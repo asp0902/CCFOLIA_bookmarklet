@@ -31,6 +31,7 @@
   const TOOLKIT_STORE_ROOM_DATA = "roomData";
   const TOOLKIT_STORE_ASSETS = "assets";
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
+  const YOUTUBE_EMBED_HOST = "https://www.youtube-nocookie.com";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
@@ -2574,6 +2575,7 @@
         ccfBgmPlayer = new window.YT.Player(ccfBgmPlayerHost, {
           width: String(YOUTUBE_PLAYER_MIN_SIZE),
           height: String(YOUTUBE_PLAYER_MIN_SIZE),
+          host: YOUTUBE_EMBED_HOST,
           videoId,
           playerVars: {
             autoplay: 0,
@@ -2666,6 +2668,7 @@
       ccfBgmPlayer = new window.YT.Player(ccfBgmPlayerHost, {
         width: String(YOUTUBE_PLAYER_MIN_SIZE),
         height: String(YOUTUBE_PLAYER_MIN_SIZE),
+        host: YOUTUBE_EMBED_HOST,
         videoId,
         playerVars: {
           autoplay: 1,
