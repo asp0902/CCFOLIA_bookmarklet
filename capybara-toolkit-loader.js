@@ -2,7 +2,7 @@
   "use strict";
 
   const VERSION = "0.1.1";
-  const BUILD_ID = "2026-05-21-youtube-audio";
+  const BUILD_ID = "2026-05-21-youtube-audio-2";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_KEYS = Object.freeze([
     "__CCF_CHAT_NOTIFIER_DEBUG__",
