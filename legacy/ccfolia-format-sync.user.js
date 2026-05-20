@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         CCF Format Sync by Capybara_korea
+// @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
 // @version      0.0.5
-// @description  Adds a rich formatting editor, renderer, Roll20 /desc conversion, ruby, tooltip, blur, and inline image support to CCFOLIA chat.
-// @description:ko CCFOLIA 채팅에 서식 편집기/렌더러, Roll20 /desc 변환, 루비, 툴팁, 블러, 인라인 이미지 기능을 추가합니다.
+// @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
+// @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -40,7 +40,7 @@
   const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
-    name: "CCF Format Sync",
+    name: "CCF Format Editor Tool",
     version: getUserscriptVersion("0.0.3"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
@@ -2624,14 +2624,9 @@
         flex-basis: 30px;
       }
 
-      .ccf-inline-toolbar .ccf-align-toggle svg,
-      .ccf-inline-toolbar .ccf-image-toggle svg {
+      .ccf-inline-toolbar .ccf-align-toggle svg {
         width: 15px;
         height: 15px;
-      }
-
-      .ccf-inline-toolbar .ccf-image-toggle {
-        padding: 6px;
       }
 
       .ccf-inline-divider {
@@ -3027,7 +3022,6 @@
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
-      <button type="button" class="ccf-toggle" data-inline-command="roll20" title="Roll20 /desc" aria-label="Roll20 /desc">R20</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -3054,13 +3048,6 @@
         <option value="20">20</option>
         <option value="24">24</option>
       </select>
-      <button type="button" class="ccf-toggle ccf-image-toggle" data-inline-command="image" title="Image URL" aria-label="Image URL">
-        <svg viewBox="0.4 1.2 15.2 13.2" aria-hidden="true">
-          <rect x="0.95" y="1.85" width="14.1" height="11.6" rx="0.85" fill="none" stroke="currentColor" stroke-width="1.45"/>
-          <circle cx="4.9" cy="5.45" r="1.24" fill="currentColor"/>
-          <path d="M2.15 11.85l3.35-3.3 2.25 2.05 2.7-3.05 2.4 2.45" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
@@ -3191,15 +3178,6 @@
     if (command === "code") {
       openInlineCodePopover(toolbar);
       return;
-    }
-
-    if (command === "roll20") {
-      openInlineRoll20Popover(toolbar);
-      return;
-    }
-
-    if (command === "image") {
-      openInlineImagePopover(toolbar);
     }
   }
 
@@ -3383,44 +3361,6 @@
     return true;
   }
 
-  function openInlineImagePopover(toolbar) {
-    const editor = activateInlineToolbarEditor(toolbar);
-    if (!editor) return false;
-
-    const text = stripInvisibleEnvelope(getEditorText(editor));
-    const selection = normalizeSelectionRange(
-      getInlineToolbarSelection(toolbar) || { start: text.length, end: text.length },
-      text.length
-    ) || { start: text.length, end: text.length };
-
-    openInlinePopover(toolbar, {
-      kind: "image",
-      title: "\uC774\uBBF8\uC9C0",
-      placeholder: "\uC774\uBBF8\uC9C0 URL",
-      value: "",
-      multiline: false,
-      editor,
-      selection
-    });
-    return true;
-  }
-
-  function openInlineRoll20Popover(toolbar) {
-    const editor = activateInlineToolbarEditor(toolbar);
-    if (!editor) return false;
-
-    const state = ensureEditorState(editor);
-    openInlinePopover(toolbar, {
-      kind: "roll20",
-      title: "Roll20 /desc",
-      placeholder: "/desc",
-      value: state.roll20Source || "",
-      multiline: true,
-      editor
-    });
-    return true;
-  }
-
   function openInlinePopover(toolbar, config) {
     document.querySelectorAll(".ccf-inline-popover.open").forEach((popover) => {
       if (!toolbar.contains(popover)) {
@@ -3507,10 +3447,6 @@
       }
     } else if (state.kind === "code") {
       applied = insertInlineCodeBlock(state.editor, value, state.selection);
-    } else if (state.kind === "image") {
-      applied = insertInlineImageUrl(state.editor, value, state.selection);
-    } else if (state.kind === "roll20") {
-      applied = applyInlineRoll20Conversion(state.editor, value);
     }
 
     if (applied) {
@@ -3549,74 +3485,6 @@
       end: runStart + codeText.length,
       style: { codeMode: "block" }
     }], selection);
-  }
-
-  function insertInlineImageUrl(editor, value, selectionOverride = null) {
-    const imageUrl = prepareImageUrlForTransport(value);
-    if (!imageUrl) {
-      alert("\uC774\uBBF8\uC9C0 URL\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
-      return false;
-    }
-
-    const text = stripInvisibleEnvelope(getEditorText(editor));
-    const selection = normalizeSelectionRange(
-      selectionOverride || { start: text.length, end: text.length },
-      text.length
-    ) || { start: text.length, end: text.length };
-    const imageAlt = getImageAltFromUrl(imageUrl);
-    const placeholderText = getImagePlaceholderText(imageAlt);
-
-    return insertTextIntoRoomEditor(editor, placeholderText, [{
-      start: selection.start,
-      end: selection.start + placeholderText.length,
-      style: {
-        imageUrl,
-        imageAlt: normalizeImageAlt(imageAlt) || placeholderText
-      }
-    }], selection);
-  }
-
-  function applyInlineRoll20Conversion(editor, value) {
-    const source = normalizeEditorText(value || "");
-    if (!source.trim()) {
-      alert("Roll20 /desc \uBA85\uB839\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
-      return false;
-    }
-
-    const parsed = parseRoll20MacroToDraft(source);
-    if (!parsed) {
-      alert("\uBCC0\uD658 \uAC00\uB2A5\uD55C Roll20 /desc \uBA85\uB839\uC744 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
-      return false;
-    }
-
-    const targetEditor = editor || getResolvedActiveEditor() || activeEditor;
-    if (!targetEditor) return false;
-
-    suppressRoomSync = true;
-    try {
-      setEditorText(targetEditor, parsed.text);
-    } finally {
-      suppressRoomSync = false;
-    }
-
-    const state = ensureEditorState(targetEditor);
-    state.text = parsed.text;
-    state.runs = cloneRuns(parsed.runs, parsed.text.length);
-    state.alignRuns = cloneAlignRuns(parsed.alignRuns, getTextLineCount(parsed.text));
-    state.blockStyle = {};
-    state.lastStyle = null;
-    state.roll20Source = source;
-    activeEditor = targetEditor;
-    activeComposer = findComposerForEditor(targetEditor);
-    lastFocusedEditor = targetEditor;
-
-    refreshComposerBadge(activeComposer, targetEditor);
-    syncEditorVisualPreview(targetEditor);
-    restoreRoomSelectionSoon(targetEditor, {
-      start: parsed.text.length,
-      end: parsed.text.length
-    });
-    return true;
   }
 
   function insertTextIntoRoomEditor(editor, insertText, insertedRuns = [], selectionOverride = null) {
