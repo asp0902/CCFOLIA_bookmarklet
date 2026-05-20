@@ -315,6 +315,7 @@
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmActiveLoop = true;
+  let ccfBgmLastControlSeed = null;
   let ccfBgmEditingSlotKey = "";
   let ccfBgmLastDialogSlotKey = "";
   let ccfBgmLastBgmClickAt = 0;
@@ -1882,7 +1883,10 @@
     }
 
     if (isCcfBgmControlButton(button)) {
-      window.setTimeout(syncCcfActiveBgmState, 80);
+      ccfBgmLastControlSeed = button;
+      window.setTimeout(() => syncCcfActiveBgmState(button), 80);
+      window.setTimeout(() => syncCcfActiveBgmState(button), 180);
+      window.setTimeout(() => syncCcfActiveBgmState(button), 420);
     }
   }
 
@@ -2696,7 +2700,11 @@
     syncCcfYoutubeBgmPlayerDockVisibility();
   }
 
-  function syncCcfActiveBgmState() {
+  function syncCcfActiveBgmState(seed = null) {
+    if (seed instanceof HTMLElement) {
+      ccfBgmLastControlSeed = seed;
+    }
+
     if (!ccfBgmActiveSlotKey || !ccfBgmPlayer) {
       return;
     }
@@ -2720,14 +2728,18 @@
 
     const volume = Math.max(0, Math.min(100, Number(state?.volume) || 0));
     try {
-      if (volume <= 0 && typeof ccfBgmPlayer.mute === "function") {
-        ccfBgmPlayer.mute();
-      } else {
-        if (typeof ccfBgmPlayer.unMute === "function") {
-          ccfBgmPlayer.unMute();
+      if (volume <= 0) {
+        ccfBgmPlayer.setVolume(0);
+        if (typeof ccfBgmPlayer.mute === "function") {
+          ccfBgmPlayer.mute();
         }
-        ccfBgmPlayer.setVolume(volume);
+        return;
       }
+
+      if (typeof ccfBgmPlayer.unMute === "function") {
+        ccfBgmPlayer.unMute();
+      }
+      ccfBgmPlayer.setVolume(volume);
     } catch (error) {
       debugLog("bgm-youtube-volume-failed", serializeError(error));
     }
@@ -2759,7 +2771,14 @@
   }
 
   function readCcfBgmGlobalVolume(seed) {
-    const panel = findCcfBgmPanel(seed);
+    const panel = findCcfBgmPanel(seed)
+      || findCcfBgmPanel(ccfBgmLastControlSeed)
+      || findCcfBgmPanel(document.activeElement)
+      || findCcfBgmPanel();
+    if (isCcfBgmPanelMuted(panel)) {
+      return 0;
+    }
+
     const input = panel?.querySelector('.MuiSlider-root input[type="range"]');
     if (!(input instanceof HTMLInputElement)) {
       return 100;
@@ -2777,6 +2796,61 @@
     }
 
     return Math.max(0, Math.min(100, Math.round((value - min) / (max - min) * 100)));
+  }
+
+  function isCcfBgmPanelMuted(panel) {
+    if (!(panel instanceof HTMLElement)) {
+      return false;
+    }
+
+    return [...panel.querySelectorAll("button")]
+      .some((button) => isCcfBgmMuteButtonActive(button));
+  }
+
+  function isCcfBgmMuteButtonActive(button) {
+    if (!(button instanceof HTMLElement) || !isCcfBgmVolumeButton(button)) {
+      return false;
+    }
+
+    const stateText = getCcfBgmButtonStateText(button);
+    if (/(volumeoff|volumemute|volume_off|muted|unmute|음소거\s*해제|ミュート解除|ミュート中)/i.test(stateText)) {
+      return true;
+    }
+
+    if (button.getAttribute("aria-pressed") === "true" || button.getAttribute("aria-selected") === "true") {
+      return true;
+    }
+
+    if (button.dataset.active === "true" || button.dataset.selected === "true" || button.dataset.checked === "true") {
+      return true;
+    }
+
+    const classText = `${button.className || ""} ${button.querySelector("svg")?.getAttribute("class") || ""}`;
+    return /\b(Mui-selected|MuiIconButton-colorPrimary|selected|active)\b/i.test(classText);
+  }
+
+  function isCcfBgmVolumeButton(button) {
+    return button instanceof HTMLElement
+      && !!button.querySelector('[data-testid*="Volume"], [data-testid*="Mute"]');
+  }
+
+  function getCcfBgmButtonStateText(button) {
+    if (!(button instanceof HTMLElement)) {
+      return "";
+    }
+
+    const parts = [
+      button.getAttribute("aria-label"),
+      button.getAttribute("title"),
+      button.dataset.testid
+    ];
+    button.querySelectorAll("[data-testid], title").forEach((node) => {
+      if (node instanceof Element) {
+        parts.push(node.getAttribute("data-testid"));
+        parts.push(node.textContent);
+      }
+    });
+    return normalizeSpace(parts.filter(Boolean).join(" "));
   }
 
   function tryEnhanceCcfBgmPanel() {
