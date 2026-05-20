@@ -285,17 +285,22 @@
           width: 48px; height: 48px; border: 0; border-radius: 999px;
           background: #fff; color: #111; cursor: pointer; display: grid; place-items: center;
           box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 4px; overflow: hidden;
-          touch-action: none; user-select: none;
+          touch-action: none; user-select: none; position: relative; z-index: 2;
         }
         .fab:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgba(0,0,0,.25); }
         .fab:active { transform: translateY(0); }
         .fab-icon { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .panel {
           width: min(420px, calc(100vw - 32px)); max-height: min(660px, calc(100vh - 88px));
-          display: none; flex-direction: column; overflow: hidden; margin-bottom: 10px;
+          display: none; flex-direction: column; overflow: hidden;
           background: #fff; border: 1px solid #d7d7d7; border-radius: 8px;
           box-shadow: 0 18px 60px rgba(0,0,0,.24);
+          position: absolute; bottom: 58px; right: 0; z-index: 1;
         }
+        :host([data-pos-y="top"]) .panel { top: 58px; bottom: auto; }
+        :host([data-pos-y="bottom"]) .panel { bottom: 58px; top: auto; }
+        :host([data-pos-x="left"]) .panel { left: 0; right: auto; }
+        :host([data-pos-x="right"]) .panel { right: 0; left: auto; }
         .panel[data-open="1"] { display: flex; }
         header { padding: 14px 14px 12px; border-bottom: 1px solid #e5e5e5; display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
         h1 { margin: 0; font-size: 15px; line-height: 1.25; color: #111; }
@@ -511,9 +516,8 @@
   function applyLauncherPosition(position) {
     if (!state.root) return;
     const margin = 8;
-    const rect = state.root.getBoundingClientRect();
-    const width = Math.max(rect.width || 48, 48);
-    const height = Math.max(rect.height || 48, 48);
+    const width = 48;
+    const height = 48;
     const x = clamp(Number(position.x) || margin, margin, Math.max(margin, window.innerWidth - width - margin));
     const y = clamp(Number(position.y) || margin, margin, Math.max(margin, window.innerHeight - height - margin));
 
@@ -521,6 +525,9 @@
     state.root.style.top = `${Math.round(y)}px`;
     state.root.style.right = "auto";
     state.root.style.bottom = "auto";
+
+    state.root.dataset.posX = x < window.innerWidth / 2 ? "left" : "right";
+    state.root.dataset.posY = y < window.innerHeight / 2 ? "top" : "bottom";
   }
 
   function clampCurrentLauncherPosition() {
