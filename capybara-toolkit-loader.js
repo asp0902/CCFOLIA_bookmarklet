@@ -199,8 +199,12 @@
     });
   }
 
-  const idbGet = (store, key) => withStore(store, "readonly", (objectStore) => objectStore.get(key));
-  const idbPut = (store, value) => withStore(store, "readwrite", (objectStore) => objectStore.put(value));
+  function idbGet(store, key) {
+    return withStore(store, "readonly", (objectStore) => objectStore.get(key));
+  }
+  function idbPut(store, value) {
+    return withStore(store, "readwrite", (objectStore) => objectStore.put(value));
+  }
 
   async function persistMeta() {
     await idbPut(STORE_META, {
