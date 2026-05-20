@@ -89,7 +89,9 @@
     isOpen: false,
     status: "준비됨",
     launcherDrag: null,
-    suppressNextToggle: false
+    suppressNextToggle: false,
+    customOrder: [],           // 드래그로 변경한 순서 저장용
+    customOrderLoaded: false   // 초기 로딩 여부 체크용
   };
 
   if (typeof window.__CCF_SUITE_MANAGER_SESSION_ID !== "string") {
@@ -291,6 +293,15 @@
     return match ? decodeURIComponent(match[1]) : "global";
   }
 
+  function getOrderedFeatures() {
+    const orderMap = new Map(state.customOrder.map((id, index) => [id, index]));
+    return [...FEATURE_CATALOG].sort((a, b) => {
+      const indexA = orderMap.has(a.id) ? orderMap.get(a.id) : 999;
+      const indexB = orderMap.has(b.id) ? orderMap.get(b.id) : 999;
+      return indexA - indexB;
+    });
+  }
+
   function ensurePanel() {
     if (state.root) return;
 
@@ -336,7 +347,8 @@
         .close { width: 28px; height: 28px; border: 1px solid #d7d7d7; border-radius: 6px; background: #fff; cursor: pointer; }
         .body { overflow: auto; padding: 10px; }
         .notice { padding: 9px 10px; border: 1px solid #e4d2a3; background: #fff8e6; color: #5d4300; border-radius: 6px; font-size: 12px; line-height: 1.45; margin-bottom: 10px; }
-        .feature { border: 1px solid #e1e1e1; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fbfbfb; }
+        .feature { border: 1px solid #e1e1e1; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fbfbfb; cursor: grab; }
+        .feature:active { cursor: grabbing; }
         .feature[data-loaded="1"] { border-color: #b0b0b0; background: #f0f0f0; }
         .feature[data-experimental="1"] { background: #f8f8f8; }
         .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -396,6 +408,47 @@
       bindLauncherDrag(fab);
     }
 
+    const bodyContainer = shadow.querySelector(".body");
+    let draggedItem = null;
+
+    bodyContainer.addEventListener("dragstart", (e) => {
+      const featureEl = e.target.closest(".feature");
+      if (!featureEl || e.target.closest("button")) {
+        if (e.target.closest("button")) e.preventDefault();
+        return;
+      }
+      draggedItem = featureEl;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", featureEl.dataset.feature);
+      setTimeout(() => featureEl.style.opacity = "0.4", 0);
+    });
+
+    bodyContainer.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const targetItem = e.target.closest(".feature");
+      
+      if (targetItem && targetItem !== draggedItem) {
+        const rect = targetItem.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          bodyContainer.insertBefore(draggedItem, targetItem);
+        } else {
+          bodyContainer.insertBefore(draggedItem, targetItem.nextSibling);
+        }
+      }
+    });
+
+    bodyContainer.addEventListener("dragend", (e) => {
+      if (draggedItem) {
+        draggedItem.style.opacity = "1";
+        draggedItem = null;
+      }
+      const newOrder = Array.from(bodyContainer.querySelectorAll(".feature")).map(el => el.dataset.feature);
+      state.customOrder = newOrder;
+      setSetting("feature-order", newOrder).catch(reportError);
+    });
+
     shadow.addEventListener("click", handlePanelClick);
     document.documentElement.appendChild(root);
     state.root = root;
@@ -407,6 +460,12 @@
 
   async function renderPanel() {
     if (!state.shadow) return;
+    
+    if (!state.customOrderLoaded) {
+      state.customOrder = await getSetting("feature-order", []) || [];
+      state.customOrderLoaded = true;
+    }
+
     const panel = state.shadow.querySelector(".panel");
     const body = state.shadow.querySelector(".body");
     const sub = state.shadow.querySelector(".sub");
@@ -421,7 +480,7 @@
       ? ""
       : `<div class="notice">코코포리아 탭에서 실행해야 레거시 기능을 주입할 수 있습니다. 지금은 패널과 저장소만 확인할 수 있어요.</div>`;
 
-    body.innerHTML = notice + FEATURE_CATALOG.map((feature) => {
+    body.innerHTML = notice + getOrderedFeatures().map((feature) => {
       const record = recordMap.get(feature.id);
       const loaded = state.loaded.has(feature.id);
       const disabledByPage = feature.roomOnly && !isRoomPage();
@@ -429,7 +488,7 @@
       const buttonText = state.loading.has(feature.id) ? "..." : (loaded ? "ON" : "OFF");
 
       return `
-        <article class="feature" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
+        <article class="feature" draggable="true" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
           <div class="row">
             <div>
               <div class="name">${escapeHtml(feature.title)}</div>
