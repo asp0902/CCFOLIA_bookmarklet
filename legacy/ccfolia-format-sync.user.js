@@ -95,15 +95,38 @@
       try { disposer(); } catch (error) { /* disposer failed */ }
     }
     try {
-      document.querySelectorAll('[data-ccf-fs-injected="1"], style[data-ccf-fs-style]').forEach(el => el.remove());
+      document.querySelectorAll([
+        '[data-ccf-fs-injected="1"]',
+        'style[data-ccf-fs-style]',
+        '[data-ccf-inline-toolbar="1"]',
+        '.ccf-open-btn[data-ccf-open-btn="1"]',
+        '#ccf-format-modal',
+        '#ccf-format-backdrop',
+        '#ccf-format-style',
+        '#ccf-format-style-fix',
+        '.ccf-editor-preview-layer[data-ccf-safe-markup="1"]'
+      ].join(", ")).forEach(el => el.remove());
     } catch (error) { /* dom sweep failed */ }
     try {
       if (window.__CCF_FORMAT_SYNC_DEBUG__ && window.__CCF_FORMAT_SYNC_DEBUG__.__owner === ccfFsSignal) {
         delete window.__CCF_FORMAT_SYNC_DEBUG__;
       }
     } catch (error) { /* debug api cleanup failed */ }
+    try {
+      if (window.__CCF_FORMAT_SYNC_RUNTIME__ && window.__CCF_FORMAT_SYNC_RUNTIME__.__owner === ccfFsSignal) {
+        delete window.__CCF_FORMAT_SYNC_RUNTIME__;
+      }
+    } catch (error) { /* runtime cleanup failed */ }
     return true;
   }
+
+  window.__CCF_FORMAT_SYNC_RUNTIME__ = {
+    __owner: ccfFsSignal,
+    withSignal: ccfFsWithSignal,
+    registerTeardown: ccfFsRegisterTeardown,
+    isActive() { return ccfFsActive; },
+    teardown: ccfFsTeardown
+  };
 
   window.__CCF_FORMAT_SYNC_DEBUG__ = {
     __owner: ccfFsSignal,
@@ -1425,8 +1448,19 @@
 (() => {
   "use strict";
 
+  const CCF_FS_RUNTIME = window.__CCF_FORMAT_SYNC_RUNTIME__ || null;
+  const ccfFsWithSignal = CCF_FS_RUNTIME?.withSignal || ((options) => {
+    if (options == null) return {};
+    if (typeof options === "boolean") return { capture: options };
+    return typeof options === "object" ? options : {};
+  });
+  const ccfFsRegisterTeardown = CCF_FS_RUNTIME?.registerTeardown || (() => {});
+  const ccfFsIsActive = () => CCF_FS_RUNTIME?.isActive?.() !== false;
+
   const OPEN_BTN_ATTR = "data-ccf-open-btn";
   const OPEN_BTN_SELECTOR = `.ccf-open-btn[${OPEN_BTN_ATTR}="1"]`;
+  const INLINE_TOOLBAR_ATTR = "data-ccf-inline-toolbar";
+  const INLINE_TOOLBAR_SELECTOR = `.ccf-inline-toolbar[${INLINE_TOOLBAR_ATTR}="1"]`;
   const MODAL_ID = "ccf-format-modal";
   const BACKDROP_ID = "ccf-format-backdrop";
   const STYLE_ID = "ccf-format-style";
@@ -1471,6 +1505,8 @@
   const EDITOR_STATE = new WeakMap();
   const PENDING_SEND_RESTORE = new WeakMap();
   const EDITOR_VISUAL_PREVIEW = new WeakMap();
+  const INLINE_TOOLBARS = new WeakMap();
+  const INLINE_TOOLBAR_EDITORS = new WeakMap();
 
   let activeComposer = null;
   let activeEditor = null;
@@ -1483,6 +1519,7 @@
   let modalDraftRoll20ConvertedSource = null;
   let modalDraftLastStyle = null;
   let modalSelection = null;
+  let inlinePopoverState = null;
   let modalSelectionRestoreToken = 0;
   let modalImageDragDepth = 0;
   let imagePopoverLayoutFrame = 0;
@@ -1519,7 +1556,7 @@
     window.addEventListener("load", onReady, ccfFsWithSignal(true));
 
     const timer = window.setInterval(() => {
-      if (!ccfFsActive) { window.clearInterval(timer); return; }
+      if (!ccfFsIsActive()) { window.clearInterval(timer); return; }
       if (tryInit()) {
         window.clearInterval(timer);
       }
@@ -2547,6 +2584,138 @@
         display: block;
       }
 
+      .ccf-inline-toolbar {
+        position: relative;
+        z-index: 2147482500;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0 0 6px;
+        padding: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: rgba(32, 32, 32, 0.94);
+        color: #fff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+        font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .ccf-inline-toolbar .ccf-toggle {
+        min-width: 30px;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .ccf-inline-toolbar .ccf-inline-tool {
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+      }
+
+      .ccf-inline-toolbar .ccf-align-toggle {
+        width: 30px;
+        min-width: 30px;
+        flex-basis: 30px;
+      }
+
+      .ccf-inline-toolbar .ccf-align-toggle svg,
+      .ccf-inline-toolbar .ccf-image-toggle svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      .ccf-inline-toolbar .ccf-image-toggle {
+        padding: 6px;
+      }
+
+      .ccf-inline-divider {
+        width: 1px;
+        height: 22px;
+        flex: 0 0 1px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .ccf-inline-size-select {
+        width: 54px;
+        height: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        background: #282828;
+        color: #fff;
+        padding: 0 4px;
+        outline: none;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .ccf-inline-size-select:focus-visible,
+      .ccf-inline-toolbar .ccf-toggle:focus-visible,
+      .ccf-inline-toolbar .ccf-inline-tool:focus-within {
+        outline: 2px solid rgba(110, 134, 214, 0.95);
+        outline-offset: 1px;
+      }
+
+      .ccf-inline-popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 6px;
+        right: 6px;
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: #2b2b2b;
+        color: #fff;
+        box-shadow: 0 16px 32px rgba(0, 0, 0, 0.36);
+      }
+
+      .ccf-inline-popover.open {
+        display: flex;
+      }
+
+      .ccf-inline-popover-title {
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .ccf-inline-popover-field {
+        width: 100%;
+        min-height: 34px;
+        box-sizing: border-box;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        background: #1f1f1f;
+        color: #fff;
+        padding: 8px 9px;
+        outline: none;
+        resize: vertical;
+        font: inherit;
+      }
+
+      textarea.ccf-inline-popover-field {
+        min-height: 92px;
+        line-height: 1.45;
+      }
+
+      .ccf-inline-popover-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .ccf-inline-popover-actions .ccf-btn {
+        border-radius: 6px;
+        padding: 7px 10px;
+      }
+
       .ccf-preview-empty {
         opacity: 0.5;
       }
@@ -2762,7 +2931,6 @@
       return;
     }
     ensureFormatButtons();
-    ensureModal();
     bindSendButtons();
     bindEnterSendForEditors();
     bindEditorVisualPreview();
@@ -2776,37 +2944,743 @@
 
   function removeFormatButtons() {
     document.querySelectorAll(OPEN_BTN_SELECTOR).forEach((btn) => btn.remove());
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => toolbar.remove());
   }
 
   function ensureFormatButtons() {
-    const d100Buttons = findDiceButtons(document)
-      .filter((btn) => getButtonLabel(btn) === "D100" && isVisible(btn));
+    document.querySelectorAll(OPEN_BTN_SELECTOR).forEach((btn) => btn.remove());
+    cleanupOrphanInlineToolbars();
 
-    for (const d100Btn of d100Buttons) {
-      const composer = findClosestComposerBar(d100Btn) || d100Btn.parentElement;
-      if (composer?.querySelector?.(OPEN_BTN_SELECTOR)) continue;
+    for (const composer of findComposerBars()) {
+      ensureInlineToolbarForComposer(composer);
+    }
+  }
 
-      const btn = createOpenButton(() => {
-        openEditorForNode(d100Btn, btn);
-      });
+  function cleanupOrphanInlineToolbars() {
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => {
+      const editor = INLINE_TOOLBAR_EDITORS.get(toolbar) || toolbar.__ccfEditor || null;
+      if (editor && document.contains(editor) && isVisible(editor)) return;
+      toolbar.remove();
+    });
+  }
 
-      d100Btn.insertAdjacentElement("afterend", btn);
-      syncAnchorButtonBadge(btn, d100Btn);
+  function ensureInlineToolbarForComposer(composer) {
+    const editor = findEditorFromComposer(composer);
+    if (!editor) return null;
+
+    const anchor = getInlineToolbarAnchor(editor);
+    const parent = anchor?.parentElement;
+    if (!parent) return null;
+
+    let toolbar = INLINE_TOOLBARS.get(editor);
+    if (toolbar && document.contains(toolbar)) {
+      bindInlineToolbarToEditor(toolbar, editor, composer);
+      if (toolbar.nextElementSibling !== anchor) {
+        parent.insertBefore(toolbar, anchor);
+      }
+      return toolbar;
     }
 
-    const submitButtons = findVisibleSubmitButtons();
-    for (const submitBtn of submitButtons) {
-      const composer = findClosestComposerBar(submitBtn) || submitBtn.parentElement;
-      if (composer?.querySelector?.(OPEN_BTN_SELECTOR)) continue;
-
-      const btn = createOpenButton(() => {
-        openEditorForNode(submitBtn, btn);
-      });
-
-      submitBtn.insertAdjacentElement("beforebegin", btn);
-      syncAnchorButtonBadge(btn, submitBtn);
+    toolbar = findInlineToolbarNearAnchor(anchor);
+    if (!toolbar) {
+      toolbar = createInlineToolbar();
+      parent.insertBefore(toolbar, anchor);
     }
 
+    bindInlineToolbarToEditor(toolbar, editor, composer);
+    updateInlineToolbarVisuals(toolbar);
+    return toolbar;
+  }
+
+  function getInlineToolbarAnchor(editor) {
+    if (!(editor instanceof HTMLElement)) return null;
+    return editor.closest(".MuiInputBase-root, .MuiFormControl-root") || editor;
+  }
+
+  function findInlineToolbarNearAnchor(anchor) {
+    const previous = anchor?.previousElementSibling;
+    return previous?.matches?.(INLINE_TOOLBAR_SELECTOR) ? previous : null;
+  }
+
+  function bindInlineToolbarToEditor(toolbar, editor, composer = null) {
+    if (!toolbar || !editor) return;
+    toolbar.__ccfEditor = editor;
+    toolbar.__ccfComposer = composer || findComposerForEditor(editor);
+    INLINE_TOOLBARS.set(editor, toolbar);
+    INLINE_TOOLBAR_EDITORS.set(toolbar, editor);
+  }
+
+  function createInlineToolbar() {
+    const toolbar = document.createElement("div");
+    toolbar.className = "ccf-inline-toolbar";
+    toolbar.setAttribute(INLINE_TOOLBAR_ATTR, "1");
+    toolbar.setAttribute(SAFE_UI_ATTR, "1");
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", "Format tools");
+    toolbar.innerHTML = `
+      <button type="button" class="ccf-toggle" data-inline-command="bold" title="Bold" aria-label="Bold"><b>B</b></button>
+      <button type="button" class="ccf-toggle" data-inline-command="italic" title="Italic" aria-label="Italic"><i>I</i></button>
+      <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+      <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
+      <span class="ccf-inline-divider" aria-hidden="true"></span>
+      <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
+      <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
+      <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
+      <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
+      <button type="button" class="ccf-toggle" data-inline-command="roll20" title="Roll20 /desc" aria-label="Roll20 /desc">R20</button>
+      <span class="ccf-inline-divider" aria-hidden="true"></span>
+      <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
+      </button>
+      <button type="button" class="ccf-toggle ccf-align-toggle" data-inline-command="align" data-align="center" title="Align center" aria-label="Align center">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"/></svg>
+      </button>
+      <button type="button" class="ccf-toggle ccf-align-toggle" data-inline-command="align" data-align="right" title="Align right" aria-label="Align right">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"/></svg>
+      </button>
+      <span class="ccf-inline-divider" aria-hidden="true"></span>
+      <label class="ccf-inline-tool ccf-color-tool" title="Text color" aria-label="Text color">
+        <input type="color" value="#ffffff" data-inline-color="color" aria-label="Text color">
+      </label>
+      <label class="ccf-inline-tool ccf-color-tool" title="Background color" aria-label="Background color">
+        <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
+      </label>
+      <select class="ccf-inline-size-select" data-inline-size aria-label="Font size" title="Font size">
+        <option value="">A</option>
+        <option value="12">12</option>
+        <option value="14">14</option>
+        <option value="16">16</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+        <option value="24">24</option>
+      </select>
+      <button type="button" class="ccf-toggle ccf-image-toggle" data-inline-command="image" title="Image URL" aria-label="Image URL">
+        <svg viewBox="0.4 1.2 15.2 13.2" aria-hidden="true">
+          <rect x="0.95" y="1.85" width="14.1" height="11.6" rx="0.85" fill="none" stroke="currentColor" stroke-width="1.45"/>
+          <circle cx="4.9" cy="5.45" r="1.24" fill="currentColor"/>
+          <path d="M2.15 11.85l3.35-3.3 2.25 2.05 2.7-3.05 2.4 2.45" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
+    `;
+
+    bindInlineToolbarEvents(toolbar);
+    return toolbar;
+  }
+
+  function bindInlineToolbarEvents(toolbar) {
+    if (!toolbar || toolbar.dataset.ccfInlineToolbarBound === "1") return;
+    toolbar.dataset.ccfInlineToolbarBound = "1";
+
+    toolbar.addEventListener("mousedown", (event) => {
+      captureInlineToolbarSelection(toolbar);
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.closest("[data-inline-popover]")) return;
+      if (target.closest("input, select, textarea, .ccf-color-tool")) return;
+      event.preventDefault();
+    }, true);
+
+    toolbar.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const popoverAction = target.closest("[data-inline-popover-action]");
+      if (popoverAction && toolbar.contains(popoverAction)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const action = popoverAction.getAttribute("data-inline-popover-action");
+        if (action === "apply") {
+          applyInlinePopover(toolbar);
+        } else {
+          closeInlinePopover(toolbar);
+        }
+        return;
+      }
+
+      const commandButton = target.closest("[data-inline-command]");
+      if (!commandButton || !toolbar.contains(commandButton)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      handleInlineToolbarCommand(toolbar, commandButton);
+    }, true);
+
+    toolbar.addEventListener("input", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.matches?.('input[type="color"][data-inline-color]')) return;
+      updateInlineToolbarVisuals(toolbar);
+      applyInlineToolbarStyle(toolbar, {
+        selectionOverride: getInlineToolbarSelection(toolbar)
+      });
+    }, true);
+
+    toolbar.addEventListener("change", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.matches?.('input[type="color"][data-inline-color]')) {
+        updateInlineToolbarVisuals(toolbar);
+        applyInlineToolbarStyle(toolbar, {
+          selectionOverride: getInlineToolbarSelection(toolbar)
+        });
+        return;
+      }
+
+      if (target?.matches?.("[data-inline-size]")) {
+        applyInlineToolbarStyle(toolbar, {
+          selectionOverride: getInlineToolbarSelection(toolbar)
+        });
+      }
+    }, true);
+
+    toolbar.addEventListener("keydown", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.matches?.(".ccf-inline-popover-field")) return;
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeInlinePopover(toolbar);
+        return;
+      }
+
+      const state = inlinePopoverState;
+      const isSingleLine = state?.toolbar === toolbar && !state.multiline;
+      const shouldApply =
+        (event.key === "Enter" && isSingleLine) ||
+        (event.key === "Enter" && (event.ctrlKey || event.metaKey));
+
+      if (!shouldApply) return;
+      event.preventDefault();
+      event.stopPropagation();
+      applyInlinePopover(toolbar);
+    }, true);
+  }
+
+  function handleInlineToolbarCommand(toolbar, commandButton) {
+    const command = commandButton.getAttribute("data-inline-command") || "";
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return;
+
+    if (["bold", "italic", "underline", "strike"].includes(command)) {
+      commandButton.classList.toggle("active");
+      applyInlineToolbarStyle(toolbar, {
+        selectionOverride: getInlineToolbarSelection(toolbar)
+      });
+      return;
+    }
+
+    if (command === "align") {
+      const align = commandButton.getAttribute("data-align") || "left";
+      setInlineToolbarAlignment(toolbar, align);
+      applyInlineAlignment(editor, align, getInlineToolbarSelection(toolbar));
+      return;
+    }
+
+    if (command === "blur") {
+      const selection = getInlineToolbarSelection(toolbar);
+      applyBlurToCurrentSelection();
+      restoreRoomSelectionSoon(editor, selection);
+      return;
+    }
+
+    if (command === "ruby" || command === "tooltip") {
+      openInlineTextPopover(toolbar, command);
+      return;
+    }
+
+    if (command === "code") {
+      openInlineCodePopover(toolbar);
+      return;
+    }
+
+    if (command === "roll20") {
+      openInlineRoll20Popover(toolbar);
+      return;
+    }
+
+    if (command === "image") {
+      openInlineImagePopover(toolbar);
+    }
+  }
+
+  function getInlineToolbarEditor(toolbar) {
+    const mapped = INLINE_TOOLBAR_EDITORS.get(toolbar) || toolbar?.__ccfEditor || null;
+    if (mapped && document.contains(mapped) && isVisible(mapped)) return mapped;
+    return getCurrentTargetEditor();
+  }
+
+  function activateInlineToolbarEditor(toolbar) {
+    const editor = getInlineToolbarEditor(toolbar);
+    if (!editor) return null;
+
+    activeEditor = editor;
+    activeComposer = toolbar?.__ccfComposer || findComposerForEditor(editor);
+    lastFocusedEditor = editor;
+    ensureEditorState(editor);
+    return editor;
+  }
+
+  function captureInlineToolbarSelection(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return null;
+
+    const selection = getEditorSelection(editor);
+    if (selection) {
+      toolbar.__ccfSelection = normalizeSelectionRange(selection, getEditorText(editor).length);
+    }
+    return toolbar.__ccfSelection || null;
+  }
+
+  function getInlineToolbarSelection(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return null;
+
+    const textLength = getEditorText(editor).length;
+    const current = getEditorSelection(editor);
+    if (current) {
+      toolbar.__ccfSelection = normalizeSelectionRange(current, textLength);
+    }
+
+    return normalizeSelectionRange(toolbar.__ccfSelection, textLength);
+  }
+
+  function getStyleFromInlineToolbar(toolbar) {
+    const color = toolbar.querySelector('input[data-inline-color="color"]')?.value || "#ffffff";
+    const backgroundColor =
+      toolbar.querySelector('input[data-inline-color="backgroundColor"]')?.value || "#000000";
+    const fontSize = normalizeFontSizeValue(toolbar.querySelector("[data-inline-size]")?.value || "");
+
+    return {
+      bold: toolbar.querySelector('[data-inline-command="bold"]')?.classList.contains("active") || false,
+      italic: toolbar.querySelector('[data-inline-command="italic"]')?.classList.contains("active") || false,
+      underline: toolbar.querySelector('[data-inline-command="underline"]')?.classList.contains("active") || false,
+      strike: toolbar.querySelector('[data-inline-command="strike"]')?.classList.contains("active") || false,
+      color,
+      backgroundColor,
+      fontSize: fontSize ?? undefined
+    };
+  }
+
+  function applyInlineToolbarStyle(toolbar, options = {}) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return false;
+
+    const selection = options.selectionOverride || getInlineToolbarSelection(toolbar);
+    const applied = applyStyleToCurrentSelection(editor, {
+      silent: true,
+      styleOverride: getStyleFromInlineToolbar(toolbar),
+      selectionOverride: selection
+    });
+
+    if (applied) {
+      restoreRoomSelectionSoon(editor, selection);
+    }
+    return applied;
+  }
+
+  function updateInlineToolbarVisuals(toolbar) {
+    toolbar.querySelectorAll('input[type="color"][data-inline-color]').forEach((input) => {
+      const tool = input.closest(".ccf-color-tool");
+      if (tool) {
+        tool.style.setProperty("--ccf-chip-color", input.value || "#ffffff");
+      }
+    });
+  }
+
+  function setInlineToolbarAlignment(toolbar, align) {
+    const value = cleanupAlign(align) || "left";
+    toolbar.querySelectorAll(".ccf-align-toggle").forEach((btn) => {
+      const btnValue = cleanupAlign(btn.getAttribute("data-align")) || "left";
+      btn.classList.toggle("active", btnValue === value);
+    });
+  }
+
+  function applyInlineAlignment(editor, align, selectionOverride = null) {
+    if (!editor) return false;
+
+    const state = ensureEditorState(editor);
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(
+      selectionOverride || getEditorSelection(editor) || { start: text.length, end: text.length },
+      text.length
+    );
+    const lineRange = getSelectedLineRange(text, selection);
+    const nextAlignRuns = addOrReplaceAlignRun(
+      state.alignRuns,
+      {
+        start: lineRange.start,
+        end: lineRange.end,
+        align: cleanupAlign(align)
+      },
+      getTextLineCount(text)
+    );
+
+    state.alignRuns = nextAlignRuns;
+    state.blockStyle = {};
+    state.text = text;
+    state.roll20Source = null;
+    renderPreview(editor);
+    refreshComposerBadge(activeComposer, editor);
+    syncEditorVisualPreview(editor);
+    restoreRoomSelectionSoon(editor, selection);
+    return true;
+  }
+
+  function openInlineTextPopover(toolbar, kind) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return false;
+
+    const styleKey = kind === "ruby" ? "rubyText" : "tooltipText";
+    const context = getActiveSelectionStyleContext(styleKey);
+    if (!context) return false;
+
+    if (!context.selection || context.selection.start === context.selection.end) {
+      alert(kind === "ruby"
+        ? "\uB8E8\uBE44\uB97C \uC801\uC6A9\uD560 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694."
+        : "\uD234\uD301\uC744 \uC801\uC6A9\uD560 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+      return false;
+    }
+
+    if (!context.selectedText || context.selectedText.includes("\n")) {
+      alert(kind === "ruby"
+        ? "\uB8E8\uBE44\uB294 \uC904\uBC14\uAFC8\uC774 \uC5C6\uB294 \uD14D\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uD560 \uC218 \uC788\uC5B4\uC694."
+        : "\uD234\uD301\uC740 \uC904\uBC14\uAFC8\uC774 \uC5C6\uB294 \uD14D\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uD560 \uC218 \uC788\uC5B4\uC694.");
+      return false;
+    }
+
+    openInlinePopover(toolbar, {
+      kind,
+      title: kind === "ruby" ? "\uB8E8\uBE44" : "\uD234\uD301",
+      placeholder: kind === "ruby"
+        ? "\uB8E8\uBE44 \uBB38\uC790"
+        : "\uD234\uD301 \uB0B4\uC6A9",
+      value: context.currentValue || "",
+      multiline: kind !== "ruby",
+      context
+    });
+    return true;
+  }
+
+  function openInlineCodePopover(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return false;
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(
+      getInlineToolbarSelection(toolbar) || { start: text.length, end: text.length },
+      text.length
+    ) || { start: text.length, end: text.length };
+
+    openInlinePopover(toolbar, {
+      kind: "code",
+      title: "\uCF54\uB4DC",
+      placeholder: "\uCF54\uB4DC\uB97C \uC785\uB825",
+      value: selection.start !== selection.end ? text.slice(selection.start, selection.end) : "",
+      multiline: true,
+      editor,
+      selection
+    });
+    return true;
+  }
+
+  function openInlineImagePopover(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return false;
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(
+      getInlineToolbarSelection(toolbar) || { start: text.length, end: text.length },
+      text.length
+    ) || { start: text.length, end: text.length };
+
+    openInlinePopover(toolbar, {
+      kind: "image",
+      title: "\uC774\uBBF8\uC9C0",
+      placeholder: "\uC774\uBBF8\uC9C0 URL",
+      value: "",
+      multiline: false,
+      editor,
+      selection
+    });
+    return true;
+  }
+
+  function openInlineRoll20Popover(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return false;
+
+    const state = ensureEditorState(editor);
+    openInlinePopover(toolbar, {
+      kind: "roll20",
+      title: "Roll20 /desc",
+      placeholder: "/desc",
+      value: state.roll20Source || "",
+      multiline: true,
+      editor
+    });
+    return true;
+  }
+
+  function openInlinePopover(toolbar, config) {
+    document.querySelectorAll(".ccf-inline-popover.open").forEach((popover) => {
+      if (!toolbar.contains(popover)) {
+        popover.classList.remove("open");
+        popover.setAttribute("aria-hidden", "true");
+        popover.textContent = "";
+      }
+    });
+
+    const popover = toolbar.querySelector("[data-inline-popover]");
+    if (!popover) return false;
+
+    popover.textContent = "";
+    const title = document.createElement("div");
+    title.className = "ccf-inline-popover-title";
+    title.textContent = config.title || "";
+
+    const field = config.multiline ? document.createElement("textarea") : document.createElement("input");
+    field.className = "ccf-inline-popover-field";
+    field.value = config.value || "";
+    field.placeholder = config.placeholder || "";
+    field.spellcheck = false;
+    if (!config.multiline) {
+      field.type = "text";
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "ccf-inline-popover-actions";
+    actions.innerHTML = `
+      <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uCDE8\uC18C</button>
+      <button type="button" class="ccf-btn primary" data-inline-popover-action="apply">\uC801\uC6A9</button>
+    `;
+
+    popover.append(title, field, actions);
+    popover.classList.add("open");
+    popover.setAttribute("aria-hidden", "false");
+
+    inlinePopoverState = {
+      ...config,
+      toolbar,
+      field,
+      popover
+    };
+
+    setTimeout(() => {
+      field.focus({ preventScroll: true });
+      if (typeof field.select === "function") {
+        field.select();
+      }
+    }, 0);
+    return true;
+  }
+
+  function closeInlinePopover(toolbar, options = {}) {
+    const state = inlinePopoverState?.toolbar === toolbar ? inlinePopoverState : null;
+    const popover = toolbar?.querySelector?.("[data-inline-popover]");
+    if (popover) {
+      popover.classList.remove("open");
+      popover.setAttribute("aria-hidden", "true");
+      popover.textContent = "";
+    }
+    if (state) {
+      inlinePopoverState = null;
+      if (options.restoreFocus !== false) {
+        restoreRoomSelectionSoon(state.editor || state.context?.editor, state.selection || state.context?.selection);
+      }
+    }
+  }
+
+  function applyInlinePopover(toolbar) {
+    const state = inlinePopoverState;
+    if (!state || state.toolbar !== toolbar) return false;
+
+    const value = state.field?.value || "";
+    let applied = false;
+
+    if (state.kind === "ruby" || state.kind === "tooltip") {
+      const stylePatch = state.kind === "ruby"
+        ? { rubyText: normalizeRubyText(value) }
+        : { tooltipText: normalizeTooltipText(value) };
+      applied = commitSelectionStyleContext(state.context, stylePatch);
+      if (applied) {
+        restoreRoomSelectionSoon(state.context?.editor, state.context?.selection);
+      }
+    } else if (state.kind === "code") {
+      applied = insertInlineCodeBlock(state.editor, value, state.selection);
+    } else if (state.kind === "image") {
+      applied = insertInlineImageUrl(state.editor, value, state.selection);
+    } else if (state.kind === "roll20") {
+      applied = applyInlineRoll20Conversion(state.editor, value);
+    }
+
+    if (applied) {
+      closeInlinePopover(toolbar, { restoreFocus: false });
+    }
+    return applied;
+  }
+
+  function insertInlineCodeBlock(editor, value, selectionOverride = null) {
+    const codeText = normalizeEditorText(value || "");
+    if (!codeText.trim()) {
+      alert("\uCF54\uB4DC \uBE14\uB85D\uC5D0 \uB123\uC744 \uB0B4\uC6A9\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
+      return false;
+    }
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(
+      selectionOverride || { start: text.length, end: text.length },
+      text.length
+    ) || { start: text.length, end: text.length };
+    const needsPrefixBreak =
+      selection.start > 0 &&
+      text[selection.start - 1] !== "\n" &&
+      !codeText.startsWith("\n");
+    const needsSuffixBreak =
+      selection.end < text.length &&
+      text[selection.end] !== "\n" &&
+      !codeText.endsWith("\n");
+    const prefix = needsPrefixBreak ? "\n" : "";
+    const suffix = needsSuffixBreak ? "\n" : "";
+    const insertText = `${prefix}${codeText}${suffix}`;
+    const runStart = selection.start + prefix.length;
+
+    return insertTextIntoRoomEditor(editor, insertText, [{
+      start: runStart,
+      end: runStart + codeText.length,
+      style: { codeMode: "block" }
+    }], selection);
+  }
+
+  function insertInlineImageUrl(editor, value, selectionOverride = null) {
+    const imageUrl = prepareImageUrlForTransport(value);
+    if (!imageUrl) {
+      alert("\uC774\uBBF8\uC9C0 URL\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
+      return false;
+    }
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(
+      selectionOverride || { start: text.length, end: text.length },
+      text.length
+    ) || { start: text.length, end: text.length };
+    const imageAlt = getImageAltFromUrl(imageUrl);
+    const placeholderText = getImagePlaceholderText(imageAlt);
+
+    return insertTextIntoRoomEditor(editor, placeholderText, [{
+      start: selection.start,
+      end: selection.start + placeholderText.length,
+      style: {
+        imageUrl,
+        imageAlt: normalizeImageAlt(imageAlt) || placeholderText
+      }
+    }], selection);
+  }
+
+  function applyInlineRoll20Conversion(editor, value) {
+    const source = normalizeEditorText(value || "");
+    if (!source.trim()) {
+      alert("Roll20 /desc \uBA85\uB839\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
+      return false;
+    }
+
+    const parsed = parseRoll20MacroToDraft(source);
+    if (!parsed) {
+      alert("\uBCC0\uD658 \uAC00\uB2A5\uD55C Roll20 /desc \uBA85\uB839\uC744 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+      return false;
+    }
+
+    const targetEditor = editor || getResolvedActiveEditor() || activeEditor;
+    if (!targetEditor) return false;
+
+    suppressRoomSync = true;
+    try {
+      setEditorText(targetEditor, parsed.text);
+    } finally {
+      suppressRoomSync = false;
+    }
+
+    const state = ensureEditorState(targetEditor);
+    state.text = parsed.text;
+    state.runs = cloneRuns(parsed.runs, parsed.text.length);
+    state.alignRuns = cloneAlignRuns(parsed.alignRuns, getTextLineCount(parsed.text));
+    state.blockStyle = {};
+    state.lastStyle = null;
+    state.roll20Source = source;
+    activeEditor = targetEditor;
+    activeComposer = findComposerForEditor(targetEditor);
+    lastFocusedEditor = targetEditor;
+
+    refreshComposerBadge(activeComposer, targetEditor);
+    syncEditorVisualPreview(targetEditor);
+    restoreRoomSelectionSoon(targetEditor, {
+      start: parsed.text.length,
+      end: parsed.text.length
+    });
+    return true;
+  }
+
+  function insertTextIntoRoomEditor(editor, insertText, insertedRuns = [], selectionOverride = null) {
+    const targetEditor = editor || getResolvedActiveEditor() || activeEditor;
+    if (!targetEditor) return false;
+
+    const baseText = stripInvisibleEnvelope(getEditorText(targetEditor));
+    const state = ensureEditorState(targetEditor);
+    const selection = normalizeSelectionRange(
+      selectionOverride || getEditorSelection(targetEditor) || { start: baseText.length, end: baseText.length },
+      baseText.length
+    ) || { start: baseText.length, end: baseText.length };
+    const nextText = `${baseText.slice(0, selection.start)}${insertText}${baseText.slice(selection.end)}`;
+    const nextRuns = rebaseRunsForTextReplacement(
+      cloneRuns(state.runs, baseText.length),
+      selection,
+      insertText,
+      baseText.length,
+      nextText.length,
+      insertedRuns
+    );
+    const nextAlignRuns = rebaseAlignRunsForTextReplacement(
+      cloneAlignRuns(state.alignRuns, getTextLineCount(baseText)),
+      baseText,
+      selection,
+      insertText,
+      nextText
+    );
+    const nextSelection = {
+      start: selection.start + insertText.length,
+      end: selection.start + insertText.length
+    };
+
+    suppressRoomSync = true;
+    try {
+      setEditorText(targetEditor, nextText);
+    } finally {
+      suppressRoomSync = false;
+    }
+
+    state.text = nextText;
+    state.runs = nextRuns;
+    state.alignRuns = nextAlignRuns;
+    state.blockStyle = {};
+    state.roll20Source = null;
+    activeEditor = targetEditor;
+    activeComposer = findComposerForEditor(targetEditor);
+    lastFocusedEditor = targetEditor;
+
+    refreshComposerBadge(activeComposer, targetEditor);
+    syncEditorVisualPreview(targetEditor);
+    restoreRoomSelectionSoon(targetEditor, nextSelection);
+    return true;
+  }
+
+  function restoreRoomSelectionSoon(editor, selection) {
+    if (!editor || !selection) return;
+    const safeSelection = normalizeSelectionRange(selection, getEditorText(editor).length);
+    if (!safeSelection) return;
+
+    setTimeout(() => {
+      if (!document.contains(editor)) return;
+      restoreEditorSelection(editor, safeSelection);
+    }, 0);
   }
 
   function syncAnchorButtonBadge(btn, anchorNode) {
@@ -3798,7 +4672,7 @@
     if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      if (!ccfFsActive) return;
+      if (!ccfFsIsActive()) return;
       if (!modal.classList.contains("show")) return;
       constrainModalSize(modal);
       constrainModalPosition(modal);
@@ -6160,8 +7034,11 @@
     const text = targetEditor === modalEditor
       ? (modalDraftText ?? getEditorText(modalEditor))
       : getEditorText(targetEditor);
-    const selection = useModalSelection ? modalEditorSelection : getEditorSelection(targetEditor);
-    const style = cleanupStyle(getStyleFromModal());
+    const selection = normalizeSelectionRange(
+      options.selectionOverride || (useModalSelection ? modalEditorSelection : getEditorSelection(targetEditor)),
+      text.length
+    );
+    const style = cleanupStyle(options.styleOverride || getStyleFromModal());
 
     if (!selection || selection.start === selection.end) {
       if (silent) return false;
@@ -6714,6 +7591,7 @@
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
     editors.forEach((editor) => {
       if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (editor.dataset.ccfEnterBound === "1") return;
 
@@ -6735,6 +7613,7 @@
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
     editors.forEach((editor) => {
       if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
       if (editor.dataset.ccfVisualPreviewBound !== "1") {
@@ -6753,6 +7632,7 @@
   function syncAllEditorVisualPreviews() {
     document.querySelectorAll(EDITOR_SELECTOR).forEach((editor) => {
       if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       syncEditorVisualPreview(editor);
     });
@@ -6972,6 +7852,7 @@
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
     editors.forEach((editor) => {
       if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (editor.dataset.ccfInputSyncBound === "1") return;
 
@@ -7046,6 +7927,7 @@
   function normalizeEditorCandidate(node) {
     if (!(node instanceof HTMLElement)) return null;
     if (node.id === "ccf-preview") return null;
+    if (node.closest && node.closest(`[${SAFE_UI_ATTR}="1"]`)) return null;
     if (node.closest && node.closest(`#${MODAL_ID}`)) return null;
     if (node.matches?.(EDITOR_SELECTOR)) return node;
     const closest = node.closest?.(EDITOR_SELECTOR);
@@ -8607,6 +9489,13 @@
 
     const safeSelection = normalizeSelectionRange(selection, getEditorText(editor).length);
     if (!safeSelection) return;
+
+    if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
+      editor.focus?.({ preventScroll: true });
+      editor.setSelectionRange?.(safeSelection.start, safeSelection.end);
+      setModalSelection(safeSelection, getEditorText(editor).length);
+      return;
+    }
 
     const start = resolveTextPosition(editor, safeSelection.start);
     const end = resolveTextPosition(editor, safeSelection.end);
