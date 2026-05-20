@@ -2624,6 +2624,13 @@
         flex-basis: 30px;
       }
 
+      .ccf-inline-toolbar .ccf-keep-toggle {
+        width: auto;
+        min-width: 42px;
+        padding: 0 8px;
+        font-weight: 700;
+      }
+
       .ccf-inline-toolbar .ccf-align-toggle svg {
         width: 15px;
         height: 15px;
@@ -3059,6 +3066,7 @@
         <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
+      <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
@@ -3174,8 +3182,17 @@
     const editor = activateInlineToolbarEditor(toolbar);
     if (!editor) return;
 
+    if (command === "keep") {
+      const nextActive = !commandButton.classList.contains("active");
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      return;
+    }
+
     if (["bold", "italic", "underline", "strike"].includes(command)) {
-      commandButton.classList.toggle("active");
+      const nextActive = !commandButton.classList.contains("active");
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
       applyInlineToolbarStyle(toolbar, {
         selectionOverride: getInlineToolbarSelection(toolbar)
       });
@@ -3381,7 +3398,9 @@
     event.stopImmediatePropagation?.();
 
     rememberInlineToolbarSelection(editor);
-    boldButton.classList.toggle("active");
+    const nextActive = !boldButton.classList.contains("active");
+    boldButton.classList.toggle("active", nextActive);
+    boldButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
     applyInlineToolbarStyle(toolbar, {
       selectionOverride: getInlineToolbarSelection(toolbar)
     });
@@ -3420,6 +3439,80 @@
       restoreRoomSelectionSoon(editor, selection);
     }
     return applied;
+  }
+
+  function isInlineFormatKeepEnabled(toolbar) {
+    return !!toolbar?.querySelector?.('[data-inline-command="keep"]')?.classList.contains("active");
+  }
+
+  function resetInlineToolbarStyleControls(toolbar) {
+    if (!toolbar) return;
+
+    toolbar.querySelectorAll(
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
+    ).forEach((btn) => {
+      btn.classList.remove("active");
+      btn.setAttribute("aria-pressed", "false");
+    });
+
+    setInlineToolbarAlignment(toolbar, "left");
+
+    const color = toolbar.querySelector('input[data-inline-color="color"]');
+    if (color instanceof HTMLInputElement) {
+      color.value = "#ffffff";
+    }
+
+    const backgroundColor = toolbar.querySelector('input[data-inline-color="backgroundColor"]');
+    if (backgroundColor instanceof HTMLInputElement) {
+      backgroundColor.value = "#000000";
+    }
+
+    const sizeInput = toolbar.querySelector("[data-inline-size]");
+    if (sizeInput instanceof HTMLInputElement) {
+      sizeInput.value = "";
+    }
+
+    closeInlinePopover(toolbar, { restoreFocus: false });
+    clearInlineToolbarSelection(toolbar);
+    updateInlineToolbarVisuals(toolbar);
+  }
+
+  function resetEditorStateAfterSendIfEmpty(editor) {
+    if (!editor || !document.contains(editor)) return;
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    if (text) return;
+
+    const state = ensureEditorState(editor);
+    state.text = "";
+    state.runs = [];
+    state.alignRuns = [];
+    state.lastStyle = null;
+    state.blockStyle = {};
+    state.roll20Source = null;
+
+    const composer = findComposerForEditor(editor);
+    refreshComposerBadge(composer, editor);
+    syncEditorVisualPreview(editor);
+  }
+
+  function scheduleInlineFormatResetAfterSend(editor) {
+    const toolbar = getInlineToolbarForEditor(editor);
+    const keepStyle = isInlineFormatKeepEnabled(toolbar);
+    const checkpoints = [120, 450, 1000, 2000];
+
+    checkpoints.forEach((delay) => {
+      setTimeout(() => {
+        if (toolbar && document.contains(toolbar)) {
+          clearInlineToolbarSelection(toolbar);
+          if (!keepStyle) {
+            resetInlineToolbarStyleControls(toolbar);
+          }
+        }
+
+        resetEditorStateAfterSendIfEmpty(editor);
+      }, delay);
+    });
   }
 
   function updateInlineToolbarVisuals(toolbar) {
@@ -7612,10 +7705,18 @@
       btn.addEventListener("click", (event) => {
         const composer = findClosestComposerBar(btn);
         const editor = composer ? findEditorFromComposer(composer) : findEditorFromNode(btn);
-        if (editor && preparePayloadForSend(editor) === false) {
+        if (!editor) return;
+
+        const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
+        if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
+          return;
+        }
+
+        if (hadMessage) {
+          scheduleInlineFormatResetAfterSend(editor);
         }
       }, true);
     });
@@ -7634,10 +7735,16 @@
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
+        const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
+          return;
+        }
+
+        if (hadMessage) {
+          scheduleInlineFormatResetAfterSend(editor);
         }
       }, true);
     });
