@@ -752,8 +752,8 @@
   }
 
   function injectStyle(path) {
-    const url = urlFor(path);
     if (document.querySelector(`link[data-capybara-toolkit-style="${cssEscape(path)}"]`)) return;
+    const url = withCacheBuster(urlFor(path));
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = url;
@@ -765,7 +765,8 @@
     const marker = `${featureId}:${path}`;
     if (document.querySelector(`script[data-capybara-toolkit-script="${cssEscape(marker)}"]`)) return;
 
-    const url = urlFor(path);
+    const baseUrl = urlFor(path);
+    const url = withCacheBuster(baseUrl);
     try {
       await injectScriptTag(url, marker);
       return;
@@ -773,11 +774,16 @@
       const cached = await idbGet(STORE_BUNDLES, `bundle:script:${path}`);
       if (!cached?.source) throw scriptError;
       try {
-        runSource(cached.source, url);
+        runSource(cached.source, baseUrl);
       } catch (evalError) {
         throw new Error(`스크립트 주입 실패: ${scriptError.message || scriptError}; 캐시 실행 실패: ${evalError.message || evalError}`);
       }
     }
+  }
+
+  function withCacheBuster(url) {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}t=${Date.now()}`;
   }
 
   function injectScriptTag(url, marker) {
