@@ -394,52 +394,6 @@
       const record = recordMap.get(feature.id);
       const loaded = state.loaded.has(feature.id);
       const disabledByPage = feature.roomOnly && !isRoomPage();
-      const disabled = !isCcfoliaHost() || disabledByPage || state.loading.has(feature.id);
-      const buttonText = loaded ? "실행됨" : (state.loading.has(feature.id) ? "실행 중" : "켜기");
-      const meta = [
-        record?.cachedAt ? `캐시 ${formatTime(record.cachedAt)}` : "미캐시",
-        record?.loadedAt ? `실행 ${formatTime(record.loadedAt)}` : "",
-        feature.roomOnly ? "룸 전용" : "",
-        feature.experimental ? "실험적" : ""
-      ].filter(Boolean);
-      return `
-        <article class="feature" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
-          <div class="row">
-            <div>
-              <div class="name">${escapeHtml(feature.title)}</div>
-              <div class="summary">${escapeHtml(feature.summary)}</div>
-              <div class="meta">${meta.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}</div>
-            </div>
-            <div class="actions">
-              <button class="btn" type="button" data-action="enable" data-feature="${escapeAttr(feature.id)}" ${disabled || loaded ? "disabled" : ""}>${buttonText}</button>
-            </div>
-          </div>
-          ${disabledByPage ? `<div class="summary">이 기능은 코코포리아 룸 안에서 켜는 편이 안전합니다.</div>` : ""}
-        </article>
-      `;
-    }).join("");
-  }
-
-  async function renderPanel() {
-    if (!state.shadow) return;
-    const panel = state.shadow.querySelector(".panel");
-    const body = state.shadow.querySelector(".body");
-    const sub = state.shadow.querySelector(".sub");
-    const status = state.shadow.querySelector(".status");
-    panel.dataset.open = state.isOpen ? "1" : "0";
-    sub.textContent = `v${VERSION} · ${isCcfoliaHost() ? "ccfolia" : "다른 사이트"} · ${state.baseUrl.href}`;
-    status.textContent = state.status;
-
-    const records = await Promise.all(FEATURE_CATALOG.map((feature) => getFeatureRecord(feature.id).catch(() => null)));
-    const recordMap = new Map(records.filter(Boolean).map((record) => [record.id, record]));
-    const notice = isCcfoliaHost()
-      ? ""
-      : `<div class="notice">코코포리아 탭에서 실행해야 레거시 기능을 주입할 수 있습니다. 지금은 패널과 저장소만 확인할 수 있어요.</div>`;
-
-    body.innerHTML = notice + FEATURE_CATALOG.map((feature) => {
-      const record = recordMap.get(feature.id);
-      const loaded = state.loaded.has(feature.id);
-      const disabledByPage = feature.roomOnly && !isRoomPage();
       const disabled = state.loading.has(feature.id) || (!loaded && (!isCcfoliaHost() || disabledByPage));
       const buttonText = state.loading.has(feature.id) ? "..." : (loaded ? "ON" : "OFF");
       const meta = [
