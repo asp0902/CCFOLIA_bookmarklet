@@ -4979,23 +4979,39 @@
   }
 
   function ccfBgmShareFindChatComposer() {
-    const candidates = document.querySelectorAll(
-      'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]'
-    );
-    for (const el of candidates) {
-      if (!(el instanceof HTMLElement)) continue;
-      if (!isVisible(el)) continue;
-      if (el.closest('[role="dialog"]')) continue;
-      const drawer = el.closest('.MuiDrawer-paper');
-      if (drawer) return el;
+    // CCFOLIA chat composer is a textarea (or contenteditable) inside the right-side drawer.
+    // Skip placeholders that look like character-name / popup inputs.
+    const skipPlaceholderRe = /noname|이름|name|url|http|youtube|search|검색/i;
+    const isPlausibleChatField = (el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      if (!isVisible(el)) return false;
+      if (el.closest('[role="dialog"]')) return false;
+      if (el.disabled || el.readOnly) return false;
+      const placeholder = el.getAttribute("placeholder") || "";
+      if (placeholder && skipPlaceholderRe.test(placeholder)) return false;
+      const aria = el.getAttribute("aria-label") || "";
+      if (aria && skipPlaceholderRe.test(aria)) return false;
+      return true;
+    };
+
+    // Pass 1: textareas inside the drawer (most reliable).
+    const textareas = document.querySelectorAll('.MuiDrawer-paper textarea');
+    for (const el of textareas) {
+      if (isPlausibleChatField(el)) return el;
     }
-    // Fallback: any visible textbox in viewport bottom half
-    for (const el of candidates) {
-      if (!(el instanceof HTMLElement)) continue;
-      if (!isVisible(el)) continue;
-      const rect = el.getBoundingClientRect();
-      if (rect.top > window.innerHeight / 2) return el;
+
+    // Pass 2: contenteditable inside the drawer.
+    const editables = document.querySelectorAll('.MuiDrawer-paper [contenteditable="true"], .MuiDrawer-paper [role="textbox"]');
+    for (const el of editables) {
+      if (isPlausibleChatField(el)) return el;
     }
+
+    // Pass 3: any visible textarea anywhere (last resort).
+    const anyTextareas = document.querySelectorAll('textarea');
+    for (const el of anyTextareas) {
+      if (isPlausibleChatField(el)) return el;
+    }
+
     return null;
   }
 
