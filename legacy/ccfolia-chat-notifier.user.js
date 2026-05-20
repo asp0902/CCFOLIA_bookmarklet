@@ -4915,8 +4915,14 @@
   }
 
   function ccfBgmShareSendOperation(op, slotData) {
-    if (ccfBgmShareSendingDepth > 0) return; // suppress re-entrant sends during receive
-    if (!chatNotifierActive) return;
+    if (ccfBgmShareSendingDepth > 0) {
+      debugLog("bgm-share-send-suppressed-reentrant", { op });
+      return;
+    }
+    if (!chatNotifierActive) {
+      debugLog("bgm-share-send-suppressed-inactive", { op });
+      return;
+    }
     const messageId = `${BGM_SHARE_SENDER_ID}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     ccfBgmShareOwnMessageIds.add(messageId);
     ccfBgmShareSeenMessageIds.add(messageId);
@@ -4929,7 +4935,15 @@
       slot: slotData
     };
     const encoded = ccfBgmShareEncode(payload);
-    ccfBgmShareSendToChat(encoded).catch((error) => {
+    debugLog("bgm-share-send-begin", {
+      op,
+      messageId,
+      encodedLength: encoded.length,
+      entryKey: slotData?.entryKey
+    });
+    ccfBgmShareSendToChat(encoded).then(() => {
+      debugLog("bgm-share-send-done", { op, messageId });
+    }).catch((error) => {
       debugLog("bgm-share-send-failed", serializeError(error));
     });
   }
@@ -4940,13 +4954,25 @@
       debugLog("bgm-share-no-composer");
       return;
     }
+    debugLog("bgm-share-composer-found", {
+      tagName: composer.tagName,
+      role: composer.getAttribute("role"),
+      contentEditable: composer.getAttribute("contenteditable"),
+      placeholder: composer.getAttribute("placeholder"),
+      ariaLabel: composer.getAttribute("aria-label"),
+      inDrawer: !!composer.closest(".MuiDrawer-paper")
+    });
     const originalValue = ccfBgmShareReadComposerValue(composer);
     ccfBgmShareWriteComposerValue(composer, text);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     ccfBgmShareSubmitComposer(composer);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
     // Best-effort restore so we don't disturb user's in-progress draft.
     const afterValue = ccfBgmShareReadComposerValue(composer);
+    debugLog("bgm-share-post-submit", {
+      afterValueIsEnvelope: afterValue === text,
+      afterValueEmpty: afterValue === ""
+    });
     if (afterValue === text || afterValue === "") {
       ccfBgmShareWriteComposerValue(composer, originalValue || "");
     }
@@ -5243,7 +5269,7 @@
     ccfBgmShareDispatchDiff(payload);
   }
 
-  let ccfBgmShareLastSnapshot = null;
+  let ccfBgmShareLastSnapshot = {};
 
   function ccfBgmShareSerializableEntry(entry) {
     return {
@@ -5270,35 +5296,51 @@
   }
 
   function ccfBgmShareDispatchDiff(payload) {
+    const next = ccfBgmShareCloneSnapshot(payload);
     if (ccfBgmShareSendingDepth > 0) {
       // Snapshot the new state without emitting (otherwise we'd echo the remote update back).
-      ccfBgmShareLastSnapshot = ccfBgmShareCloneSnapshot(payload);
-      return;
-    }
-    if (!ccfBgmShareLastSnapshot) {
-      // First persist of the session — treat as baseline, don't emit anything.
-      ccfBgmShareLastSnapshot = ccfBgmShareCloneSnapshot(payload);
+      ccfBgmShareLastSnapshot = next;
       return;
     }
 
-    const previous = ccfBgmShareLastSnapshot;
-    const next = ccfBgmShareCloneSnapshot(payload);
+    const previous = ccfBgmShareLastSnapshot || {};
+    const adds = [];
+    const edits = [];
+    const removes = [];
 
     for (const [entryKey, nextEntry] of Object.entries(next)) {
       const prevEntry = previous[entryKey];
       if (!prevEntry) {
-        ccfBgmShareSendOperation("add", { entryKey, ...nextEntry });
+        adds.push({ entryKey, nextEntry });
         continue;
       }
       if (!ccfBgmShareEntriesEqual(prevEntry, nextEntry)) {
-        ccfBgmShareSendOperation("edit", { entryKey, ...nextEntry });
+        edits.push({ entryKey, nextEntry });
       }
     }
     for (const entryKey of Object.keys(previous)) {
       if (!next[entryKey]) {
-        ccfBgmShareSendOperation("remove", { entryKey, ...previous[entryKey] });
+        removes.push({ entryKey, prevEntry: previous[entryKey] });
       }
     }
+
+    debugLog("bgm-share-diff", {
+      adds: adds.length,
+      edits: edits.length,
+      removes: removes.length,
+      baselineSize: Object.keys(previous).length,
+      nextSize: Object.keys(next).length
+    });
+
+    adds.forEach(({ entryKey, nextEntry }) => {
+      ccfBgmShareSendOperation("add", { entryKey, ...nextEntry });
+    });
+    edits.forEach(({ entryKey, nextEntry }) => {
+      ccfBgmShareSendOperation("edit", { entryKey, ...nextEntry });
+    });
+    removes.forEach(({ entryKey, prevEntry }) => {
+      ccfBgmShareSendOperation("remove", { entryKey, ...prevEntry });
+    });
 
     ccfBgmShareLastSnapshot = next;
   }
