@@ -115,6 +115,7 @@
   ensurePanel();
   openPanel();
   persistMeta().catch(() => {});
+  restoreFeatureStates().catch(reportError);
 
   function resolveBaseUrl() {
     const script = document.currentScript;
@@ -214,6 +215,22 @@
       lastSeenAt: new Date().toISOString(),
       lastSeenUrl: location.href
     });
+  }
+
+  async function restoreFeatureStates() {
+    if (!isCcfoliaHost()) return;
+    
+    const records = await Promise.all(FEATURE_CATALOG.map((f) => getFeatureRecord(f.id).catch(() => null)));
+    for (let i = 0; i < FEATURE_CATALOG.length; i++) {
+      const feature = FEATURE_CATALOG[i];
+      const record = records[i];
+      if (record && record.enabled) {
+        const disabledByPage = feature.roomOnly && !isRoomPage();
+        if (!disabledByPage) {
+          loadFeature(feature).catch(reportError);
+        }
+      }
+    }
   }
 
   async function getSetting(key, fallback = null) {
