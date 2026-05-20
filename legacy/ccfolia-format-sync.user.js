@@ -2636,20 +2636,31 @@
         background: rgba(255, 255, 255, 0.16);
       }
 
-      .ccf-inline-size-select {
-        width: 54px;
+      .ccf-inline-row-break {
+        flex: 0 0 100%;
+        width: 100%;
+        height: 0;
+      }
+
+      .ccf-inline-size-input {
+        width: 58px;
         height: 30px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 6px;
         background: #282828;
         color: #fff;
-        padding: 0 4px;
+        padding: 0 6px;
+        box-sizing: border-box;
         outline: none;
         font: inherit;
-        cursor: pointer;
+        text-align: center;
       }
 
-      .ccf-inline-size-select:focus-visible,
+      .ccf-inline-size-input::placeholder {
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .ccf-inline-size-input:focus-visible,
       .ccf-inline-toolbar .ccf-toggle:focus-visible,
       .ccf-inline-toolbar .ccf-inline-tool:focus-within {
         outline: 2px solid rgba(110, 134, 214, 0.95);
@@ -2835,6 +2846,10 @@
 
   function bindGlobalEvents() {
     document.addEventListener("keydown", (event) => {
+      if (handleInlineBoldShortcut(event)) {
+        return;
+      }
+
       if (event.key === "Escape") {
         if (isModalOpen() && isRubyPopoverOpen()) {
           event.preventDefault();
@@ -2865,6 +2880,8 @@
     }, ccfFsWithSignal(true));
 
     document.addEventListener("mousedown", (event) => {
+      handleInlineToolbarDocumentMouseDown(event);
+
       if (!isModalOpen()) return;
 
       if (isCodePopoverOpen()) {
@@ -2881,6 +2898,8 @@
     }, ccfFsWithSignal(true));
 
     document.addEventListener("selectionchange", () => {
+      syncInlineToolbarSelectionFromDocument();
+
       if (!isModalOpen()) return;
       const modalEditor = getModalEditor();
       if (!modalEditor) return;
@@ -3022,7 +3041,7 @@
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
-      <span class="ccf-inline-divider" aria-hidden="true"></span>
+      <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
       </button>
@@ -3039,15 +3058,7 @@
       <label class="ccf-inline-tool ccf-color-tool" title="Background color" aria-label="Background color">
         <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
-      <select class="ccf-inline-size-select" data-inline-size aria-label="Font size" title="Font size">
-        <option value="">A</option>
-        <option value="12">12</option>
-        <option value="14">14</option>
-        <option value="16">16</option>
-        <option value="18">18</option>
-        <option value="20">20</option>
-        <option value="24">24</option>
-      </select>
+      <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
@@ -3095,11 +3106,20 @@
 
     toolbar.addEventListener("input", (event) => {
       const target = event.target instanceof Element ? event.target : null;
-      if (!target?.matches?.('input[type="color"][data-inline-color]')) return;
-      updateInlineToolbarVisuals(toolbar);
-      applyInlineToolbarStyle(toolbar, {
-        selectionOverride: getInlineToolbarSelection(toolbar)
-      });
+      if (target?.matches?.('input[type="color"][data-inline-color]')) {
+        updateInlineToolbarVisuals(toolbar);
+        applyInlineToolbarStyle(toolbar, {
+          selectionOverride: getInlineToolbarSelection(toolbar)
+        });
+        return;
+      }
+
+      if (target?.matches?.("[data-inline-size]")) {
+        sanitizeInlineSizeInput(target);
+        applyInlineToolbarStyle(toolbar, {
+          selectionOverride: getInlineToolbarSelection(toolbar)
+        });
+      }
     }, true);
 
     toolbar.addEventListener("change", (event) => {
@@ -3113,6 +3133,7 @@
       }
 
       if (target?.matches?.("[data-inline-size]")) {
+        sanitizeInlineSizeInput(target);
         applyInlineToolbarStyle(toolbar, {
           selectionOverride: getInlineToolbarSelection(toolbar)
         });
@@ -3121,6 +3142,11 @@
 
     toolbar.addEventListener("keydown", (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      if (target?.matches?.("[data-inline-size]")) {
+        handleInlineSizeKeydown(toolbar, target, event);
+        return;
+      }
+
       if (!target?.matches?.(".ccf-inline-popover-field")) return;
 
       if (event.key === "Escape") {
@@ -3181,6 +3207,48 @@
     }
   }
 
+  function handleInlineSizeKeydown(toolbar, input, event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      sanitizeInlineSizeInput(input);
+      applyInlineToolbarStyle(toolbar, {
+        selectionOverride: getInlineToolbarSelection(toolbar)
+      });
+      restoreInlineToolbarEditorSelection(toolbar);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      input.blur?.();
+      restoreInlineToolbarEditorSelection(toolbar);
+      return;
+    }
+
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const direction = event.key === "ArrowUp" ? 1 : -1;
+    const step = event.shiftKey ? 10 : 1;
+    const baseSize = normalizeFontSizeValue(input.value) ?? 16;
+    input.value = String(clamp(baseSize + (direction * step), FONT_SIZE_MIN, FONT_SIZE_MAX));
+    applyInlineToolbarStyle(toolbar, {
+      selectionOverride: getInlineToolbarSelection(toolbar)
+    });
+  }
+
+  function sanitizeInlineSizeInput(input) {
+    if (!(input instanceof HTMLInputElement)) return "";
+    const sanitized = input.value.replace(/[^\d]/g, "").slice(0, 3);
+    if (input.value !== sanitized) {
+      input.value = sanitized;
+    }
+    return sanitized;
+  }
+
   function getInlineToolbarEditor(toolbar) {
     const mapped = INLINE_TOOLBAR_EDITORS.get(toolbar) || toolbar?.__ccfEditor || null;
     if (mapped && document.contains(mapped) && isVisible(mapped)) return mapped;
@@ -3203,8 +3271,9 @@
     if (!editor) return null;
 
     const selection = getEditorSelection(editor);
-    if (selection) {
-      toolbar.__ccfSelection = normalizeSelectionRange(selection, getEditorText(editor).length);
+    const normalized = normalizeSelectionRange(selection, getEditorText(editor).length);
+    if (normalized && normalized.start !== normalized.end) {
+      toolbar.__ccfSelection = normalized;
     }
     return toolbar.__ccfSelection || null;
   }
@@ -3215,11 +3284,108 @@
 
     const textLength = getEditorText(editor).length;
     const current = getEditorSelection(editor);
-    if (current) {
-      toolbar.__ccfSelection = normalizeSelectionRange(current, textLength);
+    const normalizedCurrent = normalizeSelectionRange(current, textLength);
+    if (normalizedCurrent && normalizedCurrent.start !== normalizedCurrent.end) {
+      toolbar.__ccfSelection = normalizedCurrent;
     }
 
     return normalizeSelectionRange(toolbar.__ccfSelection, textLength);
+  }
+
+  function getInlineToolbarForEditor(editor) {
+    if (!editor) return null;
+
+    const mapped = INLINE_TOOLBARS.get(editor);
+    if (mapped && document.contains(mapped)) return mapped;
+
+    const composer = findComposerForEditor(editor);
+    return composer ? ensureInlineToolbarForComposer(composer) : null;
+  }
+
+  function rememberInlineToolbarSelection(editor, selection = null) {
+    const toolbar = getInlineToolbarForEditor(editor);
+    if (!toolbar || !editor) return null;
+
+    const normalized = normalizeSelectionRange(selection || getEditorSelection(editor), getEditorText(editor).length);
+    if (normalized && normalized.start !== normalized.end) {
+      toolbar.__ccfSelection = normalized;
+      return normalized;
+    }
+
+    return null;
+  }
+
+  function clearInlineToolbarSelection(toolbar = null) {
+    const toolbars = toolbar ? [toolbar] : [...document.querySelectorAll(INLINE_TOOLBAR_SELECTOR)];
+    toolbars.forEach((item) => {
+      if (item) {
+        item.__ccfSelection = null;
+      }
+    });
+  }
+
+  function restoreInlineToolbarEditorSelection(toolbar) {
+    const editor = getInlineToolbarEditor(toolbar);
+    const selection = editor ? getInlineToolbarSelection(toolbar) : null;
+    restoreRoomSelectionSoon(editor, selection);
+  }
+
+  function handleInlineToolbarDocumentMouseDown(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const toolbar = target.closest(INLINE_TOOLBAR_SELECTOR);
+    if (toolbar) {
+      captureInlineToolbarSelection(toolbar);
+      return;
+    }
+
+    const editor = normalizeEditorCandidate(target);
+    if (editor) return;
+
+    clearInlineToolbarSelection();
+  }
+
+  function syncInlineToolbarSelectionFromDocument() {
+    const editor = normalizeEditorCandidate(document.activeElement);
+    if (!editor) return;
+
+    const toolbar = getInlineToolbarForEditor(editor);
+    if (!toolbar) return;
+
+    const selection = normalizeSelectionRange(getEditorSelection(editor), getEditorText(editor).length);
+    if (selection && selection.start !== selection.end) {
+      toolbar.__ccfSelection = selection;
+      return;
+    }
+
+    clearInlineToolbarSelection(toolbar);
+  }
+
+  function handleInlineBoldShortcut(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return false;
+    if (String(event.key || "").toLowerCase() !== "b") return false;
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest?.(`[${SAFE_UI_ATTR}="1"]`)) return false;
+
+    const editor = normalizeEditorCandidate(document.activeElement) || normalizeEditorCandidate(target);
+    if (!editor) return false;
+
+    const toolbar = getInlineToolbarForEditor(editor);
+    const boldButton = toolbar?.querySelector?.('[data-inline-command="bold"]');
+    if (!toolbar || !boldButton) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+
+    rememberInlineToolbarSelection(editor);
+    boldButton.classList.toggle("active");
+    applyInlineToolbarStyle(toolbar, {
+      selectionOverride: getInlineToolbarSelection(toolbar)
+    });
+    return true;
   }
 
   function getStyleFromInlineToolbar(toolbar) {
