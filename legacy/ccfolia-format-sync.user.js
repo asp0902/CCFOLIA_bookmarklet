@@ -8148,6 +8148,15 @@
       alignRuns
     };
 
+    const presenceApi = window.__CAPYBARA_TOOLKIT_PRESENCE__;
+    if (presenceApi && typeof presenceApi.decorateEnvelope === "function") {
+      try {
+        presenceApi.decorateEnvelope(envelope, rawText);
+      } catch (error) {
+        console.warn("[CCF] toolkit presence decoration failed", error);
+      }
+    }
+
     const encoded = encodeEnvelopeToInvisible(envelope);
     const outgoing = rawText + encoded;
     if (currentText === outgoing) return true;
