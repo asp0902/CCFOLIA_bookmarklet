@@ -90,8 +90,8 @@
     status: "준비됨",
     launcherDrag: null,
     suppressNextToggle: false,
-    customOrder: [],           // 드래그로 변경한 순서 저장용
-    customOrderLoaded: false   // 초기 로딩 여부 체크용
+    customOrder: [],
+    customOrderLoaded: false
   };
 
   if (typeof window.__CCF_SUITE_MANAGER_SESSION_ID !== "string") {
@@ -345,12 +345,24 @@
         h1 { margin: 0; font-size: 15px; line-height: 1.25; color: #111; }
         .sub { margin-top: 3px; font-size: 12px; color: #666; }
         .close { width: 28px; height: 28px; border: 1px solid #d7d7d7; border-radius: 6px; background: #fff; cursor: pointer; }
-        .body { overflow: auto; padding: 10px; }
+        .body { overflow: auto; padding: 10px; position: relative; }
         .notice { padding: 9px 10px; border: 1px solid #e4d2a3; background: #fff8e6; color: #5d4300; border-radius: 6px; font-size: 12px; line-height: 1.45; margin-bottom: 10px; }
-        .feature { border: 1px solid #e1e1e1; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fbfbfb; cursor: grab; }
+        .feature { 
+          border: 1px solid #e1e1e1; border-radius: 8px; padding: 10px; margin-bottom: 8px; 
+          background: #fbfbfb; cursor: grab; touch-action: none; will-change: transform;
+        }
         .feature:active { cursor: grabbing; }
+        .feature.dragging { visibility: hidden !important; position: relative; z-index: 1; }
+        .feature.animating { pointer-events: none !important; }
         .feature[data-loaded="1"] { border-color: #b0b0b0; background: #f0f0f0; }
         .feature[data-experimental="1"] { background: #f8f8f8; }
+        .drag-clone {
+          position: fixed !important; z-index: 2147483647 !important; pointer-events: none !important;
+          margin: 0 !important; box-sizing: border-box !important;
+          border: 1px solid #e1e1e1; border-radius: 8px; padding: 10px;
+          background: rgba(251, 251, 251, 0.95); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+          will-change: transform;
+        }
         .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
         .name { font-size: 13px; font-weight: 800; color: #171717; line-height: 1.35; }
         .summary { margin-top: 3px; font-size: 12px; color: #555; line-height: 1.45; }
@@ -374,6 +386,7 @@
           .sub, .summary, .status { color: #aaa; }
           .feature { background: #202020; border-color: #333; }
           .feature[data-loaded="1"] { background: #2a2a2a; border-color: #555; }
+          .drag-clone { background: rgba(32, 32, 32, 0.95); border-color: #333; }
           .notice { background: #2a2415; border-color: #6f5c2b; color: #f0d996; }
           .close, .btn.secondary { background: #151515; border-color: #444; color: #eee; }
         }
@@ -408,46 +421,172 @@
       bindLauncherDrag(fab);
     }
 
+    // --- 부드러운 드래그 앤 드롭 애니메이션 (Pointer Events & FLIP) ---
     const bodyContainer = shadow.querySelector(".body");
-    let draggedItem = null;
+    let featureDragState = null;
 
-    bodyContainer.addEventListener("dragstart", (e) => {
-      const featureEl = e.target.closest(".feature");
-      if (!featureEl || e.target.closest("button")) {
-        if (e.target.closest("button")) e.preventDefault();
-        return;
+    function animateReorder(container, excludeRow, mutateFn) {
+      const rows = Array.from(container.querySelectorAll(".feature")).filter(r => r !== excludeRow);
+      const firstRects = new Map(rows.map(r => [r, r.getBoundingClientRect()]));
+
+      mutateFn();
+
+      rows.forEach(row => {
+        const first = firstRects.get(row);
+        if (!first) return;
+        const last = row.getBoundingClientRect();
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+        const token = `${Date.now()}:${Math.random()}`;
+        row.dataset.animToken = token;
+        row.classList.add("animating");
+        row.style.transition = "none";
+        row.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        row.getBoundingClientRect(); // 강제 렌더링 트리거
+
+        requestAnimationFrame(() => {
+          if (row.dataset.animToken !== token) return;
+          row.style.transition = "transform 250ms cubic-bezier(0.25, 1, 0.5, 1)";
+          row.style.transform = "";
+        });
+
+        setTimeout(() => {
+          if (row.dataset.animToken !== token) return;
+          row.classList.remove("animating");
+          row.style.transition = "";
+          row.style.transform = "";
+          delete row.dataset.animToken;
+        }, 280);
+      });
+    }
+
+    function handleFeatureDragMove(e) {
+      if (!featureDragState || e.pointerId !== featureDragState.pointerId) return;
+
+      const dx = e.clientX - featureDragState.startX;
+      const dy = e.clientY - featureDragState.startY;
+
+      if (!featureDragState.dragging) {
+        if (Math.hypot(dx, dy) < 5) return;
+        featureDragState.dragging = true;
+
+        const rect = featureDragState.row.getBoundingClientRect();
+        const clone = featureDragState.row.cloneNode(true);
+        clone.classList.add("drag-clone");
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+        clone.style.left = `${rect.left}px`;
+        clone.style.top = `${rect.top}px`;
+        
+        shadow.appendChild(clone);
+        featureDragState.clone = clone;
+        featureDragState.row.classList.add("dragging");
       }
-      draggedItem = featureEl;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", featureEl.dataset.feature);
-      setTimeout(() => featureEl.style.opacity = "0.4", 0);
-    });
 
-    bodyContainer.addEventListener("dragover", (e) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const targetItem = e.target.closest(".feature");
-      
-      if (targetItem && targetItem !== draggedItem) {
-        const rect = targetItem.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
-          bodyContainer.insertBefore(draggedItem, targetItem);
-        } else {
-          bodyContainer.insertBefore(draggedItem, targetItem.nextSibling);
-        }
-      }
-    });
+      e.stopPropagation();
 
-    bodyContainer.addEventListener("dragend", (e) => {
-      if (draggedItem) {
-        draggedItem.style.opacity = "1";
-        draggedItem = null;
+      featureDragState.clone.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+
+      // 드롭 타겟 찾기
+      const siblings = Array.from(featureDragState.container.querySelectorAll(".feature:not(.dragging)"));
+      const target = siblings.find(sib => {
+        const rect = sib.getBoundingClientRect();
+        return e.clientY < rect.top + rect.height / 2;
+      });
+
+      if (target !== featureDragState.row.nextElementSibling) {
+        animateReorder(featureDragState.container, featureDragState.row, () => {
+          if (target) {
+            featureDragState.container.insertBefore(featureDragState.row, target);
+          } else {
+            featureDragState.container.appendChild(featureDragState.row);
+          }
+        });
       }
-      const newOrder = Array.from(bodyContainer.querySelectorAll(".feature")).map(el => el.dataset.feature);
-      state.customOrder = newOrder;
-      setSetting("feature-order", newOrder).catch(reportError);
+    }
+
+    function handleFeatureDragEnd(e) {
+      if (!featureDragState || e.pointerId !== featureDragState.pointerId) return;
+
+      window.removeEventListener("pointermove", handleFeatureDragMove, true);
+      window.removeEventListener("pointerup", handleFeatureDragEnd, true);
+      window.removeEventListener("pointercancel", handleFeatureDragEnd, true);
+
+      if (featureDragState.dragging) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const row = featureDragState.row;
+        const clone = featureDragState.clone;
+
+        row.classList.remove("dragging");
+
+        let dx = 0, dy = 0;
+        if (clone) {
+          const cloneRect = clone.getBoundingClientRect();
+          const rowRect = row.getBoundingClientRect();
+          dx = cloneRect.left - rowRect.left;
+          dy = cloneRect.top - rowRect.top;
+          clone.remove();
+        }
+
+        // 드롭 시 쫀득하게 제자리로 돌아가는 애니메이션
+        const token = `${Date.now()}:${Math.random()}`;
+        row.dataset.dropToken = token;
+        row.style.transition = "none";
+        row.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        row.getBoundingClientRect();
+
+        requestAnimationFrame(() => {
+          if (row.dataset.dropToken !== token) return;
+          row.style.transition = "transform 200ms cubic-bezier(0.25, 1, 0.5, 1)";
+          row.style.transform = "";
+        });
+
+        setTimeout(() => {
+          if (row.dataset.dropToken !== token) return;
+          row.style.transition = "";
+          row.style.transform = "";
+          delete row.dataset.dropToken;
+        }, 220);
+
+        // 변경된 순서 저장
+        const newOrder = Array.from(featureDragState.container.querySelectorAll(".feature")).map(el => el.dataset.feature);
+        state.customOrder = newOrder;
+        setSetting("feature-order", newOrder).catch(reportError);
+      }
+      featureDragState = null;
+    }
+
+    bodyContainer.addEventListener("pointerdown", (e) => {
+      // 좌클릭일 때만 실행
+      if (e.button !== 0) return;
+      
+      const featureEl = e.target.closest(".feature");
+      // 버튼 클릭 시에는 드래그 무시
+      if (!featureEl || e.target.closest("button")) return;
+
+      e.preventDefault(); // 텍스트 선택 등 방지
+
+      featureDragState = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        row: featureEl,
+        clone: null,
+        dragging: false,
+        container: bodyContainer
+      };
+
+      window.addEventListener("pointermove", handleFeatureDragMove, true);
+      window.addEventListener("pointerup", handleFeatureDragEnd, true);
+      window.addEventListener("pointercancel", handleFeatureDragEnd, true);
     });
+    // --- 드래그 애니메이션 끝 ---
 
     shadow.addEventListener("click", handlePanelClick);
     document.documentElement.appendChild(root);
@@ -487,8 +626,9 @@
       const disabled = state.loading.has(feature.id) || (!loaded && (!isCcfoliaHost() || disabledByPage));
       const buttonText = state.loading.has(feature.id) ? "..." : (loaded ? "ON" : "OFF");
 
+      // Pointer Event 방식을 위해 HTML5의 draggable="true"는 제거되었습니다.
       return `
-        <article class="feature" draggable="true" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
+        <article class="feature" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
           <div class="row">
             <div>
               <div class="name">${escapeHtml(feature.title)}</div>
