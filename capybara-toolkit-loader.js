@@ -44,6 +44,13 @@
       scripts: ["legacy/ccfolia-format-sync.user.js"]
     },
     {
+      id: "ccf-toolkit-presence",
+      title: "툴킷 사용자 표시",
+      summary: "코코포리아 룸 좌하단에 최근 툴킷 사용 신호를 보낸 인원 표시",
+      scripts: ["legacy/ccfolia-toolkit-presence.user.js"],
+      roomOnly: true
+    },
+    {
       id: "ccf-roll20-css-bridge",
       title: "Roll20 CSS 변환",
       summary: "Roll20 /desc CSS 매크로를 코코포리아 표시용 메시지로 변환",
@@ -615,6 +622,7 @@
   const LEGACY_TEARDOWN_HOOKS = Object.freeze({
     "ccf-chat-notifier": () => callLegacyDisable("__CCF_CHAT_NOTIFIER_DEBUG__"),
     "ccf-format-sync": () => callLegacyDisable("__CCF_FORMAT_SYNC_DEBUG__"),
+    "ccf-toolkit-presence": () => callLegacyDisable("__CAPYBARA_TOOLKIT_PRESENCE__"),
     "ccf-roll20-css-bridge": () => callLegacyDisable("__CCF_ROLL20_BRIDGE_DEBUG__"),
     "ccf-theme-switcher": () => callLegacyDisable("__CCF_THEME_SWITCHER_DEBUG__"),
     "ccf-log-package": () => callLegacyDisable("__CCF_LOG_PACKAGE_DEBUG__"),
