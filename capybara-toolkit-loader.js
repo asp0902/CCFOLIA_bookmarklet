@@ -373,7 +373,7 @@
         <footer>
           <div class="status"></div>
           <button class="btn secondary" type="button" data-action="cache">캐시 갱신</button>
-          <button class="btn secondary" type="button" data-action="backup">저장값 백업</button>
+          <button class="btn secondary" type="button" data-action="backup">저장</button>
         </footer>
       </section>
       <button class="fab" type="button" data-action="toggle" title="카피바라 툴킷">C</button>
