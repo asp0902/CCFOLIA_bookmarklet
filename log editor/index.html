@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>카피바라 로그 편집기</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f4f4f4;
+    --bg-elev: #fafafa;
+    --fg: #111111;
+    --fg-muted: #666666;
+    --border: #d4d4d4;
+    --border-strong: #111111;
+    --accent: #111111;
+    --accent-fg: #ffffff;
+    --danger: #8a0000;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e0e;
+      --bg-alt: #161616;
+      --bg-elev: #1c1c1c;
+      --fg: #f0f0f0;
+      --fg-muted: #9a9a9a;
+      --border: #2a2a2a;
+      --border-strong: #f0f0f0;
+      --accent: #f0f0f0;
+      --accent-fg: #0e0e0e;
+      --danger: #ff8a8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: 100vh;
+  }
+  aside.sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--bg-alt);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  aside.sidebar header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  aside.sidebar h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  aside.sidebar .room-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    list-style: none;
+    margin: 0;
+  }
+  aside.sidebar .room-list li {
+    padding: 0;
+    margin: 0;
+  }
+  aside.sidebar .room-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    padding: 10px 16px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    display: block;
+    border-left: 3px solid transparent;
+  }
+  aside.sidebar .room-item:hover {
+    background: var(--bg-elev);
+  }
+  aside.sidebar .room-item.active {
+    background: var(--bg);
+    border-left-color: var(--border-strong);
+    font-weight: 600;
+  }
+  aside.sidebar .room-item .title {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  aside.sidebar .room-item .meta {
+    display: block;
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+  }
+  aside.sidebar .empty {
+    padding: 16px;
+    color: var(--fg-muted);
+    font-size: 13px;
+  }
+  aside.sidebar footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+  main.content {
+    overflow-y: auto;
+    padding: 24px 32px;
+  }
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--fg-muted);
+    text-align: center;
+    gap: 12px;
+  }
+  .empty-state h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--fg);
+  }
+  .empty-state p {
+    margin: 0;
+    max-width: 460px;
+  }
+  .empty-state code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .room-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+  .room-header h2 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .room-header .room-meta {
+    color: var(--fg-muted);
+    font-size: 12px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .room-header .room-actions {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  button.btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+  }
+  button.btn:hover {
+    border-color: var(--border-strong);
+  }
+  button.btn.danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+  button.btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  .tab-nav {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+    overflow-x: auto;
+  }
+  .tab-nav button {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 8px 12px;
+    color: var(--fg-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .tab-nav button.active {
+    color: var(--fg);
+    border-bottom-color: var(--border-strong);
+    font-weight: 600;
+  }
+  .editor-option-panel {
+    margin: 14px 0 18px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elev);
+  }
+  .editor-option-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--fg-muted);
+    margin-bottom: 8px;
+  }
+  .tab-check-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tab-check-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tab-check-item input {
+    accent-color: var(--accent);
+  }
+  .tab-check-item small {
+    color: var(--fg-muted);
+  }
+  .editor-option-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .editor-option-row label {
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+  .editor-option-row select {
+    margin-left: 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .merge-option-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .editor-option-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .entry-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .entry {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .entry .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 0;
+    background: var(--bg-alt);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    flex: 0 0 48px;
+  }
+  .entry .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  /* 화자에게 이미지가 지정되지 않은 경우, 아바타 슬롯은 비워두되
+     옅은 사람 실루엣을 배경으로 표시한다 (외부 의존성 없는 inline SVG). */
+  .entry .avatar:empty {
+    background-color: #f3f4f6;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23d1d5db'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
+    background-size: 60%;
+    background-repeat: no-repeat;
+    background-position: center bottom;
+  }
+  @media (prefers-color-scheme: dark) {
+    .entry .avatar:empty {
+      background-color: #1c1c1c;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234a4a4a'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
+    }
+  }
+  .entry .body { min-width: 0; }
+  .entry .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .entry .head-main {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .entry .head-aux {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+  }
+  .entry-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+  .entry.system-entry .entry-actions {
+    justify-content: flex-end;
+    margin: 0;
+  }
+  .system-entry-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1;
+    display: flex;
+    justify-content: flex-end;
+    margin: 0;
+  }
+  .entry.system-entry .system-entry-actions .entry-actions {
+    justify-content: flex-end;
+    margin: 0;
+  }
+  .entry-action-btn {
+    min-width: 28px;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .entry-action-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+  .entry-action-btn.danger {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  }
+  .entry-edit-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.46);
+  }
+  .entry-edit-dialog {
+    width: min(760px, 100%);
+    max-height: min(720px, calc(100vh - 40px));
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
+  }
+  .entry-edit-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .entry-edit-title {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .entry-edit-meta {
+    margin-top: 2px;
+    color: var(--fg-muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .entry-edit-body {
+    overflow-y: auto;
+    padding: 14px 16px 16px;
+  }
+  .entry-edit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .entry-edit-tool {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-alt);
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .entry-edit-tool:hover {
+    border-color: var(--border-strong);
+  }
+  .entry-edit-color {
+    width: 34px;
+    height: 30px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-alt);
+  }
+  .entry-rich-editor {
+    min-height: 180px;
+    max-height: 360px;
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    outline: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .entry-rich-editor:focus {
+    border-color: var(--border-strong);
+  }
+  .entry-edit-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-alt);
+  }
+  .entry .speaker {
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .entry .timestamp {
+    font-size: 11px;
+    color: var(--fg-muted);
+  }
+  .entry .channel {
+    font-size: 11px;
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 6px;
+    line-height: 1.4;
+  }
+  .entry .text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14px;
+  }
+  .entry .text img {
+    max-width: 100%;
+    height: auto;
+  }
+  .entry .text p {
+    margin: 0 0 4px;
+  }
+  .entry .text p:last-child {
+    margin-bottom: 0;
+  }
+  .entry.system-entry {
+    display: block;
+    position: relative;
+  }
+  .entry.system-entry .avatar,
+  .entry.system-entry .head {
+    display: none;
+  }
+  .entry.system-entry .body {
+    max-width: 86%;
+    margin: 0 auto;
+    text-align: center;
+    opacity: 0.92;
+  }
+  .entry.system-entry .text {
+    font-style: italic;
+    color: var(--fg-muted);
+  }
+
+  /* 패키지 렌더러(buildRenderedMessageHtml)가 만드는 구조용 규칙. */
+  .ccf-render-root .ccf-line {
+    display: block;
+  }
+  .ccf-render-root .ccf-image-frag {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    margin: 4px 0;
+    vertical-align: top;
+  }
+  .ccf-render-root .ccf-image {
+    display: block;
+    width: auto;
+    max-width: min(100%, 420px);
+    height: auto;
+    border: 0;
+    border-radius: 4px;
+    box-sizing: border-box;
+    margin: 0 auto;
+  }
+  /* 이미지 fragment에 함께 박혀있는 원본 URL 토큰을 숨긴다. */
+  .ccf-render-root .ccf-image-token {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    font-size: 0;
+    line-height: 0;
+    white-space: pre;
+    pointer-events: none;
+    user-select: none;
+  }
+  .ccf-render-root .ccf-frag {
+    white-space: pre-wrap;
+  }
+  .ccf-render-root .ccf-tooltip-frag {
+    border-bottom: 1px dotted var(--fg-muted);
+    cursor: help;
+  }
+  .ccf-render-root .ccf-code-frag {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg-alt);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.94em;
+  }
+  .ccf-render-root .ccf-code-frag.is-block {
+    display: block;
+    padding: 8px 10px;
+    margin: 4px 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .ccf-render-root .ccf-ruby-frag {
+    position: relative;
+    display: inline-block;
+    line-height: 1.8;
+  }
+  .ccf-render-root .ccf-ruby-frag::before {
+    content: attr(data-ruby);
+    position: absolute;
+    top: -0.85em;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.55em;
+    font-weight: normal;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <header>
+    <h1>카피바라 로그</h1>
+    <button class="btn" id="btn-refresh" title="목록 새로고침">새로고침</button>
+  </header>
+  <ul class="room-list" id="room-list"></ul>
+  <footer id="storage-info">v0.1</footer>
+</aside>
+<main class="content" id="main-content">
+  <div class="empty-state" id="empty-state">
+    <h2>대기 중</h2>
+    <p>코코포리아 룸의 환경설정 메뉴에서 <code>카피바라 로그</code> 버튼을 누르면 이 편집기로 로그가 전달됩니다.</p>
+    <p>이전에 받은 로그가 있다면 왼쪽 목록에서 선택할 수 있습니다.</p>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const HANDOFF_MESSAGE_SOURCE = "capybara-log-userscript";
+  const HANDOFF_MESSAGE_TYPE = "capybara-log:handoff";
+  const HANDOFF_EDITOR_SOURCE = "capybara-log-editor";
+  const HANDOFF_READY_TYPE = "capybara-log:editor-ready";
+  const HANDOFF_ACK_TYPE = "capybara-log:handoff-received";
+  const HANDOFF_ERROR_TYPE = "capybara-log:handoff-error";
+  const DB_NAME = "capybara-log-editor";
+  const DB_VERSION = 1;
+  const STORE_ROOMS = "rooms";
+
+  const state = {
+    db: null,
+    rooms: [],
+    currentRoomId: "",
+    objectUrls: [],
+    selectedTabIds: new Set(),
+    selectedTabRoomId: "",
+    systemSpeaker: "",
+    mergeSameSpeaker: false
+  };
+
+  const els = {
+    roomList: document.getElementById("room-list"),
+    main: document.getElementById("main-content"),
+    emptyState: document.getElementById("empty-state"),
+    refresh: document.getElementById("btn-refresh"),
+    toast: document.getElementById("toast"),
+    storageInfo: document.getElementById("storage-info")
+  };
+
+  // ---------- IndexedDB ----------
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_ROOMS)) {
+          db.createObjectStore(STORE_ROOMS, { keyPath: "roomId" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function tx(storeName, mode, op) {
+    return new Promise((resolve, reject) => {
+      const transaction = state.db.transaction(storeName, mode);
+      const store = transaction.objectStore(storeName);
+      const req = op(store);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  const putRoom = (room) => tx(STORE_ROOMS, "readwrite", (s) => s.put(room));
+  const getRoom = (roomId) => tx(STORE_ROOMS, "readonly", (s) => s.get(roomId));
+  const deleteRoom = (roomId) => tx(STORE_ROOMS, "readwrite", (s) => s.delete(roomId));
+  const listRooms = () =>
+    tx(STORE_ROOMS, "readonly", (s) => s.getAll())
+      .then((rooms) => (rooms || []).sort((a, b) => (b.lastUpdatedAt || 0) - (a.lastUpdatedAt || 0)));
+
+  // ---------- Handoff bridge ----------
+
+  const seenHandoffKeys = new Set();
+
+  function setupMessageBridge() {
+    window.addEventListener("message", async (event) => {
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.source !== HANDOFF_MESSAGE_SOURCE) return;
+      if (data.type !== HANDOFF_MESSAGE_TYPE) return;
+
+      // 같은 핸드오프가 재전송 루프로 여러 번 들어올 수 있으니 중복 무시.
+      const key = makeHandoffKey(data);
+      if (seenHandoffKeys.has(key)) {
+        replyToOpener(event.source, { type: HANDOFF_ACK_TYPE });
+        return;
+      }
+      seenHandoffKeys.add(key);
+
+      try {
+        await ingestHandoff(data);
+        replyToOpener(event.source, { type: HANDOFF_ACK_TYPE });
+      } catch (error) {
+        console.error("[capybara-log-editor] handoff failed", error);
+        showToast("핸드오프 처리 실패: " + (error?.message || error));
+        replyToOpener(event.source, {
+          type: HANDOFF_ERROR_TYPE,
+          message: String(error?.message || error)
+        });
+      }
+    });
+
+    // 페이지가 준비되었음을 opener에게 알린다 (재전송 트리거).
+    notifyOpenerReady();
+  }
+
+  function makeHandoffKey(data) {
+    const ts = data?.record?.capturedAt || 0;
+    return `${data?.roomId || ""}::${ts}`;
+  }
+
+  function notifyOpenerReady() {
+    if (!window.opener) return;
+    try {
+      window.opener.postMessage({
+        source: HANDOFF_EDITOR_SOURCE,
+        type: HANDOFF_READY_TYPE
+      }, "*");
+    } catch (error) {
+      console.warn("[capybara-log-editor] notifyOpenerReady failed", error);
+    }
+  }
+
+  function replyToOpener(target, message) {
+    const dest = target || window.opener;
+    if (!dest) return;
+    try {
+      dest.postMessage({
+        source: HANDOFF_EDITOR_SOURCE,
+        ...message
+      }, "*");
+    } catch (error) {
+      console.warn("[capybara-log-editor] reply failed", error);
+    }
+  }
+
+  async function ingestHandoff({ roomId, roomUrl, record }) {
+    if (!roomId || !record || !record.payload) {
+      throw new Error("핸드오프 데이터가 비어있거나 형식이 올바르지 않습니다.");
+    }
+    const payload = record.payload;
+    const room = {
+      roomId,
+      roomUrl: roomUrl || record.roomUrl || "",
+      roomTitle: payload.roomTitle || "(제목 없음)",
+      roomAddress: payload.roomAddress || "",
+      capturedAt: record.capturedAt || Date.now(),
+      lastUpdatedAt: Date.now(),
+      payload
+    };
+    await putRoom(room);
+    showToast(`「${room.roomTitle}」 로그를 저장했습니다.`);
+    await refreshRoomList();
+    await selectRoom(roomId);
+  }
+
+  // ---------- Asset / HTML rewriting ----------
+
+  function buildAssetMaps(assets) {
+    const bySource = new Map();
+    const byRenderUrl = new Map();
+    for (const asset of assets || []) {
+      if (!asset) continue;
+      const bytes = asset.bytes;
+      if (!(bytes instanceof Uint8Array) || !bytes.length) continue;
+      const blob = new Blob([bytes], { type: asset.mimeType || "application/octet-stream" });
+      const objectUrl = URL.createObjectURL(blob);
+      state.objectUrls.push(objectUrl);
+      if (asset.source) bySource.set(asset.source, objectUrl);
+      if (asset.fileName) byRenderUrl.set(asset.fileName, objectUrl);
+      if (asset.renderUrl) byRenderUrl.set(asset.renderUrl, objectUrl);
+    }
+    return { bySource, byRenderUrl };
+  }
+
+  function revokeObjectUrls() {
+    for (const url of state.objectUrls) {
+      try { URL.revokeObjectURL(url); } catch {}
+    }
+    state.objectUrls = [];
+  }
+
+  function rewriteEntryHtml(html, byRenderUrl) {
+    if (!html) return "";
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    for (const img of tpl.content.querySelectorAll("img[src]")) {
+      const src = img.getAttribute("src") || "";
+      const replacement = byRenderUrl.get(src);
+      if (replacement) img.setAttribute("src", replacement);
+    }
+    for (const node of tpl.content.querySelectorAll("[style]")) {
+      const style = node.getAttribute("style") || "";
+      const updated = style.replace(/url\((['"]?)([^'")]+)\1\)/g, (match, quote, url) => {
+        const replacement = byRenderUrl.get(url);
+        return replacement ? `url(${quote}${replacement}${quote})` : match;
+      });
+      if (updated !== style) node.setAttribute("style", updated);
+    }
+    return tpl.innerHTML;
+  }
+
+  function resolveAvatarUrl(entry, assetMaps) {
+    const source = String(entry?.avatarSource || "").trim();
+    if (!source) return "";
+    const bundled = assetMaps.bySource.get(source);
+    if (bundled) return bundled;
+    if (/^\/\//.test(source)) return "https:" + source;
+    if (/^(https?:|data:image\/)/i.test(source)) return source;
+    return "";
+  }
+
+  function buildTistoryAssetMaps(assets) {
+    const bySource = new Map();
+    const byRenderUrl = new Map();
+    for (const asset of assets || []) {
+      if (!asset) continue;
+      const dataUrl = assetToDataUrl(asset);
+      if (!dataUrl) continue;
+      addAssetMapKey(bySource, asset.source, dataUrl);
+      addAssetMapKey(byRenderUrl, asset.source, dataUrl);
+      addAssetMapKey(byRenderUrl, asset.fileName, dataUrl);
+      addAssetMapKey(byRenderUrl, asset.renderUrl, dataUrl);
+    }
+    return { bySource, byRenderUrl };
+  }
+
+  function addAssetMapKey(map, key, value) {
+    if (!key || !value) return;
+    map.set(String(key), value);
+  }
+
+  function assetToDataUrl(asset) {
+    const bytes = toUint8Array(asset?.bytes);
+    if (!bytes || !bytes.length) return "";
+    const mimeType = asset.mimeType || guessMimeTypeFromName(asset.fileName || asset.source || "") || "image/png";
+    return `data:${mimeType};base64,${uint8ArrayToBase64(bytes)}`;
+  }
+
+  function toUint8Array(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (Array.isArray(value)) return Uint8Array.from(value);
+    return null;
+  }
+
+  function uint8ArrayToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  function guessMimeTypeFromName(value) {
+    const lower = String(value || "").split("?")[0].toLowerCase();
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".gif")) return "image/gif";
+    if (lower.endsWith(".webp")) return "image/webp";
+    if (lower.endsWith(".svg")) return "image/svg+xml";
+    return "";
+  }
+
+  // ---------- Render ----------
+
+  async function refreshRoomList() {
+    state.rooms = await listRooms();
+    renderRoomList();
+    updateStorageInfo();
+  }
+
+  function renderRoomList() {
+    if (!state.rooms.length) {
+      els.roomList.innerHTML = '<li class="empty">저장된 룸이 없습니다.</li>';
+      return;
+    }
+    const fmt = new Intl.DateTimeFormat("ko-KR", {
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
+    });
+    const html = state.rooms.map((room) => {
+      const isActive = room.roomId === state.currentRoomId ? " active" : "";
+      const captured = room.capturedAt ? fmt.format(new Date(room.capturedAt)) : "";
+      const title = escapeHtml(room.roomTitle || "(제목 없음)");
+      const subtitle = `${escapeHtml(room.roomId)}${captured ? ` · ${captured}` : ""}`;
+      return `<li>
+        <button class="room-item${isActive}" data-room-id="${escapeAttr(room.roomId)}">
+          <span class="title">${title}</span>
+          <span class="meta">${subtitle}</span>
+        </button>
+      </li>`;
+    }).join("");
+    els.roomList.innerHTML = html;
+    els.roomList.querySelectorAll(".room-item").forEach((btn) => {
+      btn.addEventListener("click", () => selectRoom(btn.dataset.roomId || ""));
+    });
+  }
+
+  async function selectRoom(roomId) {
+    if (!roomId) return;
+    const room = await getRoom(roomId);
+    if (!room) {
+      showToast("룸 데이터를 찾지 못했습니다.");
+      return;
+    }
+    state.currentRoomId = roomId;
+    renderRoomList();
+    renderRoom(room);
+  }
+
+  function renderRoom(room) {
+    revokeObjectUrls();
+    const payload = room.payload || {};
+    const assets = Array.isArray(payload.assets) ? payload.assets : [];
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    const tabs = Array.isArray(payload.tabs) ? payload.tabs : [];
+    const assetMaps = buildAssetMaps(assets);
+
+    const fmtFull = new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+    const capturedAt = room.capturedAt ? fmtFull.format(new Date(room.capturedAt)) : "";
+    const exportedAt = payload.exportedAt ? fmtFull.format(new Date(payload.exportedAt)) : "";
+
+    const meta = [];
+    if (room.roomId) meta.push(`룸 ID: <code>${escapeHtml(room.roomId)}</code>`);
+    if (capturedAt) meta.push(`캡처: ${capturedAt}`);
+    if (exportedAt && exportedAt !== capturedAt) meta.push(`추출: ${exportedAt}`);
+    meta.push(`메시지: ${entries.length.toLocaleString("ko-KR")}건`);
+
+    const speakerOptions = getSpeakerOptions(entries);
+    const tabIds = tabs.length
+      ? tabs.map((tab, i) => tab?.id || `tab-${i + 1}`)
+      : ["tab-1"];
+    const roomSelectionId = room.roomId || room.roomUrl || room.roomTitle || "";
+    if (state.selectedTabRoomId !== roomSelectionId) {
+      state.selectedTabIds = new Set(tabIds);
+      state.selectedTabRoomId = roomSelectionId;
+    } else {
+      const validTabIds = new Set(tabIds);
+      state.selectedTabIds = new Set([...state.selectedTabIds].filter((id) => validTabIds.has(id)));
+    }
+
+    const tabsHtml = entries.length
+      ? `<div class="editor-option-panel">
+          ${tabs.length ? `
+            <div class="editor-option-title">출력 탭 선택</div>
+            <div class="tab-check-list">
+              ${tabs.map((tab, i) => {
+                const id = tab?.id || `tab-${i + 1}`;
+                const label = escapeHtml(tab?.name || `탭 ${i + 1}`);
+                const count = Number.isFinite(tab?.messageCount) ? tab.messageCount : 0;
+                const checked = state.selectedTabIds.has(id) ? " checked" : "";
+                return `<label class="tab-check-item">
+                  <input type="checkbox" class="js-output-tab-check" value="${escapeAttr(id)}"${checked}>
+                  <span>${label}</span>
+                  <small>${count}</small>
+                </label>`;
+              }).join("")}
+            </div>
+          ` : ""}
+          <div class="editor-option-row">
+            <label>
+              시스템/나레이터 화자
+              <select id="system-speaker-select">
+                <option value="">지정 안 함</option>
+                ${speakerOptions.map((name) => `
+                  <option value="${escapeAttr(name)}"${state.systemSpeaker === name ? " selected" : ""}>
+                    ${escapeHtml(name)}
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+            <label class="merge-option-label">
+              <input type="checkbox" id="merge-same-speaker"${state.mergeSameSpeaker ? " checked" : ""}>
+              동일 화자 연속 발언 병합
+            </label>
+          </div>
+        </div>`
+      : "";
+    const tistoryActionHtml = entries.length
+      ? `
+          <button class="btn" id="btn-copy-tistory-html">티스토리용 HTML 복사</button>
+          <button class="btn" id="btn-preview-tistory-html">티스토리 HTML 보기</button>`
+      : "";
+
+    els.main.innerHTML = `
+      <section class="room-header">
+        <h2>${escapeHtml(room.roomTitle || "(제목 없음)")}</h2>
+        <div class="room-meta">${meta.join(" · ")}</div>
+        <div class="room-actions">
+          <button class="btn danger" id="btn-delete-room">이 룸 데이터 삭제</button>
+          ${tistoryActionHtml}
+        </div>
+      </section>
+      ${tabsHtml}
+      <ol class="entry-list" id="entry-list"></ol>
+    `;
+
+    renderSelectedTabEntries(room, assetMaps);
+
+    const deleteBtn = document.getElementById("btn-delete-room");
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(`「${room.roomTitle}」 의 저장 데이터를 삭제할까요?`)) return;
+        await deleteRoom(room.roomId);
+        state.currentRoomId = "";
+        revokeObjectUrls();
+        await refreshRoomList();
+        showEmpty();
+      });
+    }
+
+    els.main.querySelectorAll(".js-output-tab-check").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        state.selectedTabIds = new Set(
+          [...els.main.querySelectorAll(".js-output-tab-check:checked")]
+            .map((input) => input.value)
+            .filter(Boolean)
+        );
+        renderSelectedTabEntries(room, assetMaps);
+      });
+    });
+
+    const systemSpeakerSelect = document.getElementById("system-speaker-select");
+    if (systemSpeakerSelect) {
+      systemSpeakerSelect.addEventListener("change", () => {
+        state.systemSpeaker = systemSpeakerSelect.value || "";
+        renderSelectedTabEntries(room, assetMaps);
+      });
+    }
+
+    const mergeCheckbox = document.getElementById("merge-same-speaker");
+    if (mergeCheckbox) {
+      mergeCheckbox.addEventListener("change", () => {
+        state.mergeSameSpeaker = !!mergeCheckbox.checked;
+        renderSelectedTabEntries(room, assetMaps);
+      });
+    }
+
+    const copyTistoryBtn = document.getElementById("btn-copy-tistory-html");
+    if (copyTistoryBtn) {
+      copyTistoryBtn.addEventListener("click", async () => {
+        try {
+          const html = buildEditorTistoryHtml(room);
+          await navigator.clipboard.writeText(html);
+          showToast("티스토리용 HTML을 복사했습니다.");
+        } catch (error) {
+          showToast("티스토리 HTML 복사 실패: " + (error?.message || error));
+        }
+      });
+    }
+
+    const previewTistoryBtn = document.getElementById("btn-preview-tistory-html");
+    if (previewTistoryBtn) {
+      previewTistoryBtn.addEventListener("click", () => {
+        const html = buildEditorTistoryHtml(room);
+        openTistoryPreview(html);
+      });
+    }
+  }
+
+  function getSpeakerOptions(entries) {
+    const seen = new Set();
+    const out = [];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      const name = String(entry?.sender || "").trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out.push(name);
+    }
+    return out.sort((a, b) => a.localeCompare(b, "ko"));
+  }
+
+  function getSelectedTabEntries(room) {
+    const payload = room?.payload || {};
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    const tabs = Array.isArray(payload.tabs) ? payload.tabs : [];
+    if (!tabs.length) return entries.slice();
+    if (!state.selectedTabIds.size) return [];
+
+    return entries.filter((entry) => {
+      const tabId = String(entry?.tabId || "");
+      if (tabId) return state.selectedTabIds.has(tabId);
+
+      const tabIndex = Number.isFinite(entry?.tabIndex)
+        ? Number(entry.tabIndex)
+        : (Number.isFinite(entry?.tabOrder) ? Number(entry.tabOrder) - 1 : NaN);
+      if (Number.isFinite(tabIndex)) {
+        const fallbackId = tabs[tabIndex]?.id || `tab-${tabIndex + 1}`;
+        return state.selectedTabIds.has(fallbackId);
+      }
+
+      return true;
+    });
+  }
+
+  function mergeConsecutiveSpeakerEntries(entries, systemSpeaker = "") {
+    const out = [];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (!entry) continue;
+
+      const sender = String(entry.sender || "").trim();
+      const tabId = String(entry.tabId || "").trim();
+      const isSystem = !!(systemSpeaker && sender === systemSpeaker);
+      const prev = out[out.length - 1];
+      const prevSender = String(prev?.sender || "").trim();
+      const prevTabId = String(prev?.tabId || "").trim();
+
+      const canMerge =
+        !!sender &&
+        prev &&
+        prevSender === sender &&
+        prevTabId === tabId;
+
+      if (!canMerge) {
+        out.push({
+          ...entry,
+          __isSystemSpeaker: isSystem,
+          __mergedEntries: [entry]
+        });
+        continue;
+      }
+
+      if (!Array.isArray(prev.__mergedEntries)) prev.__mergedEntries = [];
+      prev.__mergedEntries.push(entry);
+
+      prev.text = [prev.text || "", entry.text || ""].filter(Boolean).join("\n");
+      prev.visibleText = [prev.visibleText || "", entry.visibleText || ""].filter(Boolean).join("\n");
+
+      const prevHtml = prev.packageHtml || prev.bodyHtml || "";
+      const nextHtml = entry.packageHtml || entry.bodyHtml || "";
+      const mergedHtml = [prevHtml, nextHtml].filter(Boolean).join("<br>");
+      prev.packageHtml = mergedHtml;
+      prev.bodyHtml = mergedHtml;
+
+      if (!prev.timestamp && entry.timestamp) prev.timestamp = entry.timestamp;
+    }
+    return out;
+  }
+
+  function renderSelectedTabEntries(room, assetMaps) {
+    let selectedEntries = getSelectedTabEntries(room);
+    if (state.mergeSameSpeaker) {
+      selectedEntries = mergeConsecutiveSpeakerEntries(selectedEntries, state.systemSpeaker);
+    }
+    renderEntries(selectedEntries, assetMaps, room);
+  }
+
+  function renderEntries(entries, assetMaps, room = null) {
+    const listEl = document.getElementById("entry-list");
+    if (!listEl) return;
+    if (!entries.length) {
+      listEl.innerHTML = '<li class="empty-state"><p>표시할 메시지가 없습니다.</p></li>';
+      return;
+    }
+    const html = entries.map((entry, displayIndex) => {
+      const senderText = entry?.sender || "";
+      const speaker = escapeHtml(senderText || "(이름 없음)");
+      const speakerStyle = entry?.baseColor
+        ? ` style="color:${escapeAttr(entry.baseColor)}"`
+        : "";
+      const timestamp = formatEntryTimestamp(entry?.timestamp);
+      const channel = entry?.channel ? escapeHtml(entry.channel) : "";
+      const avatarUrl = resolveAvatarUrl(entry, assetMaps);
+      const isSystemSpeaker = !!(entry?.__isSystemSpeaker || (state.systemSpeaker && senderText === state.systemSpeaker));
+      const avatarHtml = !isSystemSpeaker && avatarUrl
+        ? `<img src="${escapeAttr(avatarUrl)}" alt="${escapeAttr(senderText ? `${senderText} avatar` : "avatar")}">`
+        : "";
+      const bodyHtml = rewriteEntryHtml(entry?.packageHtml || entry?.bodyHtml || "", assetMaps.byRenderUrl);
+      const entryIndex = getRoomEntryIndex(room, entry);
+      const mergedEntries = Array.isArray(entry?.__mergedEntries) ? entry.__mergedEntries : [];
+      const canEditEntry = state.mergeSameSpeaker ? mergedEntries.length > 0 : entryIndex >= 0;
+      const canDeleteEntry = !state.mergeSameSpeaker && entryIndex >= 0;
+      const actionHtml = canEditEntry
+        ? `<div class="entry-actions">
+            <button type="button" class="entry-action-btn js-edit-entry" data-entry-index="${entryIndex}" data-display-index="${displayIndex}" title="메시지 수정">수정</button>
+            ${canDeleteEntry ? `<button type="button" class="entry-action-btn danger js-delete-entry" data-entry-index="${entryIndex}" title="메시지 삭제">삭제</button>` : ""}
+          </div>`
+        : "";
+      const systemActionHtml = isSystemSpeaker && actionHtml
+        ? `<div class="system-entry-actions">${actionHtml}</div>`
+        : "";
+      return `<li class="entry${isSystemSpeaker ? " system-entry" : ""}">
+        ${systemActionHtml}
+        <div class="avatar">${avatarHtml}</div>
+        <div class="body">
+          <div class="head">
+            <div class="head-main">
+              <span class="speaker"${speakerStyle}>${speaker}</span>
+              ${timestamp ? `<span class="timestamp">${escapeHtml(timestamp)}</span>` : ""}
+            </div>
+            <div class="head-aux">
+              ${channel ? `<span class="channel">${channel}</span>` : ""}
+              ${isSystemSpeaker ? "" : actionHtml}
+            </div>
+          </div>
+          <div class="text ccf-render-root">${bodyHtml}</div>
+        </div>
+      </li>`;
+    }).join("");
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll(".js-edit-entry").forEach((button) => {
+      button.addEventListener("click", () => {
+        const displayIndex = Number(button.dataset.displayIndex);
+        const displayEntry = Number.isInteger(displayIndex) ? entries[displayIndex] : null;
+        openEntryEditDialog(room, Number(button.dataset.entryIndex), displayEntry);
+      });
+    });
+
+    listEl.querySelectorAll(".js-delete-entry").forEach((button) => {
+      button.addEventListener("click", () => {
+        deleteEntryAtIndex(room, Number(button.dataset.entryIndex)).catch((error) => {
+          showToast("메시지 삭제 실패: " + (error?.message || error));
+        });
+      });
+    });
+  }
+
+  function getRoomEntryIndex(room, entry) {
+    const entries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    if (!entry || !entries.length) return -1;
+
+    const directIndex = entries.indexOf(entry);
+    if (directIndex >= 0) return directIndex;
+
+    const id = String(entry.id || "");
+    if (id) {
+      const idIndex = entries.findIndex((candidate) => String(candidate?.id || "") === id);
+      if (idIndex >= 0) return idIndex;
+    }
+
+    return -1;
+  }
+
+  async function deleteEntryAtIndex(room, entryIndex) {
+    const entries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    if (!room || !entries[entryIndex]) return;
+
+    const entry = entries[entryIndex];
+    const speaker = String(entry.sender || "").trim() || "(이름 없음)";
+    if (!confirm(`「${speaker}」 메시지를 삭제할까요?`)) return;
+
+    entries.splice(entryIndex, 1);
+    await persistRoomMutation(room, "메시지를 삭제했습니다.");
+  }
+
+  function openEntryEditDialog(room, entryIndex, displayEntry = null) {
+    const sourceEntries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    const entry = displayEntry || sourceEntries[entryIndex] || null;
+    if (!room || !entry) return;
+
+    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overlay = document.createElement("div");
+    overlay.className = "entry-edit-backdrop";
+    overlay.innerHTML = `
+      <section class="entry-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="entry-edit-title">
+        <header class="entry-edit-header">
+          <div>
+            <div class="entry-edit-title" id="entry-edit-title">${escapeHtml(entry.sender || "(이름 없음)")}</div>
+            <div class="entry-edit-meta">${escapeHtml([entry.channel, formatEntryTimestamp(entry.timestamp)].filter(Boolean).join(" · "))}</div>
+          </div>
+          <button type="button" class="entry-action-btn js-entry-edit-close" title="닫기">×</button>
+        </header>
+        <div class="entry-edit-body">
+          <div class="entry-edit-toolbar" aria-label="텍스트 서식">
+            <button type="button" class="entry-edit-tool" data-command="bold" title="굵게"><b>B</b></button>
+            <button type="button" class="entry-edit-tool" data-command="italic" title="기울임"><i>I</i></button>
+            <button type="button" class="entry-edit-tool" data-command="underline" title="밑줄"><u>U</u></button>
+            <button type="button" class="entry-edit-tool" data-command="strikeThrough" title="취소선"><s>S</s></button>
+            <input type="color" class="entry-edit-color" value="${escapeAttr(readEntryTextColor(entry) || "#111111")}" title="글자색">
+            <button type="button" class="entry-edit-tool" data-command="removeFormat" title="서식 제거">Tx</button>
+          </div>
+          <div class="entry-rich-editor ccf-render-root" contenteditable="true" spellcheck="false"></div>
+        </div>
+        <footer class="entry-edit-footer">
+          <button type="button" class="btn js-entry-edit-cancel">취소</button>
+          <button type="button" class="btn primary js-entry-edit-save">저장</button>
+        </footer>
+      </section>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const editor = overlay.querySelector(".entry-rich-editor");
+    if (editor instanceof HTMLElement) {
+      editor.innerHTML = getEditableEntryHtml(entry);
+      editor.focus();
+      placeCursorAtEnd(editor);
+    }
+
+    const close = () => {
+      overlay.remove();
+      if (previousActive) {
+        try { previousActive.focus(); } catch {}
+      }
+    };
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    });
+
+    overlay.querySelector(".js-entry-edit-close")?.addEventListener("click", close);
+    overlay.querySelector(".js-entry-edit-cancel")?.addEventListener("click", close);
+
+    overlay.querySelectorAll("[data-command]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const command = button.getAttribute("data-command") || "";
+        if (!command || !(editor instanceof HTMLElement)) return;
+        editor.focus();
+        document.execCommand(command, false, null);
+      });
+    });
+
+    const colorInput = overlay.querySelector(".entry-edit-color");
+    if (colorInput instanceof HTMLInputElement) {
+      colorInput.addEventListener("input", () => {
+        if (!(editor instanceof HTMLElement)) return;
+        editor.focus();
+        document.execCommand("foreColor", false, colorInput.value);
+      });
+    }
+
+    overlay.querySelector(".js-entry-edit-save")?.addEventListener("click", async () => {
+      if (!(editor instanceof HTMLElement)) return;
+      try {
+        const editedHtml = sanitizeEditedEntryHtml(editor.innerHTML);
+        if (getMergedSourceEntries(room, entry).length) {
+          applyEditedMergedEntryHtml(room, entry, editedHtml);
+        } else {
+          applyEditedEntryHtml(sourceEntries[entryIndex] || entry, editedHtml);
+        }
+        await persistRoomMutation(room, "메시지를 수정했습니다.");
+        close();
+      } catch (error) {
+        showToast("메시지 수정 실패: " + (error?.message || error));
+      }
+    });
+
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        overlay.querySelector(".js-entry-edit-save")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
+  }
+
+  function getEditableEntryHtml(entry) {
+    const mergedEntries = Array.isArray(entry?.__mergedEntries) ? entry.__mergedEntries : [];
+    if (mergedEntries.length > 1) {
+      return mergedEntries
+        .map((sourceEntry) => getSingleEditableEntryHtml(sourceEntry))
+        .join('<br data-capybara-merge-break="1">');
+    }
+    return getSingleEditableEntryHtml(entry);
+  }
+
+  function getSingleEditableEntryHtml(entry) {
+    const html = String(entry?.packageHtml || entry?.bodyHtml || "").trim();
+    if (html) return html;
+    return escapeHtml(entry?.text || entry?.visibleText || "").replace(/\n/g, "<br>");
+  }
+
+  function getMergedSourceEntries(room, entry) {
+    const roomEntries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    const mergedEntries = Array.isArray(entry?.__mergedEntries) ? entry.__mergedEntries : [];
+    if (!roomEntries.length || !mergedEntries.length) return [];
+
+    return mergedEntries.map((sourceEntry) => {
+      const index = getRoomEntryIndex(room, sourceEntry);
+      return index >= 0 ? roomEntries[index] : null;
+    }).filter(Boolean);
+  }
+
+  function applyEditedMergedEntryHtml(room, mergedEntry, html) {
+    const sourceEntries = getMergedSourceEntries(room, mergedEntry);
+    if (!sourceEntries.length) {
+      applyEditedEntryHtml(mergedEntry, stripMergeBoundaryBreaks(html));
+      return;
+    }
+
+    if (sourceEntries.length === 1) {
+      applyEditedEntryHtml(sourceEntries[0], stripMergeBoundaryBreaks(html));
+      return;
+    }
+
+    const parts = splitMergedEditableHtml(html).map((part) => stripMergeBoundaryBreaks(part));
+    if (parts.length <= 1) {
+      applyEditedEntryHtml(sourceEntries[0], stripMergeBoundaryBreaks(html));
+      removeRoomEntries(room, sourceEntries.slice(1));
+      return;
+    }
+
+    const usableParts = parts.slice(0, sourceEntries.length);
+    const overflowParts = parts.slice(sourceEntries.length).filter((part) => String(part || "").trim());
+    if (overflowParts.length) {
+      const lastIndex = usableParts.length - 1;
+      usableParts[lastIndex] = [usableParts[lastIndex], ...overflowParts].filter(Boolean).join("<br>");
+    }
+
+    usableParts.forEach((part, index) => {
+      applyEditedEntryHtml(sourceEntries[index], part);
+    });
+
+    if (usableParts.length < sourceEntries.length) {
+      removeRoomEntries(room, sourceEntries.slice(usableParts.length));
+    }
+  }
+
+  function splitMergedEditableHtml(html) {
+    return String(html || "").split(/<br\b(?=[^>]*\bdata-capybara-merge-break\s*=\s*(?:"1"|'1'|1))[^>]*>/gi);
+  }
+
+  function stripMergeBoundaryBreaks(html) {
+    return String(html || "").replace(/<br\b(?=[^>]*\bdata-capybara-merge-break\s*=\s*(?:"1"|'1'|1))[^>]*>/gi, "<br>");
+  }
+
+  function removeRoomEntries(room, entriesToRemove) {
+    const roomEntries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    if (!roomEntries.length || !entriesToRemove?.length) return;
+
+    const removeSet = new Set(entriesToRemove);
+    for (let index = roomEntries.length - 1; index >= 0; index -= 1) {
+      if (removeSet.has(roomEntries[index])) {
+        roomEntries.splice(index, 1);
+      }
+    }
+  }
+
+  function applyEditedEntryHtml(entry, html) {
+    if (!entry || typeof entry !== "object") return;
+    const plainText = htmlToPlainText(html);
+    entry.bodyHtml = html;
+    entry.packageHtml = html;
+    entry.text = plainText;
+    entry.visibleText = plainText;
+    entry.rawText = plainText;
+    entry.formatRuns = [];
+    entry.alignRuns = [];
+    entry.blockStyle = {};
+    entry.formatEnvelopeVersion = null;
+    entry.editedAt = new Date().toISOString();
+  }
+
+  async function persistRoomMutation(room, message) {
+    if (!room || !room.payload) return;
+    room.lastUpdatedAt = Date.now();
+    room.payload.editedAt = new Date().toISOString();
+    refreshTabMessageCounts(room);
+    await putRoom(room);
+    await refreshRoomList();
+    renderRoom(room);
+    if (message) showToast(message);
+  }
+
+  function refreshTabMessageCounts(room) {
+    const entries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
+    const tabs = Array.isArray(room?.payload?.tabs) ? room.payload.tabs : [];
+    if (!tabs.length) return;
+
+    tabs.forEach((tab, index) => {
+      const tabId = String(tab?.id || `tab-${index + 1}`);
+      tab.messageCount = entries.filter((entry) => isEntryInTab(entry, tabId, index, tabs.length)).length;
+    });
+  }
+
+  function isEntryInTab(entry, tabId, tabIndex, tabCount) {
+    if (!entry || typeof entry !== "object") return false;
+    const entryTabId = String(entry.tabId || "");
+    if (entryTabId) return entryTabId === tabId;
+
+    const entryTabIndex = Number.isFinite(entry.tabIndex)
+      ? Number(entry.tabIndex)
+      : (Number.isFinite(entry.tabOrder) ? Number(entry.tabOrder) - 1 : NaN);
+    if (Number.isFinite(entryTabIndex)) return entryTabIndex === tabIndex;
+    return tabCount <= 1;
+  }
+
+  function sanitizeEditedEntryHtml(html) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = String(html || "");
+    tpl.content.querySelectorAll("script, iframe, object, embed, link, meta").forEach((node) => node.remove());
+
+    tpl.content.querySelectorAll("*").forEach((node) => {
+      [...node.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value || "";
+        if (name.startsWith("on")) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if ((name === "href" || name === "src") && /^\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if (name === "style" && /(?:expression\s*\(|javascript:)/i.test(value)) {
+          node.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    return tpl.innerHTML.trim();
+  }
+
+  function htmlToPlainText(html) {
+    const container = document.createElement("div");
+    container.innerHTML = String(html || "");
+    container.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    container.querySelectorAll("p, div, li, .ccf-line").forEach((node) => {
+      if (!node.textContent?.endsWith("\n")) {
+        node.appendChild(document.createTextNode("\n"));
+      }
+    });
+    return container.textContent
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function readEntryTextColor(entry) {
+    const color = String(entry?.baseColor || "").trim();
+    const probe = document.createElement("span");
+    probe.style.color = color;
+    const normalized = probe.style.color || "";
+    if (/^#[0-9a-f]{6}$/i.test(normalized)) return normalized;
+
+    const match = normalized.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    if (!match) return "";
+    return "#" + match.slice(1).map((part) => Number(part).toString(16).padStart(2, "0")).join("");
+  }
+
+  function normalizeCssColorForHtml(value) {
+    const color = String(value || "").trim();
+    if (!color) return "";
+    const probe = document.createElement("span");
+    probe.style.color = color;
+    return probe.style.color || "";
+  }
+
+  function placeCursorAtEnd(element) {
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function buildEditorTistoryHtml(room) {
+    const payload = room?.payload || {};
+    const roomTitle = room?.roomTitle || payload.roomTitle || "(제목 없음)";
+    const tistoryAssetMaps = buildTistoryAssetMaps(payload.assets || []);
+    let entries = getSelectedTabEntries(room);
+
+    if (state.mergeSameSpeaker) {
+      entries = mergeConsecutiveSpeakerEntries(entries, state.systemSpeaker);
+    }
+
+    const htmlEntries = entries.map((entry) => {
+      const sender = String(entry?.sender || "").trim();
+      const isSystem = !!(state.systemSpeaker && sender === state.systemSpeaker);
+      const bodyHtml = rewriteEntryHtml(entry?.packageHtml || entry?.bodyHtml || "", tistoryAssetMaps.byRenderUrl);
+      const avatarUrl = resolveAvatarUrl(entry, tistoryAssetMaps);
+      const speakerColor = normalizeCssColorForHtml(entry?.baseColor || "");
+      const speakerStyle = speakerColor ? ` style="color:${escapeAttr(speakerColor)}"` : "";
+
+      if (isSystem) {
+        return `
+          <div class="ccf-tistory-system">
+            <div class="ccf-tistory-system-text">${bodyHtml}</div>
+          </div>`;
+      }
+
+      return `
+        <div class="ccf-tistory-entry">
+          ${avatarUrl ? `<div class="ccf-tistory-avatar"><img src="${escapeAttr(avatarUrl)}" alt=""></div>` : `<div class="ccf-tistory-avatar"></div>`}
+          <div class="ccf-tistory-body">
+            <div class="ccf-tistory-speaker"${speakerStyle}>${escapeHtml(sender || "(이름 없음)")}</div>
+            <div class="ccf-tistory-text">${bodyHtml}</div>
+          </div>
+        </div>`;
+    }).join("\n");
+
+    return `<!-- Capybara Log: Tistory HTML -->
+<div class="ccf-tistory-log">
+  <style>
+    .ccf-tistory-log {
+      max-width: 760px;
+      margin: 0 auto;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: #222;
+      line-height: 1.7;
+    }
+    .ccf-tistory-title {
+      margin: 0 0 20px;
+      padding: 0 0 12px;
+      border-bottom: 1px solid #ddd;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .ccf-tistory-entry {
+      display: flex;
+      gap: 10px;
+      margin: 12px 0;
+      align-items: flex-start;
+    }
+    .ccf-tistory-avatar {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f2f2f2;
+    }
+    .ccf-tistory-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .ccf-tistory-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .ccf-tistory-speaker {
+      display: inline-block;
+      margin-bottom: 3px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .ccf-tistory-text {
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: #f7f7f7;
+      word-break: break-word;
+    }
+    .ccf-tistory-system {
+      margin: 16px auto;
+      text-align: center;
+    }
+    .ccf-tistory-system-text {
+      display: inline-block;
+      max-width: 86%;
+      padding: 8px 12px;
+      color: #666;
+      font-style: italic;
+      border-top: 1px solid #ddd;
+      border-bottom: 1px solid #ddd;
+    }
+    .ccf-tistory-log img {
+      max-width: 100%;
+    }
+  </style>
+
+  <h2 class="ccf-tistory-title">${escapeHtml(roomTitle)}</h2>
+  ${htmlEntries}
+</div>`;
+  }
+
+  function openTistoryPreview(html) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      showToast("미리보기 창을 열지 못했습니다. 팝업 차단을 확인해 주세요.");
+      return;
+    }
+
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>티스토리 HTML 미리보기</title>
+</head>
+<body>
+${html}
+</body>
+</html>`);
+    win.document.close();
+  }
+
+  function formatEntryTimestamp(value) {
+    if (value == null) return "";
+    if (value instanceof Date) {
+      return Number.isFinite(value.getTime()) ? formatTimeOfDay(value) : "";
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return formatTimeOfDay(new Date(value));
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      // 코코포리아 공식 로그는 이미 표시용 시간 문자열이 들어오기도 한다.
+      const numericLike = /^\d{4,}$/.test(trimmed) ? Number(trimmed) : NaN;
+      if (Number.isFinite(numericLike)) {
+        const d = new Date(numericLike);
+        if (Number.isFinite(d.getTime())) return formatTimeOfDay(d);
+      }
+      const parsed = Date.parse(trimmed);
+      if (Number.isFinite(parsed)) {
+        return formatTimeOfDay(new Date(parsed));
+      }
+      return trimmed;
+    }
+    return "";
+  }
+
+  const _fmtTimeOfDay = new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+  function formatTimeOfDay(d) {
+    return _fmtTimeOfDay.format(d);
+  }
+
+  function showEmpty() {
+    els.main.innerHTML = `
+      <div class="empty-state">
+        <h2>대기 중</h2>
+        <p>코코포리아 룸의 환경설정 메뉴에서 <code>카피바라 로그</code> 버튼을 누르면 이 편집기로 로그가 전달됩니다.</p>
+        <p>이전에 받은 로그가 있다면 왼쪽 목록에서 선택할 수 있습니다.</p>
+      </div>
+    `;
+  }
+
+  // ---------- Misc ----------
+
+  async function updateStorageInfo() {
+    try {
+      const total = state.rooms.length;
+      let bytes = 0;
+      for (const room of state.rooms) {
+        for (const asset of room?.payload?.assets || []) {
+          if (asset?.bytes instanceof Uint8Array) {
+            bytes += asset.bytes.byteLength;
+          } else if (typeof asset?.size === "number") {
+            bytes += asset.size;
+          }
+        }
+      }
+      els.storageInfo.textContent = `v0.1 · 룸 ${total}개 · 자산 약 ${formatBytes(bytes)}`;
+    } catch {
+      els.storageInfo.textContent = "v0.1";
+    }
+  }
+
+  function formatBytes(n) {
+    if (!n) return "0B";
+    const units = ["B", "KB", "MB", "GB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
+  }
+
+  let toastTimer = 0;
+  function showToast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add("visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove("visible"), 2400);
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ---------- Bootstrap ----------
+
+  async function bootstrap() {
+    try {
+      state.db = await openDb();
+    } catch (error) {
+      console.error("[capybara-log-editor] failed to open IndexedDB", error);
+      els.main.innerHTML = `<div class="empty-state"><h2>저장소 열기 실패</h2><p>${escapeHtml(error?.message || error)}</p></div>`;
+      return;
+    }
+
+    setupMessageBridge();
+    await refreshRoomList();
+
+    const params = new URLSearchParams(location.search);
+    const wantedRoomId = params.get("roomId") || "";
+    if (wantedRoomId) {
+      const existing = await getRoom(wantedRoomId);
+      if (existing) {
+        await selectRoom(wantedRoomId);
+        return;
+      }
+      // 핸드오프 메시지가 곧 도착할 가능성이 높으므로 빈 화면을 그대로 둔다.
+    }
+
+    if (state.rooms.length && !state.currentRoomId) {
+      await selectRoom(state.rooms[0].roomId);
+    }
+  }
+
+  els.refresh.addEventListener("click", () => {
+    refreshRoomList().catch((e) => showToast("새로고침 실패: " + (e?.message || e)));
+  });
+
+  bootstrap().catch((error) => {
+    console.error("[capybara-log-editor] bootstrap failed", error);
+    showToast("초기화 실패: " + (error?.message || error));
+  });
+})();
+</script>
+</body>
+</html>
