@@ -30,6 +30,14 @@
       primaryAction: "sound"
     },
     {
+      id: "ccfolia-standing-picker",
+      title: "스탠딩 @ 선택",
+      summary: "채팅 입력 중 @로 캐릭터 스탠딩을 빠르게 선택",
+      styles: ["legacy/ccfolia-standing-picker.style.css"],
+      scripts: ["legacy/ccfolia-standing-picker.content.js"],
+      legacyStateId: "ccfolia-standing-picker"
+    },
+    {
       id: "ccf-format-sync",
       title: "서식 편집 도구",
       summary: "채팅 입력창 위 서식 편집 툴바, 렌더러, 루비/툴팁/블러 서식",
@@ -53,14 +61,6 @@
       summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
       scripts: ["legacy/ccfolia-log-package.user.js"],
       roomOnly: true
-    },
-    {
-      id: "ccfolia-standing-picker",
-      title: "스탠딩 @ 선택",
-      summary: "채팅 입력 중 @로 캐릭터 스탠딩을 빠르게 선택",
-      styles: ["legacy/ccfolia-standing-picker.style.css"],
-      scripts: ["legacy/ccfolia-standing-picker.content.js"],
-      legacyStateId: "ccfolia-standing-picker"
     },
     {
       id: "ccf-suite-manager",
