@@ -25,7 +25,11 @@
   const BGM_NATIVE_EDIT_GRACE_MS = 5000;
   const BGM_DRAWER_WIDTH_PX = 640;
   const BGM_WEB_AUDIO_MIN_DURATION = 8;
-  const BGM_STORAGE_KEY = `ccf-chat-notifier:youtube-bgm:${location.pathname}`;
+  const BGM_STORAGE_PREFIX = "ccf-chat-notifier:youtube-bgm:";
+  const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}${location.pathname}`;
+  const TOOLKIT_DB_NAME = "capybara-toolkit";
+  const TOOLKIT_STORE_ROOM_DATA = "roomData";
+  const TOOLKIT_STORE_ASSETS = "assets";
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
   const DEBUG_ENABLED = true;
@@ -1372,6 +1376,36 @@
           stopped: ccfBgmLastWebAudio.stopped,
           createdAt: ccfBgmLastWebAudio.createdAt
         } : null;
+      },
+      getYoutubeBgmEntries() {
+        return [...ccfBgmSlotMap.entries()].map(([entryKey, entry]) => ({
+          entryKey,
+          ...ccfBgmShareSerializableEntry(entry)
+        }));
+      },
+      inspectYoutubeBgmStorage() {
+        return collectCcfBgmStorageCandidates().then((candidates) => candidates.map((candidate) => ({
+          source: candidate.source,
+          tier: candidate.tier,
+          count: candidate.count,
+          updatedAt: candidate.updatedAt
+        })));
+      },
+      recoverYoutubeBgmStorage() {
+        return recoverCcfBgmStorageFromCandidates().then((result) => {
+          if (result?.payload) {
+            ccfBgmSlotMap.clear();
+            applyCcfBgmPersistedPayload(result.payload);
+            markCcfYoutubeBgmSlotButtons();
+            tryEnhanceCcfBgmPanel();
+            renderCcfYoutubeBgmLibraryItems();
+          }
+          return {
+            recovered: !!result?.payload,
+            source: result?.source || "",
+            count: result?.count || 0
+          };
+        });
       }
     };
     window.__CCF_CHAT_NOTIFIER_DEBUG__ = ccfChatNotifierDebugApi;
@@ -5185,25 +5219,303 @@
     return { getRoomData, setRoomData };
   }
 
-  function readCcfBgmLocalStorage() {
+  function getCcfBgmRoomKeyCandidates() {
+    const keys = [CCF_BGM_TOOLKIT_ROOM_KEY, location.pathname];
+    const match = location.pathname.match(/^\/rooms\/([^/?#]+)/i);
+    if (match) {
+      const rawRoomId = match[1];
+      keys.push(rawRoomId);
+      try {
+        keys.push(decodeURIComponent(rawRoomId));
+      } catch (error) {
+        // Keep the raw room id if decoding fails.
+      }
+      keys.push(`/rooms/${rawRoomId}`);
+    }
+    keys.push(`${location.origin}${location.pathname}`);
+    keys.push(location.href.split(/[?#]/)[0]);
+    return uniqueCcfBgmStrings(keys);
+  }
+
+  function getCcfBgmLocalStorageKeyCandidates() {
+    const keys = getCcfBgmRoomKeyCandidates().map((key) => `${BGM_STORAGE_PREFIX}${key}`);
+    keys.unshift(BGM_STORAGE_KEY);
+
+    const roomTokens = getCcfBgmRoomKeyCandidates()
+      .flatMap((key) => [key, encodeURIComponent(key)])
+      .filter((key) => key && key.length >= 4);
+
     try {
-      const raw = window.localStorage.getItem(BGM_STORAGE_KEY);
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index);
+        if (!key || !key.startsWith(BGM_STORAGE_PREFIX)) {
+          continue;
+        }
+        if (keys.includes(key) || roomTokens.some((token) => key.includes(token))) {
+          keys.push(key);
+        }
+      }
+    } catch (error) {
+      debugLog("bgm-storage-key-scan-failed", serializeError(error));
+    }
+
+    return uniqueCcfBgmStrings(keys);
+  }
+
+  function uniqueCcfBgmStrings(values) {
+    return [...new Set(values.map((value) => String(value || "")).filter(Boolean))];
+  }
+
+  function readCcfBgmLocalStorage(key = BGM_STORAGE_KEY) {
+    try {
+      const raw = window.localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
     } catch (error) {
-      debugLog("bgm-storage-local-read-failed", serializeError(error));
+      debugLog("bgm-storage-local-read-failed", {
+        key,
+        error: serializeError(error)
+      });
       return null;
     }
   }
 
-  function writeCcfBgmLocalStorage(payload) {
+  function writeCcfBgmLocalStorage(payload, key = BGM_STORAGE_KEY) {
     try {
-      window.localStorage.setItem(BGM_STORAGE_KEY, JSON.stringify(payload));
+      window.localStorage.setItem(key, JSON.stringify(payload));
     } catch (error) {
-      debugLog("bgm-storage-local-save-failed", serializeError(error));
+      debugLog("bgm-storage-local-save-failed", {
+        key,
+        error: serializeError(error)
+      });
     }
   }
 
+  function countCcfBgmPayloadEntries(payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return 0;
+    }
+
+    return Object.entries(payload).reduce((count, [entryKey, entry]) => {
+      const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
+      const url = String(entry?.url || "");
+      const videoId = sanitizeCcfYoutubeVideoId(entry?.videoId || extractCcfYoutubeVideoId(url));
+      return count + (normalizedSlot && url && videoId ? 1 : 0);
+    }, 0);
+  }
+
+  function getCcfBgmPayloadUpdatedAt(payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return 0;
+    }
+
+    return Object.values(payload).reduce((latest, entry) => {
+      const updatedAt = Number(entry?.updatedAt) || 0;
+      const createdAt = Number(entry?.createdAt) || 0;
+      const order = Number(entry?.order) || 0;
+      return Math.max(latest, updatedAt, createdAt, order);
+    }, 0);
+  }
+
+  function addCcfBgmStorageCandidate(candidates, source, payload, tier) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return;
+    }
+
+    candidates.push({
+      source,
+      payload,
+      tier,
+      count: countCcfBgmPayloadEntries(payload),
+      updatedAt: getCcfBgmPayloadUpdatedAt(payload)
+    });
+  }
+
+  function chooseCcfBgmStorageCandidate(candidates) {
+    const viable = candidates.filter((candidate) => candidate.count > 0);
+    if (!viable.length) {
+      return null;
+    }
+
+    viable.sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.count !== b.count) return b.count - a.count;
+      return b.updatedAt - a.updatedAt;
+    });
+    return viable[0];
+  }
+
+  function readCcfBgmIndexedRecord(storeName, key) {
+    if (!window.indexedDB || !storeName || !key) {
+      return Promise.resolve(null);
+    }
+
+    return new Promise((resolve) => {
+      const request = window.indexedDB.open(TOOLKIT_DB_NAME);
+      request.onerror = () => resolve(null);
+      request.onsuccess = () => {
+        const db = request.result;
+        try {
+          if (!db.objectStoreNames.contains(storeName)) {
+            db.close();
+            resolve(null);
+            return;
+          }
+
+          const tx = db.transaction(storeName, "readonly");
+          const store = tx.objectStore(storeName);
+          const getRequest = store.get(key);
+          getRequest.onsuccess = () => resolve(getRequest.result || null);
+          getRequest.onerror = () => resolve(null);
+          tx.oncomplete = () => db.close();
+          tx.onabort = () => db.close();
+        } catch (error) {
+          db.close();
+          debugLog("bgm-storage-idb-direct-read-failed", {
+            storeName,
+            key,
+            error: serializeError(error)
+          });
+          resolve(null);
+        }
+      };
+    });
+  }
+
+  async function readCcfBgmIndexedRoomPayload(roomKey) {
+    const record = await readCcfBgmIndexedRecord(
+      TOOLKIT_STORE_ROOM_DATA,
+      `room:${CCF_BGM_TOOLKIT_FEATURE_ID}:${roomKey}`
+    );
+    return record && record.value && typeof record.value === "object" ? record.value : null;
+  }
+
+  async function readCcfBgmLocalStorageBackup(localKey) {
+    const record = await readCcfBgmIndexedRecord(TOOLKIT_STORE_ASSETS, `localStorage:${localKey}`);
+    if (!record || record.value == null) {
+      return null;
+    }
+
+    try {
+      return typeof record.value === "string" ? JSON.parse(record.value) : record.value;
+    } catch (error) {
+      debugLog("bgm-storage-backup-parse-failed", {
+        key: localKey,
+        error: serializeError(error)
+      });
+      return null;
+    }
+  }
+
+  async function collectCcfBgmStorageCandidates() {
+    const candidates = [];
+    const toolkit = getCcfBgmToolkitStorage();
+    const roomKeys = getCcfBgmRoomKeyCandidates();
+    const localKeys = getCcfBgmLocalStorageKeyCandidates();
+
+    if (toolkit) {
+      for (const [index, roomKey] of roomKeys.entries()) {
+        try {
+          const record = await toolkit.getRoomData(CCF_BGM_TOOLKIT_FEATURE_ID, roomKey);
+          if (record && record.value && typeof record.value === "object") {
+            addCcfBgmStorageCandidate(
+              candidates,
+              `indexedDB:roomData:${roomKey}`,
+              record.value,
+              index === 0 ? 1 : 2
+            );
+          }
+        } catch (error) {
+          debugLog("bgm-storage-idb-read-failed", {
+            roomKey,
+            error: serializeError(error)
+          });
+        }
+      }
+    }
+
+    for (const [index, roomKey] of roomKeys.entries()) {
+      try {
+        const payload = await readCcfBgmIndexedRoomPayload(roomKey);
+        addCcfBgmStorageCandidate(
+          candidates,
+          `indexedDB-direct:roomData:${roomKey}`,
+          payload,
+          index === 0 ? 1 : 2
+        );
+      } catch (error) {
+        debugLog("bgm-storage-idb-direct-room-read-failed", {
+          roomKey,
+          error: serializeError(error)
+        });
+      }
+    }
+
+    for (const [index, localKey] of localKeys.entries()) {
+      addCcfBgmStorageCandidate(
+        candidates,
+        `localStorage:${localKey}`,
+        readCcfBgmLocalStorage(localKey),
+        localKey === BGM_STORAGE_KEY || index === 0 ? 1 : 2
+      );
+    }
+
+    for (const localKey of localKeys) {
+      const backupPayload = await readCcfBgmLocalStorageBackup(localKey);
+      addCcfBgmStorageCandidate(
+        candidates,
+        `indexedDB:backup:${localKey}`,
+        backupPayload,
+        3
+      );
+    }
+
+    return candidates;
+  }
+
+  async function recoverCcfBgmStorageFromCandidates() {
+    const candidates = await collectCcfBgmStorageCandidates();
+    const selected = chooseCcfBgmStorageCandidate(candidates);
+    debugLog("bgm-storage-candidates", candidates.map((candidate) => ({
+      source: candidate.source,
+      tier: candidate.tier,
+      count: candidate.count,
+      updatedAt: candidate.updatedAt
+    })));
+
+    if (!selected) {
+      return null;
+    }
+
+    writeCcfBgmLocalStorage(selected.payload);
+    const toolkit = getCcfBgmToolkitStorage();
+    if (toolkit) {
+      try {
+        await toolkit.setRoomData(CCF_BGM_TOOLKIT_FEATURE_ID, CCF_BGM_TOOLKIT_ROOM_KEY, selected.payload);
+      } catch (error) {
+        debugLog("bgm-storage-recovery-save-failed", serializeError(error));
+      }
+    }
+
+    if (selected.tier > 1) {
+      debugLog("bgm-storage-recovered", {
+        source: selected.source,
+        count: selected.count
+      });
+    }
+
+    return selected;
+  }
+
   async function readCcfBgmPersistedPayload() {
+    try {
+      const selected = await recoverCcfBgmStorageFromCandidates();
+      if (selected?.payload) {
+        return selected.payload;
+      }
+    } catch (error) {
+      debugLog("bgm-storage-recovery-failed", serializeError(error));
+    }
+
     const toolkit = getCcfBgmToolkitStorage();
     if (toolkit) {
       try {
