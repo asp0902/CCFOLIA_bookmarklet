@@ -31,6 +31,13 @@
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
   const ROOM_PATH_RE = /^\/rooms\/[^/?#]+/i;
+  // Distinct from format-sync's INVIS markers so the two scripts don't collide.
+  const BGM_SHARE_START = "⁡⁡⁡";
+  const BGM_SHARE_END = "⁤⁤⁤";
+  const BGM_SHARE_INVIS_MAP = ["​", "‌", "‍", "⁠"];
+  const BGM_SHARE_PROTOCOL_VERSION = 1;
+  const BGM_SHARE_DOM_ATTR = "data-ccf-bgm-share";
+  const BGM_SHARE_SENDER_ID = `bgm-share-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
@@ -659,6 +666,7 @@
       }
 
       candidates.forEach((itemRoot) => {
+        ccfBgmShareInspectChatItem(itemRoot);
         registerMessageItem(itemRoot, true);
       });
     });
@@ -4826,6 +4834,265 @@
     return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
   }
 
+  const ccfBgmShareSeenMessageIds = new Set();
+  const ccfBgmShareOwnMessageIds = new Set();
+  let ccfBgmShareSendingDepth = 0;
+
+  function ccfBgmShareEncode(payload) {
+    const json = JSON.stringify(payload);
+    const base64 = ccfBgmShareUtf8ToBase64(json);
+    let bits = "";
+    for (const ch of base64) {
+      bits += ch.charCodeAt(0).toString(2).padStart(8, "0");
+    }
+    let out = BGM_SHARE_START;
+    for (let i = 0; i < bits.length; i += 2) {
+      const pair = bits.slice(i, i + 2).padEnd(2, "0");
+      out += BGM_SHARE_INVIS_MAP[parseInt(pair, 2)];
+    }
+    out += BGM_SHARE_END;
+    return out;
+  }
+
+  function ccfBgmShareDecode(text) {
+    if (typeof text !== "string") return null;
+    const startIndex = text.indexOf(BGM_SHARE_START);
+    if (startIndex < 0) return null;
+    const endIndex = text.indexOf(BGM_SHARE_END, startIndex + BGM_SHARE_START.length);
+    if (endIndex < 0) return null;
+
+    const encoded = text.slice(startIndex + BGM_SHARE_START.length, endIndex);
+    const reverse = new Map(BGM_SHARE_INVIS_MAP.map((ch, idx) => [ch, idx]));
+    let bits = "";
+    for (const ch of encoded) {
+      const idx = reverse.get(ch);
+      if (idx == null) continue;
+      bits += idx.toString(2).padStart(2, "0");
+    }
+    const bytes = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+      bytes.push(parseInt(bits.slice(i, i + 8), 2));
+    }
+    try {
+      const base64 = String.fromCharCode(...bytes).replace(/\0+$/g, "");
+      const json = ccfBgmShareBase64ToUtf8(base64);
+      const parsed = JSON.parse(json);
+      if (parsed && parsed.t === "bgm-share" && parsed.v === BGM_SHARE_PROTOCOL_VERSION) {
+        return parsed;
+      }
+    } catch (error) {
+      debugLog("bgm-share-decode-failed", serializeError(error));
+    }
+    return null;
+  }
+
+  function ccfBgmShareUtf8ToBase64(str) {
+    try {
+      return btoa(unescape(encodeURIComponent(str)));
+    } catch (error) {
+      debugLog("bgm-share-encode-base64-failed", serializeError(error));
+      return "";
+    }
+  }
+
+  function ccfBgmShareBase64ToUtf8(base64) {
+    return decodeURIComponent(escape(atob(base64)));
+  }
+
+  function ccfBgmShareBuildSlotPayload(entryKey, entry) {
+    if (!entry) return null;
+    return {
+      entryKey: String(entryKey),
+      slotKey: getCcfBgmEntrySlotKey(entryKey, entry),
+      url: String(entry.url || ""),
+      videoId: String(entry.videoId || ""),
+      title: String(entry.title || ""),
+      displayName: String(entry.displayName || entry.title || ""),
+      volume: Number.isFinite(Number(entry.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+      loop: entry.loop !== false,
+      order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : Date.now()
+    };
+  }
+
+  function ccfBgmShareSendOperation(op, slotData) {
+    if (ccfBgmShareSendingDepth > 0) return; // suppress re-entrant sends during receive
+    if (!chatNotifierActive) return;
+    const messageId = `${BGM_SHARE_SENDER_ID}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    ccfBgmShareOwnMessageIds.add(messageId);
+    ccfBgmShareSeenMessageIds.add(messageId);
+    const payload = {
+      v: BGM_SHARE_PROTOCOL_VERSION,
+      t: "bgm-share",
+      op,
+      id: messageId,
+      sender: BGM_SHARE_SENDER_ID,
+      slot: slotData
+    };
+    const encoded = ccfBgmShareEncode(payload);
+    ccfBgmShareSendToChat(encoded).catch((error) => {
+      debugLog("bgm-share-send-failed", serializeError(error));
+    });
+  }
+
+  async function ccfBgmShareSendToChat(text) {
+    const composer = ccfBgmShareFindChatComposer();
+    if (!composer) {
+      debugLog("bgm-share-no-composer");
+      return;
+    }
+    const originalValue = ccfBgmShareReadComposerValue(composer);
+    ccfBgmShareWriteComposerValue(composer, text);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    ccfBgmShareSubmitComposer(composer);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    // Best-effort restore so we don't disturb user's in-progress draft.
+    const afterValue = ccfBgmShareReadComposerValue(composer);
+    if (afterValue === text || afterValue === "") {
+      ccfBgmShareWriteComposerValue(composer, originalValue || "");
+    }
+  }
+
+  function ccfBgmShareFindChatComposer() {
+    const candidates = document.querySelectorAll(
+      'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]'
+    );
+    for (const el of candidates) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (!isVisible(el)) continue;
+      if (el.closest('[role="dialog"]')) continue;
+      const drawer = el.closest('.MuiDrawer-paper');
+      if (drawer) return el;
+    }
+    // Fallback: any visible textbox in viewport bottom half
+    for (const el of candidates) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (!isVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.top > window.innerHeight / 2) return el;
+    }
+    return null;
+  }
+
+  function ccfBgmShareReadComposerValue(composer) {
+    if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
+      return composer.value || "";
+    }
+    return composer.textContent || "";
+  }
+
+  function ccfBgmShareWriteComposerValue(composer, value) {
+    if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
+      const proto = composer instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (setter) {
+        setter.call(composer, value);
+      } else {
+        composer.value = value;
+      }
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    // contenteditable
+    composer.textContent = value;
+    composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  }
+
+  function ccfBgmShareSubmitComposer(composer) {
+    const enterDown = new KeyboardEvent("keydown", {
+      bubbles: true, cancelable: true, key: "Enter", code: "Enter", keyCode: 13, which: 13
+    });
+    const enterPress = new KeyboardEvent("keypress", {
+      bubbles: true, cancelable: true, key: "Enter", code: "Enter", keyCode: 13, which: 13
+    });
+    const enterUp = new KeyboardEvent("keyup", {
+      bubbles: true, cancelable: true, key: "Enter", code: "Enter", keyCode: 13, which: 13
+    });
+    composer.dispatchEvent(enterDown);
+    composer.dispatchEvent(enterPress);
+    composer.dispatchEvent(enterUp);
+
+    // Fallback: try submit on the enclosing form.
+    const form = composer.closest("form");
+    if (form && enterDown.defaultPrevented === false) {
+      try {
+        form.requestSubmit?.();
+      } catch (error) {
+        // ignore
+      }
+    }
+  }
+
+  function ccfBgmShareApplyIncoming(payload) {
+    if (!payload || !payload.id || !payload.slot) return;
+    if (ccfBgmShareSeenMessageIds.has(payload.id)) return;
+    ccfBgmShareSeenMessageIds.add(payload.id);
+    if (payload.sender === BGM_SHARE_SENDER_ID) return; // self echo
+    if (ccfBgmShareOwnMessageIds.has(payload.id)) return;
+
+    const slot = payload.slot;
+    if (!slot.url || !slot.videoId) return;
+
+    const entryKey = String(slot.entryKey || slot.slotKey);
+    if (!entryKey) return;
+
+    const existing = ccfBgmSlotMap.get(entryKey);
+    if (payload.op === "remove") {
+      if (existing) {
+        ccfBgmSlotMap.delete(entryKey);
+        ccfBgmShareSendingDepth += 1;
+        try {
+          persistCcfBgmSlotMap();
+          markCcfYoutubeBgmSlotButtons();
+          tryEnhanceCcfBgmPanel();
+        } finally {
+          ccfBgmShareSendingDepth -= 1;
+        }
+      }
+      return;
+    }
+
+    // add or edit
+    const now = Date.now();
+    ccfBgmSlotMap.set(entryKey, {
+      slotKey: slot.slotKey || entryKey,
+      url: slot.url,
+      videoId: slot.videoId,
+      title: slot.title || "YouTube BGM",
+      displayName: slot.displayName || slot.title || "YouTube BGM",
+      volume: Number.isFinite(Number(slot.volume)) ? clampCcfBgmVolume(slot.volume) : 100,
+      loop: slot.loop !== false,
+      updatedAt: now,
+      createdAt: existing?.createdAt || now,
+      order: Number.isFinite(Number(slot.order)) ? Number(slot.order) : (existing?.order || now),
+      pending: false
+    });
+
+    ccfBgmShareSendingDepth += 1;
+    try {
+      persistCcfBgmSlotMap();
+      markCcfYoutubeBgmSlotButtons();
+      tryEnhanceCcfBgmPanel();
+      fetchStoredCcfYoutubeTitles();
+    } finally {
+      ccfBgmShareSendingDepth -= 1;
+    }
+  }
+
+  function ccfBgmShareInspectChatItem(itemRoot) {
+    if (!(itemRoot instanceof HTMLElement)) return;
+    if (itemRoot.dataset.ccfBgmShareInspected === "1") return;
+    itemRoot.dataset.ccfBgmShareInspected = "1";
+    const text = itemRoot.textContent || "";
+    if (text.indexOf(BGM_SHARE_START) < 0) return;
+    const payload = ccfBgmShareDecode(text);
+    if (!payload) return;
+    itemRoot.setAttribute(BGM_SHARE_DOM_ATTR, payload.op || "1");
+    ccfBgmShareApplyIncoming(payload);
+  }
+
   function getCcfBgmToolkitStorage() {
     const api = window.__CAPYBARA_TOOLKIT__;
     if (!api || !api.storage) return null;
@@ -4932,6 +5199,12 @@
     } catch (error) {
       debugLog("bgm-storage-load-failed", serializeError(error));
     }
+    // Seed share baseline so loaded-from-storage slots aren't re-broadcast on next persist.
+    const baseline = {};
+    ccfBgmSlotMap.forEach((entry, entryKey) => {
+      baseline[entryKey] = ccfBgmShareSerializableEntry(entry);
+    });
+    ccfBgmShareLastSnapshot = baseline;
   }
 
   function persistCcfBgmSlotMap() {
@@ -4966,6 +5239,76 @@
         debugLog("bgm-storage-idb-save-failed", serializeError(error));
       });
     }
+
+    ccfBgmShareDispatchDiff(payload);
+  }
+
+  let ccfBgmShareLastSnapshot = null;
+
+  function ccfBgmShareSerializableEntry(entry) {
+    return {
+      url: entry?.url || "",
+      videoId: entry?.videoId || "",
+      title: entry?.title || "",
+      displayName: entry?.displayName || "",
+      volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+      loop: entry?.loop !== false,
+      order: Number.isFinite(Number(entry?.order)) ? Number(entry.order) : 0,
+      slotKey: entry?.slotKey || ""
+    };
+  }
+
+  function ccfBgmShareEntriesEqual(a, b) {
+    if (!a || !b) return false;
+    return a.url === b.url
+      && a.videoId === b.videoId
+      && a.title === b.title
+      && a.displayName === b.displayName
+      && a.volume === b.volume
+      && a.loop === b.loop
+      && a.order === b.order;
+  }
+
+  function ccfBgmShareDispatchDiff(payload) {
+    if (ccfBgmShareSendingDepth > 0) {
+      // Snapshot the new state without emitting (otherwise we'd echo the remote update back).
+      ccfBgmShareLastSnapshot = ccfBgmShareCloneSnapshot(payload);
+      return;
+    }
+    if (!ccfBgmShareLastSnapshot) {
+      // First persist of the session — treat as baseline, don't emit anything.
+      ccfBgmShareLastSnapshot = ccfBgmShareCloneSnapshot(payload);
+      return;
+    }
+
+    const previous = ccfBgmShareLastSnapshot;
+    const next = ccfBgmShareCloneSnapshot(payload);
+
+    for (const [entryKey, nextEntry] of Object.entries(next)) {
+      const prevEntry = previous[entryKey];
+      if (!prevEntry) {
+        ccfBgmShareSendOperation("add", { entryKey, ...nextEntry });
+        continue;
+      }
+      if (!ccfBgmShareEntriesEqual(prevEntry, nextEntry)) {
+        ccfBgmShareSendOperation("edit", { entryKey, ...nextEntry });
+      }
+    }
+    for (const entryKey of Object.keys(previous)) {
+      if (!next[entryKey]) {
+        ccfBgmShareSendOperation("remove", { entryKey, ...previous[entryKey] });
+      }
+    }
+
+    ccfBgmShareLastSnapshot = next;
+  }
+
+  function ccfBgmShareCloneSnapshot(payload) {
+    const out = {};
+    for (const [entryKey, entry] of Object.entries(payload || {})) {
+      out[entryKey] = ccfBgmShareSerializableEntry(entry);
+    }
+    return out;
   }
 
   function injectCcfBgmEnhancerStyle() {
@@ -4982,6 +5325,10 @@
     const style = document.createElement("style");
     style.id = "ccf-bgm-enhancer-style";
     style.textContent = `
+      [data-ccf-bgm-share] {
+        display: none !important;
+      }
+
       [data-ccf-bgm-drawer-size-lock="1"] {
         box-sizing: content-box !important;
         display: flex !important;
