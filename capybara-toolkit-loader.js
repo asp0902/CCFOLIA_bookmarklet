@@ -1,14 +1,28 @@
 (() => {
   "use strict";
 
+  const VERSION = "0.1.1";
+  const BUILD_ID = "2026-05-21-youtube-audio";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
+  const LEGACY_DEBUG_KEYS = Object.freeze([
+    "__CCF_CHAT_NOTIFIER_DEBUG__",
+    "__CCF_FORMAT_SYNC_DEBUG__",
+    "__CAPYBARA_TOOLKIT_PRESENCE__",
+    "__CCF_ROLL20_BRIDGE_DEBUG__",
+    "__CCF_THEME_SWITCHER_DEBUG__",
+    "__CCF_LOG_PACKAGE_DEBUG__",
+    "__CCF_STANDING_PICKER_DEBUG__",
+    "__CCF_SUITE_DEBUG__"
+  ]);
   const EXISTING = window[GLOBAL_KEY];
   if (EXISTING && typeof EXISTING.openPanel === "function") {
-    EXISTING.openPanel();
-    return;
+    if (EXISTING.buildId === BUILD_ID) {
+      EXISTING.openPanel();
+      return;
+    }
+    resetExistingToolkit(EXISTING);
   }
 
-  const VERSION = "0.1.0";
   const DB_NAME = "capybara-toolkit";
   const DB_VERSION = 1;
   const STORE_META = "meta";
@@ -100,6 +114,7 @@
 
   const api = {
     version: VERSION,
+    buildId: BUILD_ID,
     baseUrl: state.baseUrl.href,
     features: FEATURE_CATALOG.map((feature) => ({ ...feature })),
     openPanel,
@@ -125,6 +140,40 @@
   openPanel();
   persistMeta().catch(() => {});
   restoreFeatureStates().catch(reportError);
+
+  function resetExistingToolkit(existing) {
+    try {
+      existing.closePanel?.();
+    } catch (error) {
+      console.warn("[Capybara Toolkit] close previous panel failed", error);
+    }
+
+    for (const key of LEGACY_DEBUG_KEYS) {
+      const legacyApi = window[key];
+      if (legacyApi && typeof legacyApi.disable === "function") {
+        try {
+          legacyApi.disable();
+        } catch (error) {
+          console.warn(`[Capybara Toolkit] ${key}.disable() failed`, error);
+        }
+      }
+    }
+
+    document.querySelectorAll([
+      "#capybara-toolkit-root",
+      "[data-capybara-toolkit-script]",
+      "[data-capybara-toolkit-style]"
+    ].join(",")).forEach((element) => element.remove());
+
+    try {
+      delete window[GLOBAL_KEY];
+    } catch (error) {
+      Object.defineProperty(window, GLOBAL_KEY, {
+        value: undefined,
+        configurable: true
+      });
+    }
+  }
 
   function resolveBaseUrl() {
     const script = document.currentScript;
