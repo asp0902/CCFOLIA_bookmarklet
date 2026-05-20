@@ -165,6 +165,7 @@
   ];
 
   let chatNotifierActive = true;
+  let ccfChatNotifierDebugApi = null;
   const teardownDisposers = [];
   const teardownAbortController = new AbortController();
   const teardownSignal = teardownAbortController.signal;
@@ -1311,7 +1312,6 @@
     };
   }
 
-  let ccfChatNotifierDebugApi = null;
   function exposeDebugApi() {
     ccfChatNotifierDebugApi = {
       isActive() {
