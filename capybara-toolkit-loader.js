@@ -335,8 +335,6 @@
         .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
         .name { font-size: 13px; font-weight: 800; color: #171717; line-height: 1.35; }
         .summary { margin-top: 3px; font-size: 12px; color: #555; line-height: 1.45; }
-        .meta { margin-top: 7px; font-size: 11px; color: #777; display: flex; flex-wrap: wrap; gap: 5px; }
-        .chip { border: 1px solid #dadada; border-radius: 999px; padding: 1px 6px; background: #fff; }
         .actions { display: flex; gap: 6px; flex: 0 0 auto; }
         .btn {
           min-width: 58px; height: 30px; padding: 0 9px; border: 1px solid #111; border-radius: 6px;
@@ -354,11 +352,11 @@
           .panel { background: #171717; border-color: #333; }
           header, footer { border-color: #303030; }
           h1, .name { color: #f5f5f5; }
-          .sub, .summary, .status, .meta { color: #aaa; }
+          .sub, .summary, .status { color: #aaa; }
           .feature { background: #202020; border-color: #333; }
           .feature[data-loaded="1"] { background: #2a2a2a; border-color: #555; }
           .notice { background: #2a2415; border-color: #6f5c2b; color: #f0d996; }
-          .chip, .close, .btn.secondary { background: #151515; border-color: #444; color: #eee; }
+          .close, .btn.secondary { background: #151515; border-color: #444; color: #eee; }
         }
       </style>
       <section class="panel" part="panel">
@@ -422,13 +420,6 @@
       const disabledByPage = feature.roomOnly && !isRoomPage();
       const disabled = state.loading.has(feature.id) || (!loaded && (!isCcfoliaHost() || disabledByPage));
       const buttonText = state.loading.has(feature.id) ? "..." : (loaded ? "ON" : "OFF");
-      const meta = [
-        record?.cachedAt ? `캐시 ${formatTime(record.cachedAt)}` : "미캐시",
-        record?.loadedAt ? `실행 ${formatTime(record.loadedAt)}` : "",
-        record?.enabled === false ? "OFF 저장됨" : "",
-        feature.roomOnly ? "룸 전용" : "",
-        feature.experimental ? "실험적" : ""
-      ].filter(Boolean);
 
       return `
         <article class="feature" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
@@ -436,7 +427,6 @@
             <div>
               <div class="name">${escapeHtml(feature.title)}</div>
               <div class="summary">${escapeHtml(feature.summary)}</div>
-              <div class="meta">${meta.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}</div>
             </div>
             <div class="actions">
               <button class="btn toggle" type="button" data-action="feature-toggle" data-feature="${escapeAttr(feature.id)}" data-on="${loaded ? "1" : "0"}" aria-pressed="${loaded ? "true" : "false"}" ${disabled ? "disabled" : ""}>${buttonText}</button>
