@@ -1378,6 +1378,20 @@
           createdAt: ccfBgmLastWebAudio.createdAt
         } : null;
       },
+      getYoutubePlayerState() {
+        if (!ccfBgmPlayer) {
+          return null;
+        }
+
+        return {
+          activeSlotKey: ccfBgmActiveSlotKey,
+          activeEntryKey: ccfBgmActiveEntryKey,
+          videoId: ccfBgmPlayerVideoId,
+          volume: typeof ccfBgmPlayer.getVolume === "function" ? ccfBgmPlayer.getVolume() : null,
+          muted: typeof ccfBgmPlayer.isMuted === "function" ? ccfBgmPlayer.isMuted() : null,
+          playerState: typeof ccfBgmPlayer.getPlayerState === "function" ? ccfBgmPlayer.getPlayerState() : null
+        };
+      },
       getYoutubeBgmEntries() {
         return [...ccfBgmSlotMap.entries()].map(([entryKey, entry]) => ({
           entryKey,
@@ -2649,13 +2663,15 @@
 
       if (ccfBgmPlayer) {
         try {
+          applyCcfBgmPlayerVolume(state);
           if (ccfBgmPlayerVideoId === videoId && typeof ccfBgmPlayer.playVideo === "function") {
             ccfBgmPlayer.playVideo();
           } else {
             ccfBgmPlayer.loadVideoById(videoId);
             ccfBgmPlayerVideoId = videoId;
           }
-          applyCcfBgmPlayerVolume(state);
+          window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
+          window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
           adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
           startCcfBgmProgressLoop();
         } catch (error) {
@@ -2689,6 +2705,8 @@
             });
             applyCcfBgmPlayerVolume(state);
             event.target.playVideo();
+            window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
+            window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
             adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
             startCcfBgmProgressLoop();
           },
@@ -2863,7 +2881,7 @@
     }
 
     const classText = `${button.className || ""} ${button.querySelector("svg")?.getAttribute("class") || ""}`;
-    return /\b(Mui-selected|MuiIconButton-colorPrimary|selected|active)\b/i.test(classText);
+    return /\b(Mui-selected|selected|active)\b/i.test(classText);
   }
 
   function isCcfBgmVolumeButton(button) {
