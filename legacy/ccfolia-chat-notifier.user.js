@@ -1412,30 +1412,12 @@
       if (ccfBgmSlotMap.size) {
         loadYoutubeIframeApi();
         fetchStoredCcfYoutubeTitles();
-        resumeCcfYoutubeBgmAfterReload();
       }
       debugLog("bgm-enhancer-init", {
         slots: ccfBgmSlotMap.size,
         storage: getCcfBgmToolkitStorage() ? "toolkit-idb" : "local-storage"
       });
     });
-  }
-
-  function resumeCcfYoutubeBgmAfterReload() {
-    const candidates = [...ccfBgmSlotMap.entries()]
-      .filter(([, entry]) => entry?.videoId && entry.pending === false)
-      .sort(([, a], [, b]) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
-
-    const target = candidates[0];
-    if (!target) {
-      return;
-    }
-
-    const [entryKey, entry] = target;
-    const slotKey = getCcfBgmEntrySlotKey(entryKey, entry);
-    window.setTimeout(() => {
-      playCcfYoutubeBgmSlot(slotKey, entry, findCcfBgmButtonBySlot(slotKey), 0, entryKey);
-    }, 800);
   }
 
   function hookCcfBgmNativeMediaProgress() {
@@ -1886,24 +1868,10 @@
       ccfBgmLastBgmClickAt = Date.now();
       updateCcfBgmSlotStateFromButton(slotKey, button);
 
-      const entryHitBeforeDialogScan = findCcfReadyYoutubeEntryForSlot(slotKey);
-      const entryKeyBeforeDialogScan = entryHitBeforeDialogScan?.[0] || "";
-      const entryBeforeDialogScan = entryHitBeforeDialogScan?.[1] || null;
-      if (entryKeyBeforeDialogScan && entryBeforeDialogScan && !entryBeforeDialogScan.pending) {
-        playCcfYoutubeBgmSlot(slotKey, entryBeforeDialogScan, button, 0, entryKeyBeforeDialogScan);
-      }
-
       window.setTimeout(() => {
         tryCenterCcfBgmDialogs();
         tryCaptureYoutubeUrlsFromBgmDialogs();
         tryEnhanceCcfBgmPanel();
-
-        const entryHit = findCcfReadyYoutubeEntryForSlot(slotKey);
-        const entryKey = entryHit?.[0] || "";
-        const entry = entryHit?.[1] || null;
-        if (entryKey && entry && !entryBeforeDialogScan && !entry.pending) {
-          playCcfYoutubeBgmSlot(slotKey, entry, button, 0, entryKey);
-        }
       }, 80);
 
       window.setTimeout(() => {
