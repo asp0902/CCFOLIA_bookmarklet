@@ -31,8 +31,8 @@
     },
     {
       id: "ccf-format-sync",
-      title: "서식 동기화",
-      summary: "리치 서식 편집기, 렌더러, 루비/툴팁/블러/이미지 서식",
+      title: "서식 편집 도구",
+      summary: "채팅 입력창 위 서식 편집 툴바, 렌더러, 루비/툴팁/블러 서식",
       scripts: ["legacy/ccfolia-format-sync.user.js"]
     },
     {
