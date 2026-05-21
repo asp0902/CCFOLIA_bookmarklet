@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.11
+// @version      0.0.12
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -18,6 +18,12 @@
   const STYLE_ID = "ccf-log-package-style";
   const EXPORT_BTN_ATTR = "data-ccf-log-package-btn";
   const EXPORT_BTN_SELECTOR = `[${EXPORT_BTN_ATTR}="1"]`;
+
+  // ----------------------------------------------------
+  // [수정 포인트 1] 커스텀 탭 삭제 버튼을 위한 상수 추가
+  // ----------------------------------------------------
+  const DELETE_TAB_BTN_ATTR = "data-ccf-delete-tab-btn";
+  const DELETE_TAB_BTN_SELECTOR = `[${DELETE_TAB_BTN_ATTR}="1"]`;
 
   const CAPYBARA_LOG_LABEL = "카피바라 로그";
   // 편집기 HTML은 이 파일 끝의 CAPYBARA_LOG_EDITOR_HTML 상수에 임베드되어 있다.
@@ -92,9 +98,9 @@
   const LOG_SCAN_MAX_ITERATIONS = 120;
   const LOG_SCAN_STEP_RATIO = 0.75;
   const LOG_SCAN_MIN_STEP = 360;
-  const LOG_SETTLE_QUIET_MS = 100;
+  const LOG_SETTLE_QUIET_MS = 120;
   const LOG_SETTLE_TIMEOUT_MS = 700;
-  const CCF_LOG_ENABLE_DOM_SCROLL_FALLBACK = false;
+  const CCF_LOG_ENABLE_DOM_SCROLL_FALLBACK = true;
   const CCF_LOG_ENABLE_LIVE_AVATAR_SCAN = false;
   const CCF_LOG_ENABLE_VISIBLE_AVATAR_SCAN = true;
   const CCF_LOG_ENABLE_CHARACTER_LIST_AVATAR_SCAN = true;
@@ -1372,12 +1378,17 @@
     ccfLpRegisterTeardown(() => observer.disconnect());
   }
 
+
+  // ----------------------------------------------------
+  // [수정 포인트 2] 스케줄러 내부에 버튼 주입 함수 호출 추가
+  // ----------------------------------------------------
   function scheduleEnsureButtons() {
     if (buttonState.scheduled) return;
     buttonState.scheduled = true;
     requestAnimationFrame(() => {
       buttonState.scheduled = false;
       ensureExportButtons();
+      ensureCustomDeleteButtons(); // ← 새로 추가된 부분
     });
   }
 
@@ -1409,6 +1420,144 @@
       }
     }
   }
+
+  // ----------------------------------------------------
+  // [수정 포인트 3] 커스텀 삭제 버튼 주입 및 클릭 이벤트 핸들러 추가
+  // (ensureExportButtons 함수가 끝나는 바로 밑에 아래 함수들을 통째로 추가하세요)
+  // ----------------------------------------------------
+  function ensureCustomDeleteButtons() {
+    const menus = document.querySelectorAll('[role="menu"]');
+    
+    for (const menu of menus) {
+      if (!(menu instanceof HTMLElement) || !isVisible(menu)) continue;
+
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      
+      const nativeDeleteBtn = items.find((item) => {
+        const text = normalizeSpace(item.textContent || "").toLowerCase();
+        return text.includes("룸 로그 삭제") || text.includes("delete room log") || text.includes("ルームログ削除");
+      });
+
+      if (nativeDeleteBtn && !menu.querySelector(DELETE_TAB_BTN_SELECTOR)) {
+        const customDeleteBtn = document.createElement("li");
+        
+        customDeleteBtn.className = cleanupMenuItemClassName(nativeDeleteBtn.className);
+        customDeleteBtn.setAttribute(DELETE_TAB_BTN_ATTR, "1");
+        customDeleteBtn.setAttribute("role", "menuitem");
+        customDeleteBtn.setAttribute("tabindex", "-1");
+
+        const label = document.createElement("span");
+        label.textContent = "현재 탭 룸 로그 삭제";
+        label.style.color = "#d32f2f"; 
+        customDeleteBtn.appendChild(label);
+
+        const ripple = nativeDeleteBtn.querySelector(".MuiTouchRipple-root");
+        if (ripple) {
+          customDeleteBtn.appendChild(ripple.cloneNode(false));
+        }
+
+        customDeleteBtn.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          
+          await dismissTransientMenusAndOverlays();
+          
+          handleDeleteCurrentTabLogs();
+        });
+
+        nativeDeleteBtn.insertAdjacentElement("afterend", customDeleteBtn);
+      }
+    }
+  }
+
+  async function handleDeleteCurrentTabLogs() {
+    const roomTitle = getRoomTitle("");
+    const currentTab = getCurrentPackageTabDescriptor(roomTitle);
+
+    if (!currentTab) {
+      alert("현재 활성화된 탭을 찾을 수 없습니다.");
+      return;
+    }
+
+    const confirmDelete = confirm(`정말 [ ${currentTab.name} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
+    if (!confirmDelete) return;
+
+    console.log(`[CCF LOG PACKAGE] ${currentTab.name} 탭 로그 삭제 요청됨.`);
+    setButtonsBusy(true);
+
+    try {
+      const scope = findPrimaryLogScope(currentTab);
+      if (!scope) {
+        throw new Error("탭 로그 영역을 찾을 수 없습니다.");
+      }
+
+      const scroller = findLogScrollContainer(scope);
+      if (scroller) {
+        scroller.style.scrollBehavior = "auto";
+      }
+
+      let deletedCount = 0;
+      let emptyCount = 0;
+      
+      const toastId = "ccf-delete-toast";
+      let toast = document.getElementById(toastId);
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = toastId;
+        toast.style.cssText = "position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 8px; z-index: 9999; font-size: 14px; pointer-events: none;";
+        document.body.appendChild(toast);
+      }
+      
+      const updateToast = (msg) => {
+        if (toast) toast.textContent = msg;
+      };
+
+      while (emptyCount < 3) {
+        const itemRoots = findLogMessageItemRoots([scope]);
+        const deleteBtns = [];
+        
+        for (const root of itemRoots) {
+          const btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], [data-testid="DeleteIcon"]')?.closest('button');
+          if (btn) {
+            deleteBtns.push(btn);
+          }
+        }
+
+        if (deleteBtns.length === 0) {
+          emptyCount++;
+          if (scroller) {
+            scroller.scrollTop = 0;
+          }
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+
+        emptyCount = 0;
+        
+        for (let i = deleteBtns.length - 1; i >= 0; i--) {
+          const btn = deleteBtns[i];
+          try {
+            btn.click();
+            deletedCount++;
+            updateToast(`[ ${currentTab.name} ] 탭 삭제 중... (${deletedCount}개 삭제됨)`);
+          } catch (e) {
+          }
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      if (toast) toast.remove();
+      alert(`[ ${currentTab.name} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.`);
+    } catch (error) {
+      console.error("[CCF LOG PACKAGE] delete failed", error);
+      alert(error?.message || "로그 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setButtonsBusy(false);
+    }
+  }
+  // ----------------------------------------------------
 
   function cleanupDuplicateExportButtons(menu, anchors) {
     const buttons = [...menu.querySelectorAll(EXPORT_BTN_SELECTOR)]
