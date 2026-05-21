@@ -36,6 +36,7 @@
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
   const YOUTUBE_EMBED_HOST = "https://www.youtube-nocookie.com";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
+  const YOUTUBE_AUDIO_REINFORCE_DELAYS_MS = Object.freeze([0, 80, 250, 700, 1500]);
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
   const ROOM_PATH_RE = /^\/rooms\/[^/?#]+/i;
@@ -252,6 +253,7 @@
       ccfBgmPlayerHost = null;
       try { ccfBgmPlayer?.destroy?.(); } catch (error) { /* youtube player teardown */ }
       ccfBgmPlayer = null;
+      ccfBgmPlayerReady = false;
     } catch (error) {
       debugLog("teardown-dom-sweep-failed", serializeError(error));
     }
@@ -322,6 +324,7 @@
   let ccfBgmPlayerDock = null;
   let ccfBgmPlayerVisible = false;
   let ccfBgmPlayerVideoId = "";
+  let ccfBgmPlayerReady = false;
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmActiveLoop = true;
@@ -1498,6 +1501,7 @@
     loadCcfBgmSlotMap().then(() => {
       if (ccfBgmSlotMap.size) {
         loadYoutubeIframeApi();
+        prepareCcfYoutubeBgmPlayerFromEntries([...ccfBgmSlotMap.entries()]);
         fetchStoredCcfYoutubeTitles();
       }
       debugLog("bgm-enhancer-init", {
@@ -2595,7 +2599,27 @@
     return state;
   }
 
-  function cueCcfYoutubeBgmSlot(slotKey, entry, entryKey = "") {
+  function prepareCcfYoutubeBgmPlayerFromEntries(entries) {
+    if (ccfBgmActiveSlotKey || ccfBgmPlayer) {
+      return;
+    }
+
+    const hit = (entries || [])
+      .filter(([entryKey, entry]) => {
+        return entryKey
+          && entry?.videoId
+          && getCcfBgmEntrySlotKey(entryKey, entry);
+      })
+      .sort(compareCcfYoutubeBgmEntries)[0];
+    if (!hit) {
+      return;
+    }
+
+    const [entryKey, entry] = hit;
+    cueCcfYoutubeBgmSlot(getCcfBgmEntrySlotKey(entryKey, entry), entry, entryKey);
+  }
+
+  function cueCcfYoutubeBgmSlot(slotKey, entry, entryKey = "", options = {}) {
     const normalizedSlotKey = normalizeCcfBgmSlotKey(slotKey);
     const videoId = entry?.videoId || extractCcfYoutubeVideoId(entry?.url || "");
     const resolvedEntryKey = entryKey || findCcfYoutubeEntryKey(normalizedSlotKey, entry);
@@ -2603,7 +2627,7 @@
       return;
     }
 
-    if (!ensureYoutubePlayerHost()) {
+    if (!ensureYoutubePlayerHost({ visible: !!options.visible })) {
       return;
     }
 
@@ -2623,6 +2647,7 @@
         }
 
         ccfBgmPlayerVideoId = videoId;
+        ccfBgmPlayerReady = false;
         ccfBgmPlayer = new window.YT.Player(ccfBgmPlayerHost, {
           width: String(YOUTUBE_PLAYER_MIN_SIZE),
           height: String(YOUTUBE_PLAYER_MIN_SIZE),
@@ -2640,6 +2665,7 @@
           },
           events: {
             onReady(event) {
+              ccfBgmPlayerReady = true;
               mountCcfYoutubeBgmPlayerFrame(event.target);
               if (!ccfBgmActiveSlotKey && typeof event.target.cueVideoById === "function") {
                 event.target.cueVideoById(videoId);
@@ -2709,6 +2735,7 @@
           }
           window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
           window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
+          reinforceCcfYoutubeBgmAudio(state, "existing-player");
           adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
           startCcfBgmProgressLoop();
         } catch (error) {
@@ -2718,13 +2745,14 @@
       }
 
       ccfBgmPlayerVideoId = videoId;
+      ccfBgmPlayerReady = false;
       ccfBgmPlayer = new window.YT.Player(ccfBgmPlayerHost, {
         width: String(YOUTUBE_PLAYER_MIN_SIZE),
         height: String(YOUTUBE_PLAYER_MIN_SIZE),
         host: YOUTUBE_EMBED_HOST,
         videoId,
         playerVars: {
-          autoplay: 1,
+          autoplay: 0,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -2735,6 +2763,7 @@
         },
         events: {
           onReady(event) {
+            ccfBgmPlayerReady = true;
             mountCcfYoutubeBgmPlayerFrame(event.target);
             debugLog("bgm-youtube-ready", {
               slotKey: normalizedSlotKey,
@@ -2744,6 +2773,7 @@
             event.target.playVideo();
             window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
             window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
+            reinforceCcfYoutubeBgmAudio(state, "new-player-ready");
             adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
             startCcfBgmProgressLoop();
           },
@@ -2769,6 +2799,12 @@
       syncCcfActiveBgmState();
       window.setTimeout(syncCcfActiveBgmState, 120);
       window.setTimeout(syncCcfActiveBgmState, 500);
+      const activeEntry = ccfBgmSlotMap.get(ccfBgmActiveEntryKey)
+        || findCcfReadyYoutubeEntryForSlot(ccfBgmActiveSlotKey)?.[1];
+      reinforceCcfYoutubeBgmAudio(
+        readCcfYoutubeBgmPlaybackState(ccfBgmActiveSlotKey, activeEntry, findCcfBgmButtonBySlot(ccfBgmActiveSlotKey)),
+        "state-playing"
+      );
     }
     startCcfBgmProgressLoop();
   }
@@ -2818,6 +2854,37 @@
     applyCcfBgmPlayerVolume(state);
   }
 
+  function reinforceCcfYoutubeBgmAudio(state, reason = "play") {
+    if (!ccfBgmActiveSlotKey) {
+      return;
+    }
+
+    YOUTUBE_AUDIO_REINFORCE_DELAYS_MS.forEach((delay) => {
+      window.setTimeout(() => {
+        if (!ccfBgmActiveSlotKey || !ccfBgmPlayer) {
+          return;
+        }
+
+        applyCcfBgmPlayerVolume(state);
+        try {
+          if (typeof ccfBgmPlayer.playVideo === "function") {
+            ccfBgmPlayer.playVideo();
+          }
+          debugLog("bgm-youtube-audio-reinforced", {
+            reason,
+            delay,
+            volume: typeof ccfBgmPlayer.getVolume === "function" ? ccfBgmPlayer.getVolume() : null,
+            muted: typeof ccfBgmPlayer.isMuted === "function" ? ccfBgmPlayer.isMuted() : null,
+            ready: ccfBgmPlayerReady,
+            state: typeof ccfBgmPlayer.getPlayerState === "function" ? ccfBgmPlayer.getPlayerState() : null
+          });
+        } catch (error) {
+          debugLog("bgm-youtube-audio-reinforce-failed", serializeError(error));
+        }
+      }, delay);
+    });
+  }
+
   function applyCcfBgmPlayerVolume(state) {
     if (!ccfBgmPlayer || typeof ccfBgmPlayer.setVolume !== "function") {
       return;
@@ -2833,10 +2900,14 @@
         return;
       }
 
+      ccfBgmPlayer.setVolume(volume);
       if (typeof ccfBgmPlayer.unMute === "function") {
         ccfBgmPlayer.unMute();
       }
       ccfBgmPlayer.setVolume(volume);
+      if (typeof ccfBgmPlayer.unMute === "function") {
+        ccfBgmPlayer.unMute();
+      }
     } catch (error) {
       debugLog("bgm-youtube-volume-failed", serializeError(error));
     }
@@ -3098,6 +3169,7 @@
       listRoot.dataset.ccfYoutubeBgmRenderSignature === signature
       && renderedDomSig === expectedDomSig
     ) {
+      prepareCcfYoutubeBgmPlayerFromEntries(entries);
       return;
     }
 
@@ -3108,6 +3180,7 @@
     container.querySelectorAll(".ccf-youtube-bgm-row-wrap").forEach((row) => row.remove());
 
     insertCcfYoutubeBgmRowsByPlan(container, placementPlan);
+    prepareCcfYoutubeBgmPlayerFromEntries(entries);
   }
 
   function findCcfYoutubeBgmInsertionContainer(listRoot) {
@@ -3322,16 +3395,29 @@
       playCcfYoutubeBgmSlot(slotKey, current, findCcfBgmButtonBySlot(slotKey), 0, entryKey);
     };
 
+    const warmPlayer = () => {
+      const current = ccfBgmSlotMap.get(entryKey) || entry;
+      if (!current?.videoId || ccfBgmActiveSlotKey) {
+        return;
+      }
+      loadYoutubeIframeApi();
+      cueCcfYoutubeBgmSlot(slotKey, current, entryKey);
+    };
+
     const handlePlayKeydown = (event) => {
       if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
 
       event.preventDefault();
+      warmPlayer();
       play();
     };
 
     if (itemButton instanceof HTMLElement) {
+      itemButton.addEventListener("pointerenter", warmPlayer);
+      itemButton.addEventListener("focus", warmPlayer);
+      itemButton.addEventListener("pointerdown", warmPlayer, true);
       itemButton.addEventListener("click", (event) => {
         if (Date.now() < ccfYoutubeBgmSuppressClickUntil) {
           event.preventDefault();
@@ -3343,6 +3429,7 @@
           return;
         }
 
+        warmPlayer();
         play();
       });
       itemButton.addEventListener("keydown", handlePlayKeydown);
@@ -4791,13 +4878,13 @@
     return ccfBgmApiReadyPromise;
   }
 
-  function ensureYoutubePlayerHost() {
+  function ensureYoutubePlayerHost(options = {}) {
     const dock = ensureCcfYoutubeBgmPlayerDock();
     if (!(dock instanceof HTMLElement)) {
       return null;
     }
 
-    ccfBgmPlayerVisible = true;
+    ccfBgmPlayerVisible = options.visible !== false;
     syncCcfYoutubeBgmPlayerDockVisibility();
 
     let host = getCcfYoutubeBgmPlayerElement();
