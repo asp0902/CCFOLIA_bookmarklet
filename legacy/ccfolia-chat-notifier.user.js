@@ -4191,7 +4191,8 @@
     const title = normalizeSpace(entry.displayName || entry.title || "YouTube BGM");
     // 네이티브 음원처럼 0.05 단위(0~1)로 스냅한다. 내부 표현은 0~100을 유지.
     const initialVolume = Math.round(getCcfYoutubeBgmEditVolume(entry, slotKey) / 5) * 5;
-    const initialVolumeLabel = (initialVolume / 100).toFixed(2);
+    // 네이티브처럼 후행 0 없이 표기 (1, 0.5, 0.75 …)
+    const initialVolumeLabel = String(initialVolume / 100);
     const loop = entry.loop !== false;
     const inputId = `ccf-youtube-bgm-name-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -4289,7 +4290,7 @@
         sliderThumb.style.left = pct;
       }
       if (volumeValueLabel instanceof HTMLElement) {
-        volumeValueLabel.textContent = (value / 100).toFixed(2);
+        volumeValueLabel.textContent = String(value / 100);
       }
       if (volumeInput instanceof HTMLInputElement) {
         volumeInput.value = String(value);
@@ -7102,92 +7103,177 @@
         transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
       }
 
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] *,
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] *::before,
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] *::after {
+      /* ── 팝오버 자체 완결 스타일: 코코포리아 emotion CSS 미주입 상태에서도 정상 표시 ── */
+      .ccf-youtube-bgm-popover *:not(.ccf-youtube-bgm-paper),
+      .ccf-youtube-bgm-popover *:not(.ccf-youtube-bgm-paper)::before,
+      .ccf-youtube-bgm-popover *:not(.ccf-youtube-bgm-paper)::after {
         box-sizing: border-box !important;
       }
 
-      .ccf-youtube-bgm-form {
+      .ccf-youtube-bgm-popover form {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+      }
+
+      .ccf-youtube-bgm-popover .MuiFormControl-root {
         display: flex !important;
         flex-direction: column !important;
-        gap: 8px !important;
+        position: relative !important;
         width: 100% !important;
-        margin: 0 !important;
+        margin: 8px 0 4px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        vertical-align: top !important;
       }
 
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] .MuiFormControl-root {
-        width: 100% !important;
-        margin: 0 !important;
-      }
-
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] .MuiInputBase-root {
+      .ccf-youtube-bgm-popover .MuiInputBase-root {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
         width: 100% !important;
         min-width: 0 !important;
+        height: 56px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: rgba(255, 255, 255, 0.09) !important;
+        border: 0 !important;
+        border-radius: 4px 4px 0 0 !important;
+        color: rgb(255, 255, 255) !important;
+        cursor: text !important;
+        font-family: Roboto, Helvetica, Arial, sans-serif !important;
       }
 
-      .ccf-youtube-bgm-popover[data-ccf-youtube-bgm-fallback="1"] input[name="name"] {
+      .ccf-youtube-bgm-popover .MuiInputBase-root::before {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.7) !important;
+        pointer-events: none !important;
+      }
+
+      .ccf-youtube-bgm-popover .MuiInputBase-root::after {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        border-bottom: 2px solid rgb(33, 150, 243) !important;
+        transform: scaleX(0) !important;
+        transition: transform 0.2s cubic-bezier(0, 0, 0.2, 1) !important;
+        pointer-events: none !important;
+      }
+
+      .ccf-youtube-bgm-popover .MuiInputBase-root:focus-within::after {
+        transform: scaleX(1) !important;
+      }
+
+      .ccf-youtube-bgm-popover input[name="name"] {
+        display: block !important;
         width: 100% !important;
         min-width: 0 !important;
-        overflow: hidden !important;
+        height: 56px !important;
+        margin: 0 !important;
+        padding: 25px 12px 8px !important;
+        border: 0 !important;
+        outline: none !important;
+        background: transparent !important;
+        color: rgb(255, 255, 255) !important;
+        font-family: Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        line-height: 23px !important;
+        letter-spacing: 0.15px !important;
         text-overflow: ellipsis !important;
       }
 
-      .ccf-youtube-bgm-volume-row:not(.jJDQMj) {
-        display: grid !important;
-        grid-template-columns: 24px minmax(0, 1fr) 28px 28px !important;
-        align-items: center !important;
-        gap: 6px !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        min-height: 30px !important;
+      .ccf-youtube-bgm-popover label {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: translate(12px, 7px) scale(0.75) !important;
+        transform-origin: top left !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        font-family: Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        line-height: 23px !important;
+        letter-spacing: 0.15px !important;
+        white-space: nowrap !important;
+        pointer-events: none !important;
+        z-index: 1 !important;
       }
 
-      .ccf-youtube-bgm-volume-row:not(.jJDQMj) > svg {
-        display: block !important;
-        width: 22px !important;
-        height: 22px !important;
+      .ccf-youtube-bgm-volume-row {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: 34px !important;
+        margin: 8px 0 0 !important;
+        padding: 0 !important;
+      }
+
+      .ccf-youtube-bgm-volume-row > svg {
         flex: 0 0 auto !important;
+        display: block !important;
+        width: 24px !important;
+        height: 24px !important;
+        fill: rgb(255, 255, 255) !important;
       }
 
       .ccf-youtube-bgm-slider {
         position: relative !important;
-        min-width: 0 !important;
-      }
-
-      .ccf-youtube-bgm-slider:not(.hoiSIY) {
-        position: relative !important;
         display: block !important;
-        width: 100% !important;
+        flex: 1 1 auto !important;
+        width: auto !important;
         min-width: 0 !important;
-        height: 24px !important;
-        margin: 0 !important;
+        height: 28px !important;
+        margin: 0 8px !important;
         padding: 0 !important;
+        cursor: pointer !important;
+        touch-action: none !important;
       }
 
-      .ccf-youtube-bgm-slider:not(.hoiSIY) .MuiSlider-rail,
-      .ccf-youtube-bgm-slider:not(.hoiSIY) .MuiSlider-track {
+      .ccf-youtube-bgm-slider .MuiSlider-rail,
+      .ccf-youtube-bgm-slider .MuiSlider-track {
         position: absolute !important;
         top: 50% !important;
+        height: 2px !important;
+        margin: 0 !important;
         transform: translateY(-50%) !important;
-        height: 3px !important;
-        border-radius: 999px !important;
+        border-radius: 12px !important;
+        background-color: rgb(33, 150, 243) !important;
       }
 
-      .ccf-youtube-bgm-slider:not(.hoiSIY) .MuiSlider-rail {
+      .ccf-youtube-bgm-slider .MuiSlider-rail {
         left: 0 !important;
         right: 0 !important;
         width: 100% !important;
-        opacity: 0.35 !important;
+        opacity: 0.38 !important;
       }
 
-      .ccf-youtube-bgm-slider:not(.hoiSIY) .MuiSlider-thumb {
+      .ccf-youtube-bgm-slider .MuiSlider-track {
+        left: 0 !important;
+        opacity: 1 !important;
+      }
+
+      .ccf-youtube-bgm-slider .MuiSlider-thumb {
         position: absolute !important;
         top: 50% !important;
-        width: 14px !important;
-        height: 14px !important;
+        width: 12px !important;
+        height: 12px !important;
         margin: 0 !important;
+        padding: 0 !important;
         transform: translate(-50%, -50%) !important;
+        border-radius: 50% !important;
+        background-color: rgb(33, 150, 243) !important;
       }
 
       .ccf-youtube-bgm-range {
@@ -7213,20 +7299,38 @@
         border: 0 !important;
       }
 
-      .ccf-youtube-bgm-volume-value:not(.css-9l3uo3) {
-        width: 28px !important;
+      .ccf-youtube-bgm-volume-value {
+        flex: 0 0 auto !important;
         margin: 0 !important;
+        padding: 0 2px !important;
+        color: rgb(255, 255, 255) !important;
+        font-family: Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        line-height: 24px !important;
+        letter-spacing: 0.15px !important;
         text-align: center !important;
-        line-height: 1 !important;
         white-space: nowrap !important;
       }
 
-      .ccf-youtube-bgm-loop:not(.css-11qx9u) {
-        width: 28px !important;
-        height: 28px !important;
-        min-width: 28px !important;
+      .ccf-youtube-bgm-loop {
+        flex: 0 0 auto !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
         margin: 0 !important;
-        padding: 4px !important;
+        padding: 5px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        cursor: pointer !important;
+      }
+
+      .ccf-youtube-bgm-loop svg {
+        width: 24px !important;
+        height: 24px !important;
       }
 
       /* 반복재생 버튼: 네이티브처럼 배경/하이라이트 없이 아이콘만 표시한다. */
@@ -7246,17 +7350,18 @@
         display: none !important;
       }
 
-      /* 켜짐 상태는 네이티브 MuiIconButton-colorPrimary 색상을 그대로 사용한다. */
+      /* 켜짐: 네이티브 primary 파랑 / 꺼짐: 흰색 */
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"],
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"] svg {
+        color: rgb(33, 150, 243) !important;
+        fill: rgb(33, 150, 243) !important;
         opacity: 1 !important;
       }
 
-      /* 꺼짐 상태만 흰색으로 표시한다. */
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"],
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"] svg {
-        color: #ffffff !important;
-        fill: #ffffff !important;
+        color: rgb(255, 255, 255) !important;
+        fill: rgb(255, 255, 255) !important;
         opacity: 1 !important;
       }
 
@@ -7271,20 +7376,45 @@
         z-index: -1 !important;
       }
 
-      .ccf-youtube-bgm-actions:not(.iyVLQd) {
+      .ccf-youtube-bgm-actions {
         display: flex !important;
+        flex-direction: row !important;
         align-items: center !important;
-        gap: 4px !important;
         width: 100% !important;
         min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
 
-      .ccf-youtube-bgm-actions:not(.iyVLQd) button {
+      .ccf-youtube-bgm-actions button {
         flex: 1 1 0 !important;
-        min-width: 0 !important;
-        min-height: 30px !important;
-        padding: 4px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 64px !important;
+        margin: 0 !important;
+        padding: 6px 8px !important;
+        border: 0 !important;
+        border-radius: 4px !important;
+        background: transparent !important;
+        cursor: pointer !important;
+        font-family: Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        line-height: 24.5px !important;
+        letter-spacing: 0.4px !important;
+        text-transform: uppercase !important;
         white-space: nowrap !important;
+      }
+
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-preview,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-save {
+        color: rgb(33, 150, 243) !important;
+      }
+
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-remove,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-preview[data-previewing="1"] {
+        color: rgb(220, 0, 78) !important;
       }
 
       .ccf-youtube-bgm-player-dock {
