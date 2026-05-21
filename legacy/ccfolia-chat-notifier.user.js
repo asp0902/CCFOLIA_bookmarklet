@@ -337,6 +337,7 @@
   const ccfBgmNativeLoadedSlots = new Set();
   const ccfBgmKnownNativeMedia = new Set();
   const ccfBgmNativeMediaListeners = new WeakSet();
+  const ccfBgmCreationTrackedMedia = new WeakSet();
   let ccfBgmProgressRoot = null;
   let ccfBgmProgressTimer = 0;
   let ccfBgmDomEnhanceTimer = 0;
@@ -1499,6 +1500,7 @@
     ccfBgmEnhancerInitialized = true;
     injectCcfBgmEnhancerStyle();
     hookCcfBgmNativeMediaProgress();
+    hookCcfBgmMediaElementCreation();
     hookCcfBgmWebAudioProgress();
     bindCcfBgmEvents();
     observeCcfBgmDom();
@@ -1668,6 +1670,108 @@
     });
 
     debugLog("bgm-webaudio-hooked");
+  }
+
+  // 코코포리아가 DOM에 붙지 않은 Audio 객체를 autoplay로 재생하는 경우,
+  // .play() 메서드 후크로는 잡히지 않는다. 미디어 엘리먼트의 생성/소스 지정
+  // 시점을 후킹해 직접 play 이벤트 리스너를 붙여 추적한다.
+  function trackCcfBgmCreatedMedia(media) {
+    if (!(media instanceof HTMLMediaElement) || ccfBgmCreationTrackedMedia.has(media)) {
+      return;
+    }
+    ccfBgmCreationTrackedMedia.add(media);
+    // autoplay로 재생돼 .play()를 거치지 않아도 'play'/'playing' 이벤트는 발생한다.
+    ["play", "playing"].forEach((type) => {
+      media.addEventListener(type, () => {
+        if (!chatNotifierActive) {
+          return;
+        }
+        handleCcfNativeMediaActivity(media, "play", "media-created");
+      }, true);
+    });
+  }
+
+  function hookCcfBgmMediaElementCreation() {
+    if (window.__ccfBgmMediaCreationHooked) {
+      return;
+    }
+    window.__ccfBgmMediaCreationHooked = true;
+
+    // 1) Audio 생성자
+    const OrigAudio = window.Audio;
+    if (typeof OrigAudio === "function") {
+      const PatchedAudio = function CcfBgmAudio() {
+        const media = arguments.length
+          ? new OrigAudio(arguments[0])
+          : new OrigAudio();
+        try { trackCcfBgmCreatedMedia(media); } catch (_) {}
+        return media;
+      };
+      PatchedAudio.prototype = OrigAudio.prototype;
+      window.Audio = PatchedAudio;
+      registerTeardown(() => {
+        if (window.Audio === PatchedAudio) {
+          window.Audio = OrigAudio;
+        }
+      });
+    }
+
+    // 2) document.createElement('audio'|'video')
+    const origCreateElement = document.createElement;
+    if (typeof origCreateElement === "function") {
+      const patchedCreateElement = function ccfBgmCreateElement(tagName) {
+        const element = origCreateElement.apply(this, arguments);
+        try {
+          if (typeof tagName === "string" && /^(?:audio|video)$/i.test(tagName)) {
+            trackCcfBgmCreatedMedia(element);
+          }
+        } catch (_) {}
+        return element;
+      };
+      document.createElement = patchedCreateElement;
+      registerTeardown(() => {
+        if (document.createElement === patchedCreateElement) {
+          document.createElement = origCreateElement;
+        }
+      });
+    }
+
+    // 3) src / srcObject 세터 — 이미 존재하던 엘리먼트를 재사용하는 경우 대응
+    const proto = window.HTMLMediaElement && window.HTMLMediaElement.prototype;
+    if (proto) {
+      ["src", "srcObject"].forEach((prop) => {
+        try {
+          const desc = Object.getOwnPropertyDescriptor(proto, prop);
+          if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function") {
+            return;
+          }
+          const patched = {
+            configurable: true,
+            enumerable: desc.enumerable,
+            get() { return desc.get.call(this); },
+            set(value) {
+              try { trackCcfBgmCreatedMedia(this); } catch (_) {}
+              return desc.set.call(this, value);
+            }
+          };
+          Object.defineProperty(proto, prop, patched);
+          registerTeardown(() => {
+            const current = Object.getOwnPropertyDescriptor(proto, prop);
+            if (current && current.set === patched.set) {
+              Object.defineProperty(proto, prop, desc);
+            }
+          });
+        } catch (error) {
+          debugLog("bgm-media-src-hook-failed", serializeError(error));
+        }
+      });
+    }
+
+    registerTeardown(() => {
+      window.__ccfBgmMediaCreationHooked = false;
+    });
+
+    debugLog("bgm-media-creation-hooked");
   }
 
   function createCcfWebAudioTrackingState(source, when, offset, duration) {
