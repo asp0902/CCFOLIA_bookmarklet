@@ -1448,7 +1448,6 @@
 
         const label = document.createElement("span");
         label.textContent = "현재 탭 룸 로그 삭제";
-        label.style.color = "#d32f2f"; 
         customDeleteBtn.appendChild(label);
 
         const ripple = nativeDeleteBtn.querySelector(".MuiTouchRipple-root");
@@ -1460,9 +1459,8 @@
           event.preventDefault();
           event.stopPropagation();
           
+          await handleDeleteCurrentTabLogs();
           await dismissTransientMenusAndOverlays();
-          
-          handleDeleteCurrentTabLogs();
         });
 
         nativeDeleteBtn.insertAdjacentElement("afterend", customDeleteBtn);
@@ -1514,10 +1512,19 @@
 
       while (emptyCount < 3) {
         const itemRoots = findLogMessageItemRoots([scope]);
+
+        // React의 동적 렌더링 최적화(마우스 오버 시에만 휴지통 렌더링)에 대응하기 위해 Hover 이벤트를 강제 발생시킵니다.
+        for (const root of itemRoots) {
+          root.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
+          root.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true, cancelable: true }));
+        }
+        // DOM에 버튼이 추가될 수 있도록 아주 짧게 대기합니다.
+        await new Promise((r) => setTimeout(r, 60));
+
         const deleteBtns = [];
         
         for (const root of itemRoots) {
-          const btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], [data-testid="DeleteIcon"]')?.closest('button');
+          const btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"], svg[data-testid*="Delete" i], path[d^="M6 19c0"]')?.closest('button');
           if (btn) {
             deleteBtns.push(btn);
           }
@@ -1526,7 +1533,7 @@
         if (deleteBtns.length === 0) {
           emptyCount++;
           if (scroller) {
-            scroller.scrollTop = 0;
+            scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight);
           }
           await new Promise((r) => setTimeout(r, 600));
           continue;
@@ -1538,11 +1545,24 @@
           const btn = deleteBtns[i];
           try {
             btn.click();
+
+            // 간혹 개별 삭제 시 확인 다이얼로그가 뜨는 버전을 대비
+            await new Promise((r) => setTimeout(r, 30));
+            const confirmDialog = document.querySelector('[role="dialog"]');
+            if (confirmDialog) {
+              const confirmBtn = confirmDialog.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"], button.MuiButton-containedSecondary, button.MuiButton-containedPrimary:not(:first-of-type)');
+              if (confirmBtn) {
+                confirmBtn.click();
+                await new Promise((r) => setTimeout(r, 30));
+              }
+            }
+
             deletedCount++;
             updateToast(`[ ${currentTab.name} ] 탭 삭제 중... (${deletedCount}개 삭제됨)`);
           } catch (e) {
+            console.warn("[CCF LOG PACKAGE] 개별 메시지 삭제 클릭 실패:", e);
           }
-          await new Promise((r) => setTimeout(r, 30));
+          await new Promise((r) => setTimeout(r, 50));
         }
         
         await new Promise((r) => setTimeout(r, 500));
