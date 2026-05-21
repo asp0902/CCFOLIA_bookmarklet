@@ -6806,8 +6806,18 @@
         padding: 4px !important;
       }
 
-      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"] {
-        opacity: 0.45 !important;
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"],
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"] svg {
+        color: #2196f3 !important;
+        fill: #2196f3 !important;
+        opacity: 1 !important;
+      }
+
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"],
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"] svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        opacity: 1 !important;
       }
 
       .ccf-youtube-bgm-actions:not(.iyVLQd) {
