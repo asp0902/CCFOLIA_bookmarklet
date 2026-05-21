@@ -340,6 +340,8 @@
   let ccfBgmProgressRoot = null;
   let ccfBgmProgressTimer = 0;
   let ccfBgmDomEnhanceTimer = 0;
+  let ccfBgmNativeTooltipEl = null;
+  let ccfBgmNativeTooltipButton = null;
   let ccfBgmLastNativeMedia = null;
   let ccfBgmLastWebAudio = null;
   let ccfBgmAudioContextNow = null;
@@ -1728,6 +1730,10 @@
     document.addEventListener("keypress", handleCcfBgmUrlKeydown, withTeardownSignal(true));
     document.addEventListener("submit", handleCcfBgmUrlSubmit, withTeardownSignal(true));
     document.addEventListener("click", handleCcfBgmDocumentClick, withTeardownSignal(true));
+    document.addEventListener("pointerover", handleCcfBgmTooltipPointerOver, withTeardownSignal(true));
+    document.addEventListener("pointerout", handleCcfBgmTooltipPointerOut, withTeardownSignal(true));
+    document.addEventListener("pointerdown", handleCcfBgmTooltipPointerOut, withTeardownSignal(true));
+    registerTeardown(teardownCcfBgmNativeTooltip);
     [
       "play",
       "timeupdate",
@@ -3132,6 +3138,144 @@
         button.removeAttribute("data-ccf-youtube-bgm-registered");
       }
     });
+
+    if (
+      ccfBgmNativeTooltipButton
+      && !ccfBgmNativeTooltipButton.hasAttribute("data-ccf-youtube-bgm-registered")
+    ) {
+      hideCcfBgmNativeTooltip();
+    }
+  }
+
+  function getCcfBgmTooltipEntryForSlot(slotKey) {
+    if (!slotKey) {
+      return null;
+    }
+    if (ccfBgmActiveSlotKey === slotKey && ccfBgmActiveEntryKey) {
+      const activeEntry = ccfBgmSlotMap.get(ccfBgmActiveEntryKey);
+      if (activeEntry?.videoId) {
+        return activeEntry;
+      }
+    }
+    const ready = findCcfReadyYoutubeEntryForSlot(slotKey);
+    if (ready?.[1]?.videoId) {
+      return ready[1];
+    }
+    return getCcfYoutubeEntriesForSlot(slotKey)[0]?.[1] || null;
+  }
+
+  function ensureCcfBgmNativeTooltip() {
+    if (ccfBgmNativeTooltipEl && document.body && document.body.contains(ccfBgmNativeTooltipEl)) {
+      return ccfBgmNativeTooltipEl;
+    }
+    const tip = document.createElement("div");
+    tip.className = "ccf-bgm-native-tooltip";
+    tip.setAttribute("role", "tooltip");
+    tip.dataset.visible = "0";
+    tip.innerHTML = [
+      '<div class="ccf-bgm-native-tooltip-title"></div>',
+      '<div class="ccf-bgm-native-tooltip-meta"></div>'
+    ].join("");
+    (document.body || document.documentElement).appendChild(tip);
+    ccfBgmNativeTooltipEl = tip;
+    return tip;
+  }
+
+  function showCcfBgmNativeTooltip(button, slotKey) {
+    const entry = getCcfBgmTooltipEntryForSlot(slotKey);
+    if (!entry) {
+      hideCcfBgmNativeTooltip();
+      return;
+    }
+
+    const tip = ensureCcfBgmNativeTooltip();
+    const title = normalizeSpace(entry.displayName || entry.title || "YouTube BGM") || "YouTube BGM";
+    const volume = clampCcfBgmVolume(entry.volume, 100);
+    const loopOn = entry.loop !== false;
+
+    const titleEl = tip.querySelector(".ccf-bgm-native-tooltip-title");
+    const metaEl = tip.querySelector(".ccf-bgm-native-tooltip-meta");
+    if (titleEl) {
+      titleEl.textContent = title;
+    }
+    if (metaEl) {
+      metaEl.textContent = `vol: ${volume} · loop: ${loopOn ? "on" : "off"}`;
+    }
+
+    const needsReposition = ccfBgmNativeTooltipButton !== button || tip.dataset.visible !== "1";
+    ccfBgmNativeTooltipButton = button;
+    tip.dataset.visible = "1";
+    if (needsReposition) {
+      positionCcfBgmNativeTooltip(button, tip);
+    }
+  }
+
+  function positionCcfBgmNativeTooltip(button, tip) {
+    if (!(button instanceof HTMLElement) || !(tip instanceof HTMLElement)) {
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    const margin = 6;
+    const left = Math.max(
+      margin,
+      Math.min(
+        rect.left + rect.width / 2 - tipRect.width / 2,
+        window.innerWidth - tipRect.width - margin
+      )
+    );
+    let top = rect.top - tipRect.height - margin;
+    if (top < margin) {
+      top = rect.bottom + margin;
+    }
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+  }
+
+  function hideCcfBgmNativeTooltip() {
+    ccfBgmNativeTooltipButton = null;
+    if (ccfBgmNativeTooltipEl) {
+      ccfBgmNativeTooltipEl.dataset.visible = "0";
+    }
+  }
+
+  function teardownCcfBgmNativeTooltip() {
+    ccfBgmNativeTooltipButton = null;
+    if (ccfBgmNativeTooltipEl) {
+      ccfBgmNativeTooltipEl.remove();
+      ccfBgmNativeTooltipEl = null;
+    }
+  }
+
+  function handleCcfBgmTooltipPointerOver(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-ccf-youtube-bgm-registered]');
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+    const slotKey = getCcfBgmSlotKeyFromButton(button);
+    if (!slotKey) {
+      return;
+    }
+    showCcfBgmNativeTooltip(button, slotKey);
+  }
+
+  function handleCcfBgmTooltipPointerOut(event) {
+    if (!ccfBgmNativeTooltipButton) {
+      return;
+    }
+    if (event.type === "pointerdown") {
+      hideCcfBgmNativeTooltip();
+      return;
+    }
+    const related = event.relatedTarget;
+    if (related instanceof Node && ccfBgmNativeTooltipButton.contains(related)) {
+      return;
+    }
+    hideCcfBgmNativeTooltip();
   }
 
   function hasCcfNormalSoundLoaded(button) {
@@ -6320,6 +6464,44 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
         pointer-events: none;
         z-index: 10;
+      }
+
+      .ccf-bgm-native-tooltip {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: 2147483647;
+        max-width: 320px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: rgba(20, 20, 20, 0.96);
+        color: #fff;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 120ms ease;
+      }
+
+      .ccf-bgm-native-tooltip[data-visible="1"] {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .ccf-bgm-native-tooltip-title {
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.45;
+        word-break: break-word;
+      }
+
+      .ccf-bgm-native-tooltip-meta {
+        margin-top: 3px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: rgba(255, 255, 255, 0.7);
+        font-variant-numeric: tabular-nums;
       }
 
       .ccf-youtube-bgm-row-wrap {
