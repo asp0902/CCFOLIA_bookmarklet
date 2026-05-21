@@ -2721,6 +2721,7 @@
     ccfBgmActiveSlotKey = normalizedSlotKey;
     ccfBgmActiveEntryKey = resolvedEntryKey;
     ccfBgmActiveLoop = state.loop;
+    markCcfYoutubeBgmSlotButtons();
 
     if (!ensureYoutubePlayerHost()) {
       if (retryCount < 50) {
@@ -2736,6 +2737,7 @@
         ccfBgmActiveEntryKey = "";
         ccfBgmPlayerVisible = false;
         syncCcfYoutubeBgmPlayerDockVisibility();
+        markCcfYoutubeBgmSlotButtons();
       }
       return;
     }
@@ -2834,6 +2836,7 @@
         ccfBgmActiveEntryKey = "";
         ccfBgmPlayerVisible = false;
         syncCcfYoutubeBgmPlayerDockVisibility();
+        markCcfYoutubeBgmSlotButtons();
       }
     }
     if (event?.data === window.YT?.PlayerState?.PLAYING) {
@@ -2856,6 +2859,7 @@
       ccfBgmActiveEntryKey = "";
       ccfBgmPlayerVisible = false;
       syncCcfYoutubeBgmPlayerDockVisibility();
+      markCcfYoutubeBgmSlotButtons();
       return;
     }
 
@@ -2872,6 +2876,7 @@
     ccfBgmActiveEntryKey = "";
     ccfBgmPlayerVisible = false;
     syncCcfYoutubeBgmPlayerDockVisibility();
+    markCcfYoutubeBgmSlotButtons();
   }
 
   function syncCcfActiveBgmState(seed = null) {
@@ -3122,18 +3127,18 @@
   }
 
   function markCcfYoutubeBgmSlotButtons() {
+    // YouTube 음원을 "실제로 재생 중"인 슬롯에만 표시한다.
+    // 단순 등록(대기) 상태로는 네이티브 버튼 외형을 바꾸지 않는다.
     document.querySelectorAll("button").forEach((button) => {
       const slotKey = getCcfBgmSlotKeyFromButton(button);
       if (!slotKey) {
         return;
       }
 
-      const hasYoutube = hasCcfReadyYoutubeEntryForSlot(slotKey);
-      const hasNormalSound = hasCcfNormalSoundLoaded(button) || ccfBgmNativeLoadedSlots.has(slotKey);
-      if (hasYoutube && !hasNormalSound) {
+      const isPlayingYoutube = !!ccfBgmActiveSlotKey
+        && slotKey === ccfBgmActiveSlotKey;
+      if (isPlayingYoutube) {
         button.setAttribute("data-ccf-youtube-bgm-registered", "true");
-      } else if (hasYoutube && hasNormalSound) {
-        button.setAttribute("data-ccf-youtube-bgm-registered", "faded");
       } else {
         button.removeAttribute("data-ccf-youtube-bgm-registered");
       }
