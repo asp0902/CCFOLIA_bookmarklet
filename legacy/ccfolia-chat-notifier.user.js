@@ -2605,7 +2605,8 @@
 
     if (storedEntry && Number.isFinite(Number(storedEntry.volume))) {
       const entryVolume = getCcfYoutubeBgmEditVolume(storedEntry, slotKey);
-      state.volume = entryVolume;
+      const globalVolume = readCcfBgmGlobalVolume(button || findCcfBgmButtonBySlot(slotKey));
+      state.volume = Math.max(0, Math.min(100, Math.round(entryVolume * globalVolume / 100)));
     }
 
     if (storedEntry && typeof storedEntry.loop === "boolean") {
