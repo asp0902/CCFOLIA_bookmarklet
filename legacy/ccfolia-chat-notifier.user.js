@@ -6823,8 +6823,8 @@
         box-sizing: border-box !important;
         display: block !important;
         justify-self: center !important;
-        width: calc(100% - 25px) !important;
-        max-width: calc(100% - 25px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
         min-width: 0 !important;
         height: 16px !important;
         margin: 0 !important;
