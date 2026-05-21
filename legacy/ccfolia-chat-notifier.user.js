@@ -1958,7 +1958,7 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["aria-label", "class", "style", "value"]
+      attributeFilter: ["aria-label", "aria-selected", "class", "style", "value"]
     });
     registerTeardown(() => {
       ccfBgmObserver?.disconnect();
@@ -2517,7 +2517,9 @@
     const entryKey = makeCcfYoutubeBgmEntryKey(normalizedSlotKey, videoId);
     const entry = createCcfYoutubeBgmEntry(normalizedSlotKey, url, videoId, {});
 
-    const tabSignature = getCcfBgmActiveTabSignature(mountRoot instanceof Element ? mountRoot : null);
+    const tabSignature = normalizeCcfBgmTabSignature(
+      getCcfBgmActiveTabSignature(mountRoot instanceof Element ? mountRoot : null)
+    );
     if (tabSignature) {
       entry.tabSignature = tabSignature;
     }
@@ -3431,20 +3433,30 @@
     }
 
     const activeTabSig = getCcfBgmActiveTabSignature(listRoot);
+    let tabSignatureChanged = false;
 
     const entries = [...ccfBgmSlotMap.entries()]
-      .filter(([, entry]) => {
+      .filter(([entryKey, entry]) => {
         if (!entry?.videoId) {
           return false;
+        }
+        const entryTabSig = normalizeCcfBgmTabSignature(entry.tabSignature);
+        if (activeTabSig && !entryTabSig) {
+          entry.tabSignature = activeTabSig;
+          entry.updatedAt = Date.now();
+          ccfBgmSlotMap.set(entryKey, entry);
+          tabSignatureChanged = true;
+          return true;
         }
         if (!activeTabSig) {
           return true;
         }
-        if (!entry.tabSignature) {
-          return true;
-        }
-        return entry.tabSignature === activeTabSig;
+        return entryTabSig === activeTabSig;
       });
+
+    if (tabSignatureChanged) {
+      persistCcfBgmSlotMap();
+    }
 
     const nativeAnchorOrder = getCcfYoutubeBgmNativeAnchorOrder(container);
     const placementPlan = computeCcfYoutubeBgmPlacementPlan(entries, nativeAnchorOrder);
@@ -5436,29 +5448,56 @@
     });
 
     for (const root of scopes) {
-      const tablist = root.querySelector('[role="tablist"]');
-      if (!tablist) {
-        continue;
-      }
-
-      const tabs = [...tablist.querySelectorAll('button.MuiTab-root, [role="tab"]')];
-      for (let idx = 0; idx < tabs.length; idx += 1) {
-        const tab = tabs[idx];
-        if (!(tab instanceof HTMLElement)) {
-          continue;
-        }
-        const isSelected = tab.getAttribute("aria-selected") === "true"
-          || tab.classList.contains("Mui-selected");
-        if (!isSelected) {
-          continue;
-        }
-        const labelEl = tab.querySelector(".MuiTypography-root, p, span");
-        const name = normalizeSpace(labelEl?.textContent || tab.textContent || "");
-        return `${idx}::${name}`;
+      const signature = readCcfBgmActiveTabSignatureFromRoot(root);
+      if (signature) {
+        return signature;
       }
     }
 
     return "";
+  }
+
+  function readCcfBgmActiveTabSignatureFromRoot(root) {
+    if (!(root instanceof Element)) {
+      return "";
+    }
+
+    const tablists = [...root.querySelectorAll('[role="tablist"], .MuiTabs-root')];
+    for (const tablist of tablists) {
+      const tabs = [...tablist.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')];
+      const signature = readCcfBgmActiveTabSignatureFromTabs(tabs);
+      if (signature) {
+        return signature;
+      }
+    }
+
+    return readCcfBgmActiveTabSignatureFromTabs(
+      [...root.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')]
+    );
+  }
+
+  function readCcfBgmActiveTabSignatureFromTabs(tabs) {
+    for (let idx = 0; idx < tabs.length; idx += 1) {
+      const tab = tabs[idx];
+      if (!(tab instanceof HTMLElement)) {
+        continue;
+      }
+      const isSelected = tab.getAttribute("aria-selected") === "true"
+        || tab.classList.contains("Mui-selected")
+        || tab.getAttribute("aria-current") === "page";
+      if (!isSelected) {
+        continue;
+      }
+      const labelEl = tab.querySelector(".MuiTypography-root, p, span");
+      const name = normalizeSpace(labelEl?.textContent || tab.textContent || "");
+      const stableId = normalizeSpace(tab.getAttribute("aria-controls") || tab.id || "");
+      return normalizeCcfBgmTabSignature(`${idx}::${name || stableId}`);
+    }
+    return "";
+  }
+
+  function normalizeCcfBgmTabSignature(value) {
+    return normalizeSpace(value || "");
   }
 
   function getCcfBgmSlotKeyFromButton(button) {
@@ -6048,6 +6087,7 @@
       videoId: slot.videoId,
       title: slot.title || "YouTube BGM",
       displayName: slot.displayName || slot.title || "YouTube BGM",
+      tabSignature: normalizeCcfBgmTabSignature(slot.tabSignature),
       volume: Number.isFinite(Number(slot.volume)) ? clampCcfBgmVolume(slot.volume) : 100,
       loop: slot.loop !== false,
       updatedAt,
@@ -6516,6 +6556,7 @@
             videoId,
             title: normalizeSpace(entry?.title || "") || "YouTube BGM",
             displayName: normalizeSpace(entry?.displayName || entry?.title || "") || "YouTube BGM",
+            tabSignature: normalizeCcfBgmTabSignature(entry?.tabSignature),
             volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
             volumeEdited: entry?.volumeEdited === true,
             loop: typeof entry?.loop === "boolean" ? entry.loop : true,
@@ -6552,6 +6593,7 @@
           videoId: entry.videoId,
           title: entry.title || "",
           displayName: entry.displayName || entry.title || "",
+          tabSignature: normalizeCcfBgmTabSignature(entry.tabSignature),
           volume: Number.isFinite(Number(entry.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
           volumeEdited: entry.volumeEdited === true,
           loop: entry.loop !== false,
@@ -6598,6 +6640,7 @@
       videoId: entry?.videoId || "",
       title: entry?.title || "",
       displayName: entry?.displayName || "",
+      tabSignature: normalizeCcfBgmTabSignature(entry?.tabSignature),
       volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
       loop: entry?.loop !== false,
       order: Number.isFinite(Number(entry?.order)) ? Number(entry.order) : 0,
@@ -6611,6 +6654,7 @@
       && a.videoId === b.videoId
       && a.title === b.title
       && a.displayName === b.displayName
+      && a.tabSignature === b.tabSignature
       && a.volume === b.volume
       && a.loop === b.loop
       && a.order === b.order;
