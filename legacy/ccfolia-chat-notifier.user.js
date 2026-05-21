@@ -4768,6 +4768,7 @@
       } else {
         markCcfBgmProgressHost(panel);
       }
+      syncCcfBgmProgressWidth(mountTarget, ccfBgmProgressRoot);
       ensureCcfYoutubeBgmPlayerDock(ccfBgmProgressRoot);
       return;
     }
@@ -4793,6 +4794,7 @@
 
     insertCcfBgmProgressRoot(panel, mountTarget, root);
     ccfBgmProgressRoot = root;
+    syncCcfBgmProgressWidth(mountTarget, root);
     ensureCcfYoutubeBgmPlayerDock(root);
   }
 
@@ -4844,11 +4846,43 @@
     if (mountTarget instanceof HTMLElement && mountTarget !== panel && mountTarget.parentElement) {
       markCcfBgmProgressHost(mountTarget.parentElement);
       mountTarget.insertAdjacentElement("afterend", progressRoot);
+      syncCcfBgmProgressWidth(mountTarget, progressRoot);
       return;
     }
 
     markCcfBgmProgressHost(panel);
     panel.appendChild(progressRoot);
+    syncCcfBgmProgressWidth(panel, progressRoot);
+  }
+
+  function syncCcfBgmProgressWidth(mountTarget, progressRoot = ccfBgmProgressRoot) {
+    if (!(progressRoot instanceof HTMLElement)) {
+      return;
+    }
+
+    const source = mountTarget instanceof HTMLElement
+      ? mountTarget
+      : progressRoot.parentElement;
+    const sourceRect = source instanceof HTMLElement
+      ? source.getBoundingClientRect()
+      : null;
+    const parentRect = progressRoot.parentElement instanceof HTMLElement
+      ? progressRoot.parentElement.getBoundingClientRect()
+      : null;
+    const width = sourceRect
+      ? sourceRect.width
+      : 0;
+
+    if (Number.isFinite(width) && width > 0) {
+      progressRoot.style.setProperty("--ccf-bgm-progress-width", `${Math.floor(width)}px`);
+      const left = parentRect && sourceRect
+        ? Math.max(0, Math.floor(sourceRect.left - parentRect.left))
+        : 0;
+      progressRoot.style.setProperty("--ccf-bgm-progress-left", `${left}px`);
+    } else {
+      progressRoot.style.removeProperty("--ccf-bgm-progress-width");
+      progressRoot.style.removeProperty("--ccf-bgm-progress-left");
+    }
   }
 
   function markCcfBgmProgressHost(host) {
@@ -6725,10 +6759,10 @@
       .ccf-bgm-progress-root {
         box-sizing: border-box !important;
         display: flex !important;
-        justify-content: flex-end !important;
+        justify-content: flex-start !important;
         flex: 0 0 auto !important;
-        align-self: flex-end !important;
-        width: 284px !important;
+        align-self: stretch !important;
+        width: 100% !important;
         max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
@@ -6749,8 +6783,9 @@
         align-items: center !important;
         justify-content: flex-start !important;
         gap: 0 !important;
-        width: 284px !important;
-        max-width: 100% !important;
+        margin-left: var(--ccf-bgm-progress-left, 0px) !important;
+        width: var(--ccf-bgm-progress-width, 100%) !important;
+        max-width: calc(100% - var(--ccf-bgm-progress-left, 0px)) !important;
         min-width: 0 !important;
         height: auto !important;
         padding: 0 !important;
@@ -6764,7 +6799,7 @@
         align-items: center !important;
         gap: 2px !important;
         flex: 0 0 auto !important;
-        width: 284px !important;
+        width: 100% !important;
         max-width: 100% !important;
         height: 16px !important;
         min-width: 0 !important;
