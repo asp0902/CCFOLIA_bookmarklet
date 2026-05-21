@@ -2229,6 +2229,17 @@
     return Math.max(0, Math.min(100, Math.round(number)));
   }
 
+  function getCcfYoutubeBgmEditVolume(entry, slotKey) {
+    const storedVolume = Number(entry?.volume);
+    if (Number.isFinite(storedVolume) && (storedVolume > 0 || entry?.volumeEdited === true)) {
+      return clampCcfBgmVolume(storedVolume, 100);
+    }
+
+    const slotVolume = readCcfBgmSlotVolumeFromButton(findCcfBgmButtonBySlot(slotKey));
+    const fallbackVolume = clampCcfBgmVolume(slotVolume, 100);
+    return fallbackVolume > 0 ? fallbackVolume : 100;
+  }
+
   function isDefaultCcfYoutubeBgmTitle(value) {
     const title = normalizeSpace(value || "");
     return !title || title === "YouTube BGM";
@@ -2346,7 +2357,9 @@
     const previousTitle = normalizeSpace(previous.title || "");
     const previousDisplayName = normalizeSpace(previous.displayName || "");
     const isSameVideo = previous.videoId === videoId;
-    const buttonState = readCcfBgmStateFromButton(findCcfBgmButtonBySlot(slotKey));
+    const slotButton = findCcfBgmButtonBySlot(slotKey);
+    const buttonState = readCcfBgmStateFromButton(slotButton);
+    const slotVolume = clampCcfBgmVolume(readCcfBgmSlotVolumeFromButton(slotButton), 100) || 100;
     const title = isSameVideo && previousTitle ? previousTitle : "YouTube BGM";
     const displayName = isCustomCcfYoutubeBgmName(previous)
       ? previousDisplayName
@@ -2361,9 +2374,10 @@
       videoId,
       title,
       displayName: normalizeSpace(displayName || "") || title,
-      volume: Number.isFinite(Number(previous.volume))
+      volume: Number.isFinite(Number(previous.volume)) && (Number(previous.volume) > 0 || previous.volumeEdited === true)
         ? clampCcfBgmVolume(previous.volume)
-        : clampCcfBgmVolume(buttonState.volume),
+        : slotVolume,
+      volumeEdited: previous.volumeEdited === true,
       loop: typeof previous.loop === "boolean" ? previous.loop : buttonState.loop,
       updatedAt: previous.url === url && previous.videoId === videoId
         ? Number(previous.updatedAt) || now
@@ -2407,13 +2421,16 @@
 
   function updateCcfBgmSlotStateFromButton(slotKey, button) {
     const state = readCcfBgmStateFromButton(button);
+    const slotVolume = clampCcfBgmVolume(readCcfBgmSlotVolumeFromButton(button), 100) || 100;
     getCcfYoutubeEntriesForSlot(slotKey).forEach(([entryKey, entry]) => {
       if (!entry?.videoId) {
         return;
       }
 
       entry.loop = state.loop;
-      entry.volume = state.volume;
+      if (entry.volumeEdited !== true) {
+        entry.volume = slotVolume;
+      }
       ccfBgmSlotMap.set(entryKey, entry);
     });
   }
@@ -2587,7 +2604,7 @@
       || findCcfReadyYoutubeEntryForSlot(slotKey)?.[1];
 
     if (storedEntry && Number.isFinite(Number(storedEntry.volume))) {
-      const entryVolume = clampCcfBgmVolume(storedEntry.volume);
+      const entryVolume = getCcfYoutubeBgmEditVolume(storedEntry, slotKey);
       const globalVolume = readCcfBgmGlobalVolume(button);
       state.volume = Math.max(0, Math.min(100, Math.round(entryVolume * globalVolume / 100)));
     }
@@ -2915,15 +2932,20 @@
 
   function readCcfBgmStateFromButton(button) {
     const label = button instanceof HTMLElement ? button.getAttribute("aria-label") || "" : "";
-    const volMatch = label.match(/vol\s*:\s*(-?\d+(?:\.\d+)?)/i);
     const loopMatch = label.match(/loop\s*:\s*(on|off)/i);
-    const slotVolume = volMatch ? convertCcfBgmSlotVolume(Number(volMatch[1])) : 100;
+    const slotVolume = readCcfBgmSlotVolumeFromButton(button);
     const globalVolume = readCcfBgmGlobalVolume(button);
 
     return {
       volume: Math.max(0, Math.min(100, Math.round(slotVolume * globalVolume / 100))),
       loop: loopMatch ? loopMatch[1].toLowerCase() === "on" : true
     };
+  }
+
+  function readCcfBgmSlotVolumeFromButton(button) {
+    const label = button instanceof HTMLElement ? button.getAttribute("aria-label") || "" : "";
+    const volMatch = label.match(/vol\s*:\s*(-?\d+(?:\.\d+)?)/i);
+    return volMatch ? convertCcfBgmSlotVolume(Number(volMatch[1])) : 100;
   }
 
   function convertCcfBgmSlotVolume(value) {
@@ -3859,40 +3881,40 @@
     const popover = document.createElement("div");
     popover.className = "MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation8 MuiPopover-paper css-1vy434g ccf-youtube-bgm-popover";
     popover.setAttribute("data-ccf-youtube-bgm-popover", "1");
+    popover.setAttribute("data-ccf-youtube-bgm-fallback", "1");
 
     const title = normalizeSpace(entry.displayName || entry.title || "YouTube BGM");
-    const volume01 = clampCcfBgmVolume(entry.volume, 100) / 100;
+    const initialVolume = getCcfYoutubeBgmEditVolume(entry, slotKey);
     const loop = entry.loop !== false;
     const inputId = `ccf-youtube-bgm-name-${Math.random().toString(36).slice(2, 8)}`;
 
     popover.innerHTML = [
       '<div class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation6 sc-kNoaeN GxVfF css-175dgcc ccf-youtube-bgm-paper">',
-      '<form>',
+      '<form class="ccf-youtube-bgm-form">',
       '  <div class="MuiFormControl-root MuiFormControl-marginDense MuiFormControl-fullWidth MuiTextField-root css-twdmtu">',
-      `    <label class="MuiFormLabel-root MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled MuiFormLabel-colorPrimary MuiFormLabel-filled MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled css-1n71hkt" data-shrink="true" for="${inputId}" id="${inputId}-label">name</label>`,
+      `    <label class="MuiFormLabel-root MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled MuiFormLabel-colorPrimary css-1n71hkt" data-shrink="true" for="${inputId}" id="${inputId}-label">이름</label>`,
       '    <div class="MuiInputBase-root MuiFilledInput-root MuiFilledInput-underline MuiInputBase-colorPrimary MuiInputBase-fullWidth MuiInputBase-formControl css-sblib2">',
       `      <input aria-invalid="false" id="${inputId}" name="name" type="text" class="MuiInputBase-input MuiFilledInput-input css-1476h24" value="${escapeCcfHtml(title)}">`,
       '    </div>',
       '  </div>',
-      '  <div class="sc-hFFBBO jJDQMj ccf-youtube-bgm-volume-row">',
+      '  <div class="ccf-youtube-bgm-volume-row">',
       '    <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="VolumeDownIcon"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"></path></svg>',
-      '    <span class="MuiSlider-root MuiSlider-colorPrimary MuiSlider-sizeSmall sc-cnyrnb hoiSIY css-1yyocgo ccf-youtube-bgm-slider">',
+      '    <span class="MuiSlider-root MuiSlider-colorPrimary MuiSlider-sizeSmall ccf-youtube-bgm-slider">',
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
-      `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${(volume01 * 100).toFixed(0)}%;"></span>`,
-      `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${(volume01 * 100).toFixed(0)}%;">`,
-      `        <input data-index="0" aria-label="ボリュ?ム" aria-valuenow="${volume01}" aria-orientation="horizontal" aria-valuemax="1" aria-valuemin="0" name="volume" type="range" min="0" max="1" step="0.05" value="${volume01}" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 100%; margin: -1px; overflow: hidden; padding: 0px; position: absolute; white-space: nowrap; width: 100%; direction: ltr;">`,
-      '      </span>',
+      `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${initialVolume}%;"></span>`,
+      `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
+      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="1" value="${initialVolume}">`,
       '    </span>',
-      `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${volume01}</p>`,
-      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="リピ?ト" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
+      `    <p class="MuiTypography-root MuiTypography-body1 ccf-youtube-bgm-volume-value">${initialVolume}</p>`,
+      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
       '      <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="RepeatIcon"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>',
       '      <span class="MuiTouchRipple-root css-w0pj6f"></span>',
       '    </button>',
       '  </div>',
-      '  <div class="sc-bAcsk iyVLQd ccf-youtube-bgm-actions">',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">미리듣기<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">삭제<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">저장<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '  <div class="ccf-youtube-bgm-actions">',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">미리듣기<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">삭제<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">저장<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '  </div>',
       '</form>',
       '</div>'
@@ -3901,6 +3923,16 @@
     document.body.appendChild(popover);
     ccfBgmEditPopover = popover;
     positionCcfYoutubeBgmPopover(popover, anchor);
+    ["pointerdown", "mousedown", "mouseup", "click", "touchstart"].forEach((type) => {
+      popover.addEventListener(type, (event) => {
+        event.stopPropagation();
+      });
+    });
+    popover.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        event.stopPropagation();
+      }
+    });
 
     const form = popover.querySelector("form");
     const nameInput = popover.querySelector('input[name="name"]');
@@ -3912,8 +3944,9 @@
     const previewButton = popover.querySelector(".ccf-youtube-bgm-preview");
     const removeButton = popover.querySelector(".ccf-youtube-bgm-remove");
 
-    const updateSliderVisuals = (value01) => {
-      const pct = `${(value01 * 100).toFixed(0)}%`;
+    const updateSliderVisuals = (volume) => {
+      const value = clampCcfBgmVolume(volume, initialVolume);
+      const pct = `${value}%`;
       if (sliderTrack instanceof HTMLElement) {
         sliderTrack.style.width = pct;
       }
@@ -3921,19 +3954,24 @@
         sliderThumb.style.left = pct;
       }
       if (volumeValueLabel instanceof HTMLElement) {
-        volumeValueLabel.textContent = String(value01);
+        volumeValueLabel.textContent = String(value);
       }
       if (volumeInput instanceof HTMLInputElement) {
-        volumeInput.setAttribute("aria-valuenow", String(value01));
+        volumeInput.value = String(value);
+        volumeInput.setAttribute("aria-valuenow", String(value));
       }
     };
 
-    volumeInput?.addEventListener("input", () => {
-      const v = Math.max(0, Math.min(1, Number(volumeInput.value) || 0));
-      updateSliderVisuals(Number(v.toFixed(2)));
-    });
+    const handleVolumeInput = () => {
+      updateSliderVisuals(Number(volumeInput?.value));
+    };
 
-    loopButton?.addEventListener("click", () => {
+    volumeInput?.addEventListener("input", handleVolumeInput);
+    volumeInput?.addEventListener("change", handleVolumeInput);
+
+    loopButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const next = loopButton.dataset.loop !== "1";
       loopButton.dataset.loop = next ? "1" : "0";
       loopButton.setAttribute("aria-pressed", next ? "true" : "false");
@@ -3946,10 +3984,10 @@
       }
 
       current.displayName = normalizeSpace(nameInput?.value || "") || current.title || "YouTube BGM";
-      const v01 = volumeInput instanceof HTMLInputElement
-        ? Math.max(0, Math.min(1, Number(volumeInput.value) || 0))
-        : clampCcfBgmVolume(current.volume, 100) / 100;
-      current.volume = clampCcfBgmVolume(Math.round(v01 * 100), clampCcfBgmVolume(current.volume, 100));
+      current.volume = volumeInput instanceof HTMLInputElement
+        ? clampCcfBgmVolume(volumeInput.value, getCcfYoutubeBgmEditVolume(current, slotKey))
+        : getCcfYoutubeBgmEditVolume(current, slotKey);
+      current.volumeEdited = true;
       current.loop = loopButton ? loopButton.dataset.loop === "1" : current.loop !== false;
       current.updatedAt = Date.now();
       ccfBgmSlotMap.set(entryKey, current);
@@ -5835,6 +5873,7 @@
             title: normalizeSpace(entry?.title || "") || "YouTube BGM",
             displayName: normalizeSpace(entry?.displayName || entry?.title || "") || "YouTube BGM",
             volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+            volumeEdited: entry?.volumeEdited === true,
             loop: typeof entry?.loop === "boolean" ? entry.loop : true,
             updatedAt,
             createdAt,
@@ -5870,6 +5909,7 @@
           title: entry.title || "",
           displayName: entry.displayName || entry.title || "",
           volume: Number.isFinite(Number(entry.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+          volumeEdited: entry.volumeEdited === true,
           loop: entry.loop !== false,
           updatedAt: entry.updatedAt || now,
           createdAt: entry.createdAt || entry.updatedAt || now,
@@ -6415,6 +6455,18 @@
         height: 14px !important;
         margin: 0 !important;
         transform: translate(-50%, -50%) !important;
+      }
+
+      .ccf-youtube-bgm-range {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 2 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        opacity: 0 !important;
       }
 
       .ccf-youtube-bgm-volume-value:not(.css-9l3uo3) {
