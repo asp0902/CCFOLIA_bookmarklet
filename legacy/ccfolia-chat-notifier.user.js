@@ -4110,7 +4110,12 @@
       '</div>'
     ].join("");
 
-    document.body.appendChild(popover);
+    // 코코포리아 BGM 드로어는 MUI Modal(포커스 트랩)이라서, document.body에
+    // 붙이면 트랩이 name 입력란의 포커스를 즉시 빼앗아 타이핑이 불가능해진다.
+    // 트랩 루트(드로어 paper) 내부에 붙여 포커스를 유지시킨다.
+    const popoverHost = (anchor instanceof HTMLElement
+      && anchor.closest(".MuiDrawer-paper")) || document.body;
+    popoverHost.appendChild(popover);
     ccfBgmEditPopover = popover;
     positionCcfYoutubeBgmPopover(popover, anchor);
     ["pointerdown", "mousedown", "mouseup", "click", "touchstart"].forEach((type) => {
@@ -4381,8 +4386,19 @@
       ? Math.max(8, window.innerHeight - height - 8)
       : Math.max(8, preferredTop);
 
-    popover.style.left = `${left}px`;
-    popover.style.top = `${top}px`;
+    // position:fixed라도 transform이 적용된 조상 안에 있으면 기준점이 그 조상이 된다.
+    // (드로어 paper 내부에 붙인 경우 대비) offsetParent 기준으로 보정한다.
+    let originLeft = 0;
+    let originTop = 0;
+    const offsetParent = popover.offsetParent;
+    if (offsetParent instanceof HTMLElement) {
+      const opRect = offsetParent.getBoundingClientRect();
+      originLeft = opRect.left;
+      originTop = opRect.top;
+    }
+
+    popover.style.left = `${left - originLeft}px`;
+    popover.style.top = `${top - originTop}px`;
   }
 
   function handleCcfYoutubeBgmPopoverOutsidePointer(event) {
@@ -7038,6 +7054,23 @@
         min-width: 28px !important;
         margin: 0 !important;
         padding: 4px !important;
+      }
+
+      /* 반복재생 버튼: 네이티브처럼 배경/하이라이트 없이 아이콘만 표시한다. */
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop:hover,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop:focus,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop:focus-visible,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop:active,
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop.Mui-focusVisible {
+        background: transparent !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        outline: none !important;
+      }
+
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop .MuiTouchRipple-root {
+        display: none !important;
       }
 
       /* 켜짐 상태는 네이티브 MuiIconButton-colorPrimary 색상을 그대로 사용한다. */
