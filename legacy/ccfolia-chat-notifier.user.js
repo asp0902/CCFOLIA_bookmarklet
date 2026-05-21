@@ -1932,18 +1932,19 @@
       const targetSlotKey = ccfBgmActiveSlotKey
         || ccfBgmEditingSlotKey
         || ccfBgmLastDialogSlotKey;
-      const activeEntryKeyBeforeStop = ccfBgmActiveEntryKey;
       stopCcfYoutubeBgm("stop-button");
       if (targetSlotKey) {
         ccfBgmNativeLoadedSlots.delete(targetSlotKey);
-        const entryHit = activeEntryKeyBeforeStop && ccfBgmSlotMap.has(activeEntryKeyBeforeStop)
-          ? [activeEntryKeyBeforeStop, ccfBgmSlotMap.get(activeEntryKeyBeforeStop)]
-          : findCcfReadyYoutubeEntryForSlot(targetSlotKey);
-        const entryKey = entryHit?.[0] || "";
-        const entry = entryHit?.[1] || null;
-        if (entryKey && entry && entry.pending !== true) {
-          entry.pending = true;
-          ccfBgmSlotMap.set(entryKey, entry);
+        // 슬롯에 중복/잔존 항목이 있어도 재생 표시가 남지 않도록 해당 슬롯의 모든 항목을 정지 상태로 만든다.
+        let pendingChanged = false;
+        getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
+          if (entryKey && entry && entry.pending !== true) {
+            entry.pending = true;
+            ccfBgmSlotMap.set(entryKey, entry);
+            pendingChanged = true;
+          }
+        });
+        if (pendingChanged) {
           persistCcfBgmSlotMap();
         }
         markCcfYoutubeBgmSlotButtons();
