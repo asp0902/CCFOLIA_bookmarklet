@@ -1,9 +1,9 @@
-ï»¿// ==UserScript==
+// ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
 // @version      0.2.30
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
-// @description:ko ì½”ì½”í¬ë¦¬ì•„ íƒ­ì´ë‚˜ ì°½ì´ ë¹„í™œì„± ìƒíƒœì¼ ë•Œ ìƒˆ ì±„íŒ…ì´ ì˜¤ë©´ ì†Œë¦¬ë¡œë§Œ ì•Œë¦½ë‹ˆë‹¤.
+// @description:ko ÄÚÄÚÆ÷¸®¾Æ ÅÇÀÌ³ª Ã¢ÀÌ ºñÈ°¼º »óÅÂÀÏ ¶§ »õ Ã¤ÆÃÀÌ ¿À¸é ¼Ò¸®·Î¸¸ ¾Ë¸³´Ï´Ù.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -27,6 +27,9 @@
   const BGM_WEB_AUDIO_MIN_DURATION = 8;
   const BGM_STORAGE_PREFIX = "ccf-chat-notifier:youtube-bgm:";
   const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}${location.pathname}`;
+  const BGM_STORAGE_META_KEY = "__ccfBgmMeta";
+  const BGM_STORAGE_META_VERSION = 1;
+  const BGM_DELETED_ENTRY_LIMIT = 200;
   const TOOLKIT_DB_NAME = "capybara-toolkit";
   const TOOLKIT_STORE_ROOM_DATA = "roomData";
   const TOOLKIT_STORE_ASSETS = "assets";
@@ -37,9 +40,9 @@
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
   const ROOM_PATH_RE = /^\/rooms\/[^/?#]+/i;
   // Distinct from format-sync's INVIS markers so the two scripts don't collide.
-  const BGM_SHARE_START = "â¡â¡â¡";
-  const BGM_SHARE_END = "â¤â¤â¤";
-  const BGM_SHARE_INVIS_MAP = ["â€‹", "â€Œ", "â€", "â "];
+  const BGM_SHARE_START = "???";
+  const BGM_SHARE_END = "???";
+  const BGM_SHARE_INVIS_MAP = ["?", "?", "?", "?"];
   const BGM_SHARE_PROTOCOL_VERSION = 1;
   const BGM_SHARE_DOM_ATTR = "data-ccf-bgm-share";
   const BGM_SHARE_SENDER_ID = `bgm-share-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -56,9 +59,9 @@
     '[data-index] div.MuiTypography-root',
     'li p'
   ].join(", ");
-  const CHAT_DRAWER_TITLE_RE = /ë£¸\s*ì±„íŒ…|room\s*chat|ãƒãƒ£ãƒƒãƒˆ|chat/i;
-  const BGM_DIALOG_KEYWORD_RE = /BGM|bgm|external\s*file|file\s*url|youtube|YouTube|ìœ íŠœë¸Œ|ì™¸ë¶€\s*íŒŒì¼|íŒŒì¼\s*URL|éŸ³æ¥½|ã‚µã‚¦ãƒ³ãƒ‰|ãƒ«ãƒ¼ãƒ—|loop|volume/i;
-  const BGM_INPUT_HINT_RE = /url|youtube|external|file|ìœ íŠœë¸Œ|ì™¸ë¶€|íŒŒì¼/i;
+  const CHAT_DRAWER_TITLE_RE = /·ë\s*Ã¤ÆÃ|room\s*chat|«Á«ã«Ã«È|chat/i;
+  const BGM_DIALOG_KEYWORD_RE = /BGM|bgm|external\s*file|file\s*url|youtube|YouTube|À¯Æ©ºê|¿ÜºÎ\s*ÆÄÀÏ|ÆÄÀÏ\s*URL|ëå?|«µ«¦«ó«É|«ë?«×|loop|volume/i;
+  const BGM_INPUT_HINT_RE = /url|youtube|external|file|À¯Æ©ºê|¿ÜºÎ|ÆÄÀÏ/i;
   const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
   const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
@@ -168,12 +171,12 @@
   ].join("");
   const UNREAD_PATTERNS = [
     /^\s*\((\d+)\)/,
-    /^\s*ï¼ˆ(\d+)ï¼‰/,
+    /^\s*£¨(\d+)£©/,
     /^\s*\[(\d+)\]/,
-    /^\s*ï¼»(\d+)ï¼½/,
-    /^\s*ã€(\d+)ã€‘/,
+    /^\s*£Û(\d+)£İ/,
+    /^\s*¡¼(\d+)¡½/,
     /^\s*<(\d+)>/,
-    /^\s*ï¼œ(\d+)ï¼/
+    /^\s*£¼(\d+)£¾/
   ];
 
   let chatNotifierActive = true;
@@ -309,6 +312,7 @@
   let ccfBgmStorageLoaded = false;
   let ccfBgmStorageLoadPromise = null;
   let ccfBgmStorageMigratedFromLocal = false;
+  let ccfBgmDeletedEntries = {};
   const CCF_BGM_TOOLKIT_FEATURE_ID = "ccf-chat-notifier";
   const CCF_BGM_TOOLKIT_ROOM_KEY = location.pathname;
   let ccfBgmApiReadyPromise = null;
@@ -831,7 +835,7 @@
     const hasSubmit = [...root.querySelectorAll('button[type="submit"]')]
       .some((button) => {
         const label = normalizeSpace(button.textContent || button.getAttribute("aria-label") || "");
-        return !label || /ì „ì†¡|send|é€ä¿¡/i.test(label);
+        return !label || /Àü¼Û|send|áêãá/i.test(label);
       });
     return hasEditor && hasSubmit;
   }
@@ -2906,7 +2910,7 @@
     }
 
     const stateText = getCcfBgmButtonStateText(button);
-    if (/(volumeoff|volumemute|volume_off|\bmuted\b|unmute|ìŒì†Œê±°\s*í•´ì œ|ãƒŸãƒ¥ãƒ¼ãƒˆè§£é™¤|ãƒŸãƒ¥ãƒ¼ãƒˆä¸­)/i.test(stateText)) {
+    if (/(volumeoff|volumemute|volume_off|\bmuted\b|unmute|À½¼Ò°Å\s*ÇØÁ¦|«ß«å?«Èú°ğ¶|«ß«å?«Èñé)/i.test(stateText)) {
       return true;
     }
 
@@ -2985,7 +2989,7 @@
     }
 
     return !!drawer.querySelector(
-      '.MuiTabs-root, [data-testid="LibraryMusicIcon"], [data-testid="StopIcon"], input[name="url"], [aria-label*="BGM"], [aria-label*="ãƒ¡ãƒ‡ã‚£ã‚¢"]'
+      '.MuiTabs-root, [data-testid="LibraryMusicIcon"], [data-testid="StopIcon"], input[name="url"], [aria-label*="BGM"], [aria-label*="«á«Ç«£«¢"]'
     );
   }
 
@@ -3269,7 +3273,7 @@
       '      <span class="MuiTouchRipple-root css-w0pj6f"></span>',
       "    </div>",
       '    <div class="MuiListItemSecondaryAction-root css-y3qv5r">',
-      '      <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-edgeEnd MuiIconButton-sizeLarge css-1pvfj5s ccf-youtube-bgm-edit" tabindex="0" type="button" aria-label="YouTube BGM í¸ì§‘">',
+      '      <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-edgeEnd MuiIconButton-sizeLarge css-1pvfj5s ccf-youtube-bgm-edit" tabindex="0" type="button" aria-label="YouTube BGM ÆíÁı">',
       '        <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="EditIcon">',
       '          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path>',
       "        </svg>",
@@ -3786,19 +3790,19 @@
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
       `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${(volume01 * 100).toFixed(0)}%;"></span>`,
       `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${(volume01 * 100).toFixed(0)}%;">`,
-      `        <input data-index="0" aria-label="ãƒœãƒªãƒ¥ãƒ¼ãƒ " aria-valuenow="${volume01}" aria-orientation="horizontal" aria-valuemax="1" aria-valuemin="0" name="volume" type="range" min="0" max="1" step="0.05" value="${volume01}" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 100%; margin: -1px; overflow: hidden; padding: 0px; position: absolute; white-space: nowrap; width: 100%; direction: ltr;">`,
+      `        <input data-index="0" aria-label="«Ü«ê«å?«à" aria-valuenow="${volume01}" aria-orientation="horizontal" aria-valuemax="1" aria-valuemin="0" name="volume" type="range" min="0" max="1" step="0.05" value="${volume01}" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 100%; margin: -1px; overflow: hidden; padding: 0px; position: absolute; white-space: nowrap; width: 100%; direction: ltr;">`,
       '      </span>',
       '    </span>',
       `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${volume01}</p>`,
-      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="ãƒªãƒ”ãƒ¼ãƒˆ" aria-pressed="${loop ? "true" : "false"}" title="ë°˜ë³µì¬ìƒ">`,
+      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="«ê«Ô?«È" aria-pressed="${loop ? "true" : "false"}" title="¹İº¹Àç»ı">`,
       '      <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="RepeatIcon"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>',
       '      <span class="MuiTouchRipple-root css-w0pj6f"></span>',
       '    </button>',
       '  </div>',
       '  <div class="sc-bAcsk iyVLQd ccf-youtube-bgm-actions">',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">ë¯¸ë¦¬ë“£ê¸°<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">ì‚­ì œ<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">ì €ì¥<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">¹Ì¸®µè±â<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">»èÁ¦<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">ÀúÀå<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '  </div>',
       '</form>',
       '</div>'
@@ -4568,7 +4572,7 @@
     }
 
     const text = normalizeSpace(dialog.innerText || dialog.textContent || "");
-    return /ë£¸\s*ì„¤ì •|ë£¸\s*ê°œìš”|ë£¸\s*ë°ì´í„°|ë©¤ë²„\s*ë¦¬ìŠ¤íŠ¸|ë£¸\s*ë³µì œ|ãƒ«ãƒ¼ãƒ \s*è¨­å®š|ãƒ«ãƒ¼ãƒ \s*æ¦‚è¦|ãƒ«ãƒ¼ãƒ \s*ãƒ‡ãƒ¼ã‚¿|ãƒ¡ãƒ³ãƒãƒ¼\s*ãƒªã‚¹ãƒˆ|ãƒ«ãƒ¼ãƒ \s*è¤‡è£½|ã‚¿ãƒ¼ãƒœ\s*ãƒ¢ãƒ¼ãƒ‰/i.test(text);
+    return /·ë\s*¼³Á¤|·ë\s*°³¿ä|·ë\s*µ¥ÀÌÅÍ|¸â¹ö\s*¸®½ºÆ®|·ë\s*º¹Á¦|«ë?«à\s*àâïÒ|«ë?«à\s*?é©|«ë?«à\s*«Ç?«¿|«á«ó«Ğ?\s*«ê«¹«È|«ë?«à\s*ÜÜğ²|«¿?«Ü\s*«â?«É/i.test(text);
   }
 
   function isLikelyCcfBgmDialog(dialog) {
@@ -4599,7 +4603,7 @@
 
     return isRecentCcfBgmClick()
       && !!dialog.querySelector("input, textarea")
-      && /external\s*file|file\s*url|youtube|YouTube|ìœ íŠœë¸Œ|ì™¸ë¶€\s*íŒŒì¼|íŒŒì¼\s*URL/i.test(text);
+      && /external\s*file|file\s*url|youtube|YouTube|À¯Æ©ºê|¿ÜºÎ\s*ÆÄÀÏ|ÆÄÀÏ\s*URL/i.test(text);
   }
 
   function isLikelyCcfBgmUrlInput(input) {
@@ -5058,7 +5062,8 @@
       debugLog("bgm-share-send-suppressed-inactive", { op });
       return;
     }
-    const messageId = `${BGM_SHARE_SENDER_ID}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const sentAt = Date.now();
+    const messageId = `${BGM_SHARE_SENDER_ID}-${sentAt.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     ccfBgmShareOwnMessageIds.add(messageId);
     ccfBgmShareSeenMessageIds.add(messageId);
     const payload = {
@@ -5067,6 +5072,7 @@
       op,
       id: messageId,
       sender: BGM_SHARE_SENDER_ID,
+      sentAt,
       slot: slotData
     };
     const encoded = ccfBgmShareEncode(payload);
@@ -5116,7 +5122,7 @@
   function ccfBgmShareFindChatComposer() {
     // CCFOLIA chat composer is a textarea (or contenteditable) inside the right-side drawer.
     // Skip placeholders that look like character-name / popup inputs.
-    const skipPlaceholderRe = /noname|ì´ë¦„|name|url|http|youtube|search|ê²€ìƒ‰/i;
+    const skipPlaceholderRe = /noname|ÀÌ¸§|name|url|http|youtube|search|°Ë»ö/i;
     const isPlausibleChatField = (el) => {
       if (!(el instanceof HTMLElement)) return false;
       if (!isVisible(el)) return false;
@@ -5202,6 +5208,18 @@
     }
   }
 
+  function getCcfBgmSharePayloadTime(payload) {
+    const sentAt = Number(payload?.sentAt);
+    if (Number.isFinite(sentAt) && sentAt > 0) {
+      return sentAt;
+    }
+
+    const parts = String(payload?.id || "").split("-");
+    const encodedTime = parts.length >= 2 ? parts[parts.length - 2] : "";
+    const parsed = parseInt(encodedTime, 36);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
   function ccfBgmShareApplyIncoming(payload) {
     if (!payload || !payload.id || !payload.slot) return;
     if (ccfBgmShareSeenMessageIds.has(payload.id)) return;
@@ -5215,24 +5233,39 @@
     const entryKey = String(slot.entryKey || slot.slotKey);
     if (!entryKey) return;
 
+    const payloadTime = getCcfBgmSharePayloadTime(payload);
     const existing = ccfBgmSlotMap.get(entryKey);
     if (payload.op === "remove") {
-      if (existing) {
-        ccfBgmSlotMap.delete(entryKey);
-        ccfBgmShareSendingDepth += 1;
-        try {
-          persistCcfBgmSlotMap();
+      const existingUpdatedAt = Number(existing?.updatedAt) || 0;
+      if (existing && payloadTime && existingUpdatedAt > payloadTime) {
+        debugLog("bgm-share-stale-remove-ignored", { entryKey, payloadTime, existingUpdatedAt });
+        return;
+      }
+
+      rememberCcfBgmDeletedEntry(entryKey, payloadTime || Date.now());
+      ccfBgmShareSendingDepth += 1;
+      try {
+        if (existing) {
+          ccfBgmSlotMap.delete(entryKey);
           markCcfYoutubeBgmSlotButtons();
           tryEnhanceCcfBgmPanel();
-        } finally {
-          ccfBgmShareSendingDepth -= 1;
         }
+        persistCcfBgmSlotMap();
+      } finally {
+        ccfBgmShareSendingDepth -= 1;
       }
+      return;
+    }
+
+    const deletedAt = Number(ccfBgmDeletedEntries[entryKey]) || 0;
+    if (deletedAt && (!payloadTime || payloadTime <= deletedAt)) {
+      debugLog("bgm-share-stale-add-ignored", { entryKey, payloadTime, deletedAt });
       return;
     }
 
     // add or edit
     const now = Date.now();
+    const updatedAt = payloadTime || now;
     ccfBgmSlotMap.set(entryKey, {
       slotKey: slot.slotKey || entryKey,
       url: slot.url,
@@ -5241,9 +5274,9 @@
       displayName: slot.displayName || slot.title || "YouTube BGM",
       volume: Number.isFinite(Number(slot.volume)) ? clampCcfBgmVolume(slot.volume) : 100,
       loop: slot.loop !== false,
-      updatedAt: now,
-      createdAt: existing?.createdAt || now,
-      order: Number.isFinite(Number(slot.order)) ? Number(slot.order) : (existing?.order || now),
+      updatedAt,
+      createdAt: existing?.createdAt || updatedAt,
+      order: Number.isFinite(Number(slot.order)) ? Number(slot.order) : (existing?.order || updatedAt),
       pending: false
     });
 
@@ -5349,12 +5382,69 @@
     }
   }
 
+  function getCcfBgmPayloadMeta(payload) {
+    const meta = payload?.[BGM_STORAGE_META_KEY];
+    return meta && typeof meta === "object" && !Array.isArray(meta) ? meta : null;
+  }
+
+  function getCcfBgmPayloadMetaUpdatedAt(payload) {
+    const meta = getCcfBgmPayloadMeta(payload);
+    const updatedAt = Number(meta?.updatedAt);
+    return Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0;
+  }
+
+  function getCcfBgmPayloadDeletedEntries(payload) {
+    const deletedEntries = getCcfBgmPayloadMeta(payload)?.deletedEntries;
+    return deletedEntries && typeof deletedEntries === "object" && !Array.isArray(deletedEntries)
+      ? deletedEntries
+      : {};
+  }
+
+  function rememberCcfBgmDeletedEntry(entryKey, deletedAt = Date.now()) {
+    const key = String(entryKey || "");
+    const time = Number(deletedAt);
+    if (!key || !Number.isFinite(time) || time <= 0) {
+      return;
+    }
+
+    ccfBgmDeletedEntries[key] = Math.max(Number(ccfBgmDeletedEntries[key]) || 0, time);
+    trimCcfBgmDeletedEntries();
+  }
+
+  function mergeCcfBgmDeletedEntries(deletedEntries) {
+    Object.entries(deletedEntries || {}).forEach(([entryKey, deletedAt]) => {
+      rememberCcfBgmDeletedEntry(entryKey, deletedAt);
+    });
+  }
+
+  function trimCcfBgmDeletedEntries() {
+    const entries = Object.entries(ccfBgmDeletedEntries)
+      .map(([entryKey, deletedAt]) => [entryKey, Number(deletedAt) || 0])
+      .filter(([, deletedAt]) => deletedAt > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, BGM_DELETED_ENTRY_LIMIT);
+    ccfBgmDeletedEntries = Object.fromEntries(entries);
+  }
+
+  function rememberCcfBgmPayloadRemovals(nextPayload) {
+    const previous = ccfBgmShareLastSnapshot || {};
+    Object.keys(previous).forEach((entryKey) => {
+      if (!nextPayload?.[entryKey]) {
+        rememberCcfBgmDeletedEntry(entryKey);
+      }
+    });
+  }
+
   function countCcfBgmPayloadEntries(payload) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return 0;
     }
 
     return Object.entries(payload).reduce((count, [entryKey, entry]) => {
+      if (entryKey === BGM_STORAGE_META_KEY) {
+        return count;
+      }
+
       const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
       const url = String(entry?.url || "");
       const videoId = sanitizeCcfYoutubeVideoId(entry?.videoId || extractCcfYoutubeVideoId(url));
@@ -5367,12 +5457,17 @@
       return 0;
     }
 
-    return Object.values(payload).reduce((latest, entry) => {
+    const metaUpdatedAt = getCcfBgmPayloadMetaUpdatedAt(payload);
+    return Object.entries(payload).reduce((latest, [entryKey, entry]) => {
+      if (entryKey === BGM_STORAGE_META_KEY) {
+        return latest;
+      }
+
       const updatedAt = Number(entry?.updatedAt) || 0;
       const createdAt = Number(entry?.createdAt) || 0;
       const order = Number(entry?.order) || 0;
       return Math.max(latest, updatedAt, createdAt, order);
-    }, 0);
+    }, metaUpdatedAt);
   }
 
   function addCcfBgmStorageCandidate(candidates, source, payload, tier) {
@@ -5390,15 +5485,15 @@
   }
 
   function chooseCcfBgmStorageCandidate(candidates) {
-    const viable = candidates.filter((candidate) => candidate.count > 0);
+    const viable = candidates.filter((candidate) => candidate.count > 0 || candidate.updatedAt > 0);
     if (!viable.length) {
       return null;
     }
 
     viable.sort((a, b) => {
       if (a.tier !== b.tier) return a.tier - b.tier;
-      if (a.count !== b.count) return b.count - a.count;
-      return b.updatedAt - a.updatedAt;
+      if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+      return b.count - a.count;
     });
     return viable[0];
   }
@@ -5624,7 +5719,12 @@
 
   function applyCcfBgmPersistedPayload(parsed) {
     try {
+      mergeCcfBgmDeletedEntries(getCcfBgmPayloadDeletedEntries(parsed));
       Object.entries(parsed || {}).forEach(([entryKey, entry], index) => {
+        if (entryKey === BGM_STORAGE_META_KEY) {
+          return;
+        }
+
         const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
         const storageKey = String(entryKey || "").includes(":youtube:")
           ? String(entryKey)
@@ -5664,7 +5764,9 @@
 
   function persistCcfBgmSlotMap() {
     let payload;
+    let persistedPayload;
     try {
+      const now = Date.now();
       payload = {};
       ccfBgmSlotMap.forEach((entry, entryKey) => {
         payload[entryKey] = {
@@ -5675,22 +5777,34 @@
           displayName: entry.displayName || entry.title || "",
           volume: Number.isFinite(Number(entry.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
           loop: entry.loop !== false,
-          updatedAt: entry.updatedAt || Date.now(),
-          createdAt: entry.createdAt || entry.updatedAt || Date.now(),
-          order: getCcfYoutubeBgmOrder(entry, Date.now()),
+          updatedAt: entry.updatedAt || now,
+          createdAt: entry.createdAt || entry.updatedAt || now,
+          order: getCcfYoutubeBgmOrder(entry, now),
           pending: entry.pending !== false
         };
       });
+      rememberCcfBgmPayloadRemovals(payload);
+      trimCcfBgmDeletedEntries();
+      persistedPayload = {
+        ...payload,
+        [BGM_STORAGE_META_KEY]: {
+          version: BGM_STORAGE_META_VERSION,
+          roomKey: CCF_BGM_TOOLKIT_ROOM_KEY,
+          updatedAt: now,
+          count: Object.keys(payload).length,
+          deletedEntries: { ...ccfBgmDeletedEntries }
+        }
+      };
     } catch (error) {
       debugLog("bgm-storage-serialize-failed", serializeError(error));
       return;
     }
 
-    writeCcfBgmLocalStorage(payload);
+    writeCcfBgmLocalStorage(persistedPayload);
 
     const toolkit = getCcfBgmToolkitStorage();
     if (toolkit) {
-      toolkit.setRoomData(CCF_BGM_TOOLKIT_FEATURE_ID, CCF_BGM_TOOLKIT_ROOM_KEY, payload).catch((error) => {
+      toolkit.setRoomData(CCF_BGM_TOOLKIT_FEATURE_ID, CCF_BGM_TOOLKIT_ROOM_KEY, persistedPayload).catch((error) => {
         debugLog("bgm-storage-idb-save-failed", serializeError(error));
       });
     }
@@ -5777,6 +5891,17 @@
   function ccfBgmShareCloneSnapshot(payload) {
     const out = {};
     for (const [entryKey, entry] of Object.entries(payload || {})) {
+      if (entryKey === BGM_STORAGE_META_KEY) {
+        continue;
+      }
+
+      const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
+      const url = String(entry?.url || "");
+      const videoId = sanitizeCcfYoutubeVideoId(entry?.videoId || extractCcfYoutubeVideoId(url));
+      if (!normalizedSlot || !url || !videoId) {
+        continue;
+      }
+
       out[entryKey] = ccfBgmShareSerializableEntry(entry);
     }
     return out;
