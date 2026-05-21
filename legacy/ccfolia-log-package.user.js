@@ -1477,7 +1477,12 @@
   async function handleDeleteCurrentTabLogs() {
     const roomTitle = getRoomTitle("");
     const currentTab = getCurrentPackageTabDescriptor(roomTitle);
-    const tabName = currentTab ? currentTab.name : "메인";
+    
+    // [수정 포인트 1] 탭 이름이 "메인 0" 등으로 이상하게 표기되는 현상 교정
+    let tabName = currentTab ? currentTab.name : "메인";
+    if (tabName.startsWith("메인")) tabName = "메인";
+    else if (tabName.startsWith("정보")) tabName = "정보";
+    else if (tabName.startsWith("잡담")) tabName = "잡담";
 
     const confirmDelete = confirm(`정말 [ ${tabName} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
     if (!confirmDelete) return;
@@ -1486,22 +1491,17 @@
     setButtonsBusy(true);
 
     try {
-      // 1차 탐색: 현재 탭 정보를 기반으로 영역을 찾습니다.
+      // 영역 탐색 폴백 강화
       let scope = findPrimaryLogScope(currentTab || null);
-      
-      // 2차 탐색 (폴백): 메인 탭이거나 영역을 찾지 못한 경우, 화면에 보이는 최우선 로그 영역을 강제로 잡습니다.
-      if (!scope) {
-        scope = findPrimaryLogScope();
-      }
-
-      // 그래도 못 찾은 경우에만 에러를 발생시킵니다.
-      if (!scope) {
-        throw new Error("탭 로그 영역을 찾을 수 없습니다.");
-      }
+      if (!scope) scope = findPrimaryLogScope();
+      if (!scope) throw new Error("탭 로그 영역을 찾을 수 없습니다.");
 
       const scroller = findLogScrollContainer(scope);
       if (scroller) {
         scroller.style.scrollBehavior = "auto";
+        // [수정 포인트 2] React 가상 스크롤(Virtualization) 대응을 위해 스크롤을 맨 아래로 강제 이동
+        scroller.scrollTop = scroller.scrollHeight;
+        await new Promise((r) => setTimeout(r, 300));
       }
 
       let deletedCount = 0;
@@ -1512,30 +1512,41 @@
       if (!toast) {
         toast = document.createElement("div");
         toast.id = toastId;
-        toast.style.cssText = "position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 8px; z-index: 9999; font-size: 14px; pointer-events: none;";
+        toast.style.cssText = "position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 8px; z-index: 9999; font-size: 14px; pointer-events: none;";
         document.body.appendChild(toast);
       }
-      
-      const updateToast = (msg) => {
-        if (toast) toast.textContent = msg;
-      };
+      const updateToast = (msg) => { if (toast) toast.textContent = msg; };
 
-      while (emptyCount < 3) {
+      while (emptyCount < 4) {
         const itemRoots = findLogMessageItemRoots([scope]);
 
-        // React의 동적 렌더링 최적화(마우스 오버 시에만 휴지통 렌더링)에 대응하기 위해 Hover 이벤트를 강제 발생시킵니다.
+        // [수정 포인트 3] React 합성 이벤트(Synthetic Event) 후킹을 위한 강력한 Hover 트리거
         for (const root of itemRoots) {
-          root.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
-          root.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true, cancelable: true }));
+          ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'mousemove'].forEach(type => {
+            root.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+          });
         }
-        // DOM에 버튼이 추가될 수 있도록 아주 짧게 대기합니다.
-        await new Promise((r) => setTimeout(r, 60));
+        // DOM 렌더링을 기다리기 위해 대기 시간 약간 증가
+        await new Promise((r) => setTimeout(r, 100));
 
         const deleteBtns = [];
-        
         for (const root of itemRoots) {
-          const btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"], svg[data-testid*="Delete" i], path[d^="M6 19c0"]')?.closest('button');
-          if (btn) {
+          // 1순위: 명시적인 삭제 텍스트나 라벨
+          let btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"]');
+          
+          // 2순위: 휴지통 아이콘을 그리는 고유 SVG 경로(Path)
+          if (!btn) {
+            const path = root.querySelector('path[d^="M6 19c"]');
+            if (path) btn = path.closest('button');
+          }
+          
+          // 3순위: 코코포리아 메시지 우측 액션 영역(SecondaryAction)의 유일한 버튼
+          if (!btn) {
+            const actionArea = root.querySelector('.MuiListItemSecondaryAction-root');
+            if (actionArea) btn = actionArea.querySelector('button');
+          }
+
+          if (btn && !deleteBtns.includes(btn)) {
             deleteBtns.push(btn);
           }
         }
@@ -1543,39 +1554,43 @@
         if (deleteBtns.length === 0) {
           emptyCount++;
           if (scroller) {
-            scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight);
+            // 화면에 지울 메시지가 없으면 스크롤을 위로 올려 이전 메시지를 로드
+            scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight * 0.75);
+            await new Promise((r) => setTimeout(r, 600));
+          } else {
+            break;
           }
-          await new Promise((r) => setTimeout(r, 600));
           continue;
         }
 
         emptyCount = 0;
         
+        // [수정 포인트 4] 가상 DOM 구조가 꼬이지 않도록 역순(아래에서부터 위로)으로 삭제 진행
         for (let i = deleteBtns.length - 1; i >= 0; i--) {
           const btn = deleteBtns[i];
           try {
             btn.click();
+            await new Promise((r) => setTimeout(r, 20));
 
-            // 간혹 개별 삭제 시 확인 다이얼로그가 뜨는 버전을 대비
-            await new Promise((r) => setTimeout(r, 30));
+            // 개별 삭제 모달 다이얼로그가 뜨는 경우 강제 승인 처리
             const confirmDialog = document.querySelector('[role="dialog"]');
             if (confirmDialog) {
-              const confirmBtn = confirmDialog.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"], button.MuiButton-containedSecondary, button.MuiButton-containedPrimary:not(:first-of-type)');
+              const confirmBtn = confirmDialog.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button.MuiButton-containedSecondary, button.MuiButton-containedPrimary:not(:first-of-type)');
               if (confirmBtn) {
                 confirmBtn.click();
-                await new Promise((r) => setTimeout(r, 30));
+                await new Promise((r) => setTimeout(r, 40));
               }
             }
 
             deletedCount++;
-            updateToast(`[ ${tabName} ] 탭 삭제 중... (${deletedCount}개 삭제됨)`);
+            updateToast(`[ ${tabName} ] 탭 비우는 중... (${deletedCount}개 삭제됨)`);
           } catch (e) {
-            console.warn("[CCF LOG PACKAGE] 개별 메시지 삭제 클릭 실패:", e);
+            console.warn("[CCF LOG PACKAGE] 메시지 삭제 클릭 실패:", e);
           }
-          await new Promise((r) => setTimeout(r, 50));
         }
         
-        await new Promise((r) => setTimeout(r, 500));
+        // 일괄 삭제 후 React DOM이 갱신될 충분한 시간 대기
+        await new Promise((r) => setTimeout(r, 400));
       }
 
       if (toast) toast.remove();
