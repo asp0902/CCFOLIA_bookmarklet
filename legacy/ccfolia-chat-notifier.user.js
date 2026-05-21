@@ -2605,8 +2605,7 @@
 
     if (storedEntry && Number.isFinite(Number(storedEntry.volume))) {
       const entryVolume = getCcfYoutubeBgmEditVolume(storedEntry, slotKey);
-      const globalVolume = readCcfBgmGlobalVolume(button);
-      state.volume = Math.max(0, Math.min(100, Math.round(entryVolume * globalVolume / 100)));
+      state.volume = entryVolume;
     }
 
     if (storedEntry && typeof storedEntry.loop === "boolean") {
@@ -2735,6 +2734,38 @@
     stopNativeYoutubeMedia();
     stopCcfNormalBgmPlayback();
 
+    const playExistingPlayer = () => {
+      if (!ccfBgmPlayer) {
+        return false;
+      }
+
+      try {
+        if (ccfBgmPlayerVideoId !== videoId && typeof ccfBgmPlayer.loadVideoById === "function") {
+          ccfBgmPlayer.loadVideoById(videoId);
+          ccfBgmPlayerVideoId = videoId;
+        } else if (typeof ccfBgmPlayer.playVideo === "function") {
+          ccfBgmPlayer.playVideo();
+        }
+        applyCcfBgmPlayerVolume(state);
+        if (typeof ccfBgmPlayer.playVideo === "function") {
+          ccfBgmPlayer.playVideo();
+        }
+        window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
+        window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
+        reinforceCcfYoutubeBgmAudio(state, "existing-player");
+        adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
+        startCcfBgmProgressLoop();
+        return true;
+      } catch (error) {
+        debugLog("bgm-youtube-load-failed", serializeError(error));
+        return false;
+      }
+    };
+
+    if (window.YT?.Player && ccfBgmPlayer && playExistingPlayer()) {
+      return;
+    }
+
     loadYoutubeIframeApi().then(() => {
       if (!window.YT || !window.YT.Player) {
         debugLog("bgm-youtube-api-missing");
@@ -2742,22 +2773,7 @@
       }
 
       if (ccfBgmPlayer) {
-        try {
-          applyCcfBgmPlayerVolume(state);
-          if (ccfBgmPlayerVideoId === videoId && typeof ccfBgmPlayer.playVideo === "function") {
-            ccfBgmPlayer.playVideo();
-          } else {
-            ccfBgmPlayer.loadVideoById(videoId);
-            ccfBgmPlayerVideoId = videoId;
-          }
-          window.setTimeout(() => applyCcfBgmPlayerVolume(state), 120);
-          window.setTimeout(() => applyCcfBgmPlayerVolume(state), 500);
-          reinforceCcfYoutubeBgmAudio(state, "existing-player");
-          adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
-          startCcfBgmProgressLoop();
-        } catch (error) {
-          debugLog("bgm-youtube-load-failed", serializeError(error));
-        }
+        playExistingPlayer();
         return;
       }
 
@@ -3881,8 +3897,6 @@
     const popover = document.createElement("div");
     popover.className = "MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation8 MuiPopover-paper css-1vy434g ccf-youtube-bgm-popover";
     popover.setAttribute("data-ccf-youtube-bgm-popover", "1");
-    popover.setAttribute("data-ccf-youtube-bgm-fallback", "1");
-
     const title = normalizeSpace(entry.displayName || entry.title || "YouTube BGM");
     const initialVolume = getCcfYoutubeBgmEditVolume(entry, slotKey);
     const loop = entry.loop !== false;
@@ -3890,31 +3904,31 @@
 
     popover.innerHTML = [
       '<div class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation6 sc-kNoaeN GxVfF css-175dgcc ccf-youtube-bgm-paper">',
-      '<form class="ccf-youtube-bgm-form">',
+      '<form>',
       '  <div class="MuiFormControl-root MuiFormControl-marginDense MuiFormControl-fullWidth MuiTextField-root css-twdmtu">',
-      `    <label class="MuiFormLabel-root MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled MuiFormLabel-colorPrimary css-1n71hkt" data-shrink="true" for="${inputId}" id="${inputId}-label">이름</label>`,
+      `    <label class="MuiFormLabel-root MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled MuiFormLabel-colorPrimary MuiFormLabel-filled MuiInputLabel-root MuiInputLabel-formControl MuiInputLabel-animated MuiInputLabel-shrink MuiInputLabel-sizeMedium MuiInputLabel-filled css-1n71hkt" data-shrink="true" for="${inputId}" id="${inputId}-label">name</label>`,
       '    <div class="MuiInputBase-root MuiFilledInput-root MuiFilledInput-underline MuiInputBase-colorPrimary MuiInputBase-fullWidth MuiInputBase-formControl css-sblib2">',
       `      <input aria-invalid="false" id="${inputId}" name="name" type="text" class="MuiInputBase-input MuiFilledInput-input css-1476h24" value="${escapeCcfHtml(title)}">`,
       '    </div>',
       '  </div>',
-      '  <div class="ccf-youtube-bgm-volume-row">',
+      '  <div class="sc-hFFBBO jJDQMj ccf-youtube-bgm-volume-row">',
       '    <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="VolumeDownIcon"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"></path></svg>',
-      '    <span class="MuiSlider-root MuiSlider-colorPrimary MuiSlider-sizeSmall ccf-youtube-bgm-slider">',
+      '    <span class="MuiSlider-root MuiSlider-colorPrimary MuiSlider-sizeSmall sc-cnyrnb hoiSIY css-1yyocgo ccf-youtube-bgm-slider">',
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
       `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${initialVolume}%;"></span>`,
-      `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
+      `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
       `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="1" value="${initialVolume}">`,
       '    </span>',
-      `    <p class="MuiTypography-root MuiTypography-body1 ccf-youtube-bgm-volume-value">${initialVolume}</p>`,
-      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
+      `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${initialVolume}</p>`,
+      `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
       '      <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="RepeatIcon"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>',
       '      <span class="MuiTouchRipple-root css-w0pj6f"></span>',
       '    </button>',
       '  </div>',
-      '  <div class="ccf-youtube-bgm-actions">',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">미리듣기<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">삭제<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">저장<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '  <div class="sc-bAcsk iyVLQd ccf-youtube-bgm-actions">',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">미리듣기<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">삭제<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">저장<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '  </div>',
       '</form>',
       '</div>'
@@ -3937,12 +3951,15 @@
     const form = popover.querySelector("form");
     const nameInput = popover.querySelector('input[name="name"]');
     const volumeInput = popover.querySelector('input[name="volume"]');
+    const sliderElement = popover.querySelector(".ccf-youtube-bgm-slider");
     const sliderTrack = popover.querySelector(".MuiSlider-track");
     const sliderThumb = popover.querySelector(".MuiSlider-thumb");
     const volumeValueLabel = popover.querySelector(".ccf-youtube-bgm-volume-value");
     const loopButton = popover.querySelector(".ccf-youtube-bgm-loop");
     const previewButton = popover.querySelector(".ccf-youtube-bgm-preview");
     const removeButton = popover.querySelector(".ccf-youtube-bgm-remove");
+    let liveVolumeReinforceTimer = 0;
+    let sliderPointerId = null;
 
     const updateSliderVisuals = (volume) => {
       const value = clampCcfBgmVolume(volume, initialVolume);
@@ -3960,14 +3977,96 @@
         volumeInput.value = String(value);
         volumeInput.setAttribute("aria-valuenow", String(value));
       }
+      return value;
+    };
+
+    const applyLivePlaybackSettings = (volume, reinforce = false) => {
+      if (ccfBgmActiveEntryKey !== entryKey) {
+        return;
+      }
+
+      const loop = loopButton ? loopButton.dataset.loop === "1" : ccfBgmActiveLoop;
+      ccfBgmActiveLoop = loop;
+      const state = { volume, loop };
+      applyCcfBgmPlayerVolume(state);
+      if (reinforce && volume > 0) {
+        reinforceCcfYoutubeBgmAudio(state, "edit-live");
+      }
+    };
+
+    const updateVolumeFromPointer = (event, reinforce = false) => {
+      if (!(sliderElement instanceof HTMLElement) || !(volumeInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const rect = sliderElement.getBoundingClientRect();
+      if (!rect.width) {
+        return;
+      }
+
+      const nextVolume = clampCcfBgmVolume((event.clientX - rect.left) / rect.width * 100, initialVolume);
+      updateSliderVisuals(nextVolume);
+      applyLivePlaybackSettings(nextVolume, reinforce);
+    };
+
+    const stopSliderPointerTracking = (event) => {
+      if (sliderPointerId != null && event.pointerId !== sliderPointerId) {
+        return;
+      }
+
+      window.removeEventListener("pointermove", handleSliderPointerMove, true);
+      window.removeEventListener("pointerup", stopSliderPointerTracking, true);
+      window.removeEventListener("pointercancel", stopSliderPointerTracking, true);
+      if (sliderElement instanceof HTMLElement && sliderPointerId != null) {
+        try { sliderElement.releasePointerCapture?.(sliderPointerId); } catch (_) {}
+      }
+      sliderPointerId = null;
+      if (event.type === "pointerup") {
+        updateVolumeFromPointer(event, true);
+      }
+    };
+
+    const handleSliderPointerMove = (event) => {
+      if (sliderPointerId != null && event.pointerId !== sliderPointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      updateVolumeFromPointer(event);
     };
 
     const handleVolumeInput = () => {
-      updateSliderVisuals(Number(volumeInput?.value));
+      const volume = updateSliderVisuals(Number(volumeInput?.value));
+      applyLivePlaybackSettings(volume);
+      if (liveVolumeReinforceTimer) {
+        window.clearTimeout(liveVolumeReinforceTimer);
+      }
+      liveVolumeReinforceTimer = window.setTimeout(() => {
+        liveVolumeReinforceTimer = 0;
+        applyLivePlaybackSettings(volume, true);
+      }, 90);
     };
 
     volumeInput?.addEventListener("input", handleVolumeInput);
     volumeInput?.addEventListener("change", handleVolumeInput);
+    sliderElement?.addEventListener("pointerdown", (event) => {
+      if (!(sliderElement instanceof HTMLElement) || !(volumeInput instanceof HTMLInputElement)) {
+        return;
+      }
+      if (event.button != null && event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      sliderPointerId = event.pointerId;
+      try { sliderElement.setPointerCapture?.(event.pointerId); } catch (_) {}
+      updateVolumeFromPointer(event, true);
+      window.addEventListener("pointermove", handleSliderPointerMove, true);
+      window.addEventListener("pointerup", stopSliderPointerTracking, true);
+      window.addEventListener("pointercancel", stopSliderPointerTracking, true);
+    });
 
     loopButton?.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3975,6 +4074,7 @@
       const next = loopButton.dataset.loop !== "1";
       loopButton.dataset.loop = next ? "1" : "0";
       loopButton.setAttribute("aria-pressed", next ? "true" : "false");
+      applyLivePlaybackSettings(clampCcfBgmVolume(volumeInput?.value, initialVolume));
     });
 
     const save = ({ closeAfter = false } = {}) => {
@@ -4001,6 +4101,10 @@
           volume: current.volume,
           loop: current.loop
         });
+        reinforceCcfYoutubeBgmAudio({
+          volume: current.volume,
+          loop: current.loop
+        }, "edit-save");
       }
 
       if (closeAfter) {
@@ -4014,7 +4118,9 @@
       save({ closeAfter: true });
     });
 
-    previewButton?.addEventListener("click", () => {
+    previewButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       save();
       const current = ccfBgmSlotMap.get(entryKey);
       if (current) {
@@ -4022,7 +4128,9 @@
       }
     });
 
-    removeButton?.addEventListener("click", () => {
+    removeButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (ccfBgmActiveEntryKey === entryKey) {
         stopCcfYoutubeBgm("youtube-bgm-remove");
       }
@@ -6422,6 +6530,11 @@
         flex: 0 0 auto !important;
       }
 
+      .ccf-youtube-bgm-slider {
+        position: relative !important;
+        min-width: 0 !important;
+      }
+
       .ccf-youtube-bgm-slider:not(.hoiSIY) {
         position: relative !important;
         display: block !important;
@@ -6467,6 +6580,17 @@
         padding: 0 !important;
         cursor: pointer !important;
         opacity: 0 !important;
+        appearance: none !important;
+        background: transparent !important;
+        touch-action: none !important;
+      }
+
+      .ccf-youtube-bgm-range::-webkit-slider-thumb {
+        appearance: none !important;
+        width: 18px !important;
+        height: 24px !important;
+        background: transparent !important;
+        border: 0 !important;
       }
 
       .ccf-youtube-bgm-volume-value:not(.css-9l3uo3) {
