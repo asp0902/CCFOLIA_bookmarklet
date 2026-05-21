@@ -3022,12 +3022,20 @@
       return false;
     }
 
-    const stateText = getCcfBgmButtonStateText(button);
-    if (/(volumeoff|volumemute|volume_off|\bmuted\b|unmute|음소거\s*해제|ミュ?ト解除|ミュ?ト中)/i.test(stateText)) {
+    // 토글 버튼이 aria-pressed/aria-selected로 상태를 명시하면 그 값을 신뢰한다.
+    // 음소거 버튼은 상태와 무관하게 스피커 아이콘이 고정돼 있어 아이콘만으로 판단하면 안 된다.
+    const ariaPressed = button.getAttribute("aria-pressed");
+    const ariaSelected = button.getAttribute("aria-selected");
+    if (ariaPressed === "true" || ariaSelected === "true") {
       return true;
     }
+    if (ariaPressed === "false" || ariaSelected === "false") {
+      return false;
+    }
 
-    if (button.getAttribute("aria-pressed") === "true" || button.getAttribute("aria-selected") === "true") {
+    // volumemute(VolumeMuteIcon)는 저음량 표시 아이콘이라 음소거 판정에서 제외한다.
+    const stateText = getCcfBgmButtonStateText(button);
+    if (/(volumeoff|volume_off|\bmuted\b|unmute|음소거\s*해제|ミュ?ト解除|ミュ?ト中)/i.test(stateText)) {
       return true;
     }
 
