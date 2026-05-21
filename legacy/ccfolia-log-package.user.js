@@ -1459,8 +1459,14 @@
           event.preventDefault();
           event.stopPropagation();
           
-          await handleDeleteCurrentTabLogs();
+          // 1. 팝업 메뉴를 먼저 닫아 DOM 상태를 원상복구합니다.
           await dismissTransientMenusAndOverlays();
+
+          // 2. 코코포리아 UI가 원래대로 돌아올 수 있도록 짧게 대기합니다.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // 3. 그 다음 로그 삭제 로직을 실행합니다.
+          await handleDeleteCurrentTabLogs();
         });
 
         nativeDeleteBtn.insertAdjacentElement("afterend", customDeleteBtn);
@@ -1480,7 +1486,15 @@
     setButtonsBusy(true);
 
     try {
-      const scope = findPrimaryLogScope(currentTab || null);
+      // 1차 탐색: 현재 탭 정보를 기반으로 영역을 찾습니다.
+      let scope = findPrimaryLogScope(currentTab || null);
+      
+      // 2차 탐색 (폴백): 메인 탭이거나 영역을 찾지 못한 경우, 화면에 보이는 최우선 로그 영역을 강제로 잡습니다.
+      if (!scope) {
+        scope = findPrimaryLogScope();
+      }
+
+      // 그래도 못 찾은 경우에만 에러를 발생시킵니다.
       if (!scope) {
         throw new Error("탭 로그 영역을 찾을 수 없습니다.");
       }
