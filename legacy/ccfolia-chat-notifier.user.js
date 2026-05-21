@@ -342,6 +342,11 @@
   let ccfBgmDomEnhanceTimer = 0;
   let ccfBgmNativeTooltipEl = null;
   let ccfBgmNativeTooltipButton = null;
+  let ccfBgmPreviewPlayer = null;
+  let ccfBgmPreviewHost = null;
+  let ccfBgmPreviewVideoId = "";
+  let ccfBgmPreviewActive = false;
+  let ccfBgmPreviewResumeMain = false;
   let ccfBgmLastNativeMedia = null;
   let ccfBgmLastWebAudio = null;
   let ccfBgmAudioContextNow = null;
@@ -1734,6 +1739,7 @@
     document.addEventListener("pointerout", handleCcfBgmTooltipPointerOut, withTeardownSignal(true));
     document.addEventListener("pointerdown", handleCcfBgmTooltipPointerOut, withTeardownSignal(true));
     registerTeardown(teardownCcfBgmNativeTooltip);
+    registerTeardown(destroyCcfBgmPreviewPlayer);
     [
       "play",
       "timeupdate",
@@ -2910,6 +2916,10 @@
         if (!ccfBgmActiveSlotKey || !ccfBgmPlayer) {
           return;
         }
+        // 미리듣기로 본 재생을 일시정지한 동안에는 재생을 강제하지 않는다.
+        if (ccfBgmPreviewActive) {
+          return;
+        }
 
         applyCcfBgmPlayerVolume(state);
         try {
@@ -4057,7 +4067,9 @@
     popover.className = "MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation8 MuiPopover-paper css-1vy434g ccf-youtube-bgm-popover";
     popover.setAttribute("data-ccf-youtube-bgm-popover", "1");
     const title = normalizeSpace(entry.displayName || entry.title || "YouTube BGM");
-    const initialVolume = getCcfYoutubeBgmEditVolume(entry, slotKey);
+    // 네이티브 음원처럼 0.05 단위(0~1)로 스냅한다. 내부 표현은 0~100을 유지.
+    const initialVolume = Math.round(getCcfYoutubeBgmEditVolume(entry, slotKey) / 5) * 5;
+    const initialVolumeLabel = (initialVolume / 100).toFixed(2);
     const loop = entry.loop !== false;
     const inputId = `ccf-youtube-bgm-name-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -4076,9 +4088,9 @@
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
       `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${initialVolume}%;"></span>`,
       `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
-      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="1" value="${initialVolume}">`,
+      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="5" value="${initialVolume}">`,
       '    </span>',
-      `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${initialVolume}</p>`,
+      `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${initialVolumeLabel}</p>`,
       `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
       '      <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="RepeatIcon"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>',
       '      <span class="MuiTouchRipple-root css-w0pj6f"></span>',
@@ -4120,8 +4132,29 @@
     let liveVolumeReinforceTimer = 0;
     let sliderPointerId = null;
 
+    // 음원명 입력란 상호작용 보장: 포커스/타이핑을 가로채는 핸들러로부터 보호한다.
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.removeAttribute("readonly");
+      nameInput.removeAttribute("disabled");
+      ["pointerdown", "mousedown", "click", "dblclick"].forEach((type) => {
+        nameInput.addEventListener(type, (event) => {
+          event.stopPropagation();
+          if (document.activeElement !== nameInput) {
+            try { nameInput.focus(); } catch (_) {}
+          }
+        });
+      });
+      ["keydown", "keypress", "keyup", "beforeinput", "input"].forEach((type) => {
+        nameInput.addEventListener(type, (event) => {
+          // 전역 단축키/핸들러로 키 입력이 전파되어 삼켜지지 않도록 차단한다.
+          event.stopPropagation();
+        });
+      });
+    }
+
     const updateSliderVisuals = (volume) => {
-      const value = clampCcfBgmVolume(volume, initialVolume);
+      // 0.05 단위(0~100 내부에서는 5단위)로 스냅한다.
+      const value = Math.round(clampCcfBgmVolume(volume, initialVolume) / 5) * 5;
       const pct = `${value}%`;
       if (sliderTrack instanceof HTMLElement) {
         sliderTrack.style.width = pct;
@@ -4130,7 +4163,7 @@
         sliderThumb.style.left = pct;
       }
       if (volumeValueLabel instanceof HTMLElement) {
-        volumeValueLabel.textContent = String(value);
+        volumeValueLabel.textContent = (value / 100).toFixed(2);
       }
       if (volumeInput instanceof HTMLInputElement) {
         volumeInput.value = String(value);
@@ -4140,6 +4173,12 @@
     };
 
     const applyLivePlaybackSettings = (volume, reinforce = false) => {
+      // 미리듣기 중이면 볼륨 변경을 미리듣기 플레이어에 반영한다.
+      if (ccfBgmPreviewActive) {
+        applyCcfBgmPreviewVolume(volume);
+        return;
+      }
+
       if (ccfBgmActiveEntryKey !== entryKey) {
         return;
       }
@@ -4280,11 +4319,20 @@
     previewButton?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      save();
-      const current = ccfBgmSlotMap.get(entryKey);
-      if (current) {
-        playCcfYoutubeBgmSlot(slotKey, current, findCcfBgmButtonBySlot(slotKey), 0, entryKey);
+
+      // 토글: 미리듣기 중이면 정지(본 재생 복귀), 아니면 미리듣기 시작.
+      if (ccfBgmPreviewActive) {
+        stopCcfYoutubeBgmPreview();
+        return;
       }
+
+      const current = ccfBgmSlotMap.get(entryKey) || entry;
+      const videoId = current?.videoId || extractCcfYoutubeVideoId(current?.url || "");
+      if (!videoId) {
+        return;
+      }
+      const previewVolume = updateSliderVisuals(Number(volumeInput?.value));
+      startCcfYoutubeBgmPreview(videoId, previewVolume);
     });
 
     removeButton?.addEventListener("click", (event) => {
@@ -4355,9 +4403,180 @@
     document.removeEventListener("pointerdown", handleCcfYoutubeBgmPopoverOutsidePointer, true);
     document.removeEventListener("keydown", handleCcfYoutubeBgmPopoverKeydown, true);
 
+    stopCcfYoutubeBgmPreview();
+
     if (ccfBgmEditPopover) {
       ccfBgmEditPopover.remove();
       ccfBgmEditPopover = null;
+    }
+  }
+
+  // --- 미리듣기: 본 재생과 별개인 로컬 전용 플레이어 ---
+  // 미리듣기는 해당 사용자 브라우저에서만 재생되며, 다른 참여자에게는 영향이 없다.
+
+  function ensureCcfBgmPreviewHost() {
+    if (ccfBgmPreviewHost && document.body && document.body.contains(ccfBgmPreviewHost)) {
+      return ccfBgmPreviewHost;
+    }
+    const host = document.createElement("div");
+    host.className = "ccf-youtube-bgm-preview-host";
+    host.setAttribute("aria-hidden", "true");
+    host.appendChild(document.createElement("div"));
+    (document.body || document.documentElement).appendChild(host);
+    ccfBgmPreviewHost = host;
+    return host;
+  }
+
+  function applyCcfBgmPreviewVolume(volume) {
+    if (!ccfBgmPreviewPlayer || typeof ccfBgmPreviewPlayer.setVolume !== "function") {
+      return;
+    }
+    const vol = Math.max(0, Math.min(100, Number(volume) || 0));
+    try {
+      ccfBgmPreviewPlayer.setVolume(vol);
+      if (vol <= 0) {
+        if (typeof ccfBgmPreviewPlayer.mute === "function") ccfBgmPreviewPlayer.mute();
+      } else {
+        if (typeof ccfBgmPreviewPlayer.unMute === "function") ccfBgmPreviewPlayer.unMute();
+        ccfBgmPreviewPlayer.setVolume(vol);
+      }
+    } catch (error) {
+      debugLog("bgm-youtube-preview-volume-failed", serializeError(error));
+    }
+  }
+
+  function startCcfYoutubeBgmPreview(videoId, volume) {
+    if (!videoId) {
+      return;
+    }
+
+    // 본 재생(YouTube BGM)이 진행 중이면 로컬에서만 일시정지한다.
+    ccfBgmPreviewResumeMain = false;
+    if (ccfBgmPlayer && typeof ccfBgmPlayer.getPlayerState === "function") {
+      try {
+        if (ccfBgmPlayer.getPlayerState() === window.YT?.PlayerState?.PLAYING) {
+          if (typeof ccfBgmPlayer.pauseVideo === "function") {
+            ccfBgmPlayer.pauseVideo();
+          }
+          ccfBgmPreviewResumeMain = true;
+        }
+      } catch (error) {
+        debugLog("bgm-youtube-preview-pause-main-failed", serializeError(error));
+      }
+    }
+
+    ccfBgmPreviewActive = true;
+    syncCcfBgmPreviewButtonState();
+
+    const host = ensureCcfBgmPreviewHost();
+    const target = host.firstElementChild;
+    const vol = Math.max(0, Math.min(100, Number(volume) || 0));
+
+    loadYoutubeIframeApi().then(() => {
+      if (!ccfBgmPreviewActive || !window.YT || !window.YT.Player) {
+        return;
+      }
+
+      if (ccfBgmPreviewPlayer) {
+        try {
+          if (ccfBgmPreviewVideoId !== videoId && typeof ccfBgmPreviewPlayer.loadVideoById === "function") {
+            ccfBgmPreviewPlayer.loadVideoById(videoId);
+            ccfBgmPreviewVideoId = videoId;
+          } else if (typeof ccfBgmPreviewPlayer.playVideo === "function") {
+            ccfBgmPreviewPlayer.playVideo();
+          }
+          applyCcfBgmPreviewVolume(vol);
+        } catch (error) {
+          debugLog("bgm-youtube-preview-play-failed", serializeError(error));
+        }
+        return;
+      }
+
+      ccfBgmPreviewVideoId = videoId;
+      ccfBgmPreviewPlayer = new window.YT.Player(target, {
+        width: String(YOUTUBE_PLAYER_MIN_SIZE),
+        height: String(YOUTUBE_PLAYER_MIN_SIZE),
+        host: YOUTUBE_EMBED_HOST,
+        videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          origin: location.origin
+        },
+        events: {
+          onReady(event) {
+            if (!ccfBgmPreviewActive) {
+              try { event.target.stopVideo(); } catch (_) {}
+              return;
+            }
+            applyCcfBgmPreviewVolume(vol);
+            try { event.target.playVideo(); } catch (_) {}
+          },
+          onStateChange(event) {
+            if (event?.data === window.YT?.PlayerState?.ENDED) {
+              stopCcfYoutubeBgmPreview();
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function stopCcfYoutubeBgmPreview() {
+    const wasActive = ccfBgmPreviewActive;
+    ccfBgmPreviewActive = false;
+
+    if (ccfBgmPreviewPlayer && typeof ccfBgmPreviewPlayer.stopVideo === "function") {
+      try {
+        ccfBgmPreviewPlayer.stopVideo();
+      } catch (error) {
+        debugLog("bgm-youtube-preview-stop-failed", serializeError(error));
+      }
+    }
+
+    // 미리듣기 때문에 일시정지했던 본 재생을 다시 이어서 재생한다.
+    if (wasActive && ccfBgmPreviewResumeMain && ccfBgmPlayer && typeof ccfBgmPlayer.playVideo === "function") {
+      try {
+        ccfBgmPlayer.playVideo();
+      } catch (error) {
+        debugLog("bgm-youtube-preview-resume-main-failed", serializeError(error));
+      }
+    }
+    ccfBgmPreviewResumeMain = false;
+    syncCcfBgmPreviewButtonState();
+  }
+
+  function destroyCcfBgmPreviewPlayer() {
+    stopCcfYoutubeBgmPreview();
+    if (ccfBgmPreviewPlayer && typeof ccfBgmPreviewPlayer.destroy === "function") {
+      try { ccfBgmPreviewPlayer.destroy(); } catch (_) {}
+    }
+    ccfBgmPreviewPlayer = null;
+    ccfBgmPreviewVideoId = "";
+    if (ccfBgmPreviewHost) {
+      ccfBgmPreviewHost.remove();
+      ccfBgmPreviewHost = null;
+    }
+  }
+
+  function syncCcfBgmPreviewButtonState() {
+    const button = ccfBgmEditPopover
+      ? ccfBgmEditPopover.querySelector(".ccf-youtube-bgm-preview")
+      : null;
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+    if (ccfBgmPreviewActive) {
+      button.dataset.previewing = "1";
+      button.textContent = "미리듣기 정지";
+    } else {
+      button.dataset.previewing = "0";
+      button.textContent = "미리듣기";
     }
   }
 
@@ -6818,6 +7037,22 @@
         color: #ffffff !important;
         fill: #ffffff !important;
         opacity: 1 !important;
+      }
+
+      .ccf-youtube-bgm-popover .ccf-youtube-bgm-preview[data-previewing="1"] {
+        color: #2196f3 !important;
+        font-weight: 700 !important;
+      }
+
+      .ccf-youtube-bgm-preview-host {
+        position: fixed !important;
+        left: -10000px !important;
+        top: 0 !important;
+        width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
+        height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        z-index: -1 !important;
       }
 
       .ccf-youtube-bgm-actions:not(.iyVLQd) {

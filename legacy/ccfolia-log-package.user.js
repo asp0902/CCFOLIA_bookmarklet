@@ -1471,20 +1471,16 @@
   async function handleDeleteCurrentTabLogs() {
     const roomTitle = getRoomTitle("");
     const currentTab = getCurrentPackageTabDescriptor(roomTitle);
+    const tabName = currentTab ? currentTab.name : "메인";
 
-    if (!currentTab) {
-      alert("현재 활성화된 탭을 찾을 수 없습니다.");
-      return;
-    }
-
-    const confirmDelete = confirm(`정말 [ ${currentTab.name} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
+    const confirmDelete = confirm(`정말 [ ${tabName} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
     if (!confirmDelete) return;
 
-    console.log(`[CCF LOG PACKAGE] ${currentTab.name} 탭 로그 삭제 요청됨.`);
+    console.log(`[CCF LOG PACKAGE] ${tabName} 탭 로그 삭제 요청됨.`);
     setButtonsBusy(true);
 
     try {
-      const scope = findPrimaryLogScope(currentTab);
+      const scope = findPrimaryLogScope(currentTab || null);
       if (!scope) {
         throw new Error("탭 로그 영역을 찾을 수 없습니다.");
       }
@@ -1558,7 +1554,7 @@
             }
 
             deletedCount++;
-            updateToast(`[ ${currentTab.name} ] 탭 삭제 중... (${deletedCount}개 삭제됨)`);
+            updateToast(`[ ${tabName} ] 탭 삭제 중... (${deletedCount}개 삭제됨)`);
           } catch (e) {
             console.warn("[CCF LOG PACKAGE] 개별 메시지 삭제 클릭 실패:", e);
           }
@@ -1569,7 +1565,7 @@
       }
 
       if (toast) toast.remove();
-      alert(`[ ${currentTab.name} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.`);
+      alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.`);
     } catch (error) {
       console.error("[CCF LOG PACKAGE] delete failed", error);
       alert(error?.message || "로그 삭제 중 오류가 발생했습니다.");
