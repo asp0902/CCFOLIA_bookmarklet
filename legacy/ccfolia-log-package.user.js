@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.12
+// @version      0.0.13
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1421,32 +1421,36 @@
     }
   }
 
-  // ----------------------------------------------------
-  // [수정 포인트 3] 커스텀 삭제 버튼 주입 및 클릭 이벤트 핸들러 추가
-  // (ensureExportButtons 함수가 끝나는 바로 밑에 아래 함수들을 통째로 추가하세요)
-  // ----------------------------------------------------
   function ensureCustomDeleteButtons() {
     const menus = document.querySelectorAll('[role="menu"]');
-    
+
     for (const menu of menus) {
       if (!(menu instanceof HTMLElement) || !isVisible(menu)) continue;
 
       const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
-      
+
       const nativeDeleteBtn = items.find((item) => {
         const text = normalizeSpace(item.textContent || "").toLowerCase();
-        return text.includes("룸 로그 삭제") || text.includes("delete room log") || text.includes("ルームログ削除");
+        return (
+          text.includes("룸 로그 삭제") ||
+          text.includes("delete room log") ||
+          text.includes("ルームログ削除")
+        );
       });
 
       if (nativeDeleteBtn && !menu.querySelector(DELETE_TAB_BTN_SELECTOR)) {
         const customDeleteBtn = document.createElement("li");
-        
+
         customDeleteBtn.className = cleanupMenuItemClassName(nativeDeleteBtn.className);
+        customDeleteBtn.classList.add("ccf-log-package-menu-item");
         customDeleteBtn.setAttribute(DELETE_TAB_BTN_ATTR, "1");
         customDeleteBtn.setAttribute("role", "menuitem");
         customDeleteBtn.setAttribute("tabindex", "-1");
+        customDeleteBtn.setAttribute("aria-label", "현재 탭 룸 로그 삭제");
+        customDeleteBtn.setAttribute("title", "현재 탭 룸 로그 삭제");
 
         const label = document.createElement("span");
+        label.className = "ccf-log-package-menu-label";
         label.textContent = "현재 탭 룸 로그 삭제";
         customDeleteBtn.appendChild(label);
 
@@ -1458,14 +1462,10 @@
         customDeleteBtn.addEventListener("click", async (event) => {
           event.preventDefault();
           event.stopPropagation();
-          
-          // 1. 팝업 메뉴를 먼저 닫아 DOM 상태를 원상복구합니다.
+
           await dismissTransientMenusAndOverlays();
+          await new Promise((resolve) => setTimeout(resolve, 120));
 
-          // 2. 코코포리아 UI가 원래대로 돌아올 수 있도록 짧게 대기합니다.
-          await new Promise((resolve) => setTimeout(resolve, 100));
-
-          // 3. 그 다음 로그 삭제 로직을 실행합니다.
           await handleDeleteCurrentTabLogs();
         });
 
@@ -1474,135 +1474,373 @@
     }
   }
 
+  function dispatchMouseLikeEvent(target, type, eventInit) {
+    if (!(target instanceof Element)) return;
+
+    const EventCtor = type.startsWith("pointer") && typeof PointerEvent === "function"
+      ? PointerEvent
+      : MouseEvent;
+
+    target.dispatchEvent(new EventCtor(type, {
+      ...eventInit,
+      pointerType: "mouse",
+      pointerId: 1,
+      isPrimary: true
+    }));
+  }
+
+  function hoverMessageItemRoot(root) {
+    if (!(root instanceof HTMLElement)) return;
+
+    const rect = root.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: centerX,
+      clientY: centerY,
+      screenX: window.screenX + centerX,
+      screenY: window.screenY + centerY,
+      button: 0,
+      buttons: 0
+    };
+
+    const primaryTextElement = typeof findPrimaryMessageTextElement === "function"
+      ? findPrimaryMessageTextElement(root)
+      : null;
+
+    const triggerTargets = [
+      root,
+      root.firstElementChild,
+      root.querySelector(".MuiListItem-root"),
+      root.querySelector(".MuiListItemText-root"),
+      primaryTextElement
+    ].filter((target) => target instanceof Element);
+
+    triggerTargets.forEach((target) => {
+      [
+        "pointerover",
+        "pointerenter",
+        "mouseover",
+        "mouseenter",
+        "mousemove"
+      ].forEach((type) => {
+        dispatchMouseLikeEvent(target, type, eventInit);
+      });
+    });
+  }
+
+  function clickElementLikeUser(element) {
+    if (!(element instanceof HTMLElement)) return false;
+
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: centerX,
+      clientY: centerY,
+      screenX: window.screenX + centerX,
+      screenY: window.screenY + centerY,
+      button: 0,
+      buttons: 1
+    };
+
+    [
+      "pointerdown",
+      "mousedown",
+      "pointerup",
+      "mouseup",
+      "click"
+    ].forEach((type) => {
+      dispatchMouseLikeEvent(element, type, eventInit);
+    });
+
+    return true;
+  }
+
+  function getButtonSearchText(button) {
+    if (!(button instanceof HTMLElement)) return "";
+
+    return normalizeSpace([
+      button.getAttribute("aria-label") || "",
+      button.getAttribute("title") || "",
+      button.textContent || "",
+      button.innerHTML || ""
+    ].join(" ")).toLowerCase();
+  }
+
+  function findDeleteButtonInMessageRoot(root) {
+    if (!(root instanceof HTMLElement)) return null;
+
+    const buttons = [...root.querySelectorAll("button")]
+      .filter((button) => button instanceof HTMLElement)
+      .filter((button) => isVisible(button));
+
+    const explicitButton = buttons.find((button) => {
+      const text = getButtonSearchText(button);
+      return (
+        text.includes("삭제") ||
+        text.includes("delete") ||
+        text.includes("削除") ||
+        text.includes("trash")
+      );
+    });
+
+    if (explicitButton) return explicitButton;
+
+    const actionArea = root.querySelector(".MuiListItemSecondaryAction-root");
+    if (actionArea instanceof HTMLElement) {
+      const actionButtons = [...actionArea.querySelectorAll("button")]
+        .filter((button) => button instanceof HTMLElement)
+        .filter((button) => isVisible(button));
+
+      const actionDeleteButton = actionButtons.find((button) => {
+        const text = getButtonSearchText(button);
+        return (
+          text.includes("삭제") ||
+          text.includes("delete") ||
+          text.includes("削除") ||
+          text.includes("trash")
+        );
+      });
+
+      if (actionDeleteButton) return actionDeleteButton;
+
+      if (actionButtons.length === 1) return actionButtons[0];
+    }
+
+    return null;
+  }
+
+  function findConfirmButtonInDialog(dialog) {
+    if (!(dialog instanceof HTMLElement)) return null;
+
+    const buttons = [...dialog.querySelectorAll("button")]
+      .filter((button) => button instanceof HTMLElement)
+      .filter((button) => isVisible(button));
+
+    const deleteButton = buttons.find((button) => {
+      const text = getButtonSearchText(button);
+      return (
+        text.includes("삭제") ||
+        text.includes("delete") ||
+        text.includes("削除")
+      );
+    });
+
+    if (deleteButton) return deleteButton;
+
+    const confirmButton = buttons.find((button) => {
+      const text = getButtonSearchText(button);
+      return (
+        text.includes("확인") ||
+        text.includes("confirm") ||
+        text === "ok" ||
+        text.includes(">ok<")
+      );
+    });
+
+    return confirmButton || null;
+  }
+
+  async function confirmDeleteDialogIfPresent() {
+    let confirmButton = null;
+
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+        .filter((dialog) => dialog instanceof HTMLElement)
+        .filter((dialog) => isVisible(dialog));
+
+      for (const dialog of dialogs) {
+        confirmButton = findConfirmButtonInDialog(dialog);
+        if (confirmButton) break;
+      }
+
+      if (confirmButton) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    if (!confirmButton) return false;
+
+    clickElementLikeUser(confirmButton);
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    await waitForAnimationFrame();
+
+    return true;
+  }
+
   async function handleDeleteCurrentTabLogs() {
     const roomTitle = getRoomTitle("");
     const currentTab = getCurrentPackageTabDescriptor(roomTitle);
-    
-    // [수정 포인트 1] 탭 이름이 "메인 0" 등으로 이상하게 표기되는 현상 교정
+
     let tabName = currentTab ? currentTab.name : "메인";
     if (tabName.startsWith("메인")) tabName = "메인";
     else if (tabName.startsWith("정보")) tabName = "정보";
     else if (tabName.startsWith("잡담")) tabName = "잡담";
 
-    const confirmDelete = confirm(`정말 [ ${tabName} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
+    const confirmDelete = confirm(
+      `정말 [ ${tabName} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
+    );
     if (!confirmDelete) return;
 
     console.log(`[CCF LOG PACKAGE] ${tabName} 탭 로그 삭제 요청됨.`);
     setButtonsBusy(true);
 
-    try {
-      // 영역 탐색 폴백 강화
-      let scope = findPrimaryLogScope(currentTab || null);
-      if (!scope) scope = findPrimaryLogScope();
-      if (!scope) throw new Error("탭 로그 영역을 찾을 수 없습니다.");
+    let toast = null;
 
-      const scroller = findLogScrollContainer(scope);
-      if (scroller) {
-        scroller.style.scrollBehavior = "auto";
-        // [수정 포인트 2] React 가상 스크롤(Virtualization) 대응을 위해 스크롤을 맨 아래로 강제 이동
-        scroller.scrollTop = scroller.scrollHeight;
-        await new Promise((r) => setTimeout(r, 300));
+    try {
+      if (currentTab) {
+        await activateChatTab(currentTab);
       }
+
+      const scope = findPrimaryLogScope(currentTab) || findPrimaryLogScope();
+      if (!(scope instanceof HTMLElement)) {
+        throw new Error("현재 탭의 로그 영역을 찾을 수 없습니다.");
+      }
+
+      const scroller = findLogScrollContainer(scope) || scope;
+      if (!(scroller instanceof HTMLElement)) {
+        throw new Error("현재 탭의 스크롤 영역을 찾을 수 없습니다.");
+      }
+
+      scroller.style.scrollBehavior = "auto";
+      scroller.scrollTop = scroller.scrollHeight;
+      await waitForLogSettle(scope);
 
       let deletedCount = 0;
       let emptyCount = 0;
-      
+      let lastScrollTop = -1;
+
       const toastId = "ccf-delete-toast";
-      let toast = document.getElementById(toastId);
+      toast = document.getElementById(toastId);
+
       if (!toast) {
         toast = document.createElement("div");
         toast.id = toastId;
-        toast.style.cssText = "position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 8px; z-index: 9999; font-size: 14px; pointer-events: none;";
+        toast.style.cssText = [
+          "position: fixed",
+          "bottom: 20px",
+          "left: 50%",
+          "transform: translateX(-50%)",
+          "background: rgba(0,0,0,0.8)",
+          "color: white",
+          "padding: 10px 20px",
+          "border-radius: 8px",
+          "z-index: 9999",
+          "font-size: 14px",
+          "pointer-events: none"
+        ].join("; ");
         document.body.appendChild(toast);
       }
-      const updateToast = (msg) => { if (toast) toast.textContent = msg; };
 
-      while (emptyCount < 4) {
-        const itemRoots = findLogMessageItemRoots([scope]);
+      const updateToast = (message) => {
+        if (toast) toast.textContent = message;
+      };
 
-        // [수정 포인트 3] React 합성 이벤트(Synthetic Event) 후킹을 위한 강력한 Hover 트리거
-        for (const root of itemRoots) {
-          ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'mousemove'].forEach(type => {
-            root.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
-          });
+      updateToast(`[ ${tabName} ] 탭 로그 삭제 준비 중...`);
+
+      while (emptyCount < 3) {
+        const itemRoots = findLogMessageItemRoots([scope])
+          .filter((root) => root instanceof HTMLElement)
+          .filter((root) => isVisible(root));
+
+        let foundAnyDeleteButtonInThisLoop = false;
+        let deletedAnyInThisLoop = false;
+
+        console.log("[CCF LOG PACKAGE][delete] scan", {
+          tabName,
+          itemRootCount: itemRoots.length,
+          scrollTop: scroller.scrollTop,
+          scrollHeight: scroller.scrollHeight
+        });
+
+        for (let i = itemRoots.length - 1; i >= 0; i -= 1) {
+          const root = itemRoots[i];
+          if (!(root instanceof HTMLElement) || !isVisible(root)) continue;
+
+          hoverMessageItemRoot(root);
+
+          await new Promise((resolve) => setTimeout(resolve, 90));
+          await waitForAnimationFrame();
+
+          const deleteButton = findDeleteButtonInMessageRoot(root);
+          if (!(deleteButton instanceof HTMLElement)) continue;
+
+          foundAnyDeleteButtonInThisLoop = true;
+
+          try {
+            clickElementLikeUser(deleteButton);
+
+            const confirmed = await confirmDeleteDialogIfPresent();
+            if (!confirmed) {
+              console.warn("[CCF LOG PACKAGE] 삭제 확인 버튼을 찾지 못했습니다.", root);
+              continue;
+            }
+
+            deletedCount += 1;
+            deletedAnyInThisLoop = true;
+
+            updateToast(`[ ${tabName} ] 탭 비우는 중... (${deletedCount}개 삭제됨)`);
+
+            await waitForLogSettle(scope);
+            await new Promise((resolve) => setTimeout(resolve, 120));
+          } catch (error) {
+            console.warn("[CCF LOG PACKAGE] 개별 메시지 삭제 클릭 실패:", error);
+          }
         }
-        // DOM 렌더링을 기다리기 위해 대기 시간 약간 증가
-        await new Promise((r) => setTimeout(r, 100));
 
-        const deleteBtns = [];
-        for (const root of itemRoots) {
-          // 1순위: 명시적인 삭제 텍스트나 라벨
-          let btn = root.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button[title*="삭제"], button[title*="delete" i], button[title*="削除"]');
-          
-          // 2순위: 휴지통 아이콘을 그리는 고유 SVG 경로(Path)
-          if (!btn) {
-            const path = root.querySelector('path[d^="M6 19c"]');
-            if (path) btn = path.closest('button');
-          }
-          
-          // 3순위: 코코포리아 메시지 우측 액션 영역(SecondaryAction)의 유일한 버튼
-          if (!btn) {
-            const actionArea = root.querySelector('.MuiListItemSecondaryAction-root');
-            if (actionArea) btn = actionArea.querySelector('button');
-          }
-
-          if (btn && !deleteBtns.includes(btn)) {
-            deleteBtns.push(btn);
-          }
-        }
-
-        if (deleteBtns.length === 0) {
-          emptyCount++;
-          if (scroller) {
-            // 화면에 지울 메시지가 없으면 스크롤을 위로 올려 이전 메시지를 로드
-            scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight * 0.75);
-            await new Promise((r) => setTimeout(r, 600));
-          } else {
-            break;
-          }
+        if (deletedAnyInThisLoop) {
+          emptyCount = 0;
+          await waitForLogSettle(scope);
+          await new Promise((resolve) => setTimeout(resolve, 250));
           continue;
         }
 
-        emptyCount = 0;
-        
-        // [수정 포인트 4] 가상 DOM 구조가 꼬이지 않도록 역순(아래에서부터 위로)으로 삭제 진행
-        for (let i = deleteBtns.length - 1; i >= 0; i--) {
-          const btn = deleteBtns[i];
-          try {
-            btn.click();
-            await new Promise((r) => setTimeout(r, 20));
-
-            // 개별 삭제 모달 다이얼로그가 뜨는 경우 강제 승인 처리
-            const confirmDialog = document.querySelector('[role="dialog"]');
-            if (confirmDialog) {
-              const confirmBtn = confirmDialog.querySelector('button[aria-label*="삭제"], button[aria-label*="delete" i], button[aria-label*="削除"], button.MuiButton-containedSecondary, button.MuiButton-containedPrimary:not(:first-of-type)');
-              if (confirmBtn) {
-                confirmBtn.click();
-                await new Promise((r) => setTimeout(r, 40));
-              }
-            }
-
-            deletedCount++;
-            updateToast(`[ ${tabName} ] 탭 비우는 중... (${deletedCount}개 삭제됨)`);
-          } catch (e) {
-            console.warn("[CCF LOG PACKAGE] 메시지 삭제 클릭 실패:", e);
-          }
+        if (!foundAnyDeleteButtonInThisLoop) {
+          emptyCount += 1;
         }
-        
-        // 일괄 삭제 후 React DOM이 갱신될 충분한 시간 대기
-        await new Promise((r) => setTimeout(r, 400));
+
+        const currentScrollTop = scroller.scrollTop;
+
+        if (currentScrollTop <= 0 || currentScrollTop === lastScrollTop) {
+          break;
+        }
+
+        lastScrollTop = currentScrollTop;
+        scroller.scrollTop = Math.max(
+          0,
+          currentScrollTop - Math.max(
+            LOG_SCAN_MIN_STEP,
+            scroller.clientHeight * LOG_SCAN_STEP_RATIO
+          )
+        );
+
+        await waitForLogSettle(scope);
+        await new Promise((resolve) => setTimeout(resolve, 450));
       }
 
-      if (toast) toast.remove();
+      if (toast) {
+        toast.remove();
+        toast = null;
+      }
+
       alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.`);
     } catch (error) {
       console.error("[CCF LOG PACKAGE] delete failed", error);
       alert(error?.message || "로그 삭제 중 오류가 발생했습니다.");
     } finally {
+      if (toast) toast.remove();
       setButtonsBusy(false);
     }
   }
-  // ----------------------------------------------------
+  // ----------------------------------------------------  
 
   function cleanupDuplicateExportButtons(menu, anchors) {
     const buttons = [...menu.querySelectorAll(EXPORT_BTN_SELECTOR)]
