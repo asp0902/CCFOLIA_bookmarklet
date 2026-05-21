@@ -2603,7 +2603,12 @@
         const data = typeof ccfBgmPlayer.getVideoData === "function"
           ? ccfBgmPlayer.getVideoData()
           : null;
-        applyCcfYoutubeBgmTitle(entryKey, videoId, data?.title || "");
+        // 플레이어가 아직 이전 영상 데이터를 들고 있을 수 있으므로,
+        // getVideoData()의 video_id가 대상 영상과 일치할 때만 제목을 반영한다.
+        // (일치하지 않으면 다른 음원의 제목이 덮어씌워지는 오류 발생)
+        if (data && data.video_id === videoId && data.title) {
+          applyCcfYoutubeBgmTitle(entryKey, videoId, data.title);
+        }
       } catch (error) {
         debugLog("bgm-youtube-player-title-failed", serializeError(error));
       }
@@ -4097,7 +4102,7 @@
       '    </button>',
       '  </div>',
       '  <div class="sc-bAcsk iyVLQd ccf-youtube-bgm-actions">',
-      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button">미리듣기<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
+      '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-preview" tabindex="0" type="button"><span class="ccf-youtube-bgm-preview-label">미리듣기</span><span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-mjtl3p ccf-youtube-bgm-remove" tabindex="0" type="button">삭제<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '    <button class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-652zu6 ccf-youtube-bgm-save" tabindex="0" type="submit">저장<span class="MuiTouchRipple-root css-w0pj6f"></span></button>',
       '  </div>',
@@ -4571,12 +4576,22 @@
     if (!(button instanceof HTMLElement)) {
       return;
     }
+    const label = button.querySelector(".ccf-youtube-bgm-preview-label");
     if (ccfBgmPreviewActive) {
+      // 정지 상태: 네이티브 팝오버의 삭제 버튼과 동일한 색상(secondary)으로 표시.
       button.dataset.previewing = "1";
-      button.textContent = "미리듣기 정지";
+      button.classList.remove("MuiButton-textPrimary", "css-652zu6");
+      button.classList.add("MuiButton-textSecondary", "css-mjtl3p");
+      if (label instanceof HTMLElement) {
+        label.textContent = "정지";
+      }
     } else {
       button.dataset.previewing = "0";
-      button.textContent = "미리듣기";
+      button.classList.remove("MuiButton-textSecondary", "css-mjtl3p");
+      button.classList.add("MuiButton-textPrimary", "css-652zu6");
+      if (label instanceof HTMLElement) {
+        label.textContent = "미리듣기";
+      }
     }
   }
 
@@ -7025,23 +7040,18 @@
         padding: 4px !important;
       }
 
+      /* 켜짐 상태는 네이티브 MuiIconButton-colorPrimary 색상을 그대로 사용한다. */
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"],
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="1"] svg {
-        color: #2196f3 !important;
-        fill: #2196f3 !important;
         opacity: 1 !important;
       }
 
+      /* 꺼짐 상태만 흰색으로 표시한다. */
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"],
       .ccf-youtube-bgm-popover .ccf-youtube-bgm-loop[data-loop="0"] svg {
         color: #ffffff !important;
         fill: #ffffff !important;
         opacity: 1 !important;
-      }
-
-      .ccf-youtube-bgm-popover .ccf-youtube-bgm-preview[data-previewing="1"] {
-        color: #2196f3 !important;
-        font-weight: 700 !important;
       }
 
       .ccf-youtube-bgm-preview-host {
