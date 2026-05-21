@@ -4214,15 +4214,14 @@
       '</div>'
     ].join("");
 
-    // 코코포리아 BGM 드로어는 MUI Modal(포커스 트랩)이라서, document.body에
-    // 붙이면 트랩이 name 입력란의 포커스를 즉시 빼앗아 타이핑이 불가능해진다.
-    // 트랩 루트(드로어 paper) 내부에 붙여 포커스를 유지시킨다.
-    const popoverHost = (anchor instanceof HTMLElement
-      && anchor.closest(".MuiDrawer-paper")) || document.body;
-    popoverHost.appendChild(popover);
+    document.body.appendChild(popover);
     ccfBgmEditPopover = popover;
     positionCcfYoutubeBgmPopover(popover, anchor);
-    ["pointerdown", "mousedown", "mouseup", "click", "touchstart"].forEach((type) => {
+    // focusin: 코코포리아 BGM 드로어는 MUI Modal(포커스 트랩)이다. 트랩은 document
+    // 레벨의 focusin 핸들러로 "포커스가 모달 밖으로 나갔다"고 판단해 즉시 포커스를
+    // 되돌린다. 팝오버 내부의 focusin이 document로 전파되지 않게 막으면, 트랩이
+    // 알아채지 못해 name 입력란이 포커스를 유지할 수 있다.
+    ["pointerdown", "mousedown", "mouseup", "click", "touchstart", "focusin"].forEach((type) => {
       popover.addEventListener(type, (event) => {
         event.stopPropagation();
       });
@@ -6788,8 +6787,9 @@
       .ccf-bgm-progress-input {
         box-sizing: border-box !important;
         display: block !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        justify-self: center !important;
+        width: calc(100% - 3px) !important;
+        max-width: calc(100% - 3px) !important;
         min-width: 0 !important;
         height: 16px !important;
         margin: 0 !important;
