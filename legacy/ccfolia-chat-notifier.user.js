@@ -4489,19 +4489,8 @@
       ? Math.max(8, window.innerHeight - height - 8)
       : Math.max(8, preferredTop);
 
-    // position:fixed라도 transform이 적용된 조상 안에 있으면 기준점이 그 조상이 된다.
-    // (드로어 paper 내부에 붙인 경우 대비) offsetParent 기준으로 보정한다.
-    let originLeft = 0;
-    let originTop = 0;
-    const offsetParent = popover.offsetParent;
-    if (offsetParent instanceof HTMLElement) {
-      const opRect = offsetParent.getBoundingClientRect();
-      originLeft = opRect.left;
-      originTop = opRect.top;
-    }
-
-    popover.style.left = `${left - originLeft}px`;
-    popover.style.top = `${top - originTop}px`;
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
   }
 
   function handleCcfYoutubeBgmPopoverOutsidePointer(event) {
