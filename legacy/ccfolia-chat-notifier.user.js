@@ -3348,10 +3348,11 @@
         window.innerWidth - tipRect.width - margin
       )
     );
-    let top = rect.top - tipRect.height - margin;
-    if (top < margin) {
-      top = rect.bottom + margin;
+    let top = rect.bottom + margin;
+    if (top + tipRect.height > window.innerHeight - margin) {
+      top = rect.top - tipRect.height - margin;
     }
+    top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
     tip.style.left = `${Math.round(left)}px`;
     tip.style.top = `${Math.round(top)}px`;
   }
