@@ -6788,8 +6788,8 @@
         box-sizing: border-box !important;
         display: block !important;
         justify-self: center !important;
-        width: calc(100% - 3px) !important;
-        max-width: calc(100% - 3px) !important;
+        width: calc(100% - 13px) !important;
+        max-width: calc(100% - 13px) !important;
         min-width: 0 !important;
         height: 16px !important;
         margin: 0 !important;
