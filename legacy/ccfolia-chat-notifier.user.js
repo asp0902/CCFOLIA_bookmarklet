@@ -6762,7 +6762,7 @@
         display: grid !important;
         grid-template-columns: 34px minmax(0, 1fr) 34px !important;
         align-items: center !important;
-        gap: 6px !important;
+        gap: 2px !important;
         flex: 0 0 auto !important;
         width: 284px !important;
         max-width: 100% !important;
