@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.30
+// @version      0.2.31
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -71,7 +71,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.21"),
+    version: getUserscriptVersion("0.2.31"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -248,6 +248,45 @@
     try {
       document.getElementById("ccf-bgm-enhancer-style")?.remove();
       document.getElementById("ccf-youtube-bgm-player")?.remove();
+      document.querySelectorAll([
+        ".ccf-bgm-progress-root",
+        ".ccf-bgm-progress-break",
+        ".ccf-bgm-native-tooltip",
+        ".ccf-youtube-bgm-player-dock",
+        ".ccf-youtube-bgm-popover",
+        ".ccf-youtube-bgm-preview-host",
+        ".ccf-youtube-bgm-drag-clone",
+        ".ccf-youtube-bgm-list",
+        ".ccf-youtube-bgm-row-wrap",
+        '[data-ccf-youtube-bgm-registered]',
+        '[data-ccf-bgm-share]'
+      ].join(", ")).forEach((el) => {
+        if (el.matches?.('[data-ccf-youtube-bgm-registered], [data-ccf-bgm-share]')) {
+          el.removeAttribute("data-ccf-youtube-bgm-registered");
+          el.removeAttribute("data-ccf-bgm-share");
+          return;
+        }
+        el.remove();
+      });
+      document.querySelectorAll([
+        '[data-ccf-bgm-drawer-size-lock]',
+        '[data-ccf-bgm-panel]',
+        '[data-ccf-bgm-button-row]',
+        '[data-ccf-bgm-progress-host]',
+        '[data-ccf-bgm-progress-flow]',
+        '[data-ccf-bgm-dialog-root]',
+        '[data-ccf-bgm-dialog-paper]',
+        '[data-ccf-bgm-slot-key]'
+      ].join(", ")).forEach((el) => {
+        el.removeAttribute("data-ccf-bgm-drawer-size-lock");
+        el.removeAttribute("data-ccf-bgm-panel");
+        el.removeAttribute("data-ccf-bgm-button-row");
+        el.removeAttribute("data-ccf-bgm-progress-host");
+        el.removeAttribute("data-ccf-bgm-progress-flow");
+        el.removeAttribute("data-ccf-bgm-dialog-root");
+        el.removeAttribute("data-ccf-bgm-dialog-paper");
+        el.removeAttribute("data-ccf-bgm-slot-key");
+      });
       ccfBgmPlayerDock?.remove?.();
       ccfBgmPlayerDock = null;
       ccfBgmPlayerHost = null;
