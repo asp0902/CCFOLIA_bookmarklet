@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.5";
-  const BUILD_ID = "2026-05-23-roll20-icon-metrics-1";
+  const VERSION = "0.1.6";
+  const BUILD_ID = "2026-05-23-roll20-icon-absolute-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_KEYS = Object.freeze([
     "__CCF_CHAT_NOTIFIER_DEBUG__",
@@ -72,7 +72,7 @@
     },
     {
       id: "ccf-theme-switcher",
-      title: "테마 전환",
+      title: "테마 커스텀",
       summary: "코코포리아 색상 테마, 캐릭터 색상 팔레트, 테마 가져오기/내보내기",
       scripts: ["legacy/ccfolia-theme-switcher.user.js"]
     },

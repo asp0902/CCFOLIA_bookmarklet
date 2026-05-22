@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.2
+// @version      0.3.3
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,6 +33,9 @@
   const CCF_RAW_ATTR = "data-ccr20-raw";
   const SAFE_UI_ATTR = "data-ccr20-safe-ui";
   const OPEN_BTN_ATTR = "data-ccr20-open-btn";
+  const OPEN_BTN_HOST_ATTR = "data-ccr20-open-host";
+  const OPEN_BTN_HOST_PATCH_ATTR = "data-ccr20-open-host-position-patched";
+  const OPEN_BTN_HOST_PREV_POSITION_ATTR = "data-ccr20-open-host-prev-position";
   const CHAT_PROMPT_PANEL_ATTR = "data-ccr20-chat-prompt-panel";
   const CHAT_PROMPT_TOGGLE_ITEM_ATTR = "data-ccr20-chat-prompt-toggle";
   const CHAT_PROMPT_HIDDEN_KEY = "ccr20-hide-chat-prompt-panel";
@@ -51,6 +54,8 @@
   const CONVERT_ID = "ccr20-convert";
   const APPLY_ID = "ccr20-apply";
   const CLOSE_ID = "ccr20-close";
+  const OPEN_BTN_SIZE = 32;
+  const OPEN_BTN_GAP = 4;
 
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const FOREIGN_RENDER_SELECTOR = ".ccf-render-root[data-ccf-rendered='1']";
@@ -72,7 +77,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.2"),
+    version: getUserscriptVersion("0.3.3"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -238,6 +243,7 @@
   let modalDraftRoll20ConvertedSource = "";
   let suppressEditorSyncDepth = 0;
   let ensureUiFrame = 0;
+  let openButtonLayoutFrame = 0;
   let hideChatPromptPanel = false;
 
   let ccr20Active = true;
@@ -266,6 +272,10 @@
       try { window.cancelAnimationFrame(ensureUiFrame); } catch (error) { /* raf cleanup failed */ }
       ensureUiFrame = 0;
     }
+    if (openButtonLayoutFrame) {
+      try { window.cancelAnimationFrame(openButtonLayoutFrame); } catch (error) { /* raf cleanup failed */ }
+      openButtonLayoutFrame = 0;
+    }
     try { ccr20Abort.abort(); } catch (error) { /* abort failed */ }
     while (ccr20Disposers.length) {
       const disposer = ccr20Disposers.pop();
@@ -285,6 +295,14 @@
       document.documentElement?.removeAttribute("data-ccr20-hide-chat-prompt");
       document.querySelectorAll(`[${CHAT_PROMPT_PANEL_ATTR}="1"]`).forEach((el) => {
         el.removeAttribute(CHAT_PROMPT_PANEL_ATTR);
+      });
+      document.querySelectorAll(`[${OPEN_BTN_HOST_ATTR}="1"]`).forEach((el) => {
+        el.removeAttribute(OPEN_BTN_HOST_ATTR);
+        if (el.getAttribute(OPEN_BTN_HOST_PATCH_ATTR) === "1" && el instanceof HTMLElement) {
+          el.style.position = el.getAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR) || "";
+        }
+        el.removeAttribute(OPEN_BTN_HOST_PATCH_ATTR);
+        el.removeAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR);
       });
       document.querySelectorAll(`[${BOUND_SEND_ATTR}], [${BOUND_ENTER_ATTR}], [${BOUND_INPUT_ATTR}]`).forEach((el) => {
         el.removeAttribute(BOUND_SEND_ATTR);
@@ -442,6 +460,8 @@
     style.setAttribute("data-ccr20-style", "1");
     style.textContent = `
       .ccr20-open-btn {
+        position: absolute !important;
+        z-index: 2 !important;
         box-sizing: border-box !important;
         width: 32px !important;
         height: 32px !important;
@@ -464,6 +484,7 @@
         line-height: 0 !important;
         vertical-align: middle !important;
         cursor: pointer;
+        pointer-events: auto !important;
         box-shadow: none !important;
         transition: background-color 0.14s ease, transform 0.14s ease;
         overflow: hidden !important;
@@ -1148,6 +1169,9 @@
         activeEditor = editor;
       }
     }, ccr20WithSignal(true));
+
+    window.addEventListener("resize", scheduleOpenButtonLayout, ccr20WithSignal({ passive: true }));
+    window.addEventListener("scroll", scheduleOpenButtonLayout, ccr20WithSignal({ passive: true, capture: true }));
   }
 
   function ensureUi() {
@@ -1216,6 +1240,15 @@
       ensureUiFrame = 0;
       if (!ccr20Active) return;
       ensureUi();
+    });
+  }
+
+  function scheduleOpenButtonLayout() {
+    if (openButtonLayoutFrame) return;
+    openButtonLayoutFrame = window.requestAnimationFrame(() => {
+      openButtonLayoutFrame = 0;
+      if (!ccr20Active) return;
+      syncOpenButtonPositions();
     });
   }
 
@@ -1373,19 +1406,26 @@
 
       if (isBgmExternalUrlComposer(composer)) {
         composer.querySelectorAll(OPEN_BTN_SELECTOR).forEach((el) => el.remove());
+        releaseOpenButtonHost(composer);
         continue;
       }
-
-      if (composer.querySelector?.(OPEN_BTN_SELECTOR)) continue;
 
       const submitBtn = findSubmitButtonInComposer(composer);
       const diceBtn = findPreferredDiceButton(composer);
       const formatSyncBtn = findFormatSyncButton(composer);
       const anchor = diceBtn || formatSyncBtn || submitBtn || composer;
+      const visualTarget = formatSyncBtn || submitBtn || diceBtn || composer;
+      const existing = composer.querySelector?.(OPEN_BTN_SELECTOR);
 
-      const btn = createOpenButton(() => {
-        openEditorForNode(anchor);
+      if (existing instanceof HTMLElement) {
+        bindOpenButtonToComposer(existing, composer, anchor, visualTarget);
+        continue;
+      }
+
+      const btn = createOpenButton((button) => {
+        openEditorForNode(button?.__ccr20Anchor || anchor);
       }, diceBtn || formatSyncBtn);
+      bindOpenButtonToComposer(btn, composer, anchor, visualTarget);
 
       if (formatSyncBtn) {
         formatSyncBtn.insertAdjacentElement("beforebegin", btn);
@@ -1404,6 +1444,85 @@
 
       composer.appendChild(btn);
     }
+
+    syncOpenButtonPositions();
+  }
+
+  function bindOpenButtonToComposer(btn, composer, anchor, visualTarget) {
+    if (!(btn instanceof HTMLElement) || !(composer instanceof HTMLElement)) return;
+    ensureOpenButtonHost(composer);
+    btn.__ccr20Composer = composer;
+    btn.__ccr20Anchor = anchor instanceof Element ? anchor : composer;
+    btn.__ccr20VisualTarget = visualTarget instanceof Element ? visualTarget : composer;
+    btn.style.position = "absolute";
+    btn.style.right = "auto";
+    btn.style.bottom = "auto";
+    positionOpenButton(btn);
+  }
+
+  function ensureOpenButtonHost(composer) {
+    if (!(composer instanceof HTMLElement)) return;
+    composer.setAttribute(OPEN_BTN_HOST_ATTR, "1");
+    if (getComputedStyle(composer).position !== "static") return;
+    if (!composer.hasAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR)) {
+      composer.setAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR, composer.style.position || "");
+    }
+    composer.setAttribute(OPEN_BTN_HOST_PATCH_ATTR, "1");
+    composer.style.position = "relative";
+  }
+
+  function releaseOpenButtonHost(composer) {
+    if (!(composer instanceof HTMLElement)) return;
+    if (composer.querySelector?.(OPEN_BTN_SELECTOR)) return;
+    composer.removeAttribute(OPEN_BTN_HOST_ATTR);
+    if (composer.getAttribute(OPEN_BTN_HOST_PATCH_ATTR) === "1") {
+      composer.style.position = composer.getAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR) || "";
+    }
+    composer.removeAttribute(OPEN_BTN_HOST_PATCH_ATTR);
+    composer.removeAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR);
+  }
+
+  function syncOpenButtonPositions() {
+    document.querySelectorAll(OPEN_BTN_SELECTOR).forEach((btn) => {
+      if (btn instanceof HTMLElement) {
+        positionOpenButton(btn);
+      }
+    });
+  }
+
+  function positionOpenButton(btn) {
+    if (!(btn instanceof HTMLElement)) return false;
+    const composer = btn.__ccr20Composer instanceof HTMLElement
+      ? btn.__ccr20Composer
+      : findClosestComposerBar(btn);
+    if (!(composer instanceof HTMLElement) || !document.contains(composer)) return false;
+
+    const target = btn.__ccr20VisualTarget instanceof HTMLElement && document.contains(btn.__ccr20VisualTarget)
+      ? btn.__ccr20VisualTarget
+      : findFormatSyncButton(composer) || findSubmitButtonInComposer(composer) || findPreferredDiceButton(composer) || composer;
+
+    if (!(target instanceof HTMLElement)) return false;
+
+    const hostRect = composer.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const hostWidth = composer.clientWidth || hostRect.width || OPEN_BTN_SIZE;
+    const hostHeight = composer.clientHeight || hostRect.height || OPEN_BTN_SIZE;
+    const maxLeft = Math.max(0, hostWidth - OPEN_BTN_SIZE);
+    const maxTop = Math.max(0, hostHeight - OPEN_BTN_SIZE);
+
+    let left = maxLeft;
+    let top = Math.max(0, (hostHeight - OPEN_BTN_SIZE) / 2);
+
+    if (target !== composer && targetRect.width > 0 && targetRect.height > 0) {
+      const targetLeft = targetRect.left - hostRect.left + composer.scrollLeft;
+      const targetTop = targetRect.top - hostRect.top + composer.scrollTop;
+      left = clamp(targetLeft - OPEN_BTN_SIZE - OPEN_BTN_GAP, 0, maxLeft);
+      top = clamp(targetTop + ((targetRect.height - OPEN_BTN_SIZE) / 2), 0, maxTop);
+    }
+
+    btn.style.left = `${Math.round(left)}px`;
+    btn.style.top = `${Math.round(top)}px`;
+    return true;
   }
 
   function isBgmExternalUrlComposer(composer) {
@@ -1444,6 +1563,7 @@
     btn.type = "button";
     btn.className = getOpenButtonClassName(metricSource);
     btn.setAttribute(OPEN_BTN_ATTR, "1");
+    btn.setAttribute(SAFE_UI_ATTR, "1");
     btn.setAttribute("data-ccr20-injected", "1");
     btn.setAttribute("aria-label", ROLL20_BUTTON_TITLE);
     btn.title = ROLL20_BUTTON_TITLE;
@@ -1453,7 +1573,7 @@
       if (!ccr20Active) return;
       event.preventDefault();
       event.stopPropagation();
-      onClick();
+      onClick(btn);
     }, ccr20WithSignal());
     return btn;
   }
