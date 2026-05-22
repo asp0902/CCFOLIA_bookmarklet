@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.5
+// @version      0.0.6
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -41,7 +41,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.3"),
+    version: getUserscriptVersion("0.0.6"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -100,6 +100,7 @@
         'style[data-ccf-fs-style]',
         '[data-ccf-inline-toolbar="1"]',
         '.ccf-open-btn[data-ccf-open-btn="1"]',
+        '#ccf-render-style',
         '#ccf-format-modal',
         '#ccf-format-backdrop',
         '#ccf-format-style',
@@ -107,6 +108,11 @@
         '.ccf-editor-preview-layer[data-ccf-safe-markup="1"]'
       ].join(", ")).forEach(el => el.remove());
     } catch (error) { /* dom sweep failed */ }
+    try {
+      if (document.body?.dataset?.ccfUserscriptReady === "1") {
+        delete document.body.dataset.ccfUserscriptReady;
+      }
+    } catch (error) { /* ready marker cleanup failed */ }
     try {
       if (window.__CCF_FORMAT_SYNC_DEBUG__ && window.__CCF_FORMAT_SYNC_DEBUG__.__owner === ccfFsSignal) {
         delete window.__CCF_FORMAT_SYNC_DEBUG__;
@@ -460,6 +466,7 @@
 
     const style = document.createElement("style");
     style.id = "ccf-render-style";
+    style.setAttribute("data-ccf-fs-style", "1");
     style.textContent = `
       .ccf-render-root {
         white-space: pre-wrap;
@@ -1536,7 +1543,10 @@
   function start() {
     const tryInit = () => {
       if (!document.documentElement || !document.body) return false;
-      if (document.body.dataset.ccfUserscriptReady === "1") return true;
+      if (document.body.dataset.ccfUserscriptReady === "1") {
+        if (isUserscriptReadyMarkerCurrent()) return true;
+        delete document.body.dataset.ccfUserscriptReady;
+      }
 
       document.body.dataset.ccfUserscriptReady = "1";
       init();
@@ -1566,6 +1576,15 @@
     window.setTimeout(() => {
       window.clearInterval(timer);
     }, 15000);
+  }
+
+  function isUserscriptReadyMarkerCurrent() {
+    return !!(
+      document.getElementById(STYLE_ID) ||
+      document.getElementById(MODAL_ID) ||
+      document.querySelector(OPEN_BTN_SELECTOR) ||
+      document.querySelector(INLINE_TOOLBAR_SELECTOR)
+    );
   }
 
   function init() {
