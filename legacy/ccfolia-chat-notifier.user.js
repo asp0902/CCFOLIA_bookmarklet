@@ -339,7 +339,6 @@
   const ccfBgmNativeMediaListeners = new WeakSet();
   const ccfBgmCreationTrackedMedia = new WeakSet();
   let ccfBgmProgressRoot = null;
-  let ccfBgmProgressBreak = null;
   let ccfBgmProgressTimer = 0;
   let ccfBgmDomEnhanceTimer = 0;
   let ccfBgmNativeTooltipEl = null;
@@ -4833,26 +4832,9 @@
     return null;
   }
 
-  function ensureCcfBgmProgressBreak() {
-    if (!(ccfBgmProgressBreak instanceof HTMLElement)) {
-      ccfBgmProgressBreak = document.createElement("div");
-      ccfBgmProgressBreak.className = "ccf-bgm-progress-break";
-      ccfBgmProgressBreak.setAttribute("aria-hidden", "true");
-    }
-    return ccfBgmProgressBreak;
-  }
-
   function isCcfBgmProgressRootMountedAfter(mountTarget, progressRoot) {
     if (!(mountTarget instanceof HTMLElement) || !(progressRoot instanceof HTMLElement)) {
       return false;
-    }
-
-    const breakEl = ccfBgmProgressBreak;
-    if (breakEl instanceof HTMLElement) {
-      return progressRoot.parentElement === mountTarget.parentElement
-        && breakEl.parentElement === mountTarget.parentElement
-        && breakEl.previousElementSibling === mountTarget
-        && progressRoot.previousElementSibling === breakEl;
     }
 
     return progressRoot.parentElement === mountTarget.parentElement
@@ -4864,18 +4846,14 @@
       return;
     }
 
-    const breakEl = ensureCcfBgmProgressBreak();
-
     if (mountTarget instanceof HTMLElement && mountTarget !== panel && mountTarget.parentElement) {
       markCcfBgmProgressHost(mountTarget.parentElement);
-      mountTarget.insertAdjacentElement("afterend", breakEl);
-      breakEl.insertAdjacentElement("afterend", progressRoot);
+      mountTarget.insertAdjacentElement("afterend", progressRoot);
       syncCcfBgmProgressWidth(mountTarget, progressRoot);
       return;
     }
 
     markCcfBgmProgressHost(panel);
-    panel.appendChild(breakEl);
     panel.appendChild(progressRoot);
     syncCcfBgmProgressWidth(panel, progressRoot);
   }
@@ -4904,9 +4882,14 @@
         ? Math.max(0, Math.floor(sourceRect.left - parentRect.left))
         : 0;
       progressRoot.style.setProperty("--ccf-bgm-progress-left", `${left}px`);
+      const top = parentRect && sourceRect
+        ? Math.max(0, Math.floor(sourceRect.bottom - parentRect.top))
+        : 0;
+      progressRoot.style.setProperty("--ccf-bgm-progress-top", `${top}px`);
     } else {
       progressRoot.style.removeProperty("--ccf-bgm-progress-width");
       progressRoot.style.removeProperty("--ccf-bgm-progress-left");
+      progressRoot.style.removeProperty("--ccf-bgm-progress-top");
     }
   }
 
@@ -4917,11 +4900,15 @@
 
     host.setAttribute("data-ccf-bgm-progress-host", "1");
     try {
-      const direction = window.getComputedStyle(host).flexDirection || "";
+      const computed = window.getComputedStyle(host);
+      const direction = computed.flexDirection || "";
       host.setAttribute(
         "data-ccf-bgm-progress-flow",
         direction.startsWith("column") ? "column" : "row"
       );
+      if (computed.position === "static") {
+        host.style.position = "relative";
+      }
     } catch (error) {
       host.setAttribute("data-ccf-bgm-progress-flow", "row");
     }
@@ -6797,24 +6784,6 @@
         min-width: 0 !important;
       }
 
-      [data-ccf-bgm-progress-host="1"] {
-        flex-wrap: wrap !important;
-        align-content: flex-start !important;
-        row-gap: 0 !important;
-        column-gap: 4px !important;
-      }
-
-      .ccf-bgm-progress-break {
-        flex: 0 0 100% !important;
-        width: 100% !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
-        pointer-events: none !important;
-      }
-
       [data-ccf-bgm-button-row="1"] {
         margin-bottom: 0 !important;
       }
@@ -6823,16 +6792,18 @@
         box-sizing: border-box !important;
         display: flex !important;
         justify-content: flex-start !important;
-        flex: 0 0 auto !important;
+        position: absolute !important;
+        left: var(--ccf-bgm-progress-left, 0px) !important;
+        top: var(--ccf-bgm-progress-top, 100%) !important;
         width: var(--ccf-bgm-progress-width, auto) !important;
-        max-width: calc(100% - var(--ccf-bgm-progress-left, 0px)) !important;
-        margin-left: var(--ccf-bgm-progress-left, 0px) !important;
+        max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
         min-width: 0 !important;
+        margin: 0 !important;
         padding: 0 !important;
-        margin-top: 0 !important;
         overflow: visible !important;
+        z-index: 6 !important;
         color: rgba(255, 255, 255, 0.88);
         font-size: 10px;
         line-height: 1;

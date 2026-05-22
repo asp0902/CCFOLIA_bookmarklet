@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Capybara Toolkit Presence
 // @namespace    https://local.capybara-toolkit/ccfolia-presence
-// @version      0.1.0
+// @version      0.1.1
 // @description  Shows CCFOLIA room members who have recently sent messages with Capybara Toolkit enabled.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -19,7 +19,7 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.0";
+  const TOOLKIT_VERSION = "0.1.1";
   const ACTIVE_MS = 5 * 60 * 1000;
   const STALE_MS = 30 * 60 * 1000;
   const INVIS_START = "\u2063\u2063\u2063";
@@ -73,6 +73,10 @@
     window.clearTimeout(scanTimer);
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
+    document.querySelectorAll('[data-capybara-presence-bound], [data-capybara-presence-enter-bound]').forEach((element) => {
+      delete element.dataset.capybaraPresenceBound;
+      delete element.dataset.capybaraPresenceEnterBound;
+    });
     if (window[DEBUG_KEY]?.__owner === abort.signal) {
       delete window[DEBUG_KEY];
     }
@@ -162,6 +166,7 @@
         if (button.dataset.capybaraPresenceBound === "1") return;
         button.dataset.capybaraPresenceBound = "1";
         button.addEventListener("click", () => {
+          if (!active) return;
           const editor = findEditorFromNode(button);
           if (editor) preparePresenceForSend(editor);
         }, { capture: true, signal: abort.signal });
@@ -173,6 +178,7 @@
         if (editor.dataset.capybaraPresenceEnterBound === "1") return;
         editor.dataset.capybaraPresenceEnterBound = "1";
         editor.addEventListener("keydown", (event) => {
+          if (!active) return;
           if (event.isComposing || event.key !== "Enter" || event.shiftKey) return;
           preparePresenceForSend(editor);
         }, { capture: true, signal: abort.signal });

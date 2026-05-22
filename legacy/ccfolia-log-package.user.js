@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.13
+// @version      0.0.14
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -88,7 +88,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-    version: getUserscriptVersion("0.0.11"),
+    version: getUserscriptVersion("0.0.14"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -150,7 +150,15 @@
       try { disposer(); } catch (error) { /* disposer failed */ }
     }
     try {
-      document.querySelectorAll('[data-ccf-lp-injected="1"], style[data-ccf-lp-style]').forEach(el => el.remove());
+      buttonState.scheduled = false;
+      document.querySelectorAll([
+        `#${STYLE_ID}`,
+        EXPORT_BTN_SELECTOR,
+        DELETE_TAB_BTN_SELECTOR,
+        "#ccf-delete-toast",
+        '[data-ccf-lp-injected="1"]',
+        'style[data-ccf-lp-style]'
+      ].join(", ")).forEach(el => el.remove());
     } catch (error) { /* dom sweep failed */ }
     try {
       if (window.__CCF_LOG_PACKAGE_DEBUG__ && window.__CCF_LOG_PACKAGE_DEBUG__.__owner === ccfLpSignal) {
@@ -1328,6 +1336,7 @@
 
     const style = document.createElement("style");
     style.id = STYLE_ID;
+    style.setAttribute("data-ccf-lp-style", "1");
     style.textContent = `
       .ccf-log-package-menu-item {
         position: relative;
@@ -1387,6 +1396,7 @@
     buttonState.scheduled = true;
     requestAnimationFrame(() => {
       buttonState.scheduled = false;
+      if (!ccfLpActive) return;
       ensureExportButtons();
       ensureCustomDeleteButtons(); // ← 새로 추가된 부분
     });
@@ -1460,14 +1470,17 @@
         }
 
         customDeleteBtn.addEventListener("click", async (event) => {
+          if (!ccfLpActive) return;
           event.preventDefault();
           event.stopPropagation();
 
           await dismissTransientMenusAndOverlays();
+          if (!ccfLpActive) return;
           await new Promise((resolve) => setTimeout(resolve, 120));
+          if (!ccfLpActive) return;
 
           await handleDeleteCurrentTabLogs();
-        });
+        }, ccfLpWithSignal());
 
         nativeDeleteBtn.insertAdjacentElement("afterend", customDeleteBtn);
       }
@@ -1897,6 +1910,7 @@
     syncExportButtonState(button);
 
     button.addEventListener("click", (event) => {
+      if (!ccfLpActive) return;
       event.preventDefault();
       event.stopPropagation();
       // 사용자 제스처 컨텍스트가 살아있는 동안 즉시 새 탭을 연다.
@@ -1904,7 +1918,7 @@
       const editorWin = openCapybaraLogEditorTab();
       if (!editorWin) return;
       void handleCapybaraLogLaunch(button, editorWin);
-    });
+    }, ccfLpWithSignal());
 
     return button;
   }

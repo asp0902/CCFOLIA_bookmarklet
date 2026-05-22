@@ -26,6 +26,10 @@ function ccfspTeardown() {
     try { disposer(); } catch (error) { /* disposer failed */ }
   }
   try {
+    closePopup();
+    document.getElementById('ccfolia-standing-popup')?.remove();
+    document.getElementById('ccfolia-standing-preview')?.remove();
+    document.getElementById('ccfolia-standing-toast')?.remove();
     document.querySelectorAll('link[data-capybara-toolkit-style*="standing-picker"]').forEach(el => el.remove());
     document.body?.classList.remove('ccsp-scanning');
     document.querySelectorAll('.ccsp-preserve').forEach(el => el.classList.remove('ccsp-preserve'));
@@ -583,6 +587,7 @@ function insertLabel(item) {
 
 
 async function handleKeydown(event) {
+  if (!ccfspActive) return;
   if (event.isComposing) return;
 
   if (state.popupEl) {
@@ -610,6 +615,7 @@ async function handleKeydown(event) {
   try {
     await delayTimer(0);
     const { standings } = await getStandings();
+    if (!ccfspActive) return;
     if (standings?.length) {
       showPopup(standings);
     }

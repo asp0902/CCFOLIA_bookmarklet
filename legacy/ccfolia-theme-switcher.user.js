@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.3
+// @version      0.0.4
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -108,7 +108,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.2"),
+    version: getUserscriptVersion("0.0.4"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -140,7 +140,40 @@
       try { disposer(); } catch (error) { /* disposer failed */ }
     }
     try {
-      document.querySelectorAll('[data-ccf-theme-injected="1"], style[data-ccf-theme-style]').forEach(el => el.remove());
+      document.querySelectorAll([
+        `#${STYLE_ID}`,
+        `#${VARS_STYLE_ID}`,
+        `#${TOGGLE_ID}`,
+        `#${PANEL_ID}`,
+        `#${CHARACTER_COLOR_POPOVER_ID}`,
+        `.${CHARACTER_COLOR_WRAPPER_CLASS}`,
+        '[data-ccf-theme-injected="1"]',
+        'style[data-ccf-theme-style]'
+      ].join(", ")).forEach(el => el.remove());
+      document.documentElement?.removeAttribute(ROOT_READY_ATTR);
+      document.documentElement?.removeAttribute("data-ccf-theme-active");
+      document.documentElement?.removeAttribute("data-ccf-theme-mode");
+      document.documentElement?.removeAttribute(DEFAULT_MODE_ATTR);
+      document.body?.removeAttribute(UI_READY_ATTR);
+      document.querySelectorAll([
+        `[${ANCHOR_ATTR}]`,
+        `[${APPBAR_ATTR}]`,
+        `[${CHARACTER_COLOR_INPUT_BOUND_ATTR}]`,
+        `[${CHARACTER_COLOR_CONTAINER_BOUND_ATTR}]`,
+        `[${CHARACTER_COLOR_RENDER_STATE_ATTR}]`,
+        `[${CHARACTER_COLOR_MODE_BOUND_ATTR}]`,
+        `[${CHARACTER_COLOR_PROXY_BOUND_ATTR}]`,
+        `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`
+      ].join(", ")).forEach((el) => {
+        el.removeAttribute(ANCHOR_ATTR);
+        el.removeAttribute(APPBAR_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_INPUT_BOUND_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_CONTAINER_BOUND_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_RENDER_STATE_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_MODE_BOUND_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_PROXY_BOUND_ATTR);
+        el.removeAttribute(CHARACTER_COLOR_NATIVE_INPUT_ATTR);
+      });
     } catch (error) { /* dom sweep failed */ }
     try {
       if (window.__CCF_THEME_SWITCHER_DEBUG__ && window.__CCF_THEME_SWITCHER_DEBUG__.__owner === ccfThemeSignal) {
@@ -260,6 +293,7 @@
 
   function start() {
     const tryInit = () => {
+      if (!ccfThemeActive) return false;
       if (!document.documentElement) return false;
 
       if (document.documentElement.getAttribute(ROOT_READY_ATTR) !== "1") {
@@ -1328,6 +1362,7 @@
   }
 
   function ensureUi() {
+    if (!ccfThemeActive) return;
     if (!document.body) return;
 
     if (!document.getElementById(TOGGLE_ID)) {
@@ -1354,7 +1389,10 @@
         </svg>
       `;
       document.body.appendChild(toggle);
-      toggle.addEventListener("click", () => togglePanel());
+      toggle.addEventListener("click", () => {
+        if (!ccfThemeActive) return;
+        togglePanel();
+      }, ccfThemeWithSignal());
     }
 
     mountToggle();
@@ -1609,6 +1647,7 @@
     input.setAttribute(CHARACTER_COLOR_INPUT_BOUND_ATTR, "1");
 
     const refresh = () => {
+      if (!ccfThemeActive) return;
       pendingCharacterColorSelections.delete(container);
       exitCharacterColorDeleteMode(container);
       syncCharacterColorModeUi(container, input);
@@ -1620,8 +1659,8 @@
       }
     };
 
-    input.addEventListener("input", refresh);
-    input.addEventListener("change", refresh);
+    input.addEventListener("input", refresh, ccfThemeWithSignal());
+    input.addEventListener("change", refresh, ccfThemeWithSignal());
   }
 
   function bindCharacterColorContainer(container) {
@@ -1631,12 +1670,14 @@
     container.setAttribute(CHARACTER_COLOR_CONTAINER_BOUND_ATTR, "1");
 
     const refreshFromContainer = (event) => {
+      if (!ccfThemeActive) return;
       const clickedColor = resolveNativeCharacterColorFromTarget(event?.target, container);
       if (clickedColor) {
         pendingCharacterColorSelections.set(container, clickedColor);
       }
 
       const runRefresh = () => {
+        if (!ccfThemeActive) return;
         const actions = container.querySelector(`.${CHARACTER_COLOR_ACTIONS_CLASS}`);
         const palette = container.querySelector(`.${CHARACTER_COLOR_WRAPPER_CLASS}`);
         const storedColors = readStoredCharacterColors();
@@ -1652,8 +1693,8 @@
       window.setTimeout(runRefresh, 120);
     };
 
-    container.addEventListener("click", refreshFromContainer, true);
-    container.addEventListener("pointerup", refreshFromContainer, true);
+    container.addEventListener("click", refreshFromContainer, ccfThemeWithSignal(true));
+    container.addEventListener("pointerup", refreshFromContainer, ccfThemeWithSignal(true));
   }
 
   function ensureCharacterColorPaletteInContainer(container, storedColors = readStoredCharacterColors()) {
@@ -2935,6 +2976,7 @@
 
     ensureUiFrame = window.requestAnimationFrame(() => {
       ensureUiFrame = 0;
+      if (!ccfThemeActive) return;
       if (ensureUiInProgress) return;
 
       ensureUiInProgress = true;
@@ -3133,6 +3175,7 @@
 
     themeFieldPreviewFrame = window.requestAnimationFrame(() => {
       themeFieldPreviewFrame = 0;
+      if (!ccfThemeActive) return;
       const preview = pendingThemeFieldPreview;
       pendingThemeFieldPreview = null;
       if (!preview) return;
@@ -3277,6 +3320,7 @@
       }
       queuePanelPositionUpdate();
       window.setTimeout(() => {
+        if (!ccfThemeActive) return;
         if (isPanelOpen()) {
           queuePanelPositionUpdate();
         }
@@ -3494,6 +3538,7 @@
 
     defaultModeRefreshFrame = window.requestAnimationFrame(() => {
       defaultModeRefreshFrame = 0;
+      if (!ccfThemeActive) return;
       if (settings.mode !== MODE_DEFAULT) return;
 
       const liveTheme = ensureDefaultThemeSnapshot(true);
@@ -3507,6 +3552,7 @@
     if (panelLayoutFrame) return;
     panelLayoutFrame = window.requestAnimationFrame(() => {
       panelLayoutFrame = 0;
+      if (!ccfThemeActive) return;
       updatePanelPosition();
     });
   }
@@ -3630,6 +3676,7 @@
     dialog.setAttribute("aria-hidden", "false");
 
     window.setTimeout(() => {
+      if (!ccfThemeActive) return;
       if (!isSaveThemeDialogOpen()) return;
       input.focus({ preventScroll: true });
       input.select();
@@ -4538,6 +4585,7 @@
 
     if (message) {
       statusTimer = window.setTimeout(() => {
+        if (!ccfThemeActive) return;
         if (!(status instanceof HTMLElement)) return;
         status.textContent = "";
         status.dataset.state = "";

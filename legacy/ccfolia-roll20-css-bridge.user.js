@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.0
+// @version      0.3.1
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -16,7 +16,17 @@
   "use strict";
 
   const SCRIPT_READY_KEY = "__ccr20Roll20BridgeReady__";
-  if (window[SCRIPT_READY_KEY]) return;
+  if (window[SCRIPT_READY_KEY]) {
+    const existingDebugApi = window.__CCF_ROLL20_BRIDGE_DEBUG__;
+    let existingBridgeActive = false;
+    try {
+      existingBridgeActive = !!existingDebugApi?.isActive?.();
+    } catch (error) {
+      existingBridgeActive = true;
+    }
+    if (existingBridgeActive) return;
+    try { delete window[SCRIPT_READY_KEY]; } catch (error) { window[SCRIPT_READY_KEY] = false; }
+  }
   window[SCRIPT_READY_KEY] = true;
 
   const CCF_RENDERED_ATTR = "data-ccr20-rendered";
@@ -62,7 +72,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.2.0"),
+    version: getUserscriptVersion("0.3.1"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -252,13 +262,35 @@
   function ccr20Teardown() {
     if (!ccr20Active) return false;
     ccr20Active = false;
+    if (ensureUiFrame) {
+      try { window.cancelAnimationFrame(ensureUiFrame); } catch (error) { /* raf cleanup failed */ }
+      ensureUiFrame = 0;
+    }
     try { ccr20Abort.abort(); } catch (error) { /* abort failed */ }
     while (ccr20Disposers.length) {
       const disposer = ccr20Disposers.pop();
       try { disposer(); } catch (error) { /* disposer failed */ }
     }
     try {
-      document.querySelectorAll('style[data-ccr20-style], [data-ccr20-injected="1"]').forEach(el => el.remove());
+      document.querySelectorAll([
+        `#${STYLE_ID}`,
+        `#${BACKDROP_ID}`,
+        `#${MODAL_ID}`,
+        `#${FLOATING_ID}`,
+        OPEN_BTN_SELECTOR,
+        'style[data-ccr20-style]',
+        '[data-ccr20-injected="1"]',
+        `[${CHAT_PROMPT_TOGGLE_ITEM_ATTR}="1"]`
+      ].join(", ")).forEach(el => el.remove());
+      document.documentElement?.removeAttribute("data-ccr20-hide-chat-prompt");
+      document.querySelectorAll(`[${CHAT_PROMPT_PANEL_ATTR}="1"]`).forEach((el) => {
+        el.removeAttribute(CHAT_PROMPT_PANEL_ATTR);
+      });
+      document.querySelectorAll(`[${BOUND_SEND_ATTR}], [${BOUND_ENTER_ATTR}], [${BOUND_INPUT_ATTR}]`).forEach((el) => {
+        el.removeAttribute(BOUND_SEND_ATTR);
+        el.removeAttribute(BOUND_ENTER_ATTR);
+        el.removeAttribute(BOUND_INPUT_ATTR);
+      });
       if (document.body) delete document.body.dataset.ccr20Ready;
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -266,6 +298,7 @@
         delete window.__CCF_ROLL20_BRIDGE_DEBUG__;
       }
     } catch (error) { /* debug api cleanup failed */ }
+    try { delete window[SCRIPT_READY_KEY]; } catch (error) { window[SCRIPT_READY_KEY] = false; }
     return true;
   }
 
@@ -319,6 +352,7 @@
   }
 
   function init() {
+    if (!ccr20Active) return;
     hideChatPromptPanel = loadChatPromptPanelPreference();
     injectStyles();
     applyChatPromptPanelHiddenState();
@@ -405,6 +439,7 @@
 
     const style = document.createElement("style");
     style.id = STYLE_ID;
+    style.setAttribute("data-ccr20-style", "1");
     style.textContent = `
       .ccr20-open-btn {
         width: 32px;
@@ -1100,6 +1135,7 @@
   }
 
   function ensureUi() {
+    if (!ccr20Active) return;
     if (window.location.pathname === '/home') {
       const floating = document.getElementById(FLOATING_ID);
       if (floating) floating.hidden = true;
@@ -1162,6 +1198,7 @@
     if (ensureUiFrame) return;
     ensureUiFrame = window.requestAnimationFrame(() => {
       ensureUiFrame = 0;
+      if (!ccr20Active) return;
       ensureUi();
     });
   }
@@ -1214,17 +1251,19 @@
     }
 
     item.addEventListener("click", (event) => {
+      if (!ccr20Active) return;
       event.preventDefault();
       event.stopPropagation();
       setChatPromptPanelHidden(!hideChatPromptPanel);
-    });
+    }, ccr20WithSignal());
 
     item.addEventListener("keydown", (event) => {
+      if (!ccr20Active) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       event.stopPropagation();
       setChatPromptPanelHidden(!hideChatPromptPanel);
-    });
+    }, ccr20WithSignal());
 
     return item;
   }
@@ -1389,15 +1428,17 @@
     btn.type = "button";
     btn.className = "MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall ccr20-open-btn";
     btn.setAttribute(OPEN_BTN_ATTR, "1");
+    btn.setAttribute("data-ccr20-injected", "1");
     btn.setAttribute("aria-label", ROLL20_BUTTON_TITLE);
     btn.title = ROLL20_BUTTON_TITLE;
     btn.innerHTML = createRoll20LogoMarkup();
     btn.style.backgroundImage = "none";
     btn.addEventListener("click", (event) => {
+      if (!ccr20Active) return;
       event.preventDefault();
       event.stopPropagation();
       onClick();
-    });
+    }, ccr20WithSignal());
     return btn;
   }
 
@@ -1408,17 +1449,19 @@
       btn.id = FLOATING_ID;
       btn.type = "button";
       btn.setAttribute(SAFE_UI_ATTR, "1");
+      btn.setAttribute("data-ccr20-injected", "1");
       btn.setAttribute("aria-label", ROLL20_BUTTON_TITLE);
       btn.title = ROLL20_BUTTON_TITLE;
       btn.innerHTML = createRoll20LogoMarkup();
       btn.style.backgroundImage = "none";
       btn.hidden = true;
       btn.addEventListener("click", () => {
+        if (!ccr20Active) return;
         const target = getCurrentTargetEditor();
         if (target) {
           openEditorForNode(target);
         }
-      });
+      }, ccr20WithSignal());
       document.body.appendChild(btn);
     }
 
@@ -1436,38 +1479,44 @@
     backdrop.id = BACKDROP_ID;
     backdrop.hidden = true;
     backdrop.setAttribute(SAFE_UI_ATTR, "1");
-    backdrop.addEventListener("click", closeModal);
+    backdrop.setAttribute("data-ccr20-injected", "1");
+    backdrop.addEventListener("click", closeModal, ccr20WithSignal());
 
     modal = document.createElement("div");
     modal.id = MODAL_ID;
     modal.hidden = true;
     modal.setAttribute(SAFE_UI_ATTR, "1");
+    modal.setAttribute("data-ccr20-injected", "1");
     modal.innerHTML = getModalMarkup();
 
     document.body.appendChild(backdrop);
     document.body.appendChild(modal);
 
-    modal.querySelector(`#${CLOSE_ID}`)?.addEventListener("click", closeModal);
+    modal.querySelector(`#${CLOSE_ID}`)?.addEventListener("click", closeModal, ccr20WithSignal());
     modal.querySelector(`#${CONVERT_ID}`)?.addEventListener("click", () => {
+      if (!ccr20Active) return;
       convertRoll20Draft({ silent: false });
-    });
+    }, ccr20WithSignal());
     modal.querySelector(`#${APPLY_ID}`)?.addEventListener("click", () => {
+      if (!ccr20Active) return;
       applyModalConversion();
-    });
+    }, ccr20WithSignal());
 
     const source = getModalSourceEditor();
     source?.addEventListener("input", () => {
+      if (!ccr20Active) return;
       modalDraftRoll20Text = getEditorText(source);
       if (modalDraftRoll20ConvertedSource !== modalDraftRoll20Text) {
         invalidateRoll20ConversionPreview();
       }
-    });
+    }, ccr20WithSignal());
     source?.addEventListener("keydown", (event) => {
+      if (!ccr20Active) return;
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         convertRoll20Draft({ silent: false });
       }
-    });
+    }, ccr20WithSignal());
 
     return modal;
   }
@@ -1513,6 +1562,7 @@
   }
 
   function openEditorForNode(node) {
+    if (!ccr20Active) return false;
     const origin = node instanceof Element ? node : null;
     const composer = findClosestComposerBar(origin);
     const editor = findEditorFromComposer(composer) || findEditorFromNode(node) || getCurrentTargetEditor();
@@ -1529,6 +1579,7 @@
   }
 
   function openModal() {
+    if (!ccr20Active) return;
     const backdrop = document.getElementById(BACKDROP_ID);
     const modal = ensureModal();
     if (!backdrop || !modal) return;
@@ -1676,6 +1727,7 @@
       if (btn.getAttribute(BOUND_SEND_ATTR) === "1") return;
       btn.setAttribute(BOUND_SEND_ATTR, "1");
       btn.addEventListener("click", (event) => {
+        if (!ccr20Active) return;
         const composer = findClosestComposerBar(btn);
         const editor = findEditorFromComposer(composer) || findEditorFromNode(btn);
         if (editor && preparePayloadForSend(editor) === false) {
@@ -1683,7 +1735,7 @@
           event.stopPropagation();
           event.stopImmediatePropagation?.();
         }
-      }, true);
+      }, ccr20WithSignal(true));
     });
   }
 
@@ -1695,6 +1747,7 @@
 
       normalized.setAttribute(BOUND_ENTER_ATTR, "1");
       normalized.addEventListener("keydown", (event) => {
+        if (!ccr20Active) return;
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
@@ -1704,7 +1757,7 @@
           event.stopPropagation();
           event.stopImmediatePropagation?.();
         }
-      }, true);
+      }, ccr20WithSignal(true));
     });
   }
 
@@ -1716,6 +1769,7 @@
 
       normalized.setAttribute(BOUND_INPUT_ATTR, "1");
       normalized.addEventListener("input", () => {
+        if (!ccr20Active) return;
         if (suppressEditorSyncDepth > 0) return;
 
         const state = EDITOR_STATE.get(normalized);
@@ -1728,7 +1782,7 @@
         state.runs = [];
         state.alignRuns = [];
         state.roll20Source = "";
-      });
+      }, ccr20WithSignal());
     });
   }
 
@@ -1823,6 +1877,7 @@
 
     checkpoints.forEach((delay, index) => {
       setTimeout(() => {
+        if (!ccr20Active) return;
         if (PENDING_SEND_RESTORE.get(editor) !== token) return;
 
         const current = getEditorText(editor);
