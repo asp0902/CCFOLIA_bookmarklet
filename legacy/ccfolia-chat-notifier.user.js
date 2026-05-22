@@ -339,6 +339,7 @@
   const ccfBgmNativeMediaListeners = new WeakSet();
   const ccfBgmCreationTrackedMedia = new WeakSet();
   let ccfBgmProgressRoot = null;
+  let ccfBgmProgressBreak = null;
   let ccfBgmProgressTimer = 0;
   let ccfBgmDomEnhanceTimer = 0;
   let ccfBgmNativeTooltipEl = null;
@@ -4832,9 +4833,26 @@
     return null;
   }
 
+  function ensureCcfBgmProgressBreak() {
+    if (!(ccfBgmProgressBreak instanceof HTMLElement)) {
+      ccfBgmProgressBreak = document.createElement("div");
+      ccfBgmProgressBreak.className = "ccf-bgm-progress-break";
+      ccfBgmProgressBreak.setAttribute("aria-hidden", "true");
+    }
+    return ccfBgmProgressBreak;
+  }
+
   function isCcfBgmProgressRootMountedAfter(mountTarget, progressRoot) {
     if (!(mountTarget instanceof HTMLElement) || !(progressRoot instanceof HTMLElement)) {
       return false;
+    }
+
+    const breakEl = ccfBgmProgressBreak;
+    if (breakEl instanceof HTMLElement) {
+      return progressRoot.parentElement === mountTarget.parentElement
+        && breakEl.parentElement === mountTarget.parentElement
+        && breakEl.previousElementSibling === mountTarget
+        && progressRoot.previousElementSibling === breakEl;
     }
 
     return progressRoot.parentElement === mountTarget.parentElement
@@ -4846,14 +4864,18 @@
       return;
     }
 
+    const breakEl = ensureCcfBgmProgressBreak();
+
     if (mountTarget instanceof HTMLElement && mountTarget !== panel && mountTarget.parentElement) {
       markCcfBgmProgressHost(mountTarget.parentElement);
-      mountTarget.insertAdjacentElement("afterend", progressRoot);
+      mountTarget.insertAdjacentElement("afterend", breakEl);
+      breakEl.insertAdjacentElement("afterend", progressRoot);
       syncCcfBgmProgressWidth(mountTarget, progressRoot);
       return;
     }
 
     markCcfBgmProgressHost(panel);
+    panel.appendChild(breakEl);
     panel.appendChild(progressRoot);
     syncCcfBgmProgressWidth(panel, progressRoot);
   }
@@ -6782,9 +6804,15 @@
         column-gap: 4px !important;
       }
 
-      [data-ccf-bgm-progress-host="1"][data-ccf-bgm-progress-flow="row"] > .ccf-bgm-progress-root {
+      .ccf-bgm-progress-break {
         flex: 0 0 100% !important;
         width: 100% !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        pointer-events: none !important;
       }
 
       [data-ccf-bgm-button-row="1"] {
@@ -6796,9 +6824,9 @@
         display: flex !important;
         justify-content: flex-start !important;
         flex: 0 0 auto !important;
-        align-self: stretch !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        width: var(--ccf-bgm-progress-width, auto) !important;
+        max-width: calc(100% - var(--ccf-bgm-progress-left, 0px)) !important;
+        margin-left: var(--ccf-bgm-progress-left, 0px) !important;
         height: auto !important;
         max-height: none !important;
         min-width: 0 !important;
@@ -6818,9 +6846,9 @@
         align-items: center !important;
         justify-content: flex-start !important;
         gap: 0 !important;
-        margin-left: var(--ccf-bgm-progress-left, 0px) !important;
-        width: var(--ccf-bgm-progress-width, 100%) !important;
-        max-width: calc(100% - var(--ccf-bgm-progress-left, 0px)) !important;
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
         min-width: 0 !important;
         height: auto !important;
         padding: 0 !important;
