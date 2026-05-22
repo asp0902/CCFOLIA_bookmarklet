@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.1
+// @version      0.3.2
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -72,7 +72,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.1"),
+    version: getUserscriptVersion("0.3.2"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -442,24 +442,32 @@
     style.setAttribute("data-ccr20-style", "1");
     style.textContent = `
       .ccr20-open-btn {
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        min-height: 32px;
-        padding: 0;
-        border: 0;
+        box-sizing: border-box !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 0 !important;
+        border: 0 !important;
         border-radius: 8px;
         background-color: transparent !important;
         color: #111111;
-        margin: 0 2px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        align-self: center !important;
+        flex: 0 0 32px !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        vertical-align: middle !important;
         cursor: pointer;
-        box-shadow: none;
+        box-shadow: none !important;
         transition: background-color 0.14s ease, transform 0.14s ease;
-        overflow: visible;
+        overflow: hidden !important;
+        contain: size layout paint;
       }
 
       .ccr20-open-btn:hover {
@@ -499,12 +507,20 @@
       }
 
       .ccr20-logo {
-        display: block;
-        width: 22px;
-        height: 22px;
+        box-sizing: border-box !important;
+        display: block !important;
+        width: 22px !important;
+        height: 22px !important;
+        min-width: 22px !important;
+        max-width: 22px !important;
+        min-height: 22px !important;
+        max-height: 22px !important;
+        aspect-ratio: 1 / 1;
+        margin: 0 !important;
+        padding: 0 !important;
         object-fit: contain;
         pointer-events: none;
-        flex-shrink: 0;
+        flex: 0 0 22px !important;
       }
 
       #${FLOATING_ID}[hidden] {
@@ -978,7 +994,7 @@
 
   function createRoll20LogoMarkup() {
     const src = getRoll20ButtonLogoSrc();
-    return `<img class="ccr20-logo" data-ccr20-logo="1" src="${src}" alt="" aria-hidden="true">`;
+    return `<img class="ccr20-logo" data-ccr20-logo="1" src="${src}" width="22" height="22" alt="" aria-hidden="true" decoding="async" draggable="false">`;
   }
 
   function getRoll20ButtonLogoSrc() {
@@ -1369,7 +1385,7 @@
 
       const btn = createOpenButton(() => {
         openEditorForNode(anchor);
-      });
+      }, diceBtn || formatSyncBtn);
 
       if (formatSyncBtn) {
         formatSyncBtn.insertAdjacentElement("beforebegin", btn);
@@ -1423,10 +1439,10 @@
     return hasUrlHint && (hasBgmHint || looksLikeUrlInput);
   }
 
-  function createOpenButton(onClick) {
+  function createOpenButton(onClick, metricSource = null) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall ccr20-open-btn";
+    btn.className = getOpenButtonClassName(metricSource);
     btn.setAttribute(OPEN_BTN_ATTR, "1");
     btn.setAttribute("data-ccr20-injected", "1");
     btn.setAttribute("aria-label", ROLL20_BUTTON_TITLE);
@@ -1440,6 +1456,14 @@
       onClick();
     }, ccr20WithSignal());
     return btn;
+  }
+
+  function getOpenButtonClassName(metricSource) {
+    const inherited = metricSource instanceof HTMLElement
+      ? String(metricSource.className || "").trim()
+      : "";
+    const base = inherited || "MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall";
+    return `${base} ccr20-open-btn`.replace(/\s+/g, " ").trim();
   }
 
   function ensureFloatingButton() {

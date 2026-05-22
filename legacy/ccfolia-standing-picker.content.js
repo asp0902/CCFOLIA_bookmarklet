@@ -586,9 +586,40 @@ function insertLabel(item) {
 }
 
 
+function findCharacterSelectButton() {
+  const labelRe = /(캐릭터|character|キャラクター|角色)/i;
+  const buttons = Array.from(document.querySelectorAll('button'))
+    .filter(btn => !btn.disabled && btn.offsetParent !== null);
+
+  for (const btn of buttons) {
+    if (btn.querySelector('svg[data-testid="FaceIcon"]') && labelRe.test(btn.getAttribute('aria-label') || '')) {
+      return btn;
+    }
+  }
+  for (const btn of buttons) {
+    if (btn.querySelector('svg[data-testid="FaceIcon"]')) return btn;
+  }
+  return null;
+}
+
 async function handleKeydown(event) {
   if (!ccfspActive) return;
   if (event.isComposing) return;
+
+  if (event.key === '`') {
+    const ae = document.activeElement;
+    const chatEl = getChatInput();
+    const inOtherEditable = ae && ae !== chatEl &&
+      (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+    if (!inOtherEditable) {
+      const btn = findCharacterSelectButton();
+      if (btn) {
+        event.preventDefault();
+        btn.click();
+      }
+    }
+    return;
+  }
 
   if (state.popupEl) {
     if (event.key === 'Escape') { closePopup(); return; }
