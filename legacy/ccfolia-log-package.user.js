@@ -1730,6 +1730,8 @@
       let deletedCount = 0;
       let emptyCount = 0;
       let lastScrollTop = -1;
+      let maxItemRootCount = 0;
+      let diagSample = null;
 
       const toastId = "ccf-delete-toast";
       toast = document.getElementById(toastId);
@@ -1764,6 +1766,8 @@
           .filter((root) => root instanceof HTMLElement)
           .filter((root) => isVisible(root));
 
+        if (itemRoots.length > maxItemRootCount) maxItemRootCount = itemRoots.length;
+
         let foundAnyDeleteButtonInThisLoop = false;
         let deletedAnyInThisLoop = false;
 
@@ -1784,6 +1788,14 @@
           await waitForAnimationFrame();
 
           const deleteButton = findDeleteButtonInMessageRoot(root);
+          if (!diagSample) {
+            diagSample = {
+              buttonCount: root.querySelectorAll("button").length,
+              deleteButtonText: deleteButton instanceof HTMLElement
+                ? (getButtonSearchText(deleteButton).slice(0, 40) || "(빈 텍스트)")
+                : "(못 찾음)"
+            };
+          }
           if (!(deleteButton instanceof HTMLElement)) continue;
 
           foundAnyDeleteButtonInThisLoop = true;
@@ -1844,7 +1856,10 @@
         toast = null;
       }
 
-      alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.`);
+      const diagText = diagSample
+        ? `\n[진단] 발견 메시지 ${maxItemRootCount}개 / 첫 항목의 button ${diagSample.buttonCount}개 / 삭제버튼: ${diagSample.deleteButtonText}`
+        : `\n[진단] 발견 메시지 ${maxItemRootCount}개 — 메시지 항목을 찾지 못했습니다.`;
+      alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.${diagText}`);
     } catch (error) {
       console.error("[CCF LOG PACKAGE] delete failed", error);
       alert(error?.message || "로그 삭제 중 오류가 발생했습니다.");
