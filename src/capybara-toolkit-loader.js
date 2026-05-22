@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.6";
-  const BUILD_ID = "2026-05-23-roll20-icon-absolute-1";
+  const VERSION = "0.1.7";
+  const BUILD_ID = "2026-05-23-theme-toggle-fixed-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_KEYS = Object.freeze([
     "__CCF_CHAT_NOTIFIER_DEBUG__",

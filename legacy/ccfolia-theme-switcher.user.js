@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.4
+// @version      0.0.5
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,6 +21,8 @@
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
   const PANEL_POSITION_KEY = "ccf-theme-switcher-panel-position-v1";
+  const TOGGLE_SIZE = 24;
+  const TOGGLE_ANCHOR_INSET = 8;
   const CHARACTER_COLOR_STORAGE_KEY = "ccf-character-color-palette-v1";
   const STATUS_ID = "ccf-theme-switcher-status";
   const MODE_SELECT_ID = "ccf-theme-switcher-mode";
@@ -108,7 +110,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.4"),
+    version: getUserscriptVersion("0.0.5"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -135,6 +137,10 @@
     if (!ccfThemeActive) return false;
     ccfThemeActive = false;
     try { ccfThemeAbort.abort(); } catch (error) { /* abort failed */ }
+    if (toggleLayoutFrame) {
+      try { window.cancelAnimationFrame(toggleLayoutFrame); } catch (error) { /* raf cleanup failed */ }
+      toggleLayoutFrame = 0;
+    }
     while (ccfThemeDisposers.length) {
       const disposer = ccfThemeDisposers.pop();
       try { disposer(); } catch (error) { /* disposer failed */ }
@@ -158,6 +164,7 @@
       document.querySelectorAll([
         `[${ANCHOR_ATTR}]`,
         `[${APPBAR_ATTR}]`,
+        '[style*="--ccf-theme-anchor-height"]',
         `[${CHARACTER_COLOR_INPUT_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_CONTAINER_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_RENDER_STATE_ATTR}]`,
@@ -165,6 +172,9 @@
         `[${CHARACTER_COLOR_PROXY_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`
       ].join(", ")).forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.style.removeProperty("--ccf-theme-anchor-height");
+        }
         el.removeAttribute(ANCHOR_ATTR);
         el.removeAttribute(APPBAR_ATTR);
         el.removeAttribute(CHARACTER_COLOR_INPUT_BOUND_ATTR);
@@ -203,6 +213,7 @@
   let ensureUiInProgress = false;
   let statusTimer = 0;
   let panelLayoutFrame = 0;
+  let toggleLayoutFrame = 0;
   let defaultModeRefreshFrame = 0;
   let themeFieldPreviewFrame = 0;
   let pendingThemeFieldPreview = null;
@@ -642,43 +653,19 @@
         }
 
         [${ANCHOR_ATTR}="1"] {
-          position: relative;
-          display: flex !important;
-          align-items: center;
           max-width: 100%;
           min-width: 0;
-          height: var(--ccf-theme-anchor-height, auto);
-          min-height: var(--ccf-theme-anchor-height, 0px);
-          max-height: var(--ccf-theme-anchor-height, none);
           box-sizing: border-box;
-          overflow: hidden;
-        }
-
-        [${ANCHOR_ATTR}="1"] > :first-child {
-          display: block;
-          min-width: 0;
-          max-width: 100%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          padding-right: 34px;
-          box-sizing: border-box;
-          line-height: var(--ccf-theme-anchor-height, inherit);
-        }
-
-        [${ANCHOR_ATTR}="1"] .MuiTypography-root,
-        [${ANCHOR_ATTR}="1"] .MuiTypography-caption,
-        [${ANCHOR_ATTR}="1"] a {
-          line-height: var(--ccf-theme-anchor-height, inherit) !important;
         }
 
         #${TOGGLE_ID} {
-          position: absolute;
-          z-index: 1;
+          position: fixed;
+          z-index: 2147482600;
           width: 24px;
           height: 24px;
-          top: 50%;
-          right: 8px;
-          transform: translateY(-50%);
+          left: 0;
+          top: 0;
+          transform: none;
           border: 0;
           border-radius: 8px;
           background: transparent;
@@ -2905,6 +2892,7 @@
     };
 
     const handleScroll = () => {
+      queueTogglePositionUpdate();
       if (isPanelOpen()) {
         queuePanelPositionUpdate();
       }
@@ -3468,16 +3456,19 @@
     if (anchor) {
       document.querySelectorAll(`[${ANCHOR_ATTR}="1"]`).forEach((element) => {
         if (element !== anchor) {
+          if (element instanceof HTMLElement) {
+            element.style.removeProperty("--ccf-theme-anchor-height");
+          }
           element.removeAttribute(ANCHOR_ATTR);
         }
       });
-      ensureAnchorBaselineHeight(anchor);
       anchor.setAttribute(ANCHOR_ATTR, "1");
       anchor.setAttribute(APPBAR_ATTR, "1");
-      if (toggle.parentElement !== anchor) {
-        anchor.appendChild(toggle);
+      if (toggle.parentElement !== document.body) {
+        document.body.appendChild(toggle);
       }
       toggle.hidden = false;
+      positionToggleAtAnchor(toggle, anchor);
     } else {
       if (toggle.parentElement !== document.body) {
         document.body.appendChild(toggle);
@@ -3497,6 +3488,36 @@
     if (diceToolbar) {
       diceToolbar.setAttribute(APPBAR_ATTR, "1");
     }
+  }
+
+  function updateTogglePosition() {
+    const toggle = getToggle();
+    if (!(toggle instanceof HTMLElement) || toggle.hidden) return;
+    const anchor = resolveDicebotAnchor(toggle);
+    if (!anchor) {
+      toggle.hidden = true;
+      if (isPanelOpen()) {
+        setPanelOpen(false);
+      }
+      return;
+    }
+    positionToggleAtAnchor(toggle, anchor);
+  }
+
+  function positionToggleAtAnchor(toggle, anchor) {
+    if (!(toggle instanceof HTMLElement) || !(anchor instanceof HTMLElement)) return false;
+
+    const rect = anchor.getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.height <= 0) return false;
+
+    const maxLeft = Math.max(0, window.innerWidth - TOGGLE_SIZE);
+    const maxTop = Math.max(0, window.innerHeight - TOGGLE_SIZE);
+    const left = clamp(rect.right - TOGGLE_SIZE - TOGGLE_ANCHOR_INSET, 0, maxLeft);
+    const top = clamp(rect.top + ((rect.height - TOGGLE_SIZE) / 2), 0, maxTop);
+
+    toggle.style.left = `${Math.round(left)}px`;
+    toggle.style.top = `${Math.round(top)}px`;
+    return true;
   }
 
   function ensureAnchorBaselineHeight(anchor) {
@@ -3554,6 +3575,15 @@
       panelLayoutFrame = 0;
       if (!ccfThemeActive) return;
       updatePanelPosition();
+    });
+  }
+
+  function queueTogglePositionUpdate() {
+    if (toggleLayoutFrame) return;
+    toggleLayoutFrame = window.requestAnimationFrame(() => {
+      toggleLayoutFrame = 0;
+      if (!ccfThemeActive) return;
+      updateTogglePosition();
     });
   }
 
