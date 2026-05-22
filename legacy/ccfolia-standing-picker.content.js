@@ -587,17 +587,21 @@ function insertLabel(item) {
 
 
 function findCharacterSelectButton() {
-  const labelRe = /(캐릭터|character|キャラクター|角色)/i;
+  // "캐릭터 선택" 버튼만 대상 — "내 캐릭터 목록" 버튼은 제외한다.
+  const selectRe = /(선택|select|選択|選擇|选择)/i;
+  const listRe = /(목록|리스트|list|一覧|一览|列表)/i;
   const buttons = Array.from(document.querySelectorAll('button'))
-    .filter(btn => !btn.disabled && btn.offsetParent !== null);
+    .filter(btn => !btn.disabled && btn.offsetParent !== null && btn.querySelector('svg[data-testid="FaceIcon"]'));
 
+  // 1순위: aria-label이 "선택"류이고 "목록"류가 아닌 버튼
   for (const btn of buttons) {
-    if (btn.querySelector('svg[data-testid="FaceIcon"]') && labelRe.test(btn.getAttribute('aria-label') || '')) {
-      return btn;
-    }
+    const label = btn.getAttribute('aria-label') || '';
+    if (selectRe.test(label) && !listRe.test(label)) return btn;
   }
+  // 2순위: "목록"류 라벨도 아니고 MuiIconButton도 아닌 FaceIcon 버튼
   for (const btn of buttons) {
-    if (btn.querySelector('svg[data-testid="FaceIcon"]')) return btn;
+    const label = btn.getAttribute('aria-label') || '';
+    if (!listRe.test(label) && !btn.classList.contains('MuiIconButton-root')) return btn;
   }
   return null;
 }
