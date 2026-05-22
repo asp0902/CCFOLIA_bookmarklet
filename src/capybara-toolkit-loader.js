@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.8";
-  const BUILD_ID = "2026-05-23-theme-toggle-white-1";
+  const VERSION = "0.1.9";
+  const BUILD_ID = "2026-05-23-route-keepalive-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_KEYS = Object.freeze([
     "__CCF_CHAT_NOTIFIER_DEBUG__",
@@ -32,6 +32,7 @@
   const STORE_ROOM_DATA = "roomData";
   const LEGACY_STATE_KEY = "ccf-suite-script-states-v1";
   const LEGACY_REQUEST_EVENT = "ccf-suite:request-register";
+  const ROUTE_CHANGE_EVENT = "capybara-toolkit:route-change";
   const SESSION_ID = `capybara-toolkit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   const FEATURE_CATALOG = Object.freeze([
@@ -105,7 +106,12 @@
     launcherDrag: null,
     suppressNextToggle: false,
     customOrder: [],
-    customOrderLoaded: false
+    customOrderLoaded: false,
+    routeHref: location.href,
+    routeRefreshFrame: 0,
+    watchersBound: false,
+    rootObserver: null,
+    rootObserverHost: null
   };
 
   if (typeof window.__CCF_SUITE_MANAGER_SESSION_ID !== "string") {
@@ -117,6 +123,7 @@
     buildId: BUILD_ID,
     baseUrl: state.baseUrl.href,
     features: FEATURE_CATALOG.map((feature) => ({ ...feature })),
+    ensurePanel,
     openPanel,
     closePanel,
     togglePanel,
@@ -137,6 +144,7 @@
   });
 
   ensurePanel();
+  bindRuntimeWatchers();
   openPanel();
   persistMeta().catch(() => {});
   restoreFeatureStates().catch(reportError);
@@ -196,6 +204,19 @@
 
   function isRoomPage() {
     return /^\/rooms\/[^/?#]+/i.test(location.pathname);
+  }
+
+  function getToolkitHost() {
+    return document.documentElement || document.body;
+  }
+
+  function mountToolkitRoot(root) {
+    const host = getToolkitHost();
+    if (!host || !(root instanceof HTMLElement)) return false;
+    if (root.parentNode !== host) {
+      host.appendChild(root);
+    }
+    return true;
   }
 
   function urlFor(path) {
@@ -352,7 +373,11 @@
   }
 
   function ensurePanel() {
-    if (state.root) return;
+    if (state.root) {
+      mountToolkitRoot(state.root);
+      observeToolkitHost();
+      return;
+    }
 
     const root = document.createElement("div");
     root.id = "capybara-toolkit-root";
@@ -638,12 +663,91 @@
     // --- 드래그 애니메이션 끝 ---
 
     shadow.addEventListener("click", handlePanelClick);
-    document.documentElement.appendChild(root);
     state.root = root;
     state.shadow = shadow;
+    mountToolkitRoot(root);
+    observeToolkitHost();
     restoreLauncherPosition().catch(reportError);
     window.addEventListener("resize", clampCurrentLauncherPosition, { passive: true });
     renderPanel();
+  }
+
+  function bindRuntimeWatchers() {
+    if (state.watchersBound) return;
+    state.watchersBound = true;
+
+    window.addEventListener("popstate", scheduleRouteRefresh, { passive: true });
+    window.addEventListener("hashchange", scheduleRouteRefresh, { passive: true });
+    window.addEventListener("pageshow", scheduleRouteRefresh, { passive: true });
+    window.addEventListener("focus", scheduleRouteRefresh, { passive: true });
+    window.addEventListener(ROUTE_CHANGE_EVENT, scheduleRouteRefresh, { passive: true });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) scheduleRouteRefresh();
+    }, true);
+
+    patchHistoryNavigation("pushState");
+    patchHistoryNavigation("replaceState");
+    observeToolkitHost();
+  }
+
+  function patchHistoryNavigation(method) {
+    const current = history?.[method];
+    if (typeof current !== "function" || current.__capybaraToolkitDispatchPatched) return;
+
+    const original = current.__capybaraToolkitOriginal || current;
+
+    const patched = function capybaraToolkitHistoryPatch(...args) {
+      const result = original.apply(this, args);
+      window.dispatchEvent(new Event(ROUTE_CHANGE_EVENT));
+      return result;
+    };
+    patched.__capybaraToolkitDispatchPatched = true;
+    patched.__capybaraToolkitOriginal = original;
+
+    try {
+      history[method] = patched;
+    } catch (error) {
+      console.warn(`[Capybara Toolkit] history.${method} patch failed`, error);
+    }
+  }
+
+  function observeToolkitHost() {
+    const host = getToolkitHost();
+    if (!host || state.rootObserverHost === host) return;
+
+    state.rootObserver?.disconnect();
+    const observer = new MutationObserver(() => {
+      if (!state.root || !state.root.isConnected) {
+        scheduleRouteRefresh();
+      }
+    });
+    observer.observe(host, { childList: true });
+    state.rootObserver = observer;
+    state.rootObserverHost = host;
+  }
+
+  function scheduleRouteRefresh() {
+    if (state.routeRefreshFrame) return;
+    state.routeRefreshFrame = window.requestAnimationFrame(() => {
+      state.routeRefreshFrame = 0;
+      refreshAfterRouteChange().catch(reportError);
+    });
+  }
+
+  async function refreshAfterRouteChange() {
+    ensurePanel();
+    observeToolkitHost();
+
+    const nextHref = location.href;
+    const routeChanged = nextHref !== state.routeHref;
+    if (routeChanged) {
+      state.routeHref = nextHref;
+      await persistMeta().catch(() => {});
+      await restoreFeatureStates().catch(reportError);
+    }
+
+    await renderPanel();
   }
 
   async function renderPanel() {
