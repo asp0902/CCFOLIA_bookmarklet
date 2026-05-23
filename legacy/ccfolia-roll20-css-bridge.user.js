@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.3
+// @version      0.3.4
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -77,7 +77,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.3"),
+    version: getUserscriptVersion("0.3.4"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1998,7 +1998,7 @@
       envelopePayload.roll20Macro = true;
     }
     const outgoing = needsEnvelope
-      ? outgoingText + encodeEnvelopeToInvisible(envelopePayload)
+      ? encodeEnvelopeToInvisible(envelopePayload) + outgoingText
       : outgoingText;
 
     if (getEditorText(editor) === outgoing) return true;
@@ -2544,7 +2544,7 @@
     const endIndex = fullText.indexOf(INVIS_END, startIndex + INVIS_START.length);
     if (startIndex < 0 || endIndex < 0) return null;
 
-    const visibleText = fullText.slice(0, startIndex);
+    const visibleText = fullText.slice(0, startIndex) + fullText.slice(endIndex + INVIS_END.length);
     const encodedPart = fullText.slice(startIndex + INVIS_START.length, endIndex);
 
     try {

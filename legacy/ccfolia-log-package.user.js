@@ -1782,11 +1782,17 @@
 
           const deleteButton = findDeleteButtonInMessageRoot(root);
           if (!diagSample) {
+            const firstBtn = root.querySelector("button");
+            const firstSvg = firstBtn?.querySelector("svg");
             diagSample = {
               buttonCount: root.querySelectorAll("button").length,
               deleteButtonText: deleteButton instanceof HTMLElement
                 ? (getButtonSearchText(deleteButton).slice(0, 40) || "(빈 텍스트)")
-                : "(못 찾음)"
+                : "(못 찾음)",
+              firstBtnAriaLabel: firstBtn?.getAttribute("aria-label") || "(없음)",
+              firstBtnTitle: firstBtn?.getAttribute("title") || "(없음)",
+              firstBtnTestId: firstSvg?.getAttribute("data-testid") || "(없음)",
+              firstBtnText: (firstBtn?.textContent || "").trim().slice(0, 30) || "(빈 텍스트)"
             };
           }
           if (!(deleteButton instanceof HTMLElement)) continue;
@@ -1850,7 +1856,11 @@
       }
 
       const diagText = diagSample
-        ? `\n[진단] 발견 메시지 ${maxItemRootCount}개 / 첫 항목의 button ${diagSample.buttonCount}개 / 삭제버튼: ${diagSample.deleteButtonText}`
+        ? `\n[진단] 발견 메시지 ${maxItemRootCount}개 / button ${diagSample.buttonCount}개 / 삭제버튼: ${diagSample.deleteButtonText}`
+          + `\n  └ 첫 버튼  aria-label: "${diagSample.firstBtnAriaLabel}"`
+          + `\n             title: "${diagSample.firstBtnTitle}"`
+          + `\n             svg data-testid: "${diagSample.firstBtnTestId}"`
+          + `\n             text: "${diagSample.firstBtnText}"`
         : `\n[진단] 발견 메시지 ${maxItemRootCount}개 — 메시지 항목을 찾지 못했습니다.`;
       alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.${diagText}`);
     } catch (error) {
