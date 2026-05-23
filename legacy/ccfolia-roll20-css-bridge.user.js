@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.4
+// @version      0.3.5
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -77,7 +77,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.4"),
+    version: getUserscriptVersion("0.3.5"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -115,7 +115,6 @@
     "extraCss"
   ]);
 
-  const ROLL20_STYLE_LINK_RE = /\[([^\]]*)\]\((?:[^)]*?)?\s*#"\s*style\s*=\s*(?:"([^"]*?)"|'([^']*?)'|([^)]*?))\s*\)/gi;
   const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)\s*$/i;
   const ROLL20_DESC_RE = /^\s*\/desc\b\s*/i;
   const ROLL20_NEWLINE_TOKEN_RE = /^\s*%NEWLINE%\s*$/i;
@@ -3288,21 +3287,29 @@
       return parsedImageLine;
     }
 
-    const linkRe = new RegExp(ROLL20_STYLE_LINK_RE.source, "gi");
     const runs = [];
     let text = "";
-    let lastIndex = 0;
+    let cursor = 0;
+    let scanIndex = 0;
     let segmentCount = 0;
-    let match;
 
-    while ((match = linkRe.exec(rawLine))) {
-      text += decodeHtmlEntities(rawLine.slice(lastIndex, match.index));
+    while (scanIndex < rawLine.length) {
+      const openIndex = rawLine.indexOf("[", scanIndex);
+      if (openIndex < 0) break;
 
-      const label = decodeHtmlEntities(match[1] || "");
+      const segment = parseRoll20StyleLinkSegment(rawLine, openIndex);
+      if (!segment) {
+        scanIndex = openIndex + 1;
+        continue;
+      }
+
+      text += decodeHtmlEntities(rawLine.slice(cursor, openIndex));
+
+      const label = decodeHtmlEntities(segment.label || "");
       const start = text.length;
       text += label;
 
-      const style = parseRoll20InlineStyle(match[2] || match[3] || match[4] || "");
+      const style = parseRoll20InlineStyle(segment.styleText || "");
       if (start !== text.length && Object.keys(style).length > 0) {
         runs.push({
           start,
@@ -3311,7 +3318,8 @@
         });
       }
 
-      lastIndex = linkRe.lastIndex;
+      cursor = segment.endIndex;
+      scanIndex = cursor;
       segmentCount += 1;
     }
 
@@ -3323,13 +3331,50 @@
       };
     }
 
-    text += decodeHtmlEntities(rawLine.slice(lastIndex));
+    text += decodeHtmlEntities(rawLine.slice(cursor));
 
     return {
       text,
       runs,
       segmentCount
     };
+  }
+
+  function parseRoll20StyleLinkSegment(source, openIndex) {
+    if (typeof source !== "string" || source[openIndex] !== "[") return null;
+    if (isMarkdownEscaped(source, openIndex)) return null;
+
+    let cursor = openIndex + 1;
+    while (cursor < source.length) {
+      const closeBracket = source.indexOf("]", cursor);
+      if (closeBracket < 0) return null;
+
+      if (!isMarkdownEscaped(source, closeBracket) && source[closeBracket + 1] === "(") {
+        const closeParen = source.indexOf(")", closeBracket + 2);
+        if (closeParen < 0) return null;
+
+        const payload = source.slice(closeBracket + 2, closeParen);
+        const styleText = extractRoll20StyleLinkPayload(payload);
+        if (styleText != null) {
+          return {
+            label: source.slice(openIndex + 1, closeBracket),
+            styleText,
+            endIndex: closeParen + 1
+          };
+        }
+      }
+
+      cursor = closeBracket + 1;
+    }
+
+    return null;
+  }
+
+  function extractRoll20StyleLinkPayload(payload) {
+    const decoded = decodeHtmlEntities(payload || "");
+    const marker = decoded.match(/#"\s*style\s*=\s*/i);
+    if (!marker) return null;
+    return decoded.slice((marker.index || 0) + marker[0].length).trim();
   }
 
   function parseRoll20ImageLine(line) {
