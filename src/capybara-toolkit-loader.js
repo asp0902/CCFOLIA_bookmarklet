@@ -1,18 +1,18 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.9";
-  const BUILD_ID = "2026-05-23-route-keepalive-1";
+  const VERSION = "0.1.10";
+  const BUILD_ID = "2026-05-23-userscript-split-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
-  const LEGACY_DEBUG_KEYS = Object.freeze([
-    "__CCF_CHAT_NOTIFIER_DEBUG__",
-    "__CCF_FORMAT_SYNC_DEBUG__",
-    "__CAPYBARA_TOOLKIT_PRESENCE__",
-    "__CCF_ROLL20_BRIDGE_DEBUG__",
-    "__CCF_THEME_SWITCHER_DEBUG__",
-    "__CCF_LOG_PACKAGE_DEBUG__",
-    "__CCF_STANDING_PICKER_DEBUG__",
-    "__CCF_SUITE_DEBUG__"
+  const LEGACY_DEBUG_ENTRIES = Object.freeze([
+    { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
+    { key: "__CCF_FORMAT_SYNC_DEBUG__" },
+    { key: "__CAPYBARA_TOOLKIT_PRESENCE__", toolkitScriptPrefix: "ccf-toolkit-presence:" },
+    { key: "__CCF_ROLL20_BRIDGE_DEBUG__" },
+    { key: "__CCF_THEME_SWITCHER_DEBUG__" },
+    { key: "__CCF_LOG_PACKAGE_DEBUG__" },
+    { key: "__CCF_STANDING_PICKER_DEBUG__", toolkitScriptPrefix: "ccfolia-standing-picker:" },
+    { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" }
   ]);
   const EXISTING = window[GLOBAL_KEY];
   if (EXISTING && typeof EXISTING.openPanel === "function") {
@@ -45,25 +45,10 @@
       primaryAction: "sound"
     },
     {
-      id: "ccfolia-standing-picker",
-      title: "스탠딩 @ 선택",
-      summary: "채팅 입력 중 @로 캐릭터 스탠딩을 빠르게 선택",
-      styles: ["legacy/ccfolia-standing-picker.style.css"],
-      scripts: ["legacy/ccfolia-standing-picker.content.js"],
-      legacyStateId: "ccfolia-standing-picker"
-    },
-    {
       id: "ccf-format-sync",
       title: "서식 편집 도구",
       summary: "채팅 입력창 위 서식 편집 툴바, 렌더러, 루비/툴팁/블러 서식",
       scripts: ["legacy/ccfolia-format-sync.user.js"]
-    },
-    {
-      id: "ccf-toolkit-presence",
-      title: "툴킷 사용자 표시",
-      summary: "코코포리아 룸 좌하단에 최근 툴킷 사용 신호를 보낸 인원 표시",
-      scripts: ["legacy/ccfolia-toolkit-presence.user.js"],
-      roomOnly: true
     },
     {
       id: "ccf-roll20-css-bridge",
@@ -83,13 +68,6 @@
       summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
       scripts: ["legacy/ccfolia-log-package.user.js"],
       roomOnly: true
-    },
-    {
-      id: "ccf-suite-manager",
-      title: "기존 관리 패널",
-      summary: "기존 Suite Manager/룸 관리 기능을 레거시 형태로 실행",
-      scripts: ["legacy/ccfolia-suite.user.js"],
-      experimental: true
     }
   ]);
 
@@ -156,13 +134,14 @@
       console.warn("[Capybara Toolkit] close previous panel failed", error);
     }
 
-    for (const key of LEGACY_DEBUG_KEYS) {
-      const legacyApi = window[key];
+    for (const entry of LEGACY_DEBUG_ENTRIES) {
+      if (entry.toolkitScriptPrefix && !hasToolkitScriptMarker(entry.toolkitScriptPrefix)) continue;
+      const legacyApi = window[entry.key];
       if (legacyApi && typeof legacyApi.disable === "function") {
         try {
           legacyApi.disable();
         } catch (error) {
-          console.warn(`[Capybara Toolkit] ${key}.disable() failed`, error);
+          console.warn(`[Capybara Toolkit] ${entry.key}.disable() failed`, error);
         }
       }
     }
@@ -181,6 +160,11 @@
         configurable: true
       });
     }
+  }
+
+  function hasToolkitScriptMarker(prefix) {
+    return Array.from(document.querySelectorAll("script[data-capybara-toolkit-script]"))
+      .some((script) => (script.dataset.capybaraToolkitScript || "").startsWith(prefix));
   }
 
   function resolveBaseUrl() {
