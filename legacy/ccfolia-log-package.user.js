@@ -1771,13 +1771,6 @@
         let foundAnyDeleteButtonInThisLoop = false;
         let deletedAnyInThisLoop = false;
 
-        console.log("[CCF LOG PACKAGE][delete] scan", {
-          tabName,
-          itemRootCount: itemRoots.length,
-          scrollTop: scroller.scrollTop,
-          scrollHeight: scroller.scrollHeight
-        });
-
         for (let i = itemRoots.length - 1; i >= 0; i -= 1) {
           const root = itemRoots[i];
           if (!(root instanceof HTMLElement) || !isVisible(root)) continue;
