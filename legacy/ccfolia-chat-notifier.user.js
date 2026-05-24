@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.37
+// @version      0.2.38
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.37"),
+    version: getUserscriptVersion("0.2.38"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -1574,8 +1574,9 @@
     observeCcfBgmDom();
     // 북마클릿이 켜지기 전에 이미 재생 중이던 네이티브 BGM은 위 훅들이 잡아내지 못한다.
     // (play() 호출은 이미 끝났고, 미디어 요소도 이미 DOM에 존재) 그래서 init 직후
-    // 한 번 DOM을 훑어서 현재 재생 중/진행 중인 미디어를 트래커에 등록한다.
-    scanExistingNativeBgmMedia();
+    // DOM을 훑어 현재 재생 중/진행 중인 미디어를 트래커에 등록한다.
+    // 코코포리아가 미디어 요소를 늦게 만들 가능성에 대비해 여러 시점에 재시도.
+    scheduleCcfBgmInitScans();
     tryEnhanceCcfBgmPanel();
     tryCenterCcfBgmDialogs();
 
@@ -1596,20 +1597,41 @@
     // 페이지에 이미 존재하는 audio/video 요소를 훑어, 재생 중이거나 진행 중인 미디어를
     // 현재 활성 네이티브 BGM으로 등록한다. handleCcfNativeMediaActivity가 알아서
     // 진행바 갱신·이벤트 리스너 부착 등을 해준다.
+    // 코코포리아가 미디어 요소를 늦게 mount하는 경우가 있어 여러 시점에 재시도한다.
+    const allMedia = [...document.querySelectorAll("audio, video")];
+    let qualifying = 0;
     let registered = 0;
-    document.querySelectorAll("audio, video").forEach((media) => {
-      if (!(media instanceof HTMLMediaElement)) return;
-      if (!isPotentialNativeBgmMedia(media)) return;
-      // 재생 중이거나, 일시정지 상태지만 currentTime이 진행돼 있으면 트래커에 등록.
+    for (const media of allMedia) {
+      if (!(media instanceof HTMLMediaElement)) continue;
+      if (!isPotentialNativeBgmMedia(media)) continue;
+      qualifying += 1;
       const isPlaying = !media.paused && !media.ended;
       const hasProgress = media.currentTime > 0;
-      if (!isPlaying && !hasProgress) return;
+      if (!isPlaying && !hasProgress) continue;
       handleCcfNativeMediaActivity(media, isPlaying ? "play" : "pause", "init-scan");
       registered += 1;
-    });
-    if (registered > 0) {
-      debugLog("bgm-native-media-init-scan", { registered });
     }
+    debugLog("bgm-native-media-init-scan", {
+      totalMediaElements: allMedia.length,
+      qualifyingForBgm: qualifying,
+      registered
+    });
+    return registered;
+  }
+
+  function scheduleCcfBgmInitScans() {
+    // 즉시 + 지연 재시도. 코코포리아가 BGM <audio> 요소를 lazy-mount하거나, 사용자가
+    // 북마클릿을 누른 직후에 미디어가 막 mount되는 경우에 대비.
+    scanExistingNativeBgmMedia();
+    const delays = [300, 1000, 2500, 5000];
+    delays.forEach((ms) => {
+      window.setTimeout(() => {
+        if (!chatNotifierActive) return;
+        // 이미 한 번 등록된 미디어는 handleCcfNativeMediaActivity 내부에서 set 추가만
+        // 일어나므로 중복 호출이 부작용을 일으키지 않는다.
+        scanExistingNativeBgmMedia();
+      }, ms);
+    });
   }
 
   function hookCcfBgmNativeMediaProgress() {
