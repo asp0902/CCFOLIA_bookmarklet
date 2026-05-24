@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.31
+// @version      0.2.32
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -47,7 +47,11 @@
   const BGM_SHARE_PROTOCOL_VERSION = 1;
   const BGM_SHARE_DOM_ATTR = "data-ccf-bgm-share";
   const BGM_SHARE_SENDER_ID = `bgm-share-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const BGM_CHAT_SHARE_ENABLED = false;
+  // Re-enabled: 같은 룸에 있는 다른 카피바라 툴킷 사용자에게도
+  // YouTube BGM 추가/편집/제거가 전파되도록 한다. 채팅 메시지에 비가시 문자로
+  // 인코딩된 작은 봉투를 실어 보내고, 수신 측에서는 ccf-bgm-share 표식을 단 뒤
+  // CSS로 숨겨 채팅 로그 오염을 최소화한다.
+  const BGM_CHAT_SHARE_ENABLED = true;
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
@@ -71,7 +75,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.31"),
+    version: getUserscriptVersion("0.2.32"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -3265,6 +3269,9 @@
   }
 
   function markCcfBgmDrawerSizeLocks() {
+    // 하단 드로어는 BGM/효과음/전경/배경 등 여러 탭이 공유한다.
+    // 현재 보이는 패널이 실제 BGM 라이브러리일 때만 640px 잠금을 걸고,
+    // 다른 탭(전경/배경 등)으로 옮겼거나 드로어가 닫혔으면 잠금을 즉시 해제한다.
     document.querySelectorAll(".MuiDrawer-paper.MuiDrawer-paperAnchorBottom").forEach((drawer) => {
       if (!(drawer instanceof HTMLElement)) {
         return;
@@ -3272,6 +3279,8 @@
 
       if (isCcfBgmDrawer(drawer)) {
         drawer.setAttribute("data-ccf-bgm-drawer-size-lock", "1");
+      } else if (drawer.hasAttribute("data-ccf-bgm-drawer-size-lock")) {
+        drawer.removeAttribute("data-ccf-bgm-drawer-size-lock");
       }
     });
   }
@@ -3281,8 +3290,10 @@
       return false;
     }
 
+    // .MuiTabs-root는 BGM 외 탭(전경/배경/효과음 등)에도 항상 존재하므로
+    // 너무 헐겁다. BGM 라이브러리에서만 마운트되는 위젯들로만 좁힌다.
     return !!drawer.querySelector(
-      '.MuiTabs-root, [data-testid="LibraryMusicIcon"], [data-testid="StopIcon"], input[name="url"], [aria-label*="BGM"], [aria-label*="メディア"]'
+      '[data-testid="LibraryMusicIcon"], [data-testid="StopIcon"], input[name="url"], [aria-label*="BGM"], [aria-label*="メディア"]'
     );
   }
 
@@ -3611,13 +3622,22 @@
   function computeCcfYoutubeBgmPlacementPlan(entries, nativeAnchorOrder) {
     if (!Array.isArray(entries) || !entries.length) return [];
     const validAnchors = new Set(["", ...nativeAnchorOrder]);
+    const lastNativeAnchor = nativeAnchorOrder.length
+      ? nativeAnchorOrder[nativeAnchorOrder.length - 1]
+      : "";
     const grouped = new Map();
     entries.forEach(([entryKey, entry]) => {
-      let anchor = typeof entry?.anchorSlot === "string" ? entry.anchorSlot : "";
-      if (!validAnchors.has(anchor)) {
-        anchor = nativeAnchorOrder.length
-          ? nativeAnchorOrder[nativeAnchorOrder.length - 1]
-          : "";
+      // anchorSlot이 명시적으로 빈 문자열이면 "맨 위로 끌어다 둔 상태",
+      // 아예 필드가 없으면 "방금 추가된 신규 항목"으로 구분한다.
+      // 신규 항목은 기존 네이티브 음원 뒤(맨 아래)에 붙이는 게 자연스럽다.
+      let anchor;
+      if (typeof entry?.anchorSlot === "string") {
+        anchor = entry.anchorSlot;
+        if (!validAnchors.has(anchor)) {
+          anchor = lastNativeAnchor;
+        }
+      } else {
+        anchor = lastNativeAnchor;
       }
       if (!grouped.has(anchor)) grouped.set(anchor, []);
       grouped.get(anchor).push([entryKey, entry]);

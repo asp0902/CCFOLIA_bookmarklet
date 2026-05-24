@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.5
+// @version      0.3.6
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -561,6 +561,10 @@
       }
 
       html[data-ccr20-hide-chat-prompt="1"] [${CHAT_PROMPT_PANEL_ATTR}="1"] {
+        display: none !important;
+      }
+
+      html[data-ccr20-hide-chat-prompt="1"] .MuiPaper-root > img {
         display: none !important;
       }
 
@@ -1387,8 +1391,8 @@
       ? "\uCC44\uD305 \uD328\uB110 \uD45C\uC2DC"
       : "\uCC44\uD305 \uD328\uB110 \uC228\uAE30\uAE30";
     const secondaryText = enabled
-      ? "\uC785\uB825 \uC2DC \uB728\uB294 \uAC74\uB108\uB6F0\uAE30 \uD328\uB110\uC744 \uB2E4\uC2DC \uD45C\uC2DC\uD569\uB2C8\uB2E4"
-      : "\uC785\uB825 \uC2DC \uB728\uB294 \uAC74\uB108\uB6F0\uAE30 \uD328\uB110\uC744 \uC228\uAE41\uB2C8\uB2E4";
+      ? "\uC785\uB825 \uC2DC \uB728\uB294 \uAC74\uB108\uB6F0\uAE30 \uD328\uB110\uACFC \uC2A4\uD0E0\uB529 \uC774\uBBF8\uC9C0\uB97C \uB2E4\uC2DC \uD45C\uC2DC\uD569\uB2C8\uB2E4"
+      : "\uC785\uB825 \uC2DC \uB728\uB294 \uAC74\uB108\uB6F0\uAE30 \uD328\uB110\uACFC \uC2A4\uD0E0\uB529 \uC774\uBBF8\uC9C0\uB97C \uD568\uAED8 \uC228\uAE41\uB2C8\uB2E4";
 
     if (primary) primary.textContent = primaryText;
     if (secondary) secondary.textContent = secondaryText;
