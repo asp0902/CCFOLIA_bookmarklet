@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.7
+// @version      0.0.8
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -41,7 +41,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.7"),
+    version: getUserscriptVersion("0.0.8"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2686,6 +2686,11 @@
         color: rgba(255, 255, 255, 0.55);
       }
 
+      .ccf-inline-size-input[data-current-size="1"]::placeholder {
+        color: rgba(255, 255, 255, 0.92);
+        opacity: 1;
+      }
+
       .ccf-inline-size-input:focus-visible,
       .ccf-inline-toolbar .ccf-toggle:focus-visible,
       .ccf-inline-toolbar .ccf-inline-tool:focus-within {
@@ -3393,10 +3398,12 @@
     const selection = normalizeSelectionRange(getEditorSelection(editor), getEditorText(editor).length);
     if (selection && selection.start !== selection.end) {
       toolbar.__ccfSelection = selection;
+      updateInlineToolbarVisuals(toolbar);
       return;
     }
 
     clearInlineToolbarSelection(toolbar);
+    updateInlineToolbarVisuals(toolbar);
   }
 
   function handleInlineBoldShortcut(event) {
@@ -3490,6 +3497,9 @@
     const sizeInput = toolbar.querySelector("[data-inline-size]");
     if (sizeInput instanceof HTMLInputElement) {
       sizeInput.value = "";
+      sizeInput.placeholder = String(getDefaultEditorFontSize(getInlineToolbarEditor(toolbar)));
+      sizeInput.dataset.currentSize = "1";
+      sizeInput.title = `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${sizeInput.placeholder}px (\uAE30\uBCF8)`;
     }
 
     closeInlinePopover(toolbar, { restoreFocus: false });
@@ -3542,6 +3552,65 @@
         tool.style.setProperty("--ccf-chip-color", input.value || "#ffffff");
       }
     });
+
+    syncInlineToolbarFontSizeVisual(toolbar);
+  }
+
+  function getDefaultEditorFontSize(editor = null) {
+    const target = editor || activeEditor || lastFocusedEditor || getCurrentTargetEditor();
+    if (target) {
+      const computed = normalizeCssPixelFontSize(window.getComputedStyle(target).fontSize);
+      if (computed != null) return computed;
+    }
+    return FONT_SIZE_PRESETS[2];
+  }
+
+  function syncInlineToolbarFontSizeVisual(toolbar) {
+    if (!toolbar) return;
+
+    const input = toolbar.querySelector("[data-inline-size]");
+    if (!(input instanceof HTMLInputElement)) return;
+    if (document.activeElement === input) return;
+
+    const editor = getInlineToolbarEditor(toolbar);
+    if (!editor) {
+      const fallbackSize = getDefaultEditorFontSize();
+      input.value = "";
+      input.placeholder = String(fallbackSize);
+      input.dataset.currentSize = "1";
+      input.title = `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${fallbackSize}px (\uAE30\uBCF8)`;
+      return;
+    }
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const state = ensureEditorState(editor);
+    const selection = normalizeSelectionRange(
+      getInlineToolbarSelection(toolbar) || getEditorSelection(editor) || { start: text.length, end: text.length },
+      text.length
+    );
+    const sizeState = getFontSizeStateForSelection(state.runs, selection, text.length);
+
+    if (sizeState.mixed) {
+      input.value = "";
+      input.placeholder = "\uD63C\uD569";
+      input.dataset.currentSize = "1";
+      input.title = "\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC5EC\uB7EC \uAE00\uC790 \uD06C\uAE30\uAC00 \uC11E\uC5EC \uC788\uC2B5\uB2C8\uB2E4.";
+      return;
+    }
+
+    if (sizeState.value != null) {
+      input.value = String(sizeState.value);
+      input.placeholder = String(sizeState.value);
+      delete input.dataset.currentSize;
+      input.title = `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${sizeState.value}px`;
+      return;
+    }
+
+    const defaultSize = getDefaultEditorFontSize(editor);
+    input.value = "";
+    input.placeholder = String(defaultSize);
+    input.dataset.currentSize = "1";
+    input.title = `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${defaultSize}px (\uAE30\uBCF8)`;
   }
 
   function setInlineToolbarAlignment(toolbar, align) {
