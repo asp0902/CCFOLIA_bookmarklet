@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.36
+// @version      0.2.37
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -87,7 +87,12 @@
   ].join(", ");
   const CHAT_DRAWER_TITLE_RE = /룸\s*채팅|room\s*chat|チャット|chat/i;
   const BGM_DIALOG_KEYWORD_RE = /BGM|bgm|external\s*file|file\s*url|youtube|YouTube|유튜브|외부\s*파일|파일\s*URL|音?|サウンド|ル?プ|loop|volume/i;
-  const BGM_INPUT_HINT_RE = /url|youtube|external|file|유튜브|외부|파일/i;
+  // 이전 패턴 /url|youtube|external|file|유튜브|외부|파일/i 는 "파일" / "file" 단독 매칭이라
+  // 너무 헐거웠다. 이미지 라이브러리(전경/배경/캐릭터 등 선택 팝업)의 file 관련 라벨까지
+  // 모두 BGM URL 입력으로 오인 → tryCenterCcfBgmDialogs가 size lock(560px)을 걸어
+  // 팝업이 비좁아짐. BGM에서 실제로 쓰이는 "외부 파일 / 파일 URL / external file / file URL"
+  // 같은 구체 문구로만 매칭하도록 좁힌다. (url, youtube, 유튜브는 단독 키워드로도 충분히 특이함)
+  const BGM_INPUT_HINT_RE = /\burl\b|youtube|유튜브|external\s*file|file\s*url|외부\s*파일|파일\s*url/i;
   const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
   const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
@@ -95,7 +100,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.36"),
+    version: getUserscriptVersion("0.2.37"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -1567,6 +1572,10 @@
     hookCcfBgmWebAudioProgress();
     bindCcfBgmEvents();
     observeCcfBgmDom();
+    // 북마클릿이 켜지기 전에 이미 재생 중이던 네이티브 BGM은 위 훅들이 잡아내지 못한다.
+    // (play() 호출은 이미 끝났고, 미디어 요소도 이미 DOM에 존재) 그래서 init 직후
+    // 한 번 DOM을 훑어서 현재 재생 중/진행 중인 미디어를 트래커에 등록한다.
+    scanExistingNativeBgmMedia();
     tryEnhanceCcfBgmPanel();
     tryCenterCcfBgmDialogs();
 
@@ -1581,6 +1590,26 @@
         storage: getCcfBgmToolkitStorage() ? "toolkit-idb" : "local-storage"
       });
     });
+  }
+
+  function scanExistingNativeBgmMedia() {
+    // 페이지에 이미 존재하는 audio/video 요소를 훑어, 재생 중이거나 진행 중인 미디어를
+    // 현재 활성 네이티브 BGM으로 등록한다. handleCcfNativeMediaActivity가 알아서
+    // 진행바 갱신·이벤트 리스너 부착 등을 해준다.
+    let registered = 0;
+    document.querySelectorAll("audio, video").forEach((media) => {
+      if (!(media instanceof HTMLMediaElement)) return;
+      if (!isPotentialNativeBgmMedia(media)) return;
+      // 재생 중이거나, 일시정지 상태지만 currentTime이 진행돼 있으면 트래커에 등록.
+      const isPlaying = !media.paused && !media.ended;
+      const hasProgress = media.currentTime > 0;
+      if (!isPlaying && !hasProgress) return;
+      handleCcfNativeMediaActivity(media, isPlaying ? "play" : "pause", "init-scan");
+      registered += 1;
+    });
+    if (registered > 0) {
+      debugLog("bgm-native-media-init-scan", { registered });
+    }
   }
 
   function hookCcfBgmNativeMediaProgress() {
@@ -3562,6 +3591,26 @@
     }
 
     const nativeAnchorOrder = getCcfYoutubeBgmNativeAnchorOrder(container);
+
+    // anchorSlot이 아직 없는 신규/레거시 항목을 "현재 마지막 네이티브 뒤"에 고정한다.
+    // 이걸 영구 저장하지 않으면, 매 렌더마다 lastNativeAnchor(= 그때그때의 마지막 네이티브)를
+    // 따라가서 새 네이티브가 추가될 때마다 YouTube가 같이 맨 아래로 끌려간다.
+    // 즉 사용자가 본 "새 네이티브가 YouTube 위에 들어감" 현상의 원인.
+    if (nativeAnchorOrder.length > 0) {
+      const fallbackAnchor = nativeAnchorOrder[nativeAnchorOrder.length - 1];
+      let anchorAssigned = false;
+      entries.forEach(([entryKey, entry]) => {
+        if (entry && typeof entry.anchorSlot !== "string") {
+          entry.anchorSlot = fallbackAnchor;
+          ccfBgmSlotMap.set(entryKey, entry);
+          anchorAssigned = true;
+        }
+      });
+      if (anchorAssigned) {
+        persistCcfBgmSlotMap();
+      }
+    }
+
     const placementPlan = computeCcfYoutubeBgmPlacementPlan(entries, nativeAnchorOrder);
 
     if (!placementPlan.length) {
@@ -5404,7 +5453,9 @@
         return;
       }
 
-      if (isCcfRoomSettingsDialog(dialog)) {
+      if (isCcfRoomSettingsDialog(dialog) || isLikelyCcfImageLibraryDialog(dialog)) {
+        // 룸 설정 또는 이미지 라이브러리(배경/전경 선택 등) → BGM 다이얼로그 아님.
+        // 이전 폴링에서 잘못 마크됐을 수 있으니 size lock 속성을 모두 정리.
         dialog.removeAttribute("data-ccf-bgm-dialog-root");
         dialog.removeAttribute("data-ccf-bgm-slot-key");
 
@@ -5472,6 +5523,29 @@
     return paper instanceof HTMLElement ? paper : null;
   }
 
+  function isLikelyCcfImageLibraryDialog(dialog) {
+    // 필드 설정 → 배경 선택 / 전경 선택 등에서 뜨는 이미지 라이브러리 팝업 판별.
+    // 명확한 구분 표시:
+    //   1) "Unsplash" 텍스트가 있는 버튼/탭 (BGM 다이얼로그에는 없음)
+    //   2) 이미지 타입 탭(전경/배경/캐릭터/스크린/마커/컷인) 중 2개 이상이 함께 있음
+    if (!(dialog instanceof HTMLElement)) return false;
+
+    const buttons = [...dialog.querySelectorAll("button, [role='tab']")];
+    const buttonTexts = buttons.map((b) => normalizeSpace(b.textContent || ""));
+
+    if (buttonTexts.some((t) => /\bunsplash\b/i.test(t))) {
+      return true;
+    }
+
+    const imageTabPattern = /^(전경|배경|캐릭터|스크린|스크린\s*뒷면|마커|컷인|前景|背景|キャラクター|スクリーン|マ?カ?|カットイン|foreground|background|character|screen|marker|cut\s*in)$/i;
+    const matchedImageTabs = buttonTexts.filter((t) => t && imageTabPattern.test(t)).length;
+    if (matchedImageTabs >= 2) {
+      return true;
+    }
+
+    return false;
+  }
+
   function isCcfRoomSettingsDialog(dialog) {
     if (!(dialog instanceof HTMLElement)) {
       return false;
@@ -5487,6 +5561,12 @@
     }
 
     if (isCcfRoomSettingsDialog(dialog)) {
+      return false;
+    }
+
+    // 이미지 라이브러리(필드 설정 → 배경 선택 / 전경 선택 등)는 BGM과 비슷한 URL 입력칸을
+    // 가지지만 음악 다이얼로그가 아니다. center/size lock이 잘못 걸리지 않도록 배제.
+    if (isLikelyCcfImageLibraryDialog(dialog)) {
       return false;
     }
 

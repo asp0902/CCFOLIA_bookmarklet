@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.6
+// @version      0.0.7
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -41,7 +41,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.6"),
+    version: getUserscriptVersion("0.0.7"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2933,6 +2933,7 @@
       const selection = getEditorSelection(modalEditor);
       if (selection) {
         setModalSelection(selection, getEditorText(modalEditor).length);
+        syncFontSizeControlsFromModalSelection();
       }
     }, ccfFsWithSignal());
 
@@ -4394,7 +4395,10 @@
         event.preventDefault();
         const direction = event.key === "ArrowUp" ? 1 : -1;
         const step = event.shiftKey ? 10 : 1;
-        const baseSize = normalizeFontSizeValue(event.currentTarget.value) ?? FONT_SIZE_PRESETS[2];
+        const baseSize =
+          normalizeFontSizeValue(event.currentTarget.value) ??
+          getFontSizeFromToolState() ??
+          FONT_SIZE_PRESETS[2];
         setFontSizeControls(baseSize + (direction * step));
         applyCurrentModalStyle({ silent: true, previewOnly: true });
         restoreModalSelectionSoon();
@@ -6149,6 +6153,7 @@
     if (selection) {
       setModalSelection(selection, safeNextText.length);
     }
+    syncFontSizeControlsFromModalSelection();
   }
 
   function isRoll20EditorFocused() {
@@ -6244,6 +6249,7 @@
     if (selection) {
       setModalSelection(selection, modalDraftText.length);
     }
+    syncFontSizeControlsFromModalSelection();
   }
 
   function syncModalRoll20Draft() {
@@ -6327,6 +6333,7 @@
 
     const editor = getResolvedActiveEditor() || activeEditor;
     syncRoomEditorToModalEditor(editor);
+    syncFontSizeControlsFromModalSelection();
     if (editor) {
       renderPreview(editor, {
         force: true,
@@ -6376,6 +6383,7 @@
     setModalSelection(selection, text.length);
     syncRoomEditorToModalEditor(editor);
     syncRoomEditorToRoll20Editor(editor);
+    syncFontSizeControlsFromModalSelection();
     renderPreview(editor, {
       textOverride: text,
       runsOverride: modalDraftRuns,
@@ -8751,6 +8759,25 @@
     return value == null ? "\uAE30\uBCF8" : String(value);
   }
 
+  function normalizeCssPixelFontSize(value) {
+    const match = String(value || "").match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    return normalizeFontSizeValue(match[0]);
+  }
+
+  function getDefaultModalFontSize() {
+    const modalEditor = getModalEditor();
+    if (modalEditor) {
+      const computed = normalizeCssPixelFontSize(window.getComputedStyle(modalEditor).fontSize);
+      if (computed != null) return computed;
+    }
+    return FONT_SIZE_PRESETS[2];
+  }
+
+  function getFontSizeFromToolState() {
+    return normalizeFontSizeValue(getFontSizeTool()?.dataset.currentSize || "");
+  }
+
   function isFontSizeEditorOpen() {
     return getFontSizeTool()?.classList.contains("editing") || false;
   }
@@ -8765,20 +8792,134 @@
     });
   }
 
-  function setFontSizeControls(value) {
+  function setFontSizeControls(value, options = {}) {
     const input = getFontSizeInput();
     const display = getFontSizeDisplay();
+    const tool = getFontSizeTool();
     const normalized = normalizeFontSizeValue(value);
     const nextValue = normalized == null ? "" : String(normalized);
+    const currentSize = normalizeFontSizeValue(options.currentSize);
+    const displayText = String(options.displayText || getFontSizeLabel(normalized));
+    const displayEmpty = options.displayEmpty != null ? !!options.displayEmpty : normalized == null;
 
-    if (input) input.value = nextValue;
+    if (input) {
+      input.value = nextValue;
+      input.placeholder = currentSize != null && normalized == null ? String(currentSize) : "\uAE30\uBCF8";
+    }
     if (display) {
-      display.textContent = getFontSizeLabel(normalized);
-      display.dataset.empty = normalized == null ? "1" : "0";
+      display.textContent = displayText;
+      display.dataset.empty = displayEmpty ? "1" : "0";
+      if (options.title) display.title = options.title;
+      else display.removeAttribute("title");
+    }
+    if (tool) {
+      if (currentSize != null) tool.dataset.currentSize = String(currentSize);
+      else delete tool.dataset.currentSize;
     }
     syncFontSizeOptionState(nextValue);
 
     return normalized;
+  }
+
+  function getFontSizeStyleAtOffset(runs, offset, textLength) {
+    const safeLength = Math.max(0, Number(textLength) || 0);
+    if (safeLength <= 0) return normalizeFontSizeValue(modalDraftLastStyle?.fontSize);
+
+    const probeOffset = clamp(offset > 0 ? offset - 1 : offset, 0, safeLength - 1);
+    const style = mergeStyles(
+      normalizeRuns(runs, safeLength)
+        .filter((run) => run.start <= probeOffset && run.end > probeOffset)
+        .map((run) => run.style)
+    );
+    return normalizeFontSizeValue(style.fontSize);
+  }
+
+  function getFontSizeStateForSelection(runs, selection, textLength) {
+    const safeTextLength = Math.max(0, Number(textLength) || 0);
+    const range = normalizeSelectionRange(selection, safeTextLength);
+    if (!range) return { value: null, mixed: false };
+    if (range.start === range.end) {
+      return {
+        value: getFontSizeStyleAtOffset(runs, range.start, safeTextLength),
+        mixed: false
+      };
+    }
+
+    const oldRuns = normalizeRuns(runs, safeTextLength);
+    const points = new Set([range.start, range.end]);
+    oldRuns.forEach((run) => {
+      if (!rangesOverlap(run.start, run.end, range.start, range.end)) return;
+      points.add(clamp(run.start, range.start, range.end));
+      points.add(clamp(run.end, range.start, range.end));
+    });
+
+    const sorted = [...points].sort((a, b) => a - b);
+    let shared = Symbol("unset");
+
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const start = sorted[i];
+      const end = sorted[i + 1];
+      if (start === end) continue;
+
+      const style = mergeStyles(
+        oldRuns
+          .filter((run) => run.start <= start && run.end >= end)
+          .map((run) => run.style)
+      );
+      const value = normalizeFontSizeValue(style.fontSize);
+
+      if (typeof shared === "symbol") {
+        shared = value;
+      } else if (shared !== value) {
+        return { value: null, mixed: true };
+      }
+    }
+
+    return {
+      value: typeof shared === "symbol" ? null : shared,
+      mixed: false
+    };
+  }
+
+  function syncFontSizeControlsFromModalSelection() {
+    if (!isModalOpen() || isFontSizeEditorOpen() || modalMode !== MODAL_MODE_CCFOLIA) return;
+
+    const modalEditor = getModalEditor();
+    const editor = getResolvedActiveEditor() || activeEditor;
+    if (!modalEditor || !editor) return;
+
+    const text = typeof modalDraftText === "string" ? modalDraftText : getEditorText(modalEditor);
+    const selection = normalizeSelectionRange(
+      getModalSelection() || getEditorSelection(modalEditor) || { start: text.length, end: text.length },
+      text.length
+    );
+    const runs = cloneRuns(modalDraftRuns ?? ensureEditorState(editor).runs, text.length);
+    const state = getFontSizeStateForSelection(runs, selection, text.length);
+
+    if (state.mixed) {
+      setFontSizeControls("", {
+        displayText: "\uD63C\uD569",
+        displayEmpty: false,
+        title: "\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC5EC\uB7EC \uAE00\uC790 \uD06C\uAE30\uAC00 \uC11E\uC5EC \uC788\uC2B5\uB2C8\uB2E4."
+      });
+      return;
+    }
+
+    if (state.value != null) {
+      setFontSizeControls(state.value, {
+        currentSize: state.value,
+        title: `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${state.value}px`
+      });
+      return;
+    }
+
+    const defaultSize = getDefaultModalFontSize();
+    setFontSizeControls("", {
+      currentSize: defaultSize,
+      displayText: String(defaultSize),
+      displayEmpty: false,
+      title: `\uD604\uC7AC \uAE00\uC790 \uD06C\uAE30: ${defaultSize}px (\uAE30\uBCF8)`
+    });
   }
 
   function openFontSizeEditor() {
@@ -8816,7 +8957,7 @@
   }
 
   function stepFontSize(delta) {
-    const baseSize = getFontSizeFromControls() ?? FONT_SIZE_PRESETS[2];
+    const baseSize = getFontSizeFromControls() ?? getFontSizeFromToolState() ?? FONT_SIZE_PRESETS[2];
     setFontSizeControls(baseSize + delta);
     applyCurrentModalStyle({ silent: true, previewOnly: true });
     restoreModalSelectionSoon();
