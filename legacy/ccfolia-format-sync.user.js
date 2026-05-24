@@ -2683,10 +2683,6 @@
         text-align: center;
       }
 
-      .ccf-inline-size-input:focus {
-        text-align: right;
-      }
-
       .ccf-inline-size-input::placeholder {
         color: rgba(255, 255, 255, 0.55);
       }
