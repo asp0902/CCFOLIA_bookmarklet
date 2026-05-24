@@ -1689,180 +1689,191 @@
     return true;
   }
 
-  async function handleDeleteCurrentTabLogs() {
-    const roomTitle = getRoomTitle("");
-    const currentTab = getCurrentPackageTabDescriptor(roomTitle);
+  const CCF_FIRESTORE_PROJECT_ID = "ccfolia-160aa";
+  const CCF_CHANNEL_MAP = Object.freeze({
+    "메인": "main", "정보": "info", "잡담": "other",
+    "メイン": "main", "情報": "info", "雑談": "other",
+    "Main": "main", "Info": "info", "Other": "other", "Chat": "other"
+  });
+  let ccfReduxStoreRef = null;
 
-    let tabName = currentTab ? currentTab.name : "메인";
-    if (tabName.startsWith("메인")) tabName = "메인";
-    else if (tabName.startsWith("정보")) tabName = "정보";
-    else if (tabName.startsWith("잡담")) tabName = "잡담";
+  function findCcfReduxStore() {
+    if (ccfReduxStoreRef) return ccfReduxStoreRef;
+    const root = document.getElementById("root") || document.body?.firstElementChild;
+    if (!root) return null;
+    const containerKey = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+    if (!containerKey) return null;
+    const fiber = root[containerKey]?.stateNode?.current;
+    if (!fiber) return null;
+
+    const isStore = (v) =>
+      v && typeof v === "object"
+      && typeof v.dispatch === "function"
+      && typeof v.getState === "function"
+      && typeof v.subscribe === "function";
+
+    const seen = new WeakSet();
+    let found = null;
+    const visit = (v) => {
+      if (found || !v || typeof v !== "object" || seen.has(v)) return;
+      seen.add(v);
+      if (isStore(v)) found = v;
+    };
+    const walk = (node, depth = 0) => {
+      if (found || !node || depth > 50) return;
+      visit(node.memoizedProps);
+      visit(node.memoizedState);
+      visit(node.stateNode);
+      if (node.memoizedProps?.store) visit(node.memoizedProps.store);
+      if (node.memoizedProps?.value) visit(node.memoizedProps.value);
+      walk(node.child, depth + 1);
+      walk(node.sibling, depth + 1);
+    };
+    walk(fiber);
+    if (found) ccfReduxStoreRef = found;
+    return found;
+  }
+
+  function readFirebaseAuthRecord() {
+    return new Promise((resolve, reject) => {
+      let req;
+      try { req = indexedDB.open("firebaseLocalStorageDb"); }
+      catch (error) { reject(error); return; }
+      req.onerror = () => reject(new Error("firebaseLocalStorageDb 열기 실패"));
+      req.onsuccess = (event) => {
+        const db = event.target.result;
+        try {
+          const tx = db.transaction("firebaseLocalStorage", "readonly");
+          const store = tx.objectStore("firebaseLocalStorage");
+          const all = store.getAll();
+          all.onsuccess = () => {
+            try {
+              const records = all.result || [];
+              const rec = records.find((r) => r?.value?.stsTokenManager?.accessToken);
+              try { db.close(); } catch (closeError) { /* ignore close failure */ }
+              if (!rec) reject(new Error("Firebase 인증 레코드를 찾지 못했습니다."));
+              else resolve(rec.value);
+            } catch (innerError) { reject(innerError); }
+          };
+          all.onerror = () => reject(all.error || new Error("Auth 읽기 실패"));
+        } catch (txError) { reject(txError); }
+      };
+    });
+  }
+
+  async function getCcfFirestoreContext() {
+    const store = findCcfReduxStore();
+    if (!store) throw new Error("CCFOLIA Redux store를 찾지 못했습니다. CCFOLIA 룸 페이지에서 실행해 주세요.");
+
+    const roomMatch = location.pathname.match(/\/rooms\/([^/?#]+)/);
+    if (!roomMatch) throw new Error("룸 페이지가 아닙니다. /rooms/<roomId> 경로에서 실행해 주세요.");
+    const roomId = roomMatch[1];
+
+    const authValue = await readFirebaseAuthRecord();
+    const token = authValue?.stsTokenManager?.accessToken;
+    if (!token) throw new Error("Firebase 인증 토큰을 찾지 못했습니다.");
+
+    const expirationTime = authValue?.stsTokenManager?.expirationTime || 0;
+    if (expirationTime && expirationTime < Date.now()) {
+      throw new Error("Firebase 인증 토큰이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.");
+    }
+
+    return { store, roomId, token };
+  }
+
+  function detectActiveChatChannel() {
+    const tabEl = document.querySelector('[role="tab"][aria-selected="true"]');
+    const tabText = (tabEl?.textContent || "").trim();
+    const channel = CCF_CHANNEL_MAP[tabText] || tabText;
+    return { tabText: tabText || "메인", channel: channel || "main" };
+  }
+
+  function ensureCcfDeleteToast() {
+    const id = "ccf-delete-toast";
+    let toast = document.getElementById(id);
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = id;
+      toast.style.cssText = [
+        "position: fixed",
+        "bottom: 20px",
+        "left: 50%",
+        "transform: translateX(-50%)",
+        "background: rgba(0,0,0,0.8)",
+        "color: white",
+        "padding: 10px 20px",
+        "border-radius: 8px",
+        "z-index: 9999",
+        "font-size: 14px",
+        "pointer-events: none"
+      ].join("; ");
+      document.body.appendChild(toast);
+    }
+    return toast;
+  }
+
+  async function handleDeleteCurrentTabLogs() {
+    const { tabText, channel } = detectActiveChatChannel();
 
     const confirmDelete = confirm(
-      `정말 [ ${tabName} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
+      `정말 [ ${tabText} ] 탭의 로그만 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
     );
     if (!confirmDelete) return;
 
-    console.log(`[CCF LOG PACKAGE] ${tabName} 탭 로그 삭제 요청됨.`);
     setButtonsBusy(true);
-
     let toast = null;
-
     try {
-      if (currentTab) {
-        await activateChatTab(currentTab);
+      const ctx = await getCcfFirestoreContext();
+      const roomMessages = ctx.store.getState()?.entities?.roomMessages;
+      if (!roomMessages) throw new Error("roomMessages 슬라이스를 찾지 못했습니다.");
+
+      const sub = roomMessages.entities || {};
+      const groupBy = roomMessages.idsGroupBy || {};
+      const candidateIds = Array.isArray(groupBy[channel]) ? groupBy[channel] : [];
+      const liveIds = candidateIds.filter((id) => sub[id] && !sub[id].removed);
+
+      if (!liveIds.length) {
+        alert(`[ ${tabText} ] 탭(channel: ${channel})에 삭제할 메시지가 없습니다.`);
+        return;
       }
 
-      const scope = findPrimaryLogScope(currentTab) || findPrimaryLogScope();
-      if (!(scope instanceof HTMLElement)) {
-        throw new Error("현재 탭의 로그 영역을 찾을 수 없습니다.");
-      }
+      toast = ensureCcfDeleteToast();
+      const updateToast = (message) => { if (toast) toast.textContent = message; };
+      updateToast(`[ ${tabText} ] 탭 ${liveIds.length}개 삭제 시작...`);
 
-      const scroller = findLogScrollContainer(scope) || scope;
-      if (!(scroller instanceof HTMLElement)) {
-        throw new Error("현재 탭의 스크롤 영역을 찾을 수 없습니다.");
-      }
+      const baseUrl = `https://firestore.googleapis.com/v1/projects/${CCF_FIRESTORE_PROJECT_ID}/databases/(default)/documents/rooms/${ctx.roomId}/messages/`;
+      let success = 0;
+      let failed = 0;
+      const failures = [];
 
-      scroller.style.scrollBehavior = "auto";
-      scroller.scrollTop = scroller.scrollHeight;
-      await waitForLogSettle(scope);
-
-      let deletedCount = 0;
-      let emptyCount = 0;
-      let lastScrollTop = -1;
-      let maxItemRootCount = 0;
-      let diagSample = null;
-
-      const toastId = "ccf-delete-toast";
-      toast = document.getElementById(toastId);
-
-      if (!toast) {
-        toast = document.createElement("div");
-        toast.id = toastId;
-        toast.style.cssText = [
-          "position: fixed",
-          "bottom: 20px",
-          "left: 50%",
-          "transform: translateX(-50%)",
-          "background: rgba(0,0,0,0.8)",
-          "color: white",
-          "padding: 10px 20px",
-          "border-radius: 8px",
-          "z-index: 9999",
-          "font-size: 14px",
-          "pointer-events: none"
-        ].join("; ");
-        document.body.appendChild(toast);
-      }
-
-      const updateToast = (message) => {
-        if (toast) toast.textContent = message;
-      };
-
-      updateToast(`[ ${tabName} ] 탭 로그 삭제 준비 중...`);
-
-      while (emptyCount < 3) {
-        const itemRoots = findLogMessageItemRoots([scope])
-          .filter((root) => root instanceof HTMLElement)
-          .filter((root) => isVisible(root));
-
-        if (itemRoots.length > maxItemRootCount) maxItemRootCount = itemRoots.length;
-
-        let foundAnyDeleteButtonInThisLoop = false;
-        let deletedAnyInThisLoop = false;
-
-        for (let i = itemRoots.length - 1; i >= 0; i -= 1) {
-          const root = itemRoots[i];
-          if (!(root instanceof HTMLElement) || !isVisible(root)) continue;
-
-          hoverMessageItemRoot(root);
-
-          await new Promise((resolve) => setTimeout(resolve, 90));
-          await waitForAnimationFrame();
-
-          const deleteButton = findDeleteButtonInMessageRoot(root);
-          if (!diagSample) {
-            const firstBtn = root.querySelector("button");
-            const firstSvg = firstBtn?.querySelector("svg");
-            diagSample = {
-              buttonCount: root.querySelectorAll("button").length,
-              deleteButtonText: deleteButton instanceof HTMLElement
-                ? (getButtonSearchText(deleteButton).slice(0, 40) || "(빈 텍스트)")
-                : "(못 찾음)",
-              firstBtnAriaLabel: firstBtn?.getAttribute("aria-label") || "(없음)",
-              firstBtnTitle: firstBtn?.getAttribute("title") || "(없음)",
-              firstBtnTestId: firstSvg?.getAttribute("data-testid") || "(없음)",
-              firstBtnText: (firstBtn?.textContent || "").trim().slice(0, 30) || "(빈 텍스트)"
-            };
+      for (let i = 0; i < liveIds.length; i += 1) {
+        const id = liveIds[i];
+        try {
+          const response = await fetch(baseUrl + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { Authorization: "Bearer " + ctx.token }
+          });
+          if (response.ok) success += 1;
+          else {
+            failed += 1;
+            failures.push({ id, status: response.status });
           }
-          if (!(deleteButton instanceof HTMLElement)) continue;
-
-          foundAnyDeleteButtonInThisLoop = true;
-
-          try {
-            clickElementLikeUser(deleteButton);
-
-            const confirmed = await confirmDeleteDialogIfPresent();
-            if (!confirmed) {
-              console.warn("[CCF LOG PACKAGE] 삭제 확인 버튼을 찾지 못했습니다.", root);
-              continue;
-            }
-
-            deletedCount += 1;
-            deletedAnyInThisLoop = true;
-
-            updateToast(`[ ${tabName} ] 탭 비우는 중... (${deletedCount}개 삭제됨)`);
-
-            await waitForLogSettle(scope);
-            await new Promise((resolve) => setTimeout(resolve, 120));
-          } catch (error) {
-            console.warn("[CCF LOG PACKAGE] 개별 메시지 삭제 클릭 실패:", error);
-          }
+        } catch (error) {
+          failed += 1;
+          failures.push({ id, error: error?.message || String(error) });
         }
-
-        if (deletedAnyInThisLoop) {
-          emptyCount = 0;
-          await waitForLogSettle(scope);
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          continue;
-        }
-
-        if (!foundAnyDeleteButtonInThisLoop) {
-          emptyCount += 1;
-        }
-
-        const currentScrollTop = scroller.scrollTop;
-
-        if (currentScrollTop <= 0 || currentScrollTop === lastScrollTop) {
-          break;
-        }
-
-        lastScrollTop = currentScrollTop;
-        scroller.scrollTop = Math.max(
-          0,
-          currentScrollTop - Math.max(
-            LOG_SCAN_MIN_STEP,
-            scroller.clientHeight * LOG_SCAN_STEP_RATIO
-          )
-        );
-
-        await waitForLogSettle(scope);
-        await new Promise((resolve) => setTimeout(resolve, 450));
+        updateToast(`[ ${tabText} ] 탭 삭제 중... (${success + failed}/${liveIds.length})`);
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (toast) {
-        toast.remove();
-        toast = null;
-      }
+      if (toast) { toast.remove(); toast = null; }
 
-      const diagText = diagSample
-        ? `\n[진단] 발견 메시지 ${maxItemRootCount}개 / button ${diagSample.buttonCount}개 / 삭제버튼: ${diagSample.deleteButtonText}`
-          + `\n  └ 첫 버튼  aria-label: "${diagSample.firstBtnAriaLabel}"`
-          + `\n             title: "${diagSample.firstBtnTitle}"`
-          + `\n             svg data-testid: "${diagSample.firstBtnTestId}"`
-          + `\n             text: "${diagSample.firstBtnText}"`
-        : `\n[진단] 발견 메시지 ${maxItemRootCount}개 — 메시지 항목을 찾지 못했습니다.`;
-      alert(`[ ${tabName} ] 탭에서 총 ${deletedCount}개의 메시지를 삭제했습니다.${diagText}`);
+      if (failed === 0) {
+        alert(`[ ${tabText} ] 탭에서 총 ${success}개의 메시지를 삭제했습니다.`);
+      } else {
+        console.warn("[CCF LOG PACKAGE] 삭제 실패 상세:", failures);
+        alert(`[ ${tabText} ] 탭 삭제 결과 — 성공 ${success}개 / 실패 ${failed}개\n실패 상세는 콘솔을 확인해 주세요.`);
+      }
     } catch (error) {
       console.error("[CCF LOG PACKAGE] delete failed", error);
       alert(error?.message || "로그 삭제 중 오류가 발생했습니다.");

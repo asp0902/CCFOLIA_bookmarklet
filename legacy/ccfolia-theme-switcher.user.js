@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.6
+// @version      0.0.7
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -18,6 +18,12 @@
   const STORAGE_KEY = "ccf-theme-switcher-settings-v1";
   const STYLE_ID = "ccf-theme-switcher-style";
   const VARS_STYLE_ID = "ccf-theme-switcher-vars";
+  const DICEBOT_STYLE_ID = "ccf-theme-switcher-dicebot-style";
+  const DICEBOT_ATTR = "data-ccf-dicebot";
+  const DICEBOT_TOPBAR_SELECTOR = "span.MuiTypography-caption";
+  const DICEBOT_MAP = Object.freeze({
+    "언성 듀엣": "unsung-duet"
+  });
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
   const PANEL_POSITION_KEY = "ccf-theme-switcher-panel-position-v1";
@@ -110,7 +116,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.6"),
+    version: getUserscriptVersion("0.0.7"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -149,6 +155,7 @@
       document.querySelectorAll([
         `#${STYLE_ID}`,
         `#${VARS_STYLE_ID}`,
+        `#${DICEBOT_STYLE_ID}`,
         `#${TOGGLE_ID}`,
         `#${PANEL_ID}`,
         `#${CHARACTER_COLOR_POPOVER_ID}`,
@@ -160,6 +167,7 @@
       document.documentElement?.removeAttribute("data-ccf-theme-active");
       document.documentElement?.removeAttribute("data-ccf-theme-mode");
       document.documentElement?.removeAttribute(DEFAULT_MODE_ATTR);
+      document.documentElement?.removeAttribute(DICEBOT_ATTR);
       document.body?.removeAttribute(UI_READY_ATTR);
       document.querySelectorAll([
         `[${ANCHOR_ATTR}]`,
@@ -1346,6 +1354,158 @@
       varsStyle.id = VARS_STYLE_ID;
       document.documentElement.appendChild(varsStyle);
     }
+
+    if (!document.getElementById(DICEBOT_STYLE_ID)) {
+      const dicebotStyle = document.createElement("style");
+      dicebotStyle.id = DICEBOT_STYLE_ID;
+      dicebotStyle.textContent = buildDicebotStyleSheet();
+      document.documentElement.appendChild(dicebotStyle);
+    }
+  }
+
+  function buildDicebotStyleSheet() {
+    // Roll20 "언성 듀엣" 커스텀시트 팔레트
+    // bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff
+    const UD = {
+      bg: "#1c3245",
+      bgSoft: "rgba(28, 50, 69, 0.85)",
+      bgChip: "rgba(0, 77, 103, 0.32)",
+      border: "#004d67",
+      borderSoft: "rgba(0, 77, 103, 0.55)",
+      muted: "#8895A1",
+      text: "#ffffff",
+      shadow: "rgba(0, 0, 0, 0.45)"
+    };
+
+    return `
+      /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
+      html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
+        background: ${UD.bg} !important;
+        color: ${UD.text} !important;
+        border: 1px solid ${UD.border} !important;
+        border-radius: 10px !important;
+        box-shadow: 0 18px 40px ${UD.shadow} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiCard-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAccordion-root {
+        background: ${UD.bgSoft} !important;
+        color: ${UD.text} !important;
+        border-color: ${UD.borderSoft} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDivider-root {
+        border-color: ${UD.borderSoft} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTypography-root:not([style*="color:"]),
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormLabel-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputLabel-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormControlLabel-label,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButton-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButtonBase-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiSvgIcon-root {
+        color: ${UD.text} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormHelperText-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemText-secondary {
+        color: ${UD.muted} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFilledInput-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-input,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper textarea,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper input[type="text"],
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper input[type="number"] {
+        background: ${UD.bgChip} !important;
+        color: ${UD.text} !important;
+        border-radius: 0 !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root fieldset {
+        border-color: ${UD.border} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-focused .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root.Mui-focused fieldset {
+        border-color: ${UD.muted} !important;
+        box-shadow: 0 0 0 2px rgba(136, 149, 161, 0.25) !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root.Mui-selected,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root.Mui-selected,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-selected > .MuiListItemButton-root {
+        background: ${UD.border} !important;
+        color: ${UD.text} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTabs-indicator {
+        background: ${UD.text} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiMenuItem-root:hover {
+        background: rgba(0, 77, 103, 0.45) !important;
+      }
+
+      /* 캐릭터 시트 팝업 스크롤바 (Roll20 시트 톤) */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-track {
+        background: ${UD.bg};
+      }
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-thumb {
+        background: ${UD.border};
+        border: 2px solid ${UD.bg};
+        border-radius: 999px;
+      }
+
+      /* === [언성 듀엣] 다이스 롤 채팅 메시지 ======================== */
+      /* 채팅 로그 영역의 메시지 아이템 (li) 에 카드 톤 적용 */
+      html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li {
+        background: ${UD.bgSoft} !important;
+        border: 1px solid ${UD.border} !important;
+        border-radius: 10px !important;
+        margin: 6px 8px !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 8px 18px ${UD.shadow} !important;
+      }
+
+      html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li p.MuiTypography-body2 {
+        color: ${UD.muted} !important;
+      }
+
+      /* 다이스 결과(예: "1D6 → 4") 강조: 화살표/숫자가 들어가는 패턴을
+         가진 메시지의 굵은 텍스트는 흰색으로 띄움 */
+      html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li strong,
+      html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li b,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li strong,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li strong {
+        color: ${UD.text} !important;
+        font-weight: bold;
+      }
+
+      /* 캐릭터 이름(닉네임) 라벨 톤 */
+      html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li .MuiTypography-caption {
+        color: ${UD.text} !important;
+        font-weight: bold;
+      }
+    `;
   }
 
   function ensureUi() {
@@ -1383,6 +1543,7 @@
     }
 
     mountToggle();
+    applyDicebotAttribute();
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -3388,6 +3549,33 @@
     }
 
     return null;
+  }
+
+  function detectDicebotName() {
+    // 탑바의 `<span class="MuiTypography-caption">…</span>` 들을 훑어
+    // DICEBOT_MAP 의 키와 일치하는 텍스트가 있으면 해당 식별자를 돌려준다.
+    const spans = document.querySelectorAll(DICEBOT_TOPBAR_SELECTOR);
+    for (const span of spans) {
+      if (!(span instanceof HTMLElement)) continue;
+      const text = normalizeSpace(span.textContent || "");
+      if (!text) continue;
+      if (Object.prototype.hasOwnProperty.call(DICEBOT_MAP, text)) {
+        return DICEBOT_MAP[text];
+      }
+    }
+    return "";
+  }
+
+  function applyDicebotAttribute() {
+    const root = document.documentElement;
+    if (!root) return;
+    const id = detectDicebotName();
+    const current = root.getAttribute(DICEBOT_ATTR) || "";
+    if (id) {
+      if (current !== id) root.setAttribute(DICEBOT_ATTR, id);
+    } else if (current) {
+      root.removeAttribute(DICEBOT_ATTR);
+    }
   }
 
   function findDicebotAnchor() {
