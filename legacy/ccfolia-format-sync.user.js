@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.9
+// @version      0.0.11
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -41,7 +41,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.9"),
+    version: getUserscriptVersion("0.0.11"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1512,6 +1512,7 @@
   const EDITOR_STATE = new WeakMap();
   const PENDING_SEND_RESTORE = new WeakMap();
   const EDITOR_VISUAL_PREVIEW = new WeakMap();
+  const INLINE_SELECTION_HIGHLIGHT = new WeakMap();
   const INLINE_TOOLBARS = new WeakMap();
   const INLINE_TOOLBAR_EDITORS = new WeakMap();
 
@@ -2682,6 +2683,10 @@
         text-align: center;
       }
 
+      .ccf-inline-size-input:focus {
+        text-align: right;
+      }
+
       .ccf-inline-size-input::placeholder {
         color: rgba(255, 255, 255, 0.55);
       }
@@ -2766,6 +2771,26 @@
         word-break: break-word;
         overflow-wrap: anywhere;
         z-index: 1;
+      }
+
+      .ccf-inline-selection-layer {
+        position: fixed;
+        pointer-events: none;
+        overflow: hidden;
+        box-sizing: border-box;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        color: transparent !important;
+        -webkit-text-fill-color: transparent;
+        z-index: 2147483001;
+      }
+
+      .ccf-inline-selection-layer .ccf-inline-selection-mark {
+        background: rgba(100, 149, 255, 0.34);
+        border-radius: 3px;
+        -webkit-box-decoration-break: clone;
+        box-decoration-break: clone;
       }
 
       .ccf-editor-preview-content {
@@ -3116,6 +3141,12 @@
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
 
+      if (target.matches?.("[data-inline-size]")) {
+        moveInlineSizeCursorToEnd(target);
+        showInlineToolbarSelectionHighlight(toolbar);
+        return;
+      }
+
       const popoverAction = target.closest("[data-inline-popover-action]");
       if (popoverAction && toolbar.contains(popoverAction)) {
         event.preventDefault();
@@ -3149,11 +3180,13 @@
 
       if (target?.matches?.("[data-inline-size]")) {
         sanitizeInlineSizeInput(target);
+        moveInlineSizeCursorToEnd(target);
         target.dataset.sizePreviewApplied = "1";
         applyInlineToolbarStyle(toolbar, {
           selectionOverride: getInlineToolbarSelection(toolbar),
           restoreSelection: false
         });
+        showInlineToolbarSelectionHighlight(toolbar);
       }
     }, true);
 
@@ -3174,6 +3207,7 @@
           selectionOverride: getInlineToolbarSelection(toolbar),
           restoreSelection: false
         });
+        showInlineToolbarSelectionHighlight(toolbar);
       }
     }, true);
 
@@ -3183,6 +3217,8 @@
       captureInlineToolbarSelection(toolbar);
       target.dataset.editingSize = "1";
       delete target.dataset.sizePreviewApplied;
+      moveInlineSizeCursorToEnd(target);
+      showInlineToolbarSelectionHighlight(toolbar);
     }, true);
 
     toolbar.addEventListener("focusout", (event) => {
@@ -3201,6 +3237,7 @@
         const nextActive = document.activeElement;
         if (nextActive instanceof Element && toolbar.contains(nextActive)) return;
         restoreInlineToolbarEditorSelection(toolbar);
+        hideInlineToolbarSelectionHighlight(toolbar);
       }, 0);
     }, true);
 
@@ -3293,6 +3330,7 @@
       delete input.dataset.editingSize;
       input.blur?.();
       restoreInlineToolbarEditorSelection(toolbar);
+      hideInlineToolbarSelectionHighlight(toolbar);
       return;
     }
 
@@ -3320,6 +3358,16 @@
       selectionOverride: getInlineToolbarSelection(toolbar),
       restoreSelection: false
     });
+    showInlineToolbarSelectionHighlight(toolbar);
+  }
+
+  function moveInlineSizeCursorToEnd(input) {
+    if (!(input instanceof HTMLInputElement)) return;
+    setTimeout(() => {
+      if (!document.contains(input)) return;
+      const end = input.value.length;
+      try { input.setSelectionRange(end, end); } catch {}
+    }, 0);
   }
 
   function sanitizeInlineSizeInput(input) {
@@ -3402,6 +3450,7 @@
     toolbars.forEach((item) => {
       if (item) {
         item.__ccfSelection = null;
+        hideInlineToolbarSelectionHighlight(item);
       }
     });
   }
@@ -3410,6 +3459,113 @@
     const editor = getInlineToolbarEditor(toolbar);
     const selection = editor ? getInlineToolbarSelection(toolbar) : null;
     restoreRoomSelectionSoon(editor, selection);
+  }
+
+  function ensureInlineSelectionHighlight(editor) {
+    if (!(editor instanceof HTMLElement)) return null;
+
+    const existing = INLINE_SELECTION_HIGHLIGHT.get(editor);
+    if (existing?.overlay?.isConnected && existing.content?.isConnected) {
+      return existing;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "ccf-inline-selection-layer";
+    overlay.setAttribute(SAFE_UI_ATTR, "1");
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.style.display = "none";
+
+    const content = document.createElement("div");
+    content.className = "ccf-editor-preview-content";
+    overlay.appendChild(content);
+    document.documentElement.appendChild(overlay);
+
+    const entry = { host: document.documentElement, overlay, content, baseColor: "" };
+    INLINE_SELECTION_HIGHLIGHT.set(editor, entry);
+    return entry;
+  }
+
+  function renderInlineSelectionHighlightContent(content, text, selection) {
+    content.textContent = "";
+    if (!selection || selection.start === selection.end) return;
+
+    const before = text.slice(0, selection.start);
+    const selected = text.slice(selection.start, selection.end);
+    const after = text.slice(selection.end);
+
+    if (before) {
+      content.appendChild(document.createTextNode(before));
+    }
+
+    const mark = document.createElement("span");
+    mark.className = "ccf-inline-selection-mark";
+    mark.textContent = selected || " ";
+    content.appendChild(mark);
+
+    if (after) {
+      content.appendChild(document.createTextNode(after));
+    }
+  }
+
+  function showInlineToolbarSelectionHighlight(toolbar) {
+    const editor = getInlineToolbarEditor(toolbar);
+    if (!(editor instanceof HTMLElement)) return false;
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(getInlineToolbarSelection(toolbar), text.length);
+    if (!selection || selection.start === selection.end) {
+      hideInlineSelectionHighlight(editor);
+      return false;
+    }
+
+    const entry = ensureInlineSelectionHighlight(editor);
+    if (!entry) return false;
+
+    const computed = getComputedStyle(editor);
+    layoutInlineSelectionHighlight(editor, entry, computed);
+    renderInlineSelectionHighlightContent(entry.content, text, selection);
+    syncEditorVisualPreviewScroll(editor, entry);
+    entry.overlay.style.display = "block";
+    return true;
+  }
+
+  function layoutInlineSelectionHighlight(editor, entry, computed = getComputedStyle(editor)) {
+    const { overlay, content } = entry;
+    const rect = editor.getBoundingClientRect();
+
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    overlay.style.paddingTop = computed.paddingTop;
+    overlay.style.paddingRight = computed.paddingRight;
+    overlay.style.paddingBottom = computed.paddingBottom;
+    overlay.style.paddingLeft = computed.paddingLeft;
+    overlay.style.borderRadius = computed.borderRadius;
+    overlay.style.font = computed.font;
+    overlay.style.lineHeight = computed.lineHeight;
+    overlay.style.letterSpacing = computed.letterSpacing;
+    overlay.style.textAlign = computed.textAlign;
+    overlay.style.textIndent = computed.textIndent;
+    overlay.style.textTransform = computed.textTransform;
+    overlay.style.whiteSpace = editor instanceof HTMLInputElement ? "pre" : "pre-wrap";
+    overlay.style.wordBreak = editor instanceof HTMLInputElement ? "normal" : "break-word";
+    overlay.style.overflowWrap = editor instanceof HTMLInputElement ? "normal" : "anywhere";
+    content.style.minHeight = `calc(100% + ${editor.scrollTop}px)`;
+  }
+
+  function hideInlineSelectionHighlight(editor) {
+    const entry = INLINE_SELECTION_HIGHLIGHT.get(editor);
+    if (!entry) return;
+    entry.overlay.style.display = "none";
+    entry.content.textContent = "";
+  }
+
+  function hideInlineToolbarSelectionHighlight(toolbar) {
+    const editor = getInlineToolbarEditor(toolbar);
+    if (editor instanceof HTMLElement) {
+      hideInlineSelectionHighlight(editor);
+    }
   }
 
   function handleInlineToolbarDocumentMouseDown(event) {
@@ -3426,6 +3582,9 @@
     if (editor) return;
 
     clearInlineToolbarSelection();
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => {
+      hideInlineToolbarSelectionHighlight(toolbar);
+    });
   }
 
   function syncInlineToolbarSelectionFromDocument() {
