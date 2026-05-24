@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.34
+// @version      0.2.35
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,16 +52,22 @@
   // 남아 있는 비가시 봉투를 숨기기 위한 [data-ccf-bgm-share] CSS는 그대로 둔다.)
   const BGM_CHAT_SHARE_ENABLED = false;
 
-  // === Firestore 기반 BGM 공유 ===
-  // CCFOLIA가 사용하는 Firestore 프로젝트의 룸 문서 하위에 우리 전용 컬렉션을 만들어
-  // 슬롯을 PATCH/DELETE하고 5초마다 GET으로 폴링한다. 인증 토큰은 CCFOLIA가 이미
-  // IndexedDB(firebaseLocalStorageDb)에 저장해 둔 idToken을 그대로 빌려 쓴다.
-  // 쓰기 가능 여부는 Firestore 보안 규칙에 달려 있으므로 첫 PATCH가 403을 반환하면
-  // 콘솔에 명확히 남기고 조용히 실패한다(기능 자체는 죽지 않음).
-  const BGM_FIRESTORE_SHARE_ENABLED = true;
+  // === Firestore 기반 BGM 동기화 ===
+  // 두 가지 모드를 별도 플래그로 관리한다:
+  //   - SLOT_SYNC: 슬롯 목록 자체를 모든 클라이언트에 복제. 현재는 OFF.
+  //     (코코포리아 네이티브 BGM도 슬롯 공유는 안 함. 채워두면 panel만 지저분해짐)
+  //   - PLAYBACK_SYNC: "지금 재생 중" 신호만 전파. ON.
+  //     A가 재생/정지 누르면 B가 동일 곡을 자동 재생/정지. 자연 종료는 self-terminate.
+  // 인증 토큰은 CCFOLIA가 이미 IndexedDB(firebaseLocalStorageDb)에 저장해 둔 idToken을
+  // 그대로 빌려 쓴다. PATCH가 403이면 콘솔에 1회 경고 후 조용히 실패.
+  const BGM_FIRESTORE_SHARE_ENABLED = true;        // 마스터 스위치 (둘 중 하나라도 켜져 있으면 폴링)
+  const BGM_FIRESTORE_SLOT_SYNC_ENABLED = false;   // 슬롯 목록 동기화 (PATCH/DELETE/list)
+  const BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED = true; // 재생 신호 동기화 (단일 doc)
   const BGM_FIRESTORE_PROJECT_ID = "ccfolia-160aa";
   const BGM_FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${BGM_FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
   const BGM_FIRESTORE_SUBCOLLECTION = "capybaraToolkitBgm";
+  const BGM_FIRESTORE_PLAYBACK_DOC_ID = "nowPlaying"; // Firestore 예약어(__*__) 회피
+  const BGM_FIRESTORE_PLAYBACK_FRESH_MS = 30 * 60 * 1000; // 30분 이상 묵은 playing 신호는 무시(잔류 신호 자동복귀 방지)
   const BGM_FIRESTORE_POLL_INTERVAL_MS = 5000;
   const BGM_FIRESTORE_TOKEN_TTL_MS = 5 * 60 * 1000;
   const FIREBASE_AUTH_DB_NAME = "firebaseLocalStorageDb";
@@ -89,7 +95,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.34"),
+    version: getUserscriptVersion("0.2.35"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -2897,6 +2903,21 @@
     ccfBgmActiveLoop = state.loop;
     markCcfYoutubeBgmSlotButtons();
 
+    // 재생 신호 송신(원격에서 트리거된 적용 중이면 자동 건너뜀 → 에코 방지).
+    if (typeof ccfBgmFirestoreEmitPlayback === "function") {
+      ccfBgmFirestoreEmitPlayback({
+        entryKey: resolvedEntryKey,
+        slotKey: normalizedSlotKey,
+        url: entry?.url || "",
+        videoId,
+        title: entry?.title || "",
+        displayName: entry?.displayName || entry?.title || "",
+        volume: state.volume,
+        loop: state.loop,
+        state: "playing"
+      });
+    }
+
     if (!ensureYoutubePlayerHost()) {
       if (retryCount < 50) {
         window.setTimeout(() => {
@@ -3028,12 +3049,22 @@
   }
 
   function stopCcfYoutubeBgm(reason = "manual") {
+    // 의도적 정지(manual / remote-switch 제외)일 때만 신호를 보낸다.
+    // - "manual": 사용자가 직접 정지 클릭 → 전파
+    // - "remote-stop": 다른 사용자가 정지해서 우리도 멈춤 → 전파 안 함(applying 가드로 이미 막힘)
+    // - "remote-switch": 다른 사용자가 다른 곡으로 전환 → 전파 안 함(곧 새 playing 신호가 옴)
+    // - 그 외(예: native-bgm-started, webaudio-bgm-started): YouTube 외 BGM이 시작돼서 자동 정지 → 전파 안 함
+    const shouldEmit = reason === "manual";
+
     if (!ccfBgmPlayer || typeof ccfBgmPlayer.stopVideo !== "function") {
       ccfBgmActiveSlotKey = "";
       ccfBgmActiveEntryKey = "";
       ccfBgmPlayerVisible = false;
       syncCcfYoutubeBgmPlayerDockVisibility();
       markCcfYoutubeBgmSlotButtons();
+      if (shouldEmit && typeof ccfBgmFirestoreEmitPlayback === "function") {
+        ccfBgmFirestoreEmitPlayback({ state: "stopped" });
+      }
       return;
     }
 
@@ -3051,6 +3082,9 @@
     ccfBgmPlayerVisible = false;
     syncCcfYoutubeBgmPlayerDockVisibility();
     markCcfYoutubeBgmSlotButtons();
+    if (shouldEmit && typeof ccfBgmFirestoreEmitPlayback === "function") {
+      ccfBgmFirestoreEmitPlayback({ state: "stopped" });
+    }
   }
 
   function syncCcfActiveBgmState(seed = null) {
@@ -5960,15 +5994,17 @@
       debugLog("bgm-share-send-suppressed-inactive", { op });
       return;
     }
-    // 새 경로: Firestore. 기존 채팅 경로(아래)는 BGM_CHAT_SHARE_ENABLED가
-    // 영구히 false라 도달하지 않지만, 향후 폴백 옵션으로 남겨둔다.
-    if (BGM_FIRESTORE_SHARE_ENABLED) {
+    // 슬롯 목록 동기화 경로: 이제 기본 OFF. 슬롯을 다른 클라이언트에 전파하지 않는다.
+    // 대신 실제 재생 시작/정지 신호(아래 PLAYBACK_SYNC)만 전파해서, 다른 사용자가
+    // "현재 재생 중인 곡"만 같이 듣게 한다. 슬롯 목록은 각자 자기 panel에서만 관리.
+    if (BGM_FIRESTORE_SHARE_ENABLED && BGM_FIRESTORE_SLOT_SYNC_ENABLED) {
       ccfBgmFirestoreSendOperation(op, slotData).catch((error) => {
         debugLog("bgm-firestore-send-failed", { op, error: serializeError(error) });
       });
       return;
     }
     if (!BGM_CHAT_SHARE_ENABLED) {
+      // 슬롯 동기화도 채팅도 꺼져 있으면 송신할 곳이 없음. 조용히 종료.
       return;
     }
     const sentAt = Date.now();
@@ -7889,6 +7925,17 @@
 
   async function ccfBgmFirestorePollOnce() {
     if (!BGM_FIRESTORE_SHARE_ENABLED || !chatNotifierActive) return;
+
+    // 재생 신호 동기화: 단일 nowPlaying 문서를 GET해서 변경 감지하면 자동 재생/정지.
+    if (BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) {
+      await ccfBgmFirestorePollPlayback().catch((error) => {
+        debugLog("bgm-firestore-playback-poll-failed", serializeError(error));
+      });
+    }
+
+    // 슬롯 목록 동기화는 기본 OFF — 켜져 있을 때만 컬렉션 전체 GET 후 머지.
+    if (!BGM_FIRESTORE_SLOT_SYNC_ENABLED) return;
+
     const docs = await ccfBgmFirestoreListSlots();
     if (!docs) return; // 네트워크/권한 오류 등 — 다음 틱에 재시도
 
@@ -7961,6 +8008,193 @@
     } finally {
       ccfBgmShareSendingDepth -= 1;
     }
+  }
+
+  // ============================================================================
+  // 재생 신호 동기화 (PLAYBACK_SYNC)
+  // ----------------------------------------------------------------------------
+  // 단일 문서 rooms/{roomId}/capybaraToolkitBgm/nowPlaying 를 사용해
+  // "지금 누가 어떤 곡을 재생/정지했는가"만 공유한다.
+  // 송신: 로컬에서 playCcfYoutubeBgmSlot / stopCcfYoutubeBgm 가 실행될 때 PATCH.
+  // 수신: 폴링이 sender ≠ self인 새 신호를 감지하면 동일 곡을 자동 재생/정지.
+  // self-terminate: 곡의 자연 종료(루프 OFF로 끝까지 재생)는 각 클라이언트가 알아서
+  //   처리하고 신호를 보내지 않는다. 의도적 정지만 stopped 신호를 보낸다.
+  // 잔류 신호 방지: 30분보다 오래된 playing 신호는 fresh load 시 자동 적용하지 않음.
+  // ============================================================================
+
+  // 마지막으로 본 신호의 시그니처(sender:startedAt:state:entryKey). 변경 감지용.
+  let ccfBgmFirestoreLastPlaybackSignature = "";
+  // 원격 신호를 적용하는 동안 켜지는 플래그. 켜져 있으면 play/stop 훅이 송신을 건너뜀.
+  let ccfBgmFirestorePlaybackApplying = false;
+
+  async function ccfBgmFirestoreWritePlayback(payload) {
+    if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) return;
+    const roomId = getCcfBgmFirestoreRoomId();
+    if (!roomId) return;
+    const token = await readFirebaseIdToken();
+    if (!token) {
+      debugLog("bgm-firestore-playback-write-no-token", { state: payload?.state });
+      return;
+    }
+
+    const url = `${BGM_FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(roomId)}/${BGM_FIRESTORE_SUBCOLLECTION}/${BGM_FIRESTORE_PLAYBACK_DOC_ID}`;
+    const fields = ccfBgmFirestoreEncodeFields({
+      entryKey: String(payload?.entryKey || ""),
+      slotKey: String(payload?.slotKey || ""),
+      url: String(payload?.url || ""),
+      videoId: String(payload?.videoId || ""),
+      title: String(payload?.title || ""),
+      displayName: String(payload?.displayName || payload?.title || ""),
+      volume: Number.isFinite(Number(payload?.volume)) ? Math.round(Number(payload.volume)) : 100,
+      loop: payload?.loop !== false,
+      state: String(payload?.state || "stopped"),
+      startedAt: Date.now(),
+      sender: BGM_SHARE_SENDER_ID
+    });
+
+    try {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ fields }),
+        credentials: "omit",
+        mode: "cors"
+      });
+      debugLog("bgm-firestore-playback-write", {
+        state: payload?.state,
+        entryKey: payload?.entryKey,
+        status: response.status,
+        ok: response.ok
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        debugLog("bgm-firestore-playback-write-error-body", {
+          status: response.status,
+          body: text.slice(0, 400)
+        });
+        if (response.status === 401) {
+          ccfBgmFirestoreState.tokenCache = { token: "", fetchedAt: 0 };
+        }
+      }
+    } catch (error) {
+      debugLog("bgm-firestore-playback-write-failed", serializeError(error));
+    }
+  }
+
+  async function ccfBgmFirestoreReadPlayback() {
+    const roomId = getCcfBgmFirestoreRoomId();
+    if (!roomId) return null;
+    const url = `${BGM_FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(roomId)}/${BGM_FIRESTORE_SUBCOLLECTION}/${BGM_FIRESTORE_PLAYBACK_DOC_ID}`;
+    const token = await readFirebaseIdToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+        credentials: "omit",
+        mode: "cors"
+      });
+      if (response.status === 404) return null; // 아직 재생 신호 없음
+      if (!response.ok) {
+        debugLog("bgm-firestore-playback-read-error", { status: response.status });
+        return null;
+      }
+      const doc = await response.json();
+      return ccfBgmFirestoreDecodeFields(doc.fields);
+    } catch (error) {
+      debugLog("bgm-firestore-playback-read-failed", serializeError(error));
+      return null;
+    }
+  }
+
+  async function ccfBgmFirestorePollPlayback() {
+    if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierActive) return;
+    const data = await ccfBgmFirestoreReadPlayback();
+    if (!data) return;
+
+    // 자기가 쓴 신호는 무시 (에코).
+    if (data.sender === BGM_SHARE_SENDER_ID) {
+      // 시그니처는 갱신해두자(다음에 진짜 신호 왔을 때 비교 기준이 됨).
+      ccfBgmFirestoreLastPlaybackSignature = `${data.sender}:${data.startedAt}:${data.state}:${data.entryKey}`;
+      return;
+    }
+
+    const signature = `${data.sender || ""}:${data.startedAt || 0}:${data.state || ""}:${data.entryKey || ""}`;
+    if (signature === ccfBgmFirestoreLastPlaybackSignature) return;
+    ccfBgmFirestoreLastPlaybackSignature = signature;
+
+    debugLog("bgm-firestore-playback-received", {
+      state: data.state,
+      entryKey: data.entryKey,
+      sender: data.sender,
+      ageMs: Date.now() - (Number(data.startedAt) || 0)
+    });
+
+    if (data.state === "playing") {
+      if (!data.videoId || !data.slotKey) {
+        debugLog("bgm-firestore-playback-skip-missing-fields", { videoId: !!data.videoId, slotKey: !!data.slotKey });
+        return;
+      }
+      // 30분보다 오래된 잔류 신호 무시(누가 옛날에 재생만 하고 정지 안 한 상태일 수 있음).
+      const ageMs = Date.now() - (Number(data.startedAt) || 0);
+      if (ageMs > BGM_FIRESTORE_PLAYBACK_FRESH_MS) {
+        debugLog("bgm-firestore-playback-stale-ignored", { ageMs });
+        return;
+      }
+      // 이미 같은 곡 재생 중이면 스킵.
+      if (ccfBgmActiveSlotKey === data.slotKey && ccfBgmActiveEntryKey === data.entryKey) return;
+
+      ccfBgmFirestorePlaybackApplying = true;
+      try {
+        // 다른 곡 재생 중이면 일단 정지 (정지 신호는 송신 안 함 — applying 가드).
+        if (ccfBgmActiveSlotKey) {
+          stopCcfYoutubeBgm("remote-switch");
+        }
+        playCcfYoutubeBgmSlot(
+          data.slotKey,
+          {
+            videoId: data.videoId,
+            url: data.url || "",
+            title: data.title || "",
+            displayName: data.displayName || data.title || "",
+            loop: data.loop !== false,
+            volume: Number.isFinite(Number(data.volume)) ? Number(data.volume) : 100
+          },
+          null,
+          0,
+          data.entryKey || ""
+        );
+      } finally {
+        // 동기 호출이 끝났으니 즉시 해제. 비동기 player 콜백은 신호 송신을 안 한다.
+        ccfBgmFirestorePlaybackApplying = false;
+      }
+      return;
+    }
+
+    if (data.state === "stopped") {
+      if (!ccfBgmActiveSlotKey && !ccfBgmActiveEntryKey) return;
+      ccfBgmFirestorePlaybackApplying = true;
+      try {
+        stopCcfYoutubeBgm("remote-stop");
+      } finally {
+        ccfBgmFirestorePlaybackApplying = false;
+      }
+    }
+  }
+
+  // 로컬 play/stop 호출에서 부를 헬퍼. 적용 중이면 송신을 건너뛴다(에코 방지).
+  function ccfBgmFirestoreEmitPlayback(payload) {
+    if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) return;
+    if (ccfBgmFirestorePlaybackApplying) return;
+    if (!chatNotifierActive) return;
+    ccfBgmFirestoreWritePlayback(payload).catch((error) => {
+      debugLog("bgm-firestore-playback-emit-failed", serializeError(error));
+    });
   }
 
   function ccfBgmFirestoreStartPolling() {
