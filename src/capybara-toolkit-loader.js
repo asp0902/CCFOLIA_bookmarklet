@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.13";
-  const BUILD_ID = "2026-05-24-bgm-share-order-drawer-fix-1";
+  const VERSION = "0.1.15";
+  const BUILD_ID = "2026-05-24-bgm-firestore-channel-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

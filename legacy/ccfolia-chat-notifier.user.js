@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.32
+// @version      0.2.34
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -47,11 +47,25 @@
   const BGM_SHARE_PROTOCOL_VERSION = 1;
   const BGM_SHARE_DOM_ATTR = "data-ccf-bgm-share";
   const BGM_SHARE_SENDER_ID = `bgm-share-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  // Re-enabled: 같은 룸에 있는 다른 카피바라 툴킷 사용자에게도
-  // YouTube BGM 추가/편집/제거가 전파되도록 한다. 채팅 메시지에 비가시 문자로
-  // 인코딩된 작은 봉투를 실어 보내고, 수신 측에서는 ccf-bgm-share 표식을 단 뒤
-  // CSS로 숨겨 채팅 로그 오염을 최소화한다.
-  const BGM_CHAT_SHARE_ENABLED = true;
+  // 채팅 기반 공유는 폰트/렌더링에 따라 비가시 문자가 ?로 새어 보이는 사례가 있어
+  // 영구히 비활성화. 대신 아래 Firestore 채널을 사용한다. (수신 측에서 과거 채팅에
+  // 남아 있는 비가시 봉투를 숨기기 위한 [data-ccf-bgm-share] CSS는 그대로 둔다.)
+  const BGM_CHAT_SHARE_ENABLED = false;
+
+  // === Firestore 기반 BGM 공유 ===
+  // CCFOLIA가 사용하는 Firestore 프로젝트의 룸 문서 하위에 우리 전용 컬렉션을 만들어
+  // 슬롯을 PATCH/DELETE하고 5초마다 GET으로 폴링한다. 인증 토큰은 CCFOLIA가 이미
+  // IndexedDB(firebaseLocalStorageDb)에 저장해 둔 idToken을 그대로 빌려 쓴다.
+  // 쓰기 가능 여부는 Firestore 보안 규칙에 달려 있으므로 첫 PATCH가 403을 반환하면
+  // 콘솔에 명확히 남기고 조용히 실패한다(기능 자체는 죽지 않음).
+  const BGM_FIRESTORE_SHARE_ENABLED = true;
+  const BGM_FIRESTORE_PROJECT_ID = "ccfolia-160aa";
+  const BGM_FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${BGM_FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
+  const BGM_FIRESTORE_SUBCOLLECTION = "capybaraToolkitBgm";
+  const BGM_FIRESTORE_POLL_INTERVAL_MS = 5000;
+  const BGM_FIRESTORE_TOKEN_TTL_MS = 5 * 60 * 1000;
+  const FIREBASE_AUTH_DB_NAME = "firebaseLocalStorageDb";
+  const FIREBASE_AUTH_STORE_NAME = "firebaseLocalStorage";
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
@@ -75,7 +89,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.32"),
+    version: getUserscriptVersion("0.2.34"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -3290,10 +3304,14 @@
       return false;
     }
 
-    // .MuiTabs-root는 BGM 외 탭(전경/배경/효과음 등)에도 항상 존재하므로
-    // 너무 헐겁다. BGM 라이브러리에서만 마운트되는 위젯들로만 좁힌다.
+    // BGM 라이브러리와 이미지 라이브러리(전경/배경/캐릭터 선택)는 둘 다
+    // 하단 드로어 + MuiTabs + input[name="url"]을 가져서 헷갈리기 쉽다.
+    // BGM 패널에만 고유하게 나타나는 시그널로만 좁힌다:
+    //   - LibraryMusicIcon: BGM 슬롯 좌측의 음악 노트 아이콘
+    //   - aria-label에 "BGM" 문자열: 한글/영어 UI
+    // StopIcon, input[name="url"], "メディア"는 다른 드로어에도 등장하므로 제외.
     return !!drawer.querySelector(
-      '[data-testid="LibraryMusicIcon"], [data-testid="StopIcon"], input[name="url"], [aria-label*="BGM"], [aria-label*="メディア"]'
+      '[data-testid="LibraryMusicIcon"], [aria-label*="BGM"]'
     );
   }
 
@@ -5934,15 +5952,23 @@
   }
 
   function ccfBgmShareSendOperation(op, slotData) {
-    if (!BGM_CHAT_SHARE_ENABLED) {
-      return;
-    }
     if (ccfBgmShareSendingDepth > 0) {
       debugLog("bgm-share-send-suppressed-reentrant", { op });
       return;
     }
     if (!chatNotifierActive) {
       debugLog("bgm-share-send-suppressed-inactive", { op });
+      return;
+    }
+    // 새 경로: Firestore. 기존 채팅 경로(아래)는 BGM_CHAT_SHARE_ENABLED가
+    // 영구히 false라 도달하지 않지만, 향후 폴백 옵션으로 남겨둔다.
+    if (BGM_FIRESTORE_SHARE_ENABLED) {
+      ccfBgmFirestoreSendOperation(op, slotData).catch((error) => {
+        debugLog("bgm-firestore-send-failed", { op, error: serializeError(error) });
+      });
+      return;
+    }
+    if (!BGM_CHAT_SHARE_ENABLED) {
       return;
     }
     const sentAt = Date.now();
@@ -6731,7 +6757,8 @@
 
   function ccfBgmShareDispatchDiff(payload) {
     const next = ccfBgmShareCloneSnapshot(payload);
-    if (!BGM_CHAT_SHARE_ENABLED) {
+    // 활성화된 공유 채널이 하나도 없으면 베이스라인만 갱신하고 종료.
+    if (!BGM_CHAT_SHARE_ENABLED && !BGM_FIRESTORE_SHARE_ENABLED) {
       ccfBgmShareLastSnapshot = next;
       return;
     }
@@ -7575,6 +7602,400 @@
   }
 
   document.addEventListener("pointerdown", handleCcfNativeBgmPointerDownDelegated, withTeardownSignal(true));
+
+  // ============================================================================
+  // Firestore 기반 BGM 공유 모듈
+  // ----------------------------------------------------------------------------
+  // 송신: ccfBgmShareSendOperation에서 라우팅. 추가/편집 → PATCH, 삭제 → DELETE.
+  // 수신: 5초마다 컬렉션 전체 GET → 로컬 슬롯맵과 diff하여 원격 변경분 반영.
+  // 토큰: firebaseLocalStorageDb IndexedDB에서 idToken을 빌려 Authorization 헤더에 사용.
+  // 실패 처리: 모든 단계가 콘솔 debugLog로 결과 코드를 남기고 조용히 종료한다.
+  // ============================================================================
+
+  const ccfBgmFirestoreState = {
+    tokenCache: { token: "", fetchedAt: 0 },
+    pollTimer: 0,
+    active: false,
+    lastSnapshot: new Map(),
+    writeFailureNoted: false
+  };
+
+  function getCcfBgmFirestoreRoomId() {
+    const match = location.pathname.match(/^\/rooms\/([^/?#]+)/i);
+    return match ? match[1] : "";
+  }
+
+  function ccfBgmFirestoreSanitizeDocId(entryKey) {
+    // Firestore 문서 ID 제약: 슬래시 금지, 1500바이트 미만, "."/".."/"__*__" 금지.
+    const safe = String(entryKey || "")
+      .replace(/[\/]/g, "_")
+      .replace(/^\.+/, "_")
+      .replace(/^__|__$/g, "_")
+      .slice(0, 1000);
+    return safe || "entry";
+  }
+
+  async function readFirebaseIdToken() {
+    const now = Date.now();
+    const cache = ccfBgmFirestoreState.tokenCache;
+    if (cache.token && now - cache.fetchedAt < BGM_FIRESTORE_TOKEN_TTL_MS) {
+      return cache.token;
+    }
+    try {
+      const token = await openFirebaseAuthDbAndExtractToken();
+      ccfBgmFirestoreState.tokenCache = { token: token || "", fetchedAt: now };
+      if (!token) {
+        debugLog("bgm-firestore-token-empty");
+      } else {
+        debugLog("bgm-firestore-token-refreshed", { length: token.length });
+      }
+      return token;
+    } catch (error) {
+      debugLog("bgm-firestore-token-read-failed", serializeError(error));
+      return "";
+    }
+  }
+
+  function openFirebaseAuthDbAndExtractToken() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finalize = (value, error) => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error); else resolve(value);
+      };
+      let request;
+      try {
+        request = indexedDB.open(FIREBASE_AUTH_DB_NAME);
+      } catch (error) {
+        finalize(null, error);
+        return;
+      }
+      request.onerror = () => finalize(null, request.error || new Error("firebase auth db open failed"));
+      request.onblocked = () => finalize("");
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(FIREBASE_AUTH_STORE_NAME)) {
+          db.close();
+          finalize("");
+          return;
+        }
+        let tx;
+        try {
+          tx = db.transaction(FIREBASE_AUTH_STORE_NAME, "readonly");
+        } catch (error) {
+          db.close();
+          finalize(null, error);
+          return;
+        }
+        const store = tx.objectStore(FIREBASE_AUTH_STORE_NAME);
+        const getAll = store.getAll();
+        getAll.onerror = () => { db.close(); finalize(null, getAll.error); };
+        getAll.onsuccess = () => {
+          const rows = Array.isArray(getAll.result) ? getAll.result : [];
+          db.close();
+          // 행 구조: { fbase_key: "firebase:authUser:{API_KEY}:[DEFAULT]", value: { stsTokenManager: { accessToken, ... }, ... } }
+          let bestToken = "";
+          for (const row of rows) {
+            const key = row && typeof row.fbase_key === "string" ? row.fbase_key : "";
+            const candidate = row?.value?.stsTokenManager?.accessToken;
+            if (typeof candidate === "string" && candidate.length > 20) {
+              // authUser 항목을 우선
+              if (key.startsWith("firebase:authUser:")) {
+                bestToken = candidate;
+                break;
+              }
+              if (!bestToken) bestToken = candidate;
+            }
+          }
+          finalize(bestToken);
+        };
+      };
+    });
+  }
+
+  function ccfBgmFirestoreEncodeFields(entry) {
+    const fields = {};
+    for (const [key, value] of Object.entries(entry || {})) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === "string") {
+        fields[key] = { stringValue: value };
+      } else if (typeof value === "boolean") {
+        fields[key] = { booleanValue: value };
+      } else if (typeof value === "number" && Number.isFinite(value)) {
+        // Firestore는 정수와 부동소수를 구분. updatedAt 등은 큰 정수라 integerValue로.
+        if (Number.isInteger(value)) {
+          fields[key] = { integerValue: String(value) };
+        } else {
+          fields[key] = { doubleValue: value };
+        }
+      }
+    }
+    return fields;
+  }
+
+  function ccfBgmFirestoreDecodeFields(fields) {
+    const out = {};
+    for (const [key, value] of Object.entries(fields || {})) {
+      if (!value || typeof value !== "object") continue;
+      if (typeof value.stringValue === "string") {
+        out[key] = value.stringValue;
+      } else if (typeof value.booleanValue === "boolean") {
+        out[key] = value.booleanValue;
+      } else if (typeof value.integerValue === "string") {
+        const n = Number(value.integerValue);
+        if (Number.isFinite(n)) out[key] = n;
+      } else if (typeof value.doubleValue === "number") {
+        out[key] = value.doubleValue;
+      }
+    }
+    return out;
+  }
+
+  async function ccfBgmFirestoreSendOperation(op, slotData) {
+    const roomId = getCcfBgmFirestoreRoomId();
+    if (!roomId) {
+      debugLog("bgm-firestore-send-no-room", { op });
+      return;
+    }
+    if (!slotData?.entryKey) {
+      debugLog("bgm-firestore-send-no-entry-key", { op });
+      return;
+    }
+
+    const docId = ccfBgmFirestoreSanitizeDocId(slotData.entryKey);
+    const url = `${BGM_FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(roomId)}/${BGM_FIRESTORE_SUBCOLLECTION}/${encodeURIComponent(docId)}`;
+    const token = await readFirebaseIdToken();
+    if (!token) {
+      debugLog("bgm-firestore-send-no-token", { op, entryKey: slotData.entryKey });
+      return;
+    }
+
+    if (op === "remove") {
+      try {
+        const response = await fetch(url, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${token}` },
+          credentials: "omit",
+          mode: "cors"
+        });
+        debugLog("bgm-firestore-delete-result", {
+          entryKey: slotData.entryKey,
+          status: response.status,
+          ok: response.ok
+        });
+        ccfBgmFirestoreState.lastSnapshot.delete(docId);
+      } catch (error) {
+        debugLog("bgm-firestore-delete-failed", { entryKey: slotData.entryKey, error: serializeError(error) });
+      }
+      return;
+    }
+
+    // add / edit → upsert via PATCH
+    const fields = ccfBgmFirestoreEncodeFields({
+      entryKey: String(slotData.entryKey),
+      slotKey: String(slotData.slotKey || ""),
+      url: String(slotData.url || ""),
+      videoId: String(slotData.videoId || ""),
+      title: String(slotData.title || ""),
+      displayName: String(slotData.displayName || slotData.title || ""),
+      tabSignature: String(slotData.tabSignature || ""),
+      volume: Number.isFinite(Number(slotData.volume)) ? Math.round(Number(slotData.volume)) : 100,
+      loop: slotData.loop !== false,
+      order: Number.isFinite(Number(slotData.order)) ? Math.round(Number(slotData.order)) : Date.now(),
+      sender: BGM_SHARE_SENDER_ID,
+      updatedAt: Date.now()
+    });
+
+    try {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ fields }),
+        credentials: "omit",
+        mode: "cors"
+      });
+      debugLog("bgm-firestore-write-result", {
+        op,
+        entryKey: slotData.entryKey,
+        status: response.status,
+        ok: response.ok
+      });
+      if (response.ok) {
+        ccfBgmFirestoreState.writeFailureNoted = false;
+      } else {
+        const text = await response.text().catch(() => "");
+        debugLog("bgm-firestore-write-error-body", {
+          status: response.status,
+          body: text.slice(0, 400)
+        });
+        if (response.status === 401) {
+          // 토큰 만료 가능성 → 캐시 무효화하여 다음 시도에서 새로 읽도록.
+          ccfBgmFirestoreState.tokenCache = { token: "", fetchedAt: 0 };
+        }
+        if (response.status === 403 && !ccfBgmFirestoreState.writeFailureNoted) {
+          ccfBgmFirestoreState.writeFailureNoted = true;
+          console.warn(
+            "[CCF Chat Notifier] Firestore 보안 규칙이 capybaraToolkitBgm 컬렉션 쓰기를 거부했습니다. " +
+            "다른 사용자에게 BGM 공유가 전파되지 않습니다. " +
+            "코코포리아 측 규칙 변경이 필요하거나, 채팅 기반 공유로 폴백해야 합니다."
+          );
+        }
+      }
+    } catch (error) {
+      debugLog("bgm-firestore-write-failed", { entryKey: slotData.entryKey, error: serializeError(error) });
+    }
+  }
+
+  async function ccfBgmFirestoreListSlots() {
+    const roomId = getCcfBgmFirestoreRoomId();
+    if (!roomId) return null;
+    const url = `${BGM_FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(roomId)}/${BGM_FIRESTORE_SUBCOLLECTION}?pageSize=100`;
+    const token = await readFirebaseIdToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+        credentials: "omit",
+        mode: "cors"
+      });
+      if (response.status === 404) {
+        // 컬렉션에 문서가 하나도 없으면 404가 정상. 빈 목록으로 처리.
+        return [];
+      }
+      if (!response.ok) {
+        debugLog("bgm-firestore-list-error", { status: response.status });
+        return null;
+      }
+      const data = await response.json();
+      const docs = Array.isArray(data?.documents) ? data.documents : [];
+      return docs.map((doc) => {
+        const docId = typeof doc.name === "string" ? doc.name.split("/").pop() : "";
+        const decoded = ccfBgmFirestoreDecodeFields(doc.fields);
+        const entryKey = String(decoded.entryKey || docId || "");
+        return { docId, entryKey, entry: decoded };
+      }).filter((item) => item.entryKey);
+    } catch (error) {
+      debugLog("bgm-firestore-list-failed", serializeError(error));
+      return null;
+    }
+  }
+
+  async function ccfBgmFirestorePollOnce() {
+    if (!BGM_FIRESTORE_SHARE_ENABLED || !chatNotifierActive) return;
+    const docs = await ccfBgmFirestoreListSlots();
+    if (!docs) return; // 네트워크/권한 오류 등 — 다음 틱에 재시도
+
+    let changed = false;
+    const remoteDocIds = new Set();
+
+    // 재진입 가드: 원격 → 로컬 적용 중에 발생한 set이 다시 송신되지 않도록.
+    ccfBgmShareSendingDepth += 1;
+    try {
+      for (const { docId, entryKey, entry } of docs) {
+        remoteDocIds.add(docId);
+
+        // 자기 자신이 쓴 문서는 에코 무시.
+        if (entry.sender === BGM_SHARE_SENDER_ID) continue;
+        if (!entry.url || !entry.videoId) continue;
+
+        const remoteUpdatedAt = Number(entry.updatedAt) || 0;
+        const existing = ccfBgmSlotMap.get(entryKey);
+        const localUpdatedAt = Number(existing?.updatedAt) || 0;
+
+        // 삭제 기록과 비교: 로컬에서 의도적으로 지운 항목을 다시 끌어오지 않도록.
+        const deletedAt = Number(ccfBgmDeletedEntries?.[entryKey]) || 0;
+        if (deletedAt && deletedAt >= remoteUpdatedAt) continue;
+
+        if (existing && localUpdatedAt >= remoteUpdatedAt) continue;
+
+        ccfBgmSlotMap.set(entryKey, {
+          slotKey: String(entry.slotKey || entryKey),
+          url: String(entry.url),
+          videoId: String(entry.videoId),
+          title: String(entry.title || "YouTube BGM"),
+          displayName: String(entry.displayName || entry.title || "YouTube BGM"),
+          tabSignature: normalizeCcfBgmTabSignature(entry.tabSignature),
+          volume: Number.isFinite(Number(entry.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+          loop: entry.loop !== false,
+          updatedAt: remoteUpdatedAt,
+          createdAt: existing?.createdAt || remoteUpdatedAt,
+          order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : remoteUpdatedAt,
+          pending: false
+        });
+        changed = true;
+        debugLog("bgm-firestore-apply-remote", { entryKey, remoteUpdatedAt });
+      }
+
+      // 원격에서 사라진 슬롯 감지 → 로컬에서도 제거.
+      // 단, 한 번이라도 본 적 있는 docId만 대상으로 (첫 폴링 후부터). 그렇지 않으면
+      // 처음 진입한 사용자가 자기 로컬 슬롯을 다 날려버릴 위험.
+      if (ccfBgmFirestoreState.lastSnapshot.size > 0) {
+        for (const [prevDocId, prevEntryKey] of ccfBgmFirestoreState.lastSnapshot) {
+          if (remoteDocIds.has(prevDocId)) continue;
+          if (!ccfBgmSlotMap.has(prevEntryKey)) continue;
+          // 자기가 만든 슬롯은 자기 의도로만 지우게 둠 (원격 부재로 지우지 않음).
+          // 다른 사용자가 만든 슬롯만 원격 부재 시 정리.
+          // 현재 sender 정보가 로컬에 저장돼 있지 않으므로, 보수적으로 건너뛴다.
+          // 필요하면 향후 sender를 슬롯에 저장해 처리.
+          continue;
+        }
+      }
+
+      // 새 스냅샷 갱신
+      ccfBgmFirestoreState.lastSnapshot = new Map(
+        docs.map(({ docId, entryKey }) => [docId, entryKey])
+      );
+
+      if (changed) {
+        persistCcfBgmSlotMap();
+        markCcfYoutubeBgmSlotButtons();
+        tryEnhanceCcfBgmPanel();
+      }
+    } finally {
+      ccfBgmShareSendingDepth -= 1;
+    }
+  }
+
+  function ccfBgmFirestoreStartPolling() {
+    if (!BGM_FIRESTORE_SHARE_ENABLED) return;
+    if (ccfBgmFirestoreState.pollTimer || ccfBgmFirestoreState.active) return;
+    ccfBgmFirestoreState.active = true;
+    debugLog("bgm-firestore-poll-start", { intervalMs: BGM_FIRESTORE_POLL_INTERVAL_MS });
+    const tick = async () => {
+      if (!ccfBgmFirestoreState.active || !chatNotifierActive) return;
+      try {
+        await ccfBgmFirestorePollOnce();
+      } catch (error) {
+        debugLog("bgm-firestore-poll-error", serializeError(error));
+      }
+      if (!ccfBgmFirestoreState.active || !chatNotifierActive) return;
+      ccfBgmFirestoreState.pollTimer = window.setTimeout(tick, BGM_FIRESTORE_POLL_INTERVAL_MS);
+    };
+    // 첫 폴링은 약간 지연시켜 토큰이 안정적으로 IndexedDB에 적재된 뒤 실행.
+    ccfBgmFirestoreState.pollTimer = window.setTimeout(tick, 1500);
+  }
+
+  function ccfBgmFirestoreStopPolling() {
+    ccfBgmFirestoreState.active = false;
+    if (ccfBgmFirestoreState.pollTimer) {
+      window.clearTimeout(ccfBgmFirestoreState.pollTimer);
+      ccfBgmFirestoreState.pollTimer = 0;
+    }
+    debugLog("bgm-firestore-poll-stop");
+  }
+
+  // 룸 페이지에서만 폴링 (홈 등에서는 무의미).
+  if (BGM_FIRESTORE_SHARE_ENABLED && ROOM_PATH_RE.test(location.pathname)) {
+    ccfBgmFirestoreStartPolling();
+    registerTeardown(ccfBgmFirestoreStopPolling);
+  }
 
   function isVisible(element) {
     if (!(element instanceof HTMLElement)) {
