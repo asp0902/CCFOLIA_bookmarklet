@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.1
+// @version      0.1.2
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -638,7 +638,22 @@ function getButtonSearchText(btn) {
   ].join(' ');
 }
 
+function queryCharacterSelectButton() {
+  const selectors = [
+    'button[aria-label="\uCE90\uB9AD\uD130 \uC120\uD0DD"]',
+    'button[aria-label="Character selection"]',
+    'button[aria-label="Select character"]',
+    'button[aria-label="\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC\u9078\u629E"]',
+    'button[aria-label="\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC \u9078\u629E"]'
+  ];
+  const matches = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
+  return matches.find(isVisibleButton) || matches.find((btn) => btn instanceof HTMLButtonElement && !btn.disabled) || null;
+}
+
 function findCharacterSelectButton() {
+  const direct = queryCharacterSelectButton();
+  if (direct) return direct;
+
   const exactLabelRe = /^(?:\uCE90\uB9AD\uD130\s*\uC120\uD0DD|character\s*selection|select\s*character|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC\s*\u9078\u629E|\u89D2\u8272\s*(?:\u9009\u62E9|\u9078\u64C7))$/i;
   const selectRe = /(?:\uC120\uD0DD|select|selection|\u9078\u629E|\u9078\u64C7|\u9009\u62E9)/i;
   const characterRe = /(?:\uCE90\uB9AD\uD130|character|chara|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC|\u89D2\u8272)/i;
@@ -673,11 +688,23 @@ function isBackquoteShortcut(event) {
   return event.code === 'Backquote' || event.key === '`' || event.key === '\u20A9' || event.key === '\uFF40';
 }
 
+function clickCharacterSelectButton(btn) {
+  if (!(btn instanceof HTMLElement)) return;
+  try { btn.focus({ preventScroll: true }); } catch {}
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    try {
+      btn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    } catch {}
+  }
+  try { btn.click(); } catch {}
+}
+
 async function handleKeydown(event) {
   if (!ccfspActive) return;
-  if (event.isComposing) return;
+  const isShortcut = isBackquoteShortcut(event);
+  if (!isShortcut && event.isComposing) return;
 
-  if (isBackquoteShortcut(event)) {
+  if (isShortcut) {
     const ae = document.activeElement;
     const chatEl = getChatInput();
     const inOtherEditable = ae && ae !== chatEl &&
@@ -690,7 +717,8 @@ async function handleKeydown(event) {
       const btn = findCharacterSelectButton();
       if (btn) {
         event.preventDefault();
-        btn.click();
+        event.stopPropagation();
+        clickCharacterSelectButton(btn);
       }
     }
     return;
