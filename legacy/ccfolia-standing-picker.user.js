@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.0
+// @version      0.1.1
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -619,36 +619,74 @@ function insertLabel(item) {
 }
 
 
-function findCharacterSelectButton() {
-  // "캐릭터 선택" 버튼만 대상 — "내 캐릭터 목록" 버튼은 제외한다.
-  const selectRe = /(선택|select|選択|選擇|选择)/i;
-  const listRe = /(목록|리스트|list|一覧|一览|列表)/i;
-  const buttons = Array.from(document.querySelectorAll('button'))
-    .filter(btn => !btn.disabled && btn.offsetParent !== null && btn.querySelector('svg[data-testid="FaceIcon"]'));
+function isVisibleButton(btn) {
+  if (!(btn instanceof HTMLElement)) return false;
+  if (btn.disabled) return false;
+  const rect = btn.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
 
-  // 1순위: aria-label이 "선택"류이고 "목록"류가 아닌 버튼
+function getButtonSearchText(btn) {
+  const iconNames = Array.from(btn.querySelectorAll('svg[data-testid]'))
+    .map(svg => svg.getAttribute('data-testid') || '')
+    .join(' ');
+  return [
+    btn.getAttribute('aria-label') || '',
+    btn.getAttribute('title') || '',
+    removeSpaces(btn.textContent || ''),
+    iconNames
+  ].join(' ');
+}
+
+function findCharacterSelectButton() {
+  const exactLabelRe = /^(?:\uCE90\uB9AD\uD130\s*\uC120\uD0DD|character\s*selection|select\s*character|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC\s*\u9078\u629E|\u89D2\u8272\s*(?:\u9009\u62E9|\u9078\u64C7))$/i;
+  const selectRe = /(?:\uC120\uD0DD|select|selection|\u9078\u629E|\u9078\u64C7|\u9009\u62E9)/i;
+  const characterRe = /(?:\uCE90\uB9AD\uD130|character|chara|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC|\u89D2\u8272)/i;
+  const listRe = /(?:\uBAA9\uB85D|\uB9AC\uC2A4\uD2B8|list|\u4E00\u89A7|\u4E00\u89C8|\u5217\u8868)/i;
+  const characterIconRe = /(?:Face|Person|AccountCircle|PermIdentity|Badge|Groups?)Icon/i;
+  const buttons = Array.from(document.querySelectorAll('button')).filter(isVisibleButton);
+
   for (const btn of buttons) {
-    const label = btn.getAttribute('aria-label') || '';
-    if (selectRe.test(label) && !listRe.test(label)) return btn;
+    const label = removeSpaces(btn.getAttribute('aria-label') || btn.getAttribute('title') || '');
+    if (exactLabelRe.test(label) && !listRe.test(label)) return btn;
   }
-  // 2순위: "목록"류 라벨도 아니고 MuiIconButton도 아닌 FaceIcon 버튼
+
   for (const btn of buttons) {
-    const label = btn.getAttribute('aria-label') || '';
-    if (!listRe.test(label) && !btn.classList.contains('MuiIconButton-root')) return btn;
+    const text = getButtonSearchText(btn);
+    if (!listRe.test(text) && characterRe.test(text) && selectRe.test(text)) return btn;
   }
+
+  for (const btn of buttons) {
+    const text = getButtonSearchText(btn);
+    if (!listRe.test(text) && selectRe.test(text) && characterIconRe.test(text)) return btn;
+  }
+
+  for (const btn of buttons) {
+    const text = getButtonSearchText(btn);
+    if (!listRe.test(text) && characterIconRe.test(text) && !btn.classList.contains('MuiIconButton-root')) return btn;
+  }
+
   return null;
+}
+
+function isBackquoteShortcut(event) {
+  return event.code === 'Backquote' || event.key === '`' || event.key === '\u20A9' || event.key === '\uFF40';
 }
 
 async function handleKeydown(event) {
   if (!ccfspActive) return;
   if (event.isComposing) return;
 
-  if (event.key === '`') {
+  if (isBackquoteShortcut(event)) {
     const ae = document.activeElement;
     const chatEl = getChatInput();
     const inOtherEditable = ae && ae !== chatEl &&
       (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
     if (!inOtherEditable) {
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
       const btn = findCharacterSelectButton();
       if (btn) {
         event.preventDefault();
