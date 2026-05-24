@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.35
+// @version      0.2.36
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -95,7 +95,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.35"),
+    version: getUserscriptVersion("0.2.36"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -3049,12 +3049,13 @@
   }
 
   function stopCcfYoutubeBgm(reason = "manual") {
-    // 의도적 정지(manual / remote-switch 제외)일 때만 신호를 보낸다.
-    // - "manual": 사용자가 직접 정지 클릭 → 전파
-    // - "remote-stop": 다른 사용자가 정지해서 우리도 멈춤 → 전파 안 함(applying 가드로 이미 막힘)
-    // - "remote-switch": 다른 사용자가 다른 곡으로 전환 → 전파 안 함(곧 새 playing 신호가 옴)
-    // - 그 외(예: native-bgm-started, webaudio-bgm-started): YouTube 외 BGM이 시작돼서 자동 정지 → 전파 안 함
-    const shouldEmit = reason === "manual";
+    // 사용자가 의도적으로 정지/제거한 경우만 신호를 보낸다. 자동 전환(다른 BGM 시작 등)과
+    // 원격 적용은 송신 안 함(원격은 applying 가드로 이중 안전).
+    // - manual / stop-button / youtube-bgm-remove: 사용자 의도 → 전파 ✅
+    // - native-bgm-started / webaudio-bgm-started / native-library-selected: 다른 BGM이 시작돼서 자동 정지 → 전파 안 함
+    // - remote-stop / remote-switch: 원격 신호 적용 중 → 전파 안 함
+    const MANUAL_STOP_REASONS = new Set(["manual", "stop-button", "youtube-bgm-remove"]);
+    const shouldEmit = MANUAL_STOP_REASONS.has(reason);
 
     if (!ccfBgmPlayer || typeof ccfBgmPlayer.stopVideo !== "function") {
       ccfBgmActiveSlotKey = "";

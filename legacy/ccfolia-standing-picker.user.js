@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.2
+// @version      0.1.3
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,6 +79,13 @@ ccfspInjectStyle();
 window.__CCF_STANDING_PICKER_DEBUG__ = {
   __owner: ccfspSignal,
   isActive() { return ccfspActive; },
+  findCharacterSelectButton() { return findCharacterSelectButton(); },
+  clickCharacterSelectButton() {
+    const btn = findCharacterSelectButton();
+    if (!btn) return false;
+    clickCharacterSelectButton(btn);
+    return true;
+  },
   disable() { return ccfspTeardown(); }
 };
 
@@ -89,6 +96,7 @@ const state = {
   currentInputEl: null,
   currentCharacterName: null,
   lastSeenName: null,
+  lastCharacterShortcutAt: 0,
   isFetching: false,
   items: [],
   standingsCacheByCharName: new Map()
@@ -205,12 +213,26 @@ function isTypingAt(el) {
 }
 
 function getChatInput() {
-  return document.querySelector('textarea[name="text"]');
+  const active = document.activeElement;
+  if (isChatInput(active)) return active;
+  return Array.from(document.querySelectorAll('textarea[name="text"], textarea, [contenteditable="true"], [role="textbox"]'))
+    .find(isChatInput) || null;
 }
 
 function isChatInput(el) {
-  const msgEl = getChatInput();
-  return !!msgEl && el === msgEl;
+  if (!el || el.nodeType !== 1) return false;
+  if (el.closest?.('[role="dialog"], .MuiDialog-root, .MuiPopover-root, #ccfolia-standing-popup')) return false;
+  if (el.matches?.('textarea[name="text"]')) return true;
+  const text = [
+    el.getAttribute?.('name') || '',
+    el.getAttribute?.('aria-label') || '',
+    el.getAttribute?.('placeholder') || '',
+    el.getAttribute?.('title') || ''
+  ].join(' ');
+  if (/message|chat|comment|send|input|textbox|\uBA54\uC2DC\uC9C0|\uCC44\uD305|\uC785\uB825|\uBC1C\uC5B8/i.test(text)) return true;
+  if (el.closest?.('.MuiDrawer-paper')) return true;
+  const form = el.closest?.('form');
+  return !!form?.querySelector?.('button[type="submit"]');
 }
 
 function getDialog() {
@@ -620,7 +642,7 @@ function insertLabel(item) {
 
 
 function isVisibleButton(btn) {
-  if (!(btn instanceof HTMLElement)) return false;
+  if (!btn || btn.nodeType !== 1) return false;
   if (btn.disabled) return false;
   const rect = btn.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
@@ -647,7 +669,7 @@ function queryCharacterSelectButton() {
     'button[aria-label="\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC \u9078\u629E"]'
   ];
   const matches = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
-  return matches.find(isVisibleButton) || matches.find((btn) => btn instanceof HTMLButtonElement && !btn.disabled) || null;
+  return matches.find(isVisibleButton) || matches.find((btn) => btn?.tagName === 'BUTTON' && !btn.disabled) || null;
 }
 
 function findCharacterSelectButton() {
@@ -685,44 +707,65 @@ function findCharacterSelectButton() {
 }
 
 function isBackquoteShortcut(event) {
-  return event.code === 'Backquote' || event.key === '`' || event.key === '\u20A9' || event.key === '\uFF40';
+  return event.code === 'Backquote' ||
+    event.key === '`' ||
+    event.key === '\u20A9' ||
+    event.key === '\uFF40' ||
+    event.keyCode === 192 ||
+    event.which === 192;
 }
 
 function clickCharacterSelectButton(btn) {
-  if (!(btn instanceof HTMLElement)) return;
+  if (!btn || btn.nodeType !== 1) return;
   try { btn.focus({ preventScroll: true }); } catch {}
   for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
     try {
-      btn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      const EventCtor = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+      btn.dispatchEvent(new EventCtor(type, { bubbles: true, cancelable: true, view: window, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type.endsWith('down') ? 1 : 0 }));
     } catch {}
   }
   try { btn.click(); } catch {}
 }
 
+function isEditableElement(el) {
+  return !!el && el.nodeType === 1 &&
+    (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute?.('role') === 'textbox');
+}
+
+function canUseCharacterShortcutFrom(el) {
+  if (!el || el === document.body || el === document.documentElement) return true;
+  if (isChatInput(el)) return true;
+  return !isEditableElement(el);
+}
+
+function consumeShortcutEvent(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+}
+
+function runCharacterShortcut(event) {
+  if (!isBackquoteShortcut(event)) return false;
+  if (!canUseCharacterShortcutFrom(document.activeElement)) return false;
+
+  consumeShortcutEvent(event);
+  if (event.repeat) return true;
+
+  const now = Date.now();
+  if (now - state.lastCharacterShortcutAt < 160) return true;
+
+  const btn = findCharacterSelectButton();
+  if (btn) {
+    state.lastCharacterShortcutAt = now;
+    clickCharacterSelectButton(btn);
+  }
+  return true;
+}
+
 async function handleKeydown(event) {
   if (!ccfspActive) return;
-  const isShortcut = isBackquoteShortcut(event);
-  if (!isShortcut && event.isComposing) return;
-
-  if (isShortcut) {
-    const ae = document.activeElement;
-    const chatEl = getChatInput();
-    const inOtherEditable = ae && ae !== chatEl &&
-      (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
-    if (!inOtherEditable) {
-      if (event.repeat) {
-        event.preventDefault();
-        return;
-      }
-      const btn = findCharacterSelectButton();
-      if (btn) {
-        event.preventDefault();
-        event.stopPropagation();
-        clickCharacterSelectButton(btn);
-      }
-    }
-    return;
-  }
+  if (runCharacterShortcut(event)) return;
+  if (event.isComposing) return;
 
   if (state.popupEl) {
     if (event.key === 'Escape') { closePopup(); return; }
@@ -758,6 +801,11 @@ async function handleKeydown(event) {
   }
 }
 
+function handleKeyup(event) {
+  if (!ccfspActive) return;
+  runCharacterShortcut(event);
+}
+
 function handleInput(event) {
   if (!state.popupEl) return;
   if (!state.currentInputEl) return;
@@ -778,7 +826,10 @@ function handleResize() {
 function initEvents() {
   document.addEventListener('input', handleInput, ccfspWithSignal(true));
   document.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
+  document.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
   document.addEventListener('click', handleClick, ccfspWithSignal(true));
+  window.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
+  window.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
   window.addEventListener('resize', handleResize, ccfspWithSignal());
   window.addEventListener('scroll', handleResize, ccfspWithSignal(true));
 }
