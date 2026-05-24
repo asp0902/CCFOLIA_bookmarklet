@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.8
+// @version      0.0.9
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -41,7 +41,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.8"),
+    version: getUserscriptVersion("0.0.9"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3149,8 +3149,10 @@
 
       if (target?.matches?.("[data-inline-size]")) {
         sanitizeInlineSizeInput(target);
+        target.dataset.sizePreviewApplied = "1";
         applyInlineToolbarStyle(toolbar, {
-          selectionOverride: getInlineToolbarSelection(toolbar)
+          selectionOverride: getInlineToolbarSelection(toolbar),
+          restoreSelection: false
         });
       }
     }, true);
@@ -3167,10 +3169,39 @@
 
       if (target?.matches?.("[data-inline-size]")) {
         sanitizeInlineSizeInput(target);
+        target.dataset.sizePreviewApplied = "1";
         applyInlineToolbarStyle(toolbar, {
-          selectionOverride: getInlineToolbarSelection(toolbar)
+          selectionOverride: getInlineToolbarSelection(toolbar),
+          restoreSelection: false
         });
       }
+    }, true);
+
+    toolbar.addEventListener("focusin", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.matches?.("[data-inline-size]")) return;
+      captureInlineToolbarSelection(toolbar);
+      target.dataset.editingSize = "1";
+      delete target.dataset.sizePreviewApplied;
+    }, true);
+
+    toolbar.addEventListener("focusout", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.matches?.("[data-inline-size]")) return;
+      delete target.dataset.editingSize;
+      sanitizeInlineSizeInput(target);
+      if (target.dataset.sizePreviewApplied === "1") {
+        applyInlineToolbarStyle(toolbar, {
+          selectionOverride: getInlineToolbarSelection(toolbar),
+          restoreSelection: false
+        });
+      }
+      delete target.dataset.sizePreviewApplied;
+      setTimeout(() => {
+        const nextActive = document.activeElement;
+        if (nextActive instanceof Element && toolbar.contains(nextActive)) return;
+        restoreInlineToolbarEditorSelection(toolbar);
+      }, 0);
     }, true);
 
     toolbar.addEventListener("keydown", (event) => {
@@ -3255,8 +3286,12 @@
       event.stopPropagation();
       sanitizeInlineSizeInput(input);
       applyInlineToolbarStyle(toolbar, {
-        selectionOverride: getInlineToolbarSelection(toolbar)
+        selectionOverride: getInlineToolbarSelection(toolbar),
+        restoreSelection: false
       });
+      input.dataset.sizePreviewApplied = "1";
+      delete input.dataset.editingSize;
+      input.blur?.();
       restoreInlineToolbarEditorSelection(toolbar);
       return;
     }
@@ -3275,10 +3310,15 @@
 
     const direction = event.key === "ArrowUp" ? 1 : -1;
     const step = event.shiftKey ? 10 : 1;
-    const baseSize = normalizeFontSizeValue(input.value) ?? 16;
+    const baseSize =
+      normalizeFontSizeValue(input.value) ??
+      normalizeFontSizeValue(input.placeholder) ??
+      16;
     input.value = String(clamp(baseSize + (direction * step), FONT_SIZE_MIN, FONT_SIZE_MAX));
+    input.dataset.sizePreviewApplied = "1";
     applyInlineToolbarStyle(toolbar, {
-      selectionOverride: getInlineToolbarSelection(toolbar)
+      selectionOverride: getInlineToolbarSelection(toolbar),
+      restoreSelection: false
     });
   }
 
@@ -3462,7 +3502,7 @@
       selectionOverride: selection
     });
 
-    if (applied) {
+    if (applied && options.restoreSelection !== false) {
       restoreRoomSelectionSoon(editor, selection);
     }
     return applied;
@@ -3570,7 +3610,7 @@
 
     const input = toolbar.querySelector("[data-inline-size]");
     if (!(input instanceof HTMLInputElement)) return;
-    if (document.activeElement === input) return;
+    if (document.activeElement === input || input.dataset.editingSize === "1") return;
 
     const editor = getInlineToolbarEditor(toolbar);
     if (!editor) {
