@@ -1421,20 +1421,24 @@
         border-color: ${UD.borderSoft} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTypography-root:not([style*="color:"]),
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormLabel-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputLabel-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormControlLabel-label,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButton-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButtonBase-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiSvgIcon-root {
+      /* 텍스트 톤 — DialogActions(삭제/복제 등 액션 버튼)는 CCFOLIA 네이티브
+         색을 유지하기 위해 DialogContent 스코프로 한정 */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiInputLabel-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormControlLabel-label,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButton-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiSvgIcon-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogTitle-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogTitle-root .MuiTypography-root {
         color: ${UD.text} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTypography-caption,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFormHelperText-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemText-secondary {
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormHelperText-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemText-secondary {
         color: ${UD.muted} !important;
       }
 
@@ -1472,10 +1476,10 @@
         background: ${UD.text} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiButtonBase-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiMenuItem-root:hover {
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemButton-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiMenuItem-root:hover {
         background: rgba(0, 77, 103, 0.45) !important;
       }
 
