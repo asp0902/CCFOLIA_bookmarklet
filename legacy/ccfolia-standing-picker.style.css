@@ -79,3 +79,9 @@ body.ccsp-scanning div[role="presentation"]:not(.ccsp-preserve) {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+[data-ccfsp-character-nav-active="1"] {
+  background: rgba(233, 30, 99, 0.18) !important;
+  outline: 1px solid rgba(233, 30, 99, 0.92) !important;
+  outline-offset: -1px !important;
+}

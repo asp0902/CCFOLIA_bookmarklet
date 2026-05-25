@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.4
+// @version      0.1.5
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -29,7 +29,12 @@ function ccfspInjectStyle() {
   const style = document.createElement('style');
   style.id = CCFSP_STYLE_ID;
   style.dataset.capybaraToolkitStyle = 'standing-picker userscript';
-  style.textContent = CCFSP_STYLE;
+  style.textContent = `${CCFSP_STYLE}
+[data-ccfsp-character-nav-active="1"] {
+  background: rgba(233, 30, 99, 0.18) !important;
+  outline: 1px solid rgba(233, 30, 99, 0.92) !important;
+  outline-offset: -1px !important;
+}`;
   (document.head || document.documentElement).appendChild(style);
   ccfspRegisterTeardown(() => style.remove());
 }
@@ -57,6 +62,7 @@ function ccfspTeardown() {
     try { disposer(); } catch (error) { /* disposer failed */ }
   }
   try {
+    clearNativeCharacterPickerNavigation();
     closePopup();
     document.getElementById('ccfolia-standing-popup')?.remove();
     document.getElementById('ccfolia-standing-preview')?.remove();
@@ -97,6 +103,11 @@ const state = {
   currentCharacterName: null,
   lastSeenName: null,
   lastCharacterShortcutAt: 0,
+  nativeCharacterPickerRoot: null,
+  nativeCharacterPickerItems: [],
+  nativeCharacterPickerIndex: -1,
+  nativeCharacterPickerUntil: 0,
+  nativeCharacterPickerToken: 0,
   isFetching: false,
   items: [],
   standingsCacheByCharName: new Map()
@@ -728,6 +739,145 @@ function clickCharacterSelectButton(btn) {
   try { btn.click(); } catch {}
 }
 
+function isVisibleNativeCharacterNode(node) {
+  if (!(node instanceof HTMLElement) || node.closest('#ccfolia-standing-popup')) return false;
+  const rect = node.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  const style = getComputedStyle(node);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function getNativeCharacterOptionItems(list) {
+  if (!(list instanceof HTMLElement)) return [];
+  return Array.from(list.children).filter((item) => {
+    if (!(item instanceof HTMLElement) || !isVisibleNativeCharacterNode(item)) return false;
+    if (item.querySelector('.MuiListItemSecondaryAction-root')) return false;
+    const text = removeSpaces(
+      item.querySelector('.MuiListItemText-primary')?.textContent ||
+      item.getAttribute('aria-label') ||
+      item.textContent ||
+      ''
+    );
+    if (!text) return false;
+    return !!item.querySelector('img, .MuiAvatar-root') ||
+      item.matches('[role="option"], [role="menuitem"]');
+  });
+}
+
+function findNativeCharacterPickerOptions() {
+  const lists = Array.from(document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]'))
+    .filter(isVisibleNativeCharacterNode)
+    .map((list) => ({ list, items: getNativeCharacterOptionItems(list) }))
+    .filter((candidate) => candidate.items.length);
+  lists.sort((a, b) => b.items.length - a.items.length);
+  return lists[0] || null;
+}
+
+function clearNativeCharacterPickerNavigation() {
+  state.nativeCharacterPickerItems.forEach((item) => {
+    item.removeAttribute('data-ccfsp-character-nav-active');
+  });
+  state.nativeCharacterPickerRoot = null;
+  state.nativeCharacterPickerItems = [];
+  state.nativeCharacterPickerIndex = -1;
+  state.nativeCharacterPickerUntil = 0;
+}
+
+function refreshNativeCharacterPickerNavigation() {
+  if (!state.nativeCharacterPickerUntil || Date.now() > state.nativeCharacterPickerUntil) {
+    clearNativeCharacterPickerNavigation();
+    return [];
+  }
+  const candidate = findNativeCharacterPickerOptions();
+  if (!candidate) return [];
+  state.nativeCharacterPickerRoot = candidate.list;
+  state.nativeCharacterPickerItems = candidate.items;
+  if (state.nativeCharacterPickerIndex >= candidate.items.length) {
+    state.nativeCharacterPickerIndex = -1;
+  }
+  return candidate.items;
+}
+
+function setNativeCharacterPickerHighlight(index, scrollIntoView) {
+  const items = state.nativeCharacterPickerItems;
+  if (!items.length) return;
+  items.forEach((item) => item.removeAttribute('data-ccfsp-character-nav-active'));
+  state.nativeCharacterPickerIndex = Math.max(0, Math.min(items.length - 1, index));
+  const item = items[state.nativeCharacterPickerIndex];
+  item.setAttribute('data-ccfsp-character-nav-active', '1');
+  const focusTarget = item.matches('button, [role="option"], [role="menuitem"]')
+    ? item
+    : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
+  try { focusTarget.focus({ preventScroll: true }); } catch {}
+  if (scrollIntoView) {
+    try { item.scrollIntoView({ block: 'nearest' }); } catch {}
+  }
+}
+
+function beginNativeCharacterPickerNavigation() {
+  clearNativeCharacterPickerNavigation();
+  state.nativeCharacterPickerUntil = Date.now() + 12000;
+  const token = ++state.nativeCharacterPickerToken;
+  [0, 40, 120, 240].forEach((delay) => {
+    setTimeout(() => {
+      if (token !== state.nativeCharacterPickerToken) return;
+      refreshNativeCharacterPickerNavigation();
+    }, delay);
+  });
+}
+
+function activateNativeCharacterPickerOption(item) {
+  const target = item.matches('button, [role="option"], [role="menuitem"]')
+    ? item
+    : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
+    try {
+      const EventCtor = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+      target.dispatchEvent(new EventCtor(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: type.endsWith('down') ? 1 : 0
+      }));
+    } catch {}
+  }
+  try { target.click(); } catch {}
+  clearNativeCharacterPickerNavigation();
+}
+
+function handleNativeCharacterPickerKey(event) {
+  if (!state.nativeCharacterPickerUntil) return false;
+  if (event.key === 'Escape') {
+    clearNativeCharacterPickerNavigation();
+    return false;
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return false;
+  const items = refreshNativeCharacterPickerNavigation();
+  if (!items.length) return false;
+  consumeShortcutEvent(event);
+  if (event.key === 'ArrowDown') {
+    setNativeCharacterPickerHighlight(
+      state.nativeCharacterPickerIndex < 0 ? 0 : state.nativeCharacterPickerIndex + 1,
+      true
+    );
+    return true;
+  }
+  if (event.key === 'ArrowUp') {
+    setNativeCharacterPickerHighlight(
+      state.nativeCharacterPickerIndex < 0 ? items.length - 1 : state.nativeCharacterPickerIndex - 1,
+      true
+    );
+    return true;
+  }
+  const index = state.nativeCharacterPickerIndex < 0 ? 0 : state.nativeCharacterPickerIndex;
+  setNativeCharacterPickerHighlight(index, false);
+  activateNativeCharacterPickerOption(items[index]);
+  return true;
+}
+
 function isEditableElement(el) {
   return !!el && el.nodeType === 1 &&
     (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute?.('role') === 'textbox');
@@ -759,6 +909,7 @@ function runCharacterShortcut(event) {
   if (btn) {
     state.lastCharacterShortcutAt = now;
     clickCharacterSelectButton(btn);
+    beginNativeCharacterPickerNavigation();
   }
   return true;
 }
@@ -767,6 +918,7 @@ async function handleKeydown(event) {
   if (!ccfspActive) return;
   if (runCharacterShortcut(event)) return;
   if (event.isComposing) return;
+  if (handleNativeCharacterPickerKey(event)) return;
 
   if (state.popupEl) {
     if (event.key === 'Escape') { closePopup(); return; }
@@ -804,7 +956,9 @@ async function handleKeydown(event) {
 
 function handleKeyup(event) {
   if (!ccfspActive) return;
-  runCharacterShortcut(event);
+  if (isBackquoteShortcut(event) && (state.nativeCharacterPickerUntil || canUseCharacterShortcutFrom(document.activeElement))) {
+    consumeShortcutEvent(event);
+  }
 }
 
 function handleInput(event) {

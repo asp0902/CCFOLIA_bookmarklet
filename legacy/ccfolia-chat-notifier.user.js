@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.38
+// @version      0.2.39
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -36,6 +36,7 @@
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
   const YOUTUBE_EMBED_HOST = "https://www.youtube-nocookie.com";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
+  const YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX = 8;
   const YOUTUBE_AUDIO_REINFORCE_DELAYS_MS = Object.freeze([0, 80, 250, 700, 1500]);
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
@@ -100,7 +101,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.38"),
+    version: getUserscriptVersion("0.2.39"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -7644,14 +7645,15 @@
       .ccf-youtube-bgm-player-dock {
         box-sizing: border-box !important;
         display: none !important;
-        flex: 0 0 ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        min-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        max-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
+        flex: 0 0 ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
+        width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
+        min-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
+        max-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
         height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         max-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         margin: 6px 5px !important;
+        padding: 0 ${YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX}px !important;
         overflow: hidden !important;
         background: #000000 !important;
         pointer-events: auto !important;
@@ -7666,7 +7668,7 @@
         position: static !important;
         display: block !important;
         box-sizing: border-box !important;
-        width: 100% !important;
+        width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         max-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         height: 100% !important;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.15
+// @version      0.0.16
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -20,6 +20,7 @@
   const EXPORT_BTN_SELECTOR = `[${EXPORT_BTN_ATTR}="1"]`;
   const CHARACTER_LIST_ORDER_STORAGE_KEY = "ccf-log-package:my-character-order:v1";
   const CHARACTER_LIST_ATTR = "data-ccf-lp-character-list";
+  const CHARACTER_SELECTION_LIST_ATTR = "data-ccf-lp-character-selection-list";
   const CHARACTER_ITEM_ATTR = "data-ccf-lp-character-sortable";
   const CHARACTER_ITEM_ID_ATTR = "data-ccf-lp-character-id";
   const CHARACTER_ITEM_BOUND_ATTR = "data-ccf-lp-character-dnd-bound";
@@ -95,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-    version: getUserscriptVersion("0.0.15"),
+    version: getUserscriptVersion("0.0.16"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -1547,9 +1548,10 @@
     ccfLpRegisterTeardown(() => {
       characterListDragState = null;
       clearCharacterListDropMarks();
-      document.querySelectorAll(`[${CHARACTER_LIST_ATTR}], [${CHARACTER_ITEM_ATTR}]`).forEach((node) => {
+      document.querySelectorAll(`[${CHARACTER_LIST_ATTR}], [${CHARACTER_SELECTION_LIST_ATTR}], [${CHARACTER_ITEM_ATTR}]`).forEach((node) => {
         if (!(node instanceof HTMLElement)) return;
         node.removeAttribute(CHARACTER_LIST_ATTR);
+        node.removeAttribute(CHARACTER_SELECTION_LIST_ATTR);
         node.removeAttribute(CHARACTER_ITEM_ATTR);
         node.removeAttribute(CHARACTER_ITEM_ID_ATTR);
         node.removeAttribute(CHARACTER_ITEM_BOUND_ATTR);
@@ -1561,15 +1563,23 @@
   }
 
   function ensureCharacterListSortables() {
-    document.querySelectorAll("ul.MuiList-root").forEach((list) => {
+    document.querySelectorAll("ul.MuiList-root, [role=\"listbox\"]").forEach((list) => {
       if (!(list instanceof HTMLElement) || !isVisible(list)) return;
 
       const items = getMyCharacterListItems(list);
-      if (!items.length) return;
+      if (items.length) {
+        list.setAttribute(CHARACTER_LIST_ATTR, "1");
+        items.forEach((item, index) => decorateCharacterListItem(item, index));
+        applyStoredCharacterListOrder(list, items);
+        migrateStoredCharacterListOrderToLabels(list);
+        return;
+      }
 
-      list.setAttribute(CHARACTER_LIST_ATTR, "1");
-      items.forEach((item, index) => decorateCharacterListItem(item, index));
-      applyStoredCharacterListOrder(list);
+      const selectionItems = getCharacterSelectionItems(list);
+      if (!selectionItems.length) return;
+
+      list.setAttribute(CHARACTER_SELECTION_LIST_ATTR, "1");
+      applyStoredCharacterListOrder(list, selectionItems);
     });
   }
 
@@ -1584,6 +1594,26 @@
         && child.querySelector(".MuiListItemSecondaryAction-root")
       );
     });
+  }
+
+  function getCharacterSelectionItems(list) {
+    if (!(list instanceof HTMLElement)) return [];
+
+    return [...list.children].filter((child) => {
+      if (!(child instanceof HTMLElement)) return false;
+      return !!(
+        child.querySelector(".MuiListItemAvatar-root, .MuiAvatar-root, img")
+        && getCharacterListLabelKey(child)
+        && !child.querySelector(".MuiListItemSecondaryAction-root")
+      );
+    });
+  }
+
+  function getCharacterListLabelKey(item) {
+    if (!(item instanceof HTMLElement)) return "";
+    const primary = item.querySelector(".MuiListItemText-primary");
+    const name = normalizeSpace(primary?.textContent || getCharacterProfileItemName(item) || item.textContent || "");
+    return name ? `label:${name}` : "";
   }
 
   function decorateCharacterListItem(item, index) {
@@ -1621,10 +1651,7 @@
       if (characterId) return `id:${characterId}`;
     }
 
-    const primary = item.querySelector(".MuiListItemText-primary");
-    const name = normalizeSpace(primary?.textContent || item.textContent || "");
-    if (!name) return "";
-    return `label:${name}:${index}`;
+    return getCharacterListLabelKey(item);
   }
 
   function handleCharacterItemDragStart(event) {
@@ -1687,6 +1714,7 @@
     }
 
     persistCharacterListOrder(state.list);
+    ensureCharacterListSortables();
     finishCharacterItemDrag();
   }
 
@@ -1722,15 +1750,30 @@
     });
   }
 
-  function applyStoredCharacterListOrder(list) {
+  function getCharacterListOrderMatchKey(key) {
+    const normalized = String(key || "");
+    return normalized.startsWith("label:") ? normalized.replace(/:\d+$/, "") : normalized;
+  }
+
+  function applyStoredCharacterListOrder(list, providedItems = null) {
     if (!(list instanceof HTMLElement)) return;
 
     const storedOrder = readCharacterListOrderForCurrentRoom();
     if (!storedOrder.length) return;
 
-    const items = getMyCharacterListItems(list);
-    const itemByKey = new Map(items.map((item, index) => [getCharacterListItemKey(item, index), item]));
-    const orderedItems = storedOrder.map((key) => itemByKey.get(key)).filter(Boolean);
+    const items = Array.isArray(providedItems) ? providedItems : getMyCharacterListItems(list);
+    const orderedItems = [];
+    storedOrder.forEach((key) => {
+      const matchKey = getCharacterListOrderMatchKey(key);
+      const item = items.find((candidate, index) => {
+        if (orderedItems.includes(candidate)) return false;
+        return [
+          getCharacterListItemKey(candidate, index),
+          getCharacterListLabelKey(candidate)
+        ].some((candidateKey) => getCharacterListOrderMatchKey(candidateKey) === matchKey);
+      });
+      if (item) orderedItems.push(item);
+    });
     const included = new Set(orderedItems);
     items.forEach((item) => {
       if (!included.has(item)) orderedItems.push(item);
@@ -1753,12 +1796,18 @@
     }
   }
 
+  function migrateStoredCharacterListOrderToLabels(list) {
+    const storedOrder = readCharacterListOrderForCurrentRoom();
+    if (!storedOrder.some((key) => key.startsWith("id:") || /^label:.*:\d+$/.test(key))) return;
+    persistCharacterListOrder(list);
+  }
+
   function persistCharacterListOrder(list) {
     const roomId = getCurrentCcfRoomId();
     if (!roomId || !(list instanceof HTMLElement)) return;
 
     const order = getMyCharacterListItems(list)
-      .map((item, index) => getCharacterListItemKey(item, index))
+      .map((item, index) => getCharacterListLabelKey(item) || getCharacterListItemKey(item, index))
       .filter(Boolean);
     if (!order.length) return;
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.13
+// @version      0.0.15
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,10 @@
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
   const CCF_SAFE_UI_ATTR = "data-ccf-safe-markup";
+  const CCF_NARRATION_ATTR = "data-ccf-narration";
+  const CCF_NARRATION_PANEL_ATTR = "data-ccf-narration-panel";
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
+  const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
     'p.MuiTypography-root.MuiTypography-body2',
     'div.MuiTypography-root.MuiTypography-body2',
@@ -41,6 +44,7 @@
   const DEFAULT_BLUR_VALUE = "4px";
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
+  const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
   const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
   const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
@@ -48,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.13"),
+    version: getUserscriptVersion("0.0.15"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -656,6 +660,29 @@
         pointer-events: none;
         user-select: none;
       }
+
+      [${CCF_NARRATION_ATTR}="1"] .MuiListItemAvatar-root,
+      [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-primary,
+      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image) {
+        display: none !important;
+      }
+
+      .MuiPaper-root[${CCF_NARRATION_PANEL_ATTR}="1"] > img {
+        display: none !important;
+      }
+
+      [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root {
+        width: 100% !important;
+        margin: 0 auto !important;
+        text-align: center !important;
+      }
+
+      .ccf-render-root[${CCF_NARRATION_ATTR}="1"],
+      [${CCF_NARRATION_ATTR}="1"] .ccf-render-root,
+      [${CCF_NARRATION_ATTR}="1"] .ccf-render-root .ccf-line {
+        text-align: center !important;
+        font-style: italic !important;
+      }
     `;
     document.documentElement.appendChild(style);
   }
@@ -721,6 +748,39 @@
         tryRenderEncodedMessage(el);
       }
     }
+
+    syncNarrationPanelsWithin(root);
+  }
+
+  function syncNarrationPanelsWithin(root) {
+    if (!(root instanceof Element)) return;
+
+    const papers = new Set();
+    const closestPaper = root.closest?.(".MuiPaper-root");
+    if (closestPaper instanceof HTMLElement) papers.add(closestPaper);
+    root.querySelectorAll?.(".MuiPaper-root").forEach((paper) => {
+      if (paper instanceof HTMLElement) papers.add(paper);
+    });
+
+    papers.forEach((paper) => {
+      const messageElements = [...paper.querySelectorAll(MESSAGE_TEXT_SELECTOR)]
+        .filter((element) => (
+          element instanceof HTMLElement &&
+          !element.closest(`[${CCF_SAFE_UI_ATTR}="1"]`) &&
+          !element.closest('textarea, input, [contenteditable="true"], [role="textbox"]')
+        ));
+      const latest = messageElements[messageElements.length - 1];
+      const latestItem = latest?.closest?.(MESSAGE_ITEM_SELECTOR);
+      const narration = !!latest && (
+        latest.getAttribute(CCF_NARRATION_ATTR) === "1" ||
+        latestItem?.getAttribute?.(CCF_NARRATION_ATTR) === "1"
+      );
+      if (narration) {
+        paper.setAttribute(CCF_NARRATION_PANEL_ATTR, "1");
+      } else {
+        paper.removeAttribute(CCF_NARRATION_PANEL_ATTR);
+      }
+    });
   }
 
   function collectRenderTargets(root, targets) {
@@ -772,6 +832,7 @@
     const renderText = envelope.text || visibleText || "";
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
+    const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
 
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
       el.setAttribute(CCF_RAW_ATTR, text);
@@ -779,8 +840,9 @@
 
     el.innerHTML = "";
     el.classList.add("ccf-render-root");
+    applyNarrationMessageLayout(el, narration);
 
-    if (!runs.length && !alignRuns.length) {
+    if (!runs.length && !alignRuns.length && !narration) {
       el.textContent = renderText;
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
@@ -789,6 +851,28 @@
     renderStyledText(el, renderText, runs, alignRuns);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
+  }
+
+  function applyNarrationMessageLayout(el, narration) {
+    if (!(el instanceof HTMLElement)) return;
+
+    if (narration) {
+      el.setAttribute(CCF_NARRATION_ATTR, "1");
+    } else {
+      el.removeAttribute(CCF_NARRATION_ATTR);
+    }
+
+    const item = el.closest?.(MESSAGE_ITEM_SELECTOR);
+    if (!(item instanceof HTMLElement) || item === el) return;
+
+    if (narration) {
+      item.setAttribute(CCF_NARRATION_ATTR, "1");
+      return;
+    }
+
+    if (!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`)) {
+      item.removeAttribute(CCF_NARRATION_ATTR);
+    }
   }
 
   function extractEnvelope(fullText) {
@@ -1112,6 +1196,9 @@
     if (style && ["center", "right"].includes(style.align)) {
       out.align = style.align;
     }
+    if (style?.narration === true) {
+      out.narration = true;
+    }
     return out;
   }
 
@@ -1128,6 +1215,13 @@
   }
 
   function getEffectiveAlignRuns(text, alignRuns, blockStyle = null) {
+    if (cleanupBlockStyle(blockStyle).narration) {
+      return [{
+        start: 0,
+        end: getTextLineCount(text),
+        align: "center"
+      }];
+    }
     const normalized = normalizeAlignRuns(alignRuns, getTextLineCount(text));
     if (normalized.length) return normalized;
     return getLegacyAlignRuns(text, blockStyle);
@@ -1496,6 +1590,7 @@
   const FONT_SIZE_MIN = 1;
   const FONT_SIZE_MAX = 200;
   const DEFAULT_BLUR_VALUE = "4px";
+  const PARENTHETICAL_GRAY_COLOR = "#878787";
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const LOCAL_IMAGE_INDEX_KEY = "ccf-inline-image:index";
@@ -1530,6 +1625,7 @@
   let modalDraftText = null;
   let modalDraftRuns = null;
   let modalDraftAlignRuns = null;
+  let modalDraftBlockStyle = null;
   let modalDraftRoll20Text = null;
   let modalDraftRoll20ConvertedSource = null;
   let modalDraftLastStyle = null;
@@ -2928,6 +3024,12 @@
           setCodePopoverOpen(false, { focusToggle: true });
           return;
         }
+        if (isModalOpen() && isStyleClipboardPopoverOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          setStyleClipboardPopoverOpen(false, { focusToggle: true });
+          return;
+        }
         if (isModalOpen() && isImagePopoverOpen()) {
           event.preventDefault();
           event.stopPropagation();
@@ -2947,6 +3049,13 @@
         const codeTool = getCodeTool();
         if (codeTool && event.target instanceof Node && !codeTool.contains(event.target)) {
           setCodePopoverOpen(false);
+        }
+      }
+
+      if (isStyleClipboardPopoverOpen()) {
+        const tool = getStyleClipboardTool();
+        if (tool && event.target instanceof Node && !tool.contains(event.target)) {
+          setStyleClipboardPopoverOpen(false);
         }
       }
 
@@ -3096,11 +3205,15 @@
       <button type="button" class="ccf-toggle" data-inline-command="italic" title="Italic" aria-label="Italic"><i>I</i></button>
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
+      <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray">()</button>
+      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration">Nar</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
+      <span class="ccf-inline-divider" aria-hidden="true"></span>
+      <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -3147,6 +3260,25 @@
       if (target.matches?.("[data-inline-size]")) {
         moveInlineSizeCursorToEnd(target);
         showInlineToolbarSelectionHighlight(toolbar);
+        return;
+      }
+
+      const styleAction = target.closest("[data-inline-style-action]");
+      if (styleAction && toolbar.contains(styleAction)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const state = inlinePopoverState;
+        if (!state || state.toolbar !== toolbar || state.kind !== "style-clipboard") return;
+        const action = styleAction.getAttribute("data-inline-style-action");
+        const applied = action === "save"
+          ? saveStyleClipboardFromContext(state.context)
+          : applyStyleClipboardToContext(state.context);
+        if (applied) {
+          closeInlinePopover(toolbar, { restoreFocus: false });
+          restoreRoomSelectionSoon(state.editor, state.selection);
+          showInlineToolbarSelectionHighlight(toolbar);
+          updateInlineToolbarVisuals(toolbar);
+        }
         return;
       }
 
@@ -3316,6 +3448,11 @@
 
     if (command === "code") {
       openInlineCodePopover(toolbar);
+      return;
+    }
+
+    if (command === "style-clipboard") {
+      openInlineStyleClipboardPopover(toolbar);
       return;
     }
   }
@@ -3604,6 +3741,19 @@
       return;
     }
 
+    if (command === "paren-gray") {
+      applyParentheticalGrayToEditor(editor);
+      return;
+    }
+
+    if (command === "narration") {
+      const nextActive = !commandButton.classList.contains("active");
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      applyInlineNarration(editor, nextActive);
+      return;
+    }
+
     clearInlineToolbarSelection(toolbar);
     updateInlineToolbarVisuals(toolbar);
   }
@@ -3720,7 +3870,7 @@
     if (!toolbar) return;
 
     toolbar.querySelectorAll(
-      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"], [data-inline-command="narration"]'
     ).forEach((btn) => {
       btn.classList.remove("active");
       btn.setAttribute("aria-pressed", "false");
@@ -3886,7 +4036,7 @@
     );
 
     state.alignRuns = nextAlignRuns;
-    state.blockStyle = {};
+    state.blockStyle = cleanupBlockStyle(state.blockStyle);
     state.text = text;
     state.roll20Source = null;
     renderPreview(editor);
@@ -3950,6 +4100,67 @@
       editor,
       selection
     });
+    return true;
+  }
+
+  function getInlineStyleClipboardContext(toolbar) {
+    const editor = activateInlineToolbarEditor(toolbar);
+    if (!editor) return null;
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    const selection = normalizeSelectionRange(getInlineToolbarSelection(toolbar), text.length);
+    const state = ensureEditorState(editor);
+    return {
+      editor,
+      state,
+      modalEditor: null,
+      targetEditor: editor,
+      text,
+      selection,
+      selectedText: selection ? text.slice(selection.start, selection.end) : "",
+      baseRuns: cloneRuns(state.runs, text.length)
+    };
+  }
+
+  function openInlineStyleClipboardPopover(toolbar) {
+    const context = getInlineStyleClipboardContext(toolbar);
+    if (!context?.selection || context.selection.start === context.selection.end) {
+      alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uAC70\uB098 \uBD88\uB7EC\uC62C \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+      return false;
+    }
+
+    document.querySelectorAll(".ccf-inline-popover.open").forEach((popover) => {
+      if (!toolbar.contains(popover)) {
+        popover.classList.remove("open");
+        popover.setAttribute("aria-hidden", "true");
+        popover.textContent = "";
+      }
+    });
+
+    const popover = toolbar.querySelector("[data-inline-popover]");
+    if (!popover) return false;
+    const hasSavedStyle = !!readStyleClipboard();
+    popover.innerHTML = `
+      <div class="ccf-inline-popover-title">\uC11C\uC2DD \uC800\uC7A5</div>
+      <div class="ccf-code-note">${hasSavedStyle
+        ? "\uC800\uC7A5\uB41C \uC11C\uC2DD\uC744 \uC120\uD0DD \uC601\uC5ED\uC5D0 \uBD88\uB7EC\uC62C \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+        : "\uC120\uD0DD \uD14D\uC2A4\uD2B8\uC758 \uC11C\uC2DD\uC744 \uBA3C\uC800 \uC800\uC7A5\uD574 \uC8FC\uC138\uC694."}</div>
+      <div class="ccf-inline-popover-actions">
+        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uCDE8\uC18C</button>
+        <button type="button" class="ccf-btn" data-inline-style-action="save">\uC800\uC7A5</button>
+        <button type="button" class="ccf-btn primary" data-inline-style-action="load"${hasSavedStyle ? "" : " disabled"}>\uBD88\uB7EC\uC624\uAE30</button>
+      </div>
+    `;
+    popover.classList.add("open");
+    popover.setAttribute("aria-hidden", "false");
+    inlinePopoverState = {
+      kind: "style-clipboard",
+      toolbar,
+      popover,
+      context,
+      editor: context.editor,
+      selection: context.selection
+    };
+    showInlineToolbarSelectionHighlight(toolbar);
     return true;
   }
 
@@ -4120,7 +4331,7 @@
     state.text = nextText;
     state.runs = nextRuns;
     state.alignRuns = nextAlignRuns;
-    state.blockStyle = {};
+    state.blockStyle = cleanupBlockStyle(state.blockStyle);
     state.roll20Source = null;
     activeEditor = targetEditor;
     activeComposer = findComposerForEditor(targetEditor);
@@ -4249,6 +4460,8 @@
             <button type="button" class="ccf-toggle" data-toggle="italic" title="\uAE30\uC6B8\uC784" aria-label="\uAE30\uC6B8\uC784"><i>I</i></button>
             <button type="button" class="ccf-toggle" data-toggle="underline" title="\uBC11\uC904" aria-label="\uBC11\uC904"><u>U</u></button>
             <button type="button" class="ccf-toggle" data-toggle="strike" title="\uCDE8\uC18C\uC120" aria-label="\uCDE8\uC18C\uC120"><s>S</s></button>
+            <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9">()</button>
+            <button type="button" class="ccf-toggle" id="ccf-narration-toggle" title="\uB098\uB808\uC774\uC158" aria-label="\uB098\uB808\uC774\uC158" aria-pressed="false">Nar</button>
             <div class="ccf-code-tool ccf-ruby-tool" id="ccf-ruby-tool">
               <button
                 type="button"
@@ -4332,6 +4545,27 @@
                     <button type="button" class="ccf-btn" id="ccf-code-cancel">\uCDE8\uC18C</button>
                     <button type="button" class="ccf-btn primary" id="ccf-code-apply">\uC0BD\uC785</button>
                   </div>
+                </div>
+              </div>
+            </div>
+            <span class="ccf-inline-divider" aria-hidden="true"></span>
+            <div class="ccf-code-tool" id="ccf-style-clipboard-tool">
+              <button
+                type="button"
+                class="ccf-toggle ccf-code-toggle"
+                id="ccf-style-clipboard-toggle"
+                title="\uC11C\uC2DD \uC800\uC7A5"
+                aria-label="\uC11C\uC2DD \uC800\uC7A5"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >Sv</button>
+              <div class="ccf-code-backdrop" id="ccf-style-clipboard-backdrop" aria-hidden="true"></div>
+              <div class="ccf-code-toolbox" id="ccf-style-clipboard-toolbox" role="dialog" aria-label="\uC11C\uC2DD \uC800\uC7A5" aria-hidden="true">
+                <span class="ccf-code-note" id="ccf-style-clipboard-note">\uC120\uD0DD \uD14D\uC2A4\uD2B8\uC758 \uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uAC70\uB098 \uBD88\uB7EC\uC635\uB2C8\uB2E4.</span>
+                <div class="ccf-code-actions">
+                  <button type="button" class="ccf-btn" id="ccf-style-clipboard-cancel">\uCDE8\uC18C</button>
+                  <button type="button" class="ccf-btn" id="ccf-style-clipboard-save">\uC800\uC7A5</button>
+                  <button type="button" class="ccf-btn primary" id="ccf-style-clipboard-load">\uBD88\uB7EC\uC624\uAE30</button>
                 </div>
               </div>
             </div>
@@ -4561,6 +4795,19 @@
       });
     });
 
+    modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+    });
+    modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("click", () => {
+      applyParentheticalGrayToModalDraft();
+    });
+    modal.querySelector("#ccf-narration-toggle")?.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+    });
+    modal.querySelector("#ccf-narration-toggle")?.addEventListener("click", () => {
+      toggleModalNarration();
+    });
+
     modal.querySelector("#ccf-ruby-toggle")?.addEventListener("mousedown", (event) => {
       event.preventDefault();
     });
@@ -4614,6 +4861,28 @@
         const end = input.selectionEnd ?? start;
         event.preventDefault();
         input.setRangeText("  ", start, end, "end");
+      }
+    });
+    modal.querySelector("#ccf-style-clipboard-toggle")?.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+    });
+    modal.querySelector("#ccf-style-clipboard-toggle")?.addEventListener("click", () => {
+      setStyleClipboardPopoverOpen(!isStyleClipboardPopoverOpen());
+    });
+    modal.querySelector("#ccf-style-clipboard-backdrop")?.addEventListener("click", () => {
+      setStyleClipboardPopoverOpen(false, { focusToggle: true });
+    });
+    modal.querySelector("#ccf-style-clipboard-cancel")?.addEventListener("click", () => {
+      setStyleClipboardPopoverOpen(false, { focusToggle: true });
+    });
+    modal.querySelector("#ccf-style-clipboard-save")?.addEventListener("click", () => {
+      if (saveStyleClipboardFromContext(getActiveSelectionStyleContext())) {
+        setStyleClipboardPopoverOpen(false, { focusToggle: true });
+      }
+    });
+    modal.querySelector("#ccf-style-clipboard-load")?.addEventListener("click", () => {
+      if (applyStyleClipboardToContext(getActiveSelectionStyleContext())) {
+        setStyleClipboardPopoverOpen(false, { focusToggle: true });
       }
     });
     modal.querySelector("#ccf-tooltip-toggle")?.addEventListener("mousedown", (event) => {
@@ -4949,12 +5218,14 @@
     modalDraftText = null;
     modalDraftRuns = null;
     modalDraftAlignRuns = null;
+    modalDraftBlockStyle = null;
     modalDraftRoll20Text = null;
     modalDraftRoll20ConvertedSource = null;
     modalDraftLastStyle = null;
     resetRubyToolboxState();
     resetTooltipToolboxState();
     resetCodeToolboxState();
+    setStyleClipboardPopoverOpen(false);
     resetImageToolboxState();
     roomEditor?.focus?.({ preventScroll: true });
   }
@@ -5419,6 +5690,10 @@
     return document.getElementById("ccf-code-tool");
   }
 
+  function getStyleClipboardTool() {
+    return document.getElementById("ccf-style-clipboard-tool");
+  }
+
   function getRubyTool() {
     return document.getElementById("ccf-ruby-tool");
   }
@@ -5429,6 +5704,10 @@
 
   function getCodeBackdrop() {
     return document.getElementById("ccf-code-backdrop");
+  }
+
+  function getStyleClipboardBackdrop() {
+    return document.getElementById("ccf-style-clipboard-backdrop");
   }
 
   function getRubyBackdrop() {
@@ -5443,6 +5722,10 @@
     return document.getElementById("ccf-code-toolbox");
   }
 
+  function getStyleClipboardToolbox() {
+    return document.getElementById("ccf-style-clipboard-toolbox");
+  }
+
   function getRubyToolbox() {
     return document.getElementById("ccf-ruby-toolbox");
   }
@@ -5453,6 +5736,10 @@
 
   function getCodeToggle() {
     return document.getElementById("ccf-code-toggle");
+  }
+
+  function getStyleClipboardToggle() {
+    return document.getElementById("ccf-style-clipboard-toggle");
   }
 
   function getRubyToggle() {
@@ -5513,6 +5800,10 @@
 
   function isCodePopoverOpen() {
     return getCodeTool()?.classList.contains("open") || false;
+  }
+
+  function isStyleClipboardPopoverOpen() {
+    return getStyleClipboardTool()?.classList.contains("open") || false;
   }
 
   function isRubyPopoverOpen() {
@@ -5632,6 +5923,7 @@
 
     setRubyPopoverOpen(false);
     setTooltipPopoverOpen(false);
+    setStyleClipboardPopoverOpen(false);
     setImagePopoverOpen(false);
 
     const selectedText = options.prefillSelection ? populateCodeInputFromSelection() : getSelectedCodeDraftText();
@@ -5651,6 +5943,42 @@
           input.setSelectionRange(offset, offset);
         }
       });
+    }
+  }
+
+  function setStyleClipboardPopoverOpen(open, options = {}) {
+    const tool = getStyleClipboardTool();
+    const backdrop = getStyleClipboardBackdrop();
+    const toolbox = getStyleClipboardToolbox();
+    const toggle = getStyleClipboardToggle();
+    if (!tool || !backdrop || !toolbox || !toggle) return;
+
+    const nextOpen = !!open && isCcfModalMode();
+    tool.classList.toggle("open", nextOpen);
+    backdrop.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    toolbox.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+
+    if (!nextOpen) {
+      if (options.focusToggle) {
+        toggle.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    setRubyPopoverOpen(false);
+    setTooltipPopoverOpen(false);
+    setCodePopoverOpen(false);
+    setImagePopoverOpen(false);
+    const note = document.getElementById("ccf-style-clipboard-note");
+    if (note) {
+      note.textContent = readStyleClipboard()
+        ? "\uC800\uC7A5\uB41C \uC11C\uC2DD\uC744 \uD604\uC7AC \uC120\uD0DD \uC601\uC5ED\uC5D0 \uBD88\uB7EC\uC62C \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+        : "\uC120\uD0DD \uD14D\uC2A4\uD2B8\uC758 \uC11C\uC2DD\uC744 \uBA3C\uC800 \uC800\uC7A5\uD574 \uC8FC\uC138\uC694.";
+    }
+    const load = document.getElementById("ccf-style-clipboard-load");
+    if (load instanceof HTMLButtonElement) {
+      load.disabled = !readStyleClipboard();
     }
   }
 
@@ -5676,6 +6004,7 @@
 
     setTooltipPopoverOpen(false);
     setCodePopoverOpen(false);
+    setStyleClipboardPopoverOpen(false);
     setImagePopoverOpen(false);
 
     if (options.focusInput) {
@@ -5710,6 +6039,7 @@
 
     setRubyPopoverOpen(false);
     setCodePopoverOpen(false);
+    setStyleClipboardPopoverOpen(false);
     setImagePopoverOpen(false);
 
     if (options.focusInput) {
@@ -6546,6 +6876,7 @@
       setRubyPopoverOpen(false);
       setTooltipPopoverOpen(false);
       setCodePopoverOpen(false);
+      setStyleClipboardPopoverOpen(false);
       setImagePopoverOpen(false);
     }
   }
@@ -6594,6 +6925,7 @@
         modalDraftText = "";
         modalDraftRuns = [];
         modalDraftAlignRuns = [];
+        modalDraftBlockStyle = {};
         modalDraftRoll20ConvertedSource = "";
         modalDraftLastStyle = null;
         resetModalStyleControls();
@@ -6603,6 +6935,7 @@
         modalDraftText = nextText;
         modalDraftRuns = [];
         modalDraftAlignRuns = [];
+        modalDraftBlockStyle = {};
         modalDraftRoll20ConvertedSource = null;
         modalDraftLastStyle = null;
         resetModalStyleControls();
@@ -6674,11 +7007,13 @@
     resetRubyToolboxState();
     resetTooltipToolboxState();
     resetCodeToolboxState();
+    setStyleClipboardPopoverOpen(false);
     resetImageToolboxState();
 
     modalDraftText = text;
     modalDraftRuns = cloneRuns(state.runs, text.length);
     modalDraftAlignRuns = cloneAlignRuns(state.alignRuns, getTextLineCount(text));
+    modalDraftBlockStyle = cleanupBlockStyle(state.blockStyle);
     modalDraftRoll20Text = text;
     modalDraftRoll20ConvertedSource = null;
     modalDraftLastStyle = state.lastStyle ? { ...state.lastStyle } : null;
@@ -6693,6 +7028,7 @@
         ? getActiveAlignForSelection(text, modalDraftAlignRuns, selection, state.blockStyle)
         : "left"
     );
+    setNarrationToggle(modalDraftBlockStyle.narration === true);
     setModalSelection(selection, text.length);
     syncRoomEditorToModalEditor(editor);
     syncRoomEditorToRoll20Editor(editor);
@@ -6710,6 +7046,13 @@
     if (btn) {
       btn.classList.toggle("active", !!on);
     }
+  }
+
+  function setNarrationToggle(on) {
+    const btn = document.getElementById("ccf-narration-toggle");
+    if (!btn) return;
+    btn.classList.toggle("active", !!on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
   function setAlignmentToggle(value) {
@@ -6740,6 +7083,7 @@
     setToggle("italic", false);
     setToggle("underline", false);
     setToggle("strike", false);
+    setNarrationToggle(false);
     setAlignmentToggle("left");
 
     const color = document.getElementById("ccf-color");
@@ -6774,6 +7118,109 @@
       backgroundColor: bg,
       fontSize: size ?? undefined
     };
+  }
+
+  function getParentheticalRanges(text) {
+    const source = String(text || "");
+    const stacks = { "(": [], "\uFF08": [] };
+    const closingToOpening = { ")": "(", "\uFF09": "\uFF08" };
+    const ranges = [];
+
+    for (let index = 0; index < source.length; index += 1) {
+      const char = source[index];
+      if (Object.prototype.hasOwnProperty.call(stacks, char)) {
+        stacks[char].push(index);
+        continue;
+      }
+
+      const opening = closingToOpening[char];
+      if (!opening || !stacks[opening].length) continue;
+      const start = stacks[opening].pop();
+      ranges.push({ start, end: index + 1 });
+    }
+
+    return ranges.sort((left, right) => left.start - right.start || right.end - left.end);
+  }
+
+  function applyParentheticalGrayRuns(existingRuns, text) {
+    return getParentheticalRanges(text).reduce(
+      (runs, range) => patchStyleRuns(runs, range, { color: PARENTHETICAL_GRAY_COLOR }, text.length),
+      cloneRuns(existingRuns, text.length)
+    );
+  }
+
+  function applyParentheticalGrayToEditor(editor) {
+    if (!editor) return false;
+
+    const text = stripInvisibleEnvelope(getEditorText(editor));
+    if (!getParentheticalRanges(text).length) return false;
+
+    const state = ensureEditorState(editor);
+    state.runs = applyParentheticalGrayRuns(state.runs, text);
+    state.text = text;
+    renderPreview(editor);
+    refreshComposerBadge(activeComposer, editor);
+    syncEditorVisualPreview(editor);
+    return true;
+  }
+
+  function applyParentheticalGrayToModalDraft() {
+    const editor = getResolvedActiveEditor() || activeEditor;
+    const modalEditor = getModalEditor();
+    if (!editor || !modalEditor) return false;
+
+    modalDraftText = getEditorText(modalEditor);
+    if (!getParentheticalRanges(modalDraftText).length) return false;
+
+    modalDraftRuns = applyParentheticalGrayRuns(
+      modalDraftRuns ?? ensureEditorState(editor).runs,
+      modalDraftText
+    );
+    renderPreview(editor, {
+      force: true,
+      restoreSelection: true,
+      textOverride: modalDraftText,
+      runsOverride: modalDraftRuns,
+      alignRunsOverride: modalDraftAlignRuns
+    });
+    restoreModalSelectionSoon();
+    return true;
+  }
+
+  function applyInlineNarration(editor, active) {
+    if (!editor) return false;
+
+    const state = ensureEditorState(editor);
+    state.blockStyle = cleanupBlockStyle({
+      ...state.blockStyle,
+      narration: !!active
+    });
+    state.text = stripInvisibleEnvelope(getEditorText(editor));
+    renderPreview(editor);
+    refreshComposerBadge(activeComposer, editor);
+    syncEditorVisualPreview(editor);
+    return true;
+  }
+
+  function toggleModalNarration() {
+    const editor = getResolvedActiveEditor() || activeEditor;
+    if (!editor) return false;
+
+    const active = modalDraftBlockStyle?.narration !== true;
+    modalDraftBlockStyle = cleanupBlockStyle({
+      ...(modalDraftBlockStyle ?? ensureEditorState(editor).blockStyle),
+      narration: active
+    });
+    setNarrationToggle(active);
+    renderPreview(editor, {
+      force: true,
+      restoreSelection: true,
+      textOverride: modalDraftText ?? getEditorText(editor),
+      runsOverride: modalDraftRuns ?? ensureEditorState(editor).runs,
+      alignRunsOverride: modalDraftAlignRuns ?? ensureEditorState(editor).alignRuns
+    });
+    restoreModalSelectionSoon();
+    return true;
   }
 
   function getAlignFromModal() {
@@ -7163,6 +7610,119 @@
     renderPreview(activeEditor || context.editor);
     refreshComposerBadge(activeComposer, activeEditor || context.editor);
     syncEditorVisualPreview(activeEditor || context.editor);
+    return true;
+  }
+
+  function readStyleClipboard() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STYLE_CLIPBOARD_STORAGE_KEY) || "null");
+      if (!stored || typeof stored !== "object") return null;
+      return {
+        style: cleanupStyle(stored.style || {}),
+        align: cleanupAlign(stored.align) || "left"
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeStyleClipboard(value) {
+    try {
+      localStorage.setItem(STYLE_CLIPBOARD_STORAGE_KEY, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+      return false;
+    }
+  }
+
+  function getStyleClipboardAlign(context) {
+    if (!context) return "left";
+    const useModal = context.targetEditor === context.modalEditor;
+    const alignRuns = useModal
+      ? (modalDraftAlignRuns ?? context.state?.alignRuns)
+      : context.state?.alignRuns;
+    const blockStyle = useModal
+      ? (modalDraftBlockStyle ?? context.state?.blockStyle)
+      : context.state?.blockStyle;
+    return getActiveAlignForSelection(context.text, alignRuns || [], context.selection, blockStyle);
+  }
+
+  function getStyleClipboardTextStyle(context) {
+    if (!context?.selection || context.selection.start === context.selection.end) return {};
+    const offset = Math.min(context.selection.start, Math.max(0, context.text.length - 1));
+    const activeRuns = normalizeRuns(context.baseRuns, context.text.length)
+      .filter((run) => run.start <= offset && offset < run.end)
+      .map((run) => run.style);
+    const style = cleanupStyle(mergeStyles(activeRuns));
+    delete style.imageUrl;
+    delete style.imageAlt;
+    return style;
+  }
+
+  function saveStyleClipboardFromContext(context) {
+    if (!context?.selection || context.selection.start === context.selection.end) {
+      alert("\uC800\uC7A5\uD560 \uC11C\uC2DD\uC758 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+      restoreModalSelectionSoon();
+      return false;
+    }
+    const saved = {
+      style: getStyleClipboardTextStyle(context),
+      align: getStyleClipboardAlign(context)
+    };
+    return writeStyleClipboard(saved);
+  }
+
+  function applyStyleClipboardToContext(context) {
+    const saved = readStyleClipboard();
+    if (!saved) {
+      alert("\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
+      restoreModalSelectionSoon();
+      return false;
+    }
+    if (!context?.selection || context.selection.start === context.selection.end) {
+      alert("\uC11C\uC2DD\uC744 \uBD88\uB7EC\uC62C \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+      restoreModalSelectionSoon();
+      return false;
+    }
+
+    const clearedStyle = {
+      bold: null,
+      italic: null,
+      underline: null,
+      strike: null,
+      rubyText: null,
+      tooltipText: null,
+      codeMode: null,
+      blur: null,
+      color: null,
+      backgroundColor: null,
+      backgroundImage: null,
+      fontSize: null,
+      display: null,
+      padding: null,
+      margin: null,
+      borderRadius: null,
+      border: null,
+      letterSpacing: null,
+      lineHeight: null,
+      textAlign: null,
+      textShadow: null,
+      opacity: undefined
+    };
+    const applied = commitSelectionStyleContext(context, {
+      ...clearedStyle,
+      ...saved.style
+    });
+    if (!applied) return false;
+
+    if (context.targetEditor === context.modalEditor) {
+      setAlignmentToggle(saved.align);
+      applyCurrentModalBlockStyle({ previewOnly: true });
+      restoreModalSelectionSoon();
+    } else {
+      applyInlineAlignment(context.editor, saved.align, context.selection);
+    }
     return true;
   }
 
@@ -7560,6 +8120,19 @@
     return true;
   }
 
+  function applyNarrationPreviewRuns(runs, text, blockStyle) {
+    if (!text || cleanupBlockStyle(blockStyle).narration !== true) {
+      return normalizeRuns(runs, text.length);
+    }
+
+    return patchStyleRuns(
+      runs,
+      { start: 0, end: text.length },
+      { italic: true },
+      text.length
+    );
+  }
+
   function renderPreview(editor, options = {}) {
     const preview = document.getElementById("ccf-preview");
     if (!preview) return;
@@ -7574,27 +8147,33 @@
     const text = typeof options.textOverride === "string"
       ? options.textOverride
       : getEditorText(editor);
+    const state = ensureEditorState(editor);
+    const blockStyle = cleanupBlockStyle(
+      options.blockStyleOverride ??
+      (isModalOpen() && modalMode === MODAL_MODE_CCFOLIA && modalDraftBlockStyle != null
+        ? modalDraftBlockStyle
+        : state.blockStyle)
+    );
     const selectionToRestore = force && options.restoreSelection !== false
       ? normalizeSelectionRange(options.selection || getModalSelection(), text.length)
       : null;
 
     if (!text) {
-      const state = ensureEditorState(editor);
       const alignRuns = options.alignRunsOverride != null
-        ? getEffectiveAlignRuns(text, options.alignRunsOverride)
-        : getEffectiveAlignRuns(text, state.alignRuns, state.blockStyle);
+        ? getEffectiveAlignRuns(text, options.alignRunsOverride, blockStyle)
+        : getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
       preview.style.textAlign = getLineAlign(alignRuns, 0) || "";
       preview.textContent = "";
       return;
     }
 
-    const runs = Array.isArray(options.runsOverride)
+    const baseRuns = Array.isArray(options.runsOverride)
       ? normalizeRuns(options.runsOverride, text.length)
       : normalizeRuns(ensureEditorState(editor).runs, text.length);
-    const state = ensureEditorState(editor);
+    const runs = applyNarrationPreviewRuns(baseRuns, text, blockStyle);
     const alignRuns = options.alignRunsOverride != null
-      ? getEffectiveAlignRuns(text, options.alignRunsOverride)
-      : getEffectiveAlignRuns(text, state.alignRuns, state.blockStyle);
+      ? getEffectiveAlignRuns(text, options.alignRunsOverride, blockStyle)
+      : getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     renderStyledText(preview, text, runs, alignRuns);
 
     if (selectionToRestore) {
@@ -7742,6 +8321,7 @@
     modalDraftText = parsed.text;
     modalDraftRuns = parsed.runs;
     modalDraftAlignRuns = parsed.alignRuns;
+    modalDraftBlockStyle = {};
     modalDraftRoll20ConvertedSource = source;
     modalDraftLastStyle = null;
 
@@ -8158,8 +8738,9 @@
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
-    const runs = normalizeRuns(state.runs, text.length);
-    const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, state.blockStyle);
+    const blockStyle = cleanupBlockStyle(state.blockStyle);
+    const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
+    const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
 
     if (!shouldShow) {
@@ -8374,6 +8955,15 @@
           state.alignRuns = [];
           state.lastStyle = null;
           state.blockStyle = {};
+        } else {
+          const toolbar = getInlineToolbarForEditor(editor);
+          const narrationActive = toolbar?.querySelector?.('[data-inline-command="narration"]')?.classList.contains("active");
+          if (narrationActive) {
+            state.blockStyle = cleanupBlockStyle({
+              ...state.blockStyle,
+              narration: true
+            });
+          }
         }
 
         state.text = text;
@@ -8475,8 +9065,9 @@
     }
 
     const runs = preparedRuns.runs;
-    const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, state.blockStyle);
-    if (!runs.length && !alignRuns.length) return true;
+    const blockStyle = cleanupBlockStyle(state.blockStyle);
+    const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
+    if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;
     state.text = rawText;
     state.runs = runs;
@@ -8485,7 +9076,8 @@
       v: 1,
       text: rawText,
       formatRuns: runs,
-      alignRuns
+      alignRuns,
+      blockStyle
     };
 
     const presenceApi = window.__CAPYBARA_TOOLKIT_PRESENCE__;
@@ -9420,6 +10012,9 @@
     if (style && ["center", "right"].includes(style.align)) {
       out.align = style.align;
     }
+    if (style?.narration === true) {
+      out.narration = true;
+    }
     return out;
   }
 
@@ -9436,6 +10031,13 @@
   }
 
   function getEffectiveAlignRuns(text, alignRuns, blockStyle = null) {
+    if (cleanupBlockStyle(blockStyle).narration) {
+      return [{
+        start: 0,
+        end: getTextLineCount(text),
+        align: "center"
+      }];
+    }
     const normalized = normalizeAlignRuns(alignRuns, getTextLineCount(text));
     if (normalized.length) return normalized;
     return getLegacyAlignRuns(text, blockStyle);
@@ -10198,7 +10800,7 @@
     const state = ensureEditorState(roomEditor);
     state.runs = nextRuns;
     state.alignRuns = nextAlignRuns;
-    state.blockStyle = {};
+    state.blockStyle = cleanupBlockStyle(modalDraftBlockStyle);
     state.text = nextText;
     state.roll20Source = null;
     if (modalDraftLastStyle) {
