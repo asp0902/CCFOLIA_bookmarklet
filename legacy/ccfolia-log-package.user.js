@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.14
+// @version      0.0.15
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -18,6 +18,13 @@
   const STYLE_ID = "ccf-log-package-style";
   const EXPORT_BTN_ATTR = "data-ccf-log-package-btn";
   const EXPORT_BTN_SELECTOR = `[${EXPORT_BTN_ATTR}="1"]`;
+  const CHARACTER_LIST_ORDER_STORAGE_KEY = "ccf-log-package:my-character-order:v1";
+  const CHARACTER_LIST_ATTR = "data-ccf-lp-character-list";
+  const CHARACTER_ITEM_ATTR = "data-ccf-lp-character-sortable";
+  const CHARACTER_ITEM_ID_ATTR = "data-ccf-lp-character-id";
+  const CHARACTER_ITEM_BOUND_ATTR = "data-ccf-lp-character-dnd-bound";
+  const CHARACTER_DRAGGING_ATTR = "data-ccf-lp-character-dragging";
+  const CHARACTER_DROP_ATTR = "data-ccf-lp-character-drop";
 
   // ----------------------------------------------------
   // [수정 포인트 1] 커스텀 탭 삭제 버튼을 위한 상수 추가
@@ -88,7 +95,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-    version: getUserscriptVersion("0.0.14"),
+    version: getUserscriptVersion("0.0.15"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -123,6 +130,8 @@
   };
 
   let ccfLpActive = true;
+  let characterListDragState = null;
+  let characterListSuppressClickUntil = 0;
   const ccfLpDisposers = [];
   const ccfLpAbort = new AbortController();
   const ccfLpSignal = ccfLpAbort.signal;
@@ -256,6 +265,7 @@
       console.warn("[CCF LOG PACKAGE] runtime capture init failed; falling back to UI scan", error);
     }
     injectStyle();
+    installCharacterListSorterCleanup();
     scheduleEnsureButtons();
     observeDom();
   }
@@ -1365,6 +1375,51 @@
         animation: ccf-log-package-spin 1s linear infinite;
       }
 
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"] {
+        position: relative;
+        cursor: grab;
+        transition: box-shadow 120ms ease, opacity 120ms ease;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"].MuiListItem-root,
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"] > .MuiListItem-root {
+        padding-left: 34px !important;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"]::before {
+        content: "\\22ee  \\22ee";
+        position: absolute;
+        top: 50%;
+        left: 9px;
+        transform: translateY(-50%);
+        color: currentColor;
+        font-size: 15px;
+        line-height: 1;
+        letter-spacing: 0;
+        opacity: 0.42;
+        pointer-events: none;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"]:active {
+        cursor: grabbing;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"] button {
+        cursor: pointer;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_DRAGGING_ATTR}="1"] {
+        opacity: 0.42;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_DROP_ATTR}="before"] {
+        box-shadow: inset 0 2px 0 #e91e63;
+      }
+
+      [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_DROP_ATTR}="after"] {
+        box-shadow: inset 0 -2px 0 #e91e63;
+      }
+
       @keyframes ccf-log-package-spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
@@ -1399,6 +1454,7 @@
       if (!ccfLpActive) return;
       ensureExportButtons();
       ensureCustomDeleteButtons(); // ← 새로 추가된 부분
+      ensureCharacterListSortables();
     });
   }
 
@@ -1484,6 +1540,235 @@
 
         nativeDeleteBtn.insertAdjacentElement("afterend", customDeleteBtn);
       }
+    }
+  }
+
+  function installCharacterListSorterCleanup() {
+    ccfLpRegisterTeardown(() => {
+      characterListDragState = null;
+      clearCharacterListDropMarks();
+      document.querySelectorAll(`[${CHARACTER_LIST_ATTR}], [${CHARACTER_ITEM_ATTR}]`).forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        node.removeAttribute(CHARACTER_LIST_ATTR);
+        node.removeAttribute(CHARACTER_ITEM_ATTR);
+        node.removeAttribute(CHARACTER_ITEM_ID_ATTR);
+        node.removeAttribute(CHARACTER_ITEM_BOUND_ATTR);
+        node.removeAttribute(CHARACTER_DRAGGING_ATTR);
+        node.removeAttribute(CHARACTER_DROP_ATTR);
+        node.removeAttribute("draggable");
+      });
+    });
+  }
+
+  function ensureCharacterListSortables() {
+    document.querySelectorAll("ul.MuiList-root").forEach((list) => {
+      if (!(list instanceof HTMLElement) || !isVisible(list)) return;
+
+      const items = getMyCharacterListItems(list);
+      if (!items.length) return;
+
+      list.setAttribute(CHARACTER_LIST_ATTR, "1");
+      items.forEach((item, index) => decorateCharacterListItem(item, index));
+      applyStoredCharacterListOrder(list);
+    });
+  }
+
+  function getMyCharacterListItems(list) {
+    if (!(list instanceof HTMLElement)) return [];
+
+    return [...list.children].filter((child) => {
+      if (!(child instanceof HTMLElement)) return false;
+      return !!(
+        child.querySelector(".MuiListItemAvatar-root")
+        && child.querySelector(".MuiListItemText-root")
+        && child.querySelector(".MuiListItemSecondaryAction-root")
+      );
+    });
+  }
+
+  function decorateCharacterListItem(item, index) {
+    if (!(item instanceof HTMLElement)) return;
+
+    const characterKey = getCharacterListItemKey(item, index);
+    if (!characterKey) return;
+
+    item.setAttribute(CHARACTER_ITEM_ATTR, "1");
+    item.setAttribute(CHARACTER_ITEM_ID_ATTR, characterKey);
+    item.setAttribute("draggable", "true");
+    if (item.getAttribute(CHARACTER_ITEM_BOUND_ATTR) === "1") return;
+
+    item.setAttribute(CHARACTER_ITEM_BOUND_ATTR, "1");
+    item.addEventListener("dragstart", handleCharacterItemDragStart, ccfLpWithSignal());
+    item.addEventListener("dragover", handleCharacterItemDragOver, ccfLpWithSignal());
+    item.addEventListener("drop", handleCharacterItemDrop, ccfLpWithSignal());
+    item.addEventListener("dragend", handleCharacterItemDragEnd, ccfLpWithSignal());
+    item.addEventListener("click", suppressCharacterItemClickAfterDrag, ccfLpWithSignal({ capture: true }));
+  }
+
+  function getCharacterListItemKey(item, index = 0) {
+    const existing = item.getAttribute(CHARACTER_ITEM_ID_ATTR);
+    if (existing) return existing;
+
+    const fiberKey = Object.keys(item).find((key) => (
+      key.startsWith("__reactFiber$")
+      || key.startsWith("__reactInternalInstance$")
+    ));
+    let fiber = fiberKey ? item[fiberKey] : null;
+    for (let depth = 0; fiber && depth < 14; depth += 1, fiber = fiber.return) {
+      const characterId = typeof fiber.memoizedProps?.characterId === "string"
+        ? fiber.memoizedProps.characterId.trim()
+        : "";
+      if (characterId) return `id:${characterId}`;
+    }
+
+    const primary = item.querySelector(".MuiListItemText-primary");
+    const name = normalizeSpace(primary?.textContent || item.textContent || "");
+    if (!name) return "";
+    return `label:${name}:${index}`;
+  }
+
+  function handleCharacterItemDragStart(event) {
+    const item = event.currentTarget;
+    if (!(item instanceof HTMLElement)) return;
+
+    const interactive = event.target instanceof Element
+      ? event.target.closest("button, a, input, textarea, select")
+      : null;
+    if (interactive && interactive !== item) {
+      event.preventDefault();
+      return;
+    }
+
+    const list = item.parentElement;
+    if (!(list instanceof HTMLElement) || list.getAttribute(CHARACTER_LIST_ATTR) !== "1") {
+      event.preventDefault();
+      return;
+    }
+
+    characterListDragState = { item, list };
+    characterListSuppressClickUntil = Date.now() + 300;
+    item.setAttribute(CHARACTER_DRAGGING_ATTR, "1");
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", item.getAttribute(CHARACTER_ITEM_ID_ATTR) || "");
+    }
+  }
+
+  function handleCharacterItemDragOver(event) {
+    const target = event.currentTarget;
+    const state = characterListDragState;
+    if (!(target instanceof HTMLElement) || !state || target.parentElement !== state.list) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+
+    clearCharacterListDropMarks(state.list);
+    if (target === state.item) return;
+
+    const rect = target.getBoundingClientRect();
+    const position = event.clientY < rect.top + (rect.height / 2) ? "before" : "after";
+    target.setAttribute(CHARACTER_DROP_ATTR, position);
+  }
+
+  function handleCharacterItemDrop(event) {
+    const target = event.currentTarget;
+    const state = characterListDragState;
+    if (!(target instanceof HTMLElement) || !state || target.parentElement !== state.list) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const position = target.getAttribute(CHARACTER_DROP_ATTR);
+    if (target !== state.item && position === "before") {
+      state.list.insertBefore(state.item, target);
+    } else if (target !== state.item && position === "after") {
+      state.list.insertBefore(state.item, target.nextSibling);
+    }
+
+    persistCharacterListOrder(state.list);
+    finishCharacterItemDrag();
+  }
+
+  function handleCharacterItemDragEnd() {
+    if (!characterListDragState) return;
+    finishCharacterItemDrag();
+  }
+
+  function finishCharacterItemDrag() {
+    const state = characterListDragState;
+    if (state?.item instanceof HTMLElement) {
+      state.item.removeAttribute(CHARACTER_DRAGGING_ATTR);
+    }
+    clearCharacterListDropMarks(state?.list);
+    characterListSuppressClickUntil = Date.now() + 350;
+    characterListDragState = null;
+  }
+
+  function suppressCharacterItemClickAfterDrag(event) {
+    if (Date.now() > characterListSuppressClickUntil) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  function clearCharacterListDropMarks(list = null) {
+    const root = list instanceof HTMLElement ? list : document;
+    root.querySelectorAll(`[${CHARACTER_DROP_ATTR}], [${CHARACTER_DRAGGING_ATTR}]`).forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.removeAttribute(CHARACTER_DROP_ATTR);
+      if (!characterListDragState || node !== characterListDragState.item) {
+        node.removeAttribute(CHARACTER_DRAGGING_ATTR);
+      }
+    });
+  }
+
+  function applyStoredCharacterListOrder(list) {
+    if (!(list instanceof HTMLElement)) return;
+
+    const storedOrder = readCharacterListOrderForCurrentRoom();
+    if (!storedOrder.length) return;
+
+    const items = getMyCharacterListItems(list);
+    const itemByKey = new Map(items.map((item, index) => [getCharacterListItemKey(item, index), item]));
+    const orderedItems = storedOrder.map((key) => itemByKey.get(key)).filter(Boolean);
+    const included = new Set(orderedItems);
+    items.forEach((item) => {
+      if (!included.has(item)) orderedItems.push(item);
+    });
+
+    if (orderedItems.every((item, index) => items[index] === item)) return;
+    orderedItems.forEach((item) => list.appendChild(item));
+  }
+
+  function readCharacterListOrderForCurrentRoom() {
+    const roomId = getCurrentCcfRoomId();
+    if (!roomId) return [];
+
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(CHARACTER_LIST_ORDER_STORAGE_KEY) || "{}");
+      const order = stored && Array.isArray(stored[roomId]) ? stored[roomId] : [];
+      return order.filter((value) => typeof value === "string" && value);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function persistCharacterListOrder(list) {
+    const roomId = getCurrentCcfRoomId();
+    if (!roomId || !(list instanceof HTMLElement)) return;
+
+    const order = getMyCharacterListItems(list)
+      .map((item, index) => getCharacterListItemKey(item, index))
+      .filter(Boolean);
+    if (!order.length) return;
+
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(CHARACTER_LIST_ORDER_STORAGE_KEY) || "{}");
+      const next = stored && typeof stored === "object" ? stored : {};
+      next[roomId] = order;
+      window.localStorage.setItem(CHARACTER_LIST_ORDER_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.warn("[CCF LOG PACKAGE] failed to save my character order", error);
     }
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.11
+// @version      0.0.12
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -20,8 +20,15 @@
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const MESSAGE_TEXT_SELECTOR = [
     'p.MuiTypography-root.MuiTypography-body2',
+    'div.MuiTypography-root.MuiTypography-body2',
+    'span.MuiTypography-root.MuiTypography-body2',
+    '.MuiTypography-root.MuiListItemText-secondary',
     '.MuiListItemText-root > p',
+    '.MuiListItemText-root > div',
+    '.MuiListItemText-root > span.MuiTypography-root',
     '[data-index] p',
+    '[data-index] div.MuiTypography-root',
+    '[data-index] span.MuiTypography-root',
     'li p'
   ].join(", ");
 
@@ -41,7 +48,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.11"),
+    version: getUserscriptVersion("0.0.12"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
