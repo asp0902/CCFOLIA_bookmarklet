@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.21
+// @version      0.0.22
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-    version: getUserscriptVersion("0.0.21"),
+  version: getUserscriptVersion("0.0.22"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -1640,7 +1640,7 @@
   }
 
   function ensureCharacterListSortables() {
-    document.querySelectorAll("ul.MuiList-root, [role=\"listbox\"]").forEach((list) => {
+  document.querySelectorAll("ul.MuiList-root, .MuiMenu-list, [role=\"listbox\"], [role=\"menu\"]").forEach((list) => {
       if (!(list instanceof HTMLElement) || !isVisible(list)) return;
 
       const items = getMyCharacterListItems(list);
@@ -1676,15 +1676,18 @@
   function getCharacterSelectionItems(list) {
     if (!(list instanceof HTMLElement)) return [];
 
-    return [...list.children].filter((child) => {
-      if (!(child instanceof HTMLElement)) return false;
-      return !!(
-        child.querySelector(".MuiListItemAvatar-root, .MuiAvatar-root, img")
-        && getCharacterListLabelKey(child)
-        && !child.querySelector(".MuiListItemSecondaryAction-root")
-      );
-    });
-  }
+  return [...list.children].filter((child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    const hasAvatar = !!child.querySelector(".MuiListItemAvatar-root, .MuiAvatar-root, img");
+    const isOption = child.matches("[role=\"option\"], [role=\"menuitem\"]")
+      || !!child.querySelector("[role=\"option\"], [role=\"menuitem\"]");
+    return !!(
+      getCharacterListLabelKey(child)
+      && !child.querySelector(".MuiListItemSecondaryAction-root")
+      && (hasAvatar || isOption)
+    );
+  });
+}
 
   function getCharacterListLabelKey(item) {
     if (!(item instanceof HTMLElement)) return "";

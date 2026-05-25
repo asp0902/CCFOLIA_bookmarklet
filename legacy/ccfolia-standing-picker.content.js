@@ -55,10 +55,11 @@ const state = {
   previewEl: null,
   selectedIndex: 0,
   currentInputEl: null,
-  currentCharacterName: null,
-  lastSeenName: null,
-  lastCharacterShortcutAt: 0,
-  nativeCharacterPickerRoot: null,
+    currentCharacterName: null,
+    lastSeenName: null,
+    lastCharacterShortcutAt: 0,
+    rightShiftDown: false,
+    nativeCharacterPickerRoot: null,
   nativeCharacterPickerItems: [],
   nativeCharacterPickerIndex: -1,
   nativeCharacterPickerUntil: 0,
@@ -672,8 +673,14 @@ function findCharacterSelectButton() {
   return null;
 }
 
+  function isRightShiftEvent(event) {
+    return event.code === 'ShiftRight' || (event.key === 'Shift' && event.location === 2);
+  }
+
   function isBackquoteShortcut(event) {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+    const shiftHeld = event.shiftKey || state.rightShiftDown ||
+      (typeof event.getModifierState === 'function' && event.getModifierState('Shift'));
+    if (event.ctrlKey || event.metaKey || event.altKey || shiftHeld) return false;
     return event.code === 'Backquote' ||
       event.key === '`' ||
       event.key === '\u20A9' ||
@@ -869,9 +876,13 @@ function runCharacterShortcut(event) {
   return true;
 }
 
-async function handleKeydown(event) {
-  if (!ccfspActive) return;
-  if (runCharacterShortcut(event)) return;
+  async function handleKeydown(event) {
+    if (!ccfspActive) return;
+    if (isRightShiftEvent(event)) {
+      state.rightShiftDown = true;
+      return;
+    }
+    if (runCharacterShortcut(event)) return;
   if (event.isComposing) return;
   if (handleNativeCharacterPickerKey(event)) return;
 
@@ -909,12 +920,20 @@ async function handleKeydown(event) {
   }
 }
 
-function handleKeyup(event) {
-  if (!ccfspActive) return;
-  if (isBackquoteShortcut(event) && (state.nativeCharacterPickerUntil || canUseCharacterShortcutFrom(document.activeElement))) {
-    consumeShortcutEvent(event);
+  function handleKeyup(event) {
+    if (!ccfspActive) return;
+    if (isRightShiftEvent(event)) {
+      state.rightShiftDown = false;
+      return;
+    }
+    if (isBackquoteShortcut(event) && (state.nativeCharacterPickerUntil || canUseCharacterShortcutFrom(document.activeElement))) {
+      consumeShortcutEvent(event);
+    }
   }
-}
+
+  function clearPhysicalShortcutModifiers() {
+    state.rightShiftDown = false;
+  }
 
 function handleInput(event) {
   if (!state.popupEl) return;
@@ -937,10 +956,11 @@ function initEvents() {
   document.addEventListener('input', handleInput, ccfspWithSignal(true));
   document.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
   document.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
-  document.addEventListener('click', handleClick, ccfspWithSignal(true));
-  window.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
-  window.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
-  window.addEventListener('resize', handleResize, ccfspWithSignal());
+    document.addEventListener('click', handleClick, ccfspWithSignal(true));
+    window.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
+    window.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
+    window.addEventListener('blur', clearPhysicalShortcutModifiers, ccfspWithSignal());
+    window.addEventListener('resize', handleResize, ccfspWithSignal());
   window.addEventListener('scroll', handleResize, ccfspWithSignal(true));
 }
 
