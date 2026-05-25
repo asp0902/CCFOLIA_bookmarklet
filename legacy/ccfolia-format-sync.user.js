@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.19
+// @version      0.0.21
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.19"),
+    version: getUserscriptVersion("0.0.21"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1643,6 +1643,18 @@
   let ifhBridgeListenerBound = false;
   let ifhBridgeRequestCounter = 0;
   const IFH_PENDING_REQUESTS = new Map();
+
+  const CHARACTER_SELECT_BUTTON_SELECTORS = [
+    'button[aria-label="캐릭터 선택"]',
+    'button[aria-label="Character selection"]',
+    'button[aria-label="Select character"]',
+    'button[aria-label="キャラクター選択"]',
+    'button[aria-label="キャラクター 選択"]'
+  ];
+  let narratorScrapeHideStyle = null;
+  let lastObservedSpeakerName = "";
+  let characterSpeakerObserverStarted = false;
+  let pendingSpeakerCheckTimer = 0;
 
   start();
 
@@ -7500,14 +7512,6 @@
     }
   }
 
-  const CHARACTER_SELECT_BUTTON_SELECTORS = [
-    'button[aria-label="캐릭터 선택"]',
-    'button[aria-label="Character selection"]',
-    'button[aria-label="Select character"]',
-    'button[aria-label="キャラクター選択"]',
-    'button[aria-label="キャラクター 選択"]'
-  ];
-
   function findCharacterSelectButton() {
     for (const selector of CHARACTER_SELECT_BUTTON_SELECTORS) {
       const matches = document.querySelectorAll(selector);
@@ -7604,7 +7608,6 @@
     });
   }
 
-  let narratorScrapeHideStyle = null;
   function setNarratorScrapeHidden(hidden) {
     if (hidden) {
       if (narratorScrapeHideStyle) return;
@@ -7639,10 +7642,6 @@
       } catch (error) { /* backdrop dismiss failed */ }
     }
   }
-
-  let lastObservedSpeakerName = "";
-  let characterSpeakerObserverStarted = false;
-  let pendingSpeakerCheckTimer = 0;
 
   function scheduleSpeakerCheck() {
     if (pendingSpeakerCheckTimer) return;
