@@ -3206,14 +3206,13 @@
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
       <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray">()</button>
-      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration">Nar</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
-      <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
+      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration">Nar</button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -3232,7 +3231,9 @@
         <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
+      <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
+      <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
