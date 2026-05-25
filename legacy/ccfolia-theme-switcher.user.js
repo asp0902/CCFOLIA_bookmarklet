@@ -41,6 +41,7 @@
     )
   );
   const UNSUNG_DUET_FIELD_BOUND_ATTR = "data-ccf-unsung-duet-bound";
+  const UNSUNG_DUET_TOGGLE_ID = "ccf-theme-switcher-unsung-duet-toggle";
   const UNSUNG_DUET_MSG_INJECTED_ATTR = "data-ccf-unsung-duet-msg-injected";
   const UNSUNG_DUET_IMG_CLASS = "ccf-unsung-duet-msg-img";
   // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
@@ -1606,13 +1607,12 @@
         font-weight: bold;
       }
 
-      /* 트리거 텍스트가 치환된 imgur URL → DOM 인젝트된 <img> */
+      /* 트리거 텍스트가 치환된 <img> — 채팅 메시지에서 가운데 정렬 */
       .${UNSUNG_DUET_IMG_CLASS} {
-        display: inline-block;
+        display: block;
         max-width: 100%;
         height: auto;
-        vertical-align: middle;
-        margin: 2px 4px;
+        margin: 6px auto;
         border-radius: 4px;
       }
     `;
@@ -1715,6 +1715,15 @@
             <button type="button" class="ccf-theme-btn" data-action="export-theme">내보내기</button>
             <button type="button" class="ccf-theme-btn" data-action="delete-theme">테마 삭제</button>
           </div>
+          <div class="ccf-theme-actions">
+            <button
+              type="button"
+              class="ccf-theme-btn"
+              id="${UNSUNG_DUET_TOGGLE_ID}"
+              data-action="toggle-unsung-duet"
+              aria-pressed="true"
+            >언성 듀엣 테마: ON</button>
+          </div>
           <input id="${IMPORT_INPUT_ID}" type="file" accept=".json,application/json" hidden>
         </div>
         <div id="${SAVE_DIALOG_ID}" aria-hidden="true">
@@ -1776,6 +1785,23 @@
 
         if (action === "confirm-save-theme") {
           saveCurrentTheme();
+          return;
+        }
+
+        if (action === "toggle-unsung-duet") {
+          const nextEnabled = !settings.unsungDuetEnabled;
+          settings = { ...settings, unsungDuetEnabled: nextEnabled };
+          persistSettings();
+          syncUnsungDuetToggle();
+          applyDicebotAttribute();
+          // 토글 OFF → 이미 인젝트된 이미지/마킹을 즉시 정리해 원본 텍스트로 복원
+          if (!nextEnabled) revertUnsungDuetDomState();
+          setStatus(
+            nextEnabled
+              ? "언성 듀엣 테마를 활성화했습니다."
+              : "언성 듀엣 테마를 비활성화했습니다.",
+            "success"
+          );
           return;
         }
 
@@ -3335,6 +3361,7 @@
     });
 
     syncThemeNameInput();
+    syncUnsungDuetToggle();
   }
 
   function getUiThemePreview() {
@@ -3682,7 +3709,13 @@
   function applyDicebotAttribute() {
     const root = document.documentElement;
     if (!root) return;
-    const id = detectDicebotName();
+    let id = detectDicebotName();
+    // 패널의 "언성 듀엣 테마" 토글이 OFF면 unsung-duet 식별을 비활성화.
+    // 이 단일 게이트로 CSS 테마 / 트리거 치환 / 이미지 인젝션 / pauseVideo 차단
+    // 모두 한 번에 OFF 됨 (모두 getCurrentDicebotId() === "unsung-duet" 체크하므로).
+    if (id === "unsung-duet" && settings.unsungDuetEnabled === false) {
+      id = "";
+    }
     const current = root.getAttribute(DICEBOT_ATTR) || "";
     if (id) {
       if (current !== id) root.setAttribute(DICEBOT_ATTR, id);
@@ -3788,6 +3821,31 @@
     }, ccfThemeWithSignal(true));
   }
 
+  function syncUnsungDuetToggle() {
+    const button = document.getElementById(UNSUNG_DUET_TOGGLE_ID);
+    if (!(button instanceof HTMLButtonElement)) return;
+    const enabled = settings.unsungDuetEnabled !== false;
+    button.textContent = enabled ? "언성 듀엣 테마: ON" : "언성 듀엣 테마: OFF";
+    button.setAttribute("aria-pressed", enabled ? "true" : "false");
+  }
+
+  // 토글 OFF 시 — 이미 채팅에 인젝트된 <img>와 마킹된 li 속성을 청소해
+  // CCFOLIA 원본 메시지가 다시 텍스트 그대로 보이도록 복원.
+  function revertUnsungDuetDomState() {
+    document.querySelectorAll(`.${UNSUNG_DUET_IMG_CLASS}`).forEach((img) => {
+      const url = img.getAttribute("src") || "";
+      const alt = UNSUNG_DUET_URL_TO_ALT[url] || "";
+      const parent = img.parentNode;
+      if (!parent) return;
+      // 가능하면 원본 [이미지](URL) 텍스트로 복원
+      const restored = document.createTextNode(`[이미지](${url})`);
+      parent.replaceChild(restored, img);
+    });
+    document.querySelectorAll(`[${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"]`).forEach((el) => {
+      el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
+    });
+  }
+
   function bindUnsungDuetTriggerFields() {
     // dicebot이 unsung-duet일 때만 신규 필드 바인딩 — 다른 다이스봇일 땐 사이드 이펙트 없음
     if (getCurrentDicebotId() !== "unsung-duet") return;
@@ -3840,8 +3898,12 @@
 
   function hasUnsungDuetSignal(text) {
     if (!text) return false;
+    if (text.indexOf("[이미지](") >= 0) return true;
     for (const url of Object.values(UNSUNG_DUET_URLS)) {
       if (text.indexOf(url) >= 0) return true;
+    }
+    for (const trigger of Object.keys(UNSUNG_DUET_URLS)) {
+      if (text.indexOf(trigger) >= 0) return true;
     }
     return false;
   }
@@ -3951,9 +4013,11 @@
     });
   }
 
-  // [이미지](https://i.imgur.com/XXXX.png) 또는 raw URL — 둘 다 매칭하는 정규식.
-  // 그룹1: [이미지](…) 안의 URL, 그룹2: raw URL.
-  const UNSUNG_DUET_TEXT_PATTERN = /\[이미지\]\((https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)\)|(https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)/g;
+  // 채팅 메시지 텍스트에서 매칭할 패턴 — 세 형태 모두 처리:
+  //   그룹1: [이미지](URL) 안의 URL
+  //   그룹2: raw URL
+  //   그룹3: 【…】 트리거 텍스트 (CCFOLIA 다이스봇이 원문을 그대로 echo back할 때)
+  const UNSUNG_DUET_TEXT_PATTERN = /\[이미지\]\((https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)\)|(https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)|(【(?:시프터 판정|바인더 판정|프래그먼트 효과|이계화)】)/g;
 
   function replaceTextNodesWithImages(root) {
     if (!(root instanceof HTMLElement)) return false;
@@ -3969,10 +4033,14 @@
             return NodeFilter.FILTER_REJECT;
           }
         }
-        // 알려진 URL 또는 [이미지]( 가 텍스트에 있는지 빠른 사전 필터
-        if (node.textContent.indexOf("[이미지](") >= 0) return NodeFilter.FILTER_ACCEPT;
+        // 알려진 URL / [이미지]( / 【…】 트리거 텍스트 중 하나라도 있는지 사전 필터
+        const t = node.textContent;
+        if (t.indexOf("[이미지](") >= 0) return NodeFilter.FILTER_ACCEPT;
         for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
-          if (node.textContent.indexOf(url) >= 0) return NodeFilter.FILTER_ACCEPT;
+          if (t.indexOf(url) >= 0) return NodeFilter.FILTER_ACCEPT;
+        }
+        for (const trigger of Object.keys(UNSUNG_DUET_URLS)) {
+          if (t.indexOf(trigger) >= 0) return NodeFilter.FILTER_ACCEPT;
         }
         return NodeFilter.FILTER_REJECT;
       }
@@ -3995,13 +4063,19 @@
       let foundAny = false;
       let match;
       while ((match = UNSUNG_DUET_TEXT_PATTERN.exec(text)) !== null) {
-        const url = match[1] || match[2];
-        if (!url || !UNSUNG_DUET_URL_TO_ALT[url]) continue;
+        // URL 매칭 (그룹1·2) 또는 트리거 텍스트 매칭 (그룹3) — 어느 쪽이든 URL로 정규화
+        let url = match[1] || match[2];
+        let alt = url ? UNSUNG_DUET_URL_TO_ALT[url] : "";
+        if (!url && match[3]) {
+          url = UNSUNG_DUET_URLS[match[3]] || "";
+          alt = match[3].replace(/[【】]/g, "");
+        }
+        if (!url) continue;
         foundAny = true;
         if (match.index > cursor) {
           fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
         }
-        fragment.appendChild(createUnsungDuetImage(url, UNSUNG_DUET_URL_TO_ALT[url]));
+        fragment.appendChild(createUnsungDuetImage(url, alt));
         cursor = match.index + match[0].length;
       }
       if (!foundAny) continue;
@@ -4749,7 +4823,8 @@
       defaultTheme: null,
       defaultThemeVersion: 0,
       customTheme: { ...DEFAULT_CUSTOM_THEME },
-      savedThemes: []
+      savedThemes: [],
+      unsungDuetEnabled: true
     };
   }
 
@@ -4762,7 +4837,8 @@
       defaultTheme: normalizeOptionalTheme(value?.defaultTheme),
       defaultThemeVersion: Number.isInteger(value?.defaultThemeVersion) ? value.defaultThemeVersion : 0,
       customTheme: normalizeTheme(value?.customTheme || value?.theme || base.customTheme),
-      savedThemes
+      savedThemes,
+      unsungDuetEnabled: typeof value?.unsungDuetEnabled === "boolean" ? value.unsungDuetEnabled : true
     };
   }
 
