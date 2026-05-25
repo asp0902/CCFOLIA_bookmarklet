@@ -24,6 +24,16 @@
   const DICEBOT_MAP = Object.freeze({
     "언성 듀엣": "unsung-duet"
   });
+
+  // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지 URL
+  // 발송 시 트리거 텍스트(대괄호 포함)를 해당 URL로 치환하여 모든 참가자에게 이미지가 보이도록 함
+  const UNSUNG_DUET_TRIGGER_MAP = Object.freeze({
+    "【시프터 판정】": "https://i.imgur.com/FFUXgYg.png",
+    "【바인더 판정】": "https://i.imgur.com/Jt8hw3i.png",
+    "【프래그먼트 효과】": "https://i.imgur.com/dcMRZ62.png",
+    "【이계화】": "https://i.imgur.com/cfVWYGn.png"
+  });
+  const UNSUNG_DUET_FIELD_BOUND_ATTR = "data-ccf-unsung-duet-bound";
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
   const PANEL_POSITION_KEY = "ccf-theme-switcher-panel-position-v1";
@@ -178,7 +188,8 @@
         `[${CHARACTER_COLOR_RENDER_STATE_ATTR}]`,
         `[${CHARACTER_COLOR_MODE_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_PROXY_BOUND_ATTR}]`,
-        `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`
+        `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`,
+        `[${UNSUNG_DUET_FIELD_BOUND_ATTR}]`
       ].join(", ")).forEach((el) => {
         if (el instanceof HTMLElement) {
           el.style.removeProperty("--ccf-theme-anchor-height");
@@ -191,6 +202,7 @@
         el.removeAttribute(CHARACTER_COLOR_MODE_BOUND_ATTR);
         el.removeAttribute(CHARACTER_COLOR_PROXY_BOUND_ATTR);
         el.removeAttribute(CHARACTER_COLOR_NATIVE_INPUT_ATTR);
+        el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -228,6 +240,7 @@
   let themeNameDraft = "";
   let panelDragState = null;
   let lastDicebotAnchor = null;
+  let unsungDuetEnterReentry = false;
   let lastThemePreview = normalizeOptionalTheme(settings.defaultTheme) || null;
   const pendingCharacterColorSelections = new WeakMap();
   const pendingCharacterColorAddSelections = new WeakSet();
@@ -1607,6 +1620,7 @@
 
     mountToggle();
     applyDicebotAttribute();
+    bindUnsungDuetTriggerFields();
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -3639,6 +3653,112 @@
     } else if (current) {
       root.removeAttribute(DICEBOT_ATTR);
     }
+  }
+
+  // === 언성 듀엣: 채팅 트리거 텍스트 → 이미지 URL 자동 치환 ============
+  function getCurrentDicebotId() {
+    return document.documentElement?.getAttribute(DICEBOT_ATTR) || "";
+  }
+
+  function replaceUnsungDuetTriggers(text) {
+    if (typeof text !== "string" || !text) return text;
+    let result = text;
+    for (const [trigger, url] of Object.entries(UNSUNG_DUET_TRIGGER_MAP)) {
+      if (result.indexOf(trigger) >= 0) {
+        result = result.split(trigger).join(url);
+      }
+    }
+    return result;
+  }
+
+  function setReactInputValue(el, value) {
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+    const proto = el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
+    if (descriptor && typeof descriptor.set === "function") {
+      descriptor.set.call(el, value);
+    } else {
+      el.value = value;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function isUnsungDuetTextField(field) {
+    if (field instanceof HTMLTextAreaElement) return true;
+    if (field instanceof HTMLInputElement) {
+      const type = (field.type || "text").toLowerCase();
+      return type === "text" || type === "search" || type === "url" || type === "email" || type === "";
+    }
+    return false;
+  }
+
+  function bindUnsungDuetField(field) {
+    if (!isUnsungDuetTextField(field)) return;
+    if (field.getAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR) === "1") return;
+    field.setAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR, "1");
+
+    field.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      // Shift+Enter는 줄바꿈, IME 조합 중 Enter는 한글 확정용 — 둘 다 발송이 아님
+      if (event.shiftKey || event.isComposing || event.keyCode === 229) return;
+      if (unsungDuetEnterReentry) return;
+      if (getCurrentDicebotId() !== "unsung-duet") return;
+
+      const original = field.value;
+      const replaced = replaceUnsungDuetTriggers(original);
+      if (replaced === original) return;
+
+      // 트리거 발견 — 원 Enter는 막고, value 치환 후 React state가 갱신될 시간을
+      // 준 뒤 새 Enter 키 이벤트를 재발송해서 CCFOLIA 채팅 전송 핸들러를 깨움
+      event.preventDefault();
+      event.stopPropagation();
+
+      setReactInputValue(field, replaced);
+
+      window.setTimeout(() => {
+        unsungDuetEnterReentry = true;
+        try {
+          const replay = new KeyboardEvent("keydown", {
+            key: "Enter",
+            code: "Enter",
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            shiftKey: false,
+            ctrlKey: false,
+            altKey: false,
+            metaKey: false
+          });
+          field.dispatchEvent(replay);
+
+          // 일부 빌드는 form submit으로 발송하므로 form fallback도 시도
+          const form = field.closest("form");
+          if (form && typeof form.requestSubmit === "function") {
+            try { form.requestSubmit(); } catch (error) { /* requestSubmit 실패 무시 */ }
+          }
+        } finally {
+          window.setTimeout(() => { unsungDuetEnterReentry = false; }, 120);
+        }
+      }, 0);
+    }, ccfThemeWithSignal(true));
+  }
+
+  function bindUnsungDuetTriggerFields() {
+    // dicebot이 unsung-duet일 때만 신규 필드 바인딩 — 다른 다이스봇일 땐 사이드 이펙트 없음
+    if (getCurrentDicebotId() !== "unsung-duet") return;
+    const selector = [
+      `textarea:not([${UNSUNG_DUET_FIELD_BOUND_ATTR}="1"])`,
+      `input[type="text"]:not([${UNSUNG_DUET_FIELD_BOUND_ATTR}="1"])`,
+      `input[type="search"]:not([${UNSUNG_DUET_FIELD_BOUND_ATTR}="1"])`,
+      `input:not([type]):not([${UNSUNG_DUET_FIELD_BOUND_ATTR}="1"])`
+    ].join(", ");
+    document.querySelectorAll(selector).forEach((field) => {
+      if (field instanceof HTMLElement) bindUnsungDuetField(field);
+    });
   }
 
   function findDicebotAnchor() {
