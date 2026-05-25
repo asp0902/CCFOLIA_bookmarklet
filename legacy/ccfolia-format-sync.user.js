@@ -3166,10 +3166,18 @@
         activeEditor = editor;
       }
       syncEditorVisualPreview(editor);
-      refreshAllInlineNarrationButtons();
+      try {
+        refreshAllInlineNarrationButtons();
+      } catch (error) {
+        console.error("[ccf-format-sync] refreshAllInlineNarrationButtons failed", error);
+      }
     }, ccfFsWithSignal(true));
 
-    startCharacterSpeakerObserver();
+    try {
+      startCharacterSpeakerObserver();
+    } catch (error) {
+      console.error("[ccf-format-sync] startCharacterSpeakerObserver failed", error);
+    }
 
     window.addEventListener("resize", () => {
       if (isModalOpen()) {
@@ -3313,7 +3321,11 @@
     `;
 
     bindInlineToolbarEvents(toolbar);
-    refreshInlineNarrationButton(toolbar);
+    try {
+      refreshInlineNarrationButton(toolbar);
+    } catch (error) {
+      console.error("[ccf-format-sync] refreshInlineNarrationButton (init) failed", error);
+    }
     return toolbar;
   }
 
