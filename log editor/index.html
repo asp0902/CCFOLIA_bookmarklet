@@ -660,8 +660,10 @@
     <h2>대기 중</h2>
     <p>코코포리아 룸의 환경설정 메뉴에서 <code>카피바라 로그</code> 버튼을 누르면 이 편집기로 로그가 전달됩니다.</p>
     <p>이전에 받은 로그가 있다면 왼쪽 목록에서 선택할 수 있습니다.</p>
+    <button type="button" class="btn js-import-edit-data">편집 데이터 가져오기</button>
   </div>
 </main>
+<input type="file" id="input-import-edit-data" accept=".json,application/json" hidden>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -677,6 +679,8 @@
   const DB_NAME = "capybara-log-editor";
   const DB_VERSION = 1;
   const STORE_ROOMS = "rooms";
+  const EDITOR_DATA_FORMAT = "capybara-log-editor-data";
+  const EDITOR_DATA_VERSION = 1;
 
   const state = {
     db: null,
@@ -694,6 +698,7 @@
     main: document.getElementById("main-content"),
     emptyState: document.getElementById("empty-state"),
     refresh: document.getElementById("btn-refresh"),
+    importEditData: document.getElementById("input-import-edit-data"),
     toast: document.getElementById("toast"),
     storageInfo: document.getElementById("storage-info")
   };
@@ -847,6 +852,7 @@
     if (!html) return "";
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
+    tpl.content.querySelectorAll(".ccf-image-token").forEach((node) => node.remove());
     for (const img of tpl.content.querySelectorAll("img[src]")) {
       const src = img.getAttribute("src") || "";
       const replacement = byRenderUrl.get(src);
@@ -1055,6 +1061,8 @@
         <div class="room-meta">${meta.join(" · ")}</div>
         <div class="room-actions">
           <button class="btn danger" id="btn-delete-room">이 룸 데이터 삭제</button>
+          <button class="btn" id="btn-export-edit-data">편집 데이터 내보내기</button>
+          <button class="btn js-import-edit-data" type="button">편집 데이터 가져오기</button>
           <button class="btn" id="btn-export-html">HTML 내보내기</button>
           ${tistoryActionHtml}
         </div>
@@ -1074,6 +1082,18 @@
         revokeObjectUrls();
         await refreshRoomList();
         showEmpty();
+      });
+    }
+
+    const exportEditDataBtn = document.getElementById("btn-export-edit-data");
+    if (exportEditDataBtn) {
+      exportEditDataBtn.addEventListener("click", () => {
+        try {
+          exportEditorData(room);
+          showToast("편집 데이터 파일을 내보냈습니다.");
+        } catch (error) {
+          showToast("편집 데이터 내보내기 실패: " + (error?.message || error));
+        }
       });
     }
 
@@ -1748,6 +1768,130 @@
     downloadEditorBlob(fileName, blob);
   }
 
+  function exportEditorData(room) {
+    const data = {
+      format: EDITOR_DATA_FORMAT,
+      version: EDITOR_DATA_VERSION,
+      exportedAt: new Date().toISOString(),
+      room,
+      editorState: {
+        selectedTabIds: [...state.selectedTabIds],
+        systemSpeaker: state.systemSpeaker,
+        mergeSameSpeaker: state.mergeSameSpeaker
+      }
+    };
+    const json = JSON.stringify(data, editorDataJsonReplacer, 2);
+    const fileName = buildEditorDataFileName(room);
+    const blob = new Blob(["\uFEFF", json], { type: "application/json;charset=utf-8" });
+    downloadEditorBlob(fileName, blob);
+  }
+
+  function editorDataJsonReplacer(_key, value) {
+    if (value instanceof Uint8Array) {
+      return {
+        __capybaraDataType: "Uint8Array",
+        base64: uint8ArrayToBase64(value)
+      };
+    }
+    if (value instanceof ArrayBuffer) {
+      return {
+        __capybaraDataType: "Uint8Array",
+        base64: uint8ArrayToBase64(new Uint8Array(value))
+      };
+    }
+    return value;
+  }
+
+  function editorDataJsonReviver(_key, value) {
+    if (value?.__capybaraDataType === "Uint8Array" && typeof value.base64 === "string") {
+      return base64ToUint8Array(value.base64);
+    }
+    return value;
+  }
+
+  function base64ToUint8Array(base64) {
+    const binary = atob(String(base64 || ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  async function importEditorDataFile(file) {
+    const source = (await file.text()).replace(/^\uFEFF/, "");
+    const data = JSON.parse(source, editorDataJsonReviver);
+    if (!data || data.format !== EDITOR_DATA_FORMAT || data.version !== EDITOR_DATA_VERSION) {
+      throw new Error("카피바라 로그 편집 데이터 파일 형식이 아닙니다.");
+    }
+
+    const room = normalizeImportedEditorRoom(data.room);
+    const existing = await getRoom(room.roomId);
+    if (existing && !confirm(`「${room.roomTitle}」 의 저장 데이터를 가져온 편집 데이터로 교체할까요?`)) {
+      return;
+    }
+
+    await putRoom(room);
+    restoreImportedEditorState(room, data.editorState);
+    await refreshRoomList();
+    await selectRoom(room.roomId);
+    showToast("편집 데이터를 가져왔습니다.");
+  }
+
+  function normalizeImportedEditorRoom(source) {
+    if (!source || typeof source !== "object" || !source.payload || !Array.isArray(source.payload.entries)) {
+      throw new Error("가져올 룸 데이터가 비어있거나 올바르지 않습니다.");
+    }
+
+    const roomId = String(source.roomId || "").trim();
+    if (!roomId) {
+      throw new Error("가져올 룸 ID가 없습니다.");
+    }
+
+    const payload = {
+      ...source.payload,
+      entries: source.payload.entries
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => {
+          const next = { ...entry };
+          if (typeof next.bodyHtml === "string") next.bodyHtml = sanitizeEditedEntryHtml(next.bodyHtml);
+          if (typeof next.packageHtml === "string") next.packageHtml = sanitizeEditedEntryHtml(next.packageHtml);
+          return next;
+        }),
+      assets: Array.isArray(source.payload.assets)
+        ? source.payload.assets
+          .filter((asset) => asset && typeof asset === "object")
+          .map((asset) => {
+            const next = { ...asset };
+            const bytes = toUint8Array(next.bytes);
+            if (bytes) next.bytes = bytes;
+            return next;
+          })
+        : []
+    };
+
+    return {
+      ...source,
+      roomId,
+      roomTitle: String(source.roomTitle || payload.roomTitle || "(제목 없음)"),
+      lastUpdatedAt: Date.now(),
+      payload
+    };
+  }
+
+  function restoreImportedEditorState(room, importedState) {
+    const tabs = Array.isArray(room?.payload?.tabs) ? room.payload.tabs : [];
+    const validTabIds = new Set(tabs.map((tab, index) => String(tab?.id || `tab-${index + 1}`)));
+    const requestedTabs = Array.isArray(importedState?.selectedTabIds)
+      ? importedState.selectedTabIds.map((id) => String(id)).filter((id) => validTabIds.has(id))
+      : [...validTabIds];
+
+    state.selectedTabRoomId = room.roomId || room.roomUrl || room.roomTitle || "";
+    state.selectedTabIds = new Set(requestedTabs);
+    state.systemSpeaker = typeof importedState?.systemSpeaker === "string" ? importedState.systemSpeaker : "";
+    state.mergeSameSpeaker = !!importedState?.mergeSameSpeaker;
+  }
+
   function buildEditorStandaloneHtml(room) {
     const payload = room?.payload || {};
     const roomTitle = room?.roomTitle || payload.roomTitle || "(제목 없음)";
@@ -1807,6 +1951,10 @@
       String(date.getDate()).padStart(2, "0")
     ].join("");
     return `${safeTitle}_${stamp}.html`;
+  }
+
+  function buildEditorDataFileName(room) {
+    return buildEditorHtmlFileName(room).replace(/\.html$/i, ".capybara-log.json");
   }
 
   function formatExportedAt(date) {
@@ -1891,6 +2039,7 @@ ${html}
         <h2>대기 중</h2>
         <p>코코포리아 룸의 환경설정 메뉴에서 <code>카피바라 로그</code> 버튼을 누르면 이 편집기로 로그가 전달됩니다.</p>
         <p>이전에 받은 로그가 있다면 왼쪽 목록에서 선택할 수 있습니다.</p>
+        <button type="button" class="btn js-import-edit-data">편집 데이터 가져오기</button>
       </div>
     `;
   }
@@ -1975,6 +2124,21 @@ ${html}
 
   els.refresh.addEventListener("click", () => {
     refreshRoomList().catch((e) => showToast("새로고침 실패: " + (e?.message || e)));
+  });
+
+  els.main.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest(".js-import-edit-data") : null;
+    if (!target || !(els.importEditData instanceof HTMLInputElement)) return;
+    els.importEditData.value = "";
+    els.importEditData.click();
+  });
+
+  els.importEditData?.addEventListener("change", () => {
+    const file = els.importEditData.files?.[0];
+    if (!file) return;
+    importEditorDataFile(file).catch((error) => {
+      showToast("편집 데이터 가져오기 실패: " + (error?.message || error));
+    });
   });
 
   bootstrap().catch((error) => {
