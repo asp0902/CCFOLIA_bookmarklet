@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.17
+// @version      0.0.18
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.17"),
+    version: getUserscriptVersion("0.0.18"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1595,6 +1595,7 @@
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const LOCAL_IMAGE_INDEX_KEY = "ccf-inline-image:index";
   const LOCAL_IMAGE_MAX_ENTRIES = 24;
+  const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
   const ROLL20_STYLE_LINK_RE = /\[([^\]]*)\]\(#"\s*style="([^"]*?)"?\s*\)/gi;
   const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)\s*$/i;
   const ROLL20_DESC_RE = /^\s*\/desc\b\s*/i;
@@ -3872,7 +3873,7 @@
     if (!toolbar) return;
 
     toolbar.querySelectorAll(
-      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"], [data-inline-command="narration"]'
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
     ).forEach((btn) => {
       btn.classList.remove("active");
       btn.setAttribute("aria-pressed", "false");
@@ -3910,11 +3911,12 @@
     if (text) return;
 
     const state = ensureEditorState(editor);
+    const preservedNarration = state.blockStyle?.narration === true;
     state.text = "";
     state.runs = [];
     state.alignRuns = [];
     state.lastStyle = null;
-    state.blockStyle = {};
+    state.blockStyle = preservedNarration ? { narration: true } : {};
     state.roll20Source = null;
 
     const composer = findComposerForEditor(editor);
