@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.4.0
+// @version      0.5.0
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,7 +33,7 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.1.0"),
+    version: getUserscriptVersion("0.5.0"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
@@ -1756,5 +1756,2350 @@
       subtree: true
     });
     ccfSuiteRegisterTeardown(() => observer.disconnect());
+  }
+
+  // ============================================================
+  // Home enhancer: 룸 즐겨찾기 + 방문기록 통합 (v0.1.1)
+  // ============================================================
+
+  const CCFH_STORAGE_FAV = "ccfh-favorites-v1";
+  const CCFH_STORAGE_HISTORY = "ccfh-history-v1";
+  const CCFH_STORAGE_META = "ccfh-room-meta-v1";
+  const CCFH_STORAGE_FOLD = "ccfh-section-fold-v1";
+  const CCFH_STORAGE_VIEW = "ccfh-section-view-v1";
+  const CCFH_ROOM_HREF_RE = /^\/rooms\/([A-Za-z0-9_-]+)\/?$/;
+  const CCFH_ROOM_PAGE_RE = /^\/rooms\/([A-Za-z0-9_-]+)(?:\/.*)?$/;
+  const CCFH_STAR_ATTR = "data-ccfh-star";
+  const CCFH_VISITED_ATTR = "data-ccfh-visited";
+  const CCFH_FAV_ATTR = "data-ccfh-fav";
+  const CCFH_CARD_ATTR = "data-ccfh-card";
+  const CCFH_ORIGINAL_ORDER_ATTR = "data-ccfh-original-order";
+  const CCFH_STYLE_ID = "ccfh-style";
+
+  function ccfhReadJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return parsed == null ? fallback : parsed;
+    } catch (err) {
+      return fallback;
+    }
+  }
+  function ccfhWriteJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); }
+    catch (err) { console.warn("[CCFH] save failed", key, err); }
+  }
+  function ccfhFavorites() {
+    const a = ccfhReadJson(CCFH_STORAGE_FAV, []);
+    return Array.isArray(a) ? a.filter((x) => typeof x === "string") : [];
+  }
+  function ccfhSaveFavorites(arr) {
+    ccfhWriteJson(CCFH_STORAGE_FAV, [...new Set(arr.filter(Boolean))]);
+  }
+  function ccfhIsFavorite(id) { return ccfhFavorites().includes(id); }
+  function ccfhToggleFavorite(id) {
+    const favs = ccfhFavorites();
+    const i = favs.indexOf(id);
+    if (i >= 0) favs.splice(i, 1); else favs.unshift(id);
+    ccfhSaveFavorites(favs);
+    return i < 0;
+  }
+  function ccfhHistory() {
+    const a = ccfhReadJson(CCFH_STORAGE_HISTORY, []);
+    return Array.isArray(a) ? a.filter((e) => e && typeof e.id === "string") : [];
+  }
+  function ccfhSaveHistory(arr) {
+    ccfhWriteJson(CCFH_STORAGE_HISTORY, arr);
+  }
+  function ccfhRoomMeta() {
+    const data = ccfhReadJson(CCFH_STORAGE_META, {});
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  }
+  function ccfhSaveRoomMeta(meta) {
+    ccfhWriteJson(CCFH_STORAGE_META, meta);
+  }
+  function ccfhCachedRoomMeta(id) {
+    const meta = ccfhRoomMeta()[id];
+    return meta && typeof meta === "object" ? meta : {};
+  }
+  function ccfhFoldState() {
+    const data = ccfhReadJson(CCFH_STORAGE_FOLD, {});
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  }
+  function ccfhSetFoldState(key, folded) {
+    if (!key) return;
+    const state = ccfhFoldState();
+    state[key] = !!folded;
+    ccfhWriteJson(CCFH_STORAGE_FOLD, state);
+  }
+  function ccfhIsFolded(key) {
+    return !!ccfhFoldState()[key];
+  }
+  function ccfhViewState() {
+    const data = ccfhReadJson(CCFH_STORAGE_VIEW, {});
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  }
+  function ccfhSetViewState(key, view) {
+    if (!key) return;
+    const state = ccfhViewState();
+    state[key] = view;
+    ccfhWriteJson(CCFH_STORAGE_VIEW, state);
+  }
+  function ccfhGetView(key) {
+    return ccfhViewState()[key] || "card";
+  }
+  function ccfhCleanText(text) {
+    return (text || "").replace(/\s+/g, " ").trim();
+  }
+  function ccfhIsGenericRoomName(name) {
+    const text = ccfhCleanText(name);
+    if (!text) return true;
+    return /^ccfolia(?:\s|$)/i.test(text) || /オンラインセッションツール/i.test(text);
+  }
+  function ccfhIsGenericThumbnail(url) {
+    if (!url) return true;
+    return /ccfolia\.png$/i.test(url);
+  }
+  function ccfhResolveHistoryEntry(entry) {
+    const cached = ccfhCachedRoomMeta(entry.id);
+    const name = ccfhCleanText(entry.name);
+    const resolvedName = ccfhIsGenericRoomName(name) && cached.name ? cached.name : name;
+    let thumb = entry.thumbnail || "";
+    // 썸네일이 코코포리아 기본 이미지일 경우, 이전에 캐싱된 이미지가 있다면 그것을 우선 사용
+    if (ccfhIsGenericThumbnail(thumb) && cached.thumbnail && !ccfhIsGenericThumbnail(cached.thumbnail)) {
+      thumb = cached.thumbnail;
+    }
+    return {
+      ...entry,
+      name: resolvedName || cached.name || "(이름 없음)",
+      thumbnail: thumb || cached.thumbnail || "",
+      date: entry.date || cached.date || ""
+    };
+  }
+  function ccfhRepairHistoryWithMeta() {
+    const list = ccfhHistory();
+    let changed = false;
+    const next = list.map((entry) => {
+      const resolved = ccfhResolveHistoryEntry(entry);
+      if (resolved.name !== entry.name || resolved.thumbnail !== entry.thumbnail) changed = true;
+      return resolved;
+    });
+    if (changed) ccfhSaveHistory(next);
+  }
+  function ccfhRecordVisit(entry) {
+    if (!entry || !entry.id) return;
+    const list = ccfhHistory().filter((e) => e.id !== entry.id);
+    const resolved = ccfhResolveHistoryEntry(entry);
+    list.unshift({
+      id: entry.id,
+      name: resolved.name,
+      thumbnail: resolved.thumbnail,
+      date: resolved.date,
+      visitedAt: Date.now()
+    });
+    ccfhSaveHistory(list);
+  }
+  function ccfhRemoveHistory(id) {
+    ccfhSaveHistory(ccfhHistory().filter((e) => e.id !== id));
+  }
+
+  function ccfhInjectStyle() {
+    if (document.getElementById(CCFH_STYLE_ID)) return;
+    const s = document.createElement("style");
+    s.id = CCFH_STYLE_ID;
+    s.textContent = `
+      .ccfh-star-btn {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        box-sizing: border-box;
+        width: 20px;
+        height: 20px;
+        min-width: 20px;
+        max-width: 20px;
+        padding: 5px;
+        margin: 0 -1px 0 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 20px;
+        font-size: 14px;
+        line-height: 1;
+        color: #b9bdc7;
+        overflow: hidden;
+        vertical-align: middle;
+        transition: color 0.14s ease;
+      }
+      .ccfh-star-btn:hover { color: #ffc83a; }
+      .ccfh-star-btn[data-active="1"] { color: #ffc83a; }
+      .ccfh-star-btn[data-active="1"]:hover { color: #ffd76a; }
+      [${CCFH_CARD_ATTR}] .MuiCardHeader-content,
+      [${CCFH_CARD_ATTR}] [class*="MuiCardHeader-content"] {
+        min-width: 0;
+      }
+      [data-ccfh-actions] {
+        align-items: center;
+        flex-wrap: nowrap !important;
+        min-width: 0;
+      }
+      [data-ccfh-actions] > .MuiTypography-root,
+      [data-ccfh-actions] > h1,
+      [data-ccfh-actions] > h2,
+      [data-ccfh-actions] > h3,
+      [data-ccfh-actions] > h4,
+      [data-ccfh-actions] > h5,
+      [data-ccfh-actions] > h6 {
+        display: flex !important;
+        align-items: baseline;
+        gap: 0;
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: clip !important;
+      }
+      [data-ccfh-actions] > .MuiBox-root,
+      [data-ccfh-actions] > [class*="MuiBox-root"] {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .ccfh-room-title-main {
+        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .ccfh-room-title-date {
+        display: inline-block;
+        flex: 0 0 auto;
+        margin-left: 0.35em;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+      }
+      [data-ccfh-actions] > span {
+        display: inline-flex;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+      [${CCFH_CARD_ATTR}] .MuiTypography-noWrap,
+      [${CCFH_CARD_ATTR}] h1,
+      [${CCFH_CARD_ATTR}] h2,
+      [${CCFH_CARD_ATTR}] h3,
+      [${CCFH_CARD_ATTR}] h4,
+      [${CCFH_CARD_ATTR}] h5,
+      [${CCFH_CARD_ATTR}] h6 {
+        min-width: 0;
+        max-width: 100%;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      [${CCFH_VISITED_ATTR}] { position: relative; }
+      [${CCFH_VISITED_ATTR}]::after {
+        content: "방문";
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.55);
+        color: #fff;
+        pointer-events: none;
+        z-index: 2;
+      }
+      #ccfh-shortcut-sections {
+        margin: 10px 16px 10px;
+        font-family: "Roboto", "Noto Sans KR", sans-serif;
+        --ccfh-grid-columns: repeat(auto-fill, minmax(220px, 1fr));
+        --ccfh-grid-gap: 16px;
+      }
+      .ccfh-room-section { margin: 0 0 20px; }
+      .ccfh-section-header-wrap {
+        position: relative;
+        margin-bottom: 12px;
+      }
+      .ccfh-room-section-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 -8px;
+        padding: 6px 10px;
+        padding-right: 140px;
+        width: calc(100% + 16px);
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+      .ccfh-room-section-heading:hover { background: rgba(255,255,255,0.06); }
+      .ccfh-room-section-heading:focus-visible { outline: 2px solid rgba(255,200,58,0.6); outline-offset: 2px; }
+      .ccfh-section-fold-arrow {
+        display: inline-block;
+        width: 12px;
+        text-align: center;
+        transition: transform 160ms ease;
+        color: rgba(255,255,255,0.6);
+      }
+      .ccfh-header-controls {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        z-index: 2;
+      }
+      .ccfh-sort-select, .ccfh-view-toggle {
+        background: rgba(255,255,255,0.08);
+        color: rgba(255,255,255,0.86);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 12px;
+        outline: none;
+        cursor: pointer;
+        height: 26px;
+        box-sizing: border-box;
+        transition: background 120ms ease;
+      }
+      .ccfh-sort-select:hover, .ccfh-view-toggle:hover {
+        background: rgba(255,255,255,0.16);
+      }
+      .ccfh-view-toggle {
+        width: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ccfh-view-toggle svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+      .ccfh-sort-select option {
+        background: #2a2a2a;
+        color: #fff;
+      }
+      .ccfh-room-section.is-folded { margin-bottom: 6px; }
+      .ccfh-room-section.is-folded .ccfh-section-header-wrap { margin-bottom: 0; }
+      .ccfh-room-section.is-folded .ccfh-section-fold-arrow { transform: rotate(-90deg); }
+      .ccfh-section-count {
+        margin-left: -4px;
+        color: rgba(255,255,255,0.45);
+        font-weight: 500;
+      }
+      .ccfh-room-card-grid-wrapper {
+        display: grid;
+        grid-template-rows: 1fr;
+        transition: grid-template-rows 240ms ease-in-out;
+      }
+      .ccfh-room-section.is-folded .ccfh-room-card-grid-wrapper {
+        grid-template-rows: 0fr;
+      }
+      .ccfh-room-card-grid {
+        display: grid;
+        grid-template-columns: var(--ccfh-grid-columns);
+        gap: var(--ccfh-grid-gap);
+        min-height: 0;
+        overflow: hidden;
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        transition: opacity 240ms ease-in-out, transform 240ms ease-in-out, visibility 0s 0s;
+      }
+      .ccfh-room-section.is-folded .ccfh-room-card-grid {
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-8px);
+        transition: opacity 240ms ease-in-out, transform 240ms ease-in-out, visibility 0s 240ms;
+      }
+      .ccfh-room-like-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 4px;
+        background: #2f3136;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+        transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+      }
+      .ccfh-room-like-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.34);
+        filter: brightness(1.04);
+      }
+      .ccfh-room-like-card[draggable="true"] { cursor: grab; }
+      .ccfh-room-like-card.is-dragging,
+      .ccfh-room-like-card.is-dragging:hover {
+        opacity: 0.4;
+        transform: scale(0.96);
+        cursor: grabbing;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        z-index: 10;
+      }
+      .ccfh-room-like-link {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+      }
+      .ccfh-room-like-thumb {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 16 / 9;
+        background-size: cover;
+        background-position: center;
+        background-color: #202225;
+        color: rgba(255,255,255,0.35);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+      }
+      .ccfh-room-like-body {
+        padding: 12px 68px 12px 12px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .ccfh-room-like-title {
+        color: rgba(255,255,255,0.92);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .ccfh-room-like-meta {
+        color: rgba(255,255,255,0.5);
+        font-size: 12px;
+        line-height: 1.2;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .ccfh-room-like-actions {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        z-index: 2;
+      }
+      .ccfh-room-like-star,
+      .ccfh-room-like-remove {
+        appearance: none;
+        width: 24px;
+        height: 24px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(0,0,0,0.28);
+        color: rgba(255,255,255,0.72);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 24px;
+        text-align: center;
+        padding: 0;
+      }
+      .ccfh-room-like-star { color: #ffc83a; }
+      .ccfh-room-like-remove:hover,
+      .ccfh-room-like-star:hover { background: rgba(0,0,0,0.46); }
+      .ccfh-room-section.is-list-view .ccfh-room-card-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .ccfh-room-section.is-list-view .ccfh-room-like-link {
+        display: flex;
+        align-items: center;
+      }
+      .ccfh-room-section.is-list-view .ccfh-room-like-thumb {
+        width: 88px;
+        height: 50px;
+        flex: 0 0 auto;
+      }
+      .ccfh-room-section.is-list-view .ccfh-room-like-body {
+        min-height: 50px;
+        padding: 6px 68px 6px 12px;
+        flex: 1 1 0;
+        align-items: center;
+      }
+      .ccfh-room-section.is-list-view .ccfh-room-like-title {
+        font-size: 13px;
+      }
+      .ccfh-room-section.is-list-view .ccfh-room-like-actions {
+        top: 50%;
+        bottom: auto;
+        transform: translateY(-50%);
+      }
+      .ccfh-show-more-wrap {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 4px;
+      }
+      .ccfh-show-more-btn {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 8px 16px;
+        cursor: pointer;
+        transition: color 120ms ease, background 120ms ease;
+      }
+      .ccfh-show-more-btn:hover {
+        color: rgba(255, 255, 255, 0.86);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .ccfh-section-divider {
+        border: 0;
+        border-top: 2px dotted rgba(255, 255, 255, 0.24);
+        margin: 16px 0 6px;
+      }
+      @media (max-width: 600px) {
+        #ccfh-shortcut-sections {
+          margin: 16px 8px 20px;
+          --ccfh-grid-columns: repeat(auto-fill, minmax(160px, 1fr));
+          --ccfh-grid-gap: 12px;
+        }
+      .ccfh-room-like-title { font-size: 13px; }
+        .ccfh-room-like-meta { font-size: 11px; }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function ccfhRoomIdFromHref(href) {
+    if (!href) return null;
+    try {
+      const u = new URL(href, location.origin);
+      const m = u.pathname.match(CCFH_ROOM_HREF_RE) || u.pathname.match(CCFH_ROOM_PAGE_RE);
+      return m ? m[1] : null;
+    } catch (err) { return null; }
+  }
+
+  function ccfhFindRoomCardElement(anchor) {
+    const structural = ccfhFindStructuralRoomItem(anchor);
+    if (structural) return structural;
+    const directCard = anchor.closest("li, [data-rbd-draggable-id], [class*='RoomCard'], [class*='roomCard']");
+    const muiCard = anchor.closest(".MuiCard-root");
+    const base = directCard || muiCard || anchor.parentElement || anchor;
+    const gridItem = (muiCard || base).closest(".MuiGrid-item, [class*='MuiGrid-grid-xs-'], [class*='MuiGrid-grid-sm-'], [class*='MuiGrid-grid-md-'], [class*='MuiGrid-grid-lg-'], [class*='MuiGrid-grid-xl-']");
+    return gridItem && gridItem.contains(anchor) ? gridItem : base;
+  }
+
+  function ccfhFindStructuralRoomItem(anchor) {
+    let cur = anchor.closest(".MuiCard-root") || anchor;
+    while (cur && cur.parentElement && cur.parentElement !== document.body) {
+      const parent = cur.parentElement;
+      const siblingsWithRooms = Array.from(parent.children).filter((child) => child.querySelector && child.querySelector('a[href*="/rooms/"]'));
+      if (siblingsWithRooms.length >= 2) return cur;
+      cur = parent;
+    }
+    return null;
+  }
+
+  function ccfhFindRoomCards(root) {
+    const scope = root || document;
+    const anchors = Array.from(scope.querySelectorAll('a[href*="/rooms/"]'));
+    const seen = new Set();
+    const out = [];
+    for (const a of anchors) {
+      const id = ccfhRoomIdFromHref(a.getAttribute("href") || "");
+      if (!id) continue;
+      const card = ccfhFindRoomCardElement(a);
+      if (!card || seen.has(card)) continue;
+      seen.add(card);
+      card.setAttribute(CCFH_CARD_ATTR, "1");
+      out.push({ id, anchor: a, card });
+    }
+    return out;
+  }
+
+  function ccfhFindTrashButton(card) {
+    const buttons = Array.from(card.querySelectorAll("button")).filter((b) => !b.hasAttribute(CCFH_STAR_ATTR));
+    for (const b of buttons) {
+      const label = (b.getAttribute("aria-label") || "").toLowerCase();
+      if (/delete|trash|remove|삭제|제거|削除/.test(label)) return b;
+      const svg = b.querySelector("svg");
+      if (svg && /trash|delete|m6 7|m9 3v1/i.test(svg.outerHTML)) return b;
+      if (/delete|trash/i.test(b.getAttribute("data-testid") || "")) return b;
+    }
+    return buttons.length ? buttons[buttons.length - 1] : null;
+  }
+
+  function ccfhEnsureStar(roomInfo) {
+    const { id, card } = roomInfo;
+    card.setAttribute(CCFH_CARD_ATTR, "1");
+    let star = card.querySelector(`[${CCFH_STAR_ATTR}="${CSS.escape(id)}"]`);
+    const trash = ccfhFindTrashButton(card);
+    if (!star) {
+      star = document.createElement("button");
+      star.type = "button";
+      star.className = "ccfh-star-btn";
+      star.setAttribute(CCFH_STAR_ATTR, id);
+      star.setAttribute("aria-label", "즐겨찾기 토글");
+      star.title = "즐겨찾기";
+      star.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        ccfhToggleFavorite(id);
+        ccfhUpdateStar(star, id);
+        ccfhMarkFavorite(card, id);
+        // 단축 섹션이 있으면 재렌더 (즐겨찾기 토글 즉시 반영)
+        if (typeof ccfhRenderRoomShortcutSections === "function") {
+          ccfhRenderRoomShortcutSections();
+        }
+      });
+    }
+    if (trash && trash.parentElement) {
+      // 휴지통 버튼의 좌측에 배치
+      if (star.parentElement !== trash.parentElement || star.nextElementSibling !== trash) {
+        trash.parentElement.insertBefore(star, trash);
+      }
+    } else if (!star.parentElement) {
+      card.appendChild(star);
+    }
+    const actions = star.closest(".MuiCardActions-root, [class*='MuiCardActions-root']");
+    if (actions) {
+      actions.setAttribute("data-ccfh-actions", "1");
+      ccfhPrepareTitleLine(ccfhFindActionTitleElement(actions));
+    }
+    ccfhUpdateStar(star, id);
+    ccfhMarkFavorite(card, id);
+  }
+
+  function ccfhUpdateStar(star, id) {
+    if (ccfhIsFavorite(id)) {
+      star.textContent = "★";
+      star.setAttribute("data-active", "1");
+    } else {
+      star.textContent = "☆";
+      star.removeAttribute("data-active");
+    }
+  }
+
+  function ccfhMarkFavorite(card, id) {
+    const favs = ccfhFavorites();
+    const index = favs.indexOf(id);
+    if (index >= 0) {
+      card.setAttribute(CCFH_FAV_ATTR, "1");
+      card.style.order = String(-10000 + index);
+    } else {
+      card.removeAttribute(CCFH_FAV_ATTR);
+      card.style.removeProperty("order");
+    }
+  }
+
+  function ccfhEnsureOriginalOrder(parent, infos) {
+    if (!parent || !Array.isArray(infos)) return;
+    const ordered = infos
+      .slice()
+      .sort((a, b) => {
+        return Array.prototype.indexOf.call(parent.children, a.card)
+          - Array.prototype.indexOf.call(parent.children, b.card);
+      });
+    ordered.forEach((info, index) => {
+      if (!info.card.hasAttribute(CCFH_ORIGINAL_ORDER_ATTR)) {
+        info.card.setAttribute(CCFH_ORIGINAL_ORDER_ATTR, String(index));
+      }
+    });
+  }
+
+  function ccfhGetOriginalOrder(info, fallbackIndex) {
+    const value = Number(info.card.getAttribute(CCFH_ORIGINAL_ORDER_ATTR));
+    return Number.isFinite(value) ? value : fallbackIndex;
+  }
+
+  let ccfhReorderInProgress = false;
+  let ccfhShortcutRenderInProgress = false;
+  function ccfhReorderFavorites(force) {
+    if (ccfhReorderInProgress && !force) return;
+    ccfhReorderInProgress = true;
+    try {
+      const groups = new Map();
+      for (const info of ccfhFindRoomCards(document)) {
+        const parent = info.card.parentElement;
+        if (!parent) continue;
+        if (!groups.has(parent)) groups.set(parent, []);
+        groups.get(parent).push(info);
+      }
+      for (const [parent, infos] of groups) {
+        ccfhEnsureOriginalOrder(parent, infos);
+        const favs = ccfhFavorites();
+        const sorted = infos.slice().sort((a, b) => {
+          const ai = favs.indexOf(a.id);
+          const bi = favs.indexOf(b.id);
+          if (ai >= 0 && bi >= 0) return ai - bi;
+          if (ai >= 0) return -1;
+          if (bi >= 0) return 1;
+          return ccfhGetOriginalOrder(a, infos.indexOf(a))
+            - ccfhGetOriginalOrder(b, infos.indexOf(b));
+        });
+        const marker = document.createComment("ccfh-order");
+        parent.insertBefore(marker, infos[0].card);
+        const fragment = document.createDocumentFragment();
+        sorted.forEach((info) => {
+          ccfhMarkFavorite(info.card, info.id);
+          fragment.appendChild(info.card);
+        });
+        parent.insertBefore(fragment, marker);
+        marker.remove();
+      }
+    } finally {
+      setTimeout(() => { ccfhReorderInProgress = false; }, 0);
+    }
+  }
+
+  function ccfhIsHomePage() {
+    // 주의: 루트("/")는 ccfolia.com 랜딩 페이지(로그인 전, "지금 바로 시작" 화면)이므로 제외.
+    // 단축 섹션은 로그인 후 대시보드(/home, /rooms 목록)에서만 표시.
+    const p = location.pathname;
+    return /^\/(home|rooms)\/?$/.test(p);
+  }
+
+  function ccfhCurrentRoomId() {
+    const m = location.pathname.match(CCFH_ROOM_PAGE_RE);
+    return m ? m[1] : null;
+  }
+
+  function ccfhTextWithoutCaption(el) {
+    if (!el) return "";
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll("small, span").forEach((child) => {
+      const className = child.getAttribute("class") || "";
+      if (/caption|ccfh-room-title-date/i.test(className)) child.remove();
+    });
+    return ccfhCleanText(clone.textContent);
+  }
+
+  function ccfhFindTitleCaption(el) {
+    if (!el) return null;
+    return Array.from(el.querySelectorAll("small, span")).find((child) => {
+      const className = child.getAttribute("class") || "";
+      return /caption|ccfh-room-title-date/i.test(className);
+    }) || null;
+  }
+
+  function ccfhFindActionTitleElement(actions) {
+    if (!actions) return null;
+    return Array.from(actions.children).find((el) => (
+      /^H[1-6]$/i.test(el.tagName) ||
+      /\bMuiTypography-root\b/.test(el.getAttribute("class") || "")
+    )) || null;
+  }
+
+  function ccfhSetTitleLine(titleEl, name, dateText, captionTemplate) {
+    if (!titleEl) return;
+    const titleText = ccfhCleanText(name);
+    const captionText = ccfhCleanText(dateText);
+    const main = document.createElement("span");
+    main.className = "ccfh-room-title-main";
+    main.textContent = titleText;
+    const captionClone = captionText && captionTemplate ? captionTemplate.cloneNode(true) : null;
+    titleEl.textContent = "";
+    titleEl.appendChild(main);
+    if (captionText) {
+      const caption = captionClone || document.createElement("span");
+      if (!caption.className || typeof caption.className !== "string") {
+        caption.className = "MuiTypography-root MuiTypography-caption ccfh-room-title-date";
+      } else if (!/\bccfh-room-title-date\b/.test(caption.className)) {
+        caption.className = `${caption.className} ccfh-room-title-date`;
+      }
+      caption.textContent = captionText;
+      titleEl.appendChild(caption);
+    }
+    titleEl.setAttribute("data-ccfh-title-line", "1");
+  }
+
+  function ccfhPrepareTitleLine(titleEl) {
+    if (!titleEl) return;
+    const titleText = ccfhTextWithoutCaption(titleEl);
+    const caption = ccfhFindTitleCaption(titleEl);
+    const dateText = caption ? ccfhCleanText(caption.textContent) : "";
+    if (titleEl.querySelector(":scope > .ccfh-room-title-main")) {
+      const date = ccfhFindTitleCaption(titleEl);
+      if (date && !/\bccfh-room-title-date\b/.test(date.className || "")) {
+        date.className = `${date.className || ""} ccfh-room-title-date`.trim();
+      }
+      titleEl.setAttribute("data-ccfh-title-line", "1");
+      return;
+    }
+    ccfhSetTitleLine(titleEl, titleText, dateText, caption);
+  }
+
+  function ccfhFindCardTitleElement(card) {
+    const headings = Array.from(card.querySelectorAll("h1, h2, h3, h4, h5, h6"));
+    const heading = headings.find((el) => !ccfhIsGenericRoomName(ccfhTextWithoutCaption(el)));
+    return heading || card.querySelector('[class*="title" i], [class*="name" i]');
+  }
+
+  function ccfhExtractRoomNameFromCard(card) {
+      const originalTitleEl = ccfhFindCardTitleElement(card);
+      if (!originalTitleEl) return "";
+      
+      // 💡 핵심: 코코포리아의 원본 DOM이 망가지는 것을 막기 위해 복제본 생성
+      const titleEl = originalTitleEl.cloneNode(true);
+      ccfhPrepareTitleLine(titleEl); // 복제본에만 구조 변경을 수행
+      
+      const primary = ccfhTextWithoutCaption(titleEl);
+      if (primary && !ccfhIsGenericRoomName(primary)) return primary;
+      const full = ccfhCleanText(titleEl.textContent);
+      return ccfhIsGenericRoomName(full) ? "" : full;
+    }
+
+    function ccfhExtractRoomDateFromCard(card) {
+      const originalTitleEl = ccfhFindCardTitleElement(card);
+      if (!originalTitleEl) return "";
+
+      // 💡 핵심: 여기서도 복제본 생성
+      const titleEl = originalTitleEl.cloneNode(true);
+      ccfhPrepareTitleLine(titleEl);
+
+      const caption = ccfhFindTitleCaption(titleEl);
+      return caption ? ccfhCleanText(caption.textContent) : "";
+    }
+
+  function ccfhExtractRoomDateFromCard(card, options) {
+    const titleEl = ccfhFindCardTitleElement(card);
+    if (!titleEl) return "";
+    if (!options || options.prepare !== false) ccfhPrepareTitleLine(titleEl);
+    const caption = ccfhFindTitleCaption(titleEl);
+    return caption ? ccfhCleanText(caption.textContent) : "";
+  }
+
+  function ccfhExtractThumbnailFromCard(card) {
+    const urlRe = /url\((['"]?)(.*?)\1\)/;
+    // 1) MuiCardMedia 우선 — 코코포리아 카드 썸네일은 거의 항상 여기에 있음
+    const cardMedia = card.querySelector('.MuiCardMedia-root, [class*="MuiCardMedia-root"]');
+    if (cardMedia) {
+      const inlineBg = cardMedia.style && cardMedia.style.backgroundImage || "";
+      let m = inlineBg && inlineBg.match(urlRe);
+      if (m && m[2]) return m[2];
+      try {
+        const computed = window.getComputedStyle(cardMedia).backgroundImage || "";
+        if (computed && computed !== "none") {
+          m = computed.match(urlRe);
+          if (m && m[2]) return m[2];
+        }
+      } catch (_) { /* noop */ }
+      const innerImg = cardMedia.querySelector("img[src]");
+      if (innerImg) return innerImg.currentSrc || innerImg.src || innerImg.getAttribute("src") || "";
+    }
+    // 2) 카드 내부 background-image 가진 요소 중 url(...)을 가진 것
+    const bgEl = Array.from(card.querySelectorAll('[style*="background-image"]'))
+      .find((el) => /url\(/.test(el.style && el.style.backgroundImage || ""));
+    if (bgEl) {
+      const m = (bgEl.style.backgroundImage || "").match(urlRe);
+      if (m && m[2]) return m[2];
+    }
+    // 3) 마지막 fallback — 카드 내부 첫 img
+    const img = card.querySelector("img[src]");
+    if (img) return img.currentSrc || img.src || img.getAttribute("src") || "";
+    return "";
+  }
+
+  function ccfhCollectHomeRoomMeta(roomInfos) {
+    const meta = ccfhRoomMeta();
+    let changed = false;
+    for (const { id, card } of roomInfos) {
+      if (card.hasAttribute(CCFH_VISITED_ATTR)) continue;
+      const name = ccfhExtractRoomNameFromCard(card);
+      const date = ccfhExtractRoomDateFromCard(card);
+      const thumbnail = ccfhExtractThumbnailFromCard(card);
+      if (!name && !date && !thumbnail) continue;
+      const current = meta[id] || {};
+      if ((name && current.name !== name) || (date && current.date !== date) || (thumbnail && current.thumbnail !== thumbnail)) {
+        meta[id] = {
+          ...current,
+          ...(name ? { name } : {}),
+          ...(date ? { date } : {}),
+          ...(thumbnail ? { thumbnail } : {}),
+          updatedAt: Date.now()
+        };
+        changed = true;
+      }
+    }
+    if (changed) ccfhSaveRoomMeta(meta);
+  }
+
+  function ccfhRememberRoomFromAnchor(anchor) {
+      const id = ccfhRoomIdFromHref(anchor && anchor.getAttribute("href"));
+      if (!id) return;
+      const card = ccfhFindRoomCardElement(anchor);
+      if (!card || card.hasAttribute(CCFH_VISITED_ATTR)) return;
+      
+      // 옵션 제거 후 원상복구
+      const name = ccfhExtractRoomNameFromCard(card);
+      const date = ccfhExtractRoomDateFromCard(card);
+      const thumbnail = ccfhExtractThumbnailFromCard(card);
+      
+      if (!name && !date && !thumbnail) return;
+      const meta = ccfhRoomMeta();
+      const current = meta[id] || {};
+      meta[id] = {
+        ...current,
+        ...(name ? { name } : {}),
+        ...(date ? { date } : {}),
+        ...(thumbnail ? { thumbnail } : {}),
+        updatedAt: Date.now()
+      };
+      ccfhSaveRoomMeta(meta);
+    }
+
+  function ccfhFindRoomName(id) {
+    const cached = id ? ccfhCachedRoomMeta(id) : {};
+    if (cached.name) return cached.name;
+    const t = (document.title || "").trim();
+    const cleaned = t.replace(/\s*[|\-–]\s*ccfolia.*$/i, "").trim();
+    if (cleaned && !ccfhIsGenericRoomName(cleaned)) return cleaned;
+    const els = document.querySelectorAll("h1, h2, h3, h4, h5, h6, [class*='RoomName'], [class*='roomName'], [class*='Title']");
+    for (const el of els) {
+      const text = ccfhTextWithoutCaption(el);
+      if (text && text.length <= 80 && !ccfhIsGenericRoomName(text)) return text;
+    }
+    if (cached.name) return cached.name;
+    return "";
+  }
+
+  function ccfhFindRoomThumbnail(id) {
+    const cached = id ? ccfhCachedRoomMeta(id) : {};
+    if (cached.thumbnail && !ccfhIsGenericThumbnail(cached.thumbnail)) return cached.thumbnail;
+    
+    const og = document.querySelector('meta[property="og:image"]');
+    const ogUrl = og ? og.getAttribute("content") : "";
+    if (ogUrl && !ccfhIsGenericThumbnail(ogUrl)) return ogUrl;
+    
+    const img = document.querySelector('img[src*="ccfolia"], img[src*="rooms/"], img[src*="cdn"]');
+    const imgUrl = img ? img.src : "";
+    if (imgUrl && !ccfhIsGenericThumbnail(imgUrl)) return imgUrl;
+    
+    return cached.thumbnail || ogUrl || imgUrl || "";
+  }
+
+  let ccfhLastRecordKey = "";
+  function ccfhMaybeRecordCurrent() {
+    const id = ccfhCurrentRoomId();
+    if (!id) return;
+    const name = ccfhFindRoomName(id);
+    if (!name) return;
+    const key = `${id}::${name}`;
+    if (key === ccfhLastRecordKey) return;
+    ccfhLastRecordKey = key;
+    ccfhRecordVisit({ id, name, thumbnail: ccfhFindRoomThumbnail(id) });
+    console.info("[CCFH] recorded visit:", id, name);
+  }
+
+  function ccfhInjectVisitedCards() {
+    if (!ccfhIsHomePage()) return;
+
+    // 이미 방문 카드로 표시된 것은 제외하고 "원본" 카드만 수집
+    const allCards = ccfhFindRoomCards(document);
+    ccfhCollectHomeRoomMeta(allCards);
+    ccfhRepairHistoryWithMeta();
+    const owned = allCards.filter(({ card }) => !card.hasAttribute(CCFH_VISITED_ATTR));
+    if (!owned.length) return; // 템플릿 카드가 없으면 스킵
+
+    const template = owned[0].card;
+    const parent = template.parentElement;
+    if (!parent) return;
+
+    const ownedIds = new Set(owned.map((o) => o.id));
+    const history = ccfhHistory().filter((e) => !ownedIds.has(e.id)).map(ccfhResolveHistoryEntry);
+
+    // 더 이상 history에 없는 방문 카드는 제거
+    const validIds = new Set(history.map((e) => e.id));
+    parent.querySelectorAll(`[${CCFH_VISITED_ATTR}]`).forEach((el) => {
+      const id = el.getAttribute(CCFH_VISITED_ATTR);
+      if (!validIds.has(id)) el.remove();
+    });
+
+    // 카드 생성/갱신
+    history.forEach((entry) => {
+      let visitedCard = parent.querySelector(`[${CCFH_VISITED_ATTR}="${CSS.escape(entry.id)}"]`);
+      if (!visitedCard) {
+        visitedCard = template.cloneNode(true);
+        visitedCard.querySelectorAll(`[${CCFH_STAR_ATTR}]`).forEach((el) => el.remove());
+        visitedCard.removeAttribute(CCFH_FAV_ATTR);
+        visitedCard.setAttribute(CCFH_VISITED_ATTR, entry.id);
+        parent.appendChild(visitedCard);
+      }
+      ccfhPopulateVisitedCard(visitedCard, entry);
+      ccfhEnsureStar({ id: entry.id, card: visitedCard, anchor: visitedCard.querySelector("a") });
+    });
+  }
+
+  function ccfhNavigateToRoom(id) {
+    if (!id) return;
+    const url = `/rooms/${encodeURIComponent(id)}`;
+    if (location.pathname === url) return;
+    location.assign(url);
+  }
+
+  function ccfhIsPlainLeftClick(event) {
+    return event.button === 0
+      && !event.metaKey
+      && !event.ctrlKey
+      && !event.shiftKey
+      && !event.altKey;
+  }
+
+  function ccfhIsRoomCardControl(target) {
+    if (!(target instanceof Element)) return true;
+    if (target.closest(`[${CCFH_STAR_ATTR}]`)) return true;
+    const button = target.closest("button");
+    if (button) return true;
+    const input = target.closest("input, textarea, select, option, label");
+    if (input) return true;
+    const roleButton = target.closest('[role="button"]');
+    if (roleButton && !roleButton.matches('a[href*="/rooms/"]')) return true;
+    // 코코포리아 카드의 액션 영역(제목/날짜/삭제 버튼)은 룸 입장 클릭 영역에서 제외
+    if (target.closest('.MuiCardActions-root, [class*="MuiCardActions-root"]')) return true;
+    // 우리 단축 카드의 텍스트 영역(제목/날짜)도 입장 영역에서 제외
+    if (target.closest('.ccfh-room-like-body')) return true;
+    return false;
+  }
+
+  function ccfhFindRoomClickInfo(target) {
+    if (!(target instanceof Element)) return null;
+    const anchor = target.closest('a[href*="/rooms/"]');
+    if (anchor) {
+      const id = ccfhRoomIdFromHref(anchor.getAttribute("href") || "");
+      if (!id) return null;
+      return {
+        id,
+        anchor,
+        card: ccfhFindRoomCardElement(anchor)
+      };
+    }
+    const card = target.closest(`[${CCFH_CARD_ATTR}]`);
+    if (!card) return null;
+    const cardAnchor = card.querySelector('a[href*="/rooms/"]');
+    if (!cardAnchor) return null;
+    const id = ccfhRoomIdFromHref(cardAnchor.getAttribute("href") || "");
+    if (!id) return null;
+    return {
+      id,
+      anchor: cardAnchor,
+      card
+    };
+  }
+
+  function ccfhHandleRoomCardClick(event) {
+    if (!ccfhIsHomePage()) return;
+    if (!ccfhIsPlainLeftClick(event)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const info = ccfhFindRoomClickInfo(target);
+    if (!info || !info.id || !info.card) return;
+    const isVisitedCard = info.card.hasAttribute(CCFH_VISITED_ATTR);
+    const trashButton = target.closest("button");
+    if (trashButton) {
+      if (isVisitedCard && /delete|trash|remove|삭제|제거|削除/.test((trashButton.getAttribute("aria-label") || "").toLowerCase())) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        ccfhRemoveHistory(info.id);
+        info.card.remove();
+      }
+      return;
+    }
+    if (ccfhIsRoomCardControl(target)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!isVisitedCard) {
+      ccfhRememberRoomFromAnchor(info.anchor);
+    }
+    ccfhNavigateToRoom(info.id);
+  }
+
+  function ccfhBindGlobalRoomNavigation() {
+    if (document.documentElement.hasAttribute("data-ccfh-global-room-nav")) return;
+    document.documentElement.setAttribute("data-ccfh-global-room-nav", "1");
+    document.addEventListener("click", ccfhHandleRoomCardClick, true);
+
+    document.addEventListener("contextmenu", (event) => {
+      if (!ccfhIsHomePage()) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const info = ccfhFindRoomClickInfo(target);
+      if (info && info.id && info.card) {
+        event.preventDefault();
+        event.stopPropagation();
+        const roomUrl = location.origin + "/rooms/" + info.id;
+        const roomName = ccfhExtractRoomNameFromCard(info.card) || ccfhFindRoomName(info.id) || "선택한 룸";
+        navigator.clipboard.writeText(roomUrl).then(() => {
+          showToast("룸 주소 복사 완료", roomName);
+        }).catch(() => {
+          showToast("복사 실패", "클립보드 접근 권한이 필요합니다.");
+        });
+      }
+    }, true);
+  }
+
+  function ccfhPopulateVisitedCard(card, entry) {
+    card.setAttribute(CCFH_CARD_ATTR, "1");
+    // 앵커 href 갱신
+    card.querySelectorAll("a").forEach((a) => {
+      a.setAttribute("href", `/rooms/${entry.id}`);
+    });
+    // 썸네일 교체
+    if (entry.thumbnail) {
+      card.querySelectorAll("img").forEach((img) => {
+        img.src = entry.thumbnail;
+        img.removeAttribute("srcset");
+      });
+      card.querySelectorAll('[style*="background-image"]').forEach((el) => {
+        el.style.backgroundImage = `url(${JSON.stringify(entry.thumbnail)})`;
+      });
+    }
+    // 룸 이름 교체 (가장 굵은 텍스트 후보 우선)
+    const titleEl = ccfhFindCardTitleElement(card) || card.querySelector('h1, h2, h3, h4, h5, h6, [class*="title" i], [class*="name" i]');
+    if (titleEl) ccfhSetTitleLine(titleEl, entry.name, entry.date, ccfhFindTitleCaption(titleEl));
+    // 휴지통 버튼은 "방문기록에서 제거"로 의미 변경 — 라벨 갱신 + 동작은 위 click 핸들러에서 처리
+    const trash = ccfhFindTrashButton(card);
+    if (trash) {
+      trash.setAttribute("aria-label", "방문기록에서 제거");
+      trash.title = "방문기록에서 제거";
+    }
+  }
+
+  function ccfhEntryFromMeta(id) {
+    const meta = ccfhCachedRoomMeta(id);
+    if (!id || !meta.name) return null;
+    return {
+      id,
+      name: meta.name || "(이름 없음)",
+      thumbnail: meta.thumbnail || "",
+      date: meta.date || "",
+      visitedAt: meta.updatedAt || 0
+    };
+  }
+
+  function ccfhFindHomeMountPoint() {
+    const firstRoomAnchor = document.querySelector('a[href*="/rooms/"]');
+    if (!firstRoomAnchor) return null;
+    const firstCard = ccfhFindRoomCardElement(firstRoomAnchor);
+    if (!firstCard) return firstRoomAnchor;
+    let cur = firstCard;
+    while (cur && cur.parentElement && cur.parentElement !== document.body) {
+      const parent = cur.parentElement;
+      const roomChildren = Array.from(parent.children)
+        .filter((child) => child.querySelector && child.querySelector('a[href*="/rooms/"]'));
+      if (roomChildren.length >= 2) return parent;
+      cur = parent;
+    }
+    return firstCard;
+  }
+
+  function ccfhFormatVisitDate(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diff = today.getTime() - target.getTime();
+    if (diff === 0) return "오늘";
+    if (diff === 86400000) return "어제";
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}.${m}.${d}`;
+  }
+
+  let ccfhDraggingCard = null;
+  let ccfhDragSectionKey = null;
+
+  function ccfhSaveReorderedSection(grid, sectionKey) {
+    if (!grid) return;
+    const newIds = Array.from(grid.querySelectorAll(".ccfh-room-like-card"))
+      .map((card) => card.getAttribute("data-ccfh-shortcut-card"))
+      .filter(Boolean);
+
+    if (sectionKey === "favorites") {
+      const currentFavs = ccfhFavorites();
+      const unrendered = currentFavs.filter((id) => !newIds.includes(id));
+      ccfhSaveFavorites([...newIds, ...unrendered]);
+    } else if (sectionKey === "recent") {
+      const currentHistory = ccfhHistory();
+      const newHistory = [];
+      newIds.forEach((id) => {
+        const found = currentHistory.find((e) => e.id === id);
+        if (found) newHistory.push(found);
+      });
+      const unrendered = currentHistory.filter((e) => !newIds.includes(e.id));
+      ccfhSaveHistory([...newHistory, ...unrendered]);
+    }
+    ccfhRenderRoomShortcutSections();
+  }
+
+  function ccfhCreateRoomLikeCard(entry, isFavoriteSection, foldKey) {
+    const id = entry.id;
+    const name = entry.name || "(이름 없음)";
+    const url = `/rooms/${encodeURIComponent(id)}`;
+    const isFav = ccfhIsFavorite(id);
+
+    const card = document.createElement("article");
+    card.className = "ccfh-room-like-card";
+    card.setAttribute("data-ccfh-shortcut-card", id);
+    card.draggable = true;
+
+    card.addEventListener("dragstart", (e) => {
+      ccfhDraggingCard = card;
+      ccfhDragSectionKey = foldKey;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", id);
+      setTimeout(() => card.classList.add("is-dragging"), 0);
+    });
+
+    card.addEventListener("dragend", () => {
+      card.classList.remove("is-dragging");
+      if (ccfhDraggingCard) {
+        ccfhSaveReorderedSection(card.parentElement, foldKey);
+        ccfhDraggingCard = null;
+        ccfhDragSectionKey = null;
+      }
+    });
+
+    const link = document.createElement("a");
+    link.className = "ccfh-room-like-link";
+    link.href = url;
+    link.title = name;
+    link.draggable = false;
+
+    const thumb = document.createElement("div");
+    thumb.className = "ccfh-room-like-thumb";
+    if (entry.thumbnail) {
+      thumb.style.backgroundImage = `url(${JSON.stringify(entry.thumbnail)})`;
+    } else {
+      thumb.classList.add("is-empty");
+      thumb.textContent = "NO IMAGE";
+    }
+
+    const body = document.createElement("div");
+    body.className = "ccfh-room-like-body";
+
+    const title = document.createElement("div");
+    title.className = "ccfh-room-like-title";
+    title.textContent = name;
+
+    const meta = document.createElement("div");
+    meta.className = "ccfh-room-like-meta";
+    meta.textContent = ccfhFormatVisitDate(entry.visitedAt) || entry.date || "";
+
+    body.append(title, meta);
+    link.append(thumb, body);
+
+    const actions = document.createElement("div");
+    actions.className = "ccfh-room-like-actions";
+
+    const star = document.createElement("button");
+    star.type = "button";
+    star.className = "ccfh-room-like-star";
+    star.textContent = isFav ? "★" : "☆";
+    star.title = isFav ? "즐겨찾기 해제" : "즐겨찾기 추가";
+    star.setAttribute("aria-label", star.title);
+    star.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      ccfhToggleFavorite(id);
+      ccfhRenderRoomShortcutSections();
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ccfh-room-like-remove";
+    remove.textContent = "×";
+    remove.title = isFavoriteSection ? "즐겨찾기에서 제거" : "방문 기록에서 제거";
+    remove.setAttribute("aria-label", remove.title);
+    remove.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isFavoriteSection) {
+        const next = ccfhFavorites().filter((favId) => favId !== id);
+        ccfhSaveFavorites(next);
+      } else {
+        ccfhRemoveHistory(id);
+      }
+      ccfhRenderRoomShortcutSections();
+    });
+
+    actions.append(star, remove);
+    card.append(link, actions);
+    return card;
+  }
+
+  const ccfhExpandedSections = {};
+
+  function ccfhCreateRoomSection(title, entries, isFavoriteSection, foldKey) {
+    const section = document.createElement("section");
+    section.className = "ccfh-room-section";
+    const folded = ccfhIsFolded(foldKey);
+    if (folded) section.classList.add("is-folded");
+
+    const headerWrap = document.createElement("div");
+    headerWrap.className = "ccfh-section-header-wrap";
+
+    const heading = document.createElement("button");
+    heading.type = "button";
+    heading.className = "ccfh-room-section-heading";
+    heading.setAttribute("aria-expanded", String(!folded));
+
+    const arrow = document.createElement("span");
+    arrow.className = "ccfh-section-fold-arrow";
+    arrow.textContent = "▾";
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "ccfh-section-title";
+    titleSpan.textContent = title;
+
+    const countSpan = document.createElement("span");
+    countSpan.className = "ccfh-section-count";
+    countSpan.textContent = `(${entries.length})`;
+
+    heading.append(arrow, titleSpan, countSpan);
+
+    heading.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nowFolded = !section.classList.contains("is-folded");
+      section.classList.toggle("is-folded", nowFolded);
+      heading.setAttribute("aria-expanded", String(!nowFolded));
+      ccfhSetFoldState(foldKey, nowFolded);
+    });
+
+    headerWrap.appendChild(heading);
+
+    const controls = document.createElement("div");
+    controls.className = "ccfh-header-controls";
+    const viewToggle = document.createElement("button");
+    viewToggle.type = "button";
+    viewToggle.className = "ccfh-view-toggle";
+
+    const iconList = '<svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>';
+    const iconGrid = '<svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>';
+
+    const currentView = ccfhGetView(foldKey);
+    if (currentView === "list") {
+      section.classList.add("is-list-view");
+      viewToggle.innerHTML = iconGrid;
+      viewToggle.title = "카드형으로 보기";
+    } else {
+      viewToggle.innerHTML = iconList;
+      viewToggle.title = "리스트형으로 보기";
+    }
+
+    viewToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isList = section.classList.contains("is-list-view");
+      if (isList) {
+        section.classList.remove("is-list-view");
+        ccfhSetViewState(foldKey, "card");
+        viewToggle.innerHTML = iconList;
+        viewToggle.title = "리스트형으로 보기";
+      } else {
+        section.classList.add("is-list-view");
+        ccfhSetViewState(foldKey, "list");
+        viewToggle.innerHTML = iconGrid;
+        viewToggle.title = "카드형으로 보기";
+      }
+    });
+
+    controls.appendChild(viewToggle);
+    headerWrap.appendChild(controls);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "ccfh-room-card-grid-wrapper";
+
+    const grid = document.createElement("div");
+    grid.className = "ccfh-room-card-grid";
+
+    grid.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!ccfhDraggingCard || ccfhDragSectionKey !== foldKey) return;
+      e.dataTransfer.dropEffect = "move";
+      
+      const targetCard = e.target.closest(".ccfh-room-like-card:not(.is-dragging)");
+      if (targetCard && targetCard !== ccfhDraggingCard) {
+        const box = targetCard.getBoundingClientRect();
+        const isListView = section.classList.contains("is-list-view");
+        const isAfter = isListView
+          ? e.clientY > box.top + box.height / 2
+          : e.clientX > box.left + box.width / 2;
+        if (isAfter) {
+          const next = targetCard.nextElementSibling;
+          if (next && next.classList.contains("ccfh-show-more-wrap")) return;
+          grid.insertBefore(ccfhDraggingCard, next);
+        } else {
+          grid.insertBefore(ccfhDraggingCard, targetCard);
+        }
+      }
+    });
+    grid.addEventListener("drop", (e) => e.preventDefault());
+
+    const limit = 15;
+    const isExpanded = !!ccfhExpandedSections[foldKey];
+    const visibleEntries = isExpanded ? entries : entries.slice(0, limit);
+
+    visibleEntries.forEach((entry) => {
+      grid.appendChild(ccfhCreateRoomLikeCard(entry, isFavoriteSection, foldKey));
+    });
+
+    if (entries.length > limit) {
+      const moreWrap = document.createElement("div");
+      moreWrap.className = "ccfh-show-more-wrap";
+      const moreBtn = document.createElement("button");
+      moreBtn.type = "button";
+      moreBtn.className = "ccfh-show-more-btn";
+      moreBtn.textContent = isExpanded ? "접기" : `더보기 (${entries.length - limit}개)`;
+      moreBtn.addEventListener("click", () => {
+        ccfhExpandedSections[foldKey] = !isExpanded;
+        ccfhRenderRoomShortcutSections();
+      });
+      moreWrap.appendChild(moreBtn);
+      grid.appendChild(moreWrap);
+    }
+
+    wrapper.appendChild(grid);
+    section.append(headerWrap, wrapper);
+    return section;
+  }
+
+  function ccfhDetectCocoColumnCount() {
+    const cards = ccfhFindRoomCards(document)
+      .map((info) => info.card)
+      .filter((card) => !card.closest("#ccfh-shortcut-sections"));
+    if (cards.length === 0) return 0;
+    const card = cards[0];
+    const parent = card.parentElement;
+    if (!parent) return 0;
+    const pw = parent.getBoundingClientRect().width;
+    const cw = card.getBoundingClientRect().width;
+    if (pw > 0 && cw > 0) {
+      return Math.round(pw / cw);
+    }
+    return 0;
+  }
+
+  function ccfhDetectCocoGridGap() {
+    const firstAnchor = document.querySelector('a[href*="/rooms/"]');
+    if (!firstAnchor) return 0;
+    const firstCard = ccfhFindRoomCardElement(firstAnchor);
+    if (!firstCard || !firstCard.parentElement) return 0;
+    const cs = window.getComputedStyle(firstCard.parentElement);
+    const raw = cs.gap || cs.columnGap || cs.gridColumnGap || "";
+    const match = String(raw).match(/^([\d.]+)px/);
+    return match ? Math.round(parseFloat(match[1])) : 0;
+  }
+
+  function ccfhBackupData() {
+    const favs = ccfhFavorites();
+    const hist = ccfhHistory();
+    if (!favs.length && !hist.length) {
+      alert("백업할 데이터가 없습니다.");
+      return;
+    }
+    const meta = ccfhRoomMeta();
+    const backupData = {
+      type: "ccfh-backup",
+      version: 2,
+      timestamp: Date.now(),
+      favorites: favs,
+      history: hist,
+      meta: {}
+    };
+    const idsToBackup = new Set([...favs, ...hist.map((e) => e.id)]);
+    idsToBackup.forEach((id) => {
+      if (meta[id]) backupData.meta[id] = meta[id];
+    });
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    a.download = `ccfolia-backup-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function ccfhRestoreData() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          const isV1 = data.type === "ccfh-favorites-backup";
+          const isV2 = data.type === "ccfh-backup";
+          if (!isV1 && !isV2) {
+            return alert("올바른 백업 파일이 아닙니다.");
+          }
+          const favCount = Array.isArray(data.favorites) ? data.favorites.length : 0;
+          const histCount = Array.isArray(data.history) ? data.history.length : 0;
+          if (!confirm(`즐겨찾기 ${favCount}개, 방문 기록 ${histCount}개를 복원하시겠습니까?\n(기존 데이터와 병합됩니다.)`)) return;
+          if (favCount > 0) {
+            const currentFavs = ccfhFavorites();
+            ccfhSaveFavorites([...new Set([...currentFavs, ...data.favorites])]);
+          }
+          if (histCount > 0) {
+            const currentHistory = ccfhHistory();
+            const existingIds = new Set(currentHistory.map((h) => h.id));
+            const mergedHistory = [...currentHistory];
+            data.history.forEach((entry) => {
+              if (!existingIds.has(entry.id)) {
+                mergedHistory.push(entry);
+                existingIds.add(entry.id);
+              }
+            });
+            mergedHistory.sort((a, b) => (b.visitedAt || 0) - (a.visitedAt || 0));
+            ccfhSaveHistory(mergedHistory);
+          }
+          if (data.meta && typeof data.meta === "object") ccfhSaveRoomMeta(Object.assign(ccfhRoomMeta(), data.meta));
+          ccfhRefresh();
+          if (typeof showToast === "function") showToast("데이터 복원 완료", `즐겨찾기 ${favCount}개, 방문 기록 ${histCount}개가 복원/병합되었습니다.`);
+        } catch (err) {
+          alert("파일을 읽거나 복원하는 중 오류가 발생했습니다.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+
+  function ccfhRenderRoomShortcutSections() {
+    if (!ccfhIsHomePage()) return;
+    ccfhShortcutRenderInProgress = true;
+    try {
+      const existing = document.getElementById("ccfh-shortcut-sections");
+      if (existing) existing.remove();
+
+      const history = ccfhHistory().map(ccfhResolveHistoryEntry);
+      const favIds = ccfhFavorites();
+
+      const favoriteRooms = favIds
+        .map((id) => history.find((entry) => entry.id === id) || ccfhEntryFromMeta(id))
+        .filter(Boolean);
+
+      const recentRooms = history.filter((entry) => !favIds.includes(entry.id));
+
+      if (!favoriteRooms.length && !recentRooms.length) return;
+
+      const root = document.createElement("section");
+      root.id = "ccfh-shortcut-sections";
+      root.className = "ccfh-shortcut-sections";
+
+      if (favoriteRooms.length) {
+        root.appendChild(ccfhCreateRoomSection("즐겨찾기", favoriteRooms, true, "favorites"));
+      }
+      if (recentRooms.length) {
+        root.appendChild(ccfhCreateRoomSection("최근 방문 기록", recentRooms, false, "recent"));
+      }
+
+      const divider = document.createElement("hr");
+      divider.className = "ccfh-section-divider";
+      root.appendChild(divider);
+
+      const mount = ccfhFindHomeMountPoint();
+      if (mount && mount.parentElement) {
+        mount.parentElement.insertBefore(root, mount);
+      } else {
+        document.body.prepend(root);
+      }
+
+      // 코코포리아 원본 그리드의 컬럼 수와 gap을 감지해서 단축 섹션에 동일 적용
+      const cocoCols = ccfhDetectCocoColumnCount();
+      if (cocoCols > 0) {
+        root.style.setProperty("--ccfh-grid-columns", `repeat(${cocoCols}, 1fr)`);
+      }
+      const cocoGap = ccfhDetectCocoGridGap();
+      if (cocoGap > 0) {
+        root.style.setProperty("--ccfh-grid-gap", `${cocoGap}px`);
+      }
+    } finally {
+      setTimeout(() => { ccfhShortcutRenderInProgress = false; }, 0);
+    }
+  }
+
+  function ccfhInjectBackupRestoreButtons() {
+    if (!ccfhIsHomePage()) return;
+    const tablist = document.querySelector('.MuiTabs-flexContainer[role="tablist"]');
+    if (!tablist) return;
+    if (document.getElementById("ccfh-backup-controls")) return;
+
+    const controls = document.createElement("div");
+    controls.id = "ccfh-backup-controls";
+    controls.style.marginLeft = "auto";
+    controls.style.display = "flex";
+    controls.style.alignItems = "center";
+    controls.style.gap = "6px";
+    controls.style.paddingRight = "8px";
+
+    const backupBtn = document.createElement("button");
+    backupBtn.type = "button";
+    backupBtn.className = "ccfh-view-toggle";
+    backupBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    backupBtn.title = "데이터 백업 (.json)";
+    backupBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof ccfhBackupData === "function") ccfhBackupData();
+      else if (typeof ccfhBackupFavorites === "function") ccfhBackupFavorites();
+    });
+
+    const restoreBtn = document.createElement("button");
+    restoreBtn.type = "button";
+    restoreBtn.className = "ccfh-view-toggle";
+    restoreBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>';
+    restoreBtn.title = "데이터 복원 (.json)";
+    restoreBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof ccfhRestoreData === "function") ccfhRestoreData();
+      else if (typeof ccfhRestoreFavorites === "function") ccfhRestoreFavorites();
+    });
+
+    controls.append(backupBtn, restoreBtn);
+    tablist.appendChild(controls);
+  }
+
+  function ccfhRefresh() {
+    ccfhInjectStyle();
+    if (ccfhIsHomePage()) {
+      const roomInfos = ccfhFindRoomCards(document);
+      ccfhCollectHomeRoomMeta(roomInfos);
+      ccfhRepairHistoryWithMeta();
+      // 원본 카드에도 즐겨찾기 별 버튼 주입 (DOM 재정렬은 안 함)
+      roomInfos.forEach(ccfhEnsureStar);
+      ccfhRenderRoomShortcutSections();
+      ccfhInjectBackupRestoreButtons();
+    }
+    if (ccfhCurrentRoomId()) ccfhMaybeRecordCurrent();
+  }
+
+  function ccfhInit() {
+    ccfhInjectStyle();
+    ccfhBindGlobalRoomNavigation();
+
+    let pending = false;
+    const obs = new MutationObserver(() => {
+      if (ccfhReorderInProgress) return;
+      if (ccfhShortcutRenderInProgress) return;
+      if (ccfhDraggingCard) return;
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        ccfhRefresh();
+      });
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+
+    // SPA 네비게이션 후킹
+    const fire = () => window.dispatchEvent(new Event("ccfh:locationchange"));
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function (...args) { const r = origPush.apply(this, args); fire(); return r; };
+    history.replaceState = function (...args) { const r = origReplace.apply(this, args); fire(); return r; };
+    window.addEventListener("popstate", fire);
+    window.addEventListener("ccfh:locationchange", () => {
+      ccfhLastRecordKey = "";
+      setTimeout(ccfhRefresh, 50);
+      setTimeout(ccfhRefresh, 600);
+    });
+
+    // 창 크기가 바뀌면 코코포리아 그리드 컬럼 수가 달라지므로 단축 섹션도 재측정/재렌더
+    let ccfhResizeTimer = 0;
+    window.addEventListener("resize", () => {
+      if (!ccfhIsHomePage()) return;
+      if (!document.getElementById("ccfh-shortcut-sections")) return;
+      clearTimeout(ccfhResizeTimer);
+      ccfhResizeTimer = setTimeout(() => {
+        ccfhRenderRoomShortcutSections();
+      }, 150);
+    });
+
+    // 룸 페이지 제목이 늦게 채워지는 경우를 위한 폴링
+    setInterval(() => {
+      if (ccfhCurrentRoomId()) ccfhMaybeRecordCurrent();
+    }, 1500);
+
+    ccfhRefresh();
+    console.info("[CCFH] Home enhancer integrated v0.1.1 (left-trash, DOM-reorder, integrated cards)");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ccfhInit, { once: true });
+  } else {
+    ccfhInit();
   }
 })();
+
+
+// Integrated toolkit presence indicator.
+(() => {
+  "use strict";
+
+  const DEBUG_KEY = "__CAPYBARA_TOOLKIT_PRESENCE__";
+  const ROOT_ID = "capybara-toolkit-presence";
+  const STYLE_ID = "capybara-toolkit-presence-style";
+  const SAFE_UI_ATTR = "data-capybara-toolkit-presence";
+  const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
+  const PRESENCE_KEY = "capybaraToolkitPresence";
+  const PRESENCE_VERSION = 1;
+  const TOOLKIT_VERSION = "0.1.1";
+  const ACTIVE_MS = 5 * 60 * 1000;
+  const STALE_MS = 30 * 60 * 1000;
+  const INVIS_START = "\u2063\u2063\u2063";
+  const INVIS_END = "\u2062\u2062\u2062";
+  const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
+  const INVIS_REVERSE = new Map(INVIS_MAP.map((ch, index) => [ch, index]));
+  const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
+  const MESSAGE_TEXT_SELECTOR = [
+    'p.MuiTypography-root.MuiTypography-body2',
+    '.MuiListItemText-root > p',
+    '[data-index] p',
+    'li p'
+  ].join(", ");
+
+  // Replace an already-running presence integration instead of binding twice.
+  window[DEBUG_KEY]?.disable?.();
+
+  let active = true;
+  let scanTimer = 0;
+  let peerRoomKey = "";
+  const abort = new AbortController();
+  const peers = new Map();
+  const clientId = getClientId();
+  let refreshTimer = 0;
+
+  const api = {
+    __owner: abort.signal,
+    decorateEnvelope,
+    decorateOutgoingText,
+    getPeers: () => [...peers.values()],
+    disable
+  };
+
+  window[DEBUG_KEY] = api;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true, signal: abort.signal });
+  } else {
+    start();
+  }
+
+  function start() {
+    if (!active) return;
+    injectStyles();
+    ensurePanel();
+    if (isCcfoliaRoom()) {
+      rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
+    }
+    bindSendTriggers();
+    observeMessages();
+    scanMessages();
+    renderPanel();
+    refreshTimer = window.setInterval(() => {
+      if (isCcfoliaRoom()) {
+        rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
+      }
+      renderPanel();
+    }, 15000);
+  }
+
+  function disable() {
+    if (!active) return false;
+    active = false;
+    abort.abort();
+    window.clearInterval(refreshTimer);
+    window.clearTimeout(scanTimer);
+    document.getElementById(ROOT_ID)?.remove();
+    document.getElementById(STYLE_ID)?.remove();
+    document.querySelectorAll('[data-capybara-presence-bound], [data-capybara-presence-enter-bound]').forEach((element) => {
+      delete element.dataset.capybaraPresenceBound;
+      delete element.dataset.capybaraPresenceEnterBound;
+    });
+    if (window[DEBUG_KEY]?.__owner === abort.signal) {
+      delete window[DEBUG_KEY];
+    }
+    return true;
+  }
+
+  function isCcfoliaRoom() {
+    return /(?:^|\.)ccfolia\.com$/i.test(location.hostname) && /^\/rooms\/[^/?#]+/i.test(location.pathname);
+  }
+
+  function getRoomKey() {
+    return location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || location.pathname;
+  }
+
+  function getClientId() {
+    try {
+      const stored = window.localStorage.getItem(CLIENT_ID_KEY);
+      if (stored) return stored;
+      const next = `capybara-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      window.localStorage.setItem(CLIENT_ID_KEY, next);
+      return next;
+    } catch (error) {
+      return `capybara-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }
+
+  function createPresencePayload(name) {
+    return {
+      v: PRESENCE_VERSION,
+      roomKey: getRoomKey(),
+      clientId,
+      name: sanitizeName(name) || "\uB098",
+      at: Date.now(),
+      toolkitVersion: TOOLKIT_VERSION
+    };
+  }
+
+  function sanitizeName(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+
+  function rememberPresence(payload, options = {}) {
+    if (!isCcfoliaRoom() || !payload || payload.roomKey !== getRoomKey() || !payload.clientId) return false;
+    if (peerRoomKey !== payload.roomKey) {
+      peers.clear();
+      peerRoomKey = payload.roomKey;
+    }
+
+    const name = sanitizeName(payload.name) || (payload.clientId === clientId ? "\uB098" : "\uD234\uD0B7 \uC0AC\uC6A9\uC790");
+    peers.set(payload.clientId, {
+      clientId: payload.clientId,
+      name,
+      at: Number(payload.at) || Date.now(),
+      toolkitVersion: String(payload.toolkitVersion || ""),
+      self: options.self || payload.clientId === clientId
+    });
+    return true;
+  }
+
+  function decorateEnvelope(envelope, visibleText = "") {
+    if (!active || !envelope || typeof envelope !== "object") return envelope;
+    const name = getLocalDisplayName();
+    envelope[PRESENCE_KEY] = createPresencePayload(name);
+    if (!envelope.text && typeof visibleText === "string") {
+      envelope.text = visibleText;
+    }
+    rememberPresence(envelope[PRESENCE_KEY], { self: true });
+    renderPanel();
+    return envelope;
+  }
+
+  function decorateOutgoingText(value) {
+    const currentText = normalizeText(value);
+    const extracted = extractEnvelope(currentText);
+    const visibleText = extracted ? extracted.visibleText : stripInvisibleEnvelope(currentText);
+    if (!visibleText.trim()) return currentText;
+
+    const envelope = extracted?.envelope && typeof extracted.envelope === "object"
+      ? extracted.envelope
+      : { v: 1, text: visibleText };
+    decorateEnvelope(envelope, visibleText);
+
+    const encoded = encodeEnvelopeToInvisible(envelope);
+    if (!extracted) return visibleText + encoded;
+    return `${extracted.visibleText}${encoded}${extracted.afterText || ""}`;
+  }
+
+  function bindSendTriggers() {
+    const bind = () => {
+      document.querySelectorAll('button[type="submit"]').forEach((button) => {
+        if (button.dataset.capybaraPresenceBound === "1") return;
+        button.dataset.capybaraPresenceBound = "1";
+        button.addEventListener("click", () => {
+          if (!active) return;
+          const editor = findEditorFromNode(button);
+          if (editor) preparePresenceForSend(editor);
+        }, { capture: true, signal: abort.signal });
+      });
+
+      document.querySelectorAll(EDITOR_SELECTOR).forEach((editor) => {
+        if (!(editor instanceof HTMLElement)) return;
+        if (editor.closest?.(`[${SAFE_UI_ATTR}="1"]`)) return;
+        if (editor.dataset.capybaraPresenceEnterBound === "1") return;
+        editor.dataset.capybaraPresenceEnterBound = "1";
+        editor.addEventListener("keydown", (event) => {
+          if (!active) return;
+          if (event.isComposing || event.key !== "Enter" || event.shiftKey) return;
+          preparePresenceForSend(editor);
+        }, { capture: true, signal: abort.signal });
+      });
+    };
+
+    bind();
+    const observer = new MutationObserver(bind);
+    observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    abort.signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+  }
+
+  function preparePresenceForSend(editor) {
+    const currentText = getEditorText(editor);
+    const visibleText = stripInvisibleEnvelope(currentText);
+    if (!visibleText.trim()) return true;
+
+    const nextText = decorateOutgoingText(currentText);
+    if (nextText === currentText) return true;
+
+    setEditorText(editor, nextText);
+    scheduleEditorRestore(editor, visibleText, nextText);
+    return true;
+  }
+
+  function scheduleEditorRestore(editor, rawText, outgoingText) {
+    [180, 450, 1000, 2000].forEach((delay, index, checkpoints) => {
+      window.setTimeout(() => {
+        if (!active || !document.contains(editor)) return;
+        const current = getEditorText(editor);
+        if (current !== outgoingText && !current.includes(INVIS_START)) return;
+        if (current.includes(INVIS_START)) {
+          setEditorText(editor, stripInvisibleEnvelope(current));
+          return;
+        }
+        if (index === checkpoints.length - 1 && current === outgoingText) {
+          setEditorText(editor, rawText);
+        }
+      }, delay);
+    });
+  }
+
+  function observeMessages() {
+    const observer = new MutationObserver(scheduleScanMessages);
+    observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: true });
+    abort.signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+  }
+
+  function scheduleScanMessages() {
+    if (scanTimer) return;
+    scanTimer = window.setTimeout(() => {
+      scanTimer = 0;
+      scanMessages();
+    }, 120);
+  }
+
+  function scanMessages() {
+    let changed = false;
+    document.querySelectorAll(MESSAGE_TEXT_SELECTOR).forEach((node) => {
+      const text = node.getAttribute?.("data-ccf-raw") || node.textContent || "";
+      const payload = extractPresencePayload(text);
+      if (payload) {
+        changed = rememberPresence(payload) || changed;
+      }
+    });
+    if (changed || isCcfoliaRoom()) renderPanel();
+  }
+
+  function extractPresencePayload(text) {
+    const extracted = extractEnvelope(text);
+    const payload = extracted?.envelope?.[PRESENCE_KEY];
+    if (!payload || typeof payload !== "object") return null;
+    return payload;
+  }
+
+  function ensurePanel() {
+    if (!isCcfoliaRoom()) {
+      document.getElementById(ROOT_ID)?.remove();
+      return null;
+    }
+    if (document.getElementById(ROOT_ID)) return document.getElementById(ROOT_ID);
+    const root = document.createElement("section");
+    root.id = ROOT_ID;
+    root.setAttribute(SAFE_UI_ATTR, "1");
+    root.setAttribute("aria-live", "polite");
+    root.innerHTML = `
+      <div class="capybara-presence-title">\uD234\uD0B7 \uC0AC\uC6A9\uC790</div>
+      <div class="capybara-presence-list"></div>
+      <div class="capybara-presence-note">\uCD5C\uADFC \uBA54\uC2DC\uC9C0 \uC2E0\uD638 \uAE30\uC900</div>
+    `;
+    (document.body || document.documentElement).appendChild(root);
+    return root;
+  }
+
+  function renderPanel() {
+    if (!isCcfoliaRoom()) {
+      document.getElementById(ROOT_ID)?.remove();
+      return;
+    }
+    if (peerRoomKey !== getRoomKey()) {
+      peers.clear();
+      peerRoomKey = getRoomKey();
+      rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
+    }
+    const root = ensurePanel();
+    if (!root) return;
+    const list = root.querySelector(".capybara-presence-list");
+    if (!list) return;
+
+    const now = Date.now();
+    const rows = [...peers.values()]
+      .filter((peer) => peer.self || now - peer.at <= STALE_MS)
+      .sort((a, b) => Number(b.self) - Number(a.self) || b.at - a.at || a.name.localeCompare(b.name));
+
+    list.innerHTML = "";
+    rows.forEach((peer) => {
+      const row = document.createElement("div");
+      const age = Math.max(0, now - peer.at);
+      const state = peer.self || age <= ACTIVE_MS ? "active" : "idle";
+      row.className = `capybara-presence-row ${state}`;
+      row.innerHTML = `
+        <span class="capybara-presence-dot" aria-hidden="true"></span>
+        <span class="capybara-presence-name">${escapeHtml(peer.self ? `${peer.name} (\uB098)` : peer.name)}</span>
+        <span class="capybara-presence-age">${escapeHtml(peer.self ? "\uC811\uC18D \uC911" : formatAge(age))}</span>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      #${ROOT_ID} {
+        position: fixed;
+        left: 14px;
+        bottom: 14px;
+        z-index: 2147482400;
+        width: min(220px, calc(100vw - 28px));
+        box-sizing: border-box;
+        padding: 9px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        background: rgba(28, 28, 28, 0.92);
+        color: #fff;
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+        font: 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #${ROOT_ID} .capybara-presence-title {
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      #${ROOT_ID} .capybara-presence-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      #${ROOT_ID} .capybara-presence-row {
+        display: grid;
+        grid-template-columns: 9px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        min-height: 18px;
+      }
+
+      #${ROOT_ID} .capybara-presence-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #9ca3af;
+      }
+
+      #${ROOT_ID} .capybara-presence-row.active .capybara-presence-dot {
+        background: #58d68d;
+      }
+
+      #${ROOT_ID} .capybara-presence-row.idle .capybara-presence-dot {
+        background: #f4c542;
+      }
+
+      #${ROOT_ID} .capybara-presence-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+
+      #${ROOT_ID} .capybara-presence-age,
+      #${ROOT_ID} .capybara-presence-note {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 11px;
+      }
+
+      #${ROOT_ID} .capybara-presence-note {
+        margin-top: 6px;
+      }
+    `;
+    document.documentElement.appendChild(style);
+  }
+
+  function findEditorFromNode(node) {
+    const direct = normalizeEditorCandidate(node);
+    if (direct) return direct;
+
+    const origin = node instanceof Element ? node : null;
+    const composer = findClosestComposerBar(origin);
+    const candidates = [];
+
+    if (composer) {
+      candidates.push(...composer.querySelectorAll(EDITOR_SELECTOR));
+      let cur = composer.parentElement;
+      for (let i = 0; i < 5 && cur; i += 1, cur = cur.parentElement) {
+        candidates.push(...cur.querySelectorAll(EDITOR_SELECTOR));
+      }
+    }
+
+    if (!candidates.length) {
+      candidates.push(...document.querySelectorAll(EDITOR_SELECTOR));
+    }
+
+    return pickBestEditor(candidates, origin || composer);
+  }
+
+  function findClosestComposerBar(node) {
+    let el = node;
+    while (el && el !== document.body) {
+      if (looksLikeComposerBar(el)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function looksLikeComposerBar(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    if (!el.querySelector('button[type="submit"]')) return false;
+    return [...el.querySelectorAll("button")].some((btn) => /^D\d+$/i.test(getButtonLabel(btn))) ||
+      [...el.querySelectorAll(EDITOR_SELECTOR)].some((editor) => normalizeEditorCandidate(editor));
+  }
+
+  function normalizeEditorCandidate(node) {
+    if (!(node instanceof HTMLElement)) return null;
+    if (node.closest?.(`[${SAFE_UI_ATTR}="1"]`)) return null;
+    if (!node.matches?.(EDITOR_SELECTOR)) {
+      const closest = node.closest?.(EDITOR_SELECTOR);
+      return closest instanceof HTMLElement ? normalizeEditorCandidate(closest) : null;
+    }
+    if (node instanceof HTMLInputElement && node.type !== "text") return null;
+    if (!isVisible(node)) return null;
+    return node;
+  }
+
+  function pickBestEditor(candidates, anchor = null) {
+    const unique = [...new Set(candidates.map(normalizeEditorCandidate).filter(Boolean))];
+    if (!unique.length) return null;
+    unique.sort((a, b) => scoreEditor(b, anchor) - scoreEditor(a, anchor));
+    return unique[0] || null;
+  }
+
+  function scoreEditor(editor, anchor = null) {
+    const hint = [
+      editor.getAttribute("placeholder"),
+      editor.getAttribute("aria-label"),
+      editor.getAttribute("name"),
+      editor.id,
+      typeof editor.className === "string" ? editor.className : ""
+    ].filter(Boolean).join(" ").toLowerCase();
+    const rect = editor.getBoundingClientRect();
+    let score = 0;
+    if (editor instanceof HTMLTextAreaElement) score += 80;
+    if (editor.isContentEditable || editor.getAttribute("role") === "textbox") score += 50;
+    if (/message|chat|comment|send|message|채팅|메시지|입력|발언/i.test(hint)) score += 100;
+    if (/name|character|display.?name|nickname|이름|캐릭터/i.test(hint)) score -= 160;
+    if (rect.width >= 240) score += 20;
+    if (rect.height >= 40) score += 20;
+    if (anchor instanceof HTMLElement) score -= Math.min(distanceBetween(anchor, editor) / 8, 80);
+    return score;
+  }
+
+  function getLocalDisplayName() {
+    const editor = document.activeElement instanceof Element ? findEditorFromNode(document.activeElement) : null;
+    const composer = editor ? findClosestComposerBar(editor) : null;
+    const name = getNameFromComposer(composer) || getNameFromVisibleUi();
+    return sanitizeName(name) || "\uB098";
+  }
+
+  function getNameFromComposer(composer) {
+    if (!(composer instanceof HTMLElement)) return "";
+    const inputs = [...composer.querySelectorAll('input[type="text"], [contenteditable="true"], [role="textbox"]')];
+    for (const input of inputs) {
+      if (normalizeEditorCandidate(input)) continue;
+      const value = getEditorText(input);
+      const hint = [
+        input.getAttribute("placeholder"),
+        input.getAttribute("aria-label"),
+        input.getAttribute("name"),
+        input.id
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (value && /name|character|nickname|이름|캐릭터/i.test(hint)) return value;
+    }
+    return "";
+  }
+
+  function getNameFromVisibleUi() {
+    const selectors = [
+      '[aria-label*="\uC774\uB984"]',
+      '[placeholder*="\uC774\uB984"]',
+      '[aria-label*="name" i]',
+      '[placeholder*="name" i]'
+    ];
+    for (const selector of selectors) {
+      const el = document.querySelector(selector);
+      const value = getEditorText(el);
+      if (sanitizeName(value)) return value;
+    }
+    return "";
+  }
+
+  function getEditorText(editor) {
+    if (!editor) return "";
+    if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
+      return normalizeText(editor.value || "");
+    }
+    if (editor.isContentEditable || editor.getAttribute("role") === "textbox") {
+      return normalizeText(typeof editor.innerText === "string" ? editor.innerText : (editor.textContent || ""));
+    }
+    return normalizeText(editor.textContent || "");
+  }
+
+  function setEditorText(editor, value) {
+    if (!editor) return;
+    const nextValue = normalizeText(value);
+    if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
+      const setter = Object.getOwnPropertyDescriptor(editor.constructor.prototype, "value")?.set;
+      if (setter) setter.call(editor, nextValue);
+      else editor.value = nextValue;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+    if (editor.isContentEditable || editor.getAttribute("role") === "textbox") {
+      editor.textContent = nextValue;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  function stripInvisibleEnvelope(text) {
+    const normalized = normalizeText(text);
+    const extracted = extractEnvelope(normalized);
+    if (!extracted) return normalized;
+    return `${extracted.visibleText}${extracted.afterText || ""}`;
+  }
+
+  function extractEnvelope(fullText) {
+    const text = normalizeText(fullText);
+    const startIndex = text.indexOf(INVIS_START);
+    const endIndex = text.indexOf(INVIS_END, startIndex + INVIS_START.length);
+    if (startIndex < 0 || endIndex < 0) return null;
+
+    const visibleText = text.slice(0, startIndex);
+    const encodedPart = text.slice(startIndex + INVIS_START.length, endIndex);
+    const afterText = text.slice(endIndex + INVIS_END.length);
+
+    try {
+      return {
+        visibleText,
+        envelope: JSON.parse(decodeInvisibleToJson(encodedPart)),
+        afterText
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function encodeEnvelopeToInvisible(envelope) {
+    const json = JSON.stringify(envelope);
+    const base64 = utf8ToBase64(json);
+    let bits = "";
+    for (const ch of base64) {
+      bits += ch.charCodeAt(0).toString(2).padStart(8, "0");
+    }
+
+    let out = INVIS_START;
+    for (let i = 0; i < bits.length; i += 2) {
+      out += INVIS_MAP[parseInt(bits.slice(i, i + 2).padEnd(2, "0"), 2)];
+    }
+    return out + INVIS_END;
+  }
+
+  function decodeInvisibleToJson(encodedPart) {
+    let bits = "";
+    for (const ch of encodedPart) {
+      const value = INVIS_REVERSE.get(ch);
+      if (value == null) continue;
+      bits += value.toString(2).padStart(2, "0");
+    }
+
+    const bytes = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+      bytes.push(parseInt(bits.slice(i, i + 8), 2));
+    }
+    return base64ToUtf8(String.fromCharCode(...bytes).replace(/\0+$/g, ""));
+  }
+
+  function utf8ToBase64(value) {
+    return btoa(unescape(encodeURIComponent(value)));
+  }
+
+  function base64ToUtf8(base64) {
+    return decodeURIComponent(escape(atob(base64)));
+  }
+
+  function normalizeText(value) {
+    return typeof value === "string" ? value.replace(/\r\n?/g, "\n") : "";
+  }
+
+  function formatAge(age) {
+    const seconds = Math.max(0, Math.floor(age / 1000));
+    if (seconds < 60) return "\uBC29\uAE08";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}\uBD84 \uC804`;
+    return `${Math.floor(minutes / 60)}\uC2DC\uAC04 \uC804`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[ch]);
+  }
+
+  function getButtonLabel(button) {
+    return (button?.getAttribute?.("aria-label") || button?.textContent || "").trim().toUpperCase();
+  }
+
+  function isVisible(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function distanceBetween(a, b) {
+    const ra = a.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
+    return Math.abs(ra.top - rb.top) + Math.abs(ra.left - rb.left);
+  }
+})();
+
