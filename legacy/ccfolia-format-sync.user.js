@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.18
+// @version      0.0.19
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.18"),
+    version: getUserscriptVersion("0.0.19"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1596,6 +1596,7 @@
   const LOCAL_IMAGE_INDEX_KEY = "ccf-inline-image:index";
   const LOCAL_IMAGE_MAX_ENTRIES = 24;
   const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
+  const NARRATOR_STORAGE_KEY_PREFIX = "ccf-format-narrators-v1:";
   const ROLL20_STYLE_LINK_RE = /\[([^\]]*)\]\(#"\s*style="([^"]*?)"?\s*\)/gi;
   const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)\s*$/i;
   const ROLL20_DESC_RE = /^\s*\/desc\b\s*/i;
@@ -2858,6 +2859,78 @@
         padding: 7px 10px;
       }
 
+      .ccf-narrator-note {
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 12px;
+        padding: 4px 0;
+      }
+
+      .ccf-narrator-empty {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 12px;
+        padding: 8px 4px;
+      }
+
+      .ccf-narrator-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 4px 0;
+      }
+
+      .ccf-narrator-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        background: #1f1f1f;
+        color: rgba(255, 255, 255, 0.92);
+        text-align: left;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .ccf-narrator-item:hover {
+        background: #2a2a2a;
+      }
+
+      .ccf-narrator-item.active {
+        background: rgba(100, 149, 255, 0.18);
+        border-color: rgba(100, 149, 255, 0.55);
+      }
+
+      .ccf-narrator-item .ccf-narrator-check {
+        width: 14px;
+        text-align: center;
+        color: rgba(120, 200, 120, 0.92);
+        font-weight: 700;
+      }
+
+      .ccf-narrator-item .ccf-narrator-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ccf-narrator-item .ccf-narrator-tag {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .ccf-narrator-item.is-current .ccf-narrator-name {
+        font-weight: 600;
+      }
+
+      .ccf-narrator-item.is-orphan {
+        opacity: 0.7;
+      }
+
       .ccf-preview-empty {
         opacity: 0.5;
       }
@@ -3093,7 +3166,10 @@
         activeEditor = editor;
       }
       syncEditorVisualPreview(editor);
+      refreshAllInlineNarrationButtons();
     }, ccfFsWithSignal(true));
+
+    startCharacterSpeakerObserver();
 
     window.addEventListener("resize", () => {
       if (isModalOpen()) {
@@ -3237,6 +3313,7 @@
     `;
 
     bindInlineToolbarEvents(toolbar);
+    refreshInlineNarrationButton(toolbar);
     return toolbar;
   }
 
@@ -3278,6 +3355,22 @@
           restoreRoomSelectionSoon(state.editor, state.selection);
           showInlineToolbarSelectionHighlight(toolbar);
           updateInlineToolbarVisuals(toolbar);
+        }
+        return;
+      }
+
+      const narratorAction = target.closest("[data-inline-narrator-action]");
+      if (narratorAction && toolbar.contains(narratorAction)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const action = narratorAction.getAttribute("data-inline-narrator-action");
+        if (action === "toggle") {
+          const name = narratorAction.getAttribute("data-inline-narrator-name") || "";
+          toggleNarratorName(name);
+          updateInlineNarratorPopoverList(toolbar);
+          refreshInlineNarrationButton(toolbar);
+        } else if (action === "refresh") {
+          refreshInlineNarratorPopover(toolbar);
         }
         return;
       }
@@ -3462,10 +3555,7 @@
     }
 
     if (command === "narration") {
-      const nextActive = !commandButton.classList.contains("active");
-      commandButton.classList.toggle("active", nextActive);
-      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
-      applyInlineNarration(editor, nextActive);
+      openInlineNarratorPopover(toolbar);
       return;
     }
   }
@@ -4123,6 +4213,174 @@
       selectedText: selection ? text.slice(selection.start, selection.end) : "",
       baseRuns: cloneRuns(state.runs, text.length)
     };
+  }
+
+  function toggleNarratorName(name) {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return false;
+    const set = readNarratorNameSet();
+    if (set.has(trimmed)) {
+      set.delete(trimmed);
+    } else {
+      set.add(trimmed);
+    }
+    return writeNarratorNameSet(set);
+  }
+
+  function getNarratorButton(toolbar) {
+    return toolbar?.querySelector?.('[data-inline-command="narration"]') || null;
+  }
+
+  function refreshInlineNarrationButton(toolbar) {
+    const btn = getNarratorButton(toolbar);
+    if (!(btn instanceof HTMLElement)) return;
+    const speaker = getCurrentSpeakerName();
+    const set = readNarratorNameSet();
+    const speakerActive = !!speaker && set.has(speaker);
+    const editor = getInlineToolbarEditor(toolbar);
+    const blockActive = editor ? ensureEditorState(editor).blockStyle?.narration === true : false;
+    const active = speakerActive || blockActive;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.title = speakerActive
+      ? `나레이션 대상: ${speaker}`
+      : "나레이션 캐릭터 설정";
+  }
+
+  function refreshAllInlineNarrationButtons() {
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => {
+      refreshInlineNarrationButton(toolbar);
+    });
+  }
+
+  function buildInlineNarratorListMarkup(names, narratorSet, currentSpeaker) {
+    const trimmedSpeaker = String(currentSpeaker || "").trim();
+    const knownSet = new Set(names);
+    const orphanNarrators = [...narratorSet].filter((name) => !knownSet.has(name));
+    const ordered = [...names, ...orphanNarrators];
+
+    if (!ordered.length) {
+      return `<div class="ccf-narrator-empty">캐릭터 목록을 불러오지 못했습니다. 새로고침을 눌러주세요.</div>`;
+    }
+
+    return `<div class="ccf-narrator-list" role="listbox">
+      ${ordered.map((name) => {
+        const isActive = narratorSet.has(name);
+        const isCurrent = !!trimmedSpeaker && trimmedSpeaker === name;
+        const isOrphan = !knownSet.has(name);
+        const classes = ["ccf-narrator-item"];
+        if (isActive) classes.push("active");
+        if (isCurrent) classes.push("is-current");
+        if (isOrphan) classes.push("is-orphan");
+        const escapedName = escapeHtml(name);
+        const suffixParts = [];
+        if (isCurrent) suffixParts.push("현재 화자");
+        if (isOrphan) suffixParts.push("목록 없음");
+        const suffix = suffixParts.length
+          ? ` <span class="ccf-narrator-tag">${suffixParts.join(" · ")}</span>`
+          : "";
+        return `<button type="button" class="${classes.join(" ")}" role="option" aria-selected="${isActive ? "true" : "false"}" data-inline-narrator-action="toggle" data-inline-narrator-name="${escapedName}"><span class="ccf-narrator-check" aria-hidden="true">${isActive ? "✓" : ""}</span><span class="ccf-narrator-name">${escapedName}</span>${suffix}</button>`;
+      }).join("")}
+    </div>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function getInlineNarratorPopoverState(toolbar) {
+    const state = inlinePopoverState;
+    if (!state || state.toolbar !== toolbar || state.kind !== "narrator") return null;
+    return state;
+  }
+
+  function updateInlineNarratorPopoverList(toolbar) {
+    const state = getInlineNarratorPopoverState(toolbar);
+    if (!state) return;
+    const listHost = state.popover?.querySelector?.("[data-inline-narrator-list-host]");
+    if (!listHost) return;
+    const set = readNarratorNameSet();
+    listHost.innerHTML = buildInlineNarratorListMarkup(state.characterNames || [], set, getCurrentSpeakerName());
+  }
+
+  function setInlineNarratorPopoverBusy(toolbar, busy, message = "") {
+    const state = getInlineNarratorPopoverState(toolbar);
+    if (!state) return;
+    const note = state.popover?.querySelector?.("[data-inline-narrator-note]");
+    if (note instanceof HTMLElement) {
+      note.textContent = message || "";
+      note.style.display = message ? "block" : "none";
+    }
+    state.popover?.querySelectorAll?.('[data-inline-narrator-action="refresh"]').forEach((btn) => {
+      if (btn instanceof HTMLButtonElement) btn.disabled = !!busy;
+    });
+  }
+
+  async function refreshInlineNarratorPopover(toolbar) {
+    const state = getInlineNarratorPopoverState(toolbar);
+    if (!state) return;
+    setInlineNarratorPopoverBusy(toolbar, true, "캐릭터 목록을 불러오는 중…");
+    try {
+      const names = await scrapeCharacterNames();
+      const currentState = getInlineNarratorPopoverState(toolbar);
+      if (!currentState) return;
+      currentState.characterNames = names;
+    } catch (error) {
+      console.error("[ccf-format-sync] refreshInlineNarratorPopover failed", error);
+    } finally {
+      setInlineNarratorPopoverBusy(toolbar, false, "");
+      updateInlineNarratorPopoverList(toolbar);
+      refreshInlineNarrationButton(toolbar);
+    }
+  }
+
+  function openInlineNarratorPopover(toolbar) {
+    if (!getCurrentRoomId()) {
+      alert("나레이션 캐릭터 설정은 룸 안에서만 사용할 수 있어요.");
+      return false;
+    }
+
+    document.querySelectorAll(".ccf-inline-popover.open").forEach((popover) => {
+      if (!toolbar.contains(popover)) {
+        popover.classList.remove("open");
+        popover.setAttribute("aria-hidden", "true");
+        popover.textContent = "";
+      }
+    });
+
+    const popover = toolbar.querySelector("[data-inline-popover]");
+    if (!popover) return false;
+
+    const initialSet = readNarratorNameSet();
+    const currentSpeaker = getCurrentSpeakerName();
+
+    popover.innerHTML = `
+      <div class="ccf-inline-popover-title">나레이션 캐릭터</div>
+      <div class="ccf-code-note">선택한 캐릭터가 이 룸에서 보낸 메시지는 나레이션으로 표시됩니다.</div>
+      <div class="ccf-narrator-note" data-inline-narrator-note style="display:none;"></div>
+      <div data-inline-narrator-list-host>${buildInlineNarratorListMarkup([], initialSet, currentSpeaker)}</div>
+      <div class="ccf-inline-popover-actions">
+        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">닫기</button>
+        <button type="button" class="ccf-btn primary" data-inline-narrator-action="refresh">새로고침</button>
+      </div>
+    `;
+    popover.classList.add("open");
+    popover.setAttribute("aria-hidden", "false");
+
+    inlinePopoverState = {
+      kind: "narrator",
+      toolbar,
+      popover,
+      characterNames: []
+    };
+
+    refreshInlineNarratorPopover(toolbar);
+    return true;
   }
 
   function openInlineStyleClipboardPopover(toolbar) {
@@ -7194,6 +7452,243 @@
     return true;
   }
 
+  function getCurrentRoomId() {
+    const match = location.pathname.match(/^\/rooms\/([^/?#]+)/i);
+    return match ? match[1] : "";
+  }
+
+  function getNarratorStorageKey() {
+    const roomId = getCurrentRoomId();
+    return roomId ? `${NARRATOR_STORAGE_KEY_PREFIX}${roomId}` : "";
+  }
+
+  function readNarratorNameSet() {
+    const key = getNarratorStorageKey();
+    if (!key) return new Set();
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!Array.isArray(raw)) return new Set();
+      return new Set(raw.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim()));
+    } catch (error) {
+      console.error("[ccf-format-sync] readNarratorNameSet failed", error);
+      return new Set();
+    }
+  }
+
+  function writeNarratorNameSet(set) {
+    const key = getNarratorStorageKey();
+    if (!key) return false;
+    try {
+      const list = [...set].filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim());
+      localStorage.setItem(key, JSON.stringify(list));
+      return true;
+    } catch (error) {
+      console.error("[ccf-format-sync] writeNarratorNameSet failed", error);
+      return false;
+    }
+  }
+
+  const CHARACTER_SELECT_BUTTON_SELECTORS = [
+    'button[aria-label="캐릭터 선택"]',
+    'button[aria-label="Character selection"]',
+    'button[aria-label="Select character"]',
+    'button[aria-label="キャラクター選択"]',
+    'button[aria-label="キャラクター 選択"]'
+  ];
+
+  function findCharacterSelectButton() {
+    for (const selector of CHARACTER_SELECT_BUTTON_SELECTORS) {
+      const matches = document.querySelectorAll(selector);
+      for (const btn of matches) {
+        if (btn instanceof HTMLButtonElement && !btn.disabled && isVisible(btn)) {
+          return btn;
+        }
+      }
+    }
+    return null;
+  }
+
+  function getCurrentSpeakerName() {
+    const btn = findCharacterSelectButton();
+    if (!btn) return "";
+    const raw = btn.textContent || "";
+    return raw.replace(/\s+/g, " ").trim();
+  }
+
+  function dispatchCharacterButtonOpen(btn) {
+    if (!(btn instanceof HTMLElement)) return;
+    try { btn.focus({ preventScroll: true }); } catch (error) { /* focus failed */ }
+    const types = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    for (const type of types) {
+      try {
+        const Ctor = type.startsWith("pointer") && typeof PointerEvent === "function" ? PointerEvent : MouseEvent;
+        btn.dispatchEvent(new Ctor(type, {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: type.endsWith("down") ? 1 : 0
+        }));
+      } catch (error) { /* dispatch failed */ }
+    }
+    try { btn.click(); } catch (error) { /* click failed */ }
+  }
+
+  function findCharacterDropdownList() {
+    const lists = document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]');
+    let best = null;
+    let bestCount = 0;
+    lists.forEach((list) => {
+      if (!(list instanceof HTMLElement) || !isVisible(list)) return;
+      if (list.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      const items = [...list.children].filter((item) => {
+        if (!(item instanceof HTMLElement) || !isVisible(item)) return false;
+        const text = (item.querySelector(".MuiListItemText-primary")?.textContent || item.textContent || "").trim();
+        if (!text) return false;
+        return !!item.querySelector("img, .MuiAvatar-root") || item.matches('[role="option"], [role="menuitem"]');
+      });
+      if (items.length > bestCount) {
+        bestCount = items.length;
+        best = { list, items };
+      }
+    });
+    return best;
+  }
+
+  function readCharacterListNames(items) {
+    const names = [];
+    const seen = new Set();
+    for (const item of items) {
+      if (!(item instanceof HTMLElement)) continue;
+      const raw = (item.querySelector(".MuiListItemText-primary")?.textContent
+        || item.getAttribute("aria-label")
+        || item.textContent
+        || "").replace(/\s+/g, " ").trim();
+      if (!raw || seen.has(raw)) continue;
+      seen.add(raw);
+      names.push(raw);
+    }
+    return names;
+  }
+
+  function waitForCondition(check, timeoutMs = 800, intervalMs = 25) {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        const result = check();
+        if (result) {
+          resolve(result);
+          return;
+        }
+        if (Date.now() - startedAt > timeoutMs) {
+          resolve(null);
+          return;
+        }
+        setTimeout(tick, intervalMs);
+      };
+      tick();
+    });
+  }
+
+  let narratorScrapeHideStyle = null;
+  function setNarratorScrapeHidden(hidden) {
+    if (hidden) {
+      if (narratorScrapeHideStyle) return;
+      const style = document.createElement("style");
+      style.id = "ccf-narrator-scrape-hide";
+      style.setAttribute(SAFE_UI_ATTR, "1");
+      style.textContent = `
+        body > .MuiPopover-root,
+        body > [role="presentation"]:has([role="listbox"]),
+        body > [role="presentation"]:has([role="menu"]) {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `;
+      document.documentElement.appendChild(style);
+      narratorScrapeHideStyle = style;
+    } else if (narratorScrapeHideStyle) {
+      narratorScrapeHideStyle.remove();
+      narratorScrapeHideStyle = null;
+    }
+  }
+
+  function closeCharacterDropdown() {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true, cancelable: true }));
+    const backdrop = document.querySelector('body > .MuiPopover-root .MuiBackdrop-root, body > [role="presentation"] .MuiBackdrop-root');
+    if (backdrop instanceof HTMLElement) {
+      try {
+        backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+        backdrop.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+      } catch (error) { /* backdrop dismiss failed */ }
+    }
+  }
+
+  let lastObservedSpeakerName = "";
+  let characterSpeakerObserverStarted = false;
+  let pendingSpeakerCheckTimer = 0;
+
+  function scheduleSpeakerCheck() {
+    if (pendingSpeakerCheckTimer) return;
+    pendingSpeakerCheckTimer = setTimeout(() => {
+      pendingSpeakerCheckTimer = 0;
+      const current = getCurrentSpeakerName();
+      if (current === lastObservedSpeakerName) return;
+      lastObservedSpeakerName = current;
+      refreshAllInlineNarrationButtons();
+    }, 80);
+  }
+
+  function startCharacterSpeakerObserver() {
+    if (characterSpeakerObserverStarted) return;
+    characterSpeakerObserverStarted = true;
+    lastObservedSpeakerName = getCurrentSpeakerName();
+    const observer = new MutationObserver(() => {
+      scheduleSpeakerCheck();
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    ccfFsRegisterTeardown(() => {
+      try { observer.disconnect(); } catch (error) { /* observer teardown failed */ }
+      if (pendingSpeakerCheckTimer) {
+        clearTimeout(pendingSpeakerCheckTimer);
+        pendingSpeakerCheckTimer = 0;
+      }
+    });
+  }
+
+  async function scrapeCharacterNames() {
+    const btn = findCharacterSelectButton();
+    if (!btn) return [];
+
+    const dropdownAlreadyOpen = findCharacterDropdownList();
+    if (dropdownAlreadyOpen) {
+      return readCharacterListNames(dropdownAlreadyOpen.items);
+    }
+
+    setNarratorScrapeHidden(true);
+    try {
+      dispatchCharacterButtonOpen(btn);
+      const found = await waitForCondition(() => {
+        const candidate = findCharacterDropdownList();
+        return candidate && candidate.items.length ? candidate : null;
+      }, 1000);
+      const names = found ? readCharacterListNames(found.items) : [];
+      closeCharacterDropdown();
+      await waitForCondition(() => !findCharacterDropdownList(), 400);
+      return names;
+    } finally {
+      setNarratorScrapeHidden(false);
+    }
+  }
+
   function applyInlineNarration(editor, active) {
     if (!editor) return false;
 
@@ -9081,6 +9576,13 @@
 
     const runs = preparedRuns.runs;
     const blockStyle = cleanupBlockStyle(state.blockStyle);
+    const speakerName = getCurrentSpeakerName();
+    if (speakerName) {
+      const narratorSet = readNarratorNameSet();
+      if (narratorSet.has(speakerName)) {
+        blockStyle.narration = true;
+      }
+    }
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
     if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;
