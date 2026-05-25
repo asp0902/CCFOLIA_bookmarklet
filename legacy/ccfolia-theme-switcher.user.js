@@ -1367,32 +1367,52 @@
     // Roll20 "언성 듀엣" 커스텀시트 팔레트
     // bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff
     const UD = {
-      bg: "#1c3245",
-      bgSoft: "rgba(28, 50, 69, 0.85)",
-      bgChip: "rgba(0, 77, 103, 0.32)",
+      // 반투명: CCFOLIA 네이티브 다크 배경이 비쳐 보이도록 알파 낮춤
+      bgGlass: "rgba(28, 50, 69, 0.55)",
+      bgGlassInner: "rgba(28, 50, 69, 0.32)",
+      bgChip: "rgba(0, 77, 103, 0.28)",
       border: "#004d67",
       borderSoft: "rgba(0, 77, 103, 0.55)",
       muted: "#8895A1",
       text: "#ffffff",
-      shadow: "rgba(0, 0, 0, 0.45)"
+      shadow: "rgba(0, 0, 0, 0.45)",
+      // Roll20 시트의 헤더 일러스트(언성 듀엣 룰 타이틀 그려져 있는 .sheet-outer 배경)
+      sheetBg: "url(https://i.imgur.com/htxGxau.png)"
     };
 
     return `
       /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
+      /* Dialog paper 자체: CCFOLIA 네이티브 톤 + 청록 보더, 반투명 유리 효과 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
-        background: ${UD.bg} !important;
+        background-color: ${UD.bgGlass} !important;
+        background-image: none !important;
         color: ${UD.text} !important;
         border: 1px solid ${UD.border} !important;
         border-radius: 10px !important;
         box-shadow: 0 18px 40px ${UD.shadow} !important;
+        backdrop-filter: blur(14px) saturate(120%);
+        -webkit-backdrop-filter: blur(14px) saturate(120%);
       }
 
+      /* DialogContent: Roll20 시트의 헤더 일러스트를 깔아 룰 타이틀이 보이게 함.
+         배경 이미지 + 반투명 청록 톤 오버레이가 겹쳐 보이도록 두 레이어 사용. */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root {
+        background-image:
+          linear-gradient(${UD.bgGlassInner}, ${UD.bgGlassInner}),
+          ${UD.sheetBg} !important;
+        background-repeat: no-repeat, no-repeat !important;
+        background-position: center top, center top !important;
+        background-size: cover, contain !important;
+        background-color: transparent !important;
+      }
+
+      /* 내부 Paper/카드/아코디언은 한층 더 투명 — 시트 배경이 살짝 비치게 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiCard-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAccordion-root {
-        background: ${UD.bgSoft} !important;
+        background: ${UD.bgGlassInner} !important;
         color: ${UD.text} !important;
         border-color: ${UD.borderSoft} !important;
       }
