@@ -25,14 +25,21 @@
     "언성 듀엣": "unsung-duet"
   });
 
-  // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지 URL
-  // 발송 시 트리거 텍스트(대괄호 포함)를 해당 URL로 치환하여 모든 참가자에게 이미지가 보이도록 함
-  const UNSUNG_DUET_TRIGGER_MAP = Object.freeze({
+  // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지.
+  // CCFOLIA는 raw URL을 자동 임베드하지 않으므로 마크다운 링크 형태로 발송.
+  // 동시에 클라이언트 측에서 DOM 인젝션으로 <img>로 치환해 시각적으로 보이게 함.
+  const UNSUNG_DUET_URLS = Object.freeze({
     "【시프터 판정】": "https://i.imgur.com/FFUXgYg.png",
     "【바인더 판정】": "https://i.imgur.com/Jt8hw3i.png",
     "【프래그먼트 효과】": "https://i.imgur.com/dcMRZ62.png",
     "【이계화】": "https://i.imgur.com/cfVWYGn.png"
   });
+  // 트리거 → 발송 메시지에 들어갈 텍스트 ([이미지](URL) 형태)
+  const UNSUNG_DUET_TRIGGER_MAP = Object.freeze(
+    Object.fromEntries(
+      Object.entries(UNSUNG_DUET_URLS).map(([k, url]) => [k, `[이미지](${url})`])
+    )
+  );
   const UNSUNG_DUET_FIELD_BOUND_ATTR = "data-ccf-unsung-duet-bound";
   const UNSUNG_DUET_MSG_INJECTED_ATTR = "data-ccf-unsung-duet-msg-injected";
   const UNSUNG_DUET_IMG_CLASS = "ccf-unsung-duet-msg-img";
@@ -1415,8 +1422,8 @@
     return `
       /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
       /* Dialog paper 자체: 반투명 + 블랙 보더(=inset shadow).
-         ⚠️ border / backdrop-filter는 모두 일부 브라우저에서 다이얼로그 너비를
-            건드릴 수 있어 제거. 블랙 외곽선은 inset box-shadow만으로 표현. */
+         외곽선은 inset box-shadow만으로 표현 — 레이아웃 영향 없음.
+         min-width: MUI 'sm' 기본값(600px)을 명시해 CCFOLIA 네이티브 너비 보장. */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
@@ -1424,16 +1431,20 @@
         background-image: none !important;
         color: ${UD.text} !important;
         border: 0 !important;
+        min-width: min(600px, calc(100vw - 64px)) !important;
         box-shadow:
           inset 0 0 0 1px ${UD.accent},
           0 18px 40px ${UD.shadow} !important;
       }
 
-      /* DialogActions(삭제/복제/맵에서 집어넣기) 버튼은 어떤 경우에도 한 줄 유지 */
+      /* DialogActions(삭제/복제/맵에서 집어넣기):
+         - 세 버튼이 가로 폭을 균등 분배하도록 flex:1 1 0
+         - 텍스트는 어떤 너비에서도 한 줄 유지 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
-        white-space: nowrap !important;
+        flex: 1 1 0 !important;
         min-width: 0 !important;
+        white-space: nowrap !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 톤.
@@ -1645,6 +1656,7 @@
     applyDicebotAttribute();
     bindUnsungDuetTriggerFields();
     injectUnsungDuetMessageImages();
+    installYouTubePauseInterceptor();
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -3766,8 +3778,9 @@
           }
 
           // 본인이 발송한 트리거 메시지 → 곧 컷인이 재생됨.
-          // YouTube가 정지되지 않도록 다중 시점에 자동 재개 시도.
-          scheduleYouTubeResume();
+          // 다음 N초간 YouTube iframe으로 가는 pauseVideo 명령을 차단해
+          // BGM이 일시정지되지 않도록 표시.
+          markUnsungDuetCutinActive();
         } finally {
           window.setTimeout(() => { unsungDuetEnterReentry = false; }, 120);
         }
@@ -3792,34 +3805,88 @@
   // 채팅 로그 메시지에서 알려진 imgur URL을 <img>로 인라인 치환.
   // CCFOLIA가 메시지 텍스트 내 URL을 자동 임베드하지 않기 때문에 클라이언트
   // 쪽에서 DOM에 직접 이미지 요소를 끼워 넣어 시각적으로 보이게 한다.
+  //
+  // 인식하는 패턴 (모두 처리):
+  //   1) [이미지](https://i.imgur.com/XXXX.png) - 마크다운 링크 텍스트
+  //   2) <a href="https://i.imgur.com/XXXX.png">…</a> - 렌더된 링크 요소
+  //   3) https://i.imgur.com/XXXX.png - raw URL 텍스트
   function injectUnsungDuetMessageImages() {
     if (getCurrentDicebotId() !== "unsung-duet") return;
 
-    const messageSelector = [
-      '[role="log"] li',
-      '[aria-live="polite"] li',
-      '[aria-live="assertive"] li'
-    ].join(", ");
+    // 채팅 메시지가 들어 있을 수 있는 가능한 모든 컨테이너의 li를 스캔
+    // (CCFOLIA의 채팅 영역은 빌드/버전에 따라 다양한 셀렉터를 가질 수 있음)
+    const messages = document.querySelectorAll(
+      `li:not([${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"])`
+    );
 
     let anyInjected = false;
-    document.querySelectorAll(messageSelector).forEach((message) => {
+    messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
-      if (message.getAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR) === "1") return;
 
-      const replaced = replaceImgurUrlsWithImages(message);
-      if (replaced) {
+      // 빠른 사전 필터: 메시지 텍스트에 알려진 URL 일부 또는 [이미지](가 포함되어 있는지
+      const text = message.textContent || "";
+      if (!hasUnsungDuetSignal(text) && !hasUnsungDuetAnchor(message)) return;
+
+      const replacedText = replaceTextNodesWithImages(message);
+      const replacedAnchor = replaceAnchorsWithImages(message);
+      if (replacedText || replacedAnchor) {
         message.setAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR, "1");
         anyInjected = true;
       }
     });
 
-    // 트리거 메시지가 새로 등장 = 사용자가 설정한 컷인이 곧/방금 재생됨.
-    // 컷인 사운드가 YouTube 배경 음원을 정지시키는 케이스 대비, 여러 시점에
-    // YouTube 재생을 재개시켜 사용자가 의도한 BGM이 끊기지 않도록 한다.
-    if (anyInjected) scheduleYouTubeResume();
+    if (anyInjected) markUnsungDuetCutinActive();
   }
 
-  // === YouTube 자동 재개 (컷인 사운드와의 충돌 회피) =====================
+  function hasUnsungDuetSignal(text) {
+    if (!text) return false;
+    for (const url of Object.values(UNSUNG_DUET_URLS)) {
+      if (text.indexOf(url) >= 0) return true;
+    }
+    return false;
+  }
+
+  function hasUnsungDuetAnchor(root) {
+    if (!(root instanceof HTMLElement)) return false;
+    const anchors = root.querySelectorAll("a[href]");
+    for (const a of anchors) {
+      const href = a.getAttribute("href") || "";
+      if (UNSUNG_DUET_URL_TO_ALT[href]) return true;
+    }
+    return false;
+  }
+
+  function replaceAnchorsWithImages(root) {
+    if (!(root instanceof HTMLElement)) return false;
+    const anchors = [...root.querySelectorAll("a[href]")];
+    let modified = false;
+    for (const a of anchors) {
+      const href = a.getAttribute("href") || "";
+      const alt = UNSUNG_DUET_URL_TO_ALT[href];
+      if (!alt) continue;
+      const img = createUnsungDuetImage(href, alt);
+      a.parentNode?.replaceChild(img, a);
+      modified = true;
+    }
+    return modified;
+  }
+
+  function createUnsungDuetImage(url, alt) {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = alt || "";
+    img.className = UNSUNG_DUET_IMG_CLASS;
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    return img;
+  }
+
+  // === YouTube pauseVideo 명령 가로채기 ==================================
+  // 이전 접근(다중 playVideo 호출)은 BGM과 동시 재생은 성공했지만 컷인 종료 후
+  // CCFOLIA 내부 BGM 컨트롤러 상태가 desync 되는 부작용이 있었음(BGM01 폰트색
+  // 변경, 빨강 뱃지 사라짐, 재생바 미복귀). 그래서 접근을 바꿔서: CCFOLIA가
+  // 애초에 YouTube iframe에 pauseVideo 명령을 보내지 못하게 가로챈다.
+  // 이렇게 하면 CCFOLIA 컨트롤러는 BGM이 계속 재생 중이라고 인식하므로 desync 없음.
   function findYouTubeIframes() {
     return document.querySelectorAll([
       'iframe[src*="youtube.com/embed"]',
@@ -3828,45 +3895,82 @@
     ].join(", "));
   }
 
-  function tryResumeYouTubePlayback() {
-    // YouTube IFrame Player API: enablejsapi=1 이 있는 iframe만 명령을 수락.
-    // CCFOLIA가 enablejsapi를 켜둔 경우엔 postMessage("playVideo") 로 재개됨.
-    const payload = JSON.stringify({ event: "command", func: "playVideo", args: "" });
-    findYouTubeIframes().forEach((iframe) => {
-      if (!(iframe instanceof HTMLIFrameElement)) return;
-      if (!iframe.contentWindow) return;
-      try { iframe.contentWindow.postMessage(payload, "*"); }
-      catch (error) { /* postMessage 실패 무시 */ }
+  function isYouTubeContentWindow(win) {
+    const iframes = findYouTubeIframes();
+    for (const iframe of iframes) {
+      if (iframe instanceof HTMLIFrameElement && iframe.contentWindow === win) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 컷인 활성 윈도우 — 트리거 메시지가 발생/감지된 직후 N초간만 pauseVideo 차단.
+  // 평소(컷인이 없는 일반 상황)에는 사용자가 BGM을 수동 일시정지하면 정상 작동.
+  let unsungDuetCutinActiveUntil = 0;
+  const UNSUNG_DUET_CUTIN_WINDOW_MS = 7000;
+
+  function markUnsungDuetCutinActive() {
+    if (getCurrentDicebotId() !== "unsung-duet") return;
+    unsungDuetCutinActiveUntil = Date.now() + UNSUNG_DUET_CUTIN_WINDOW_MS;
+  }
+
+  function isUnsungDuetCutinActive() {
+    return Date.now() < unsungDuetCutinActiveUntil;
+  }
+
+  function installYouTubePauseInterceptor() {
+    if (window.__ccfUnsungDuetPauseInterceptorInstalled) return;
+    window.__ccfUnsungDuetPauseInterceptorInstalled = true;
+
+    const originalPostMessage = Window.prototype.postMessage;
+    Window.prototype.postMessage = function (message, ...rest) {
+      try {
+        // 다이스봇이 언성 듀엣이고, 컷인 활성 윈도우 안이며,
+        // 타깃이 YouTube iframe contentWindow일 때만 pauseVideo 차단
+        if (
+          this !== window &&
+          getCurrentDicebotId() === "unsung-duet" &&
+          isUnsungDuetCutinActive() &&
+          isYouTubeContentWindow(this) &&
+          typeof message === "string"
+        ) {
+          const parsed = JSON.parse(message);
+          if (parsed && parsed.event === "command" && parsed.func === "pauseVideo") {
+            return; // pauseVideo 차단
+          }
+        }
+      } catch (error) { /* JSON 파싱 실패 등 — 정상 흐름으로 통과 */ }
+      return originalPostMessage.apply(this, [message, ...rest]);
+    };
+
+    ccfThemeRegisterTeardown(() => {
+      try { Window.prototype.postMessage = originalPostMessage; }
+      catch (error) { /* prototype 복원 실패 무시 */ }
+      window.__ccfUnsungDuetPauseInterceptorInstalled = false;
     });
   }
 
-  function scheduleYouTubeResume() {
-    // 컷인 사운드가 시작 직후/중간/끝 시점 모두에서 paused면 즉시 resume.
-    // 컷인 길이를 모르므로 200ms, 1200ms, 2500ms, 4500ms 의 다중 시점에 호출.
-    [200, 1200, 2500, 4500].forEach((delay) => {
-      window.setTimeout(() => {
-        if (!ccfThemeActive) return;
-        if (getCurrentDicebotId() !== "unsung-duet") return;
-        tryResumeYouTubePlayback();
-      }, delay);
-    });
-  }
+  // [이미지](https://i.imgur.com/XXXX.png) 또는 raw URL — 둘 다 매칭하는 정규식.
+  // 그룹1: [이미지](…) 안의 URL, 그룹2: raw URL.
+  const UNSUNG_DUET_TEXT_PATTERN = /\[이미지\]\((https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)\)|(https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)/g;
 
-  function replaceImgurUrlsWithImages(root) {
+  function replaceTextNodesWithImages(root) {
     if (!(root instanceof HTMLElement)) return false;
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (!node.textContent) return NodeFilter.FILTER_REJECT;
-        // 이미 img 안에 있거나 script/style 내부면 제외
         const parent = node.parentNode;
         if (parent instanceof HTMLElement) {
           const tag = parent.tagName;
-          if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG") {
+          if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG" || tag === "A") {
+            // <a> 안의 텍스트는 별도 replaceAnchorsWithImages 로 처리
             return NodeFilter.FILTER_REJECT;
           }
         }
-        // 알려진 URL 중 하나라도 텍스트에 있는지 확인
+        // 알려진 URL 또는 [이미지]( 가 텍스트에 있는지 빠른 사전 필터
+        if (node.textContent.indexOf("[이미지](") >= 0) return NodeFilter.FILTER_ACCEPT;
         for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
           if (node.textContent.indexOf(url) >= 0) return NodeFilter.FILTER_ACCEPT;
         }
@@ -3879,52 +3983,30 @@
     while ((current = walker.nextNode())) {
       targets.push(current);
     }
-
     if (targets.length === 0) return false;
 
     let modified = false;
     for (const textNode of targets) {
       const text = textNode.textContent || "";
-      // 텍스트를 URL/non-URL 토큰으로 분리
-      const tokens = [];
-      let cursor = 0;
-      while (cursor < text.length) {
-        let nextHit = -1;
-        let nextUrl = "";
-        for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
-          const idx = text.indexOf(url, cursor);
-          if (idx >= 0 && (nextHit === -1 || idx < nextHit)) {
-            nextHit = idx;
-            nextUrl = url;
-          }
-        }
-        if (nextHit === -1) {
-          tokens.push({ type: "text", value: text.slice(cursor) });
-          break;
-        }
-        if (nextHit > cursor) {
-          tokens.push({ type: "text", value: text.slice(cursor, nextHit) });
-        }
-        tokens.push({ type: "img", value: nextUrl });
-        cursor = nextHit + nextUrl.length;
-      }
-
-      // URL 토큰이 없으면 건너뜀
-      if (!tokens.some((t) => t.type === "img")) continue;
+      UNSUNG_DUET_TEXT_PATTERN.lastIndex = 0;
 
       const fragment = document.createDocumentFragment();
-      for (const token of tokens) {
-        if (token.type === "text") {
-          if (token.value) fragment.appendChild(document.createTextNode(token.value));
-        } else {
-          const img = document.createElement("img");
-          img.src = token.value;
-          img.alt = UNSUNG_DUET_URL_TO_ALT[token.value] || "";
-          img.className = UNSUNG_DUET_IMG_CLASS;
-          img.loading = "lazy";
-          img.referrerPolicy = "no-referrer";
-          fragment.appendChild(img);
+      let cursor = 0;
+      let foundAny = false;
+      let match;
+      while ((match = UNSUNG_DUET_TEXT_PATTERN.exec(text)) !== null) {
+        const url = match[1] || match[2];
+        if (!url || !UNSUNG_DUET_URL_TO_ALT[url]) continue;
+        foundAny = true;
+        if (match.index > cursor) {
+          fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
         }
+        fragment.appendChild(createUnsungDuetImage(url, UNSUNG_DUET_URL_TO_ALT[url]));
+        cursor = match.index + match[0].length;
+      }
+      if (!foundAny) continue;
+      if (cursor < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor)));
       }
 
       const parent = textNode.parentNode;
@@ -3933,7 +4015,6 @@
         modified = true;
       }
     }
-
     return modified;
   }
 
