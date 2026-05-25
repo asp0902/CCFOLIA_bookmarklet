@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.23
+// @version      0.0.24
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.23"),
+    version: getUserscriptVersion("0.0.24"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1636,6 +1636,16 @@
   const LOCAL_IMAGE_MAX_ENTRIES = 24;
   const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
   const NARRATOR_STORAGE_KEY_PREFIX = "ccf-format-narrators-v1:";
+  const MY_CHARACTER_ORDER_STORAGE_KEY = "ccf-log-package:my-character-order:v1";
+  const MY_CHARACTER_NAMES_STORAGE_KEY = "ccf-log-package:my-character-names:v1";
+  const MY_CHARACTER_PANEL_TITLES = [
+    "\uB0B4 \uCE90\uB9AD\uD130 \uBAA9\uB85D",
+    "\uB0B4 \uCE90\uB9AD\uD130 \uB9AC\uC2A4\uD2B8",
+    "My character list",
+    "My characters",
+    "Character list"
+  ];
+  const CHARACTER_STATUS_TEXT_RE = /(?:\uD65C\uC131\uD654|\uBE44\uD65C\uC131\uD654)\s*\uC0C1\uD0DC|(?:active|inactive|enabled|disabled)\s*status/i;
   const ROLL20_STYLE_LINK_RE = /\[([^\]]*)\]\(#"\s*style="([^"]*?)"?\s*\)/gi;
   const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)\s*$/i;
   const ROLL20_DESC_RE = /^\s*\/desc\b\s*/i;
@@ -3457,7 +3467,7 @@
           updateInlineNarratorPopoverList(toolbar);
           refreshInlineNarrationButton(toolbar);
         } else if (action === "refresh") {
-          refreshInlineNarratorPopover(toolbar);
+          refreshInlineNarratorPopover(toolbar, { forcePanelScan: true });
         }
         return;
       }
@@ -4408,12 +4418,12 @@
     });
   }
 
-  async function refreshInlineNarratorPopover(toolbar) {
+  async function refreshInlineNarratorPopover(toolbar, options = {}) {
     const state = getInlineNarratorPopoverState(toolbar);
     if (!state) return;
     setInlineNarratorPopoverBusy(toolbar, true, "캐릭터 목록을 불러오는 중…");
     try {
-      const names = await scrapeCharacterNames();
+      const names = await scrapeCharacterNames(options.forcePanelScan === true);
       const currentState = getInlineNarratorPopoverState(toolbar);
       if (!currentState) return;
       currentState.characterNames = names;
@@ -7623,6 +7633,154 @@
     }
   }
 
+  function normalizeMyCharacterName(value) {
+    return String(value || "")
+      .replace(CHARACTER_STATUS_TEXT_RE, "")
+      .replace(/\bNO\s+TEXT\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function uniqueCharacterNames(names) {
+    const seen = new Set();
+    return names
+      .map(normalizeMyCharacterName)
+      .filter((name) => {
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
+  }
+
+  function readRoomCharacterNameStore(storageKey) {
+    const roomId = getCurrentRoomId();
+    if (!roomId) return [];
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      return stored && Array.isArray(stored[roomId]) ? stored[roomId] : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function readStoredMyCharacterOrderNames() {
+    return uniqueCharacterNames(readRoomCharacterNameStore(MY_CHARACTER_ORDER_STORAGE_KEY)
+      .map((key) => {
+        const value = String(key || "");
+        if (!value.startsWith("label:")) return "";
+        return value.slice("label:".length).replace(/:\d+$/, "");
+      }));
+  }
+
+  function readCachedMyCharacterNames() {
+    return uniqueCharacterNames(readRoomCharacterNameStore(MY_CHARACTER_NAMES_STORAGE_KEY));
+  }
+
+  function cacheMyCharacterNames(names) {
+    const roomId = getCurrentRoomId();
+    const normalized = uniqueCharacterNames(names);
+    if (!roomId || !normalized.length) return normalized;
+    try {
+      const stored = JSON.parse(localStorage.getItem(MY_CHARACTER_NAMES_STORAGE_KEY) || "{}");
+      const next = stored && typeof stored === "object" ? stored : {};
+      next[roomId] = normalized;
+      localStorage.setItem(MY_CHARACTER_NAMES_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.error("[ccf-format-sync] cacheMyCharacterNames failed", error);
+    }
+    return normalized;
+  }
+
+  function sortNamesByMyCharacterOrder(names) {
+    const normalized = uniqueCharacterNames(names);
+    const storedOrder = readStoredMyCharacterOrderNames();
+    if (!storedOrder.length) return normalized;
+
+    const available = new Set(normalized);
+    const ordered = storedOrder.filter((name) => available.has(name));
+    const included = new Set(ordered);
+    normalized.forEach((name) => {
+      if (!included.has(name)) ordered.push(name);
+    });
+    return ordered;
+  }
+
+  function getMyCharacterPanel() {
+    const titles = new Set(MY_CHARACTER_PANEL_TITLES.map(normalizeMyCharacterName));
+    const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6, [role=\"heading\"]");
+    for (const heading of headings) {
+      if (!(heading instanceof HTMLElement) || !titles.has(normalizeMyCharacterName(heading.textContent))) continue;
+      const panel = heading.closest(".MuiPaper-root, [role=\"dialog\"]") || heading.parentElement;
+      if (panel instanceof HTMLElement && isVisible(panel)) return panel;
+    }
+    return null;
+  }
+
+  function getMyCharacterPanelItemName(item) {
+    if (!(item instanceof HTMLElement)) return "";
+    for (const selector of [".MuiListItemText-primary", "[class*=\"MuiListItemText-primary\"]", ".MuiTypography-body1"]) {
+      const name = normalizeMyCharacterName(item.querySelector(selector)?.textContent || "");
+      if (name) return name;
+    }
+    return normalizeMyCharacterName(item.textContent || "");
+  }
+
+  function readMyCharacterPanelNames(panel = getMyCharacterPanel()) {
+    if (!(panel instanceof HTMLElement)) return [];
+    let best = [];
+    panel.querySelectorAll("ul.MuiList-root, [role=\"list\"], [role=\"listbox\"]").forEach((list) => {
+      if (!(list instanceof HTMLElement)) return;
+      const names = uniqueCharacterNames([...list.children]
+        .filter((item) => item instanceof HTMLElement && !!item.querySelector("img, .MuiAvatar-root"))
+        .map(getMyCharacterPanelItemName));
+      if (names.length > best.length) best = names;
+    });
+    return best;
+  }
+
+  function findMyCharacterPanelButton() {
+    const labels = new Set(MY_CHARACTER_PANEL_TITLES.map(normalizeMyCharacterName));
+    for (const button of document.querySelectorAll("button, [role=\"button\"]")) {
+      if (!(button instanceof HTMLElement) || !isVisible(button)) continue;
+      const label = normalizeMyCharacterName(
+        button.getAttribute("aria-label") || button.getAttribute("title") || button.textContent || ""
+      );
+      if (labels.has(label)) return button;
+    }
+    return null;
+  }
+
+  function closeMyCharacterPanel(panel) {
+    if (!(panel instanceof HTMLElement)) return;
+    const closeButton = panel.querySelector('button svg[data-testid="CloseIcon"]')?.closest("button")
+      || panel.querySelector('button[aria-label="\uB2EB\uAE30"], button[aria-label="Close"]');
+    if (closeButton instanceof HTMLElement) {
+      closeButton.click();
+      return;
+    }
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  }
+
+  async function scrapeNamesFromMyCharacterPanel() {
+    const existingPanel = getMyCharacterPanel();
+    const visibleNames = readMyCharacterPanelNames(existingPanel);
+    if (visibleNames.length) return visibleNames;
+
+    const button = findMyCharacterPanelButton();
+    if (!button) return [];
+
+    button.click();
+    const opened = await waitForCondition(() => {
+      const panel = getMyCharacterPanel();
+      const names = readMyCharacterPanelNames(panel);
+      return names.length ? { panel, names } : null;
+    }, 1000);
+    if (!opened) return [];
+
+    if (!existingPanel) closeMyCharacterPanel(opened.panel);
+    return opened.names;
+  }
+
   function findCharacterSelectButton() {
     for (const selector of CHARACTER_SELECT_BUTTON_SELECTORS) {
       const matches = document.querySelectorAll(selector);
@@ -7786,7 +7944,7 @@
     });
   }
 
-  async function scrapeCharacterNames() {
+  async function scrapeCharacterSelectionNames() {
     const btn = findCharacterSelectButton();
     if (!btn) return [];
 
@@ -7809,6 +7967,28 @@
     } finally {
       setNarratorScrapeHidden(false);
     }
+  }
+
+  async function scrapeCharacterNames(forcePanelScan = false) {
+    const visibleNames = readMyCharacterPanelNames();
+    if (visibleNames.length) {
+      return sortNamesByMyCharacterOrder(cacheMyCharacterNames(visibleNames));
+    }
+    const cachedNames = readCachedMyCharacterNames();
+    const storedOrder = readStoredMyCharacterOrderNames();
+    if (!forcePanelScan && (cachedNames.length || storedOrder.length)) {
+      return sortNamesByMyCharacterOrder([...cachedNames, ...storedOrder]);
+    }
+
+    const panelNames = await scrapeNamesFromMyCharacterPanel();
+    if (panelNames.length) {
+      return sortNamesByMyCharacterOrder(cacheMyCharacterNames(panelNames));
+    }
+    if (cachedNames.length || storedOrder.length) {
+      return sortNamesByMyCharacterOrder([...cachedNames, ...storedOrder]);
+    }
+
+    return sortNamesByMyCharacterOrder(await scrapeCharacterSelectionNames());
   }
 
   function applyInlineNarration(editor, active) {

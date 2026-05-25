@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.22
+// @version      0.0.23
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -19,6 +19,7 @@
   const EXPORT_BTN_ATTR = "data-ccf-log-package-btn";
   const EXPORT_BTN_SELECTOR = `[${EXPORT_BTN_ATTR}="1"]`;
   const CHARACTER_LIST_ORDER_STORAGE_KEY = "ccf-log-package:my-character-order:v1";
+  const CHARACTER_LIST_NAMES_STORAGE_KEY = "ccf-log-package:my-character-names:v1";
   const CHARACTER_LIST_ATTR = "data-ccf-lp-character-list";
   const CHARACTER_SELECTION_LIST_ATTR = "data-ccf-lp-character-selection-list";
   const CHARACTER_ITEM_ATTR = "data-ccf-lp-character-sortable";
@@ -26,6 +27,7 @@
   const CHARACTER_ITEM_BOUND_ATTR = "data-ccf-lp-character-dnd-bound";
   const CHARACTER_DRAGGING_ATTR = "data-ccf-lp-character-dragging";
   const CHARACTER_DROP_ATTR = "data-ccf-lp-character-drop";
+  const CHARACTER_SELECTION_STATUS_RE = /(?:\uD65C\uC131\uD654|\uBE44\uD65C\uC131\uD654)\s*\uC0C1\uD0DC|(?:active|inactive|enabled|disabled)\s*status/i;
 
   // ----------------------------------------------------
   // [수정 포인트 1] 커스텀 탭 삭제 버튼을 위한 상수 추가
@@ -1640,24 +1642,53 @@
   }
 
   function ensureCharacterListSortables() {
-  document.querySelectorAll("ul.MuiList-root, .MuiMenu-list, [role=\"listbox\"], [role=\"menu\"]").forEach((list) => {
+    document.querySelectorAll("ul.MuiList-root, .MuiMenu-list, [role=\"listbox\"], [role=\"menu\"]").forEach((list) => {
       if (!(list instanceof HTMLElement) || !isVisible(list)) return;
+
+      const selectionItems = getCharacterSelectionItems(list);
+      if (selectionItems.length && isCharacterSelectionList(list)) {
+        list.removeAttribute(CHARACTER_LIST_ATTR);
+        list.setAttribute(CHARACTER_SELECTION_LIST_ATTR, "1");
+        selectionItems.forEach(clearCharacterSortableDecoration);
+        applyStoredCharacterListOrder(list, selectionItems);
+        return;
+      }
 
       const items = getMyCharacterListItems(list);
       if (items.length) {
+        list.removeAttribute(CHARACTER_SELECTION_LIST_ATTR);
         list.setAttribute(CHARACTER_LIST_ATTR, "1");
         items.forEach((item, index) => decorateCharacterListItem(item, index));
         applyStoredCharacterListOrder(list, items);
         migrateStoredCharacterListOrderToLabels(list);
+        persistCharacterListNames(list);
         return;
       }
 
-      const selectionItems = getCharacterSelectionItems(list);
       if (!selectionItems.length) return;
 
+      list.removeAttribute(CHARACTER_LIST_ATTR);
       list.setAttribute(CHARACTER_SELECTION_LIST_ATTR, "1");
       applyStoredCharacterListOrder(list, selectionItems);
     });
+  }
+
+  function isCharacterSelectionList(list) {
+    if (!(list instanceof HTMLElement)) return false;
+    return [...list.children].some((child) => (
+      child instanceof HTMLElement
+      && CHARACTER_SELECTION_STATUS_RE.test(normalizeSpace(child.textContent || ""))
+    ));
+  }
+
+  function clearCharacterSortableDecoration(item) {
+    if (!(item instanceof HTMLElement)) return;
+    item.removeAttribute(CHARACTER_ITEM_ATTR);
+    item.removeAttribute(CHARACTER_ITEM_ID_ATTR);
+    item.removeAttribute(CHARACTER_ITEM_BOUND_ATTR);
+    item.removeAttribute(CHARACTER_DRAGGING_ATTR);
+    item.removeAttribute(CHARACTER_DROP_ATTR);
+    item.removeAttribute("draggable");
   }
 
   function getMyCharacterListItems(list) {
@@ -1691,9 +1722,36 @@
 
   function getCharacterListLabelKey(item) {
     if (!(item instanceof HTMLElement)) return "";
-    const primary = item.querySelector(".MuiListItemText-primary");
-    const name = normalizeSpace(primary?.textContent || getCharacterProfileItemName(item) || item.textContent || "");
+    const name = getCharacterListDisplayName(item);
     return name ? `label:${name}` : "";
+  }
+
+  function getCharacterListDisplayName(item) {
+    if (!(item instanceof HTMLElement)) return "";
+
+    const preferredSelectors = [
+      ".MuiListItemText-primary",
+      "[class*=\"MuiListItemText-primary\"]",
+      ".MuiTypography-body1",
+      ".MuiTypography-subtitle1",
+      "[class*=\"primary\"]"
+    ];
+    for (const selector of preferredSelectors) {
+      const name = normalizeCharacterListDisplayName(item.querySelector(selector)?.textContent || "");
+      if (name) return name;
+    }
+
+    const lines = readNodeTextWithBreaks(item)
+      .split(/\n+/)
+      .map(normalizeCharacterListDisplayName)
+      .filter(Boolean);
+    return lines[0] || normalizeCharacterListDisplayName(item.textContent || "");
+  }
+
+  function normalizeCharacterListDisplayName(value) {
+    return normalizeSpace(String(value || "")
+      .replace(CHARACTER_SELECTION_STATUS_RE, "")
+      .replace(/\bNO\s+TEXT\b/gi, ""));
   }
 
   function decorateCharacterListItem(item, index) {
@@ -1898,6 +1956,25 @@
       window.localStorage.setItem(CHARACTER_LIST_ORDER_STORAGE_KEY, JSON.stringify(next));
     } catch (error) {
       console.warn("[CCF LOG PACKAGE] failed to save my character order", error);
+    }
+  }
+
+  function persistCharacterListNames(list) {
+    const roomId = getCurrentCcfRoomId();
+    if (!roomId || !(list instanceof HTMLElement)) return;
+
+    const names = getMyCharacterListItems(list)
+      .map((item) => getCharacterListDisplayName(item))
+      .filter(Boolean);
+    if (!names.length) return;
+
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(CHARACTER_LIST_NAMES_STORAGE_KEY) || "{}");
+      const next = stored && typeof stored === "object" ? stored : {};
+      next[roomId] = [...new Set(names)];
+      window.localStorage.setItem(CHARACTER_LIST_NAMES_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      console.warn("[CCF LOG PACKAGE] failed to save my character names", error);
     }
   }
 
