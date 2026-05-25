@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.15
+// @version      0.0.17
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.15"),
+    version: getUserscriptVersion("0.0.17"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2773,13 +2773,13 @@
       }
 
       .ccf-inline-size-input {
-        width: 58px;
+        width: 44px;
         height: 30px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 6px;
         background: #282828;
         color: #fff;
-        padding: 0 6px;
+        padding: 0 4px;
         box-sizing: border-box;
         outline: none;
         font: inherit;
@@ -3211,8 +3211,6 @@
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
-      <span class="ccf-inline-divider" aria-hidden="true"></span>
-      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration">Nar</button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -3231,9 +3229,9 @@
         <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
-      <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
       <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
+      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false">Nar</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
@@ -3454,6 +3452,19 @@
 
     if (command === "style-clipboard") {
       openInlineStyleClipboardPopover(toolbar);
+      return;
+    }
+
+    if (command === "paren-gray") {
+      applyParentheticalGrayToEditor(editor);
+      return;
+    }
+
+    if (command === "narration") {
+      const nextActive = !commandButton.classList.contains("active");
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      applyInlineNarration(editor, nextActive);
       return;
     }
   }
@@ -3720,11 +3731,14 @@
     }
 
     const editor = normalizeEditorCandidate(target);
-    if (editor) return;
+    const editorToolbar = editor ? getInlineToolbarForEditor(editor) : null;
 
-    clearInlineToolbarSelection();
-    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => {
-      hideInlineToolbarSelectionHighlight(toolbar);
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((item) => {
+      if (item === editorToolbar) return;
+      if (inlinePopoverState?.toolbar === item) {
+        closeInlinePopover(item, { restoreFocus: false });
+      }
+      clearInlineToolbarSelection(item);
     });
   }
 
@@ -3739,19 +3753,6 @@
     if (selection && selection.start !== selection.end) {
       toolbar.__ccfSelection = selection;
       updateInlineToolbarVisuals(toolbar);
-      return;
-    }
-
-    if (command === "paren-gray") {
-      applyParentheticalGrayToEditor(editor);
-      return;
-    }
-
-    if (command === "narration") {
-      const nextActive = !commandButton.classList.contains("active");
-      commandButton.classList.toggle("active", nextActive);
-      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
-      applyInlineNarration(editor, nextActive);
       return;
     }
 
@@ -4231,6 +4232,9 @@
       if (options.restoreFocus !== false) {
         restoreRoomSelectionSoon(state.editor || state.context?.editor, state.selection || state.context?.selection);
       }
+    }
+    if (toolbar && options.keepHighlight !== true) {
+      hideInlineToolbarSelectionHighlight(toolbar);
     }
   }
 
@@ -7632,6 +7636,7 @@
       localStorage.setItem(STYLE_CLIPBOARD_STORAGE_KEY, JSON.stringify(value));
       return true;
     } catch (error) {
+      console.error("[ccf-format-sync] writeStyleClipboard failed", { error, value });
       alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
       return false;
     }
@@ -7667,10 +7672,17 @@
       restoreModalSelectionSoon();
       return false;
     }
-    const saved = {
-      style: getStyleClipboardTextStyle(context),
-      align: getStyleClipboardAlign(context)
-    };
+    let saved;
+    try {
+      saved = {
+        style: getStyleClipboardTextStyle(context),
+        align: getStyleClipboardAlign(context)
+      };
+    } catch (error) {
+      console.error("[ccf-format-sync] saveStyleClipboardFromContext build failed", { error, context });
+      alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+      return false;
+    }
     return writeStyleClipboard(saved);
   }
 
