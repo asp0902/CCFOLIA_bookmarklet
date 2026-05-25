@@ -1365,14 +1365,21 @@
 
   function buildDicebotStyleSheet() {
     // Roll20 "언성 듀엣" 커스텀시트 팔레트
-    // bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff
+    // (Roll20 원본: bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff)
     const UD = {
       // 반투명: CCFOLIA 네이티브 다크 배경이 비쳐 보이도록 알파 낮춤
       bgGlass: "rgba(28, 50, 69, 0.55)",
       bgGlassInner: "rgba(28, 50, 69, 0.32)",
+      bgSolid: "#1c3245",
+      // 텍스트 입력칸은 청록 톤 유지
       bgChip: "rgba(0, 77, 103, 0.28)",
-      border: "#004d67",
-      borderSoft: "rgba(0, 77, 103, 0.55)",
+      inputBorder: "#004d67",
+      inputBorderSoft: "rgba(0, 77, 103, 0.55)",
+      // 텍스트 입력칸을 제외한 나머지 영역(헤더/보더/셀렉트/스크롤바 등)은
+      // 언성 듀엣 배경과 동일한 블랙 톤으로 통일
+      accent: "#000000",
+      accentSoft: "rgba(0, 0, 0, 0.55)",
+      accentHover: "rgba(0, 0, 0, 0.45)",
       muted: "#8895A1",
       text: "#ffffff",
       shadow: "rgba(0, 0, 0, 0.45)",
@@ -1382,18 +1389,47 @@
 
     return `
       /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
-      /* Dialog paper 자체: CCFOLIA 네이티브 톤 + 청록 보더, 반투명 유리 효과 */
+      /* Dialog paper 자체: 반투명 유리 + 블랙 보더.
+         ⚠️ border 대신 outline+inset shadow 사용 — border는 content-box에서 2px
+            가용 너비를 깎아 DialogActions("맵에서 집어넣기")가 줄바꿈됨.
+            outline은 레이아웃에 영향이 없어 CCFOLIA 네이티브 너비를 그대로 유지. */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
         background-color: ${UD.bgGlass} !important;
         background-image: none !important;
         color: ${UD.text} !important;
-        border: 1px solid ${UD.border} !important;
+        border: 0 !important;
         border-radius: 10px !important;
-        box-shadow: 0 18px 40px ${UD.shadow} !important;
+        outline: 1px solid ${UD.accent};
+        outline-offset: -1px;
+        box-shadow:
+          inset 0 0 0 1px ${UD.accent},
+          0 18px 40px ${UD.shadow} !important;
         backdrop-filter: blur(14px) saturate(120%);
         -webkit-backdrop-filter: blur(14px) saturate(120%);
+      }
+
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 톤.
+         border-bottom 대신 inset box-shadow로 가짜 보더 — 레이아웃 영향 없음 */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] .MuiAppBar-root {
+        background: ${UD.accentSoft} !important;
+        background-image: none !important;
+        color: ${UD.text} !important;
+        border-bottom: 0 !important;
+        box-shadow:
+          inset 0 -1px 0 0 ${UD.accent},
+          0 4px 14px ${UD.shadow} !important;
+      }
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiTypography-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiSvgIcon-root {
+        color: ${UD.text} !important;
+      }
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root:hover {
+        background: ${UD.accentHover} !important;
       }
 
       /* DialogContent: Roll20 시트의 헤더 일러스트를 깔아 룰 타이틀이 보이게 함.
@@ -1408,17 +1444,17 @@
         background-color: transparent !important;
       }
 
-      /* 내부 Paper/카드/아코디언은 한층 더 투명 — 시트 배경이 살짝 비치게 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root,
+      /* 내부 Paper/카드/아코디언 — MuiAppBar는 위 헤더 규칙이 처리하므로 제외 */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root:not(.MuiAppBar-root),
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiCard-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAccordion-root {
         background: ${UD.bgGlassInner} !important;
         color: ${UD.text} !important;
-        border-color: ${UD.borderSoft} !important;
+        border-color: ${UD.accentSoft} !important;
       }
 
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDivider-root {
-        border-color: ${UD.borderSoft} !important;
+        border-color: ${UD.accentSoft} !important;
       }
 
       /* 텍스트 톤 — DialogActions(삭제/복제 등 액션 버튼)는 CCFOLIA 네이티브
@@ -1454,9 +1490,10 @@
         border-radius: 0 !important;
       }
 
+      /* 입력칸 보더는 청록 유지 (Roll20 시트 톤) */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root fieldset {
-        border-color: ${UD.border} !important;
+        border-color: ${UD.inputBorder} !important;
       }
 
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-focused .MuiOutlinedInput-notchedOutline,
@@ -1465,10 +1502,11 @@
         box-shadow: 0 0 0 2px rgba(136, 149, 161, 0.25) !important;
       }
 
+      /* 탭/리스트 선택 — 블랙 액센트 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root.Mui-selected,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root.Mui-selected,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-selected > .MuiListItemButton-root {
-        background: ${UD.border} !important;
+        background: ${UD.accent} !important;
         color: ${UD.text} !important;
       }
 
@@ -1476,20 +1514,21 @@
         background: ${UD.text} !important;
       }
 
+      /* 호버 — 블랙 톤 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root:hover,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root:hover,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemButton-root:hover,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiMenuItem-root:hover {
-        background: rgba(0, 77, 103, 0.45) !important;
+        background: ${UD.accentHover} !important;
       }
 
-      /* 캐릭터 시트 팝업 스크롤바 (Roll20 시트 톤) */
+      /* 캐릭터 시트 팝업 스크롤바 — 블랙 액센트 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-track {
-        background: ${UD.bg};
+        background: ${UD.bgSolid};
       }
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-thumb {
-        background: ${UD.border};
-        border: 2px solid ${UD.bg};
+        background: ${UD.accent};
+        border: 2px solid ${UD.bgSolid};
         border-radius: 999px;
       }
 
@@ -1498,8 +1537,8 @@
       html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li {
-        background: ${UD.bgSoft} !important;
-        border: 1px solid ${UD.border} !important;
+        background: ${UD.bgGlass} !important;
+        border: 1px solid ${UD.inputBorder} !important;
         border-radius: 10px !important;
         margin: 6px 8px !important;
         padding: 8px 12px !important;
