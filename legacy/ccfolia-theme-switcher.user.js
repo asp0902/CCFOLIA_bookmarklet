@@ -1659,6 +1659,8 @@
     bindUnsungDuetTriggerFields();
     injectUnsungDuetMessageImages();
     installYouTubePauseInterceptor();
+    ensureToolkitToggleWatcher();
+    mountUnsungDuetToolkitToggle();
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -3825,10 +3827,109 @@
 
   function syncUnsungDuetToggle() {
     const button = document.getElementById(UNSUNG_DUET_TOGGLE_ID);
-    if (!(button instanceof HTMLButtonElement)) return;
+    if (button instanceof HTMLButtonElement) {
+      const enabled = settings.unsungDuetEnabled !== false;
+      button.textContent = enabled ? "언성 듀엣 테마: ON" : "언성 듀엣 테마: OFF";
+      button.setAttribute("aria-pressed", enabled ? "true" : "false");
+    }
+    syncUnsungDuetToolkitToggle();
+  }
+
+  // === 카피바라 툴킷 패널의 "테마 커스텀" 카드 안에 토글 인젝트 =============
+  function findToolkitThemeCard() {
+    const toolkitRoot = document.getElementById("capybara-toolkit-root");
+    const shadow = toolkitRoot?.shadowRoot;
+    if (!shadow) return null;
+    return shadow.querySelector('article.feature[data-feature="ccf-theme-switcher"]');
+  }
+
+  function mountUnsungDuetToolkitToggle() {
+    const card = findToolkitThemeCard();
+    if (!card) return;
+
+    let row = card.querySelector("[data-ccf-unsung-duet-row]");
+    if (!row) {
+      row = document.createElement("div");
+      row.setAttribute("data-ccf-unsung-duet-row", "1");
+      // 툴킷은 shadow DOM 이라 외부 CSS 가 안 먹음 → 인라인 스타일로 처리
+      row.style.cssText =
+        "display:flex;align-items:center;justify-content:space-between;gap:8px;" +
+        "padding:8px 0 0 0;margin-top:8px;" +
+        "border-top:1px solid rgba(255,255,255,0.08);";
+
+      const label = document.createElement("div");
+      label.style.cssText = "min-width:0;flex:1 1 auto;";
+      label.innerHTML =
+        '<div style="font-size:13px;line-height:1.3;">언성 듀엣 테마</div>' +
+        '<div style="font-size:11px;opacity:0.7;line-height:1.4;margin-top:2px;">' +
+        '다이스봇이 "언성 듀엣"일 때만 적용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 ON/OFF</div>';
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn toggle"; // 툴킷 기존 버튼 스타일 차용
+      btn.setAttribute("data-ccf-unsung-duet-btn", "1");
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const next = !(settings.unsungDuetEnabled !== false);
+        settings = { ...settings, unsungDuetEnabled: next };
+        persistSettings();
+        applyDicebotAttribute();
+        if (!next) revertUnsungDuetDomState();
+        syncUnsungDuetToggle();
+        setStatus(
+          next ? "언성 듀엣 테마를 활성화했습니다." : "언성 듀엣 테마를 비활성화했습니다.",
+          "success"
+        );
+      });
+
+      row.appendChild(label);
+      row.appendChild(btn);
+      card.appendChild(row);
+    }
+
+    syncUnsungDuetToolkitToggle();
+  }
+
+  function syncUnsungDuetToolkitToggle() {
+    const card = findToolkitThemeCard();
+    if (!card) return;
+    const btn = card.querySelector('[data-ccf-unsung-duet-btn="1"]');
+    if (!(btn instanceof HTMLButtonElement)) return;
     const enabled = settings.unsungDuetEnabled !== false;
-    button.textContent = enabled ? "언성 듀엣 테마: ON" : "언성 듀엣 테마: OFF";
-    button.setAttribute("aria-pressed", enabled ? "true" : "false");
+    btn.textContent = enabled ? "ON" : "OFF";
+    btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+    btn.setAttribute("data-on", enabled ? "1" : "0");
+  }
+
+  function ensureToolkitToggleWatcher() {
+    const toolkitRoot = document.getElementById("capybara-toolkit-root");
+    const shadow = toolkitRoot?.shadowRoot;
+    if (!shadow) return;
+    const body = shadow.querySelector(".body");
+    if (!(body instanceof HTMLElement)) return;
+
+    // 기존 옵저버가 같은 body 를 보고 있으면 그대로 둠
+    if (toolkitToggleObserver && toolkitToggleObserverHost === body) return;
+    if (toolkitToggleObserver) {
+      try { toolkitToggleObserver.disconnect(); } catch (error) { /* ignore */ }
+    }
+
+    toolkitToggleObserver = new MutationObserver(() => {
+      if (!ccfThemeActive) return;
+      mountUnsungDuetToolkitToggle();
+    });
+    toolkitToggleObserver.observe(body, { childList: true, subtree: false });
+    toolkitToggleObserverHost = body;
+
+    ccfThemeRegisterTeardown(() => {
+      try { toolkitToggleObserver?.disconnect(); } catch (error) { /* ignore */ }
+      toolkitToggleObserver = null;
+      toolkitToggleObserverHost = null;
+    });
+
+    // 옵저버 설정 직후, 이미 렌더된 카드에 한 번 인젝트
+    mountUnsungDuetToolkitToggle();
   }
 
   // 토글 OFF 시 — 이미 채팅에 인젝트된 <img>와 마킹된 li 속성을 청소해
