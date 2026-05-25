@@ -1055,6 +1055,7 @@
         <div class="room-meta">${meta.join(" · ")}</div>
         <div class="room-actions">
           <button class="btn danger" id="btn-delete-room">이 룸 데이터 삭제</button>
+          <button class="btn" id="btn-export-html">HTML 내보내기</button>
           ${tistoryActionHtml}
         </div>
       </section>
@@ -1073,6 +1074,18 @@
         revokeObjectUrls();
         await refreshRoomList();
         showEmpty();
+      });
+    }
+
+    const exportHtmlBtn = document.getElementById("btn-export-html");
+    if (exportHtmlBtn) {
+      exportHtmlBtn.addEventListener("click", () => {
+        try {
+          exportEditorHtml(room);
+          showToast("HTML 파일을 내보냈습니다.");
+        } catch (error) {
+          showToast("HTML 내보내기 실패: " + (error?.message || error));
+        }
       });
     }
 
@@ -1726,6 +1739,96 @@
   <h2 class="ccf-tistory-title">${escapeHtml(roomTitle)}</h2>
   ${htmlEntries}
 </div>`;
+  }
+
+  function exportEditorHtml(room) {
+    const html = buildEditorStandaloneHtml(room);
+    const fileName = buildEditorHtmlFileName(room);
+    const blob = new Blob(["\uFEFF", html], { type: "text/html;charset=utf-8" });
+    downloadEditorBlob(fileName, blob);
+  }
+
+  function buildEditorStandaloneHtml(room) {
+    const payload = room?.payload || {};
+    const roomTitle = room?.roomTitle || payload.roomTitle || "(제목 없음)";
+    const entries = getSelectedTabEntries(room);
+    const selectedCount = state.mergeSameSpeaker
+      ? mergeConsecutiveSpeakerEntries(entries, state.systemSpeaker).length
+      : entries.length;
+    const exportedAt = new Date();
+    const contentHtml = buildEditorTistoryHtml(room);
+
+    return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(roomTitle)} - 카피바라 로그</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  body {
+    padding: 32px 20px 48px;
+  }
+  .ccf-export-meta {
+    max-width: 760px;
+    margin: 0 auto 18px;
+    color: #777;
+    font: 12px/1.5 "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    text-align: right;
+  }
+  @media (max-width: 560px) {
+    body { padding: 18px 12px 32px; }
+  }
+</style>
+</head>
+<body>
+  <p class="ccf-export-meta">메시지 ${selectedCount}개 · ${escapeHtml(formatExportedAt(exportedAt))}</p>
+  ${contentHtml}
+</body>
+</html>`;
+  }
+
+  function buildEditorHtmlFileName(room) {
+    const roomTitle = room?.roomTitle || room?.payload?.roomTitle || "capybara-log";
+    const safeTitle = String(roomTitle)
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "capybara-log";
+    const date = new Date();
+    const stamp = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0")
+    ].join("");
+    return `${safeTitle}_${stamp}.html`;
+  }
+
+  function formatExportedAt(date) {
+    return new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  function downloadEditorBlob(fileName, blob) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function openTistoryPreview(html) {
