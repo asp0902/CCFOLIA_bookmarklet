@@ -34,6 +34,15 @@
     "【이계화】": "https://i.imgur.com/cfVWYGn.png"
   });
   const UNSUNG_DUET_FIELD_BOUND_ATTR = "data-ccf-unsung-duet-bound";
+  const UNSUNG_DUET_MSG_INJECTED_ATTR = "data-ccf-unsung-duet-msg-injected";
+  const UNSUNG_DUET_IMG_CLASS = "ccf-unsung-duet-msg-img";
+  // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
+  const UNSUNG_DUET_URL_TO_ALT = Object.freeze({
+    "https://i.imgur.com/FFUXgYg.png": "시프터 판정",
+    "https://i.imgur.com/Jt8hw3i.png": "바인더 판정",
+    "https://i.imgur.com/dcMRZ62.png": "프래그먼트 효과",
+    "https://i.imgur.com/cfVWYGn.png": "이계화"
+  });
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
   const PANEL_POSITION_KEY = "ccf-theme-switcher-panel-position-v1";
@@ -189,7 +198,9 @@
         `[${CHARACTER_COLOR_MODE_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_PROXY_BOUND_ATTR}]`,
         `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`,
-        `[${UNSUNG_DUET_FIELD_BOUND_ATTR}]`
+        `[${UNSUNG_DUET_FIELD_BOUND_ATTR}]`,
+        `[${UNSUNG_DUET_MSG_INJECTED_ATTR}]`,
+        `.${UNSUNG_DUET_IMG_CLASS}`
       ].join(", ")).forEach((el) => {
         if (el instanceof HTMLElement) {
           el.style.removeProperty("--ccf-theme-anchor-height");
@@ -203,6 +214,7 @@
         el.removeAttribute(CHARACTER_COLOR_PROXY_BOUND_ATTR);
         el.removeAttribute(CHARACTER_COLOR_NATIVE_INPUT_ATTR);
         el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
+        el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -1402,10 +1414,9 @@
 
     return `
       /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
-      /* Dialog paper 자체: 반투명 유리 + 블랙 보더.
-         ⚠️ border 대신 outline+inset shadow 사용 — border는 content-box에서 2px
-            가용 너비를 깎아 DialogActions("맵에서 집어넣기")가 줄바꿈됨.
-            outline은 레이아웃에 영향이 없어 CCFOLIA 네이티브 너비를 그대로 유지. */
+      /* Dialog paper 자체: 반투명 + 블랙 보더(=inset shadow).
+         ⚠️ border / backdrop-filter는 모두 일부 브라우저에서 다이얼로그 너비를
+            건드릴 수 있어 제거. 블랙 외곽선은 inset box-shadow만으로 표현. */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
@@ -1413,14 +1424,16 @@
         background-image: none !important;
         color: ${UD.text} !important;
         border: 0 !important;
-        border-radius: 10px !important;
-        outline: 1px solid ${UD.accent};
-        outline-offset: -1px;
         box-shadow:
           inset 0 0 0 1px ${UD.accent},
           0 18px 40px ${UD.shadow} !important;
-        backdrop-filter: blur(14px) saturate(120%);
-        -webkit-backdrop-filter: blur(14px) saturate(120%);
+      }
+
+      /* DialogActions(삭제/복제/맵에서 집어넣기) 버튼은 어떤 경우에도 한 줄 유지 */
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
+      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
+        white-space: nowrap !important;
+        min-width: 0 !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 톤.
@@ -1581,6 +1594,16 @@
         color: ${UD.text} !important;
         font-weight: bold;
       }
+
+      /* 트리거 텍스트가 치환된 imgur URL → DOM 인젝트된 <img> */
+      .${UNSUNG_DUET_IMG_CLASS} {
+        display: inline-block;
+        max-width: 100%;
+        height: auto;
+        vertical-align: middle;
+        margin: 2px 4px;
+        border-radius: 4px;
+      }
     `;
   }
 
@@ -1621,6 +1644,7 @@
     mountToggle();
     applyDicebotAttribute();
     bindUnsungDuetTriggerFields();
+    injectUnsungDuetMessageImages();
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -3740,6 +3764,10 @@
           if (form && typeof form.requestSubmit === "function") {
             try { form.requestSubmit(); } catch (error) { /* requestSubmit 실패 무시 */ }
           }
+
+          // 본인이 발송한 트리거 메시지 → 곧 컷인이 재생됨.
+          // YouTube가 정지되지 않도록 다중 시점에 자동 재개 시도.
+          scheduleYouTubeResume();
         } finally {
           window.setTimeout(() => { unsungDuetEnterReentry = false; }, 120);
         }
@@ -3759,6 +3787,154 @@
     document.querySelectorAll(selector).forEach((field) => {
       if (field instanceof HTMLElement) bindUnsungDuetField(field);
     });
+  }
+
+  // 채팅 로그 메시지에서 알려진 imgur URL을 <img>로 인라인 치환.
+  // CCFOLIA가 메시지 텍스트 내 URL을 자동 임베드하지 않기 때문에 클라이언트
+  // 쪽에서 DOM에 직접 이미지 요소를 끼워 넣어 시각적으로 보이게 한다.
+  function injectUnsungDuetMessageImages() {
+    if (getCurrentDicebotId() !== "unsung-duet") return;
+
+    const messageSelector = [
+      '[role="log"] li',
+      '[aria-live="polite"] li',
+      '[aria-live="assertive"] li'
+    ].join(", ");
+
+    let anyInjected = false;
+    document.querySelectorAll(messageSelector).forEach((message) => {
+      if (!(message instanceof HTMLElement)) return;
+      if (message.getAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR) === "1") return;
+
+      const replaced = replaceImgurUrlsWithImages(message);
+      if (replaced) {
+        message.setAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR, "1");
+        anyInjected = true;
+      }
+    });
+
+    // 트리거 메시지가 새로 등장 = 사용자가 설정한 컷인이 곧/방금 재생됨.
+    // 컷인 사운드가 YouTube 배경 음원을 정지시키는 케이스 대비, 여러 시점에
+    // YouTube 재생을 재개시켜 사용자가 의도한 BGM이 끊기지 않도록 한다.
+    if (anyInjected) scheduleYouTubeResume();
+  }
+
+  // === YouTube 자동 재개 (컷인 사운드와의 충돌 회피) =====================
+  function findYouTubeIframes() {
+    return document.querySelectorAll([
+      'iframe[src*="youtube.com/embed"]',
+      'iframe[src*="youtube-nocookie.com/embed"]',
+      'iframe[src*="youtube.com/watch"]'
+    ].join(", "));
+  }
+
+  function tryResumeYouTubePlayback() {
+    // YouTube IFrame Player API: enablejsapi=1 이 있는 iframe만 명령을 수락.
+    // CCFOLIA가 enablejsapi를 켜둔 경우엔 postMessage("playVideo") 로 재개됨.
+    const payload = JSON.stringify({ event: "command", func: "playVideo", args: "" });
+    findYouTubeIframes().forEach((iframe) => {
+      if (!(iframe instanceof HTMLIFrameElement)) return;
+      if (!iframe.contentWindow) return;
+      try { iframe.contentWindow.postMessage(payload, "*"); }
+      catch (error) { /* postMessage 실패 무시 */ }
+    });
+  }
+
+  function scheduleYouTubeResume() {
+    // 컷인 사운드가 시작 직후/중간/끝 시점 모두에서 paused면 즉시 resume.
+    // 컷인 길이를 모르므로 200ms, 1200ms, 2500ms, 4500ms 의 다중 시점에 호출.
+    [200, 1200, 2500, 4500].forEach((delay) => {
+      window.setTimeout(() => {
+        if (!ccfThemeActive) return;
+        if (getCurrentDicebotId() !== "unsung-duet") return;
+        tryResumeYouTubePlayback();
+      }, delay);
+    });
+  }
+
+  function replaceImgurUrlsWithImages(root) {
+    if (!(root instanceof HTMLElement)) return false;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.textContent) return NodeFilter.FILTER_REJECT;
+        // 이미 img 안에 있거나 script/style 내부면 제외
+        const parent = node.parentNode;
+        if (parent instanceof HTMLElement) {
+          const tag = parent.tagName;
+          if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG") {
+            return NodeFilter.FILTER_REJECT;
+          }
+        }
+        // 알려진 URL 중 하나라도 텍스트에 있는지 확인
+        for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
+          if (node.textContent.indexOf(url) >= 0) return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    const targets = [];
+    let current;
+    while ((current = walker.nextNode())) {
+      targets.push(current);
+    }
+
+    if (targets.length === 0) return false;
+
+    let modified = false;
+    for (const textNode of targets) {
+      const text = textNode.textContent || "";
+      // 텍스트를 URL/non-URL 토큰으로 분리
+      const tokens = [];
+      let cursor = 0;
+      while (cursor < text.length) {
+        let nextHit = -1;
+        let nextUrl = "";
+        for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
+          const idx = text.indexOf(url, cursor);
+          if (idx >= 0 && (nextHit === -1 || idx < nextHit)) {
+            nextHit = idx;
+            nextUrl = url;
+          }
+        }
+        if (nextHit === -1) {
+          tokens.push({ type: "text", value: text.slice(cursor) });
+          break;
+        }
+        if (nextHit > cursor) {
+          tokens.push({ type: "text", value: text.slice(cursor, nextHit) });
+        }
+        tokens.push({ type: "img", value: nextUrl });
+        cursor = nextHit + nextUrl.length;
+      }
+
+      // URL 토큰이 없으면 건너뜀
+      if (!tokens.some((t) => t.type === "img")) continue;
+
+      const fragment = document.createDocumentFragment();
+      for (const token of tokens) {
+        if (token.type === "text") {
+          if (token.value) fragment.appendChild(document.createTextNode(token.value));
+        } else {
+          const img = document.createElement("img");
+          img.src = token.value;
+          img.alt = UNSUNG_DUET_URL_TO_ALT[token.value] || "";
+          img.className = UNSUNG_DUET_IMG_CLASS;
+          img.loading = "lazy";
+          img.referrerPolicy = "no-referrer";
+          fragment.appendChild(img);
+        }
+      }
+
+      const parent = textNode.parentNode;
+      if (parent) {
+        parent.replaceChild(fragment, textNode);
+        modified = true;
+      }
+    }
+
+    return modified;
   }
 
   function findDicebotAnchor() {
