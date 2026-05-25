@@ -666,10 +666,11 @@ function findCharacterSelectButton() {
   return null;
 }
 
-function isBackquoteShortcut(event) {
-  return event.code === 'Backquote' ||
-    event.key === '`' ||
-    event.key === '\u20A9' ||
+  function isBackquoteShortcut(event) {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+    return event.code === 'Backquote' ||
+      event.key === '`' ||
+      event.key === '\u20A9' ||
     event.key === '\uFF40' ||
     event.keyCode === 192 ||
     event.which === 192;

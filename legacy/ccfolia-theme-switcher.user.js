@@ -261,6 +261,8 @@
   let panelDragState = null;
   let lastDicebotAnchor = null;
   let unsungDuetEnterReentry = false;
+  let toolkitToggleObserver = null;
+  let toolkitToggleObserverHost = null;
   let lastThemePreview = normalizeOptionalTheme(settings.defaultTheme) || null;
   const pendingCharacterColorSelections = new WeakMap();
   const pendingCharacterColorAddSelections = new WeakSet();

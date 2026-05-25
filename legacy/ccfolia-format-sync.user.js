@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.12
+// @version      0.0.13
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -48,7 +48,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.12"),
+    version: getUserscriptVersion("0.0.13"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2905,7 +2905,7 @@
 
   function bindGlobalEvents() {
     document.addEventListener("keydown", (event) => {
-      if (handleInlineBoldShortcut(event)) {
+      if (handleFormatShortcut(event)) {
         return;
       }
 
@@ -3608,28 +3608,70 @@
     updateInlineToolbarVisuals(toolbar);
   }
 
-  function handleInlineBoldShortcut(event) {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey) return false;
-    if (String(event.key || "").toLowerCase() !== "b") return false;
+  function getFormatShortcutCommand(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return "";
+
+    const key = String(event.key || "").toLowerCase();
+    if (key === "b") return "bold";
+    if (key === "i") return "italic";
+    if (key === "u") return "underline";
+    if (
+      event.code === "Backquote" ||
+      event.key === "`" ||
+      event.key === "\u20A9" ||
+      event.key === "\uFF40" ||
+      event.keyCode === 192 ||
+      event.which === 192
+    ) {
+      return "strike";
+    }
+    return "";
+  }
+
+  function handleFormatShortcut(event) {
+    const command = getFormatShortcutCommand(event);
+    if (!command) return false;
 
     const target = event.target instanceof Element ? event.target : null;
+    const modalEditor = getModalEditor();
+    const isModalEditorTarget =
+      !!modalEditor &&
+      (document.activeElement === modalEditor || !!(target && modalEditor.contains(target)));
+
+    if (isModalEditorTarget) {
+      const modal = document.getElementById(MODAL_ID);
+      const commandButton = modal?.querySelector?.(`.ccf-toggle[data-toggle="${command}"]`);
+      if (!commandButton) return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+
+      const nextActive = !commandButton.classList.contains("active");
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      applyCurrentModalStyle({ silent: true, previewOnly: true });
+      restoreModalSelectionSoon();
+      return true;
+    }
+
     if (target?.closest?.(`[${SAFE_UI_ATTR}="1"]`)) return false;
 
     const editor = normalizeEditorCandidate(document.activeElement) || normalizeEditorCandidate(target);
     if (!editor) return false;
 
     const toolbar = getInlineToolbarForEditor(editor);
-    const boldButton = toolbar?.querySelector?.('[data-inline-command="bold"]');
-    if (!toolbar || !boldButton) return false;
+    const commandButton = toolbar?.querySelector?.(`[data-inline-command="${command}"]`);
+    if (!toolbar || !commandButton) return false;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
 
     rememberInlineToolbarSelection(editor);
-    const nextActive = !boldButton.classList.contains("active");
-    boldButton.classList.toggle("active", nextActive);
-    boldButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+    const nextActive = !commandButton.classList.contains("active");
+    commandButton.classList.toggle("active", nextActive);
+    commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
     applyInlineToolbarStyle(toolbar, {
       selectionOverride: getInlineToolbarSelection(toolbar)
     });
