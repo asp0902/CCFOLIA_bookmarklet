@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.21
+// @version      0.0.22
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.21"),
+    version: getUserscriptVersion("0.0.22"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -833,6 +833,7 @@
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
+    const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
 
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
       el.setAttribute(CCF_RAW_ATTR, text);
@@ -849,8 +850,46 @@
     }
 
     renderStyledText(el, renderText, runs, alignRuns);
+    preserveBottomScrollForRenderedImages(el, bottomScrollTarget);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
+  }
+
+  function captureBottomAnchoredMessageScroller(el) {
+    let current = el?.parentElement || null;
+    while (current && current !== document.documentElement) {
+      const overflowY = getComputedStyle(current).overflowY || "";
+      if (/(?:auto|scroll|overlay)/i.test(overflowY)) {
+        const distanceFromBottom = current.scrollHeight - current.scrollTop - current.clientHeight;
+        return distanceFromBottom <= 72 ? current : null;
+      }
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function preserveBottomScrollForRenderedImages(el, scrollTarget) {
+    if (!(scrollTarget instanceof HTMLElement)) return;
+    const images = [...el.querySelectorAll("img.ccf-image")];
+    if (!images.length) return;
+
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        if (scrollTarget.isConnected) {
+          scrollTarget.scrollTop = scrollTarget.scrollHeight;
+        }
+      });
+    };
+
+    scrollToBottom();
+    images.forEach((image) => {
+      if (image.complete) {
+        scrollToBottom();
+        return;
+      }
+      image.addEventListener("load", scrollToBottom, { once: true });
+      image.addEventListener("error", scrollToBottom, { once: true });
+    });
   }
 
   function applyNarrationMessageLayout(el, narration) {
@@ -1612,6 +1651,8 @@
   const IMAGE_POPOVER_GAP = 8;
   const IMAGE_POPOVER_VIEWPORT_MARGIN = 12;
   const IMAGE_POPOVER_DEFAULT_WIDTH = 320;
+  const INLINE_NARRATOR_POPOVER_GAP = 6;
+  const INLINE_NARRATOR_POPOVER_MARGIN = 12;
 
   const EDITOR_STATE = new WeakMap();
   const PENDING_SEND_RESTORE = new WeakMap();
@@ -2836,6 +2877,19 @@
         display: flex;
       }
 
+      .ccf-inline-popover.ccf-inline-narrator-popover {
+        position: fixed;
+        inset: auto;
+        width: min(320px, calc(100vw - 24px));
+        max-height: calc(100vh - 24px);
+        overflow: hidden;
+        z-index: 2147483002;
+      }
+
+      .ccf-inline-popover.ccf-inline-narrator-popover .ccf-narrator-list {
+        max-height: min(220px, calc(100vh - 166px));
+      }
+
       .ccf-inline-popover-title {
         font-size: 12px;
         font-weight: 700;
@@ -3199,8 +3253,17 @@
         persistModalGeometry();
         scheduleImagePopoverPosition();
       }
+      if (inlinePopoverState?.kind === "narrator") {
+        positionInlineNarratorPopover(inlinePopoverState.toolbar);
+      }
       syncAllEditorVisualPreviews();
     }, ccfFsWithSignal());
+
+    document.addEventListener("scroll", () => {
+      if (inlinePopoverState?.kind === "narrator") {
+        positionInlineNarratorPopover(inlinePopoverState.toolbar);
+      }
+    }, ccfFsWithSignal(true));
   }
 
   function ensureUi() {
@@ -4363,6 +4426,34 @@
     }
   }
 
+  function positionInlineNarratorPopover(toolbar) {
+    const state = getInlineNarratorPopoverState(toolbar);
+    const popover = state?.popover;
+    const anchor = toolbar?.querySelector?.('[data-inline-command="narration"]');
+    if (!(popover instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !popover.classList.contains("open")) {
+      return;
+    }
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const width = popoverRect.width || Math.min(320, window.innerWidth - (INLINE_NARRATOR_POPOVER_MARGIN * 2));
+    const height = popoverRect.height || 240;
+    const maxLeft = Math.max(INLINE_NARRATOR_POPOVER_MARGIN, window.innerWidth - width - INLINE_NARRATOR_POPOVER_MARGIN);
+    const left = Math.min(
+      maxLeft,
+      Math.max(INLINE_NARRATOR_POPOVER_MARGIN, anchorRect.right - width)
+    );
+    const belowTop = anchorRect.bottom + INLINE_NARRATOR_POPOVER_GAP;
+    const aboveTop = anchorRect.top - INLINE_NARRATOR_POPOVER_GAP - height;
+    const fitsBelow = belowTop + height <= window.innerHeight - INLINE_NARRATOR_POPOVER_MARGIN;
+    const top = fitsBelow
+      ? belowTop
+      : Math.max(INLINE_NARRATOR_POPOVER_MARGIN, aboveTop);
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  }
+
   function openInlineNarratorPopover(toolbar) {
     if (!getCurrentRoomId()) {
       alert("나레이션 캐릭터 설정은 룸 안에서만 사용할 수 있어요.");
@@ -4393,7 +4484,7 @@
         <button type="button" class="ccf-btn primary" data-inline-narrator-action="refresh">새로고침</button>
       </div>
     `;
-    popover.classList.add("open");
+    popover.classList.add("ccf-inline-narrator-popover", "open");
     popover.setAttribute("aria-hidden", "false");
 
     inlinePopoverState = {
@@ -4403,6 +4494,8 @@
       characterNames: []
     };
 
+    positionInlineNarratorPopover(toolbar);
+    requestAnimationFrame(() => positionInlineNarratorPopover(toolbar));
     refreshInlineNarratorPopover(toolbar);
     return true;
   }
@@ -4424,6 +4517,9 @@
 
     const popover = toolbar.querySelector("[data-inline-popover]");
     if (!popover) return false;
+    popover.classList.remove("ccf-inline-narrator-popover");
+    popover.style.left = "";
+    popover.style.top = "";
     const hasSavedStyle = !!readStyleClipboard();
     popover.innerHTML = `
       <div class="ccf-inline-popover-title">\uC11C\uC2DD \uC800\uC7A5</div>
@@ -4462,6 +4558,9 @@
     const popover = toolbar.querySelector("[data-inline-popover]");
     if (!popover) return false;
 
+    popover.classList.remove("ccf-inline-narrator-popover");
+    popover.style.left = "";
+    popover.style.top = "";
     popover.textContent = "";
     const title = document.createElement("div");
     title.className = "ccf-inline-popover-title";
@@ -4507,9 +4606,11 @@
     const state = inlinePopoverState?.toolbar === toolbar ? inlinePopoverState : null;
     const popover = toolbar?.querySelector?.("[data-inline-popover]");
     if (popover) {
-      popover.classList.remove("open");
+      popover.classList.remove("open", "ccf-inline-narrator-popover");
       popover.setAttribute("aria-hidden", "true");
       popover.textContent = "";
+      popover.style.left = "";
+      popover.style.top = "";
     }
     if (state) {
       inlinePopoverState = null;
@@ -6886,6 +6987,13 @@
       const modalEditor = getModalEditor();
       if (!modalEditor) return;
 
+      if (options.revealBottom === true) {
+        modalEditor.scrollTop = modalEditor.scrollHeight;
+        if (editor instanceof HTMLElement) {
+          editor.scrollTop = editor.scrollHeight;
+        }
+      }
+
       if (options.restoreFocus === false) {
         if (document.activeElement === modalEditor) {
           restoreModalSelectionSoon();
@@ -6924,7 +7032,10 @@
         imageUrl: normalizedUrl,
         imageAlt: normalizeImageAlt(imageAlt) || placeholderText
       }
-    }], selection, options);
+    }], selection, {
+      ...options,
+      revealBottom: selection.end >= baseText.length
+    });
 
     if (success) {
       setImageStatus("이미지를 추가했습니다.", "success");
