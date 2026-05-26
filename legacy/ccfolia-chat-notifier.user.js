@@ -2125,10 +2125,17 @@
     if (ccfBgmActiveSlotKey && event.target instanceof Element) {
       const nativeItem = event.target.closest(".MuiListItemButton-root");
       const dialogHost = event.target.closest(".MuiDialog-root, .MuiPopover-root, .MuiModal-root");
+
+      // [추가된 로직] 해당 다이얼로그가 BGM 설정 창이 맞는지 확인합니다.
+      const isBgmDialog = dialogHost instanceof HTMLElement && (
+        dialogHost.getAttribute("data-ccf-bgm-dialog-root") === "1" || 
+        isLikelyCcfBgmDialog(dialogHost)
+      );
+
       if (
         nativeItem instanceof HTMLElement
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
-        && dialogHost instanceof HTMLElement
+        && isBgmDialog // 단순히 dialogHost가 존재하는지가 아니라, BGM 다이얼로그인지 확인
       ) {
         const stoppedSlotKey = ccfBgmActiveSlotKey
           || ccfBgmEditingSlotKey
