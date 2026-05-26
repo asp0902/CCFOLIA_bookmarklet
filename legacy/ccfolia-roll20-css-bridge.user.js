@@ -1,11 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-<<<<<<< HEAD
-// @version      0.3.8
-=======
-// @version      0.3.6
->>>>>>> parent of ef06922 (20260526-170640)
+// @version      0.3.9
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -43,6 +39,8 @@
   const CHAT_PROMPT_PANEL_ATTR = "data-ccr20-chat-prompt-panel";
   const CHAT_PROMPT_TOGGLE_ITEM_ATTR = "data-ccr20-chat-prompt-toggle";
   const CHAT_PROMPT_HIDDEN_KEY = "ccr20-hide-chat-prompt-panel";
+  const CHAT_MACRO_OPEN_ATTR = "data-ccr20-chat-macro-open";
+  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const OPEN_BTN_SELECTOR = `.ccr20-open-btn[${OPEN_BTN_ATTR}="1"]`;
   const BOUND_SEND_ATTR = "data-ccr20-send-bound";
   const BOUND_ENTER_ATTR = "data-ccr20-enter-bound";
@@ -81,11 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-<<<<<<< HEAD
-    version: getUserscriptVersion("0.3.8"),
-=======
-    version: getUserscriptVersion("0.3.5"),
->>>>>>> parent of ef06922 (20260526-170640)
+    version: getUserscriptVersion("0.3.9"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -300,6 +294,7 @@
         `[${CHAT_PROMPT_TOGGLE_ITEM_ATTR}="1"]`
       ].join(", ")).forEach(el => el.remove());
       document.documentElement?.removeAttribute("data-ccr20-hide-chat-prompt");
+      document.documentElement?.removeAttribute(CHAT_MACRO_OPEN_ATTR);
       document.querySelectorAll(`[${CHAT_PROMPT_PANEL_ATTR}="1"]`).forEach((el) => {
         el.removeAttribute(CHAT_PROMPT_PANEL_ATTR);
       });
@@ -384,6 +379,7 @@
     ensureTransparentRoll20Logo();
     initRenderer();
     ensureUi();
+    syncChatMacroMenuButtonVisibility();
     syncChatPromptPanels(document.body);
     ensureChatPromptPanelToggleItemsInScope(document.body);
     observeUiDom();
@@ -553,6 +549,12 @@
 
       #${FLOATING_ID}[hidden] {
         display: none !important;
+      }
+
+      html[${CHAT_MACRO_OPEN_ATTR}="1"] .ccr20-open-btn,
+      html[${CHAT_MACRO_OPEN_ATTR}="1"] #${FLOATING_ID} {
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
 
       #${FLOATING_ID}:hover {
@@ -1096,6 +1098,15 @@
 
   function observeUiDom() {
     const mo = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) =>
+        mutation.type === "attributes" ||
+        [...Array.from(mutation.addedNodes || []), ...Array.from(mutation.removedNodes || [])]
+          .some((node) => node instanceof Element &&
+            (node.matches?.(CHAT_MACRO_MENU_SELECTOR) || node.querySelector?.(CHAT_MACRO_MENU_SELECTOR)))
+      )) {
+        syncChatMacroMenuButtonVisibility();
+      }
+
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes || []) {
           if (!(node instanceof Element)) continue;
@@ -1122,13 +1133,16 @@
       });
 
       if (shouldRefresh) {
+        syncChatMacroMenuButtonVisibility();
         scheduleEnsureUi();
       }
     });
 
     mo.observe(document.documentElement || document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-hidden", "aria-expanded", "aria-activedescendant"]
     });
     ccr20RegisterTeardown(() => mo.disconnect());
   }
@@ -1200,6 +1214,7 @@
     bindSendButtons();
     bindEnterSendForEditors();
     bindEditorInputSync();
+    syncChatMacroMenuButtonVisibility();
   }
 
   function loadChatPromptPanelPreference() {
@@ -1239,7 +1254,6 @@
     syncChatPromptPanels();
   }
 
-<<<<<<< HEAD
   function syncChatMacroMenuButtonVisibility() {
     const root = document.documentElement;
     if (!root) return;
@@ -1259,16 +1273,28 @@
 
   function hasVisibleChatMacroMenuForEditor(editor) {
     if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+    const controls = [editor, editor.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement);
+    if (controls.some((control) => {
+      if (control.getAttribute("aria-expanded") === "true") return true;
+      const activeDescendant = control.getAttribute("aria-activedescendant");
+      return !!activeDescendant && !!document.getElementById(activeDescendant);
+    })) {
+      return true;
+    }
     return getChatMacroMenuCandidates(editor).some((menu) => isVisibleChatMacroMenu(menu, editor));
   }
 
   function getChatMacroMenuCandidates(editor) {
     const inputId = editor.id || "";
-    const candidateIds = [
+    const combobox = editor.closest?.('[role="combobox"]');
+    const candidateIds = [...new Set([
       editor.getAttribute("aria-controls"),
       editor.getAttribute("aria-owns"),
+      combobox?.getAttribute("aria-controls"),
+      combobox?.getAttribute("aria-owns"),
       inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
-    ].filter(Boolean);
+    ].filter(Boolean))];
     const directMenus = candidateIds
       .map((id) => document.getElementById(id))
       .filter((menu) => menu instanceof HTMLElement);
@@ -1281,10 +1307,13 @@
     if (!isVisible(menu) || !String(menu.textContent || "").trim()) return false;
 
     const inputId = editor.id || "";
+    const combobox = editor.closest?.('[role="combobox"]');
     const menuId = menu.id || "";
     const isConnectedMenu = [
       editor.getAttribute("aria-controls"),
       editor.getAttribute("aria-owns"),
+      combobox?.getAttribute("aria-controls"),
+      combobox?.getAttribute("aria-owns"),
       inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
     ].includes(menuId);
     if (isConnectedMenu) return true;
@@ -1299,8 +1328,6 @@
       menuRect.bottom <= editorRect.bottom;
   }
 
-=======
->>>>>>> parent of ef06922 (20260526-170640)
   function syncChatPromptPanels(scope = document) {
     getChatPromptPanels(scope).forEach((panel) => {
       panel.setAttribute(CHAT_PROMPT_PANEL_ATTR, "1");

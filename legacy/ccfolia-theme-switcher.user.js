@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.4
+// @version      0.2.5
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -210,7 +210,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.4"),
+    version: getUserscriptVersion("0.2.5"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1946,14 +1946,16 @@
         display: inline !important;
       }
 
-      /* 카드를 머금은 본문 typography span 은 강제 display:block 으로 — 안에 든
-         243×370 블록 카드가 인라인 컨텍스트에서 잘리지 않도록 보장. 배경/패딩도 해제. */
-      .MuiTypography-body2[${CREE_GRRR_FORMATTED_ATTR}="1"],
-      .MuiTypography-body1[${CREE_GRRR_FORMATTED_ATTR}="1"] {
+      /* 카드를 머금은 host 요소 — 강제 display:block 으로 인라인 컨텍스트의 클리핑 회피.
+         배경/패딩/마진 모두 해제해 카드가 자기 레이아웃 그대로 보이게 함. */
+      [${CREE_GRRR_FORMATTED_ATTR}="1"] {
         display: block !important;
         background: transparent !important;
         padding: 0 !important;
         margin: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
       }
 
       /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
@@ -4579,17 +4581,12 @@
   }
 
   // CREE-GRRR!: 채팅 다이스 판정 결과를 Roll20 시트 카드로 대체.
-  // CoC 7판 판정 패턴(CC<=N 또는 (1D100<=N))을 가진 메시지만 카드로 변환.
-  // 기타 다이스 메시지(데미지 등)는 손대지 않음.
+  // 클래스 의존성을 완전히 제거하고 텍스트 노드 자체를 스캔 → 어떤 CCFOLIA 빌드든
+  // 다이스 패턴이 있는 텍스트면 무조건 캡처. 텍스트 노드의 부모 요소가 host 가 되어
+  // 그 안에서 카드로 교체.
   //
-  // 카드 삽입: 본문 span 의 내부 콘텐츠를 카드로 교체하고, span 자체를 display:block 으로
-  // 강제(아래 CSS) → 인라인 span 안에 블록 카드가 정상적으로 렌더되도록 함.
-  // (이전엔 형제로 삽입했으나 부모 컨테이너의 overflow/flex 에 의해 잘리는 케이스가 있음)
-  //
-  // 스코프: 전역 .MuiTypography-body2.
-  //   - parser 가 엄격해서(target + 화살표 + 굴림값) 다이스 결과 메시지만 통과
-  //   - 진짜 오버레이 UI(다이얼로그/메뉴/툴팁) 만 제외 — 드로어/팝오버 는 채팅이 들어 있을
-  //     수 있어 제외하지 않음
+  // parser 가 엄격해서(target + 화살표 + 굴림값) 데미지/일반 굴림은 통과 못함.
+  // 진짜 오버레이 UI(다이얼로그/메뉴/툴팁) 는 별도 제외.
   const CREE_GRRR_SKIP_ANCESTOR_SELECTOR = [
     `[role="dialog"]`,
     `[role="menu"]`,
@@ -4599,26 +4596,59 @@
     `.MuiDialog-paper`,
     `.MuiSnackbar-root`
   ].join(", ");
+  // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과
+  const CREE_GRRR_TEXT_FAST_PATTERN =
+    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d).*[→＞>]\s*\d/is;
+
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
     cleanupLegacyCreeGrrrSpans();
-    const messages = document.querySelectorAll(
-      `.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
-      `.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
-    );
-    messages.forEach((message) => {
-      if (!(message instanceof HTMLElement)) return;
-      if (message.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return;
-      const text = message.textContent || "";
-      const parsed = parseCreeGrrrDiceRoll(text);
-      if (!parsed) return;
-      const card = buildCreeGrrrDiceCard(parsed);
-      // 원본 텍스트는 data-* 에 보존 (revert 시 복원). 본문 콘텐츠는 카드로 통째 교체.
-      message.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
-      message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-      message.replaceChildren(card);
+    if (!document.body) return;
+
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const txt = node.textContent || "";
+        if (!txt || !CREE_GRRR_TEXT_FAST_PATTERN.test(txt)) return NodeFilter.FILTER_REJECT;
+        const p = node.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        const tag = p.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "INPUT") {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (p.hasAttribute(CREE_GRRR_FORMATTED_ATTR)) return NodeFilter.FILTER_REJECT;
+        if (p.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return NodeFilter.FILTER_REJECT;
+        if (p.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
     });
+
+    // 같은 host(부모 요소) 중복 처리 방지
+    const seen = new WeakSet();
+    let scanned = 0;
+    let transformed = 0;
+    let current;
+    while ((current = walker.nextNode())) {
+      const host = current.parentElement;
+      if (!host || seen.has(host)) continue;
+      seen.add(host);
+      scanned++;
+      const text = host.textContent || "";
+      const parsed = parseCreeGrrrDiceRoll(text);
+      if (!parsed) continue;
+      transformed++;
+      const card = buildCreeGrrrDiceCard(parsed);
+      host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
+      host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+      host.replaceChildren(card);
+    }
+
+    // 진단용: scan 결과가 있으면 한 번 로그 (다음 사이클에 또 처리할 게 있으면 다시 로그됨)
+    if (scanned > 0) {
+      try {
+        console.info(`[CREE-GRRR!] dice cards: scanned ${scanned}, transformed ${transformed}`);
+      } catch (_) { /* ignore */ }
+    }
   }
 
   // CoC 7판 판정 메시지 파싱.
