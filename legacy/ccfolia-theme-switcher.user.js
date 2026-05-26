@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.9
+// @version      0.1.0
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -163,7 +163,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.9"),
+    version: getUserscriptVersion("0.1.0"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -882,7 +882,7 @@
           height: 38px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
-          padding: 0 28px 0 12px;
+          padding: 0 12px;
           box-sizing: border-box;
           background: var(--ccf-theme-input-bg, rgba(21, 20, 20, 0.88));
           color: var(--ccf-theme-text, #f4f0eb);
@@ -4165,11 +4165,23 @@
       select.setAttribute("data-ccf-sheet-theme-select", "toolkit");
       select.setAttribute("aria-label", "커스텀 시트 테마 선택");
       // shadow DOM이라 외부 .ccf-theme-select 스타일이 안 먹어서 인라인으로 톤만 맞춤
+      // 네이티브 select 의 쉐브론은 항상 우측 끝에 붙어 위치를 못 옮긴다.
+      // 우측 여백을 주기 위해 appearance:none + 커스텀 SVG 쉐브론으로 교체하고
+      // background-position 으로 쉐브론을 오른쪽 끝에서 떼어 놓는다.
+      const CHEVRON_SVG =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'>" +
+        "<path d='M1 1l4 4 4-4' stroke='%23333' stroke-width='1.5' fill='none' " +
+        "stroke-linecap='round' stroke-linejoin='round'/></svg>";
       select.style.cssText =
         "flex:1 1 auto;min-width:0;font-size:13px;line-height:1.3;" +
-        "background:rgba(0,0,0,0.35);color:inherit;" +
-        "border:1px solid rgba(255,255,255,0.15);border-radius:4px;" +
-        "padding:4px 24px 4px 8px;";
+        "appearance:none;-webkit-appearance:none;-moz-appearance:none;" +
+        "background-color:#ffffff;color:#222;" +
+        "background-image:url(\"" + CHEVRON_SVG + "\");" +
+        "background-repeat:no-repeat;background-position:right 12px center;" +
+        "background-size:10px 6px;" +
+        "border:1px solid rgba(0,0,0,0.2);border-radius:4px;" +
+        // 우측 패딩 = 쉐브론(10px) + 우측 여백(12px) + 텍스트와 쉐브론 사이 간격(8px)
+        "padding:4px 30px 4px 8px;";
       for (const theme of SHEET_THEMES) {
         const opt = document.createElement("option");
         opt.value = theme.id;

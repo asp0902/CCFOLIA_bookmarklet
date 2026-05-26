@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.26
+// @version      0.0.27
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.26"),
+    version: getUserscriptVersion("0.0.27"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3376,7 +3376,7 @@
       <button type="button" class="ccf-toggle" data-inline-command="italic" title="Italic" aria-label="Italic"><i>I</i></button>
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
-      <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray">()</button>
+      <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
@@ -3649,13 +3649,17 @@
 
     if (command === "paren-gray") {
       const selection = getInlineToolbarSelection(toolbar);
-      if (applyParentheticalGrayToEditor(editor, selection)) {
-        commandButton.classList.add("active");
-        commandButton.setAttribute("aria-pressed", "true");
-        if (selection?.start !== selection?.end) {
-          restoreRoomSelectionSoon(editor, selection);
-          showInlineToolbarSelectionHighlight(toolbar);
-        }
+      const state = ensureEditorState(editor);
+      const nextActive = state.parentheticalGray !== true;
+      state.parentheticalGray = nextActive;
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      if (nextActive) {
+        applyParentheticalGrayToEditor(editor, selection);
+      }
+      if (selection?.start !== selection?.end) {
+        restoreRoomSelectionSoon(editor, selection);
+        showInlineToolbarSelectionHighlight(toolbar);
       }
       return;
     }
@@ -4873,7 +4877,7 @@
             <button type="button" class="ccf-toggle" data-toggle="italic" title="\uAE30\uC6B8\uC784" aria-label="\uAE30\uC6B8\uC784"><i>I</i></button>
             <button type="button" class="ccf-toggle" data-toggle="underline" title="\uBC11\uC904" aria-label="\uBC11\uC904"><u>U</u></button>
             <button type="button" class="ccf-toggle" data-toggle="strike" title="\uCDE8\uC18C\uC120" aria-label="\uCDE8\uC18C\uC120"><s>S</s></button>
-            <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9">()</button>
+            <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9" aria-pressed="false">()</button>
             <button type="button" class="ccf-toggle" id="ccf-narration-toggle" title="\uB098\uB808\uC774\uC158" aria-label="\uB098\uB808\uC774\uC158" aria-pressed="false">Nr</button>
             <div class="ccf-code-tool ccf-ruby-tool" id="ccf-ruby-tool">
               <button
@@ -5212,10 +5216,11 @@
       event.preventDefault();
     });
     modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("click", (event) => {
-      const button = event.currentTarget;
-      if (applyParentheticalGrayToModalDraft()) {
-        button?.classList.add("active");
-        button?.setAttribute("aria-pressed", "true");
+      const nextActive = !modalDraftParentheticalGray;
+      modalDraftParentheticalGray = nextActive;
+      setParentheticalGrayToggle(nextActive);
+      if (nextActive) {
+        applyParentheticalGrayToModalDraft();
       }
     });
     modal.querySelector("#ccf-narration-toggle")?.addEventListener("mousedown", (event) => {
@@ -7221,10 +7226,28 @@
       modalDraftAlignRuns = normalizeAlignRuns(baseAlignRuns, getTextLineCount(safeNextText));
     }
 
+    if (modalDraftParentheticalGray) {
+      modalDraftRuns = applyParentheticalGrayRuns(modalDraftRuns, safeNextText);
+    }
+
     if (selection) {
       setModalSelection(selection, safeNextText.length);
     }
     syncFontSizeControlsFromModalSelection();
+
+    if (modalDraftParentheticalGray && getParentheticalRanges(safeNextText).length) {
+      const editor = getResolvedActiveEditor() || activeEditor;
+      if (editor) {
+        renderPreview(editor, {
+          force: true,
+          restoreSelection: true,
+          selection,
+          textOverride: safeNextText,
+          runsOverride: modalDraftRuns,
+          alignRunsOverride: modalDraftAlignRuns
+        });
+      }
+    }
   }
 
   function isRoll20EditorFocused() {
@@ -7458,6 +7481,7 @@
         : "left"
     );
     setNarrationToggle(modalDraftBlockStyle.narration === true);
+    setParentheticalGrayToggle(modalDraftParentheticalGray);
     setModalSelection(selection, text.length);
     syncRoomEditorToModalEditor(editor);
     syncRoomEditorToRoll20Editor(editor);
@@ -7479,6 +7503,21 @@
 
   function setNarrationToggle(on) {
     const btn = document.getElementById("ccf-narration-toggle");
+    if (!btn) return;
+    btn.classList.toggle("active", !!on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  function setParentheticalGrayToggle(on) {
+    const btn = document.getElementById("ccf-parenthetical-gray");
+    if (!btn) return;
+    btn.classList.toggle("active", !!on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  function setInlineParentheticalGrayToggle(editor, on) {
+    const toolbar = getInlineToolbarForEditor(editor);
+    const btn = toolbar?.querySelector?.('[data-inline-command="paren-gray"]');
     if (!btn) return;
     btn.classList.toggle("active", !!on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -7512,6 +7551,7 @@
     setToggle("italic", false);
     setToggle("underline", false);
     setToggle("strike", false);
+    setParentheticalGrayToggle(false);
     setNarrationToggle(false);
     setAlignmentToggle("left");
 
@@ -7593,10 +7633,10 @@
     if (!editor) return false;
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
-    if (!getParentheticalGrayTargetRanges(text, selection).length) return false;
-
     const state = ensureEditorState(editor);
-    state.runs = applyParentheticalGrayRuns(state.runs, text, selection);
+    if (getParentheticalGrayTargetRanges(text, selection).length) {
+      state.runs = applyParentheticalGrayRuns(state.runs, text, selection);
+    }
     state.text = text;
     state.parentheticalGray = true;
     state.roll20Source = null;
@@ -7613,23 +7653,23 @@
 
     modalDraftText = getEditorText(modalEditor);
     const selection = getModalSelection() || getEditorSelection(modalEditor);
-    if (!getParentheticalGrayTargetRanges(modalDraftText, selection).length) return false;
-
-    modalDraftRuns = applyParentheticalGrayRuns(
-      modalDraftRuns ?? ensureEditorState(editor).runs,
-      modalDraftText,
-      selection
-    );
     modalDraftParentheticalGray = true;
-    renderPreview(editor, {
-      force: true,
-      restoreSelection: true,
-      selection,
-      textOverride: modalDraftText,
-      runsOverride: modalDraftRuns,
-      alignRunsOverride: modalDraftAlignRuns
-    });
-    restoreModalSelectionSoon();
+    if (getParentheticalGrayTargetRanges(modalDraftText, selection).length) {
+      modalDraftRuns = applyParentheticalGrayRuns(
+        modalDraftRuns ?? ensureEditorState(editor).runs,
+        modalDraftText,
+        selection
+      );
+      renderPreview(editor, {
+        force: true,
+        restoreSelection: true,
+        selection,
+        textOverride: modalDraftText,
+        runsOverride: modalDraftRuns,
+        alignRunsOverride: modalDraftAlignRuns
+      });
+      restoreModalSelectionSoon();
+    }
     return true;
   }
 
@@ -11642,6 +11682,7 @@
       state.roll20Source = null;
 
       refreshComposerBadge(activeComposer, roomEditor);
+      setInlineParentheticalGrayToggle(roomEditor, false);
       syncEditorVisualPreview(roomEditor);
       return true;
     }
@@ -11674,6 +11715,7 @@
     }
 
     refreshComposerBadge(activeComposer, roomEditor);
+    setInlineParentheticalGrayToggle(roomEditor, state.parentheticalGray);
     syncEditorVisualPreview(roomEditor);
     return true;
   }
