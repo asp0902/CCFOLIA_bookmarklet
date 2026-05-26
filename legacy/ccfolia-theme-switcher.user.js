@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.0
+// @version      0.2.1
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -210,7 +210,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.0"),
+    version: getUserscriptVersion("0.2.1"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4519,18 +4519,18 @@
   }
 
   // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
-  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 저장해둔 원본 텍스트를 되돌림.
+  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 숨겨놓은 메시지 span 의 표시를 복원.
   function revertCreeGrrrDomState() {
     document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
       if (!(el instanceof HTMLElement)) return;
-      const original = el.getAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      if (original !== null) {
-        el.textContent = original;
-        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
+      // display:none 으로 숨겨놨던 원본 span 복원
+      if (el.style && el.style.display === "none") {
+        el.style.display = "";
       }
+      el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
     });
-    // 혹시 남아 있는 카드 노드 정리 (방어적)
+    // 형제로 삽입된 카드 노드 전부 제거
     document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}`).forEach((card) => card.remove());
   }
 
@@ -4538,26 +4538,34 @@
   // CoC 7판 판정 패턴(CC<=N 또는 (1D100<=N))을 가진 메시지만 카드로 변환.
   // 기타 다이스 메시지(데미지 등)는 손대지 않음.
   //
-  // 타깃: CCFOLIA 채팅 본문 .MuiTypography-body2 (간혹 body1).
-  // 메시지 컨테이너(li / div role="listitem") 는 CCFOLIA 빌드마다 달라 직접 타깃 X.
+  // 스코프: [role="log"] / [aria-live=polite|assertive] 안의 .MuiTypography-body2 만.
+  // 채팅 팔레트, 입력창, 캐릭터 카드 등에서 같은 클래스를 써도 영향 받지 않게 제한.
+  // 카드 삽입 방식: 본문 span 은 display:none 으로 숨기고, 카드는 span 의 형제로 삽입.
+  // (span 안에 블록 div 를 넣으면 inline 컨텍스트에서 레이아웃이 깨짐)
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
-    const messages = document.querySelectorAll(
-      `.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
-      `.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
-    );
+    const chatScopes = [
+      `[role="log"]`,
+      `[aria-live="polite"]`,
+      `[aria-live="assertive"]`
+    ];
+    const selector = chatScopes
+      .map((scope) =>
+        `${scope} .MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`)
+      .join(", ");
+    const messages = document.querySelectorAll(selector);
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
-      if (message.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return;
       const text = message.textContent || "";
       const parsed = parseCreeGrrrDiceRoll(text);
       if (!parsed) return;
       const card = buildCreeGrrrDiceCard(parsed);
-      // 원본 텍스트 보존 후 카드로 교체
+      // 원본 보존, 메시지는 숨김 처리, 카드는 형제로 삽입
       message.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
       message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-      message.replaceChildren(card);
+      message.style.display = "none";
+      message.after(card);
     });
   }
 
