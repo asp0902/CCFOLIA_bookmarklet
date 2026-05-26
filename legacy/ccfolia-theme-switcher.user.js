@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.9
+// @version      0.1.10
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -207,7 +207,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.9"),
+    version: getUserscriptVersion("0.1.10"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4453,15 +4453,23 @@
   // "→ 73" → 원형 프레임 안에 73 표시 (sheet-rollresult 와 동일 외형)
   // "보통 성공"/"대성공"/... → 깃발 프레임 안에 Roll20 명칭으로 변환해 표시
   //   (sheet-result-status 와 동일 외형 — CREE-GRRR! 시트의 vocabularly 로 통일)
+  //
+  // 타깃: CCFOLIA 채팅 본문은 MuiTypography-body2 (간혹 body1) 클래스를 갖는 span/p.
+  // 메시지 컨테이너(li / div role="listitem") 는 CCFOLIA 빌드마다 달라 직접 타깃하지 않고
+  // 본문 typography 요소를 직접 처리한다.
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
-    // <li> + role="listitem" 둘 다 — CCFOLIA 버전에 따라 다를 수 있어 넓게 잡음
     const messages = document.querySelectorAll(
-      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"]), [role="listitem"]:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+      `.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
+      `.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
+      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
+      `[role="listitem"]:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
     );
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
+      // 부모/조상이 이미 처리됐으면 스킵 (중복 처리 방지)
+      if (message.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return;
       const text = message.textContent || "";
       if (!hasCreeGrrrDiceResult(text)) return;
       const rollValue = extractFirstDiceValue(text);
