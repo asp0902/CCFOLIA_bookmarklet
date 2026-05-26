@@ -1722,7 +1722,7 @@
         ccfBgmLastWebAudio = trackingState;
         ccfBgmLastNativeMedia = null;
 
-        // 동시 재생을 위해 WebAudio 강제 정지 로직 삭제
+        // [수정됨] 효과음 재생 시 유튜브 BGM 강제 정지 로직 삭제
 
         startCcfBgmProgressLoop();
         window.setTimeout(updateCcfBgmProgressBar, 0);
@@ -1996,8 +1996,7 @@
       ccfBgmLastWebAudio = null;
     }
 
-    // 다른 슬롯의 네이티브 BGM과 동시 재생을 허용하기 위해 삭제 처리
-    // if (eventType === "play" && ccfBgmActiveSlotKey) { ... } 
+    // [수정됨] 동시 재생을 위해 네이티브 재생 시 유튜브 BGM 강제 정지 로직 삭제
 
     startCcfBgmProgressLoop();
     updateCcfBgmProgressBar();
@@ -2119,7 +2118,6 @@
       const nativeItem = event.target.closest(".MuiListItemButton-root");
       const dialogHost = event.target.closest(".MuiDialog-root, .MuiPopover-root, .MuiModal-root");
 
-      // [추가된 로직] 해당 다이얼로그가 BGM 설정 창이 맞는지 확인합니다.
       const isBgmDialog = dialogHost instanceof HTMLElement && (
         dialogHost.getAttribute("data-ccf-bgm-dialog-root") === "1" || 
         isLikelyCcfBgmDialog(dialogHost)
@@ -2128,17 +2126,17 @@
       if (
         nativeItem instanceof HTMLElement
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
-        && isBgmDialog // 단순히 dialogHost가 존재하는지가 아니라, BGM 다이얼로그인지 확인
+        && isBgmDialog
       ) {
+        // [수정됨] 유튜브가 재생 중인 슬롯과 동일한 탭에서 네이티브를 골랐을 때만 정지
         const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
-        // 현재 유튜브가 재생 중인 슬롯과 클릭한 네이티브 음원의 슬롯이 같을 때만 유튜브 정지
         if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
           stopCcfYoutubeBgm("native-library-selected");
           ccfBgmNativeLoadedSlots.add(targetSlotKey);
+          markCcfYoutubeBgmSlotButtons();
+          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+          window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
         }
-        markCcfYoutubeBgmSlotButtons();
-        window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-        window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
       }
     }
 
@@ -2165,7 +2163,6 @@
       stopCcfYoutubeBgm("stop-button");
       if (targetSlotKey) {
         ccfBgmNativeLoadedSlots.delete(targetSlotKey);
-        // 슬롯에 중복/잔존 항목이 있어도 재생 표시가 남지 않도록 해당 슬롯의 모든 항목을 정지 상태로 만든다.
         let pendingChanged = false;
         getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
           if (entryKey && entry && entry.pending !== true) {
@@ -2954,7 +2951,6 @@
     ccfBgmActiveLoop = state.loop;
     markCcfYoutubeBgmSlotButtons();
 
-    // 재생 신호 송신(원격에서 트리거된 적용 중이면 자동 건너뜀 → 에코 방지).
     if (typeof ccfBgmFirestoreEmitPlayback === "function") {
       ccfBgmFirestoreEmitPlayback({
         entryKey: resolvedEntryKey,
@@ -2988,7 +2984,8 @@
       return;
     }
     stopNativeYoutubeMedia();
-    stopCcfNativeBgmForSlot(normalizedSlotKey); // 타겟 슬롯의 네이티브 음원만 정지하도록 변경
+    
+    // [수정됨] 모든 BGM을 끄는 stopCcfNormalBgmPlayback() 삭제
 
     const playExistingPlayer = () => {
       if (!ccfBgmPlayer) {
