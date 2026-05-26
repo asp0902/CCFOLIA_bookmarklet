@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.3
+// @version      0.1.4
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -201,7 +201,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.3"),
+    version: getUserscriptVersion("0.1.4"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4444,7 +4444,7 @@
 
   // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
   //   대실패          → 치명적 실패  (단, d100 결과가 100 이면 "펌블")
-  //   실패            → 실패
+  //   실패            → 실패         (단, d100 결과가 96~99 이면 "치명적 실패")
   //   보통 성공       → 성공
   //   어려운 성공     → 어려운 성공
   //   대단한 성공     → 극단적 성공
@@ -4454,7 +4454,10 @@
     const normalized = ccfTerm.replace(/\s+/g, "");
     switch (normalized) {
       case "대실패":      return rollValue === 100 ? "펌블" : "치명적 실패";
-      case "실패":        return "실패";
+      case "실패":
+        return (rollValue !== null && rollValue >= 96 && rollValue <= 99)
+          ? "치명적 실패"
+          : "실패";
       case "보통성공":    return "성공";
       case "어려운성공":  return "어려운 성공";
       case "대단한성공":  return "극단적 성공";

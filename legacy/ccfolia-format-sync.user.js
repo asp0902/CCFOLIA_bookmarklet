@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.29
+// @version      0.0.30
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -19,13 +19,14 @@
   const CCF_SAFE_UI_ATTR = "data-ccf-safe-markup";
   const CCF_NARRATION_ATTR = "data-ccf-narration";
   const CCF_NARRATION_PANEL_ATTR = "data-ccf-narration-panel";
-  const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
+  const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, .MuiPaper-root, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
     'p.MuiTypography-root.MuiTypography-body2',
     'div.MuiTypography-root.MuiTypography-body2',
     'span.MuiTypography-root.MuiTypography-body2',
     '.MuiTypography-root.MuiListItemText-secondary',
+    '.MuiListItemText-secondary',
     '.MuiListItemText-root > p',
     '.MuiListItemText-root > div',
     '.MuiListItemText-root > span.MuiTypography-root',
@@ -52,7 +53,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.29"),
+    version: getUserscriptVersion("0.0.30"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -812,11 +813,19 @@
     if (el.closest('textarea, input, [contenteditable="true"], [role="textbox"]')) return false;
     if (el.closest("button, form")) return false;
     if (el.querySelector('button, form, textarea, input, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return false;
-    if (!el.matches?.(MESSAGE_TEXT_SELECTOR) && el.querySelector?.(MESSAGE_TEXT_SELECTOR)) return false;
-
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
     if (el.children.length > 3) return false;
+
+    const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
+    const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
+    if (!knownTextElement && !insideMessageSurface) return false;
+
+    const nestedEncodedElement = [...el.children].some((child) => {
+      const childText = child.textContent || "";
+      return childText.includes(INVIS_START) && childText.includes(INVIS_END);
+    });
+    if (nestedEncodedElement) return false;
 
     return true;
   }
@@ -1633,6 +1642,7 @@
   const MODAL_MODE_CCFOLIA = "ccfolia";
   const MODAL_MODE_ROLL20 = "roll20";
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
+  const CHARACTER_NAME_INPUT_SELECTOR = 'input[name="name"], input[placeholder="noname"]';
   const MESSAGE_HINT_RE = /message|chat|comment|send|메시지|채팅|입력|발언|メッセージ|チャット/i;
   const NAME_HINT_RE = /name|character|display.?name|chara|nickname|이름|캐릭터|닉네임|名前|キャラ/i;
 
@@ -9651,10 +9661,9 @@
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((editor) => {
-      if (editor.id === "ccf-preview") return;
-      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
-      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
+    editors.forEach((candidate) => {
+      const editor = normalizeEditorCandidate(candidate);
+      if (!editor) return;
       if (editor.dataset.ccfEnterBound === "1") return;
 
       editor.dataset.ccfEnterBound = "1";
@@ -9679,10 +9688,12 @@
 
   function bindEditorVisualPreview() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((editor) => {
-      if (editor.id === "ccf-preview") return;
-      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
-      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
+    editors.forEach((candidate) => {
+      const editor = normalizeEditorCandidate(candidate);
+      if (!editor) {
+        clearEditorVisualPreview(candidate);
+        return;
+      }
       if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
       if (editor.dataset.ccfVisualPreviewBound !== "1") {
         editor.dataset.ccfVisualPreviewBound = "1";
@@ -9698,10 +9709,12 @@
   }
 
   function syncAllEditorVisualPreviews() {
-    document.querySelectorAll(EDITOR_SELECTOR).forEach((editor) => {
-      if (editor.id === "ccf-preview") return;
-      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
-      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
+    document.querySelectorAll(EDITOR_SELECTOR).forEach((candidate) => {
+      const editor = normalizeEditorCandidate(candidate);
+      if (!editor) {
+        clearEditorVisualPreview(candidate);
+        return;
+      }
       syncEditorVisualPreview(editor);
     });
   }
@@ -9739,6 +9752,10 @@
 
   function syncEditorVisualPreview(editor) {
     if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
+    if (!normalizeEditorCandidate(editor)) {
+      clearEditorVisualPreview(editor);
+      return;
+    }
 
     const entry = ensureEditorVisualPreview(editor);
     if (!entry) return;
@@ -9766,6 +9783,17 @@
     );
     editor.classList.add("ccf-editor-preview-source");
     entry.overlay.style.display = "block";
+  }
+
+  function clearEditorVisualPreview(editor) {
+    if (!(editor instanceof HTMLElement)) return;
+    const entry = EDITOR_VISUAL_PREVIEW.get(editor);
+    if (entry?.overlay instanceof HTMLElement) {
+      entry.overlay.remove();
+    }
+    EDITOR_VISUAL_PREVIEW.delete(editor);
+    editor.classList.remove("ccf-editor-preview-source");
+    editor.style.removeProperty("--ccf-editor-caret-color");
   }
 
   function hideEditorVisualPreview(editor, entry = EDITOR_VISUAL_PREVIEW.get(editor)) {
@@ -9919,10 +9947,9 @@
 
   function bindEditorInputSync() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((editor) => {
-      if (editor.id === "ccf-preview") return;
-      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
-      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
+    editors.forEach((candidate) => {
+      const editor = normalizeEditorCandidate(candidate);
+      if (!editor) return;
       if (editor.dataset.ccfInputSyncBound === "1") return;
 
       editor.dataset.ccfInputSyncBound = "1";
@@ -10002,16 +10029,22 @@
     if (node.id === "ccf-preview") return null;
     if (node.closest && node.closest(`[${SAFE_UI_ATTR}="1"]`)) return null;
     if (node.closest && node.closest(`#${MODAL_ID}`)) return null;
-    if (node.matches?.(EDITOR_SELECTOR)) return node;
-    const closest = node.closest?.(EDITOR_SELECTOR);
-    return closest instanceof HTMLElement ? closest : null;
+    const candidate = node.matches?.(EDITOR_SELECTOR) ? node : node.closest?.(EDITOR_SELECTOR);
+    if (!(candidate instanceof HTMLElement)) return null;
+    if (isCharacterNameInput(candidate)) return null;
+    return candidate;
+  }
+
+  function isCharacterNameInput(node) {
+    return node instanceof HTMLInputElement && node.matches(CHARACTER_NAME_INPUT_SELECTOR);
   }
 
   function getCurrentTargetEditor() {
     const focused = normalizeEditorCandidate(document.activeElement);
     if (focused && isVisible(focused) && findComposerForEditor(focused)) return focused;
-    if (lastFocusedEditor && document.contains(lastFocusedEditor) && isVisible(lastFocusedEditor)) {
-      return lastFocusedEditor;
+    const recent = normalizeEditorCandidate(lastFocusedEditor);
+    if (recent && document.contains(recent) && isVisible(recent)) {
+      return recent;
     }
 
     return pickBestEditor([...document.querySelectorAll(EDITOR_SELECTOR)]) || null;
@@ -10051,6 +10084,9 @@
   }
 
   function preparePayloadForSend(editor) {
+    editor = normalizeEditorCandidate(editor);
+    if (!editor) return true;
+
     if (isModalOpen() && activeEditor && editor === activeEditor) {
       syncModalEditorToRoomEditor(true);
     }
