@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.33
+// @version      0.0.34
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -56,7 +56,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.33"),
+    version: getUserscriptVersion("0.0.34"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9641,6 +9641,16 @@
 
   function isVisibleChatMacroMenuForEditor(editor) {
     if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+
+    const controls = [editor, editor.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement);
+    if (controls.some((control) => {
+      if (control.getAttribute("aria-expanded") === "true") return true;
+      const activeDescendant = control.getAttribute("aria-activedescendant");
+      return !!activeDescendant && !!document.getElementById(activeDescendant);
+    })) {
+      return true;
+    }
 
     const inputId = editor.id || "";
     const relatedIds = new Set([

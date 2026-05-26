@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.5.3
+// @version      0.5.4
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,7 +33,7 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.5.3"),
+    version: getUserscriptVersion("0.5.4"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
@@ -3479,7 +3479,7 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.3";
+  const TOOLKIT_VERSION = "0.1.4";
   const ACTIVE_MS = 5 * 60 * 1000;
   const STALE_MS = 30 * 60 * 1000;
   const INVIS_START = "\u2063\u2063\u2063";
@@ -3643,6 +3643,16 @@
 
   function hasVisibleChatMacroMenuForEditor(editor) {
     if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+
+    const controls = [editor, editor.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement);
+    if (controls.some((control) => {
+      if (control.getAttribute("aria-expanded") === "true") return true;
+      const activeDescendant = control.getAttribute("aria-activedescendant");
+      return !!activeDescendant && !!document.getElementById(activeDescendant);
+    })) {
+      return true;
+    }
 
     const inputId = editor.id || "";
     const relatedIds = new Set([

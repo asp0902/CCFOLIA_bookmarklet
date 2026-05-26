@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.10
+// @version      0.1.11
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -207,7 +207,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.10"),
+    version: getUserscriptVersion("0.1.11"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4168,6 +4168,34 @@
     return false;
   }
 
+  function hasActiveChatMacroSelection(field) {
+    if (!(field instanceof HTMLTextAreaElement) || field.getAttribute("name") !== "text") return false;
+
+    const controls = [field, field.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement);
+    if (controls.some((control) => {
+      if (control.getAttribute("aria-expanded") === "true") return true;
+      const activeDescendant = control.getAttribute("aria-activedescendant");
+      return !!activeDescendant && !!document.getElementById(activeDescendant);
+    })) {
+      return true;
+    }
+
+    const inputId = field.id || "";
+    const relatedIds = [
+      field.getAttribute("aria-controls"),
+      field.getAttribute("aria-owns"),
+      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
+    ].filter(Boolean);
+
+    return relatedIds.some((id) => {
+      const menu = document.getElementById(id);
+      if (!(menu instanceof HTMLElement) || !String(menu.textContent || "").trim()) return false;
+      const style = window.getComputedStyle(menu);
+      return style.display !== "none" && style.visibility !== "hidden" && menu.getClientRects().length > 0;
+    });
+  }
+
   function bindUnsungDuetField(field) {
     if (!isUnsungDuetTextField(field)) return;
     if (field.getAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR) === "1") return;
@@ -4177,6 +4205,7 @@
       if (event.key !== "Enter") return;
       // Shift+Enter는 줄바꿈, IME 조합 중 Enter는 한글 확정용 — 둘 다 발송이 아님
       if (event.shiftKey || event.isComposing || event.keyCode === 229) return;
+      if (hasActiveChatMacroSelection(field)) return;
       if (unsungDuetEnterReentry) return;
       if (getCurrentDicebotId() !== "unsung-duet") return;
 
