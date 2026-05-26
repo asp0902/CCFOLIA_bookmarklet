@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.1
+// @version      0.2.2
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -210,7 +210,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.1"),
+    version: getUserscriptVersion("0.2.2"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1464,11 +1464,18 @@
       document.documentElement.appendChild(varsStyle);
     }
 
-    if (!document.getElementById(DICEBOT_STYLE_ID)) {
-      const dicebotStyle = document.createElement("style");
+    // 다이스봇 스타일시트는 매 호출마다 최신 textContent 로 강제 갱신.
+    // 스크립트 버전을 올렸을 때 기존 <style> 가 그대로 남아 옛 CSS(과거 인라인 뱃지 등)
+    // 가 화면에 살아 있는 문제를 방지.
+    let dicebotStyle = document.getElementById(DICEBOT_STYLE_ID);
+    if (!(dicebotStyle instanceof HTMLStyleElement)) {
+      dicebotStyle = document.createElement("style");
       dicebotStyle.id = DICEBOT_STYLE_ID;
-      dicebotStyle.textContent = buildDicebotStyleSheet();
       document.documentElement.appendChild(dicebotStyle);
+    }
+    const nextContent = buildDicebotStyleSheet();
+    if (dicebotStyle.textContent !== nextContent) {
+      dicebotStyle.textContent = nextContent;
     }
   }
 
@@ -1929,6 +1936,14 @@
       /* 채팅 입력창 영역에도 폰트 톤 통일 (선택 사항) */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li a {
         color: ${CG.accent} !important;
+      }
+
+      /* 레거시 v0.1.x 인라인 뱃지 무력화 — 브라우저에 옛 CSS가 캐시되어 살아 있어도
+         시각 효과가 안 나오게 강제 unset. JS 측 cleanupLegacyCreeGrrrSpans 와 이중 안전망. */
+      .${CREE_GRRR_ROLLRESULT_CLASS},
+      .${CREE_GRRR_STATUS_CLASS} {
+        all: unset !important;
+        display: inline !important;
       }
 
       /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
@@ -4532,6 +4547,19 @@
     });
     // 형제로 삽입된 카드 노드 전부 제거
     document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}`).forEach((card) => card.remove());
+    cleanupLegacyCreeGrrrSpans();
+  }
+
+  // 이전 버전(v0.1.x) 이 만든 인라인 뱃지 span 잔존물을 텍스트로 복원.
+  // CSS 캐시 / 옛 DOM 상태로 인해 채팅·알림 팝업에 살아 있는 경우를 청소.
+  function cleanupLegacyCreeGrrrSpans() {
+    const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
+    document.querySelectorAll(selector).forEach((span) => {
+      if (!(span instanceof HTMLElement)) return;
+      const parent = span.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(span.textContent || ""), span);
+    });
   }
 
   // CREE-GRRR!: 채팅 다이스 판정 결과를 Roll20 시트 카드로 대체.
@@ -4545,6 +4573,8 @@
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
+    // 매 사이클마다 레거시 뱃지 잔존물 청소 — 알림 팝업·팔레트 등에 살아 있던 옛 인라인 뱃지 제거
+    cleanupLegacyCreeGrrrSpans();
     const chatScopes = [
       `[role="log"]`,
       `[aria-live="polite"]`,
