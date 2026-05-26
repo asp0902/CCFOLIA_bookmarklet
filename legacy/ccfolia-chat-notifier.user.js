@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.39
+// @version      0.2.40
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -101,7 +101,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.39"),
+    version: getUserscriptVersion("0.2.40"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -2158,7 +2158,7 @@
         return;
       }
       
-      const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
+      const isGlobalStopButton = !button.closest('[data-ccf-bgm-dialog-root="1"], .MuiDialog-root, .MuiPopover-root, .MuiModal-root, [role="dialog"]');
       const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
 
       if (isGlobalStopButton) {
