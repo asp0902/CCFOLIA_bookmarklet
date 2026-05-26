@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.27
+// @version      0.0.28
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.27"),
+    version: getUserscriptVersion("0.0.28"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3466,7 +3466,7 @@
           const name = narratorAction.getAttribute("data-inline-narrator-name") || "";
           toggleNarratorName(name);
           updateInlineNarratorPopoverList(toolbar);
-          refreshInlineNarrationButton(toolbar);
+          refreshAllInlineNarrationButtons();
         } else if (action === "refresh") {
           refreshInlineNarratorPopover(toolbar, { forcePanelScan: true });
         }
@@ -4330,7 +4330,7 @@
   }
 
   function toggleNarratorName(name) {
-    const trimmed = String(name || "").trim();
+    const trimmed = normalizeMyCharacterName(name);
     if (!trimmed) return false;
     const set = readNarratorNameSet();
     if (set.has(trimmed)) {
@@ -4351,14 +4351,17 @@
     const speaker = getCurrentSpeakerName();
     const set = readNarratorNameSet();
     const speakerActive = !!speaker && set.has(speaker);
+    const configured = set.size > 0;
     const editor = getInlineToolbarEditor(toolbar);
     const blockActive = editor ? ensureEditorState(editor).blockStyle?.narration === true : false;
-    const active = speakerActive || blockActive;
+    const active = configured || blockActive;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
     btn.title = speakerActive
-      ? `나레이션 대상: ${speaker}`
-      : "나레이션 캐릭터 설정";
+      ? `현재 나레이션 대상: ${speaker}`
+      : configured
+        ? `나레이션 캐릭터 ${set.size}명 설정됨`
+        : "나레이션 캐릭터 설정";
   }
 
   function refreshAllInlineNarrationButtons() {
@@ -4368,10 +4371,11 @@
   }
 
   function buildInlineNarratorListMarkup(names, narratorSet, currentSpeaker) {
-    const trimmedSpeaker = String(currentSpeaker || "").trim();
-    const knownSet = new Set(names);
+    const trimmedSpeaker = normalizeMyCharacterName(currentSpeaker);
+    const normalizedNames = uniqueCharacterNames(names);
+    const knownSet = new Set(normalizedNames);
     const orphanNarrators = [...narratorSet].filter((name) => !knownSet.has(name));
-    const ordered = [...names, ...orphanNarrators];
+    const ordered = [...normalizedNames, ...orphanNarrators];
 
     if (!ordered.length) {
       return `<div class="ccf-narrator-empty">캐릭터 목록을 불러오지 못했습니다. 새로고침을 눌러주세요.</div>`;
@@ -4641,6 +4645,9 @@
     }
     if (state) {
       inlinePopoverState = null;
+      if (state.kind === "narrator") {
+        refreshInlineNarrationButton(toolbar);
+      }
       if (options.restoreFocus !== false) {
         restoreRoomSelectionSoon(state.editor || state.context?.editor, state.selection || state.context?.selection);
       }
@@ -7689,7 +7696,7 @@
     try {
       const raw = JSON.parse(localStorage.getItem(key) || "[]");
       if (!Array.isArray(raw)) return new Set();
-      return new Set(raw.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim()));
+      return new Set(raw.map(normalizeMyCharacterName).filter(Boolean));
     } catch (error) {
       console.error("[ccf-format-sync] readNarratorNameSet failed", error);
       return new Set();
@@ -7700,7 +7707,7 @@
     const key = getNarratorStorageKey();
     if (!key) return false;
     try {
-      const list = [...set].filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim());
+      const list = uniqueCharacterNames([...set]);
       localStorage.setItem(key, JSON.stringify(list));
       return true;
     } catch (error) {
@@ -7872,8 +7879,68 @@
   function getCurrentSpeakerName() {
     const btn = findCharacterSelectButton();
     if (!btn) return "";
-    const raw = btn.textContent || "";
-    return raw.replace(/\s+/g, " ").trim();
+
+    const inlineName = normalizeMyCharacterName(btn.textContent || "");
+    if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
+
+    const avatarName = normalizeMyCharacterName(btn.querySelector("img")?.getAttribute("alt") || "");
+    if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
+
+    const fields = findSpeakerNameFields(btn);
+    return fields.length ? fields[0].name : "";
+  }
+
+  function isCharacterSelectLabel(name) {
+    return /^(?:캐릭터\s*선택|character\s*(?:selection|select)|select\s*character|キャラクター\s*選択)$/i.test(name);
+  }
+
+  function getSpeakerNameFieldValue(field) {
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+      return normalizeMyCharacterName(field.value);
+    }
+    return normalizeMyCharacterName(field.textContent || "");
+  }
+
+  function findSpeakerNameFields(btn) {
+    const scopes = [];
+    const seenScopes = new Set();
+    let current = btn.parentElement;
+    for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+      if (!seenScopes.has(current)) {
+        scopes.push(current);
+        seenScopes.add(current);
+      }
+      if (current.matches(".MuiDrawer-paper")) break;
+    }
+
+    const seenFields = new Set();
+    const candidates = [];
+    scopes.forEach((scope, depth) => {
+      scope.querySelectorAll('input[type="text"], input:not([type]), textarea, [role="textbox"], [contenteditable="true"]').forEach((field) => {
+        if (!(field instanceof HTMLElement) || seenFields.has(field) || !isVisible(field)) return;
+        if (field.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+        const name = getSpeakerNameFieldValue(field);
+        if (!name) return;
+
+        const hint = getEditorHintText(field);
+        const nameHinted = NAME_HINT_RE.test(hint);
+        const messageHinted = MESSAGE_HINT_RE.test(hint);
+        const multiline = field instanceof HTMLTextAreaElement || field.getAttribute("aria-multiline") === "true";
+        if (messageHinted && !nameHinted) return;
+        if (multiline && !nameHinted) return;
+        seenFields.add(field);
+
+        let score = -depth * 18 - Math.min(distanceBetween(btn, field), 400) / 3;
+        if (nameHinted) score += 220;
+        if (messageHinted) score -= 240;
+        if (field instanceof HTMLInputElement && field.type === "text") score += 45;
+        if (multiline) score -= 130;
+        candidates.push({ name, score });
+      });
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates;
   }
 
   function dispatchCharacterButtonOpen(btn) {
@@ -8011,6 +8078,8 @@
       subtree: true,
       characterData: true
     });
+    document.addEventListener("input", scheduleSpeakerCheck, ccfFsWithSignal(true));
+    document.addEventListener("change", scheduleSpeakerCheck, ccfFsWithSignal(true));
     ccfFsRegisterTeardown(() => {
       try { observer.disconnect(); } catch (error) { /* observer teardown failed */ }
       if (pendingSpeakerCheckTimer) {
