@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.34
+// @version      0.0.28
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -19,17 +19,13 @@
   const CCF_SAFE_UI_ATTR = "data-ccf-safe-markup";
   const CCF_NARRATION_ATTR = "data-ccf-narration";
   const CCF_NARRATION_PANEL_ATTR = "data-ccf-narration-panel";
-  const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, .MuiPaper-root, ul.MuiList-root';
+  const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
-    'p.MuiTypography-root.MuiTypography-body1',
-    'div.MuiTypography-root.MuiTypography-body1',
-    'span.MuiTypography-root.MuiTypography-body1',
     'p.MuiTypography-root.MuiTypography-body2',
     'div.MuiTypography-root.MuiTypography-body2',
     'span.MuiTypography-root.MuiTypography-body2',
     '.MuiTypography-root.MuiListItemText-secondary',
-    '.MuiListItemText-secondary',
     '.MuiListItemText-root > p',
     '.MuiListItemText-root > div',
     '.MuiListItemText-root > span.MuiTypography-root',
@@ -56,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.34"),
+    version: getUserscriptVersion("0.0.28"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -667,8 +663,7 @@
 
       [${CCF_NARRATION_ATTR}="1"] .MuiListItemAvatar-root,
       [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-primary,
-      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image),
-      [${CCF_NARRATION_ATTR}="1"] img:not(.ccf-image):not(.ccf-render-root img) {
+      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image) {
         display: none !important;
       }
 
@@ -816,19 +811,11 @@
     if (el.closest('textarea, input, [contenteditable="true"], [role="textbox"]')) return false;
     if (el.closest("button, form")) return false;
     if (el.querySelector('button, form, textarea, input, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return false;
+    if (!el.matches?.(MESSAGE_TEXT_SELECTOR) && el.querySelector?.(MESSAGE_TEXT_SELECTOR)) return false;
+
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
     if (el.children.length > 3) return false;
-
-    const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
-    const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
-    if (!knownTextElement && !insideMessageSurface) return false;
-
-    const nestedEncodedElement = [...el.children].some((child) => {
-      const childText = child.textContent || "";
-      return childText.includes(INVIS_START) && childText.includes(INVIS_END);
-    });
-    if (nestedEncodedElement) return false;
 
     return true;
   }
@@ -914,7 +901,7 @@
       el.removeAttribute(CCF_NARRATION_ATTR);
     }
 
-    const item = findNarrationMessageItem(el);
+    const item = el.closest?.(MESSAGE_ITEM_SELECTOR);
     if (!(item instanceof HTMLElement) || item === el) return;
 
     if (narration) {
@@ -925,19 +912,6 @@
     if (!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`)) {
       item.removeAttribute(CCF_NARRATION_ATTR);
     }
-  }
-
-  function findNarrationMessageItem(el) {
-    const matched = el.closest?.(MESSAGE_ITEM_SELECTOR);
-
-    let current = el.parentElement;
-    for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
-      if (current.matches?.(".MuiPaper-root, .MuiDrawer-paper")) break;
-      const hasProfile = !!current.querySelector?.("img:not(.ccf-image), .MuiAvatar-root, .MuiListItemAvatar-root");
-      const includesText = current.contains(el);
-      if (hasProfile && includesText) return current;
-    }
-    return matched instanceof HTMLElement && matched !== el ? matched : null;
   }
 
   function extractEnvelope(fullText) {
@@ -1645,8 +1619,6 @@
   const MODAL_MODE_CCFOLIA = "ccfolia";
   const MODAL_MODE_ROLL20 = "roll20";
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
-  const CHARACTER_NAME_INPUT_SELECTOR = 'input[name="name"], input[placeholder="noname"]';
-  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const MESSAGE_HINT_RE = /message|chat|comment|send|메시지|채팅|입력|발언|メッセージ|チャット/i;
   const NAME_HINT_RE = /name|character|display.?name|chara|nickname|이름|캐릭터|닉네임|名前|キャラ/i;
 
@@ -3495,10 +3467,6 @@
           toggleNarratorName(name);
           updateInlineNarratorPopoverList(toolbar);
           refreshAllInlineNarrationButtons();
-          syncAllEditorVisualPreviews();
-          if (isModalOpen() && activeEditor) {
-            renderPreview(activeEditor, { force: true });
-          }
         } else if (action === "refresh") {
           refreshInlineNarratorPopover(toolbar, { forcePanelScan: true });
         }
@@ -4108,7 +4076,7 @@
     if (!toolbar) return;
 
     toolbar.querySelectorAll(
-      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"], [data-inline-command="paren-gray"]'
     ).forEach((btn) => {
       btn.classList.remove("active");
       btn.setAttribute("aria-pressed", "false");
@@ -4147,18 +4115,16 @@
 
     const state = ensureEditorState(editor);
     const preservedNarration = state.blockStyle?.narration === true;
-    const preservedParentheticalGray = state.parentheticalGray === true;
     state.text = "";
     state.runs = [];
     state.alignRuns = [];
     state.lastStyle = null;
     state.blockStyle = preservedNarration ? { narration: true } : {};
-    state.parentheticalGray = preservedParentheticalGray;
+    state.parentheticalGray = false;
     state.roll20Source = null;
 
     const composer = findComposerForEditor(editor);
     refreshComposerBadge(composer, editor);
-    setInlineParentheticalGrayToggle(editor, preservedParentheticalGray);
     syncEditorVisualPreview(editor);
   }
 
@@ -4388,24 +4354,14 @@
     const configured = set.size > 0;
     const editor = getInlineToolbarEditor(toolbar);
     const blockActive = editor ? ensureEditorState(editor).blockStyle?.narration === true : false;
-    const active = speakerActive || blockActive;
+    const active = configured || blockActive;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
-    btn.dataset.ccfNarratorConfigured = configured ? "1" : "0";
     btn.title = speakerActive
       ? `현재 나레이션 대상: ${speaker}`
       : configured
-        ? `나레이션 캐릭터 ${set.size}명 설정됨 (현재 화자에는 미적용)`
+        ? `나레이션 캐릭터 ${set.size}명 설정됨`
         : "나레이션 캐릭터 설정";
-  }
-
-  function applyAutomaticNarration(blockStyle) {
-    const next = cleanupBlockStyle(blockStyle);
-    const speaker = getCurrentSpeakerName();
-    if (speaker && readNarratorNameSet().has(speaker)) {
-      next.narration = true;
-    }
-    return next;
   }
 
   function refreshAllInlineNarrationButtons() {
@@ -4691,7 +4647,6 @@
       inlinePopoverState = null;
       if (state.kind === "narrator") {
         refreshInlineNarrationButton(toolbar);
-        syncAllEditorVisualPreviews();
       }
       if (options.restoreFocus !== false) {
         restoreRoomSelectionSoon(state.editor || state.context?.editor, state.selection || state.context?.selection);
@@ -7918,28 +7873,20 @@
         }
       }
     }
-    const fallback = [...document.querySelectorAll("button[aria-label]")].find((btn) => {
-      if (!(btn instanceof HTMLButtonElement) || btn.disabled || !isVisible(btn)) return false;
-      const label = normalizeMyCharacterName(btn.getAttribute("aria-label") || "");
-      return /(?:캐릭터|character|キャラクター).*(?:선택|select|selection|選択)|(?:select).*(?:character)/i.test(label);
-    });
-    if (fallback instanceof HTMLButtonElement) return fallback;
     return null;
   }
 
   function getCurrentSpeakerName() {
     const btn = findCharacterSelectButton();
-    if (btn) {
-      const inlineName = normalizeMyCharacterName(btn.textContent || "");
-      if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
+    if (!btn) return "";
 
-      const avatarName = normalizeMyCharacterName(btn.querySelector("img")?.getAttribute("alt") || "");
-      if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
-    }
+    const inlineName = normalizeMyCharacterName(btn.textContent || "");
+    if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
 
-    const anchor = btn || activeComposer || activeEditor || findChatDrawer();
-    if (!(anchor instanceof HTMLElement)) return "";
-    const fields = findSpeakerNameFields(anchor, !!btn);
+    const avatarName = normalizeMyCharacterName(btn.querySelector("img")?.getAttribute("alt") || "");
+    if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
+
+    const fields = findSpeakerNameFields(btn);
     return fields.length ? fields[0].name : "";
   }
 
@@ -7954,25 +7901,17 @@
     return normalizeMyCharacterName(field.textContent || "");
   }
 
-  function findSpeakerNameFields(anchor, allowUnhintedInput = false) {
+  function findSpeakerNameFields(btn) {
     const scopes = [];
     const seenScopes = new Set();
-    const addScope = (scope) => {
-      if (!(scope instanceof HTMLElement) || seenScopes.has(scope)) return;
-      scopes.push(scope);
-      seenScopes.add(scope);
-    };
-
-    addScope(anchor);
-    let current = anchor.parentElement;
-    for (let depth = 0; current && depth < 10; depth += 1, current = current.parentElement) {
+    let current = btn.parentElement;
+    for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
       if (!seenScopes.has(current)) {
-        addScope(current);
+        scopes.push(current);
+        seenScopes.add(current);
       }
       if (current.matches(".MuiDrawer-paper")) break;
     }
-    addScope(anchor.closest(".MuiDrawer-paper"));
-    addScope(findChatDrawer());
 
     const seenFields = new Set();
     const candidates = [];
@@ -7989,10 +7928,9 @@
         const multiline = field instanceof HTMLTextAreaElement || field.getAttribute("aria-multiline") === "true";
         if (messageHinted && !nameHinted) return;
         if (multiline && !nameHinted) return;
-        if (!nameHinted && !allowUnhintedInput) return;
         seenFields.add(field);
 
-        let score = -depth * 18 - Math.min(distanceBetween(anchor, field), 400) / 3;
+        let score = -depth * 18 - Math.min(distanceBetween(btn, field), 400) / 3;
         if (nameHinted) score += 220;
         if (messageHinted) score -= 240;
         if (field instanceof HTMLInputElement && field.type === "text") score += 45;
@@ -8125,10 +8063,6 @@
       if (current === lastObservedSpeakerName) return;
       lastObservedSpeakerName = current;
       refreshAllInlineNarrationButtons();
-      syncAllEditorVisualPreviews();
-      if (isModalOpen() && activeEditor) {
-        renderPreview(activeEditor, { force: true });
-      }
     }, 80);
   }
 
@@ -9171,7 +9105,7 @@
       ? options.textOverride
       : getEditorText(editor);
     const state = ensureEditorState(editor);
-    const blockStyle = applyAutomaticNarration(
+    const blockStyle = cleanupBlockStyle(
       options.blockStyleOverride ??
       (isModalOpen() && modalMode === MODAL_MODE_CCFOLIA && modalDraftBlockStyle != null
         ? modalDraftBlockStyle
@@ -9639,54 +9573,12 @@
     return textarea.value;
   }
 
-  function isVisibleChatMacroMenuForEditor(editor) {
-    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
-
-    const controls = [editor, editor.closest?.('[role="combobox"]')]
-      .filter((control) => control instanceof HTMLElement);
-    if (controls.some((control) => {
-      if (control.getAttribute("aria-expanded") === "true") return true;
-      const activeDescendant = control.getAttribute("aria-activedescendant");
-      return !!activeDescendant && !!document.getElementById(activeDescendant);
-    })) {
-      return true;
-    }
-
-    const inputId = editor.id || "";
-    const relatedIds = new Set([
-      editor.getAttribute("aria-controls"),
-      editor.getAttribute("aria-owns"),
-      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
-    ].filter(Boolean));
-    const directMenus = [...relatedIds]
-      .map((id) => document.getElementById(id))
-      .filter((menu) => menu instanceof HTMLElement);
-    const candidates = [...new Set([...directMenus, ...document.querySelectorAll(CHAT_MACRO_MENU_SELECTOR)])];
-
-    return candidates.some((menu) => {
-      if (!(menu instanceof HTMLElement)) return false;
-      if (menu.closest?.(`[${SAFE_UI_ATTR}="1"], #${MODAL_ID}`)) return false;
-      if (!isVisible(menu) || !String(menu.textContent || "").trim()) return false;
-      if (relatedIds.has(menu.id)) return true;
-
-      const editorRect = editor.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      return menuRect.width > 0 &&
-        menuRect.height > 0 &&
-        menuRect.left < editorRect.right &&
-        menuRect.right > editorRect.left &&
-        menuRect.top < editorRect.top &&
-        menuRect.bottom <= editorRect.bottom;
-    });
-  }
-
   function bindSendButtons() {
     const buttons = document.querySelectorAll('button[type="submit"]');
     buttons.forEach((btn) => {
       if (btn.dataset.ccfSendBound === "1") return;
       btn.dataset.ccfSendBound = "1";
 
-      // Run after other capture-phase transport helpers so this envelope is the final outgoing value.
       btn.addEventListener("click", (event) => {
         const composer = findClosestComposerBar(btn);
         const editor = composer ? findEditorFromComposer(composer) : findEditorFromNode(btn);
@@ -9703,24 +9595,23 @@
         if (hadMessage) {
           scheduleInlineFormatResetAfterSend(editor);
         }
-      });
+      }, true);
     });
   }
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((candidate) => {
-      const editor = normalizeEditorCandidate(candidate);
-      if (!editor) return;
+    editors.forEach((editor) => {
+      if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (editor.dataset.ccfEnterBound === "1") return;
 
       editor.dataset.ccfEnterBound = "1";
-      // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
-        if (isVisibleChatMacroMenuForEditor(editor)) return;
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
@@ -9732,18 +9623,16 @@
         if (hadMessage) {
           scheduleInlineFormatResetAfterSend(editor);
         }
-      });
+      }, true);
     });
   }
 
   function bindEditorVisualPreview() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((candidate) => {
-      const editor = normalizeEditorCandidate(candidate);
-      if (!editor) {
-        clearEditorVisualPreview(candidate);
-        return;
-      }
+    editors.forEach((editor) => {
+      if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
       if (editor.dataset.ccfVisualPreviewBound !== "1") {
         editor.dataset.ccfVisualPreviewBound = "1";
@@ -9759,12 +9648,10 @@
   }
 
   function syncAllEditorVisualPreviews() {
-    document.querySelectorAll(EDITOR_SELECTOR).forEach((candidate) => {
-      const editor = normalizeEditorCandidate(candidate);
-      if (!editor) {
-        clearEditorVisualPreview(candidate);
-        return;
-      }
+    document.querySelectorAll(EDITOR_SELECTOR).forEach((editor) => {
+      if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       syncEditorVisualPreview(editor);
     });
   }
@@ -9802,17 +9689,13 @@
 
   function syncEditorVisualPreview(editor) {
     if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
-    if (!normalizeEditorCandidate(editor)) {
-      clearEditorVisualPreview(editor);
-      return;
-    }
 
     const entry = ensureEditorVisualPreview(editor);
     if (!entry) return;
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
-    const blockStyle = applyAutomaticNarration(state.blockStyle);
+    const blockStyle = cleanupBlockStyle(state.blockStyle);
     const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
@@ -9833,17 +9716,6 @@
     );
     editor.classList.add("ccf-editor-preview-source");
     entry.overlay.style.display = "block";
-  }
-
-  function clearEditorVisualPreview(editor) {
-    if (!(editor instanceof HTMLElement)) return;
-    const entry = EDITOR_VISUAL_PREVIEW.get(editor);
-    if (entry?.overlay instanceof HTMLElement) {
-      entry.overlay.remove();
-    }
-    EDITOR_VISUAL_PREVIEW.delete(editor);
-    editor.classList.remove("ccf-editor-preview-source");
-    editor.style.removeProperty("--ccf-editor-caret-color");
   }
 
   function hideEditorVisualPreview(editor, entry = EDITOR_VISUAL_PREVIEW.get(editor)) {
@@ -9997,9 +9869,10 @@
 
   function bindEditorInputSync() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    editors.forEach((candidate) => {
-      const editor = normalizeEditorCandidate(candidate);
-      if (!editor) return;
+    editors.forEach((editor) => {
+      if (editor.id === "ccf-preview") return;
+      if (editor.closest && editor.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      if (editor.closest && editor.closest(`#${MODAL_ID}`)) return;
       if (editor.dataset.ccfInputSyncBound === "1") return;
 
       editor.dataset.ccfInputSyncBound = "1";
@@ -10040,6 +9913,14 @@
           state.lastStyle = null;
           state.blockStyle = {};
         } else {
+          const toolbar = getInlineToolbarForEditor(editor);
+          const narrationActive = toolbar?.querySelector?.('[data-inline-command="narration"]')?.classList.contains("active");
+          if (narrationActive) {
+            state.blockStyle = cleanupBlockStyle({
+              ...state.blockStyle,
+              narration: true
+            });
+          }
           if (state.parentheticalGray) {
             state.runs = applyParentheticalGrayRuns(state.runs, text);
           }
@@ -10079,22 +9960,16 @@
     if (node.id === "ccf-preview") return null;
     if (node.closest && node.closest(`[${SAFE_UI_ATTR}="1"]`)) return null;
     if (node.closest && node.closest(`#${MODAL_ID}`)) return null;
-    const candidate = node.matches?.(EDITOR_SELECTOR) ? node : node.closest?.(EDITOR_SELECTOR);
-    if (!(candidate instanceof HTMLElement)) return null;
-    if (isCharacterNameInput(candidate)) return null;
-    return candidate;
-  }
-
-  function isCharacterNameInput(node) {
-    return node instanceof HTMLInputElement && node.matches(CHARACTER_NAME_INPUT_SELECTOR);
+    if (node.matches?.(EDITOR_SELECTOR)) return node;
+    const closest = node.closest?.(EDITOR_SELECTOR);
+    return closest instanceof HTMLElement ? closest : null;
   }
 
   function getCurrentTargetEditor() {
     const focused = normalizeEditorCandidate(document.activeElement);
     if (focused && isVisible(focused) && findComposerForEditor(focused)) return focused;
-    const recent = normalizeEditorCandidate(lastFocusedEditor);
-    if (recent && document.contains(recent) && isVisible(recent)) {
-      return recent;
+    if (lastFocusedEditor && document.contains(lastFocusedEditor) && isVisible(lastFocusedEditor)) {
+      return lastFocusedEditor;
     }
 
     return pickBestEditor([...document.querySelectorAll(EDITOR_SELECTOR)]) || null;
@@ -10134,9 +10009,6 @@
   }
 
   function preparePayloadForSend(editor) {
-    editor = normalizeEditorCandidate(editor);
-    if (!editor) return true;
-
     if (isModalOpen() && activeEditor && editor === activeEditor) {
       syncModalEditorToRoomEditor(true);
     }
@@ -10156,7 +10028,14 @@
     }
 
     const runs = preparedRuns.runs;
-    const blockStyle = applyAutomaticNarration(state.blockStyle);
+    const blockStyle = cleanupBlockStyle(state.blockStyle);
+    const speakerName = getCurrentSpeakerName();
+    if (speakerName) {
+      const narratorSet = readNarratorNameSet();
+      if (narratorSet.has(speakerName)) {
+        blockStyle.narration = true;
+      }
+    }
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
     if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;

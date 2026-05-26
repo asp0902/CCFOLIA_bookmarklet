@@ -26,7 +26,7 @@
   const BGM_DRAWER_WIDTH_PX = 640;
   const BGM_WEB_AUDIO_MIN_DURATION = 8;
   const BGM_STORAGE_PREFIX = "ccf-chat-notifier:youtube-bgm:";
-  const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}__global_library__`; // 룸 주소 대신 전역 키 사용
+  const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}${location.pathname}`;
   const BGM_STORAGE_META_KEY = "__ccfBgmMeta";
   const BGM_STORAGE_META_VERSION = 1;
   const BGM_DELETED_ENTRY_LIMIT = 200;
@@ -386,7 +386,7 @@
   let ccfBgmStorageMigratedFromLocal = false;
   let ccfBgmDeletedEntries = {};
   const CCF_BGM_TOOLKIT_FEATURE_ID = "ccf-chat-notifier";
-  const CCF_BGM_TOOLKIT_ROOM_KEY = "__global_library__"; // Toolkit 저장소 키도 전역으로 변경
+  const CCF_BGM_TOOLKIT_ROOM_KEY = location.pathname;
   let ccfBgmApiReadyPromise = null;
   let ccfBgmPlayer = null;
   let ccfBgmPlayerHost = null;
@@ -1722,7 +1722,11 @@
         ccfBgmLastWebAudio = trackingState;
         ccfBgmLastNativeMedia = null;
 
-        // [수정됨] 효과음 재생 시 유튜브 BGM 강제 정지 로직 삭제
+        if (ccfBgmActiveSlotKey) {
+          stopCcfYoutubeBgm("webaudio-bgm-started");
+          markCcfYoutubeBgmSlotButtons();
+          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+        }
 
         startCcfBgmProgressLoop();
         window.setTimeout(updateCcfBgmProgressBar, 0);
@@ -1996,7 +2000,11 @@
       ccfBgmLastWebAudio = null;
     }
 
-    // [수정됨] 동시 재생을 위해 네이티브 재생 시 유튜브 BGM 강제 정지 로직 삭제
+    if (eventType === "play" && ccfBgmActiveSlotKey) {
+      stopCcfYoutubeBgm("native-bgm-started");
+      markCcfYoutubeBgmSlotButtons();
+      window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+    }
 
     startCcfBgmProgressLoop();
     updateCcfBgmProgressBar();
@@ -2117,25 +2125,21 @@
     if (ccfBgmActiveSlotKey && event.target instanceof Element) {
       const nativeItem = event.target.closest(".MuiListItemButton-root");
       const dialogHost = event.target.closest(".MuiDialog-root, .MuiPopover-root, .MuiModal-root");
-
-      const isBgmDialog = dialogHost instanceof HTMLElement && (
-        dialogHost.getAttribute("data-ccf-bgm-dialog-root") === "1" || 
-        isLikelyCcfBgmDialog(dialogHost)
-      );
-
       if (
         nativeItem instanceof HTMLElement
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
-        && isBgmDialog
+        && dialogHost instanceof HTMLElement
       ) {
-        const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
-        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-          stopCcfYoutubeBgm("native-library-selected");
-          ccfBgmNativeLoadedSlots.add(targetSlotKey);
-          markCcfYoutubeBgmSlotButtons();
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
+        const stoppedSlotKey = ccfBgmActiveSlotKey
+          || ccfBgmEditingSlotKey
+          || ccfBgmLastDialogSlotKey;
+        stopCcfYoutubeBgm("native-library-selected");
+        if (stoppedSlotKey) {
+          ccfBgmNativeLoadedSlots.add(stoppedSlotKey);
         }
+        markCcfYoutubeBgmSlotButtons();
+        window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+        window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
       }
     }
 
@@ -2152,52 +2156,33 @@
       return;
     }
 
-    // ========== 정지 버튼 완벽 분리 로직 ==========
     if (isCcfBgmStopButton(button)) {
       if (Date.now() < ccfSuppressStopHandlerUntil) {
         return;
       }
-      
-      const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
-      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || ccfBgmActiveSlotKey;
-
-      if (isGlobalStopButton) {
-        // 1. 하단 툴바의 전체 정지 버튼을 누른 경우 -> 유튜브도 강제 정지
-        stopCcfYoutubeBgm("stop-button");
-      } else {
-        // 2. 개별 팝업의 정지 버튼을 누른 경우
-        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-          // [유튜브 음원 팝업]에서 정지: 코코포리아가 네이티브를 끄지 못하게 이벤트 차단!
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
-          stopCcfYoutubeBgm("stop-button");
-        } else {
-          // [네이티브 음원 팝업]에서 정지: 스크립트는 유튜브를 건드리지 않고 가만히 둡니다.
-          // (코코포리아가 이벤트를 받아서 알아서 네이티브 음원만 끕니다)
-        }
-      }
-
+      const targetSlotKey = ccfBgmActiveSlotKey
+        || ccfBgmEditingSlotKey
+        || ccfBgmLastDialogSlotKey;
+      stopCcfYoutubeBgm("stop-button");
       if (targetSlotKey) {
         ccfBgmNativeLoadedSlots.delete(targetSlotKey);
-        // 우리가 유튜브를 끈 경우에만 상태(pending)를 업데이트
-        if (isGlobalStopButton || (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey)) {
-          let pendingChanged = false;
-          getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
-            if (entryKey && entry && entry.pending !== true) {
-              entry.pending = true;
-              ccfBgmSlotMap.set(entryKey, entry);
-              pendingChanged = true;
-            }
-          });
-          if (pendingChanged) persistCcfBgmSlotMap();
+        // 슬롯에 중복/잔존 항목이 있어도 재생 표시가 남지 않도록 해당 슬롯의 모든 항목을 정지 상태로 만든다.
+        let pendingChanged = false;
+        getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
+          if (entryKey && entry && entry.pending !== true) {
+            entry.pending = true;
+            ccfBgmSlotMap.set(entryKey, entry);
+            pendingChanged = true;
+          }
+        });
+        if (pendingChanged) {
+          persistCcfBgmSlotMap();
         }
         markCcfYoutubeBgmSlotButtons();
       }
       window.setTimeout(updateCcfBgmProgressBar, 50);
       return;
     }
-    // ===========================================
 
     const slotKey = getCcfBgmSlotKeyFromButton(button);
     if (slotKey) {
@@ -2970,6 +2955,7 @@
     ccfBgmActiveLoop = state.loop;
     markCcfYoutubeBgmSlotButtons();
 
+    // 재생 신호 송신(원격에서 트리거된 적용 중이면 자동 건너뜀 → 에코 방지).
     if (typeof ccfBgmFirestoreEmitPlayback === "function") {
       ccfBgmFirestoreEmitPlayback({
         entryKey: resolvedEntryKey,
@@ -3003,8 +2989,7 @@
       return;
     }
     stopNativeYoutubeMedia();
-    
-    // [수정됨] 모든 BGM을 끄는 stopCcfNormalBgmPlayback() 삭제
+    stopCcfNormalBgmPlayback();
 
     const playExistingPlayer = () => {
       if (!ccfBgmPlayer) {
@@ -3611,8 +3596,6 @@
           return false;
         }
         const entryTabSig = normalizeCcfBgmTabSignature(entry.tabSignature);
-        
-        // 1. 신규 추가 항목 (서명 없음)
         if (activeTabSig && !entryTabSig) {
           entry.tabSignature = activeTabSig;
           entry.updatedAt = Date.now();
@@ -3620,30 +3603,10 @@
           tabSignatureChanged = true;
           return true;
         }
-        
         if (!activeTabSig) {
           return true;
         }
-        
-        // 2. 현재 탭 서명과 정확히 일치
-        if (entryTabSig === activeTabSig) {
-          return true;
-        }
-
-        // 3. [추가된 로직] 하위 호환성 및 마이그레이션 방어
-        // 기존 "0::BGM 1" 형태의 서명을 가진 항목이 사라지지 않도록 처리하되,
-        // PRO 탭으로는 절대 편입되지 않도록 막습니다.
-        if (activeTabSig.startsWith(entryTabSig + "::")) {
-          if (!/PRO/i.test(activeTabSig)) {
-            entry.tabSignature = activeTabSig;
-            entry.updatedAt = Date.now();
-            ccfBgmSlotMap.set(entryKey, entry);
-            tabSignatureChanged = true;
-            return true;
-          }
-        }
-
-        return false;
+        return entryTabSig === activeTabSig;
       });
 
     if (tabSignatureChanged) {
@@ -3935,9 +3898,6 @@
 
     const play = () => {
       const current = ccfBgmSlotMap.get(entryKey) || entry;
-      // 현재 열려있는 다이얼로그의 슬롯 키를 최우선으로 가져옵니다.
-      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || slotKey;
-
       if (current) {
         current.pending = false;
         current.updatedAt = Date.now();
@@ -3945,7 +3905,7 @@
         persistCcfBgmSlotMap();
         markCcfYoutubeBgmSlotButtons();
       }
-      playCcfYoutubeBgmSlot(targetSlotKey, current, findCcfBgmButtonBySlot(targetSlotKey), 0, entryKey);
+      playCcfYoutubeBgmSlot(slotKey, current, findCcfBgmButtonBySlot(slotKey), 0, entryKey);
     };
 
     const warmPlayer = () => {
@@ -3953,9 +3913,8 @@
       if (!current?.videoId || ccfBgmActiveSlotKey) {
         return;
       }
-      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || slotKey;
       loadYoutubeIframeApi();
-      cueCcfYoutubeBgmSlot(targetSlotKey, current, entryKey);
+      cueCcfYoutubeBgmSlot(slotKey, current, entryKey);
     };
 
     const handlePlayKeydown = (event) => {
@@ -5216,7 +5175,6 @@
     return ccfBgmPlayerHost instanceof HTMLElement ? ccfBgmPlayerHost : null;
   }
 
-  // ========== 유튜브 플레이어를 코코포리아 파괴 범위 밖으로 피난시키는 로직 ==========
   function mountCcfYoutubeBgmPlayerFrame(player = null) {
     const dock = ensureCcfYoutubeBgmPlayerDock();
     if (!(dock instanceof HTMLElement)) {
@@ -5247,22 +5205,9 @@
     playerElement.setAttribute("title", "YouTube BGM player");
     playerElement.removeAttribute("aria-hidden");
     try { playerElement.inert = false; } catch (_) {}
-    
-    // 코코포리아가 툴바를 부숴도 영향이 없도록 안전 구역(document.body)에 고정
-    if (playerElement.parentElement !== document.body) {
-      document.body.appendChild(playerElement);
+    if (playerElement.parentElement !== dock) {
+      dock.appendChild(playerElement);
     }
-    
-    // 유저의 눈에 보이지 않도록 화면 밖으로 숨김 처리
-    playerElement.style.setProperty("position", "fixed", "important");
-    playerElement.style.setProperty("left", "-10000px", "important");
-    playerElement.style.setProperty("top", "0", "important");
-    playerElement.style.setProperty("width", "200px", "important");
-    playerElement.style.setProperty("height", "200px", "important");
-    playerElement.style.setProperty("opacity", "0", "important");
-    playerElement.style.setProperty("pointer-events", "none", "important");
-    playerElement.style.setProperty("z-index", "-1", "important");
-
     ccfBgmPlayerHost = playerElement;
     return playerElement;
   }
@@ -5742,34 +5687,18 @@
       return "";
     }
 
-    let baseSignature = "";
     const tablists = [...root.querySelectorAll('[role="tablist"], .MuiTabs-root')];
     for (const tablist of tablists) {
       const tabs = [...tablist.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')];
-      baseSignature = readCcfBgmActiveTabSignatureFromTabs(tabs);
-      if (baseSignature) {
-        break;
+      const signature = readCcfBgmActiveTabSignatureFromTabs(tabs);
+      if (signature) {
+        return signature;
       }
     }
 
-    if (!baseSignature) {
-      baseSignature = readCcfBgmActiveTabSignatureFromTabs(
-        [...root.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')]
-      );
-    }
-
-    // [추가된 로직] 상단 라이브러리 전환 버튼(MuiButtonGroup)의 활성화 상태 반영
-    const activeGroupButtons = [...root.querySelectorAll('.MuiButtonGroup-root .MuiButton-contained, .MuiButtonGroup-grouped.MuiButton-contained')];
-    const groupSignatures = activeGroupButtons.map(btn => {
-      // textContent를 읽으면 <title>PRO</title> 텍스트까지 포함되어 탭을 정확히 구분할 수 있습니다.
-      return normalizeSpace(btn.textContent || "");
-    }).filter(Boolean);
-
-    if (groupSignatures.length > 0) {
-      baseSignature = baseSignature ? `${baseSignature}::${groupSignatures.join("::")}` : groupSignatures.join("::");
-    }
-
-    return baseSignature;
+    return readCcfBgmActiveTabSignatureFromTabs(
+      [...root.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')]
+    );
   }
 
   function readCcfBgmActiveTabSignatureFromTabs(tabs) {
@@ -5896,7 +5825,10 @@
   }
 
   function ensureYoutubePlayerHost(options = {}) {
-    ensureCcfYoutubeBgmPlayerDock();
+    const dock = ensureCcfYoutubeBgmPlayerDock();
+    if (!(dock instanceof HTMLElement)) {
+      return null;
+    }
 
     ccfBgmPlayerVisible = options.visible !== false;
     syncCcfYoutubeBgmPlayerDockVisibility();
@@ -5912,20 +5844,9 @@
     host.classList.add("ccf-youtube-bgm-player");
     host.setAttribute("width", String(YOUTUBE_PLAYER_MIN_SIZE));
     host.setAttribute("height", String(YOUTUBE_PLAYER_MIN_SIZE));
-    
-    // 여기서도 안전 구역(document.body)에 강제 고정
-    if (host.parentElement !== document.body) {
-      document.body.appendChild(host);
+    if (host.parentElement !== dock) {
+      dock.appendChild(host);
     }
-    
-    host.style.setProperty("position", "fixed", "important");
-    host.style.setProperty("left", "-10000px", "important");
-    host.style.setProperty("top", "0", "important");
-    host.style.setProperty("width", "200px", "important");
-    host.style.setProperty("height", "200px", "important");
-    host.style.setProperty("opacity", "0", "important");
-    host.style.setProperty("pointer-events", "none", "important");
-    host.style.setProperty("z-index", "-1", "important");
 
     ccfBgmPlayerHost = host;
     return ccfBgmPlayerHost;
@@ -6832,20 +6753,12 @@
     }
 
     ccfBgmStorageLoadPromise = (async () => {
-      // 1. 먼저 전역(글로벌) 저장소에 있는 데이터를 불러옵니다.
       const parsed = await readCcfBgmPersistedPayload();
-      if (parsed) {
-        applyCcfBgmPersistedPayload(parsed);
+      if (!parsed) {
+        ccfBgmStorageLoaded = true;
+        return;
       }
-      
-      // 2. 과거에 각 방(Room)마다 흩어져 저장되어 있던 옛날 데이터를 가져와서 합칩니다.
-      const didMigrate = migrateLegacyRoomDataToGlobal();
-      
-      // 3. 만약 합칠 옛날 데이터가 있었다면, 합쳐진 결과를 전역 저장소에 다시 최종 저장합니다.
-      if (didMigrate) {
-        persistCcfBgmSlotMap(); 
-      }
-      
+      applyCcfBgmPersistedPayload(parsed);
       ccfBgmStorageLoaded = true;
     })().catch((error) => {
       ccfBgmStorageLoaded = true;
@@ -8436,94 +8349,4 @@
     const style = window.getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden";
   }
-
-function migrateLegacyRoomDataToGlobal() {
-    let migrated = false;
-    const keysToRemove = [];
-
-    try {
-      // 로컬 스토리지 전체를 순회하며 과거 룸별 키를 찾음
-      for (let i = 0; i < window.localStorage.length; i++) {
-        const key = window.localStorage.key(i);
-        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY) {
-          try {
-            const raw = window.localStorage.getItem(key);
-            const parsed = raw ? JSON.parse(raw) : null;
-            if (parsed && typeof parsed === "object") {
-              // 파싱된 과거 데이터를 현재 글로벌 맵(ccfBgmSlotMap)에 병합
-              Object.entries(parsed).forEach(([entryKey, entry], index) => {
-                if (entryKey === BGM_STORAGE_META_KEY) return;
-                
-                const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
-                const storageKey = String(entryKey || "").includes(":youtube:") ? String(entryKey) : normalizedSlot;
-                const url = String(entry?.url || "");
-                const videoId = sanitizeCcfYoutubeVideoId(entry?.videoId || extractCcfYoutubeVideoId(url));
-                const updatedAt = Number(entry?.updatedAt) || 0;
-                
-                if (storageKey && normalizedSlot && url && videoId) {
-                  const existing = ccfBgmSlotMap.get(storageKey);
-                  // 이미 등록된 곡이 없거나, 과거 데이터가 더 최신인 경우에만 추가
-                  if (!existing || existing.updatedAt < updatedAt) {
-                    ccfBgmSlotMap.set(storageKey, {
-                      slotKey: normalizedSlot,
-                      url,
-                      videoId,
-                      title: normalizeSpace(entry?.title || "") || "YouTube BGM",
-                      displayName: normalizeSpace(entry?.displayName || entry?.title || "") || "YouTube BGM",
-                      tabSignature: normalizeCcfBgmTabSignature(entry?.tabSignature),
-                      volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
-                      volumeEdited: entry?.volumeEdited === true,
-                      loop: typeof entry?.loop === "boolean" ? entry.loop : true,
-                      updatedAt,
-                      createdAt: Number(entry?.createdAt) || updatedAt || Date.now() + index,
-                      order: Number.isFinite(Number(entry?.order)) && Number(entry.order) > 0 ? Number(entry.order) : Date.now(),
-                      pending: entry?.pending !== false
-                    });
-                    migrated = true;
-                  }
-                }
-              });
-              // 병합이 끝난 과거 키는 삭제 목록에 추가
-              keysToRemove.push(key);
-            }
-          } catch (e) {
-            debugLog("legacy-migration-parse-failed", serializeError(e));
-          }
-        }
-      }
-      
-      // 마이그레이션이 끝난 과거 룸 데이터 삭제 (스토리지 정리)
-      keysToRemove.forEach(k => window.localStorage.removeItem(k));
-    } catch (e) {
-      debugLog("legacy-migration-failed", serializeError(e));
-    }
-
-    return migrated;
-  }
-
-function stopCcfNativeBgmForSlot(slotKey) {
-    if (!slotKey) return;
-    const button = findCcfBgmButtonBySlot(slotKey);
-    if (!button) return;
-
-    // 해당 슬롯의 행(Row) 컨테이너 찾기
-    const container = button.closest('.MuiListItem-root');
-    if (!container) return;
-
-    // 해당 슬롯의 전용 Stop 아이콘 찾기
-    const stopIcon = container.querySelector('[data-testid="StopIcon"]');
-    if (!stopIcon) return;
-
-    const stopBtn = stopIcon.closest('button');
-    if (!stopBtn) return;
-
-    // 정지 버튼 클릭 (의도적 정지이므로 StopHandler 무시 타이머 갱신)
-    ccfSuppressStopHandlerUntil = Date.now() + 250;
-    try {
-      stopBtn.click();
-    } catch (error) {
-      debugLog("bgm-native-slot-stop-failed", serializeError(error));
-    }
-  }
-
 })();

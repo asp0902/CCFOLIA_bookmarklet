@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.5
+// @version      0.1.1
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -23,9 +23,6 @@
   const DICEBOT_TOPBAR_SELECTOR = "span.MuiTypography-caption";
   const DICEBOT_MAP = Object.freeze({
     "언성 듀엣": "unsung-duet",
-    // CCFOLIA 한국어 UI에서는 "크툴루의 부름 7판" 으로 표기됨.
-    // 영문 표기도 같이 등록 (다국어 UI / BCDice 원문 표기 대응).
-    "크툴루의 부름 7판": "cree-grrr",
     "Call of Cthulhu 7th Edition": "cree-grrr"
   });
 
@@ -44,12 +41,12 @@
     Object.freeze({
       id: "unsung-duet",
       name: "언성 듀엣",
-      description: "언성 듀엣 룸용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 적용"
+      description: '다이스봇이 "언성 듀엣"일 때만 적용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 ON/OFF'
     }),
     Object.freeze({
       id: "cree-grrr",
       name: "CREE-GRRR!",
-      description: "CREE-GRRR! 시트용 / 팝업·채팅 다이스 결과(원형/깃발 이미지) 디자인"
+      description: '다이스봇이 "Call of Cthulhu 7th Edition"일 때만 적용 / 팝업·다이스 메시지 디자인'
     })
   ]);
   // 기존 사용자의 unsungDuetEnabled:true 설정을 그대로 보존하려고 기본값은 "unsung-duet" 유지.
@@ -57,40 +54,6 @@
   const DEFAULT_SHEET_THEME_ID = "unsung-duet";
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
   const SHEET_THEME_SELECT_TOOLKIT_ID = "ccf-theme-switcher-sheet-theme-select-toolkit";
-
-  // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스
-  const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
-  const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
-  const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
-  // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃
-  const CREE_GRRR_CARD_CLASS = "ccf-cree-grrr-dicecard";
-  const CREE_GRRR_ORIGINAL_ATTR = "data-ccf-cree-grrr-original";
-  // 인식할 판정 결과 상태 키워드 — CCFOLIA(CoC 7판 BCDice) 가 실제로 출력하는 텍스트.
-  // CREE-GRRR! 시트(Roll20)는 다른 명칭을 쓰므로 매칭한 다음 mapCcfStatusToCreeGrrr 로
-  // Roll20 명칭(스페셜/크리티컬/극단적 성공/...) 으로 치환해 뱃지에 표시한다.
-  const CREE_GRRR_STATUS_TOKENS = Object.freeze([
-    "대실패",
-    "실패",
-    "보통 성공",
-    "어려운 성공",
-    "대단한 성공",
-    "대성공"
-  ]);
-  // 다이스봇 출력의 화살표/구분자 — BCDice 는 →(U+2192), ＞(U+FF1E), 일반 > 모두 사용.
-  // (=는 "1D100<=50" 같은 수식 안에서도 등장해 d100 결과로 오인되므로 제외)
-  const CREE_GRRR_ARROW_CLASS = "[\\u2192\\uFF1E>]";
-  // 패턴: (1) "→ 73" 결과 숫자, (2) "→ 보통 성공" 또는 (3) "(보통 성공)" 상태 키워드
-  // 키워드는 길이 내림차순으로 정렬해 "보통 성공" 이 "성공" 보다 먼저 매칭되도록 함
-  const CREE_GRRR_STATUS_ALT = [...CREE_GRRR_STATUS_TOKENS]
-    .sort((a, b) => b.length - a.length)
-    .map((w) => w.replace(/\s+/g, "\\s*"))
-    .join("|");
-  const CREE_GRRR_DICE_PATTERN = new RegExp(
-    CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)" +
-    "|" + CREE_GRRR_ARROW_CLASS + "\\s*(" + CREE_GRRR_STATUS_ALT + ")" +
-    "|\\((" + CREE_GRRR_STATUS_ALT + ")\\)",
-    "g"
-  );
 
   // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지.
   // CCFOLIA는 raw URL을 자동 임베드하지 않으므로 마크다운 링크 형태로 발송.
@@ -210,7 +173,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.5"),
+    version: getUserscriptVersion("0.1.1"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -275,12 +238,7 @@
         `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`,
         `[${UNSUNG_DUET_FIELD_BOUND_ATTR}]`,
         `[${UNSUNG_DUET_MSG_INJECTED_ATTR}]`,
-        `.${UNSUNG_DUET_IMG_CLASS}`,
-        `[${CREE_GRRR_FORMATTED_ATTR}]`,
-        `[${CREE_GRRR_ORIGINAL_ATTR}]`,
-        `.${CREE_GRRR_CARD_CLASS}`,
-        `.${CREE_GRRR_ROLLRESULT_CLASS}`,
-        `.${CREE_GRRR_STATUS_CLASS}`
+        `.${UNSUNG_DUET_IMG_CLASS}`
       ].join(", ")).forEach((el) => {
         if (el instanceof HTMLElement) {
           el.style.removeProperty("--ccf-theme-anchor-height");
@@ -295,8 +253,6 @@
         el.removeAttribute(CHARACTER_COLOR_NATIVE_INPUT_ATTR);
         el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
         el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
-        el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
-        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -1464,18 +1420,11 @@
       document.documentElement.appendChild(varsStyle);
     }
 
-    // 다이스봇 스타일시트는 매 호출마다 최신 textContent 로 강제 갱신.
-    // 스크립트 버전을 올렸을 때 기존 <style> 가 그대로 남아 옛 CSS(과거 인라인 뱃지 등)
-    // 가 화면에 살아 있는 문제를 방지.
-    let dicebotStyle = document.getElementById(DICEBOT_STYLE_ID);
-    if (!(dicebotStyle instanceof HTMLStyleElement)) {
-      dicebotStyle = document.createElement("style");
+    if (!document.getElementById(DICEBOT_STYLE_ID)) {
+      const dicebotStyle = document.createElement("style");
       dicebotStyle.id = DICEBOT_STYLE_ID;
+      dicebotStyle.textContent = buildDicebotStyleSheet();
       document.documentElement.appendChild(dicebotStyle);
-    }
-    const nextContent = buildDicebotStyleSheet();
-    if (dicebotStyle.textContent !== nextContent) {
-      dicebotStyle.textContent = nextContent;
     }
   }
 
@@ -1752,12 +1701,13 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: CCFOLIA 기본 배치 유지 — flex:1 강제 X.
-         (강제 균등 분배가 적용되면서 삭제/복제/화면에 추가 버튼 정렬이 망가지는
-          현상이 있어, 폰트만 적용하고 레이아웃은 네이티브로 둠) */
+      /* DialogActions: 액션 버튼은 균등 분배 + 한 줄 유지 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        white-space: nowrap !important;
+        font-family: inherit !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
@@ -1825,21 +1775,18 @@
         color: ${CG.dim} !important;
       }
 
-      /* 입력칸 — 검은 베이스 + CYAN(#1DE2E2) 텍스트 + DungGeunMo 명시 적용.
-         이름/이니셔티브/토큰 사이즈/참고 URL 등 모든 input/textarea/select 가 대상. */
+      /* 입력칸 — 검은 베이스 + 흰색 보더 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiFilledInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-input,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiSelect-select,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper textarea,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="text"],
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"],
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="url"] {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"] {
         background: ${CG.bgChip} !important;
-        color: #1DE2E2 !important;
+        color: ${CG.text} !important;
         border-radius: 4px !important;
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+        font-family: inherit !important;
       }
 
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
@@ -1937,129 +1884,6 @@
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li a {
         color: ${CG.accent} !important;
       }
-
-      /* 레거시 v0.1.x 인라인 뱃지 무력화 — 브라우저에 옛 CSS가 캐시되어 살아 있어도
-         시각 효과가 안 나오게 강제 unset. JS 측 cleanupLegacyCreeGrrrSpans 와 이중 안전망. */
-      .${CREE_GRRR_ROLLRESULT_CLASS},
-      .${CREE_GRRR_STATUS_CLASS} {
-        all: unset !important;
-        display: inline !important;
-      }
-
-      /* 카드를 머금은 host 요소 — 강제 display:block 으로 인라인 컨텍스트의 클리핑 회피.
-         배경/패딩/마진 모두 해제해 카드가 자기 레이아웃 그대로 보이게 함. */
-      [${CREE_GRRR_FORMATTED_ATTR}="1"] {
-        display: block !important;
-        background: transparent !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-      }
-
-      /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
-         Roll20 시트의 sheet-rolltemplate-coc (243×370px) 와 동일한 카드 레이아웃.
-         스킬명 / 3개의 작은 원(판정기준·/2·/5) / 큰 중앙 원(판정값) / 판정단계 텍스트
-         JS 측에서 dicebot==='cree-grrr' + 판정 텍스트(CC<=N 또는 (1D100<=N)) 매칭
-         시에만 카드를 빌드해 메시지 본문을 대체. */
-      .${CREE_GRRR_CARD_CLASS} {
-        position: relative;
-        display: block;
-        width: 243px;
-        height: 370px;
-        margin: 6px 0;
-        background-color: rgba(7, 12, 25, 0.85);
-        background-image: url(https://i.imgur.com/hj7QazV.png);
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
-        color: ${CG.accent};
-        text-align: center;
-        box-sizing: border-box;
-      }
-      /* 스킬명 뱃지 — 좌측 상단 */
-      .${CREE_GRRR_CARD_CLASS}__skill {
-        position: absolute;
-        top: 28px;
-        left: 0;
-        padding: 5px 20px;
-        background-color: rgba(40, 170, 226, 0.25);
-        font-size: 16px;
-        color: ${CG.accent};
-        max-width: 60%;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-      }
-      /* 3개의 작은 판정 원 (판정기준 / 기준/2 / 기준/5) */
-      .${CREE_GRRR_CARD_CLASS}__targets {
-        position: absolute;
-        top: 88px;
-        left: 0;
-        right: 0;
-        display: flex;
-        justify-content: center;
-        gap: 14px;
-      }
-      .${CREE_GRRR_CARD_CLASS}__target {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 44px;
-        height: 44px;
-        background-color: rgba(7, 12, 25, 0.55);
-        background-image: url(https://i.imgur.com/XmfjgaY.png);
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-        border: 1px solid ${CG.accent};
-        border-radius: 50%;
-        box-sizing: border-box;
-        font-size: 16px;
-        color: ${CG.accent};
-        font-family: inherit;
-      }
-      /* 큰 중앙 원 — 판정값 (실제 d100 굴림) */
-      .${CREE_GRRR_CARD_CLASS}__result {
-        position: absolute;
-        top: 150px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 106px;
-        height: 106px;
-        background-color: rgba(7, 12, 25, 0.55);
-        background-image: url(https://i.imgur.com/QxyXISE.png);
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-        border: 1.5px solid ${CG.accent};
-        border-radius: 50%;
-        box-sizing: border-box;
-        font-size: 52px;
-        line-height: 1;
-        color: ${CG.accent};
-        font-family: inherit;
-      }
-      /* 판정단계 텍스트 — 카드 하단 */
-      .${CREE_GRRR_CARD_CLASS}__status {
-        position: absolute;
-        bottom: 50px;
-        left: 0;
-        right: 0;
-        font-size: 22px;
-        font-family: inherit;
-      }
-      .${CREE_GRRR_CARD_CLASS}__status--fail {
-        color: #de0000;
-      }
-      .${CREE_GRRR_CARD_CLASS}__status--success {
-        color: ${CG.accent};
-      }
     `;
   }
 
@@ -2101,7 +1925,6 @@
     applyDicebotAttribute();
     bindUnsungDuetTriggerFields();
     injectUnsungDuetMessageImages();
-    injectCreeGrrrDiceFormatting();
     installYouTubePauseInterceptor();
     ensureToolkitToggleWatcher();
     mountUnsungDuetToolkitToggle();
@@ -2251,9 +2074,7 @@
           syncUnsungDuetToggle();
           applyDicebotAttribute();
           // 토글 OFF → 이미 인젝트된 이미지/마킹을 즉시 정리해 원본 텍스트로 복원
-          // 토글 ON → 새 테마의 인젝션을 기존 메시지에도 즉시 적용
           if (!nextEnabled) revertUnsungDuetDomState();
-          else reapplySheetThemeInjections();
           const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
           setStatus(
             nextEnabled
@@ -2354,8 +2175,6 @@
         applyDicebotAttribute();
         // 다른 테마로 전환 — 이전 테마의 인젝션 흔적(이미지 치환 등) 즉시 정리
         revertUnsungDuetDomState();
-        // 새 테마 인젝션을 즉시 재실행
-        reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
         setStatus(`커스텀 시트 테마: ${themeName}`, "success");
@@ -4195,15 +4014,13 @@
   function applyDicebotAttribute() {
     const root = document.documentElement;
     if (!root) return;
-    // 사용자가 드롭다운에서 명시적으로 선택 + ON 했으면 그 테마를 무조건 적용.
-    // (CCFOLIA 다이스봇 표시명이 환경마다 미묘하게 달라 감지가 실패하는 케이스를 회피.
-    //  detectDicebotName() 의 결과는 더 이상 게이트로 사용하지 않는다.)
-    let id = "";
-    if (isSheetThemeEnabled()) {
-      const selected = getSelectedSheetThemeId();
-      if (selected && selected !== SHEET_THEME_NONE_ID) {
-        id = selected;
-      }
+    let id = detectDicebotName();
+    // 시트 테마 토글이 OFF거나, 감지된 다이스봇이 현재 선택된 시트 테마의 매핑과
+    // 다르면 식별자를 비운다. 이 단일 게이트로 CSS 테마 / 트리거 치환 / 이미지 인젝션 /
+    // pauseVideo 차단 모두 한 번에 OFF 됨
+    // (모두 getCurrentDicebotId() 검사에 의존하므로).
+    if (!isSheetThemeEnabled() || id !== getSelectedSheetThemeId()) {
+      id = "";
     }
     const current = root.getAttribute(DICEBOT_ATTR) || "";
     if (id) {
@@ -4252,34 +4069,6 @@
     return false;
   }
 
-  function hasActiveChatMacroSelection(field) {
-    if (!(field instanceof HTMLTextAreaElement) || field.getAttribute("name") !== "text") return false;
-
-    const controls = [field, field.closest?.('[role="combobox"]')]
-      .filter((control) => control instanceof HTMLElement);
-    if (controls.some((control) => {
-      if (control.getAttribute("aria-expanded") === "true") return true;
-      const activeDescendant = control.getAttribute("aria-activedescendant");
-      return !!activeDescendant && !!document.getElementById(activeDescendant);
-    })) {
-      return true;
-    }
-
-    const inputId = field.id || "";
-    const relatedIds = [
-      field.getAttribute("aria-controls"),
-      field.getAttribute("aria-owns"),
-      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
-    ].filter(Boolean);
-
-    return relatedIds.some((id) => {
-      const menu = document.getElementById(id);
-      if (!(menu instanceof HTMLElement) || !String(menu.textContent || "").trim()) return false;
-      const style = window.getComputedStyle(menu);
-      return style.display !== "none" && style.visibility !== "hidden" && menu.getClientRects().length > 0;
-    });
-  }
-
   function bindUnsungDuetField(field) {
     if (!isUnsungDuetTextField(field)) return;
     if (field.getAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR) === "1") return;
@@ -4289,7 +4078,6 @@
       if (event.key !== "Enter") return;
       // Shift+Enter는 줄바꿈, IME 조합 중 Enter는 한글 확정용 — 둘 다 발송이 아님
       if (event.shiftKey || event.isComposing || event.keyCode === 229) return;
-      if (hasActiveChatMacroSelection(field)) return;
       if (unsungDuetEnterReentry) return;
       if (getCurrentDicebotId() !== "unsung-duet") return;
 
@@ -4374,8 +4162,7 @@
       // 툴킷은 shadow DOM 이라 외부 CSS 가 안 먹음 → 인라인 스타일로 처리
       row.style.cssText =
         "display:flex;flex-direction:column;gap:6px;" +
-        // 상단 여백을 줄여 카드 설명문과 드롭다운 사이가 너무 떨어져 보이지 않게 함
-        "padding:4px 0 0 0;margin-top:4px;" +
+        "padding:8px 0 0 0;margin-top:8px;" +
         "border-top:1px solid rgba(255,255,255,0.08);";
 
       // 상단: 드롭다운(테마 선택) + ON/OFF 버튼
@@ -4420,8 +4207,6 @@
         applyDicebotAttribute();
         // 다른 테마로 전환할 때 이전 테마의 DOM 인젝션(이미지 치환 등) 흔적 정리
         revertUnsungDuetDomState();
-        // 새 테마 인젝션을 즉시 재실행 — 옵저버를 기다리지 않고 기존 메시지도 처리
-        reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
         setStatus(`커스텀 시트 테마: ${themeName}`, "success");
@@ -4439,7 +4224,6 @@
         persistSettings();
         applyDicebotAttribute();
         if (!next) revertUnsungDuetDomState();
-        else reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
         setStatus(
@@ -4531,247 +4315,6 @@
     document.querySelectorAll(`[${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"]`).forEach((el) => {
       el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
     });
-    revertCreeGrrrDomState();
-  }
-
-  // 테마 전환/토글 ON 직후 호출 — 옵저버를 기다리지 않고 기존 메시지에도 즉시
-  // 새 테마의 인젝션을 적용. (옵저버는 새 mutation 에만 반응하므로 기존 메시지가
-  // 누락되는 문제를 회피.)
-  function reapplySheetThemeInjections() {
-    try {
-      bindUnsungDuetTriggerFields();
-      injectUnsungDuetMessageImages();
-      injectCreeGrrrDiceFormatting();
-    } catch (error) { /* 인젝션 실패는 무시 — 다음 mutation 에서 재시도 */ }
-  }
-
-  // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
-  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 원본 텍스트를 되돌림.
-  function revertCreeGrrrDomState() {
-    document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
-      if (!(el instanceof HTMLElement)) return;
-      const original = el.getAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      if (original !== null) {
-        // 내부 카드 노드 제거하고 원본 텍스트로 되돌리기
-        el.textContent = original;
-        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      }
-      // 혹시 display:none 으로 숨겨놨던 케이스 호환 복원
-      if (el.style && el.style.display === "none") {
-        el.style.display = "";
-      }
-      el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
-    });
-    // 혹시 어딘가 남아 있는 카드 노드 정리 (방어적)
-    document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}`).forEach((card) => card.remove());
-    cleanupLegacyCreeGrrrSpans();
-  }
-
-  // 이전 버전(v0.1.x) 이 만든 인라인 뱃지 span 잔존물을 텍스트로 복원.
-  // CSS 캐시 / 옛 DOM 상태로 인해 채팅·알림 팝업에 살아 있는 경우를 청소.
-  function cleanupLegacyCreeGrrrSpans() {
-    const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
-    document.querySelectorAll(selector).forEach((span) => {
-      if (!(span instanceof HTMLElement)) return;
-      const parent = span.parentNode;
-      if (!parent) return;
-      parent.replaceChild(document.createTextNode(span.textContent || ""), span);
-    });
-  }
-
-  // CREE-GRRR!: 채팅 다이스 판정 결과를 Roll20 시트 카드로 대체.
-  // 클래스 의존성을 완전히 제거하고 텍스트 노드 자체를 스캔 → 어떤 CCFOLIA 빌드든
-  // 다이스 패턴이 있는 텍스트면 무조건 캡처. 텍스트 노드의 부모 요소가 host 가 되어
-  // 그 안에서 카드로 교체.
-  //
-  // parser 가 엄격해서(target + 화살표 + 굴림값) 데미지/일반 굴림은 통과 못함.
-  // 진짜 오버레이 UI(다이얼로그/메뉴/툴팁) 는 별도 제외.
-  const CREE_GRRR_SKIP_ANCESTOR_SELECTOR = [
-    `[role="dialog"]`,
-    `[role="menu"]`,
-    `[role="menuitem"]`,
-    `[role="tooltip"]`,
-    `.MuiTooltip-popper`,
-    `.MuiDialog-paper`,
-    `.MuiSnackbar-root`
-  ].join(", ");
-  // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과
-  const CREE_GRRR_TEXT_FAST_PATTERN =
-    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d).*[→＞>]\s*\d/is;
-
-  function injectCreeGrrrDiceFormatting() {
-    if (!isSheetThemeEnabled()) return;
-    if (getSelectedSheetThemeId() !== "cree-grrr") return;
-    cleanupLegacyCreeGrrrSpans();
-    if (!document.body) return;
-
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const txt = node.textContent || "";
-        if (!txt || !CREE_GRRR_TEXT_FAST_PATTERN.test(txt)) return NodeFilter.FILTER_REJECT;
-        const p = node.parentElement;
-        if (!p) return NodeFilter.FILTER_REJECT;
-        const tag = p.tagName;
-        if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "INPUT") {
-          return NodeFilter.FILTER_REJECT;
-        }
-        if (p.hasAttribute(CREE_GRRR_FORMATTED_ATTR)) return NodeFilter.FILTER_REJECT;
-        if (p.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return NodeFilter.FILTER_REJECT;
-        if (p.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-
-    // 같은 host(부모 요소) 중복 처리 방지
-    const seen = new WeakSet();
-    let scanned = 0;
-    let transformed = 0;
-    let current;
-    while ((current = walker.nextNode())) {
-      const host = current.parentElement;
-      if (!host || seen.has(host)) continue;
-      seen.add(host);
-      scanned++;
-      const text = host.textContent || "";
-      const parsed = parseCreeGrrrDiceRoll(text);
-      if (!parsed) continue;
-      transformed++;
-      const card = buildCreeGrrrDiceCard(parsed);
-      host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
-      host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-      host.replaceChildren(card);
-    }
-
-    // 진단용: scan 결과가 있으면 한 번 로그 (다음 사이클에 또 처리할 게 있으면 다시 로그됨)
-    if (scanned > 0) {
-      try {
-        console.info(`[CREE-GRRR!] dice cards: scanned ${scanned}, transformed ${transformed}`);
-      } catch (_) { /* ignore */ }
-    }
-  }
-
-  // CoC 7판 판정 메시지 파싱.
-  //   입력 예: "CC<=60 건강 (1D100<=60) 보너스, 패널티 주사위[0] ＞ 43 ＞ 43 ＞ 보통 성공"
-  //   반환: { skill, target, halfTarget, fifthTarget, rollValue, status, statusKind }
-  //   매칭 실패 시 null (카드 미생성, 메시지 원본 유지).
-  function parseCreeGrrrDiceRoll(text) {
-    if (!text || typeof text !== "string") return null;
-
-    // 판정기준 (target): CC<=N 우선, 없으면 (1D100<=N) 에서 추출
-    let target = null;
-    const ccMatch = text.match(/CC[BS]?<=(\d+)/i);
-    const d100Match = text.match(/\(\s*1D100\s*<=\s*(\d+)\s*\)/i);
-    const targetSource = ccMatch || d100Match;
-    if (targetSource) target = parseInt(targetSource[1], 10);
-    if (target === null || !Number.isFinite(target) || target < 1) return null;
-
-    // 스킬명: "CC<=N <skillname> (1D100" 사이의 문자열 (선택적)
-    let skill = "";
-    const skillMatch = text.match(/CC[BS]?<=\d+\s+([^()]+?)\s*\(\s*1D100/i);
-    if (skillMatch) skill = skillMatch[1].trim();
-
-    // 굴림값 (rollValue): 모든 "＞/>/→ N" 중 마지막 숫자 (보너스/페널티 적용 후 최종값)
-    const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
-    const rolls = [];
-    let am;
-    while ((am = arrowRe.exec(text)) !== null) {
-      const n = parseInt(am[1], 10);
-      if (n >= 1 && n <= 100) rolls.push(n);
-    }
-    if (rolls.length === 0) return null;
-    const rollValue = rolls[rolls.length - 1];
-
-    // 판정단계: 메시지 끝쪽의 마지막 상태 키워드
-    const statusRe = new RegExp(
-      CREE_GRRR_ARROW_CLASS + "\\s*(" + CREE_GRRR_STATUS_ALT + ")",
-      "g"
-    );
-    const statusMatches = [...text.matchAll(statusRe)];
-    const rawStatus = statusMatches.length > 0
-      ? statusMatches[statusMatches.length - 1][1].replace(/\s+/g, " ").trim()
-      : null;
-    const status = rawStatus ? mapCcfStatusToCreeGrrr(rawStatus, rollValue) : null;
-    const statusKind = classifyCreeGrrrStatus(status);
-
-    return {
-      skill,
-      target,
-      halfTarget: Math.floor(target / 2),
-      fifthTarget: Math.floor(target / 5),
-      rollValue,
-      status,
-      statusKind
-    };
-  }
-
-  // 표시할 판정단계가 성공류인지 실패류인지 분류 (텍스트 색상용).
-  function classifyCreeGrrrStatus(status) {
-    if (!status) return "neutral";
-    if (/(실패|펌블)/.test(status)) return "fail";
-    return "success";
-  }
-
-  // 카드 DOM 생성 — 스킬명·3개 작은 원·큰 중앙 원·상태 텍스트.
-  function buildCreeGrrrDiceCard(parsed) {
-    const card = document.createElement("div");
-    card.className = CREE_GRRR_CARD_CLASS;
-
-    if (parsed.skill) {
-      const skillEl = document.createElement("div");
-      skillEl.className = `${CREE_GRRR_CARD_CLASS}__skill`;
-      skillEl.textContent = parsed.skill;
-      card.appendChild(skillEl);
-    }
-
-    const targets = document.createElement("div");
-    targets.className = `${CREE_GRRR_CARD_CLASS}__targets`;
-    for (const value of [parsed.target, parsed.halfTarget, parsed.fifthTarget]) {
-      const t = document.createElement("span");
-      t.className = `${CREE_GRRR_CARD_CLASS}__target`;
-      t.textContent = String(value);
-      targets.appendChild(t);
-    }
-    card.appendChild(targets);
-
-    const result = document.createElement("div");
-    result.className = `${CREE_GRRR_CARD_CLASS}__result`;
-    result.textContent = String(parsed.rollValue);
-    card.appendChild(result);
-
-    if (parsed.status) {
-      const statusEl = document.createElement("div");
-      statusEl.className =
-        `${CREE_GRRR_CARD_CLASS}__status ${CREE_GRRR_CARD_CLASS}__status--${parsed.statusKind}`;
-      statusEl.textContent = parsed.status;
-      card.appendChild(statusEl);
-    }
-
-    return card;
-  }
-
-  // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
-  //   대실패          → 대실패        (단, d100 결과가 100 이면 "펌블")
-  //   실패            → 실패         (단, d100 결과가 96~99 이면 "치명적 실패")
-  //   보통 성공       → 성공
-  //   어려운 성공     → 어려운 성공
-  //   대단한 성공     → 극단적 성공
-  //   대성공          → 스페셜       (단, d100 결과가 1 이면 "크리티컬")
-  function mapCcfStatusToCreeGrrr(ccfTerm, rollValue) {
-    if (typeof ccfTerm !== "string") return ccfTerm;
-    const normalized = ccfTerm.replace(/\s+/g, "");
-    switch (normalized) {
-      case "대실패":      return rollValue === 100 ? "펌블" : "대실패";
-      case "실패":
-        return (rollValue !== null && rollValue >= 96 && rollValue <= 99)
-          ? "치명적 실패"
-          : "실패";
-      case "보통성공":    return "성공";
-      case "어려운성공":  return "어려운 성공";
-      case "대단한성공":  return "극단적 성공";
-      case "대성공":      return rollValue === 1 ? "크리티컬" : "스페셜";
-      default:            return ccfTerm;
-    }
   }
 
   function bindUnsungDuetTriggerFields() {
