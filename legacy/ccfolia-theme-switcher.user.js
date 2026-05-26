@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.1
+// @version      0.1.2
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -54,6 +54,30 @@
   const DEFAULT_SHEET_THEME_ID = "unsung-duet";
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
   const SHEET_THEME_SELECT_TOOLKIT_ID = "ccf-theme-switcher-sheet-theme-select-toolkit";
+
+  // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스
+  const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
+  const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
+  const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
+  // 인식할 판정 결과 상태 키워드 (CoC 7판 BCDice 출력 기준)
+  const CREE_GRRR_STATUS_TOKENS = Object.freeze([
+    "대성공", "대실패", "치명적 실패", "치명적실패",
+    "결정적 실패", "결정적실패", "성공", "실패",
+    "스페셜", "어려운 성공", "극단적 성공",
+    "펌블", "크리티컬"
+  ]);
+  // 패턴: (1) "→ 123" 결과 숫자, (2) "→ 성공" 또는 (3) "(성공)" 상태 키워드
+  // 키워드는 길이 내림차순으로 정렬해 "대성공" 이 "성공" 보다 먼저 매칭되도록 함
+  const CREE_GRRR_STATUS_ALT = [...CREE_GRRR_STATUS_TOKENS]
+    .sort((a, b) => b.length - a.length)
+    .map((w) => w.replace(/\s+/g, "\\s*"))
+    .join("|");
+  const CREE_GRRR_DICE_PATTERN = new RegExp(
+    "→\\s*(\\d+)" +
+    "|→\\s*(" + CREE_GRRR_STATUS_ALT + ")" +
+    "|\\((" + CREE_GRRR_STATUS_ALT + ")\\)",
+    "g"
+  );
 
   // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지.
   // CCFOLIA는 raw URL을 자동 임베드하지 않으므로 마크다운 링크 형태로 발송.
@@ -173,7 +197,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.1"),
+    version: getUserscriptVersion("0.1.2"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -238,7 +262,10 @@
         `[${CHARACTER_COLOR_NATIVE_INPUT_ATTR}]`,
         `[${UNSUNG_DUET_FIELD_BOUND_ATTR}]`,
         `[${UNSUNG_DUET_MSG_INJECTED_ATTR}]`,
-        `.${UNSUNG_DUET_IMG_CLASS}`
+        `.${UNSUNG_DUET_IMG_CLASS}`,
+        `[${CREE_GRRR_FORMATTED_ATTR}]`,
+        `.${CREE_GRRR_ROLLRESULT_CLASS}`,
+        `.${CREE_GRRR_STATUS_CLASS}`
       ].join(", ")).forEach((el) => {
         if (el instanceof HTMLElement) {
           el.style.removeProperty("--ccf-theme-anchor-height");
@@ -253,6 +280,7 @@
         el.removeAttribute(CHARACTER_COLOR_NATIVE_INPUT_ATTR);
         el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
         el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
+        el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -1884,6 +1912,46 @@
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li a {
         color: ${CG.accent} !important;
       }
+
+      /* === [CREE-GRRR!] 다이스 판정 결과 시각화 ====================== */
+      /* JS 인젝션으로 채팅 메시지의 "→ 숫자" 와 "(성공/실패/...)" 를 감싸,
+         Roll20 시트의 .sheet-rollresult / .sheet-result-status 와 동일한
+         원형 프레임 이미지를 입혀 다이스 카드 같은 외형을 만든다.
+         이 클래스들은 시트 테마와 독립적인 스코프(셀렉터에 dicebot 속성 미포함)
+         이지만 인젝션 자체가 dicebot==="cree-grrr" 게이트로만 발생한다. */
+      .${CREE_GRRR_ROLLRESULT_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        width: 70px;
+        height: 70px;
+        background: url(https://i.imgur.com/QxyXISE.png) center no-repeat;
+        background-size: contain;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
+        font-size: 28px;
+        line-height: 1;
+        color: ${CG.accent};
+        margin: 2px 4px;
+      }
+
+      .${CREE_GRRR_STATUS_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        min-width: 50px;
+        height: 50px;
+        padding: 0 8px;
+        background: url(https://i.imgur.com/XmfjgaY.png) center no-repeat;
+        background-size: 100% 100%;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
+        font-size: 14px;
+        line-height: 1;
+        color: ${CG.accent};
+        margin: 2px 4px;
+        white-space: nowrap;
+      }
     `;
   }
 
@@ -1925,6 +1993,7 @@
     applyDicebotAttribute();
     bindUnsungDuetTriggerFields();
     injectUnsungDuetMessageImages();
+    injectCreeGrrrDiceFormatting();
     installYouTubePauseInterceptor();
     ensureToolkitToggleWatcher();
     mountUnsungDuetToolkitToggle();
@@ -4162,7 +4231,8 @@
       // 툴킷은 shadow DOM 이라 외부 CSS 가 안 먹음 → 인라인 스타일로 처리
       row.style.cssText =
         "display:flex;flex-direction:column;gap:6px;" +
-        "padding:8px 0 0 0;margin-top:8px;" +
+        // 상단 여백을 줄여 카드 설명문과 드롭다운 사이가 너무 떨어져 보이지 않게 함
+        "padding:4px 0 0 0;margin-top:4px;" +
         "border-top:1px solid rgba(255,255,255,0.08);";
 
       // 상단: 드롭다운(테마 선택) + ON/OFF 버튼
@@ -4315,6 +4385,137 @@
     document.querySelectorAll(`[${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"]`).forEach((el) => {
       el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
     });
+    revertCreeGrrrDomState();
+  }
+
+  // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
+  function revertCreeGrrrDomState() {
+    const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
+    document.querySelectorAll(selector).forEach((span) => {
+      if (!(span instanceof HTMLElement)) return;
+      const parent = span.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(span.textContent || ""), span);
+    });
+    document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
+      el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
+    });
+    // 인접 텍스트 노드 병합 (다음 인젝션 시 패턴 매칭이 깨지지 않게)
+    // 단, 비용이 커서 생략 — 다음 mutation 에서 자연스럽게 처리됨.
+  }
+
+  // CREE-GRRR!: 채팅 다이스 결과 인젝션. dicebot==='cree-grrr' 일 때만 동작.
+  // "→ 73" → 원형 프레임 안에 73 표시 (sheet-rollresult 와 동일 외형)
+  // "(성공)" → 깃발 프레임 안에 "성공" 표시 (sheet-result-status 와 동일 외형)
+  function injectCreeGrrrDiceFormatting() {
+    if (getCurrentDicebotId() !== "cree-grrr") return;
+    const messages = document.querySelectorAll(
+      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+    );
+    messages.forEach((message) => {
+      if (!(message instanceof HTMLElement)) return;
+      if (!hasCreeGrrrDiceResult(message.textContent || "")) return;
+      if (wrapCreeGrrrDiceText(message)) {
+        message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+      }
+    });
+  }
+
+  function hasCreeGrrrDiceResult(text) {
+    if (!text) return false;
+    if (/→\s*\d/.test(text)) return true;
+    // 상태 키워드는 "→ X" 또는 "(X)" 형태일 때만 인정
+    CREE_GRRR_DICE_PATTERN.lastIndex = 0;
+    return CREE_GRRR_DICE_PATTERN.test(text);
+  }
+
+  function wrapCreeGrrrDiceText(root) {
+    if (!(root instanceof HTMLElement)) return false;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.textContent) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentNode;
+        if (parent instanceof HTMLElement) {
+          const tag = parent.tagName;
+          if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG" || tag === "A") {
+            return NodeFilter.FILTER_REJECT;
+          }
+          if (
+            parent.classList.contains(CREE_GRRR_ROLLRESULT_CLASS) ||
+            parent.classList.contains(CREE_GRRR_STATUS_CLASS)
+          ) {
+            return NodeFilter.FILTER_REJECT;
+          }
+        }
+        return hasCreeGrrrDiceResult(node.textContent)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    const targets = [];
+    let current;
+    while ((current = walker.nextNode())) targets.push(current);
+    if (targets.length === 0) return false;
+
+    let modified = false;
+    for (const textNode of targets) {
+      const text = textNode.textContent || "";
+      CREE_GRRR_DICE_PATTERN.lastIndex = 0;
+
+      const fragment = document.createDocumentFragment();
+      let cursor = 0;
+      let foundAny = false;
+      let match;
+      while ((match = CREE_GRRR_DICE_PATTERN.exec(text)) !== null) {
+        foundAny = true;
+        if (match.index > cursor) {
+          fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+        }
+
+        if (match[1] !== undefined) {
+          // "→ N" — "→ " 는 텍스트로 유지, N 만 원형 프레임에 감쌈
+          const number = match[1];
+          const arrowPrefix = match[0].slice(0, match[0].length - number.length);
+          if (arrowPrefix) fragment.appendChild(document.createTextNode(arrowPrefix));
+          const span = document.createElement("span");
+          span.className = CREE_GRRR_ROLLRESULT_CLASS;
+          span.textContent = number;
+          fragment.appendChild(span);
+        } else if (match[2] !== undefined) {
+          // "→ 성공" — "→ " 텍스트 + 상태 프레임
+          const word = match[2];
+          const arrowPrefix = match[0].slice(0, match[0].length - word.length);
+          if (arrowPrefix) fragment.appendChild(document.createTextNode(arrowPrefix));
+          const span = document.createElement("span");
+          span.className = CREE_GRRR_STATUS_CLASS;
+          span.textContent = word;
+          fragment.appendChild(span);
+        } else if (match[3] !== undefined) {
+          // "(성공)" — 괄호는 텍스트로 유지, 키워드만 상태 프레임에 감쌈
+          fragment.appendChild(document.createTextNode("("));
+          const span = document.createElement("span");
+          span.className = CREE_GRRR_STATUS_CLASS;
+          span.textContent = match[3];
+          fragment.appendChild(span);
+          fragment.appendChild(document.createTextNode(")"));
+        }
+
+        cursor = match.index + match[0].length;
+      }
+      if (!foundAny) continue;
+      if (cursor < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor)));
+      }
+
+      const parent = textNode.parentNode;
+      if (parent) {
+        parent.replaceChild(fragment, textNode);
+        modified = true;
+      }
+    }
+    return modified;
   }
 
   function bindUnsungDuetTriggerFields() {
