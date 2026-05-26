@@ -1752,14 +1752,20 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: CCFOLIA 기본 배치 유지 — flex/padding/font 모두 네이티브로 둠.
-         (DungGeunMo 픽셀 폰트는 기본 Roboto 보다 글자 폭이 커서 MuiButton-fullWidth
-          로 1/3 폭이 된 "화면에 추가" 가 두 줄로 줄바꿈되거나 좌측 버튼들과
-          겹치는 현상이 있었음. 하단 액션 바는 시트 폰트를 적용하지 않고
-          MUI 기본 Roboto 그대로 유지해 원래 코코포리아 팝업과 동일하게 배치. */
+      /* DialogActions: 삭제/복제/화면에 추가 — 시트 픽셀 폰트(DungGeunMo) 적용.
+         - flex:1 1 0 + min-width:0 으로 세 버튼이 가로 폭을 정확히 균등 분배
+           (MuiButton-fullWidth 의 width:100% 가 flex 컨테이너에서 일으키는
+            폭 불균등을 막음)
+         - white-space:nowrap 으로 픽셀 폰트가 좁은 컬럼에서 줄바꿈되는 현상 차단
+         - font-size 12px 로 DungGeunMo 가 1/3 폭에 안정적으로 들어가게 축소
+         - 간격(margin-left:8px) 은 MUI 네이티브 MuiDialogActions-spacing 그대로 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
-        font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+        font-size: 12px !important;
+        letter-spacing: 0 !important;
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
         white-space: nowrap !important;
       }
 
@@ -1835,8 +1841,8 @@
         color: ${CG.dim} !important;
       }
 
-      /* 입력칸 — 검은 베이스 + CYAN(#1DE2E2) 텍스트 + DungGeunMo 명시 적용.
-         이름/이니셔티브/토큰 사이즈/참고 URL 등 모든 input/textarea/select 가 대상. */
+      /* 입력칸 — 검은 베이스 + 흰색 텍스트(사용자가 입력하는 실제 값은 화이트).
+         라벨(소항목)은 별도 규칙으로 CYAN(#1DE2E2). 폰트는 DungGeunMo 픽셀 폰트. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiFilledInput-root,
@@ -1847,7 +1853,7 @@
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"],
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="url"] {
         background: ${CG.bgChip} !important;
-        color: #1DE2E2 !important;
+        color: ${CG.text} !important;
         border-radius: 4px !important;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
@@ -4610,31 +4616,50 @@
   const CREE_GRRR_TEXT_FAST_PATTERN =
     /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d).*[→＞>]\s*\d/is;
 
+  // 디버그용 상태 — 첫 호출 시 한 번만 진단 로그를 띄워 함수 도달 여부와
+  // 테마 게이트 상태를 콘솔로 확인할 수 있게 한다. 매 mutation 마다 로그가
+  // 쌓이지 않도록 일회성.
+  const creeGrrrInjectState = { firstCallLogged: false, lastSampleLogged: 0 };
+
   function injectCreeGrrrDiceFormatting() {
-    if (!isSheetThemeEnabled()) return;
-    if (getSelectedSheetThemeId() !== "cree-grrr") return;
+    const enabled = isSheetThemeEnabled();
+    const themeId = getSelectedSheetThemeId();
+
+    if (!creeGrrrInjectState.firstCallLogged) {
+      creeGrrrInjectState.firstCallLogged = true;
+      try {
+        console.info("[CREE-GRRR!] inject: first call", {
+          sheetThemeEnabled: enabled,
+          selectedSheetTheme: themeId,
+          gatePass: enabled && themeId === "cree-grrr"
+        });
+      } catch (_) { /* ignore */ }
+    }
+
+    if (!enabled) return;
+    if (themeId !== "cree-grrr") return;
     cleanupLegacyCreeGrrrSpans();
     if (!document.body) return;
 
-    // 채팅 메시지 본문 후보 — CCFOLIA 빌드별로 약간씩 다른 셀렉터를 모두 지원.
-    // 핵심: 메시지 텍스트가 strong/b 등으로 분리되어 여러 텍스트 노드로 쪼개지는
-    // 케이스가 있어서, "단일 텍스트 노드" 가 아닌 "컨테이너 요소" 단위로 스캔하고
-    // 전체 textContent 를 가지고 패턴 매칭/파싱한다. (이전 TreeWalker 방식은
-    // <strong>보통 성공</strong> 같이 키워드가 분리된 경우 fast pattern 이
-    // 절대 매칭되지 않아 카드가 영영 인젝션되지 않는 버그가 있었음.)
+    // 채팅 메시지 본문 후보 — CCFOLIA 빌드별로 셀렉터가 다양해서 넓게 잡는다.
+    // (1) MuiTypography body1/body2 의 p/div/span 모두 후보
+    // (2) 이미 처리된 노드는 제외
+    // (3) 스킵 조상(다이얼로그/메뉴/툴팁) 안에 있으면 나중에 closest 로 거른다
     const candidates = document.querySelectorAll([
-      // 채팅 패널 메시지 본문 (가장 흔한 케이스)
-      `[role="log"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
-      `[aria-live="polite"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
-      `[aria-live="assertive"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
-      // role/aria 가 없는 빌드 호환 폴백
-      `li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
-      `li p.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+      `p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `p.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `div.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `div.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `span.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `span.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
     ].join(", "));
 
     const seen = new WeakSet();
     let scanned = 0;
     let transformed = 0;
+    let fastPatternMissed = 0;
+    let parserMissed = 0;
+    let sampleText = "";
 
     candidates.forEach((host) => {
       if (!(host instanceof HTMLElement)) return;
@@ -4645,11 +4670,20 @@
 
       const text = host.textContent || "";
       if (!text) return;
-      if (!CREE_GRRR_TEXT_FAST_PATTERN.test(text)) return;
       scanned++;
 
+      if (!CREE_GRRR_TEXT_FAST_PATTERN.test(text)) {
+        // 다이스 패턴이 없는 일반 채팅 — 카운트만 (정상)
+        fastPatternMissed++;
+        return;
+      }
+
+      if (!sampleText) sampleText = text.slice(0, 120);
       const parsed = parseCreeGrrrDiceRoll(text);
-      if (!parsed) return;
+      if (!parsed) {
+        parserMissed++;
+        return;
+      }
       transformed++;
 
       const card = buildCreeGrrrDiceCard(parsed);
@@ -4658,10 +4692,20 @@
       host.replaceChildren(card);
     });
 
-    if (scanned > 0) {
-      try {
-        console.info(`[CREE-GRRR!] dice cards: scanned ${scanned}, transformed ${transformed}`);
-      } catch (_) { /* ignore */ }
+    // 다이스 패턴은 보였는데 파싱이 실패했거나, 변환이 일어났을 때만 로그.
+    // (일반 채팅만 들어와서 fastPatternMissed 만 잔뜩 쌓이는 경우는 조용히 무시.)
+    if (transformed > 0 || parserMissed > 0) {
+      const now = Date.now();
+      if (now - creeGrrrInjectState.lastSampleLogged > 250) {
+        creeGrrrInjectState.lastSampleLogged = now;
+        try {
+          console.info(
+            `[CREE-GRRR!] dice cards: candidates=${candidates.length} scanned=${scanned} ` +
+            `noPattern=${fastPatternMissed} parserMissed=${parserMissed} transformed=${transformed}` +
+            (sampleText ? `\n  sample: ${sampleText}` : "")
+          );
+        } catch (_) { /* ignore */ }
+      }
     }
   }
 
