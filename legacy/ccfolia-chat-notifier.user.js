@@ -90,7 +90,7 @@
   const BGM_DIALOG_KEYWORD_RE = /BGM|bgm|external\s*file|file\s*url|youtube|YouTube|유튜브|외부\s*파일|파일\s*URL|音?|サウンド|ル?プ|loop|volume/i;
   // 이전 패턴 /url|youtube|external|file|유튜브|외부|파일/i 는 "파일" / "file" 단독 매칭이라
   // 너무 헐거웠다. 이미지 라이브러리(전경/배경/캐릭터 등 선택 팝업)의 file 관련 라벨까지
-  // 모두 BGM URL 입력으로 오인 → tryCenterCcfBgmDialogs가 size lock(560px)을 걸어
+  // 모두 BGM URL 입력으로 오인 → tryCenterCcfBgmDialogs가 팝업 크기 제한을 걸어
   // 팝업이 비좁아짐. BGM에서 실제로 쓰이는 "외부 파일 / 파일 URL / external file / file URL"
   // 같은 구체 문구로만 매칭하도록 좁힌다. (url, youtube, 유튜브는 단독 키워드로도 충분히 특이함)
   const BGM_INPUT_HINT_RE = /\burl\b|youtube|유튜브|external\s*file|file\s*url|외부\s*파일|파일\s*url/i;
@@ -7780,7 +7780,7 @@
         bottom: auto !important;
         transform: translate(-50%, -50%) !important;
         margin: 0 !important;
-        max-width: min(92vw, 560px) !important;
+        max-width: min(92vw, ${BGM_DRAWER_WIDTH_PX}px) !important;
         max-height: 88vh !important;
       }
     `;
