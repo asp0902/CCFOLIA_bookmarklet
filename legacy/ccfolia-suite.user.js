@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.5.0
+// @version      0.5.1
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,11 +33,12 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.5.0"),
+    version: getUserscriptVersion("0.5.1"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
   const ROOT_FLOATING_ATTR = "data-ccf-suite-floating";
+  const COMPACT_VIEWPORT_QUERY = "(max-width: 600px)";
   const PRIMARY_ANCHOR_LABELS = Object.freeze([
     "내 캐릭터 목록",
     "캐릭터 선택",
@@ -388,7 +389,7 @@
 
   function ensureUi() {
     if (!document.body) return;
-    if (isHiddenRoute()) {
+    if (isHiddenRoute() || isCompactViewport()) {
       state.panelOpen = false;
       removeRoot();
       return;
@@ -1671,6 +1672,10 @@
     return path === "/" || path === "/home" || path.endsWith("/chat");
   }
 
+  function isCompactViewport() {
+    return window.matchMedia(COMPACT_VIEWPORT_QUERY).matches;
+  }
+
   function removeRoot() {
     document.getElementById("ccf-suite-root")?.remove();
   }
@@ -1730,10 +1735,10 @@
   function observeAnchor() {
     if (!document.body) return;
 
-    const observer = new MutationObserver(() => {
+    const syncRootPlacement = () => {
       const root = document.getElementById("ccf-suite-root");
 
-      if (isHiddenRoute()) {
+      if (isHiddenRoute() || isCompactViewport()) {
         state.panelOpen = false;
         if (root) {
           root.remove();
@@ -1749,14 +1754,19 @@
       }
 
       mountRoot(root, anchor);
-    });
+    };
+
+    const observer = new MutationObserver(syncRootPlacement);
 
     observer.observe(document.body, {
       childList: true,
       subtree: true
     });
     ccfSuiteRegisterTeardown(() => observer.disconnect());
-  }
+
+    const compactViewport = window.matchMedia(COMPACT_VIEWPORT_QUERY);
+    compactViewport.addEventListener("change", syncRootPlacement, ccfSuiteWithSignal());
+  }
 
   // ============================================================
   // Home enhancer: 룸 즐겨찾기 + 방문기록 통합 (v0.1.1)
