@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Capybara Toolkit Presence
 // @namespace    https://local.capybara-toolkit/ccfolia-presence
-// @version      0.1.2
+// @version      0.1.3
 // @description  Shows CCFOLIA room members who have recently sent messages with Capybara Toolkit enabled.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -19,7 +19,7 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.2";
+  const TOOLKIT_VERSION = "0.1.3";
   const ACTIVE_MS = 5 * 60 * 1000;
   const STALE_MS = 30 * 60 * 1000;
   const INVIS_START = "\u2063\u2063\u2063";
@@ -36,6 +36,10 @@
   ].join(", ");
 
   if (!isCcfoliaRoom()) return;
+  if (window[DEBUG_KEY]?.integration === "ccfolia-suite") {
+    console.info("[Capybara Toolkit Presence] Using the integrated CCFOLIA Suite presence module.");
+    return;
+  }
 
   let active = true;
   let scanTimer = 0;
@@ -44,6 +48,7 @@
   const clientId = getClientId();
 
   const api = {
+    integration: "standalone",
     __owner: abort.signal,
     decorateEnvelope,
     decorateOutgoingText,
