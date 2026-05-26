@@ -26,7 +26,7 @@
   const BGM_DRAWER_WIDTH_PX = 640;
   const BGM_WEB_AUDIO_MIN_DURATION = 8;
   const BGM_STORAGE_PREFIX = "ccf-chat-notifier:youtube-bgm:";
-  const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}${location.pathname}`;
+  const BGM_STORAGE_KEY = `${BGM_STORAGE_PREFIX}__global_library__`; // 룸 주소 대신 전역 키 사용
   const BGM_STORAGE_META_KEY = "__ccfBgmMeta";
   const BGM_STORAGE_META_VERSION = 1;
   const BGM_DELETED_ENTRY_LIMIT = 200;
@@ -386,7 +386,7 @@
   let ccfBgmStorageMigratedFromLocal = false;
   let ccfBgmDeletedEntries = {};
   const CCF_BGM_TOOLKIT_FEATURE_ID = "ccf-chat-notifier";
-  const CCF_BGM_TOOLKIT_ROOM_KEY = location.pathname;
+  const CCF_BGM_TOOLKIT_ROOM_KEY = "__global_library__"; // Toolkit 저장소 키도 전역으로 변경
   let ccfBgmApiReadyPromise = null;
   let ccfBgmPlayer = null;
   let ccfBgmPlayerHost = null;
@@ -6753,12 +6753,20 @@
     }
 
     ccfBgmStorageLoadPromise = (async () => {
+      // 1. 먼저 전역(글로벌) 저장소에 있는 데이터를 불러옵니다.
       const parsed = await readCcfBgmPersistedPayload();
-      if (!parsed) {
-        ccfBgmStorageLoaded = true;
-        return;
+      if (parsed) {
+        applyCcfBgmPersistedPayload(parsed);
       }
-      applyCcfBgmPersistedPayload(parsed);
+      
+      // 2. 과거에 각 방(Room)마다 흩어져 저장되어 있던 옛날 데이터를 가져와서 합칩니다.
+      const didMigrate = migrateLegacyRoomDataToGlobal();
+      
+      // 3. 만약 합칠 옛날 데이터가 있었다면, 합쳐진 결과를 전역 저장소에 다시 최종 저장합니다.
+      if (didMigrate) {
+        persistCcfBgmSlotMap(); 
+      }
+      
       ccfBgmStorageLoaded = true;
     })().catch((error) => {
       ccfBgmStorageLoaded = true;
@@ -8349,4 +8357,69 @@
     const style = window.getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden";
   }
+
+function migrateLegacyRoomDataToGlobal() {
+    let migrated = false;
+    const keysToRemove = [];
+
+    try {
+      // 로컬 스토리지 전체를 순회하며 과거 룸별 키를 찾음
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY) {
+          try {
+            const raw = window.localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : null;
+            if (parsed && typeof parsed === "object") {
+              // 파싱된 과거 데이터를 현재 글로벌 맵(ccfBgmSlotMap)에 병합
+              Object.entries(parsed).forEach(([entryKey, entry], index) => {
+                if (entryKey === BGM_STORAGE_META_KEY) return;
+                
+                const normalizedSlot = getCcfBgmEntrySlotKey(entryKey, entry);
+                const storageKey = String(entryKey || "").includes(":youtube:") ? String(entryKey) : normalizedSlot;
+                const url = String(entry?.url || "");
+                const videoId = sanitizeCcfYoutubeVideoId(entry?.videoId || extractCcfYoutubeVideoId(url));
+                const updatedAt = Number(entry?.updatedAt) || 0;
+                
+                if (storageKey && normalizedSlot && url && videoId) {
+                  const existing = ccfBgmSlotMap.get(storageKey);
+                  // 이미 등록된 곡이 없거나, 과거 데이터가 더 최신인 경우에만 추가
+                  if (!existing || existing.updatedAt < updatedAt) {
+                    ccfBgmSlotMap.set(storageKey, {
+                      slotKey: normalizedSlot,
+                      url,
+                      videoId,
+                      title: normalizeSpace(entry?.title || "") || "YouTube BGM",
+                      displayName: normalizeSpace(entry?.displayName || entry?.title || "") || "YouTube BGM",
+                      tabSignature: normalizeCcfBgmTabSignature(entry?.tabSignature),
+                      volume: Number.isFinite(Number(entry?.volume)) ? clampCcfBgmVolume(entry.volume) : 100,
+                      volumeEdited: entry?.volumeEdited === true,
+                      loop: typeof entry?.loop === "boolean" ? entry.loop : true,
+                      updatedAt,
+                      createdAt: Number(entry?.createdAt) || updatedAt || Date.now() + index,
+                      order: Number.isFinite(Number(entry?.order)) && Number(entry.order) > 0 ? Number(entry.order) : Date.now(),
+                      pending: entry?.pending !== false
+                    });
+                    migrated = true;
+                  }
+                }
+              });
+              // 병합이 끝난 과거 키는 삭제 목록에 추가
+              keysToRemove.push(key);
+            }
+          } catch (e) {
+            debugLog("legacy-migration-parse-failed", serializeError(e));
+          }
+        }
+      }
+      
+      // 마이그레이션이 끝난 과거 룸 데이터 삭제 (스토리지 정리)
+      keysToRemove.forEach(k => window.localStorage.removeItem(k));
+    } catch (e) {
+      debugLog("legacy-migration-failed", serializeError(e));
+    }
+
+    return migrated;
+  }
+
 })();
