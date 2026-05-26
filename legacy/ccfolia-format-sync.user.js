@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.30
+// @version      0.0.31
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,6 +22,9 @@
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, .MuiPaper-root, ul.MuiList-root';
   const MESSAGE_ITEM_SELECTOR = 'li, [role="listitem"], .MuiListItem-root, [data-index]';
   const MESSAGE_TEXT_SELECTOR = [
+    'p.MuiTypography-root.MuiTypography-body1',
+    'div.MuiTypography-root.MuiTypography-body1',
+    'span.MuiTypography-root.MuiTypography-body1',
     'p.MuiTypography-root.MuiTypography-body2',
     'div.MuiTypography-root.MuiTypography-body2',
     'span.MuiTypography-root.MuiTypography-body2',
@@ -53,7 +56,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.30"),
+    version: getUserscriptVersion("0.0.31"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9639,6 +9642,7 @@
       if (btn.dataset.ccfSendBound === "1") return;
       btn.dataset.ccfSendBound = "1";
 
+      // Run after other capture-phase transport helpers so this envelope is the final outgoing value.
       btn.addEventListener("click", (event) => {
         const composer = findClosestComposerBar(btn);
         const editor = composer ? findEditorFromComposer(composer) : findEditorFromNode(btn);
@@ -9655,7 +9659,7 @@
         if (hadMessage) {
           scheduleInlineFormatResetAfterSend(editor);
         }
-      }, true);
+      });
     });
   }
 
@@ -9667,6 +9671,7 @@
       if (editor.dataset.ccfEnterBound === "1") return;
 
       editor.dataset.ccfEnterBound = "1";
+      // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
@@ -9682,7 +9687,7 @@
         if (hadMessage) {
           scheduleInlineFormatResetAfterSend(editor);
         }
-      }, true);
+      });
     });
   }
 
