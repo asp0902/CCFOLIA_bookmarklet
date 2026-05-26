@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.4
+// @version      0.1.5
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -70,15 +70,18 @@
     "대단한 성공",
     "대성공"
   ]);
-  // 패턴: (1) "→ 123" 결과 숫자, (2) "→ 성공" 또는 (3) "(성공)" 상태 키워드
-  // 키워드는 길이 내림차순으로 정렬해 "대성공" 이 "성공" 보다 먼저 매칭되도록 함
+  // 다이스봇 출력의 화살표/구분자 — BCDice 는 →(U+2192), ＞(U+FF1E), 일반 >, ASCII =
+  // 등을 다 쓸 수 있으므로 모두 매칭.
+  const CREE_GRRR_ARROW_CLASS = "[\\u2192\\uFF1E>=]";
+  // 패턴: (1) "→ 73" 결과 숫자, (2) "→ 보통 성공" 또는 (3) "(보통 성공)" 상태 키워드
+  // 키워드는 길이 내림차순으로 정렬해 "보통 성공" 이 "성공" 보다 먼저 매칭되도록 함
   const CREE_GRRR_STATUS_ALT = [...CREE_GRRR_STATUS_TOKENS]
     .sort((a, b) => b.length - a.length)
     .map((w) => w.replace(/\s+/g, "\\s*"))
     .join("|");
   const CREE_GRRR_DICE_PATTERN = new RegExp(
-    "→\\s*(\\d+)" +
-    "|→\\s*(" + CREE_GRRR_STATUS_ALT + ")" +
+    CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)" +
+    "|" + CREE_GRRR_ARROW_CLASS + "\\s*(" + CREE_GRRR_STATUS_ALT + ")" +
     "|\\((" + CREE_GRRR_STATUS_ALT + ")\\)",
     "g"
   );
@@ -201,7 +204,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.4"),
+    version: getUserscriptVersion("0.1.5"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4429,21 +4432,21 @@
   }
 
   // 메시지에서 d100 결과로 보이는 첫 숫자(1~100)를 추출.
-  // CCFOLIA CoC 7판 BCDice 의 "→ 73" / "= 73" 형태를 따라간다.
+  // CCFOLIA CoC 7판 BCDice 의 "＞ 73", "> 73", "→ 73", "= 73" 형태 모두 지원.
   // 데미지 합산 등 100 초과 값은 d100 이 아니므로 스킵.
   function extractFirstDiceValue(text) {
     if (!text) return null;
-    const re = /→\s*(\d+)|=\s*(\d+)/g;
+    const re = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
     let m;
     while ((m = re.exec(text)) !== null) {
-      const n = parseInt(m[1] || m[2], 10);
+      const n = parseInt(m[1], 10);
       if (n >= 1 && n <= 100) return n;
     }
     return null;
   }
 
   // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
-  //   대실패          → 치명적 실패  (단, d100 결과가 100 이면 "펌블")
+  //   대실패          → 대실패        (단, d100 결과가 100 이면 "펌블")
   //   실패            → 실패         (단, d100 결과가 96~99 이면 "치명적 실패")
   //   보통 성공       → 성공
   //   어려운 성공     → 어려운 성공
@@ -4453,7 +4456,7 @@
     if (typeof ccfTerm !== "string") return ccfTerm;
     const normalized = ccfTerm.replace(/\s+/g, "");
     switch (normalized) {
-      case "대실패":      return rollValue === 100 ? "펌블" : "치명적 실패";
+      case "대실패":      return rollValue === 100 ? "펌블" : "대실패";
       case "실패":
         return (rollValue !== null && rollValue >= 96 && rollValue <= 99)
           ? "치명적 실패"
@@ -4468,8 +4471,7 @@
 
   function hasCreeGrrrDiceResult(text) {
     if (!text) return false;
-    if (/→\s*\d/.test(text)) return true;
-    // 상태 키워드는 "→ X" 또는 "(X)" 형태일 때만 인정
+    // 단일 진입점: CREE_GRRR_DICE_PATTERN 이 → 73 / ＞ 73 / > 73 / 상태키워드 모두 커버
     CREE_GRRR_DICE_PATTERN.lastIndex = 0;
     return CREE_GRRR_DICE_PATTERN.test(text);
   }
