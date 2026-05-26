@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.6
+// @version      0.3.7
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -39,6 +39,7 @@
   const CHAT_PROMPT_PANEL_ATTR = "data-ccr20-chat-prompt-panel";
   const CHAT_PROMPT_TOGGLE_ITEM_ATTR = "data-ccr20-chat-prompt-toggle";
   const CHAT_PROMPT_HIDDEN_KEY = "ccr20-hide-chat-prompt-panel";
+  const CHAT_MACRO_OPEN_ATTR = "data-ccr20-chat-macro-open";
   const OPEN_BTN_SELECTOR = `.ccr20-open-btn[${OPEN_BTN_ATTR}="1"]`;
   const BOUND_SEND_ATTR = "data-ccr20-send-bound";
   const BOUND_ENTER_ATTR = "data-ccr20-enter-bound";
@@ -60,6 +61,7 @@
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const FOREIGN_RENDER_SELECTOR = ".ccf-render-root[data-ccf-rendered='1']";
   const CHAT_PROMPT_MENU_SELECTOR = 'ul.MuiMenu-list[role="menu"], ul[role="menu"].MuiMenu-list';
+  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const MESSAGE_TEXT_SELECTOR = [
     "p.MuiTypography-root.MuiTypography-body2",
     ".MuiListItemText-root > p",
@@ -77,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.5"),
+    version: getUserscriptVersion("0.3.7"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -292,6 +294,7 @@
         `[${CHAT_PROMPT_TOGGLE_ITEM_ATTR}="1"]`
       ].join(", ")).forEach(el => el.remove());
       document.documentElement?.removeAttribute("data-ccr20-hide-chat-prompt");
+      document.documentElement?.removeAttribute(CHAT_MACRO_OPEN_ATTR);
       document.querySelectorAll(`[${CHAT_PROMPT_PANEL_ATTR}="1"]`).forEach((el) => {
         el.removeAttribute(CHAT_PROMPT_PANEL_ATTR);
       });
@@ -501,6 +504,12 @@
       .ccr20-open-btn:focus-visible {
         outline: 2px solid rgba(0, 0, 0, 0.24);
         outline-offset: 2px;
+      }
+
+      html[${CHAT_MACRO_OPEN_ATTR}="1"] .ccr20-open-btn,
+      html[${CHAT_MACRO_OPEN_ATTR}="1"] #${FLOATING_ID} {
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
 
       #${FLOATING_ID} {
@@ -1116,11 +1125,25 @@
       if (shouldRefresh) {
         scheduleEnsureUi();
       }
+      const shouldSyncChatMacroVisibility = mutations.some((mutation) => {
+        if (mutation.type === "childList") return true;
+        const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+        return !!target && (
+          target.matches?.(CHAT_MACRO_MENU_SELECTOR) ||
+          target.closest?.(CHAT_MACRO_MENU_SELECTOR) ||
+          target.querySelector?.(CHAT_MACRO_MENU_SELECTOR)
+        );
+      });
+      if (shouldSyncChatMacroVisibility) {
+        syncChatMacroMenuButtonVisibility();
+      }
     });
 
     mo.observe(document.documentElement || document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden", "aria-hidden"]
     });
     ccr20RegisterTeardown(() => mo.disconnect());
   }
@@ -1183,11 +1206,13 @@
       const floating = document.getElementById(FLOATING_ID);
       if (floating) floating.hidden = true;
       document.querySelectorAll(OPEN_BTN_SELECTOR).forEach(el => el.remove());
+      document.documentElement?.removeAttribute(CHAT_MACRO_OPEN_ATTR);
       return;
     }
 
     ensureOpenButtons();
     ensureFloatingButton();
+    syncChatMacroMenuButtonVisibility();
     ensureModal();
     bindSendButtons();
     bindEnterSendForEditors();
@@ -1229,6 +1254,60 @@
     saveChatPromptPanelPreference(normalized);
     applyChatPromptPanelHiddenState();
     syncChatPromptPanels();
+  }
+
+  function syncChatMacroMenuButtonVisibility() {
+    const root = document.documentElement;
+    if (!root) return;
+
+    if (hasVisibleChatMacroMenu()) {
+      root.setAttribute(CHAT_MACRO_OPEN_ATTR, "1");
+    } else {
+      root.removeAttribute(CHAT_MACRO_OPEN_ATTR);
+    }
+  }
+
+  function hasVisibleChatMacroMenu() {
+    return [...document.querySelectorAll('textarea[name="text"]')]
+      .filter((editor) => isVisible(editor) && !editor.closest?.(`#${MODAL_ID}`))
+      .some((editor) => getChatMacroMenuCandidates(editor).some((menu) => isVisibleChatMacroMenu(menu, editor)));
+  }
+
+  function getChatMacroMenuCandidates(editor) {
+    const inputId = editor.id || "";
+    const candidateIds = [
+      editor.getAttribute("aria-controls"),
+      editor.getAttribute("aria-owns"),
+      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
+    ].filter(Boolean);
+    const directMenus = candidateIds
+      .map((id) => document.getElementById(id))
+      .filter((menu) => menu instanceof HTMLElement);
+    return [...new Set([...directMenus, ...document.querySelectorAll(CHAT_MACRO_MENU_SELECTOR)])];
+  }
+
+  function isVisibleChatMacroMenu(menu, editor) {
+    if (!(menu instanceof HTMLElement) || !(editor instanceof HTMLElement)) return false;
+    if (menu.closest?.(`[${SAFE_UI_ATTR}="1"], #${MODAL_ID}`)) return false;
+    if (!isVisible(menu) || !String(menu.textContent || "").trim()) return false;
+
+    const inputId = editor.id || "";
+    const menuId = menu.id || "";
+    const isConnectedMenu = [
+      editor.getAttribute("aria-controls"),
+      editor.getAttribute("aria-owns"),
+      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
+    ].includes(menuId);
+    if (isConnectedMenu) return true;
+
+    const editorRect = editor.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    return menuRect.width > 0 &&
+      menuRect.height > 0 &&
+      menuRect.left < editorRect.right &&
+      menuRect.right > editorRect.left &&
+      menuRect.top < editorRect.top &&
+      menuRect.bottom <= editorRect.bottom;
   }
 
   function syncChatPromptPanels(scope = document) {
