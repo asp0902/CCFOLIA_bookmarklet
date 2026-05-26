@@ -1752,12 +1752,15 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: CCFOLIA 기본 배치 유지 — flex:1 강제 X.
-         (강제 균등 분배가 적용되면서 삭제/복제/화면에 추가 버튼 정렬이 망가지는
-          현상이 있어, 폰트만 적용하고 레이아웃은 네이티브로 둠) */
+      /* DialogActions: CCFOLIA 기본 배치 유지 — flex/padding/font 모두 네이티브로 둠.
+         (DungGeunMo 픽셀 폰트는 기본 Roboto 보다 글자 폭이 커서 MuiButton-fullWidth
+          로 1/3 폭이 된 "화면에 추가" 가 두 줄로 줄바꿈되거나 좌측 버튼들과
+          겹치는 현상이 있었음. 하단 액션 바는 시트 폰트를 적용하지 않고
+          MUI 기본 Roboto 그대로 유지해 원래 코코포리아 팝업과 동일하게 배치. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+        font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
+        white-space: nowrap !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
@@ -1805,11 +1808,18 @@
         border-color: ${CG.accentSoft} !important;
       }
 
-      /* 텍스트 톤 — DialogContent 스코프로 한정 (DialogActions는 네이티브 유지) */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
+      /* 필드 라벨(소항목) — 이름/이니셔티브/토큰 사이즈/참고 URL 등 캐릭터 편집
+         팝업의 모든 input/select 라벨 텍스트. 색상은 CYAN(#1DE2E2),
+         폰트는 입력창과 동일한 DungGeunMo 픽셀 폰트. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiInputLabel-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormControlLabel-label,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormControlLabel-label {
+        color: #1DE2E2 !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+      }
+
+      /* 그 외 본문 텍스트 톤 — 흰색 (DialogContent 스코프로 한정, DialogActions 네이티브 유지) */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root,
@@ -4606,44 +4616,48 @@
     cleanupLegacyCreeGrrrSpans();
     if (!document.body) return;
 
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const txt = node.textContent || "";
-        if (!txt || !CREE_GRRR_TEXT_FAST_PATTERN.test(txt)) return NodeFilter.FILTER_REJECT;
-        const p = node.parentElement;
-        if (!p) return NodeFilter.FILTER_REJECT;
-        const tag = p.tagName;
-        if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "INPUT") {
-          return NodeFilter.FILTER_REJECT;
-        }
-        if (p.hasAttribute(CREE_GRRR_FORMATTED_ATTR)) return NodeFilter.FILTER_REJECT;
-        if (p.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return NodeFilter.FILTER_REJECT;
-        if (p.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
+    // 채팅 메시지 본문 후보 — CCFOLIA 빌드별로 약간씩 다른 셀렉터를 모두 지원.
+    // 핵심: 메시지 텍스트가 strong/b 등으로 분리되어 여러 텍스트 노드로 쪼개지는
+    // 케이스가 있어서, "단일 텍스트 노드" 가 아닌 "컨테이너 요소" 단위로 스캔하고
+    // 전체 textContent 를 가지고 패턴 매칭/파싱한다. (이전 TreeWalker 방식은
+    // <strong>보통 성공</strong> 같이 키워드가 분리된 경우 fast pattern 이
+    // 절대 매칭되지 않아 카드가 영영 인젝션되지 않는 버그가 있었음.)
+    const candidates = document.querySelectorAll([
+      // 채팅 패널 메시지 본문 (가장 흔한 케이스)
+      `[role="log"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `[aria-live="polite"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `[aria-live="assertive"] li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      // role/aria 가 없는 빌드 호환 폴백
+      `li p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
+      `li p.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+    ].join(", "));
 
-    // 같은 host(부모 요소) 중복 처리 방지
     const seen = new WeakSet();
     let scanned = 0;
     let transformed = 0;
-    let current;
-    while ((current = walker.nextNode())) {
-      const host = current.parentElement;
-      if (!host || seen.has(host)) continue;
+
+    candidates.forEach((host) => {
+      if (!(host instanceof HTMLElement)) return;
+      if (seen.has(host)) return;
       seen.add(host);
-      scanned++;
+      if (host.hasAttribute(CREE_GRRR_FORMATTED_ATTR)) return;
+      if (host.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return;
+
       const text = host.textContent || "";
+      if (!text) return;
+      if (!CREE_GRRR_TEXT_FAST_PATTERN.test(text)) return;
+      scanned++;
+
       const parsed = parseCreeGrrrDiceRoll(text);
-      if (!parsed) continue;
+      if (!parsed) return;
       transformed++;
+
       const card = buildCreeGrrrDiceCard(parsed);
       host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
       host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
       host.replaceChildren(card);
-    }
+    });
 
-    // 진단용: scan 결과가 있으면 한 번 로그 (다음 사이클에 또 처리할 게 있으면 다시 로그됨)
     if (scanned > 0) {
       try {
         console.info(`[CREE-GRRR!] dice cards: scanned ${scanned}, transformed ${transformed}`);
