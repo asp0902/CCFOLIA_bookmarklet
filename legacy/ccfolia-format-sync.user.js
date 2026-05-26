@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.25
-// @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
-// @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
+// @version      0.0.26
+// @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
+// @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.24"),
+    version: getUserscriptVersion("0.0.26"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -11866,5 +11866,364 @@
     const ra = a.getBoundingClientRect();
     const rb = b.getBoundingClientRect();
     return Math.abs(ra.top - rb.top) + Math.abs(ra.left - rb.left);
+  }
+})();
+
+(() => {
+  "use strict";
+
+  if (!/(?:^|\.)ccfolia\.com$/i.test(location.hostname)) return;
+
+  const CCF_FS_RUNTIME = window.__CCF_FORMAT_SYNC_RUNTIME__ || null;
+  const ccfFsWithSignal = CCF_FS_RUNTIME?.withSignal || ((options) => (
+    typeof options === "object" && options ? options : {}
+  ));
+  const ccfFsRegisterTeardown = CCF_FS_RUNTIME?.registerTeardown || (() => {});
+  const ccfFsIsActive = () => CCF_FS_RUNTIME?.isActive?.() !== false;
+
+  const CUTIN_MIRROR_ATTR = "data-ccf-cutin-chat-mirror";
+  const CUTIN_STYLE_ID = "ccf-cutin-chat-mirror-style";
+  const CUTIN_CHANNEL_NAME = "ccf-cutin-chat-mirror-v1";
+  const CUTIN_MESSAGE_NAMESPACE = "ccf-cutin-chat-mirror";
+  const CUTIN_RESCAN_INTERVAL_MS = 1000;
+  const cutinSenderId =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  let cutinLocalEffect = null;
+  let cutinRequestedRoomId = null;
+  let cutinAnimationFrame = 0;
+  let cutinInterval = 0;
+  let cutinObserver = null;
+  let cutinInitialized = false;
+  const cutinRemoteEffects = new Map();
+  const cutinChannel =
+    typeof BroadcastChannel === "function"
+      ? new BroadcastChannel(CUTIN_CHANNEL_NAME)
+      : null;
+
+  startCutinMirror();
+
+  function startCutinMirror() {
+    const initialize = () => {
+      if (cutinInitialized || !document.documentElement || !document.body) return;
+      cutinInitialized = true;
+      injectCutinMirrorStyle();
+      cutinChannel?.addEventListener("message", handleCutinChannelMessage);
+      window.addEventListener("resize", scheduleCutinMirrorSync, ccfFsWithSignal());
+      window.addEventListener("popstate", scheduleCutinMirrorSync, ccfFsWithSignal());
+      window.addEventListener("pagehide", closeLocalCutinEffect, ccfFsWithSignal());
+
+      cutinObserver = new MutationObserver(scheduleCutinMirrorSync);
+      cutinObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class", "src", "style"],
+        childList: true,
+        subtree: true
+      });
+      cutinInterval = window.setInterval(scheduleCutinMirrorSync, CUTIN_RESCAN_INTERVAL_MS);
+      scheduleCutinMirrorSync();
+    };
+
+    initialize();
+    if (!cutinInitialized) {
+      document.addEventListener("DOMContentLoaded", initialize, ccfFsWithSignal(true));
+      window.addEventListener("load", initialize, ccfFsWithSignal(true));
+    }
+    ccfFsRegisterTeardown(teardownCutinMirror);
+  }
+
+  function teardownCutinMirror() {
+    closeLocalCutinEffect();
+    cutinChannel?.close();
+    if (cutinAnimationFrame) window.cancelAnimationFrame(cutinAnimationFrame);
+    if (cutinInterval) window.clearInterval(cutinInterval);
+    cutinObserver?.disconnect();
+    removeCutinMirrors();
+    document.getElementById(CUTIN_STYLE_ID)?.remove();
+  }
+
+  function scheduleCutinMirrorSync() {
+    if (!ccfFsIsActive() || cutinAnimationFrame) return;
+    cutinAnimationFrame = window.requestAnimationFrame(() => {
+      cutinAnimationFrame = 0;
+      syncCutinMirror();
+    });
+  }
+
+  function syncCutinMirror() {
+    const route = getCutinRoomRoute();
+
+    if (!route) {
+      closeLocalCutinEffect();
+      removeCutinMirrors();
+      return;
+    }
+
+    if (route.standalone) {
+      closeLocalCutinEffect();
+      requestCurrentCutinEffect(route.roomId);
+      renderCutinMirrors(getRemoteCutinEffect(route.roomId));
+      return;
+    }
+
+    cutinRequestedRoomId = null;
+    cutinRemoteEffects.clear();
+    updateLocalCutinEffect(route.roomId);
+    renderCutinMirrors(cutinLocalEffect);
+  }
+
+  function getCutinRoomRoute() {
+    const match = location.pathname.match(/^\/rooms\/([^/]+)(\/chat)?\/?$/);
+    if (!match) return null;
+    return {
+      roomId: decodeURIComponent(match[1]),
+      standalone: Boolean(match[2])
+    };
+  }
+
+  function updateLocalCutinEffect(roomId) {
+    const sourceImage = findActiveCutinImage();
+    const sourceUrl = sourceImage?.currentSrc || sourceImage?.src || "";
+    if (!sourceUrl) {
+      closeLocalCutinEffect();
+      return;
+    }
+
+    const signature = `${roomId}|${sourceUrl}`;
+    if (cutinLocalEffect?.signature === signature) return;
+    if (cutinLocalEffect && cutinLocalEffect.roomId !== roomId) {
+      broadcastCutinEffect({ ...cutinLocalEffect, open: false });
+    }
+
+    cutinLocalEffect = {
+      open: true,
+      roomId,
+      signature,
+      src: sourceUrl
+    };
+    broadcastCutinEffect(cutinLocalEffect);
+  }
+
+  function closeLocalCutinEffect() {
+    if (!cutinLocalEffect) return;
+    broadcastCutinEffect({ ...cutinLocalEffect, open: false });
+    cutinLocalEffect = null;
+  }
+
+  function findActiveCutinImage() {
+    const images = Array.from(document.images);
+    for (let index = images.length - 1; index >= 0; index -= 1) {
+      const image = images[index];
+      if (image.closest(`[${CUTIN_MIRROR_ATTR}]`) || !isVisibleCutinImage(image)) continue;
+      if (hasCutinOverlayAncestor(image)) return image;
+    }
+    return null;
+  }
+
+  function isVisibleCutinImage(image) {
+    const rect = image.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function hasCutinOverlayAncestor(image) {
+    // CCFOLIA Effect.tsx renders an active image within a full-frame dim backdrop.
+    for (
+      let element = image.parentElement;
+      element && element !== document.body;
+      element = element.parentElement
+    ) {
+      if (element.hasAttribute(CUTIN_MIRROR_ATTR)) return false;
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      if (
+        style.position === "absolute" &&
+        isZeroCutinOffset(style.top) &&
+        isZeroCutinOffset(style.right) &&
+        isZeroCutinOffset(style.bottom) &&
+        isZeroCutinOffset(style.left) &&
+        style.overflow === "hidden" &&
+        isCutinDimBackdrop(style.backgroundColor)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isZeroCutinOffset(value) {
+    return value === "0px" || value === "0";
+  }
+
+  function isCutinDimBackdrop(color) {
+    const match = color.match(
+      /^rgba?\(\s*0\s*,\s*0\s*,\s*0(?:\s*,\s*([\d.]+))?\s*\)$/
+    );
+    return Boolean(match) && Number(match[1] ?? 1) >= 0.25;
+  }
+
+  function findCutinChatPanels() {
+    return Array.from(document.querySelectorAll(".MuiDrawer-paper")).filter((paper) => {
+      const hasHeader = paper.querySelector(".MuiAppBar-root");
+      const hasEditor = paper.querySelector(
+        "textarea, input[type='text'], [contenteditable='true']"
+      );
+      const titleMatches =
+        /ルームチャット|룸\s*채팅|room\s*chat/i.test(paper.textContent || "");
+      return Boolean(hasHeader && (hasEditor || titleMatches));
+    });
+  }
+
+  function renderCutinMirrors(effect) {
+    const panels = findCutinChatPanels();
+    const activePanels = new Set(panels);
+
+    for (const mirror of document.querySelectorAll(`[${CUTIN_MIRROR_ATTR}="overlay"]`)) {
+      if (!panels.some((panel) => panel.contains(mirror))) mirror.remove();
+    }
+
+    for (const panel of panels) {
+      let mirror = Array.from(panel.children).find(
+        (child) => child.getAttribute?.(CUTIN_MIRROR_ATTR) === "overlay"
+      );
+      if (!effect?.open || !effect.src) {
+        mirror?.remove();
+        continue;
+      }
+      if (!mirror) {
+        mirror = createCutinMirror();
+        panel.append(mirror);
+      }
+      const image = mirror.querySelector("img");
+      if (image.getAttribute("src") !== effect.src) image.setAttribute("src", effect.src);
+    }
+
+    for (const mirror of document.querySelectorAll(`[${CUTIN_MIRROR_ATTR}="overlay"]`)) {
+      if (!activePanels.has(mirror.parentElement)) mirror.remove();
+    }
+  }
+
+  function createCutinMirror() {
+    const overlay = document.createElement("div");
+    overlay.setAttribute(CUTIN_MIRROR_ATTR, "overlay");
+    overlay.setAttribute("aria-hidden", "true");
+
+    const floatWindow = document.createElement("div");
+    floatWindow.setAttribute(CUTIN_MIRROR_ATTR, "window");
+    const image = document.createElement("img");
+    image.setAttribute(CUTIN_MIRROR_ATTR, "image");
+    image.alt = "";
+    image.draggable = false;
+
+    floatWindow.append(image);
+    overlay.append(floatWindow);
+    return overlay;
+  }
+
+  function removeCutinMirrors() {
+    document.querySelectorAll(`[${CUTIN_MIRROR_ATTR}="overlay"]`).forEach((mirror) => {
+      mirror.remove();
+    });
+  }
+
+  function requestCurrentCutinEffect(roomId) {
+    if (!cutinChannel || cutinRequestedRoomId === roomId) return;
+    cutinRequestedRoomId = roomId;
+    cutinRemoteEffects.clear();
+    cutinChannel.postMessage({
+      namespace: CUTIN_MESSAGE_NAMESPACE,
+      senderId: cutinSenderId,
+      type: "request",
+      roomId
+    });
+  }
+
+  function broadcastCutinEffect(effect) {
+    cutinChannel?.postMessage({
+      namespace: CUTIN_MESSAGE_NAMESPACE,
+      senderId: cutinSenderId,
+      type: "effect",
+      roomId: effect.roomId,
+      open: effect.open,
+      src: effect.src,
+      sentAt: Date.now()
+    });
+  }
+
+  function handleCutinChannelMessage(event) {
+    const message = event.data;
+    if (
+      !message ||
+      message.namespace !== CUTIN_MESSAGE_NAMESPACE ||
+      message.senderId === cutinSenderId
+    ) {
+      return;
+    }
+
+    if (message.type === "request") {
+      if (cutinLocalEffect?.roomId === message.roomId) {
+        broadcastCutinEffect(cutinLocalEffect);
+      }
+      return;
+    }
+
+    const route = getCutinRoomRoute();
+    if (
+      message.type !== "effect" ||
+      !route?.standalone ||
+      route.roomId !== message.roomId
+    ) {
+      return;
+    }
+
+    if (message.open && message.src) {
+      cutinRemoteEffects.set(message.senderId, message);
+    } else {
+      cutinRemoteEffects.delete(message.senderId);
+    }
+    scheduleCutinMirrorSync();
+  }
+
+  function getRemoteCutinEffect(roomId) {
+    const effects = Array.from(cutinRemoteEffects.values())
+      .filter((effect) => effect.roomId === roomId && effect.open)
+      .sort((left, right) => left.sentAt - right.sentAt);
+    return effects[effects.length - 1];
+  }
+
+  function injectCutinMirrorStyle() {
+    if (document.getElementById(CUTIN_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = CUTIN_STYLE_ID;
+    style.dataset.ccfFsInjected = "1";
+    style.textContent = `
+      [${CUTIN_MIRROR_ATTR}="overlay"] {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        z-index: 1400;
+        background: rgba(0, 0, 0, 0.4);
+        pointer-events: none;
+      }
+
+      [${CUTIN_MIRROR_ATTR}="window"] {
+        position: absolute;
+        top: 16%;
+        right: 16%;
+        bottom: 16%;
+        left: 16%;
+        margin: auto;
+        max-width: 480px;
+        max-height: 480px;
+      }
+
+      [${CUTIN_MIRROR_ATTR}="image"] {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+    `;
+    document.head.append(style);
   }
 })();
