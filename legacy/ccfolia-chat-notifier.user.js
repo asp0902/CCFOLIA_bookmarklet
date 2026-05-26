@@ -2158,18 +2158,19 @@
         return;
       }
       
+      // 툴바의 전체 정지 버튼인지(sizeSmall), 팝업 내부의 개별 정지 버튼인지 구분합니다.
+      const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
       const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || ccfBgmActiveSlotKey;
 
-      // 현재 정지하려는 슬롯이 유튜브 재생을 담당하는 슬롯이라면, 
-      // 코코포리아 측으로 클릭 이벤트가 넘어가지 않도록 완전히 차단합니다.
-      if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation?.();
+      if (isGlobalStopButton) {
+        // 1. 코코포리아 BGM 툴바의 정지 버튼을 누른 경우: 유튜브도 함께 정지합니다.
+        stopCcfYoutubeBgm("stop-button");
+      } else if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+        // 2. 팝업 내부 정지 버튼을 누른 경우: 현재 팝업 슬롯이 유튜브 재생 슬롯일 때만 유튜브를 정지합니다.
+        stopCcfYoutubeBgm("stop-button");
       }
+      // (만약 다른 슬롯의 팝업에서 정지 버튼을 눌렀다면, 스크립트는 아무것도 하지 않고 코코포리아가 네이티브 음원을 끄도록 내버려 둡니다.)
 
-      stopCcfYoutubeBgm("stop-button");
-      
       if (targetSlotKey) {
         ccfBgmNativeLoadedSlots.delete(targetSlotKey);
         let pendingChanged = false;
