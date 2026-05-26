@@ -2128,7 +2128,6 @@
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
         && isBgmDialog
       ) {
-        // [수정됨] 유튜브가 재생 중인 슬롯과 동일한 탭에서 네이티브를 골랐을 때만 정지
         const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
         if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
           stopCcfYoutubeBgm("native-library-selected");
@@ -2153,22 +2152,38 @@
       return;
     }
 
+    // ========== 정지 버튼 완벽 분리 로직 ==========
     if (isCcfBgmStopButton(button)) {
       if (Date.now() < ccfSuppressStopHandlerUntil) {
         return;
       }
       
       const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
-      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
+      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || ccfBgmActiveSlotKey;
 
       if (isGlobalStopButton) {
-        // 1. 하단 툴바의 전체 정지 버튼인 경우
-        // 유튜브 음원과 네이티브 음원(코코포리아 자체 기능)이 모두 꺼지도록 둡니다.
+        // 1. 하단 툴바의 전체 정지 버튼을 누른 경우 -> 유튜브도 강제 정지
         stopCcfYoutubeBgm("stop-button");
-        if (ccfBgmActiveSlotKey) {
-          ccfBgmNativeLoadedSlots.delete(ccfBgmActiveSlotKey);
+      } else {
+        // 2. 개별 팝업의 정지 버튼을 누른 경우
+        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+          // [유튜브 음원 팝업]에서 정지: 코코포리아가 네이티브를 끄지 못하게 이벤트 차단!
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          stopCcfYoutubeBgm("stop-button");
+        } else {
+          // [네이티브 음원 팝업]에서 정지: 스크립트는 유튜브를 건드리지 않고 가만히 둡니다.
+          // (코코포리아가 이벤트를 받아서 알아서 네이티브 음원만 끕니다)
+        }
+      }
+
+      if (targetSlotKey) {
+        ccfBgmNativeLoadedSlots.delete(targetSlotKey);
+        // 우리가 유튜브를 끈 경우에만 상태(pending)를 업데이트
+        if (isGlobalStopButton || (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey)) {
           let pendingChanged = false;
-          getCcfYoutubeEntriesForSlot(ccfBgmActiveSlotKey).forEach(([entryKey, entry]) => {
+          getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
             if (entryKey && entry && entry.pending !== true) {
               entry.pending = true;
               ccfBgmSlotMap.set(entryKey, entry);
@@ -2177,40 +2192,12 @@
           });
           if (pendingChanged) persistCcfBgmSlotMap();
         }
-      } else {
-        // 2. 개별 팝업의 정지 버튼인 경우
-        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-          // [유튜브 음원 팝업]에서 정지를 누른 경우
-          // 코코포리아가 이 클릭 이벤트를 눈치채면 애먼 네이티브 음원까지 꺼버리므로 이벤트를 원천 차단합니다!
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
-          
-          stopCcfYoutubeBgm("stop-button");
-          
-          if (targetSlotKey) {
-            ccfBgmNativeLoadedSlots.delete(targetSlotKey);
-            let pendingChanged = false;
-            getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
-              if (entryKey && entry && entry.pending !== true) {
-                entry.pending = true;
-                ccfBgmSlotMap.set(entryKey, entry);
-                pendingChanged = true;
-              }
-            });
-            if (pendingChanged) persistCcfBgmSlotMap();
-          }
-        } else {
-          // [네이티브 음원 팝업]에서 정지를 누른 경우
-          // 스크립트는 유튜브 음원을 건드리지 않고, 클릭 이벤트를 그냥 통과시킵니다.
-          // 그러면 코코포리아가 알아서 네이티브 음원만 정상적으로 끄게 됩니다.
-        }
+        markCcfYoutubeBgmSlotButtons();
       }
-
-      markCcfYoutubeBgmSlotButtons();
       window.setTimeout(updateCcfBgmProgressBar, 50);
       return;
     }
+    // ===========================================
 
     const slotKey = getCcfBgmSlotKeyFromButton(button);
     if (slotKey) {
@@ -5229,9 +5216,12 @@
     return ccfBgmPlayerHost instanceof HTMLElement ? ccfBgmPlayerHost : null;
   }
 
+  // ========== 유튜브 플레이어를 코코포리아 파괴 범위 밖으로 피난시키는 로직 ==========
   function mountCcfYoutubeBgmPlayerFrame(player = null) {
-    // dock(빈 껍데기) 생성은 그대로 두어 UI 진행바는 유지하되, iframe은 분리합니다.
-    ensureCcfYoutubeBgmPlayerDock();
+    const dock = ensureCcfYoutubeBgmPlayerDock();
+    if (!(dock instanceof HTMLElement)) {
+      return null;
+    }
 
     let playerElement = null;
     try {
@@ -5258,12 +5248,12 @@
     playerElement.removeAttribute("aria-hidden");
     try { playerElement.inert = false; } catch (_) {}
     
-    // 핵심 수정: React가 지배하는 패널 내부(dock)가 아니라, 
-    // 리렌더링의 영향을 받지 않는 안전한 document.body에 플레이어를 숨겨서 배치합니다.
+    // 코코포리아가 툴바를 부숴도 영향이 없도록 안전 구역(document.body)에 고정
     if (playerElement.parentElement !== document.body) {
       document.body.appendChild(playerElement);
     }
     
+    // 유저의 눈에 보이지 않도록 화면 밖으로 숨김 처리
     playerElement.style.setProperty("position", "fixed", "important");
     playerElement.style.setProperty("left", "-10000px", "important");
     playerElement.style.setProperty("top", "0", "important");
@@ -5923,7 +5913,7 @@
     host.setAttribute("width", String(YOUTUBE_PLAYER_MIN_SIZE));
     host.setAttribute("height", String(YOUTUBE_PLAYER_MIN_SIZE));
     
-    // 여기서도 플레이어를 패널 밖으로 격리합니다.
+    // 여기서도 안전 구역(document.body)에 강제 고정
     if (host.parentElement !== document.body) {
       document.body.appendChild(host);
     }
