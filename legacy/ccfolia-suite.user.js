@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.5.0
+// @version      0.5.6
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,11 +33,12 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.5.0"),
+    version: getUserscriptVersion("0.5.6"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
   const ROOT_FLOATING_ATTR = "data-ccf-suite-floating";
+  const COMPACT_VIEWPORT_QUERY = "(max-width: 600px)";
   const PRIMARY_ANCHOR_LABELS = Object.freeze([
     "내 캐릭터 목록",
     "캐릭터 선택",
@@ -388,7 +389,7 @@
 
   function ensureUi() {
     if (!document.body) return;
-    if (isHiddenRoute()) {
+    if (isHiddenRoute() || isCompactViewport()) {
       state.panelOpen = false;
       removeRoot();
       return;
@@ -1671,6 +1672,10 @@
     return path === "/" || path === "/home" || path.endsWith("/chat");
   }
 
+  function isCompactViewport() {
+    return window.matchMedia(COMPACT_VIEWPORT_QUERY).matches;
+  }
+
   function removeRoot() {
     document.getElementById("ccf-suite-root")?.remove();
   }
@@ -1730,10 +1735,10 @@
   function observeAnchor() {
     if (!document.body) return;
 
-    const observer = new MutationObserver(() => {
+    const syncRootPlacement = () => {
       const root = document.getElementById("ccf-suite-root");
 
-      if (isHiddenRoute()) {
+      if (isHiddenRoute() || isCompactViewport()) {
         state.panelOpen = false;
         if (root) {
           root.remove();
@@ -1749,14 +1754,19 @@
       }
 
       mountRoot(root, anchor);
-    });
+    };
+
+    const observer = new MutationObserver(syncRootPlacement);
 
     observer.observe(document.body, {
       childList: true,
       subtree: true
     });
     ccfSuiteRegisterTeardown(() => observer.disconnect());
-  }
+
+    const compactViewport = window.matchMedia(COMPACT_VIEWPORT_QUERY);
+    compactViewport.addEventListener("change", syncRootPlacement, ccfSuiteWithSignal());
+  }
 
   // ============================================================
   // Home enhancer: 룸 즐겨찾기 + 방문기록 통합 (v0.1.1)
@@ -3469,7 +3479,7 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.1";
+  const TOOLKIT_VERSION = "0.1.6";
   const ACTIVE_MS = 5 * 60 * 1000;
   const STALE_MS = 30 * 60 * 1000;
   const INVIS_START = "\u2063\u2063\u2063";
@@ -3477,6 +3487,7 @@
   const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
   const INVIS_REVERSE = new Map(INVIS_MAP.map((ch, index) => [ch, index]));
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
+  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const MESSAGE_TEXT_SELECTOR = [
     'p.MuiTypography-root.MuiTypography-body2',
     '.MuiListItemText-root > p',
@@ -3496,6 +3507,7 @@
   let refreshTimer = 0;
 
   const api = {
+    integration: "ccfolia-suite",
     __owner: abort.signal,
     decorateEnvelope,
     decorateOutgoingText,
@@ -3629,6 +3641,56 @@
     return `${extracted.visibleText}${encoded}${extracted.afterText || ""}`;
   }
 
+  function hasVisibleChatMacroMenuForEditor(editor) {
+    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+
+    const controls = [editor, editor.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement);
+    if (controls.some((control) => {
+      if (control.getAttribute("aria-expanded") === "true") return true;
+      const activeDescendant = control.getAttribute("aria-activedescendant");
+      return !!activeDescendant && !!document.getElementById(activeDescendant);
+    })) {
+      return true;
+    }
+
+    const relatedIds = getChatMacroMenuIdsForEditor(editor);
+    const directMenus = [...relatedIds]
+      .map((id) => document.getElementById(id))
+      .filter((menu) => menu instanceof HTMLElement);
+    const candidates = [...new Set([...directMenus, ...document.querySelectorAll(CHAT_MACRO_MENU_SELECTOR)])];
+
+    return candidates.some((menu) => {
+      if (!(menu instanceof HTMLElement) || !isVisible(menu)) return false;
+      if (!String(menu.textContent || "").trim()) return false;
+      if (relatedIds.has(menu.id)) return true;
+
+      const editorRect = editor.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      return menuRect.width > 0 &&
+        menuRect.height > 0 &&
+        menuRect.left < editorRect.right &&
+        menuRect.right > editorRect.left &&
+        menuRect.top < editorRect.top &&
+        menuRect.bottom <= editorRect.bottom;
+    });
+  }
+
+  function getChatMacroMenuIdsForEditor(editor) {
+    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return new Set();
+    const ids = new Set();
+    [editor, editor.closest?.('[role="combobox"]')]
+      .filter((control) => control instanceof HTMLElement)
+      .forEach((control) => {
+        [control.getAttribute("aria-controls"), control.getAttribute("aria-owns")]
+          .filter(Boolean)
+          .forEach((id) => ids.add(id));
+      });
+    const inputId = editor.id || "";
+    if (inputId.endsWith("-input")) ids.add(`${inputId.slice(0, -6)}-menu`);
+    return ids;
+  }
+
   function bindSendTriggers() {
     const bind = () => {
       document.querySelectorAll('button[type="submit"]').forEach((button) => {
@@ -3649,6 +3711,7 @@
         editor.addEventListener("keydown", (event) => {
           if (!active) return;
           if (event.isComposing || event.key !== "Enter" || event.shiftKey) return;
+          if (hasVisibleChatMacroMenuForEditor(editor)) return;
           preparePresenceForSend(editor);
         }, { capture: true, signal: abort.signal });
       });
@@ -3848,6 +3911,7 @@
       #${ROOT_ID} .capybara-presence-note {
         margin-top: 6px;
       }
+
     `;
     document.documentElement.appendChild(style);
   }
