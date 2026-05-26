@@ -7156,8 +7156,8 @@
         max-width: 100% !important;
         height: 16px !important;
         min-width: 0 !important;
-        padding: 0 8px 0 0 !important;
-        margin: 6px 0 !important;
+        padding: 0 8px !important;
+        margin: 6px 8px !important;
         overflow: hidden !important;
         align-self: stretch !important;
       }
