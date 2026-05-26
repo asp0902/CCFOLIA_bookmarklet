@@ -3596,6 +3596,8 @@
           return false;
         }
         const entryTabSig = normalizeCcfBgmTabSignature(entry.tabSignature);
+        
+        // 1. 신규 추가 항목 (서명 없음)
         if (activeTabSig && !entryTabSig) {
           entry.tabSignature = activeTabSig;
           entry.updatedAt = Date.now();
@@ -3603,10 +3605,30 @@
           tabSignatureChanged = true;
           return true;
         }
+        
         if (!activeTabSig) {
           return true;
         }
-        return entryTabSig === activeTabSig;
+        
+        // 2. 현재 탭 서명과 정확히 일치
+        if (entryTabSig === activeTabSig) {
+          return true;
+        }
+
+        // 3. [추가된 로직] 하위 호환성 및 마이그레이션 방어
+        // 기존 "0::BGM 1" 형태의 서명을 가진 항목이 사라지지 않도록 처리하되,
+        // PRO 탭으로는 절대 편입되지 않도록 막습니다.
+        if (activeTabSig.startsWith(entryTabSig + "::")) {
+          if (!/PRO/i.test(activeTabSig)) {
+            entry.tabSignature = activeTabSig;
+            entry.updatedAt = Date.now();
+            ccfBgmSlotMap.set(entryKey, entry);
+            tabSignatureChanged = true;
+            return true;
+          }
+        }
+
+        return false;
       });
 
     if (tabSignatureChanged) {
@@ -5687,18 +5709,34 @@
       return "";
     }
 
+    let baseSignature = "";
     const tablists = [...root.querySelectorAll('[role="tablist"], .MuiTabs-root')];
     for (const tablist of tablists) {
       const tabs = [...tablist.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')];
-      const signature = readCcfBgmActiveTabSignatureFromTabs(tabs);
-      if (signature) {
-        return signature;
+      baseSignature = readCcfBgmActiveTabSignatureFromTabs(tabs);
+      if (baseSignature) {
+        break;
       }
     }
 
-    return readCcfBgmActiveTabSignatureFromTabs(
-      [...root.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')]
-    );
+    if (!baseSignature) {
+      baseSignature = readCcfBgmActiveTabSignatureFromTabs(
+        [...root.querySelectorAll('button.MuiTab-root, [role="tab"], button[aria-selected]')]
+      );
+    }
+
+    // [추가된 로직] 상단 라이브러리 전환 버튼(MuiButtonGroup)의 활성화 상태 반영
+    const activeGroupButtons = [...root.querySelectorAll('.MuiButtonGroup-root .MuiButton-contained, .MuiButtonGroup-grouped.MuiButton-contained')];
+    const groupSignatures = activeGroupButtons.map(btn => {
+      // textContent를 읽으면 <title>PRO</title> 텍스트까지 포함되어 탭을 정확히 구분할 수 있습니다.
+      return normalizeSpace(btn.textContent || "");
+    }).filter(Boolean);
+
+    if (groupSignatures.length > 0) {
+      baseSignature = baseSignature ? `${baseSignature}::${groupSignatures.join("::")}` : groupSignatures.join("::");
+    }
+
+    return baseSignature;
   }
 
   function readCcfBgmActiveTabSignatureFromTabs(tabs) {
