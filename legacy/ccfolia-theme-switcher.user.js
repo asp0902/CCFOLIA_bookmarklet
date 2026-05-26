@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.7
+// @version      0.0.8
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,8 +22,28 @@
   const DICEBOT_ATTR = "data-ccf-dicebot";
   const DICEBOT_TOPBAR_SELECTOR = "span.MuiTypography-caption";
   const DICEBOT_MAP = Object.freeze({
-    "언성 듀엣": "unsung-duet"
+    "언성 듀엣": "unsung-duet",
+    "Call of Cthulhu 7th Edition": "cree-grrr"
   });
+
+  // 사용자가 "테마 커스텀" 카드의 드롭다운에서 선택 가능한 커스텀 시트 테마 목록.
+  // 각 테마는 CCFOLIA의 특정 다이스봇 이름과 매핑되며, 다이스봇이 일치 + 해당 테마가
+  // ON 상태일 때만 적용된다. (CSS는 buildDicebotStyleSheet에서 dicebot id로 스코프됨)
+  const SHEET_THEMES = Object.freeze([
+    Object.freeze({
+      id: "unsung-duet",
+      name: "언성 듀엣",
+      description: '다이스봇이 "언성 듀엣"일 때만 적용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 ON/OFF'
+    }),
+    Object.freeze({
+      id: "cree-grrr",
+      name: "CREE-GRRR!",
+      description: '다이스봇이 "Call of Cthulhu 7th Edition"일 때만 적용 / 팝업·다이스 메시지 디자인'
+    })
+  ]);
+  const DEFAULT_SHEET_THEME_ID = "unsung-duet";
+  const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
+  const SHEET_THEME_SELECT_TOOLKIT_ID = "ccf-theme-switcher-sheet-theme-select-toolkit";
 
   // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지.
   // CCFOLIA는 raw URL을 자동 임베드하지 않으므로 마크다운 링크 형태로 발송.
@@ -143,7 +163,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.7"),
+    version: getUserscriptVersion("0.0.8"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1617,6 +1637,243 @@
         margin: 6px auto;
         border-radius: 4px;
       }
+
+      ${buildCreeGrrrStyleSheet()}
+    `;
+  }
+
+  function buildCreeGrrrStyleSheet() {
+    // CREE-GRRR! 커스텀 시트 팔레트 (Roll20 원본 시트에서 추출)
+    // - 베이스: 어두운 톤 + sheet-wrap 헤더 이미지(https://i.imgur.com/MUGe6Qi.png)
+    // - 액센트: #1ff2f2 (시안)
+    // - 본문 텍스트: #FFF / 보조 #d1d1d1 / dim #c2c2c2
+    // - 입력칸: rgba(0,0,0,0.5) + 흰색 보더, 라운드 4~7px
+    // - 폰트: DungGeunMo + Galmuri (Roll20 시트와 동일 외관)
+    const CG = {
+      bgGlass: "rgba(7, 12, 25, 0.72)",
+      bgGlassInner: "rgba(7, 12, 25, 0.45)",
+      bgSolid: "#0b122a",
+      bgChip: "rgba(0, 0, 0, 0.5)",
+      accent: "#1ff2f2",
+      accentSoft: "rgba(31, 242, 242, 0.45)",
+      accentHover: "rgba(31, 242, 242, 0.15)",
+      border: "#ffffff",
+      borderSoft: "rgba(255, 255, 255, 0.4)",
+      muted: "#d1d1d1",
+      dim: "#c2c2c2",
+      text: "#ffffff",
+      shadow: "rgba(0, 0, 0, 0.55)",
+      sheetBg: "url(https://i.imgur.com/MUGe6Qi.png)",
+      diceBoxBg: "url(https://i.imgur.com/hj7QazV.png)",
+      // Roll20 시트의 'DungGeunMo' 픽셀 폰트와 'Galmuri'. 원본 시트와 동일한 폰트
+      // 패밀리를 import 해 CCFOLIA 측에도 적용한다. (한글 글리프 지원 + 동일 외형)
+      fontImport:
+        "@font-face{font-family:'DungGeunMo';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff') format('woff');font-weight:normal;font-style:normal;}" +
+        "@import url('https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css');"
+    };
+
+    return `
+      /* === [CREE-GRRR!] 폰트 임포트 (Roll20 시트 외관과 동일하게) ====== */
+      ${CG.fontImport}
+
+      /* === [CREE-GRRR!] 캐릭터 편집 팝업 ============================ */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper,
+      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper {
+        background-color: ${CG.bgGlass} !important;
+        background-image: none !important;
+        color: ${CG.text} !important;
+        border: 0 !important;
+        min-width: min(600px, calc(100vw - 64px)) !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+        box-shadow:
+          inset 0 0 0 1px ${CG.accent},
+          0 18px 40px ${CG.shadow} !important;
+      }
+
+      /* DialogActions: 액션 버튼은 균등 분배 + 한 줄 유지 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        white-space: nowrap !important;
+        font-family: inherit !important;
+      }
+
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] .MuiAppBar-root {
+        background: ${CG.bgSolid} !important;
+        background-image: none !important;
+        color: ${CG.text} !important;
+        border-bottom: 0 !important;
+        box-shadow:
+          inset 0 -1px 0 0 ${CG.accent},
+          0 4px 14px ${CG.shadow} !important;
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiTypography-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiSvgIcon-root {
+        color: ${CG.text} !important;
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root:hover {
+        background: ${CG.accentHover} !important;
+      }
+
+      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root {
+        background-image:
+          linear-gradient(${CG.bgGlassInner}, ${CG.bgGlassInner}),
+          ${CG.sheetBg} !important;
+        background-repeat: no-repeat, no-repeat !important;
+        background-position: center top, center top !important;
+        background-size: cover, cover !important;
+        background-color: transparent !important;
+      }
+
+      /* 내부 Paper/카드/아코디언 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiPaper-root:not(.MuiAppBar-root),
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiCard-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAccordion-root {
+        background: ${CG.bgGlassInner} !important;
+        color: ${CG.text} !important;
+        border-color: ${CG.accentSoft} !important;
+      }
+
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDivider-root {
+        border-color: ${CG.accentSoft} !important;
+      }
+
+      /* 텍스트 톤 — DialogContent 스코프로 한정 (DialogActions는 네이티브 유지) */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiInputLabel-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormControlLabel-label,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiSvgIcon-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogTitle-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogTitle-root .MuiTypography-root {
+        color: ${CG.text} !important;
+      }
+
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiFormHelperText-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemText-secondary {
+        color: ${CG.dim} !important;
+      }
+
+      /* 입력칸 — 검은 베이스 + 흰색 보더 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiFilledInput-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-input,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper textarea,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="text"],
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"] {
+        background: ${CG.bgChip} !important;
+        color: ${CG.text} !important;
+        border-radius: 4px !important;
+        font-family: inherit !important;
+      }
+
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root fieldset {
+        border-color: ${CG.borderSoft} !important;
+      }
+
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .Mui-focused .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root.Mui-focused fieldset {
+        border-color: ${CG.accent} !important;
+        box-shadow: 0 0 0 2px rgba(31, 242, 242, 0.22) !important;
+      }
+
+      /* 탭/리스트 선택 — 시안 액센트 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiTab-root.Mui-selected,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiListItemButton-root.Mui-selected,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .Mui-selected > .MuiListItemButton-root {
+        background: ${CG.accentHover} !important;
+        color: ${CG.accent} !important;
+      }
+
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiTabs-indicator {
+        background: ${CG.accent} !important;
+      }
+
+      /* 호버 — 시안 톤 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemButton-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root .MuiMenuItem-root:hover {
+        background: ${CG.accentHover} !important;
+      }
+
+      /* 캐릭터 시트 팝업 스크롤바 — 시안 액센트 */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper ::-webkit-scrollbar-track {
+        background: ${CG.bgSolid};
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper ::-webkit-scrollbar-thumb {
+        background: ${CG.accent};
+        border: 2px solid ${CG.bgSolid};
+        border-radius: 999px;
+      }
+
+      /* === [CREE-GRRR!] 다이스 롤 채팅 메시지 ======================= */
+      /* Roll20 시트의 .sheet-rolltemplate-coc 박스 디자인을 CCFOLIA 채팅
+         메시지(li)에 차용 — 검은 카드 + 시안 보더 + DungGeunMo 폰트 */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li {
+        background: ${CG.bgGlass} !important;
+        border: 1px solid ${CG.accent} !important;
+        border-radius: 10px !important;
+        margin: 6px 8px !important;
+        padding: 10px 14px !important;
+        box-shadow: 0 8px 18px ${CG.shadow}, inset 0 0 0 1px rgba(31, 242, 242, 0.12) !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
+      }
+
+      /* 본문 텍스트 — 어두운 톤에서 가독성 위해 #d1d1d1 */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li p.MuiTypography-body2 {
+        color: ${CG.muted} !important;
+        font-family: inherit !important;
+      }
+
+      /* 다이스 결과 강조 (굵은 텍스트 → 시안) */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li strong,
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li b,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li strong,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li strong {
+        color: ${CG.accent} !important;
+        font-weight: normal !important; /* 픽셀 폰트라 굵게 처리 불필요 */
+      }
+
+      /* 인라인 롤 결과 — 시안 강조 */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li .inlinerollresult,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li .inlinerollresult,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li .inlinerollresult {
+        background: none !important;
+        border: none !important;
+        color: ${CG.accent} !important;
+        padding: 0 !important;
+        font-weight: normal !important;
+      }
+
+      /* 캐릭터 이름(닉네임) — 시안 액센트 */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li .MuiTypography-caption {
+        color: ${CG.accent} !important;
+      }
+
+      /* 채팅 입력창 영역에도 폰트 톤 통일 (선택 사항) */
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li a {
+        color: ${CG.accent} !important;
+      }
     `;
   }
 
@@ -1719,6 +1976,14 @@
             <button type="button" class="ccf-theme-btn" data-action="export-theme">내보내기</button>
             <button type="button" class="ccf-theme-btn" data-action="delete-theme">테마 삭제</button>
           </div>
+          <label class="ccf-theme-row">
+            <span>커스텀 시트 테마</span>
+            <select id="${SHEET_THEME_SELECT_PANEL_ID}" class="ccf-theme-select" aria-label="커스텀 시트 테마 선택">
+              ${SHEET_THEMES.map((theme) => `
+                <option value="${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>
+              `).join("")}
+            </select>
+          </label>
           <div class="ccf-theme-actions">
             <button
               type="button"
@@ -1726,7 +1991,7 @@
               id="${UNSUNG_DUET_TOGGLE_ID}"
               data-action="toggle-unsung-duet"
               aria-pressed="true"
-            >언성 듀엣 테마: ON</button>
+            >선택 테마: ON</button>
           </div>
           <input id="${IMPORT_INPUT_ID}" type="file" accept=".json,application/json" hidden>
         </div>
@@ -1793,17 +2058,18 @@
         }
 
         if (action === "toggle-unsung-duet") {
-          const nextEnabled = !settings.unsungDuetEnabled;
+          const nextEnabled = !isSheetThemeEnabled();
           settings = { ...settings, unsungDuetEnabled: nextEnabled };
           persistSettings();
           syncUnsungDuetToggle();
           applyDicebotAttribute();
           // 토글 OFF → 이미 인젝트된 이미지/마킹을 즉시 정리해 원본 텍스트로 복원
           if (!nextEnabled) revertUnsungDuetDomState();
+          const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
           setStatus(
             nextEnabled
-              ? "언성 듀엣 테마를 활성화했습니다."
-              : "언성 듀엣 테마를 비활성화했습니다.",
+              ? `${themeName} 테마를 활성화했습니다.`
+              : `${themeName} 테마를 비활성화했습니다.`,
             "success"
           );
           return;
@@ -1887,6 +2153,21 @@
           nextMode === MODE_DEFAULT ? "사이트 기본 색으로 돌아갑니다." : "테마를 변경했습니다.",
           "success"
         );
+      });
+
+      panel.querySelector(`#${SHEET_THEME_SELECT_PANEL_ID}`)?.addEventListener("change", (event) => {
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLSelectElement)) return;
+        const value = target.value;
+        if (!SHEET_THEMES.some((t) => t.id === value)) return;
+        settings = { ...settings, selectedSheetTheme: value };
+        persistSettings();
+        applyDicebotAttribute();
+        // 다른 테마로 전환 — 이전 테마의 인젝션 흔적(이미지 치환 등) 즉시 정리
+        revertUnsungDuetDomState();
+        syncUnsungDuetToggle();
+        const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
+        setStatus(`커스텀 시트 테마: ${themeName}`, "success");
       });
 
       panel.querySelector(`#${THEME_NAME_INPUT_ID}`)?.addEventListener("input", (event) => {
@@ -3710,14 +3991,25 @@
     return "";
   }
 
+  function getSelectedSheetThemeId() {
+    const v = settings?.selectedSheetTheme;
+    return SHEET_THEMES.some((t) => t.id === v) ? v : DEFAULT_SHEET_THEME_ID;
+  }
+
+  function isSheetThemeEnabled() {
+    // 레거시 키 unsungDuetEnabled를 시트 테마 전체 ON/OFF 마스터 스위치로 재사용
+    return settings?.unsungDuetEnabled !== false;
+  }
+
   function applyDicebotAttribute() {
     const root = document.documentElement;
     if (!root) return;
     let id = detectDicebotName();
-    // 패널의 "언성 듀엣 테마" 토글이 OFF면 unsung-duet 식별을 비활성화.
-    // 이 단일 게이트로 CSS 테마 / 트리거 치환 / 이미지 인젝션 / pauseVideo 차단
-    // 모두 한 번에 OFF 됨 (모두 getCurrentDicebotId() === "unsung-duet" 체크하므로).
-    if (id === "unsung-duet" && settings.unsungDuetEnabled === false) {
+    // 시트 테마 토글이 OFF거나, 감지된 다이스봇이 현재 선택된 시트 테마의 매핑과
+    // 다르면 식별자를 비운다. 이 단일 게이트로 CSS 테마 / 트리거 치환 / 이미지 인젝션 /
+    // pauseVideo 차단 모두 한 번에 OFF 됨
+    // (모두 getCurrentDicebotId() 검사에 의존하므로).
+    if (!isSheetThemeEnabled() || id !== getSelectedSheetThemeId()) {
       id = "";
     }
     const current = root.getAttribute(DICEBOT_ATTR) || "";
@@ -3826,11 +4118,17 @@
   }
 
   function syncUnsungDuetToggle() {
+    const enabled = isSheetThemeEnabled();
+    const selectedId = getSelectedSheetThemeId();
+    const themeName = SHEET_THEMES.find((t) => t.id === selectedId)?.name || "";
     const button = document.getElementById(UNSUNG_DUET_TOGGLE_ID);
     if (button instanceof HTMLButtonElement) {
-      const enabled = settings.unsungDuetEnabled !== false;
-      button.textContent = enabled ? "언성 듀엣 테마: ON" : "언성 듀엣 테마: OFF";
+      button.textContent = enabled ? `${themeName} 테마: ON` : `${themeName} 테마: OFF`;
       button.setAttribute("aria-pressed", enabled ? "true" : "false");
+    }
+    const panelSelect = document.getElementById(SHEET_THEME_SELECT_PANEL_ID);
+    if (panelSelect instanceof HTMLSelectElement && panelSelect.value !== selectedId) {
+      panelSelect.value = selectedId;
     }
     syncUnsungDuetToolkitToggle();
   }
@@ -3853,16 +4151,44 @@
       row.setAttribute("data-ccf-unsung-duet-row", "1");
       // 툴킷은 shadow DOM 이라 외부 CSS 가 안 먹음 → 인라인 스타일로 처리
       row.style.cssText =
-        "display:flex;align-items:center;justify-content:space-between;gap:8px;" +
+        "display:flex;flex-direction:column;gap:6px;" +
         "padding:8px 0 0 0;margin-top:8px;" +
         "border-top:1px solid rgba(255,255,255,0.08);";
 
-      const label = document.createElement("div");
-      label.style.cssText = "min-width:0;flex:1 1 auto;";
-      label.innerHTML =
-        '<div style="font-size:13px;line-height:1.3;">언성 듀엣 테마</div>' +
-        '<div style="font-size:11px;opacity:0.7;line-height:1.4;margin-top:2px;">' +
-        '다이스봇이 "언성 듀엣"일 때만 적용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 ON/OFF</div>';
+      // 상단: 드롭다운(테마 선택) + ON/OFF 버튼
+      const topLine = document.createElement("div");
+      topLine.style.cssText =
+        "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+
+      const select = document.createElement("select");
+      select.id = SHEET_THEME_SELECT_TOOLKIT_ID;
+      select.setAttribute("data-ccf-sheet-theme-select", "toolkit");
+      select.setAttribute("aria-label", "커스텀 시트 테마 선택");
+      // shadow DOM이라 외부 .ccf-theme-select 스타일이 안 먹어서 인라인으로 톤만 맞춤
+      select.style.cssText =
+        "flex:1 1 auto;min-width:0;font-size:13px;line-height:1.3;" +
+        "background:rgba(0,0,0,0.35);color:inherit;" +
+        "border:1px solid rgba(255,255,255,0.15);border-radius:4px;" +
+        "padding:4px 6px;";
+      for (const theme of SHEET_THEMES) {
+        const opt = document.createElement("option");
+        opt.value = theme.id;
+        opt.textContent = theme.name;
+        select.appendChild(opt);
+      }
+      select.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const value = event.currentTarget.value;
+        if (!SHEET_THEMES.some((t) => t.id === value)) return;
+        settings = { ...settings, selectedSheetTheme: value };
+        persistSettings();
+        applyDicebotAttribute();
+        // 다른 테마로 전환할 때 이전 테마의 DOM 인젝션(이미지 치환 등) 흔적 정리
+        revertUnsungDuetDomState();
+        syncUnsungDuetToggle();
+        const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
+        setStatus(`커스텀 시트 테마: ${themeName}`, "success");
+      });
 
       const btn = document.createElement("button");
       btn.type = "button";
@@ -3871,20 +4197,29 @@
       btn.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const next = !(settings.unsungDuetEnabled !== false);
+        const next = !isSheetThemeEnabled();
         settings = { ...settings, unsungDuetEnabled: next };
         persistSettings();
         applyDicebotAttribute();
         if (!next) revertUnsungDuetDomState();
         syncUnsungDuetToggle();
+        const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
         setStatus(
-          next ? "언성 듀엣 테마를 활성화했습니다." : "언성 듀엣 테마를 비활성화했습니다.",
+          next ? `${themeName} 테마를 활성화했습니다.` : `${themeName} 테마를 비활성화했습니다.`,
           "success"
         );
       });
 
-      row.appendChild(label);
-      row.appendChild(btn);
+      topLine.appendChild(select);
+      topLine.appendChild(btn);
+
+      // 하단: 현재 선택된 테마의 설명
+      const desc = document.createElement("div");
+      desc.setAttribute("data-ccf-sheet-theme-desc", "toolkit");
+      desc.style.cssText = "font-size:11px;opacity:0.7;line-height:1.4;";
+
+      row.appendChild(topLine);
+      row.appendChild(desc);
       card.appendChild(row);
     }
 
@@ -3895,11 +4230,22 @@
     const card = findToolkitThemeCard();
     if (!card) return;
     const btn = card.querySelector('[data-ccf-unsung-duet-btn="1"]');
-    if (!(btn instanceof HTMLButtonElement)) return;
-    const enabled = settings.unsungDuetEnabled !== false;
-    btn.textContent = enabled ? "ON" : "OFF";
-    btn.setAttribute("aria-pressed", enabled ? "true" : "false");
-    btn.setAttribute("data-on", enabled ? "1" : "0");
+    if (btn instanceof HTMLButtonElement) {
+      const enabled = isSheetThemeEnabled();
+      btn.textContent = enabled ? "ON" : "OFF";
+      btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+      btn.setAttribute("data-on", enabled ? "1" : "0");
+    }
+    const select = card.querySelector(`#${SHEET_THEME_SELECT_TOOLKIT_ID}`);
+    const selectedId = getSelectedSheetThemeId();
+    if (select instanceof HTMLSelectElement && select.value !== selectedId) {
+      select.value = selectedId;
+    }
+    const desc = card.querySelector('[data-ccf-sheet-theme-desc="toolkit"]');
+    if (desc instanceof HTMLElement) {
+      const theme = SHEET_THEMES.find((t) => t.id === selectedId);
+      desc.textContent = theme?.description || "";
+    }
   }
 
   function ensureToolkitToggleWatcher() {
@@ -4927,7 +5273,10 @@
       defaultThemeVersion: 0,
       customTheme: { ...DEFAULT_CUSTOM_THEME },
       savedThemes: [],
-      unsungDuetEnabled: true
+      // 시트 테마 마스터 ON/OFF (레거시 호환 위해 unsungDuetEnabled 키 유지)
+      unsungDuetEnabled: true,
+      // 드롭다운으로 선택된 커스텀 시트 테마 id (SHEET_THEMES.id 중 하나)
+      selectedSheetTheme: DEFAULT_SHEET_THEME_ID
     };
   }
 
@@ -4935,13 +5284,17 @@
     const base = createDefaultSettings();
     const savedThemes = normalizeSavedThemes(value?.savedThemes);
     const nextMode = normalizeMode(value?.mode, savedThemes);
+    const sheetThemeId = SHEET_THEMES.some((t) => t.id === value?.selectedSheetTheme)
+      ? value.selectedSheetTheme
+      : DEFAULT_SHEET_THEME_ID;
     return {
       mode: nextMode,
       defaultTheme: normalizeOptionalTheme(value?.defaultTheme),
       defaultThemeVersion: Number.isInteger(value?.defaultThemeVersion) ? value.defaultThemeVersion : 0,
       customTheme: normalizeTheme(value?.customTheme || value?.theme || base.customTheme),
       savedThemes,
-      unsungDuetEnabled: typeof value?.unsungDuetEnabled === "boolean" ? value.unsungDuetEnabled : true
+      unsungDuetEnabled: typeof value?.unsungDuetEnabled === "boolean" ? value.unsungDuetEnabled : true,
+      selectedSheetTheme: sheetThemeId
     };
   }
 

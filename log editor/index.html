@@ -1305,7 +1305,7 @@
       button.addEventListener("click", () => {
         const displayIndex = Number(button.dataset.displayIndex);
         const displayEntry = Number.isInteger(displayIndex) ? entries[displayIndex] : null;
-        openEntryEditDialog(room, Number(button.dataset.entryIndex), displayEntry);
+        openEntryEditDialog(room, Number(button.dataset.entryIndex), displayEntry, assetMaps);
       });
     });
 
@@ -1346,7 +1346,7 @@
     await persistRoomMutation(room, "메시지를 삭제했습니다.");
   }
 
-  function openEntryEditDialog(room, entryIndex, displayEntry = null) {
+  function openEntryEditDialog(room, entryIndex, displayEntry = null, assetMaps = null) {
     const sourceEntries = Array.isArray(room?.payload?.entries) ? room.payload.entries : [];
     const entry = displayEntry || sourceEntries[entryIndex] || null;
     if (!room || !entry) return;
@@ -1422,7 +1422,7 @@
       });
     }
 
-    overlay.querySelector(".js-entry-edit-save")?.addEventListener("click", async () => {
+    overlay.querySelector(".js-entry-edit-save")?.addEventListener("click", () => {
       if (!(editor instanceof HTMLElement)) return;
       try {
         const editedHtml = sanitizeEditedEntryHtml(editor.innerHTML);
@@ -1431,8 +1431,21 @@
         } else {
           applyEditedEntryHtml(sourceEntries[entryIndex] || entry, editedHtml);
         }
-        await persistRoomMutation(room, "메시지를 수정했습니다.");
         close();
+        if (assetMaps) {
+          renderSelectedTabEntries(room, assetMaps);
+        } else {
+          renderRoom(room);
+        }
+        showToast("수정 내용을 반영했습니다. 저장 중입니다.");
+        window.setTimeout(() => {
+          persistRoomMutation(room, "메시지를 수정했습니다.", {
+            refreshList: false,
+            renderRoom: false
+          }).catch((error) => {
+            showToast("메시지 수정 저장 실패: " + (error?.message || error));
+          });
+        }, 0);
       } catch (error) {
         showToast("메시지 수정 실패: " + (error?.message || error));
       }
@@ -1547,14 +1560,18 @@
     entry.editedAt = new Date().toISOString();
   }
 
-  async function persistRoomMutation(room, message) {
+  async function persistRoomMutation(room, message, options = {}) {
     if (!room || !room.payload) return;
     room.lastUpdatedAt = Date.now();
     room.payload.editedAt = new Date().toISOString();
     refreshTabMessageCounts(room);
     await putRoom(room);
-    await refreshRoomList();
-    renderRoom(room);
+    if (options.refreshList !== false) {
+      await refreshRoomList();
+    }
+    if (options.renderRoom !== false) {
+      renderRoom(room);
+    }
     if (message) showToast(message);
   }
 

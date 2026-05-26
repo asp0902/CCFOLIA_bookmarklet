@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.24
+// @version      0.0.25
 // @description  Adds a rich formatting editor, renderer, ruby, tooltip, and blur support to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집 도구/렌더러, 루비, 툴팁, 블러 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1679,6 +1679,7 @@
   let modalDraftRuns = null;
   let modalDraftAlignRuns = null;
   let modalDraftBlockStyle = null;
+  let modalDraftParentheticalGray = false;
   let modalDraftRoll20Text = null;
   let modalDraftRoll20ConvertedSource = null;
   let modalDraftLastStyle = null;
@@ -3647,7 +3648,15 @@
     }
 
     if (command === "paren-gray") {
-      applyParentheticalGrayToEditor(editor);
+      const selection = getInlineToolbarSelection(toolbar);
+      if (applyParentheticalGrayToEditor(editor, selection)) {
+        commandButton.classList.add("active");
+        commandButton.setAttribute("aria-pressed", "true");
+        if (selection?.start !== selection?.end) {
+          restoreRoomSelectionSoon(editor, selection);
+          showInlineToolbarSelectionHighlight(toolbar);
+        }
+      }
       return;
     }
 
@@ -4045,6 +4054,9 @@
       styleOverride: getStyleFromInlineToolbar(toolbar),
       selectionOverride: selection
     });
+    if (applied && ensureEditorState(editor).parentheticalGray) {
+      applyParentheticalGrayToEditor(editor);
+    }
 
     if (applied && options.restoreSelection !== false) {
       restoreRoomSelectionSoon(editor, selection);
@@ -4060,7 +4072,7 @@
     if (!toolbar) return;
 
     toolbar.querySelectorAll(
-      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"], [data-inline-command="paren-gray"]'
     ).forEach((btn) => {
       btn.classList.remove("active");
       btn.setAttribute("aria-pressed", "false");
@@ -4104,6 +4116,7 @@
     state.alignRuns = [];
     state.lastStyle = null;
     state.blockStyle = preservedNarration ? { narration: true } : {};
+    state.parentheticalGray = false;
     state.roll20Source = null;
 
     const composer = findComposerForEditor(editor);
@@ -5198,8 +5211,12 @@
     modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("mousedown", (event) => {
       event.preventDefault();
     });
-    modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("click", () => {
-      applyParentheticalGrayToModalDraft();
+    modal.querySelector("#ccf-parenthetical-gray")?.addEventListener("click", (event) => {
+      const button = event.currentTarget;
+      if (applyParentheticalGrayToModalDraft()) {
+        button?.classList.add("active");
+        button?.setAttribute("aria-pressed", "true");
+      }
     });
     modal.querySelector("#ccf-narration-toggle")?.addEventListener("mousedown", (event) => {
       event.preventDefault();
@@ -5619,6 +5636,7 @@
     modalDraftRuns = null;
     modalDraftAlignRuns = null;
     modalDraftBlockStyle = null;
+    modalDraftParentheticalGray = false;
     modalDraftRoll20Text = null;
     modalDraftRoll20ConvertedSource = null;
     modalDraftLastStyle = null;
@@ -7424,6 +7442,7 @@
     modalDraftRuns = cloneRuns(state.runs, text.length);
     modalDraftAlignRuns = cloneAlignRuns(state.alignRuns, getTextLineCount(text));
     modalDraftBlockStyle = cleanupBlockStyle(state.blockStyle);
+    modalDraftParentheticalGray = state.parentheticalGray === true;
     modalDraftRoll20Text = text;
     modalDraftRoll20ConvertedSource = null;
     modalDraftLastStyle = state.lastStyle ? { ...state.lastStyle } : null;
@@ -7552,22 +7571,35 @@
     return ranges.sort((left, right) => left.start - right.start || right.end - left.end);
   }
 
-  function applyParentheticalGrayRuns(existingRuns, text) {
-    return getParentheticalRanges(text).reduce(
+  function getParentheticalGrayTargetRanges(text, selection = null) {
+    const ranges = getParentheticalRanges(text);
+    const selected = normalizeSelectionRange(selection, text.length);
+    if (!selected || selected.start === selected.end) return ranges;
+
+    const selectedRanges = ranges.filter((range) => (
+      rangesOverlap(range.start, range.end, selected.start, selected.end)
+    ));
+    return selectedRanges.length ? selectedRanges : ranges;
+  }
+
+  function applyParentheticalGrayRuns(existingRuns, text, selection = null) {
+    return getParentheticalGrayTargetRanges(text, selection).reduce(
       (runs, range) => patchStyleRuns(runs, range, { color: PARENTHETICAL_GRAY_COLOR }, text.length),
       cloneRuns(existingRuns, text.length)
     );
   }
 
-  function applyParentheticalGrayToEditor(editor) {
+  function applyParentheticalGrayToEditor(editor, selection = null) {
     if (!editor) return false;
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
-    if (!getParentheticalRanges(text).length) return false;
+    if (!getParentheticalGrayTargetRanges(text, selection).length) return false;
 
     const state = ensureEditorState(editor);
-    state.runs = applyParentheticalGrayRuns(state.runs, text);
+    state.runs = applyParentheticalGrayRuns(state.runs, text, selection);
     state.text = text;
+    state.parentheticalGray = true;
+    state.roll20Source = null;
     renderPreview(editor);
     refreshComposerBadge(activeComposer, editor);
     syncEditorVisualPreview(editor);
@@ -7580,15 +7612,19 @@
     if (!editor || !modalEditor) return false;
 
     modalDraftText = getEditorText(modalEditor);
-    if (!getParentheticalRanges(modalDraftText).length) return false;
+    const selection = getModalSelection() || getEditorSelection(modalEditor);
+    if (!getParentheticalGrayTargetRanges(modalDraftText, selection).length) return false;
 
     modalDraftRuns = applyParentheticalGrayRuns(
       modalDraftRuns ?? ensureEditorState(editor).runs,
-      modalDraftText
+      modalDraftText,
+      selection
     );
+    modalDraftParentheticalGray = true;
     renderPreview(editor, {
       force: true,
       restoreSelection: true,
+      selection,
       textOverride: modalDraftText,
       runsOverride: modalDraftRuns,
       alignRunsOverride: modalDraftAlignRuns
@@ -9776,6 +9812,9 @@
               narration: true
             });
           }
+          if (state.parentheticalGray) {
+            state.runs = applyParentheticalGrayRuns(state.runs, text);
+          }
         }
 
         state.text = text;
@@ -9870,6 +9909,9 @@
     if (!rawText) return true;
 
     const state = ensureEditorState(editor);
+    if (state.parentheticalGray) {
+      state.runs = applyParentheticalGrayRuns(state.runs, rawText);
+    }
     const preparedRuns = prepareRunsForTransport(state.runs, rawText.length);
     if (preparedRuns.failed) {
       alert("클립보드나 로컬 이미지를 저장하지 못해 전송을 중단했습니다. 이미지 링크를 사용하거나 이미지를 더 작게 만들어주세요.");
@@ -9992,6 +10034,7 @@
         alignRuns: [],
         lastStyle: null,
         blockStyle: {},
+        parentheticalGray: false,
         roll20Source: null
       };
       EDITOR_STATE.set(editor, state);
@@ -11593,6 +11636,7 @@
       state.runs = nextRuns;
       state.alignRuns = nextAlignRuns;
       state.blockStyle = {};
+      state.parentheticalGray = false;
       state.lastStyle = null;
       state.text = nextText;
       state.roll20Source = null;
@@ -11603,7 +11647,9 @@
     }
 
     const nextText = modalDraftText ?? getEditorText(roomEditor);
-    const nextRuns = cloneRuns(modalDraftRuns, nextText.length);
+    const nextRuns = modalDraftParentheticalGray
+      ? applyParentheticalGrayRuns(modalDraftRuns, nextText)
+      : cloneRuns(modalDraftRuns, nextText.length);
     const nextAlignRuns = cloneAlignRuns(modalDraftAlignRuns, getTextLineCount(nextText));
     const prevText = getEditorText(roomEditor);
 
@@ -11620,6 +11666,7 @@
     state.runs = nextRuns;
     state.alignRuns = nextAlignRuns;
     state.blockStyle = cleanupBlockStyle(modalDraftBlockStyle);
+    state.parentheticalGray = modalDraftParentheticalGray;
     state.text = nextText;
     state.roll20Source = null;
     if (modalDraftLastStyle) {
