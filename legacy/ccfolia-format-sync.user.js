@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.31
+// @version      0.0.32
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -56,7 +56,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.31"),
+    version: getUserscriptVersion("0.0.32"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4107,7 +4107,7 @@
     if (!toolbar) return;
 
     toolbar.querySelectorAll(
-      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"], [data-inline-command="paren-gray"]'
+      '[data-inline-command="bold"], [data-inline-command="italic"], [data-inline-command="underline"], [data-inline-command="strike"]'
     ).forEach((btn) => {
       btn.classList.remove("active");
       btn.setAttribute("aria-pressed", "false");
@@ -4146,16 +4146,18 @@
 
     const state = ensureEditorState(editor);
     const preservedNarration = state.blockStyle?.narration === true;
+    const preservedParentheticalGray = state.parentheticalGray === true;
     state.text = "";
     state.runs = [];
     state.alignRuns = [];
     state.lastStyle = null;
     state.blockStyle = preservedNarration ? { narration: true } : {};
-    state.parentheticalGray = false;
+    state.parentheticalGray = preservedParentheticalGray;
     state.roll20Source = null;
 
     const composer = findComposerForEditor(editor);
     refreshComposerBadge(composer, editor);
+    setInlineParentheticalGrayToggle(editor, preservedParentheticalGray);
     syncEditorVisualPreview(editor);
   }
 

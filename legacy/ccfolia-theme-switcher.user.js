@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.8
+// @version      0.1.9
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -207,7 +207,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.8"),
+    version: getUserscriptVersion("0.1.9"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1936,8 +1936,15 @@
         vertical-align: middle;
         width: 70px;
         height: 70px;
-        background: url(https://i.imgur.com/QxyXISE.png) center no-repeat;
+        /* 폴백: 시안 보더 + 어두운 채움 — imgur 이미지가 실패해도 원형 뱃지가 보이게 */
+        background-color: rgba(7, 12, 25, 0.7);
+        background-image: url(https://i.imgur.com/QxyXISE.png);
+        background-repeat: no-repeat;
+        background-position: center;
         background-size: contain;
+        border: 1px solid ${CG.accent};
+        border-radius: 50%;
+        box-sizing: border-box;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif;
         font-size: 28px;
         line-height: 1;
@@ -1952,9 +1959,16 @@
         vertical-align: middle;
         min-width: 50px;
         height: 50px;
-        padding: 0 8px;
-        background: url(https://i.imgur.com/XmfjgaY.png) center no-repeat;
+        padding: 0 10px;
+        /* 폴백: 시안 보더 + 어두운 채움 */
+        background-color: rgba(7, 12, 25, 0.7);
+        background-image: url(https://i.imgur.com/XmfjgaY.png);
+        background-repeat: no-repeat;
+        background-position: center;
         background-size: 100% 100%;
+        border: 1px solid ${CG.accent};
+        border-radius: 4px;
+        box-sizing: border-box;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif;
         font-size: 14px;
         line-height: 1;
@@ -2153,7 +2167,9 @@
           syncUnsungDuetToggle();
           applyDicebotAttribute();
           // 토글 OFF → 이미 인젝트된 이미지/마킹을 즉시 정리해 원본 텍스트로 복원
+          // 토글 ON → 새 테마의 인젝션을 기존 메시지에도 즉시 적용
           if (!nextEnabled) revertUnsungDuetDomState();
+          else reapplySheetThemeInjections();
           const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
           setStatus(
             nextEnabled
@@ -2254,6 +2270,8 @@
         applyDicebotAttribute();
         // 다른 테마로 전환 — 이전 테마의 인젝션 흔적(이미지 치환 등) 즉시 정리
         revertUnsungDuetDomState();
+        // 새 테마 인젝션을 즉시 재실행
+        reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
         setStatus(`커스텀 시트 테마: ${themeName}`, "success");
@@ -4289,6 +4307,8 @@
         applyDicebotAttribute();
         // 다른 테마로 전환할 때 이전 테마의 DOM 인젝션(이미지 치환 등) 흔적 정리
         revertUnsungDuetDomState();
+        // 새 테마 인젝션을 즉시 재실행 — 옵저버를 기다리지 않고 기존 메시지도 처리
+        reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
         setStatus(`커스텀 시트 테마: ${themeName}`, "success");
@@ -4306,6 +4326,7 @@
         persistSettings();
         applyDicebotAttribute();
         if (!next) revertUnsungDuetDomState();
+        else reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
         setStatus(
@@ -4400,6 +4421,17 @@
     revertCreeGrrrDomState();
   }
 
+  // 테마 전환/토글 ON 직후 호출 — 옵저버를 기다리지 않고 기존 메시지에도 즉시
+  // 새 테마의 인젝션을 적용. (옵저버는 새 mutation 에만 반응하므로 기존 메시지가
+  // 누락되는 문제를 회피.)
+  function reapplySheetThemeInjections() {
+    try {
+      bindUnsungDuetTriggerFields();
+      injectUnsungDuetMessageImages();
+      injectCreeGrrrDiceFormatting();
+    } catch (error) { /* 인젝션 실패는 무시 — 다음 mutation 에서 재시도 */ }
+  }
+
   // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
   function revertCreeGrrrDomState() {
     const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
@@ -4416,14 +4448,17 @@
     // 단, 비용이 커서 생략 — 다음 mutation 에서 자연스럽게 처리됨.
   }
 
-  // CREE-GRRR!: 채팅 다이스 결과 인젝션. dicebot==='cree-grrr' 일 때만 동작.
+  // CREE-GRRR!: 채팅 다이스 결과 인젝션. 사용자가 드롭다운에서 CREE-GRRR! + ON 했을 때만.
+  // (dicebot 속성에 의존하지 않고 설정값 직접 검사 — 더 견고한 게이트)
   // "→ 73" → 원형 프레임 안에 73 표시 (sheet-rollresult 와 동일 외형)
   // "보통 성공"/"대성공"/... → 깃발 프레임 안에 Roll20 명칭으로 변환해 표시
   //   (sheet-result-status 와 동일 외형 — CREE-GRRR! 시트의 vocabularly 로 통일)
   function injectCreeGrrrDiceFormatting() {
-    if (getCurrentDicebotId() !== "cree-grrr") return;
+    if (!isSheetThemeEnabled()) return;
+    if (getSelectedSheetThemeId() !== "cree-grrr") return;
+    // <li> + role="listitem" 둘 다 — CCFOLIA 버전에 따라 다를 수 있어 넓게 잡음
     const messages = document.querySelectorAll(
-      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"]), [role="listitem"]:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
     );
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
