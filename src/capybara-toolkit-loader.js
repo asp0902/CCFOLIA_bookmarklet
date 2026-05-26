@@ -15,9 +15,9 @@
     { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" }
   ]);
   const EXISTING = window[GLOBAL_KEY];
-  if (EXISTING && typeof EXISTING.openPanel === "function") {
+  if (EXISTING && typeof EXISTING.closePanel === "function") {
     if (EXISTING.buildId === BUILD_ID) {
-      EXISTING.openPanel();
+      EXISTING.closePanel();
       return;
     }
     resetExistingToolkit(EXISTING);
@@ -123,7 +123,7 @@
 
   ensurePanel();
   bindRuntimeWatchers();
-  openPanel();
+  closePanel();
   persistMeta().catch(() => {});
   restoreFeatureStates().catch(reportError);
 
