@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.2
+// @version      0.1.3
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -59,12 +59,16 @@
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
   const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
   const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
-  // 인식할 판정 결과 상태 키워드 (CoC 7판 BCDice 출력 기준)
+  // 인식할 판정 결과 상태 키워드 — CCFOLIA(CoC 7판 BCDice) 가 실제로 출력하는 텍스트.
+  // CREE-GRRR! 시트(Roll20)는 다른 명칭을 쓰므로 매칭한 다음 mapCcfStatusToCreeGrrr 로
+  // Roll20 명칭(스페셜/크리티컬/극단적 성공/...) 으로 치환해 뱃지에 표시한다.
   const CREE_GRRR_STATUS_TOKENS = Object.freeze([
-    "대성공", "대실패", "치명적 실패", "치명적실패",
-    "결정적 실패", "결정적실패", "성공", "실패",
-    "스페셜", "어려운 성공", "극단적 성공",
-    "펌블", "크리티컬"
+    "대실패",
+    "실패",
+    "보통 성공",
+    "어려운 성공",
+    "대단한 성공",
+    "대성공"
   ]);
   // 패턴: (1) "→ 123" 결과 숫자, (2) "→ 성공" 또는 (3) "(성공)" 상태 키워드
   // 키워드는 길이 내림차순으로 정렬해 "대성공" 이 "성공" 보다 먼저 매칭되도록 함
@@ -197,7 +201,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.2"),
+    version: getUserscriptVersion("0.1.3"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4406,7 +4410,8 @@
 
   // CREE-GRRR!: 채팅 다이스 결과 인젝션. dicebot==='cree-grrr' 일 때만 동작.
   // "→ 73" → 원형 프레임 안에 73 표시 (sheet-rollresult 와 동일 외형)
-  // "(성공)" → 깃발 프레임 안에 "성공" 표시 (sheet-result-status 와 동일 외형)
+  // "보통 성공"/"대성공"/... → 깃발 프레임 안에 Roll20 명칭으로 변환해 표시
+  //   (sheet-result-status 와 동일 외형 — CREE-GRRR! 시트의 vocabularly 로 통일)
   function injectCreeGrrrDiceFormatting() {
     if (getCurrentDicebotId() !== "cree-grrr") return;
     const messages = document.querySelectorAll(
@@ -4414,11 +4419,48 @@
     );
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
-      if (!hasCreeGrrrDiceResult(message.textContent || "")) return;
-      if (wrapCreeGrrrDiceText(message)) {
+      const text = message.textContent || "";
+      if (!hasCreeGrrrDiceResult(text)) return;
+      const rollValue = extractFirstDiceValue(text);
+      if (wrapCreeGrrrDiceText(message, rollValue)) {
         message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
       }
     });
+  }
+
+  // 메시지에서 d100 결과로 보이는 첫 숫자(1~100)를 추출.
+  // CCFOLIA CoC 7판 BCDice 의 "→ 73" / "= 73" 형태를 따라간다.
+  // 데미지 합산 등 100 초과 값은 d100 이 아니므로 스킵.
+  function extractFirstDiceValue(text) {
+    if (!text) return null;
+    const re = /→\s*(\d+)|=\s*(\d+)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const n = parseInt(m[1] || m[2], 10);
+      if (n >= 1 && n <= 100) return n;
+    }
+    return null;
+  }
+
+  // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
+  //   대실패          → 치명적 실패  (단, d100 결과가 100 이면 "펌블")
+  //   실패            → 실패
+  //   보통 성공       → 성공
+  //   어려운 성공     → 어려운 성공
+  //   대단한 성공     → 극단적 성공
+  //   대성공          → 스페셜       (단, d100 결과가 1 이면 "크리티컬")
+  function mapCcfStatusToCreeGrrr(ccfTerm, rollValue) {
+    if (typeof ccfTerm !== "string") return ccfTerm;
+    const normalized = ccfTerm.replace(/\s+/g, "");
+    switch (normalized) {
+      case "대실패":      return rollValue === 100 ? "펌블" : "치명적 실패";
+      case "실패":        return "실패";
+      case "보통성공":    return "성공";
+      case "어려운성공":  return "어려운 성공";
+      case "대단한성공":  return "극단적 성공";
+      case "대성공":      return rollValue === 1 ? "크리티컬" : "스페셜";
+      default:            return ccfTerm;
+    }
   }
 
   function hasCreeGrrrDiceResult(text) {
@@ -4429,7 +4471,7 @@
     return CREE_GRRR_DICE_PATTERN.test(text);
   }
 
-  function wrapCreeGrrrDiceText(root) {
+  function wrapCreeGrrrDiceText(root, rollValue) {
     if (!(root instanceof HTMLElement)) return false;
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -4484,20 +4526,20 @@
           span.textContent = number;
           fragment.appendChild(span);
         } else if (match[2] !== undefined) {
-          // "→ 성공" — "→ " 텍스트 + 상태 프레임
+          // "→ 보통 성공" — "→ " 텍스트 + 상태 프레임 (Roll20 명칭으로 치환)
           const word = match[2];
           const arrowPrefix = match[0].slice(0, match[0].length - word.length);
           if (arrowPrefix) fragment.appendChild(document.createTextNode(arrowPrefix));
           const span = document.createElement("span");
           span.className = CREE_GRRR_STATUS_CLASS;
-          span.textContent = word;
+          span.textContent = mapCcfStatusToCreeGrrr(word, rollValue);
           fragment.appendChild(span);
         } else if (match[3] !== undefined) {
-          // "(성공)" — 괄호는 텍스트로 유지, 키워드만 상태 프레임에 감쌈
+          // "(보통 성공)" — 괄호는 텍스트로 유지, 키워드만 상태 프레임 (Roll20 치환)
           fragment.appendChild(document.createTextNode("("));
           const span = document.createElement("span");
           span.className = CREE_GRRR_STATUS_CLASS;
-          span.textContent = match[3];
+          span.textContent = mapCcfStatusToCreeGrrr(match[3], rollValue);
           fragment.appendChild(span);
           fragment.appendChild(document.createTextNode(")"));
         }
