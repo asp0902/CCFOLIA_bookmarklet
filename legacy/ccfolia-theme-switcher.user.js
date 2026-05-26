@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.0.8
+// @version      0.0.9
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -163,7 +163,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.0.8"),
+    version: getUserscriptVersion("0.0.9"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -882,7 +882,7 @@
           height: 38px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
-          padding: 0 12px;
+          padding: 0 28px 0 12px;
           box-sizing: border-box;
           background: var(--ccf-theme-input-bg, rgba(21, 20, 20, 0.88));
           color: var(--ccf-theme-text, #f4f0eb);
@@ -4169,7 +4169,7 @@
         "flex:1 1 auto;min-width:0;font-size:13px;line-height:1.3;" +
         "background:rgba(0,0,0,0.35);color:inherit;" +
         "border:1px solid rgba(255,255,255,0.15);border-radius:4px;" +
-        "padding:4px 6px;";
+        "padding:4px 24px 4px 8px;";
       for (const theme of SHEET_THEMES) {
         const opt = document.createElement("option");
         opt.value = theme.id;

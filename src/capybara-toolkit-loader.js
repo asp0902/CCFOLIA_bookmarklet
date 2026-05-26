@@ -625,8 +625,12 @@
       if (e.button !== 0) return;
       
       const featureEl = e.target.closest(".feature");
-      // 버튼 클릭 시에는 드래그 무시
-      if (!featureEl || e.target.closest("button")) return;
+      // 버튼/폼 컨트롤 위에서는 드래그 무시 — preventDefault 가 select 의 native open
+      // 이나 input focus 를 막아버리므로 카드에 임베드된 컨트롤은 모두 통과시킨다
+      if (
+        !featureEl ||
+        e.target.closest("button, select, input, textarea, label, a[href]")
+      ) return;
 
       e.preventDefault(); // 텍스트 선택 등 방지
 
