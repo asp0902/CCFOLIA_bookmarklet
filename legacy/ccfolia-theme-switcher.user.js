@@ -349,6 +349,15 @@
   let characterColorPopoverState = { h: 0, s: 1, v: 1 };
   let characterColorPopoverInputMode = "hex";
 
+  // 모듈 로드 확정 로그. 이 로그조차 콘솔에 안 보이면 스크립트 자체가 GitHub
+  // Pages 에서 fetch 되지 않았거나 로더가 다른 경로로 실행 중인 것.
+  try {
+    console.warn(
+      "[CREE-GRRR!] theme-switcher module loaded",
+      { url: location.href, time: new Date().toISOString() }
+    );
+  } catch (_) { /* ignore */ }
+
   start();
 
   function handleCcfSuiteRegisterRequest(event) {
@@ -420,20 +429,33 @@
   }
 
   function start() {
+    let tryInitErrorLogged = false;
     const tryInit = () => {
-      if (!ccfThemeActive) return false;
-      if (!document.documentElement) return false;
+      try {
+        if (!ccfThemeActive) return false;
+        if (!document.documentElement) return false;
 
-      if (document.documentElement.getAttribute(ROOT_READY_ATTR) !== "1") {
-        document.documentElement.setAttribute(ROOT_READY_ATTR, "1");
-        injectStyles();
-        applyTheme(settings, { syncUi: false });
+        if (document.documentElement.getAttribute(ROOT_READY_ATTR) !== "1") {
+          document.documentElement.setAttribute(ROOT_READY_ATTR, "1");
+          injectStyles();
+          applyTheme(settings, { syncUi: false });
+        }
+
+        if (!document.body) return false;
+
+        ensureUi();
+        ensureDefaultThemeSnapshot();
+      } catch (err) {
+        // tryInit 실패가 start() 의 후속 setup(setInterval, DOMContentLoaded 등)
+        // 등록을 막아 ensureUi 가 영영 재시도되지 않는 침묵 실패를 방지.
+        // 첫 실패만 로깅(이후 호출은 같은 에러로 콘솔 폭주 방지).
+        if (!tryInitErrorLogged) {
+          tryInitErrorLogged = true;
+          try { console.warn("[CCF Theme] tryInit threw — recovering", err); } catch (_) {}
+        }
+        return false;
       }
-
-      if (!document.body) return false;
-
-      ensureUi();
-      ensureDefaultThemeSnapshot();
+      // 본문 — 위 try 블록 안에서 처리한 것 외 추가 동작은 try 밖에 두기 위해 분리
 
       if (document.body.getAttribute(UI_READY_ATTR) !== "1") {
         document.body.setAttribute(UI_READY_ATTR, "1");
@@ -2113,14 +2135,18 @@
       }, ccfThemeWithSignal());
     }
 
-    mountToggle();
-    applyDicebotAttribute();
-    bindUnsungDuetTriggerFields();
-    injectUnsungDuetMessageImages();
-    injectCreeGrrrDiceFormatting();
-    installYouTubePauseInterceptor();
-    ensureToolkitToggleWatcher();
-    mountUnsungDuetToolkitToggle();
+    // 각 단계를 개별 try-catch 로 감싸서 한 단계의 실패가 뒤따르는 호출
+    // (특히 injectCreeGrrrDiceFormatting) 을 막지 않도록 한다.
+    // 이전엔 ensureUi 안의 어떤 호출이 한 번 throw 하면 그 이후 호출이 영영
+    // 실행되지 않아 다이스 카드 인젝션이 침묵 실패하는 경로가 있었음.
+    try { mountToggle(); } catch (e) { try { console.warn("[CCF Theme] mountToggle failed", e); } catch (_) {} }
+    try { applyDicebotAttribute(); } catch (e) { try { console.warn("[CCF Theme] applyDicebotAttribute failed", e); } catch (_) {} }
+    try { bindUnsungDuetTriggerFields(); } catch (e) { try { console.warn("[CCF Theme] bindUnsungDuetTriggerFields failed", e); } catch (_) {} }
+    try { injectUnsungDuetMessageImages(); } catch (e) { try { console.warn("[CCF Theme] injectUnsungDuetMessageImages failed", e); } catch (_) {} }
+    try { injectCreeGrrrDiceFormatting(); } catch (e) { try { console.warn("[CCF Theme] injectCreeGrrrDiceFormatting failed", e); } catch (_) {} }
+    try { installYouTubePauseInterceptor(); } catch (e) { try { console.warn("[CCF Theme] installYouTubePauseInterceptor failed", e); } catch (_) {} }
+    try { ensureToolkitToggleWatcher(); } catch (e) { try { console.warn("[CCF Theme] ensureToolkitToggleWatcher failed", e); } catch (_) {} }
+    try { mountUnsungDuetToolkitToggle(); } catch (e) { try { console.warn("[CCF Theme] mountUnsungDuetToolkitToggle failed", e); } catch (_) {} }
 
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -4618,23 +4644,39 @@
 
   // 디버그용 상태 — 첫 호출 시 한 번만 진단 로그를 띄워 함수 도달 여부와
   // 테마 게이트 상태를 콘솔로 확인할 수 있게 한다. 매 mutation 마다 로그가
-  // 쌓이지 않도록 일회성.
-  const creeGrrrInjectState = { firstCallLogged: false, lastSampleLogged: 0 };
+  // 쌓이지 않도록 일회성. console.warn 사용 (Chrome DevTools 의 기본 필터
+  // 에서도 안전하게 표시되며, info 보다 시각적으로 두드러진다).
+  const creeGrrrInjectState = {
+    firstCallLogged: false,
+    lastSampleLogged: 0,
+    callCount: 0
+  };
 
   function injectCreeGrrrDiceFormatting() {
+    creeGrrrInjectState.callCount++;
+    // 첫 호출 + 매 100회마다 진단 로그를 강제 출력. 함수 도달 자체를 확실히
+    // 확인할 수 있게 함. (mutation 폭주로 너무 잦은 호출 방지 위해 100 단위)
+    if (!creeGrrrInjectState.firstCallLogged || creeGrrrInjectState.callCount % 100 === 0) {
+      try {
+        const enabled = isSheetThemeEnabled();
+        const themeId = getSelectedSheetThemeId();
+        console.warn(
+          `[CREE-GRRR!] inject reached #${creeGrrrInjectState.callCount}`,
+          {
+            sheetThemeEnabled: enabled,
+            selectedSheetTheme: themeId,
+            gatePass: enabled && themeId === "cree-grrr",
+            documentHasBody: !!document.body
+          }
+        );
+      } catch (e) {
+        try { console.warn("[CREE-GRRR!] inject: first call (error reading state)", e); } catch (_) {}
+      }
+      creeGrrrInjectState.firstCallLogged = true;
+    }
+
     const enabled = isSheetThemeEnabled();
     const themeId = getSelectedSheetThemeId();
-
-    if (!creeGrrrInjectState.firstCallLogged) {
-      creeGrrrInjectState.firstCallLogged = true;
-      try {
-        console.info("[CREE-GRRR!] inject: first call", {
-          sheetThemeEnabled: enabled,
-          selectedSheetTheme: themeId,
-          gatePass: enabled && themeId === "cree-grrr"
-        });
-      } catch (_) { /* ignore */ }
-    }
 
     if (!enabled) return;
     if (themeId !== "cree-grrr") return;
