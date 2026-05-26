@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.11
+// @version      0.2.0
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -62,6 +62,9 @@
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
   const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
   const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
+  // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃
+  const CREE_GRRR_CARD_CLASS = "ccf-cree-grrr-dicecard";
+  const CREE_GRRR_ORIGINAL_ATTR = "data-ccf-cree-grrr-original";
   // 인식할 판정 결과 상태 키워드 — CCFOLIA(CoC 7판 BCDice) 가 실제로 출력하는 텍스트.
   // CREE-GRRR! 시트(Roll20)는 다른 명칭을 쓰므로 매칭한 다음 mapCcfStatusToCreeGrrr 로
   // Roll20 명칭(스페셜/크리티컬/극단적 성공/...) 으로 치환해 뱃지에 표시한다.
@@ -207,7 +210,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.11"),
+    version: getUserscriptVersion("0.2.0"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -274,6 +277,8 @@
         `[${UNSUNG_DUET_MSG_INJECTED_ATTR}]`,
         `.${UNSUNG_DUET_IMG_CLASS}`,
         `[${CREE_GRRR_FORMATTED_ATTR}]`,
+        `[${CREE_GRRR_ORIGINAL_ATTR}]`,
+        `.${CREE_GRRR_CARD_CLASS}`,
         `.${CREE_GRRR_ROLLRESULT_CLASS}`,
         `.${CREE_GRRR_STATUS_CLASS}`
       ].join(", ")).forEach((el) => {
@@ -291,6 +296,7 @@
         el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
         el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
         el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
+        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
     try {
@@ -1739,13 +1745,12 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: 액션 버튼은 균등 분배 + 한 줄 유지 */
+      /* DialogActions: CCFOLIA 기본 배치 유지 — flex:1 강제 X.
+         (강제 균등 분배가 적용되면서 삭제/복제/화면에 추가 버튼 정렬이 망가지는
+          현상이 있어, 폰트만 적용하고 레이아웃은 네이티브로 둠) */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
-        white-space: nowrap !important;
-        font-family: inherit !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
@@ -1813,18 +1818,21 @@
         color: ${CG.dim} !important;
       }
 
-      /* 입력칸 — 검은 베이스 + 흰색 보더 */
+      /* 입력칸 — 검은 베이스 + CYAN(#1DE2E2) 텍스트 + DungGeunMo 명시 적용.
+         이름/이니셔티브/토큰 사이즈/참고 URL 등 모든 input/textarea/select 가 대상. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiFilledInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiInputBase-input,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiSelect-select,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper textarea,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="text"],
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"] {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="number"],
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper input[type="url"] {
         background: ${CG.bgChip} !important;
-        color: ${CG.text} !important;
+        color: #1DE2E2 !important;
         border-radius: 4px !important;
-        font-family: inherit !important;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
@@ -1923,58 +1931,107 @@
         color: ${CG.accent} !important;
       }
 
-      /* === [CREE-GRRR!] 다이스 판정 결과 시각화 ====================== */
-      /* JS 인젝션으로 채팅 메시지의 "→ 숫자" 와 "(성공/실패/...)" 를 감싸,
-         Roll20 시트의 .sheet-rollresult / .sheet-result-status 와 동일한
-         원형 프레임 이미지를 입혀 다이스 카드 같은 외형을 만든다.
-         이 클래스들은 시트 테마와 독립적인 스코프(셀렉터에 dicebot 속성 미포함)
-         이지만 인젝션 자체가 dicebot==="cree-grrr" 게이트로만 발생한다. */
-      .${CREE_GRRR_ROLLRESULT_CLASS} {
+      /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
+         Roll20 시트의 sheet-rolltemplate-coc (243×370px) 와 동일한 카드 레이아웃.
+         스킬명 / 3개의 작은 원(판정기준·/2·/5) / 큰 중앙 원(판정값) / 판정단계 텍스트
+         JS 측에서 dicebot==='cree-grrr' + 판정 텍스트(CC<=N 또는 (1D100<=N)) 매칭
+         시에만 카드를 빌드해 메시지 본문을 대체. */
+      .${CREE_GRRR_CARD_CLASS} {
+        position: relative;
+        display: block;
+        width: 243px;
+        height: 370px;
+        margin: 6px 0;
+        background-color: rgba(7, 12, 25, 0.85);
+        background-image: url(https://i.imgur.com/hj7QazV.png);
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
+        color: ${CG.accent};
+        text-align: center;
+        box-sizing: border-box;
+      }
+      /* 스킬명 뱃지 — 좌측 상단 */
+      .${CREE_GRRR_CARD_CLASS}__skill {
+        position: absolute;
+        top: 28px;
+        left: 0;
+        padding: 5px 20px;
+        background-color: rgba(40, 170, 226, 0.25);
+        font-size: 16px;
+        color: ${CG.accent};
+        max-width: 60%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      /* 3개의 작은 판정 원 (판정기준 / 기준/2 / 기준/5) */
+      .${CREE_GRRR_CARD_CLASS}__targets {
+        position: absolute;
+        top: 88px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+      }
+      .${CREE_GRRR_CARD_CLASS}__target {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        vertical-align: middle;
-        width: 70px;
-        height: 70px;
-        /* 폴백: 시안 보더 + 어두운 채움 — imgur 이미지가 실패해도 원형 뱃지가 보이게 */
-        background-color: rgba(7, 12, 25, 0.7);
-        background-image: url(https://i.imgur.com/QxyXISE.png);
+        width: 44px;
+        height: 44px;
+        background-color: rgba(7, 12, 25, 0.55);
+        background-image: url(https://i.imgur.com/XmfjgaY.png);
         background-repeat: no-repeat;
         background-position: center;
         background-size: contain;
         border: 1px solid ${CG.accent};
         border-radius: 50%;
         box-sizing: border-box;
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
-        font-size: 28px;
-        line-height: 1;
+        font-size: 16px;
         color: ${CG.accent};
-        margin: 2px 4px;
+        font-family: inherit;
       }
-
-      .${CREE_GRRR_STATUS_CLASS} {
-        display: inline-flex;
+      /* 큰 중앙 원 — 판정값 (실제 d100 굴림) */
+      .${CREE_GRRR_CARD_CLASS}__result {
+        position: absolute;
+        top: 150px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
         align-items: center;
         justify-content: center;
-        vertical-align: middle;
-        min-width: 50px;
-        height: 50px;
-        padding: 0 10px;
-        /* 폴백: 시안 보더 + 어두운 채움 */
-        background-color: rgba(7, 12, 25, 0.7);
-        background-image: url(https://i.imgur.com/XmfjgaY.png);
+        width: 106px;
+        height: 106px;
+        background-color: rgba(7, 12, 25, 0.55);
+        background-image: url(https://i.imgur.com/QxyXISE.png);
         background-repeat: no-repeat;
         background-position: center;
-        background-size: 100% 100%;
-        border: 1px solid ${CG.accent};
-        border-radius: 4px;
+        background-size: contain;
+        border: 1.5px solid ${CG.accent};
+        border-radius: 50%;
         box-sizing: border-box;
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
-        font-size: 14px;
+        font-size: 52px;
         line-height: 1;
         color: ${CG.accent};
-        margin: 2px 4px;
-        white-space: nowrap;
+        font-family: inherit;
+      }
+      /* 판정단계 텍스트 — 카드 하단 */
+      .${CREE_GRRR_CARD_CLASS}__status {
+        position: absolute;
+        bottom: 50px;
+        left: 0;
+        right: 0;
+        font-size: 22px;
+        font-family: inherit;
+      }
+      .${CREE_GRRR_CARD_CLASS}__status--fail {
+        color: #de0000;
+      }
+      .${CREE_GRRR_CARD_CLASS}__status--success {
+        color: ${CG.accent};
       }
     `;
   }
@@ -4462,64 +4519,145 @@
   }
 
   // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
+  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 저장해둔 원본 텍스트를 되돌림.
   function revertCreeGrrrDomState() {
-    const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
-    document.querySelectorAll(selector).forEach((span) => {
-      if (!(span instanceof HTMLElement)) return;
-      const parent = span.parentNode;
-      if (!parent) return;
-      parent.replaceChild(document.createTextNode(span.textContent || ""), span);
-    });
     document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      const original = el.getAttribute(CREE_GRRR_ORIGINAL_ATTR);
+      if (original !== null) {
+        el.textContent = original;
+        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
+      }
       el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
     });
-    // 인접 텍스트 노드 병합 (다음 인젝션 시 패턴 매칭이 깨지지 않게)
-    // 단, 비용이 커서 생략 — 다음 mutation 에서 자연스럽게 처리됨.
+    // 혹시 남아 있는 카드 노드 정리 (방어적)
+    document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}`).forEach((card) => card.remove());
   }
 
-  // CREE-GRRR!: 채팅 다이스 결과 인젝션. 사용자가 드롭다운에서 CREE-GRRR! + ON 했을 때만.
-  // (dicebot 속성에 의존하지 않고 설정값 직접 검사 — 더 견고한 게이트)
-  // "→ 73" → 원형 프레임 안에 73 표시 (sheet-rollresult 와 동일 외형)
-  // "보통 성공"/"대성공"/... → 깃발 프레임 안에 Roll20 명칭으로 변환해 표시
-  //   (sheet-result-status 와 동일 외형 — CREE-GRRR! 시트의 vocabularly 로 통일)
+  // CREE-GRRR!: 채팅 다이스 판정 결과를 Roll20 시트 카드로 대체.
+  // CoC 7판 판정 패턴(CC<=N 또는 (1D100<=N))을 가진 메시지만 카드로 변환.
+  // 기타 다이스 메시지(데미지 등)는 손대지 않음.
   //
-  // 타깃: CCFOLIA 채팅 본문은 MuiTypography-body2 (간혹 body1) 클래스를 갖는 span/p.
-  // 메시지 컨테이너(li / div role="listitem") 는 CCFOLIA 빌드마다 달라 직접 타깃하지 않고
-  // 본문 typography 요소를 직접 처리한다.
+  // 타깃: CCFOLIA 채팅 본문 .MuiTypography-body2 (간혹 body1).
+  // 메시지 컨테이너(li / div role="listitem") 는 CCFOLIA 빌드마다 달라 직접 타깃 X.
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
     const messages = document.querySelectorAll(
       `.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
-      `.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
-      `li:not([${CREE_GRRR_FORMATTED_ATTR}="1"]),` +
-      `[role="listitem"]:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+      `.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
     );
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
-      // 부모/조상이 이미 처리됐으면 스킵 (중복 처리 방지)
       if (message.closest(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`)) return;
       const text = message.textContent || "";
-      if (!hasCreeGrrrDiceResult(text)) return;
-      const rollValue = extractFirstDiceValue(text);
-      if (wrapCreeGrrrDiceText(message, rollValue)) {
-        message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-      }
+      const parsed = parseCreeGrrrDiceRoll(text);
+      if (!parsed) return;
+      const card = buildCreeGrrrDiceCard(parsed);
+      // 원본 텍스트 보존 후 카드로 교체
+      message.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
+      message.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+      message.replaceChildren(card);
     });
   }
 
-  // 메시지에서 d100 결과로 보이는 첫 숫자(1~100)를 추출.
-  // CCFOLIA CoC 7판 BCDice 의 "＞ 73", "> 73", "→ 73", "= 73" 형태 모두 지원.
-  // 데미지 합산 등 100 초과 값은 d100 이 아니므로 스킵.
-  function extractFirstDiceValue(text) {
-    if (!text) return null;
-    const re = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const n = parseInt(m[1], 10);
-      if (n >= 1 && n <= 100) return n;
+  // CoC 7판 판정 메시지 파싱.
+  //   입력 예: "CC<=60 건강 (1D100<=60) 보너스, 패널티 주사위[0] ＞ 43 ＞ 43 ＞ 보통 성공"
+  //   반환: { skill, target, halfTarget, fifthTarget, rollValue, status, statusKind }
+  //   매칭 실패 시 null (카드 미생성, 메시지 원본 유지).
+  function parseCreeGrrrDiceRoll(text) {
+    if (!text || typeof text !== "string") return null;
+
+    // 판정기준 (target): CC<=N 우선, 없으면 (1D100<=N) 에서 추출
+    let target = null;
+    const ccMatch = text.match(/CC[BS]?<=(\d+)/i);
+    const d100Match = text.match(/\(\s*1D100\s*<=\s*(\d+)\s*\)/i);
+    const targetSource = ccMatch || d100Match;
+    if (targetSource) target = parseInt(targetSource[1], 10);
+    if (target === null || !Number.isFinite(target) || target < 1) return null;
+
+    // 스킬명: "CC<=N <skillname> (1D100" 사이의 문자열 (선택적)
+    let skill = "";
+    const skillMatch = text.match(/CC[BS]?<=\d+\s+([^()]+?)\s*\(\s*1D100/i);
+    if (skillMatch) skill = skillMatch[1].trim();
+
+    // 굴림값 (rollValue): 모든 "＞/>/→ N" 중 마지막 숫자 (보너스/페널티 적용 후 최종값)
+    const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
+    const rolls = [];
+    let am;
+    while ((am = arrowRe.exec(text)) !== null) {
+      const n = parseInt(am[1], 10);
+      if (n >= 1 && n <= 100) rolls.push(n);
     }
-    return null;
+    if (rolls.length === 0) return null;
+    const rollValue = rolls[rolls.length - 1];
+
+    // 판정단계: 메시지 끝쪽의 마지막 상태 키워드
+    const statusRe = new RegExp(
+      CREE_GRRR_ARROW_CLASS + "\\s*(" + CREE_GRRR_STATUS_ALT + ")",
+      "g"
+    );
+    const statusMatches = [...text.matchAll(statusRe)];
+    const rawStatus = statusMatches.length > 0
+      ? statusMatches[statusMatches.length - 1][1].replace(/\s+/g, " ").trim()
+      : null;
+    const status = rawStatus ? mapCcfStatusToCreeGrrr(rawStatus, rollValue) : null;
+    const statusKind = classifyCreeGrrrStatus(status);
+
+    return {
+      skill,
+      target,
+      halfTarget: Math.floor(target / 2),
+      fifthTarget: Math.floor(target / 5),
+      rollValue,
+      status,
+      statusKind
+    };
+  }
+
+  // 표시할 판정단계가 성공류인지 실패류인지 분류 (텍스트 색상용).
+  function classifyCreeGrrrStatus(status) {
+    if (!status) return "neutral";
+    if (/(실패|펌블)/.test(status)) return "fail";
+    return "success";
+  }
+
+  // 카드 DOM 생성 — 스킬명·3개 작은 원·큰 중앙 원·상태 텍스트.
+  function buildCreeGrrrDiceCard(parsed) {
+    const card = document.createElement("div");
+    card.className = CREE_GRRR_CARD_CLASS;
+
+    if (parsed.skill) {
+      const skillEl = document.createElement("div");
+      skillEl.className = `${CREE_GRRR_CARD_CLASS}__skill`;
+      skillEl.textContent = parsed.skill;
+      card.appendChild(skillEl);
+    }
+
+    const targets = document.createElement("div");
+    targets.className = `${CREE_GRRR_CARD_CLASS}__targets`;
+    for (const value of [parsed.target, parsed.halfTarget, parsed.fifthTarget]) {
+      const t = document.createElement("span");
+      t.className = `${CREE_GRRR_CARD_CLASS}__target`;
+      t.textContent = String(value);
+      targets.appendChild(t);
+    }
+    card.appendChild(targets);
+
+    const result = document.createElement("div");
+    result.className = `${CREE_GRRR_CARD_CLASS}__result`;
+    result.textContent = String(parsed.rollValue);
+    card.appendChild(result);
+
+    if (parsed.status) {
+      const statusEl = document.createElement("div");
+      statusEl.className =
+        `${CREE_GRRR_CARD_CLASS}__status ${CREE_GRRR_CARD_CLASS}__status--${parsed.statusKind}`;
+      statusEl.textContent = parsed.status;
+      card.appendChild(statusEl);
+    }
+
+    return card;
   }
 
   // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
@@ -4544,102 +4682,6 @@
       case "대성공":      return rollValue === 1 ? "크리티컬" : "스페셜";
       default:            return ccfTerm;
     }
-  }
-
-  function hasCreeGrrrDiceResult(text) {
-    if (!text) return false;
-    // 단일 진입점: CREE_GRRR_DICE_PATTERN 이 → 73 / ＞ 73 / > 73 / 상태키워드 모두 커버
-    CREE_GRRR_DICE_PATTERN.lastIndex = 0;
-    return CREE_GRRR_DICE_PATTERN.test(text);
-  }
-
-  function wrapCreeGrrrDiceText(root, rollValue) {
-    if (!(root instanceof HTMLElement)) return false;
-
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        if (!node.textContent) return NodeFilter.FILTER_REJECT;
-        const parent = node.parentNode;
-        if (parent instanceof HTMLElement) {
-          const tag = parent.tagName;
-          if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG" || tag === "A") {
-            return NodeFilter.FILTER_REJECT;
-          }
-          if (
-            parent.classList.contains(CREE_GRRR_ROLLRESULT_CLASS) ||
-            parent.classList.contains(CREE_GRRR_STATUS_CLASS)
-          ) {
-            return NodeFilter.FILTER_REJECT;
-          }
-        }
-        return hasCreeGrrrDiceResult(node.textContent)
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_REJECT;
-      }
-    });
-
-    const targets = [];
-    let current;
-    while ((current = walker.nextNode())) targets.push(current);
-    if (targets.length === 0) return false;
-
-    let modified = false;
-    for (const textNode of targets) {
-      const text = textNode.textContent || "";
-      CREE_GRRR_DICE_PATTERN.lastIndex = 0;
-
-      const fragment = document.createDocumentFragment();
-      let cursor = 0;
-      let foundAny = false;
-      let match;
-      while ((match = CREE_GRRR_DICE_PATTERN.exec(text)) !== null) {
-        foundAny = true;
-        if (match.index > cursor) {
-          fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
-        }
-
-        if (match[1] !== undefined) {
-          // "→ N" — "→ " 는 텍스트로 유지, N 만 원형 프레임에 감쌈
-          const number = match[1];
-          const arrowPrefix = match[0].slice(0, match[0].length - number.length);
-          if (arrowPrefix) fragment.appendChild(document.createTextNode(arrowPrefix));
-          const span = document.createElement("span");
-          span.className = CREE_GRRR_ROLLRESULT_CLASS;
-          span.textContent = number;
-          fragment.appendChild(span);
-        } else if (match[2] !== undefined) {
-          // "→ 보통 성공" — "→ " 텍스트 + 상태 프레임 (Roll20 명칭으로 치환)
-          const word = match[2];
-          const arrowPrefix = match[0].slice(0, match[0].length - word.length);
-          if (arrowPrefix) fragment.appendChild(document.createTextNode(arrowPrefix));
-          const span = document.createElement("span");
-          span.className = CREE_GRRR_STATUS_CLASS;
-          span.textContent = mapCcfStatusToCreeGrrr(word, rollValue);
-          fragment.appendChild(span);
-        } else if (match[3] !== undefined) {
-          // "(보통 성공)" — 괄호는 텍스트로 유지, 키워드만 상태 프레임 (Roll20 치환)
-          fragment.appendChild(document.createTextNode("("));
-          const span = document.createElement("span");
-          span.className = CREE_GRRR_STATUS_CLASS;
-          span.textContent = mapCcfStatusToCreeGrrr(match[3], rollValue);
-          fragment.appendChild(span);
-          fragment.appendChild(document.createTextNode(")"));
-        }
-
-        cursor = match.index + match[0].length;
-      }
-      if (!foundAny) continue;
-      if (cursor < text.length) {
-        fragment.appendChild(document.createTextNode(text.slice(cursor)));
-      }
-
-      const parent = textNode.parentNode;
-      if (parent) {
-        parent.replaceChild(fragment, textNode);
-        modified = true;
-      }
-    }
-    return modified;
   }
 
   function bindUnsungDuetTriggerFields() {
