@@ -5248,20 +5248,20 @@
     playerElement.removeAttribute("aria-hidden");
     try { playerElement.inert = false; } catch (_) {}
     
-    // 코코포리아가 툴바를 부숴도 영향이 없도록 안전 구역(document.body)에 고정
-    if (playerElement.parentElement !== document.body) {
-      document.body.appendChild(playerElement);
+    if (playerElement.parentElement !== dock) {
+      dock.appendChild(playerElement);
     }
-    
-    // 유저의 눈에 보이지 않도록 화면 밖으로 숨김 처리
-    playerElement.style.setProperty("position", "fixed", "important");
-    playerElement.style.setProperty("left", "-10000px", "important");
-    playerElement.style.setProperty("top", "0", "important");
-    playerElement.style.setProperty("width", "200px", "important");
-    playerElement.style.setProperty("height", "200px", "important");
-    playerElement.style.setProperty("opacity", "0", "important");
-    playerElement.style.setProperty("pointer-events", "none", "important");
-    playerElement.style.setProperty("z-index", "-1", "important");
+
+    [
+      "position",
+      "left",
+      "top",
+      "width",
+      "height",
+      "opacity",
+      "pointer-events",
+      "z-index"
+    ].forEach((property) => playerElement.style.removeProperty(property));
 
     ccfBgmPlayerHost = playerElement;
     return playerElement;
@@ -5900,6 +5900,13 @@
 
     ccfBgmPlayerVisible = options.visible !== false;
     syncCcfYoutubeBgmPlayerDockVisibility();
+
+    if (ccfBgmPlayerReady) {
+      const playerElement = mountCcfYoutubeBgmPlayerFrame(ccfBgmPlayer);
+      if (playerElement instanceof HTMLElement) {
+        return playerElement;
+      }
+    }
 
     let host = getCcfYoutubeBgmPlayerElement();
     if (!(host instanceof HTMLElement)) {
@@ -7150,7 +7157,7 @@
         max-width: 100% !important;
         height: 16px !important;
         min-width: 0 !important;
-        padding: 0 !important;
+        padding: 0 8px 0 0 !important;
         margin: 6px 0 !important;
         overflow: hidden !important;
       }
