@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.5
+// @version      0.1.6
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -70,9 +70,9 @@
     "대단한 성공",
     "대성공"
   ]);
-  // 다이스봇 출력의 화살표/구분자 — BCDice 는 →(U+2192), ＞(U+FF1E), 일반 >, ASCII =
-  // 등을 다 쓸 수 있으므로 모두 매칭.
-  const CREE_GRRR_ARROW_CLASS = "[\\u2192\\uFF1E>=]";
+  // 다이스봇 출력의 화살표/구분자 — BCDice 는 →(U+2192), ＞(U+FF1E), 일반 > 모두 사용.
+  // (=는 "1D100<=50" 같은 수식 안에서도 등장해 d100 결과로 오인되므로 제외)
+  const CREE_GRRR_ARROW_CLASS = "[\\u2192\\uFF1E>]";
   // 패턴: (1) "→ 73" 결과 숫자, (2) "→ 보통 성공" 또는 (3) "(보통 성공)" 상태 키워드
   // 키워드는 길이 내림차순으로 정렬해 "보통 성공" 이 "성공" 보다 먼저 매칭되도록 함
   const CREE_GRRR_STATUS_ALT = [...CREE_GRRR_STATUS_TOKENS]
@@ -204,7 +204,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.5"),
+    version: getUserscriptVersion("0.1.6"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
