@@ -5087,8 +5087,8 @@
       return;
     }
 
-    const source = mountTarget instanceof HTMLElement
-      ? mountTarget
+    const source = mountTarget instanceof HTMLElement && mountTarget.parentElement instanceof HTMLElement
+      ? mountTarget.parentElement
       : progressRoot.parentElement;
     const sourceRect = source instanceof HTMLElement
       ? source.getBoundingClientRect()
@@ -7115,7 +7115,7 @@
         left: var(--ccf-bgm-progress-left, 0px) !important;
         top: var(--ccf-bgm-progress-top, 100%) !important;
         width: var(--ccf-bgm-progress-width, auto) !important;
-        max-width: none !important;
+        max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
         min-width: 0 !important;
@@ -7133,7 +7133,7 @@
         display: flex !important;
         flex-direction: column !important;
         flex-wrap: nowrap !important;
-        align-items: stretch !important;
+        align-items: center !important;
         justify-content: flex-start !important;
         gap: 0 !important;
         margin-left: 0 !important;
@@ -7159,6 +7159,7 @@
         padding: 0 8px 0 0 !important;
         margin: 6px 0 !important;
         overflow: hidden !important;
+        align-self: stretch !important;
       }
 
       .ccf-bgm-time {
@@ -7738,7 +7739,6 @@
       .ccf-youtube-bgm-player-dock {
         box-sizing: border-box !important;
         display: none !important;
-        align-self: center !important;
         flex: 0 0 ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
@@ -7746,7 +7746,7 @@
         height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         max-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        margin: 0 auto !important;
+        margin: 0 !important;
         padding: 0 !important;
         overflow: hidden !important;
         pointer-events: auto !important;
