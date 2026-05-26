@@ -36,7 +36,7 @@
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
   const YOUTUBE_EMBED_HOST = "https://www.youtube-nocookie.com";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
-  const YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX = 8;
+  const YOUTUBE_PLAYER_FRAME_PADDING_PX = 8;
   const YOUTUBE_AUDIO_REINFORCE_DELAYS_MS = Object.freeze([0, 80, 250, 700, 1500]);
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
@@ -7739,17 +7739,19 @@
       .ccf-youtube-bgm-player-dock {
         box-sizing: border-box !important;
         display: none !important;
-        flex: 0 0 ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
-        width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
-        min-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
-        max-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX * 2)}px !important;
-        height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        min-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        max-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        margin: 6px 5px !important;
-        padding: 0 ${YOUTUBE_PLAYER_HORIZONTAL_PADDING_PX}px !important;
+        flex: 0 0 ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        min-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        max-width: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        height: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        min-height: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        max-height: ${YOUTUBE_PLAYER_MIN_SIZE + (YOUTUBE_PLAYER_FRAME_PADDING_PX * 2)}px !important;
+        margin: 10px 8px 14px !important;
+        padding: ${YOUTUBE_PLAYER_FRAME_PADDING_PX}px !important;
         overflow: hidden !important;
-        background: #000000 !important;
+        border-radius: 6px !important;
+        background: rgba(30, 30, 30, 0.98) !important;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.14) !important;
         pointer-events: auto !important;
       }
 
@@ -7765,7 +7767,7 @@
         width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         max-width: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
-        height: 100% !important;
+        height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         min-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         max-height: ${YOUTUBE_PLAYER_MIN_SIZE}px !important;
         border: 0 !important;
