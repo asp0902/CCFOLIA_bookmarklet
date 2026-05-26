@@ -1722,11 +1722,7 @@
         ccfBgmLastWebAudio = trackingState;
         ccfBgmLastNativeMedia = null;
 
-        if (ccfBgmActiveSlotKey) {
-          stopCcfYoutubeBgm("webaudio-bgm-started");
-          markCcfYoutubeBgmSlotButtons();
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-        }
+        // 동시 재생을 위해 WebAudio 강제 정지 로직 삭제
 
         startCcfBgmProgressLoop();
         window.setTimeout(updateCcfBgmProgressBar, 0);
@@ -2000,11 +1996,8 @@
       ccfBgmLastWebAudio = null;
     }
 
-    if (eventType === "play" && ccfBgmActiveSlotKey) {
-      stopCcfYoutubeBgm("native-bgm-started");
-      markCcfYoutubeBgmSlotButtons();
-      window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-    }
+    // 다른 슬롯의 네이티브 BGM과 동시 재생을 허용하기 위해 삭제 처리
+    // if (eventType === "play" && ccfBgmActiveSlotKey) { ... } 
 
     startCcfBgmProgressLoop();
     updateCcfBgmProgressBar();
@@ -2137,13 +2130,16 @@
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
         && isBgmDialog // 단순히 dialogHost가 존재하는지가 아니라, BGM 다이얼로그인지 확인
       ) {
-        const stoppedSlotKey = ccfBgmActiveSlotKey
-          || ccfBgmEditingSlotKey
-          || ccfBgmLastDialogSlotKey;
-        stopCcfYoutubeBgm("native-library-selected");
-        if (stoppedSlotKey) {
-          ccfBgmNativeLoadedSlots.add(stoppedSlotKey);
+        const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
+        // 현재 유튜브가 재생 중인 슬롯과 클릭한 네이티브 음원의 슬롯이 같을 때만 유튜브 정지
+        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+          stopCcfYoutubeBgm("native-library-selected");
+          ccfBgmNativeLoadedSlots.add(targetSlotKey);
+          markCcfYoutubeBgmSlotButtons();
+          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+          window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
         }
+      }
         markCcfYoutubeBgmSlotButtons();
         window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
         window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
@@ -2996,7 +2992,7 @@
       return;
     }
     stopNativeYoutubeMedia();
-    stopCcfNormalBgmPlayback();
+    stopCcfNativeBgmForSlot(normalizedSlotKey); // 타겟 슬롯의 네이티브 음원만 정지하도록 변경
 
     const playExistingPlayer = () => {
       if (!ccfBgmPlayer) {
