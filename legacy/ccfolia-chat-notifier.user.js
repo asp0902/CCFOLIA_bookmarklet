@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.40
+// @version      0.2.39
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -101,7 +101,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.40"),
+    version: getUserscriptVersion("0.2.39"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -2158,7 +2158,7 @@
         return;
       }
       
-      const isGlobalStopButton = !button.closest('[data-ccf-bgm-dialog-root="1"], .MuiDialog-root, .MuiPopover-root, .MuiModal-root, [role="dialog"]');
+      const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
       const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
 
       if (isGlobalStopButton) {
@@ -5230,10 +5230,8 @@
   }
 
   function mountCcfYoutubeBgmPlayerFrame(player = null) {
-    const dock = ensureCcfYoutubeBgmPlayerDock();
-    if (!(dock instanceof HTMLElement)) {
-      return null;
-    }
+    // dock(빈 껍데기) 생성은 그대로 두어 UI 진행바는 유지하되, iframe은 분리합니다.
+    ensureCcfYoutubeBgmPlayerDock();
 
     let playerElement = null;
     try {
@@ -5259,9 +5257,22 @@
     playerElement.setAttribute("title", "YouTube BGM player");
     playerElement.removeAttribute("aria-hidden");
     try { playerElement.inert = false; } catch (_) {}
-    if (playerElement.parentElement !== dock) {
-      dock.appendChild(playerElement);
+    
+    // 핵심 수정: React가 지배하는 패널 내부(dock)가 아니라, 
+    // 리렌더링의 영향을 받지 않는 안전한 document.body에 플레이어를 숨겨서 배치합니다.
+    if (playerElement.parentElement !== document.body) {
+      document.body.appendChild(playerElement);
     }
+    
+    playerElement.style.setProperty("position", "fixed", "important");
+    playerElement.style.setProperty("left", "-10000px", "important");
+    playerElement.style.setProperty("top", "0", "important");
+    playerElement.style.setProperty("width", "200px", "important");
+    playerElement.style.setProperty("height", "200px", "important");
+    playerElement.style.setProperty("opacity", "0", "important");
+    playerElement.style.setProperty("pointer-events", "none", "important");
+    playerElement.style.setProperty("z-index", "-1", "important");
+
     ccfBgmPlayerHost = playerElement;
     return playerElement;
   }
@@ -5895,10 +5906,7 @@
   }
 
   function ensureYoutubePlayerHost(options = {}) {
-    const dock = ensureCcfYoutubeBgmPlayerDock();
-    if (!(dock instanceof HTMLElement)) {
-      return null;
-    }
+    ensureCcfYoutubeBgmPlayerDock();
 
     ccfBgmPlayerVisible = options.visible !== false;
     syncCcfYoutubeBgmPlayerDockVisibility();
@@ -5914,9 +5922,20 @@
     host.classList.add("ccf-youtube-bgm-player");
     host.setAttribute("width", String(YOUTUBE_PLAYER_MIN_SIZE));
     host.setAttribute("height", String(YOUTUBE_PLAYER_MIN_SIZE));
-    if (host.parentElement !== dock) {
-      dock.appendChild(host);
+    
+    // 여기서도 플레이어를 패널 밖으로 격리합니다.
+    if (host.parentElement !== document.body) {
+      document.body.appendChild(host);
     }
+    
+    host.style.setProperty("position", "fixed", "important");
+    host.style.setProperty("left", "-10000px", "important");
+    host.style.setProperty("top", "0", "important");
+    host.style.setProperty("width", "200px", "important");
+    host.style.setProperty("height", "200px", "important");
+    host.style.setProperty("opacity", "0", "important");
+    host.style.setProperty("pointer-events", "none", "important");
+    host.style.setProperty("z-index", "-1", "important");
 
     ccfBgmPlayerHost = host;
     return ccfBgmPlayerHost;
