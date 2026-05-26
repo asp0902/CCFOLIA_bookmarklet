@@ -2158,34 +2158,56 @@
         return;
       }
       
-      // 툴바의 전체 정지 버튼인지(sizeSmall), 팝업 내부의 개별 정지 버튼인지 구분합니다.
       const isGlobalStopButton = button.classList.contains("MuiIconButton-sizeSmall");
-      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || ccfBgmActiveSlotKey;
+      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
 
       if (isGlobalStopButton) {
-        // 1. 코코포리아 BGM 툴바의 정지 버튼을 누른 경우: 유튜브도 함께 정지합니다.
+        // 1. 하단 툴바의 전체 정지 버튼인 경우
+        // 유튜브 음원과 네이티브 음원(코코포리아 자체 기능)이 모두 꺼지도록 둡니다.
         stopCcfYoutubeBgm("stop-button");
-      } else if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-        // 2. 팝업 내부 정지 버튼을 누른 경우: 현재 팝업 슬롯이 유튜브 재생 슬롯일 때만 유튜브를 정지합니다.
-        stopCcfYoutubeBgm("stop-button");
-      }
-      // (만약 다른 슬롯의 팝업에서 정지 버튼을 눌렀다면, 스크립트는 아무것도 하지 않고 코코포리아가 네이티브 음원을 끄도록 내버려 둡니다.)
-
-      if (targetSlotKey) {
-        ccfBgmNativeLoadedSlots.delete(targetSlotKey);
-        let pendingChanged = false;
-        getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
-          if (entryKey && entry && entry.pending !== true) {
-            entry.pending = true;
-            ccfBgmSlotMap.set(entryKey, entry);
-            pendingChanged = true;
-          }
-        });
-        if (pendingChanged) {
-          persistCcfBgmSlotMap();
+        if (ccfBgmActiveSlotKey) {
+          ccfBgmNativeLoadedSlots.delete(ccfBgmActiveSlotKey);
+          let pendingChanged = false;
+          getCcfYoutubeEntriesForSlot(ccfBgmActiveSlotKey).forEach(([entryKey, entry]) => {
+            if (entryKey && entry && entry.pending !== true) {
+              entry.pending = true;
+              ccfBgmSlotMap.set(entryKey, entry);
+              pendingChanged = true;
+            }
+          });
+          if (pendingChanged) persistCcfBgmSlotMap();
         }
-        markCcfYoutubeBgmSlotButtons();
+      } else {
+        // 2. 개별 팝업의 정지 버튼인 경우
+        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+          // [유튜브 음원 팝업]에서 정지를 누른 경우
+          // 코코포리아가 이 클릭 이벤트를 눈치채면 애먼 네이티브 음원까지 꺼버리므로 이벤트를 원천 차단합니다!
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          
+          stopCcfYoutubeBgm("stop-button");
+          
+          if (targetSlotKey) {
+            ccfBgmNativeLoadedSlots.delete(targetSlotKey);
+            let pendingChanged = false;
+            getCcfYoutubeEntriesForSlot(targetSlotKey).forEach(([entryKey, entry]) => {
+              if (entryKey && entry && entry.pending !== true) {
+                entry.pending = true;
+                ccfBgmSlotMap.set(entryKey, entry);
+                pendingChanged = true;
+              }
+            });
+            if (pendingChanged) persistCcfBgmSlotMap();
+          }
+        } else {
+          // [네이티브 음원 팝업]에서 정지를 누른 경우
+          // 스크립트는 유튜브 음원을 건드리지 않고, 클릭 이벤트를 그냥 통과시킵니다.
+          // 그러면 코코포리아가 알아서 네이티브 음원만 정상적으로 끄게 됩니다.
+        }
       }
+
+      markCcfYoutubeBgmSlotButtons();
       window.setTimeout(updateCcfBgmProgressBar, 50);
       return;
     }
