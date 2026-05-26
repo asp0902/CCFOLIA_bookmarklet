@@ -7152,14 +7152,14 @@
         align-items: center !important;
         gap: 2px !important;
         flex: 0 0 auto !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        width: calc(100% - 16px) !important;
+        max-width: calc(100% - 16px) !important;
         height: 16px !important;
         min-width: 0 !important;
         padding: 0 8px !important;
         margin: 6px 8px !important;
         overflow: hidden !important;
-        align-self: stretch !important;
+        align-self: center !important;
       }
 
       .ccf-bgm-time {
