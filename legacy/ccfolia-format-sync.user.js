@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.32
+// @version      0.0.33
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -56,7 +56,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.32"),
+    version: getUserscriptVersion("0.0.33"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1646,6 +1646,7 @@
   const MODAL_MODE_ROLL20 = "roll20";
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
   const CHARACTER_NAME_INPUT_SELECTOR = 'input[name="name"], input[placeholder="noname"]';
+  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const MESSAGE_HINT_RE = /message|chat|comment|send|메시지|채팅|입력|발언|メッセージ|チャット/i;
   const NAME_HINT_RE = /name|character|display.?name|chara|nickname|이름|캐릭터|닉네임|名前|キャラ/i;
 
@@ -9638,6 +9639,37 @@
     return textarea.value;
   }
 
+  function isVisibleChatMacroMenuForEditor(editor) {
+    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+
+    const inputId = editor.id || "";
+    const relatedIds = new Set([
+      editor.getAttribute("aria-controls"),
+      editor.getAttribute("aria-owns"),
+      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
+    ].filter(Boolean));
+    const directMenus = [...relatedIds]
+      .map((id) => document.getElementById(id))
+      .filter((menu) => menu instanceof HTMLElement);
+    const candidates = [...new Set([...directMenus, ...document.querySelectorAll(CHAT_MACRO_MENU_SELECTOR)])];
+
+    return candidates.some((menu) => {
+      if (!(menu instanceof HTMLElement)) return false;
+      if (menu.closest?.(`[${SAFE_UI_ATTR}="1"], #${MODAL_ID}`)) return false;
+      if (!isVisible(menu) || !String(menu.textContent || "").trim()) return false;
+      if (relatedIds.has(menu.id)) return true;
+
+      const editorRect = editor.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      return menuRect.width > 0 &&
+        menuRect.height > 0 &&
+        menuRect.left < editorRect.right &&
+        menuRect.right > editorRect.left &&
+        menuRect.top < editorRect.top &&
+        menuRect.bottom <= editorRect.bottom;
+    });
+  }
+
   function bindSendButtons() {
     const buttons = document.querySelectorAll('button[type="submit"]');
     buttons.forEach((btn) => {
@@ -9678,6 +9710,7 @@
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
+        if (isVisibleChatMacroMenuForEditor(editor)) return;
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();

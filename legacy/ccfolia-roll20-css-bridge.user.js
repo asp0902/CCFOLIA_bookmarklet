@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.7
+// @version      0.3.8
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.7"),
+    version: getUserscriptVersion("0.3.8"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1270,7 +1270,12 @@
   function hasVisibleChatMacroMenu() {
     return [...document.querySelectorAll('textarea[name="text"]')]
       .filter((editor) => isVisible(editor) && !editor.closest?.(`#${MODAL_ID}`))
-      .some((editor) => getChatMacroMenuCandidates(editor).some((menu) => isVisibleChatMacroMenu(menu, editor)));
+      .some((editor) => hasVisibleChatMacroMenuForEditor(editor));
+  }
+
+  function hasVisibleChatMacroMenuForEditor(editor) {
+    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+    return getChatMacroMenuCandidates(editor).some((menu) => isVisibleChatMacroMenu(menu, editor));
   }
 
   function getChatMacroMenuCandidates(editor) {
@@ -1977,6 +1982,7 @@
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
+        if (hasVisibleChatMacroMenuForEditor(normalized)) return;
 
         if (preparePayloadForSend(normalized) === false) {
           event.preventDefault();
