@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.6
+// @version      0.1.8
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -23,6 +23,9 @@
   const DICEBOT_TOPBAR_SELECTOR = "span.MuiTypography-caption";
   const DICEBOT_MAP = Object.freeze({
     "언성 듀엣": "unsung-duet",
+    // CCFOLIA 한국어 UI에서는 "크툴루의 부름 7판" 으로 표기됨.
+    // 영문 표기도 같이 등록 (다국어 UI / BCDice 원문 표기 대응).
+    "크툴루의 부름 7판": "cree-grrr",
     "Call of Cthulhu 7th Edition": "cree-grrr"
   });
 
@@ -41,12 +44,12 @@
     Object.freeze({
       id: "unsung-duet",
       name: "언성 듀엣",
-      description: '다이스봇이 "언성 듀엣"일 때만 적용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 ON/OFF'
+      description: "언성 듀엣 룸용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 적용"
     }),
     Object.freeze({
       id: "cree-grrr",
       name: "CREE-GRRR!",
-      description: '다이스봇이 "Call of Cthulhu 7th Edition"일 때만 적용 / 팝업·다이스 메시지 디자인'
+      description: "CREE-GRRR! 시트용 / 팝업·채팅 다이스 결과(원형/깃발 이미지) 디자인"
     })
   ]);
   // 기존 사용자의 unsungDuetEnabled:true 설정을 그대로 보존하려고 기본값은 "unsung-duet" 유지.
@@ -204,7 +207,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.6"),
+    version: getUserscriptVersion("0.1.8"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4090,13 +4093,15 @@
   function applyDicebotAttribute() {
     const root = document.documentElement;
     if (!root) return;
-    let id = detectDicebotName();
-    // 시트 테마 토글이 OFF거나, 감지된 다이스봇이 현재 선택된 시트 테마의 매핑과
-    // 다르면 식별자를 비운다. 이 단일 게이트로 CSS 테마 / 트리거 치환 / 이미지 인젝션 /
-    // pauseVideo 차단 모두 한 번에 OFF 됨
-    // (모두 getCurrentDicebotId() 검사에 의존하므로).
-    if (!isSheetThemeEnabled() || id !== getSelectedSheetThemeId()) {
-      id = "";
+    // 사용자가 드롭다운에서 명시적으로 선택 + ON 했으면 그 테마를 무조건 적용.
+    // (CCFOLIA 다이스봇 표시명이 환경마다 미묘하게 달라 감지가 실패하는 케이스를 회피.
+    //  detectDicebotName() 의 결과는 더 이상 게이트로 사용하지 않는다.)
+    let id = "";
+    if (isSheetThemeEnabled()) {
+      const selected = getSelectedSheetThemeId();
+      if (selected && selected !== SHEET_THEME_NONE_ID) {
+        id = selected;
+      }
     }
     const current = root.getAttribute(DICEBOT_ATTR) || "";
     if (id) {
