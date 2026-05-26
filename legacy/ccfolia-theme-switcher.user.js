@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.2
+// @version      0.2.3
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -210,7 +210,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.2"),
+    version: getUserscriptVersion("0.2.3"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4566,27 +4566,38 @@
   // CoC 7판 판정 패턴(CC<=N 또는 (1D100<=N))을 가진 메시지만 카드로 변환.
   // 기타 다이스 메시지(데미지 등)는 손대지 않음.
   //
-  // 스코프: [role="log"] / [aria-live=polite|assertive] 안의 .MuiTypography-body2 만.
-  // 채팅 팔레트, 입력창, 캐릭터 카드 등에서 같은 클래스를 써도 영향 받지 않게 제한.
   // 카드 삽입 방식: 본문 span 은 display:none 으로 숨기고, 카드는 span 의 형제로 삽입.
   // (span 안에 블록 div 를 넣으면 inline 컨텍스트에서 레이아웃이 깨짐)
+  //
+  // 스코프: 전역 .MuiTypography-body2 후보를 보되,
+  //   - parser 가 엄격해서(target + 화살표 + 굴림값) 다이스 결과 메시지만 통과
+  //   - 다이얼로그/메뉴/팝오버/툴팁/드로어 같은 UI 컨테이너는 제외 → 팔레트·툴팁·캐릭터 편집 팝업
+  //     안의 동일 클래스 텍스트는 영향 없음
+  // (CCFOLIA 채팅 로그가 항상 role="log" 를 갖지는 않아 이전의 컨테이너 한정 셀렉터는 매칭 실패)
+  const CREE_GRRR_SKIP_ANCESTOR_SELECTOR = [
+    `[role="dialog"]`,
+    `[role="menu"]`,
+    `[role="menuitem"]`,
+    `[role="tooltip"]`,
+    `[role="presentation"]`,
+    `.MuiPopover-root`,
+    `.MuiDrawer-paper`,
+    `.MuiMenu-paper`,
+    `.MuiTooltip-popper`,
+    `.MuiDialog-paper`,
+    `.MuiSnackbar-root`
+  ].join(", ");
   function injectCreeGrrrDiceFormatting() {
     if (!isSheetThemeEnabled()) return;
     if (getSelectedSheetThemeId() !== "cree-grrr") return;
-    // 매 사이클마다 레거시 뱃지 잔존물 청소 — 알림 팝업·팔레트 등에 살아 있던 옛 인라인 뱃지 제거
+    // 매 사이클마다 레거시 뱃지 잔존물 청소
     cleanupLegacyCreeGrrrSpans();
-    const chatScopes = [
-      `[role="log"]`,
-      `[aria-live="polite"]`,
-      `[aria-live="assertive"]`
-    ];
-    const selector = chatScopes
-      .map((scope) =>
-        `${scope} .MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`)
-      .join(", ");
-    const messages = document.querySelectorAll(selector);
+    const messages = document.querySelectorAll(
+      `.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`
+    );
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
+      if (message.closest(CREE_GRRR_SKIP_ANCESTOR_SELECTOR)) return;
       const text = message.textContent || "";
       const parsed = parseCreeGrrrDiceRoll(text);
       if (!parsed) return;
