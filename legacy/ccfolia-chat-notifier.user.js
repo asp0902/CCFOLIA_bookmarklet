@@ -2157,9 +2157,16 @@
       if (Date.now() < ccfSuppressStopHandlerUntil) {
         return;
       }
-      const targetSlotKey = ccfBgmActiveSlotKey
-        || ccfBgmEditingSlotKey
-        || ccfBgmLastDialogSlotKey;
+      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || ccfBgmActiveSlotKey;
+
+      // 현재 정지하려는 슬롯이 유튜브 재생을 담당하는 슬롯이라면, 
+      // 코코포리아 측으로 클릭 이벤트가 넘어가지 않도록 완전히 차단합니다. (네이티브 BGM 오작동 방지)
+      if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+      }
+
       stopCcfYoutubeBgm("stop-button");
       if (targetSlotKey) {
         ccfBgmNativeLoadedSlots.delete(targetSlotKey);
@@ -3916,14 +3923,28 @@
 
     const play = () => {
       const current = ccfBgmSlotMap.get(entryKey) || entry;
+      // 현재 열려있는 다이얼로그의 슬롯 키를 최우선으로 가져옵니다.
+      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || slotKey;
+
       if (current) {
         current.pending = false;
         current.updatedAt = Date.now();
+        current.slotKey = targetSlotKey; // 해당 음원을 현재 슬롯 소속으로 업데이트
         ccfBgmSlotMap.set(entryKey, current);
         persistCcfBgmSlotMap();
         markCcfYoutubeBgmSlotButtons();
       }
-      playCcfYoutubeBgmSlot(slotKey, current, findCcfBgmButtonBySlot(slotKey), 0, entryKey);
+      playCcfYoutubeBgmSlot(targetSlotKey, current, findCcfBgmButtonBySlot(targetSlotKey), 0, entryKey);
+    };
+
+    const warmPlayer = () => {
+      const current = ccfBgmSlotMap.get(entryKey) || entry;
+      if (!current?.videoId || ccfBgmActiveSlotKey) {
+        return;
+      }
+      const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey || slotKey;
+      loadYoutubeIframeApi();
+      cueCcfYoutubeBgmSlot(targetSlotKey, current, entryKey);
     };
 
     const warmPlayer = () => {
