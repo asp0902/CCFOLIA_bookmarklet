@@ -2135,11 +2135,7 @@
         if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
           stopCcfYoutubeBgm("native-library-selected");
           ccfBgmNativeLoadedSlots.add(targetSlotKey);
-          markCcfYoutubeBgmSlotButtons();
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
         }
-      }
         markCcfYoutubeBgmSlotButtons();
         window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
         window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
@@ -8461,6 +8457,31 @@ function migrateLegacyRoomDataToGlobal() {
     }
 
     return migrated;
+  }
+
+function stopCcfNativeBgmForSlot(slotKey) {
+    if (!slotKey) return;
+    const button = findCcfBgmButtonBySlot(slotKey);
+    if (!button) return;
+
+    // 해당 슬롯의 행(Row) 컨테이너 찾기
+    const container = button.closest('.MuiListItem-root');
+    if (!container) return;
+
+    // 해당 슬롯의 전용 Stop 아이콘 찾기
+    const stopIcon = container.querySelector('[data-testid="StopIcon"]');
+    if (!stopIcon) return;
+
+    const stopBtn = stopIcon.closest('button');
+    if (!stopBtn) return;
+
+    // 정지 버튼 클릭 (의도적 정지이므로 StopHandler 무시 타이머 갱신)
+    ccfSuppressStopHandlerUntil = Date.now() + 250;
+    try {
+      stopBtn.click();
+    } catch (error) {
+      debugLog("bgm-native-slot-stop-failed", serializeError(error));
+    }
   }
 
 })();
