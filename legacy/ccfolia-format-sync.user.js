@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.28
+// @version      0.0.29
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.28"),
+    version: getUserscriptVersion("0.0.29"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -663,7 +663,8 @@
 
       [${CCF_NARRATION_ATTR}="1"] .MuiListItemAvatar-root,
       [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-primary,
-      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image) {
+      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image),
+      [${CCF_NARRATION_ATTR}="1"] img:not(.ccf-image):not(.ccf-render-root img) {
         display: none !important;
       }
 
@@ -901,7 +902,7 @@
       el.removeAttribute(CCF_NARRATION_ATTR);
     }
 
-    const item = el.closest?.(MESSAGE_ITEM_SELECTOR);
+    const item = findNarrationMessageItem(el);
     if (!(item instanceof HTMLElement) || item === el) return;
 
     if (narration) {
@@ -912,6 +913,19 @@
     if (!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`)) {
       item.removeAttribute(CCF_NARRATION_ATTR);
     }
+  }
+
+  function findNarrationMessageItem(el) {
+    const matched = el.closest?.(MESSAGE_ITEM_SELECTOR);
+
+    let current = el.parentElement;
+    for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
+      if (current.matches?.(".MuiPaper-root, .MuiDrawer-paper")) break;
+      const hasProfile = !!current.querySelector?.("img:not(.ccf-image), .MuiAvatar-root, .MuiListItemAvatar-root");
+      const includesText = current.contains(el);
+      if (hasProfile && includesText) return current;
+    }
+    return matched instanceof HTMLElement && matched !== el ? matched : null;
   }
 
   function extractEnvelope(fullText) {
@@ -3467,6 +3481,10 @@
           toggleNarratorName(name);
           updateInlineNarratorPopoverList(toolbar);
           refreshAllInlineNarrationButtons();
+          syncAllEditorVisualPreviews();
+          if (isModalOpen() && activeEditor) {
+            renderPreview(activeEditor, { force: true });
+          }
         } else if (action === "refresh") {
           refreshInlineNarratorPopover(toolbar, { forcePanelScan: true });
         }
@@ -4354,14 +4372,24 @@
     const configured = set.size > 0;
     const editor = getInlineToolbarEditor(toolbar);
     const blockActive = editor ? ensureEditorState(editor).blockStyle?.narration === true : false;
-    const active = configured || blockActive;
+    const active = speakerActive || blockActive;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.dataset.ccfNarratorConfigured = configured ? "1" : "0";
     btn.title = speakerActive
       ? `현재 나레이션 대상: ${speaker}`
       : configured
-        ? `나레이션 캐릭터 ${set.size}명 설정됨`
+        ? `나레이션 캐릭터 ${set.size}명 설정됨 (현재 화자에는 미적용)`
         : "나레이션 캐릭터 설정";
+  }
+
+  function applyAutomaticNarration(blockStyle) {
+    const next = cleanupBlockStyle(blockStyle);
+    const speaker = getCurrentSpeakerName();
+    if (speaker && readNarratorNameSet().has(speaker)) {
+      next.narration = true;
+    }
+    return next;
   }
 
   function refreshAllInlineNarrationButtons() {
@@ -4647,6 +4675,7 @@
       inlinePopoverState = null;
       if (state.kind === "narrator") {
         refreshInlineNarrationButton(toolbar);
+        syncAllEditorVisualPreviews();
       }
       if (options.restoreFocus !== false) {
         restoreRoomSelectionSoon(state.editor || state.context?.editor, state.selection || state.context?.selection);
@@ -7873,20 +7902,28 @@
         }
       }
     }
+    const fallback = [...document.querySelectorAll("button[aria-label]")].find((btn) => {
+      if (!(btn instanceof HTMLButtonElement) || btn.disabled || !isVisible(btn)) return false;
+      const label = normalizeMyCharacterName(btn.getAttribute("aria-label") || "");
+      return /(?:캐릭터|character|キャラクター).*(?:선택|select|selection|選択)|(?:select).*(?:character)/i.test(label);
+    });
+    if (fallback instanceof HTMLButtonElement) return fallback;
     return null;
   }
 
   function getCurrentSpeakerName() {
     const btn = findCharacterSelectButton();
-    if (!btn) return "";
+    if (btn) {
+      const inlineName = normalizeMyCharacterName(btn.textContent || "");
+      if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
 
-    const inlineName = normalizeMyCharacterName(btn.textContent || "");
-    if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
+      const avatarName = normalizeMyCharacterName(btn.querySelector("img")?.getAttribute("alt") || "");
+      if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
+    }
 
-    const avatarName = normalizeMyCharacterName(btn.querySelector("img")?.getAttribute("alt") || "");
-    if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
-
-    const fields = findSpeakerNameFields(btn);
+    const anchor = btn || activeComposer || activeEditor || findChatDrawer();
+    if (!(anchor instanceof HTMLElement)) return "";
+    const fields = findSpeakerNameFields(anchor, !!btn);
     return fields.length ? fields[0].name : "";
   }
 
@@ -7901,17 +7938,25 @@
     return normalizeMyCharacterName(field.textContent || "");
   }
 
-  function findSpeakerNameFields(btn) {
+  function findSpeakerNameFields(anchor, allowUnhintedInput = false) {
     const scopes = [];
     const seenScopes = new Set();
-    let current = btn.parentElement;
-    for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+    const addScope = (scope) => {
+      if (!(scope instanceof HTMLElement) || seenScopes.has(scope)) return;
+      scopes.push(scope);
+      seenScopes.add(scope);
+    };
+
+    addScope(anchor);
+    let current = anchor.parentElement;
+    for (let depth = 0; current && depth < 10; depth += 1, current = current.parentElement) {
       if (!seenScopes.has(current)) {
-        scopes.push(current);
-        seenScopes.add(current);
+        addScope(current);
       }
       if (current.matches(".MuiDrawer-paper")) break;
     }
+    addScope(anchor.closest(".MuiDrawer-paper"));
+    addScope(findChatDrawer());
 
     const seenFields = new Set();
     const candidates = [];
@@ -7928,9 +7973,10 @@
         const multiline = field instanceof HTMLTextAreaElement || field.getAttribute("aria-multiline") === "true";
         if (messageHinted && !nameHinted) return;
         if (multiline && !nameHinted) return;
+        if (!nameHinted && !allowUnhintedInput) return;
         seenFields.add(field);
 
-        let score = -depth * 18 - Math.min(distanceBetween(btn, field), 400) / 3;
+        let score = -depth * 18 - Math.min(distanceBetween(anchor, field), 400) / 3;
         if (nameHinted) score += 220;
         if (messageHinted) score -= 240;
         if (field instanceof HTMLInputElement && field.type === "text") score += 45;
@@ -8063,6 +8109,10 @@
       if (current === lastObservedSpeakerName) return;
       lastObservedSpeakerName = current;
       refreshAllInlineNarrationButtons();
+      syncAllEditorVisualPreviews();
+      if (isModalOpen() && activeEditor) {
+        renderPreview(activeEditor, { force: true });
+      }
     }, 80);
   }
 
@@ -9105,7 +9155,7 @@
       ? options.textOverride
       : getEditorText(editor);
     const state = ensureEditorState(editor);
-    const blockStyle = cleanupBlockStyle(
+    const blockStyle = applyAutomaticNarration(
       options.blockStyleOverride ??
       (isModalOpen() && modalMode === MODAL_MODE_CCFOLIA && modalDraftBlockStyle != null
         ? modalDraftBlockStyle
@@ -9695,7 +9745,7 @@
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
-    const blockStyle = cleanupBlockStyle(state.blockStyle);
+    const blockStyle = applyAutomaticNarration(state.blockStyle);
     const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
@@ -9913,14 +9963,6 @@
           state.lastStyle = null;
           state.blockStyle = {};
         } else {
-          const toolbar = getInlineToolbarForEditor(editor);
-          const narrationActive = toolbar?.querySelector?.('[data-inline-command="narration"]')?.classList.contains("active");
-          if (narrationActive) {
-            state.blockStyle = cleanupBlockStyle({
-              ...state.blockStyle,
-              narration: true
-            });
-          }
           if (state.parentheticalGray) {
             state.runs = applyParentheticalGrayRuns(state.runs, text);
           }
@@ -10028,14 +10070,7 @@
     }
 
     const runs = preparedRuns.runs;
-    const blockStyle = cleanupBlockStyle(state.blockStyle);
-    const speakerName = getCurrentSpeakerName();
-    if (speakerName) {
-      const narratorSet = readNarratorNameSet();
-      if (narratorSet.has(speakerName)) {
-        blockStyle.narration = true;
-      }
-    }
+    const blockStyle = applyAutomaticNarration(state.blockStyle);
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
     if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;
