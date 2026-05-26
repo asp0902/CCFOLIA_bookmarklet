@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Capybara Toolkit Presence
 // @namespace    https://local.capybara-toolkit/ccfolia-presence
-// @version      0.1.1
+// @version      0.1.2
 // @description  Shows CCFOLIA room members who have recently sent messages with Capybara Toolkit enabled.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -19,7 +19,7 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.1";
+  const TOOLKIT_VERSION = "0.1.2";
   const ACTIVE_MS = 5 * 60 * 1000;
   const STALE_MS = 30 * 60 * 1000;
   const INVIS_START = "\u2063\u2063\u2063";
@@ -27,6 +27,7 @@
   const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
   const INVIS_REVERSE = new Map(INVIS_MAP.map((ch, index) => [ch, index]));
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
+  const CHAT_MACRO_MENU_SELECTOR = '[role="listbox"], [id^="downshift-"][id$="-menu"]';
   const MESSAGE_TEXT_SELECTOR = [
     'p.MuiTypography-root.MuiTypography-body2',
     '.MuiListItemText-root > p',
@@ -160,6 +161,36 @@
     return `${extracted.visibleText}${encoded}${extracted.afterText || ""}`;
   }
 
+  function hasVisibleChatMacroMenuForEditor(editor) {
+    if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
+
+    const inputId = editor.id || "";
+    const relatedIds = new Set([
+      editor.getAttribute("aria-controls"),
+      editor.getAttribute("aria-owns"),
+      inputId.endsWith("-input") ? `${inputId.slice(0, -6)}-menu` : ""
+    ].filter(Boolean));
+    const directMenus = [...relatedIds]
+      .map((id) => document.getElementById(id))
+      .filter((menu) => menu instanceof HTMLElement);
+    const candidates = [...new Set([...directMenus, ...document.querySelectorAll(CHAT_MACRO_MENU_SELECTOR)])];
+
+    return candidates.some((menu) => {
+      if (!(menu instanceof HTMLElement) || !isVisible(menu)) return false;
+      if (!String(menu.textContent || "").trim()) return false;
+      if (relatedIds.has(menu.id)) return true;
+
+      const editorRect = editor.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      return menuRect.width > 0 &&
+        menuRect.height > 0 &&
+        menuRect.left < editorRect.right &&
+        menuRect.right > editorRect.left &&
+        menuRect.top < editorRect.top &&
+        menuRect.bottom <= editorRect.bottom;
+    });
+  }
+
   function bindSendTriggers() {
     const bind = () => {
       document.querySelectorAll('button[type="submit"]').forEach((button) => {
@@ -180,6 +211,7 @@
         editor.addEventListener("keydown", (event) => {
           if (!active) return;
           if (event.isComposing || event.key !== "Enter" || event.shiftKey) return;
+          if (hasVisibleChatMacroMenuForEditor(editor)) return;
           preparePresenceForSend(editor);
         }, { capture: true, signal: abort.signal });
       });
