@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -29,7 +29,15 @@
   // 사용자가 "테마 커스텀" 카드의 드롭다운에서 선택 가능한 커스텀 시트 테마 목록.
   // 각 테마는 CCFOLIA의 특정 다이스봇 이름과 매핑되며, 다이스봇이 일치 + 해당 테마가
   // ON 상태일 때만 적용된다. (CSS는 buildDicebotStyleSheet에서 dicebot id로 스코프됨)
+  // "none" 은 어떤 다이스봇과도 매칭되지 않는 sentinel — 선택 시 어떤 커스텀 시트도
+  // 적용되지 않음 (= 사이트 기본 상태로 되돌림)
+  const SHEET_THEME_NONE_ID = "none";
   const SHEET_THEMES = Object.freeze([
+    Object.freeze({
+      id: SHEET_THEME_NONE_ID,
+      name: "기본",
+      description: "커스텀 시트를 적용하지 않습니다."
+    }),
     Object.freeze({
       id: "unsung-duet",
       name: "언성 듀엣",
@@ -41,6 +49,8 @@
       description: '다이스봇이 "Call of Cthulhu 7th Edition"일 때만 적용 / 팝업·다이스 메시지 디자인'
     })
   ]);
+  // 기존 사용자의 unsungDuetEnabled:true 설정을 그대로 보존하려고 기본값은 "unsung-duet" 유지.
+  // 신규/마이그레이션 시 normalizeSettings 가 "기본" 으로 떨어뜨리지 않도록 함.
   const DEFAULT_SHEET_THEME_ID = "unsung-duet";
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
   const SHEET_THEME_SELECT_TOOLKIT_ID = "ccf-theme-switcher-sheet-theme-select-toolkit";
@@ -163,7 +173,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.1.0"),
+    version: getUserscriptVersion("0.1.1"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
