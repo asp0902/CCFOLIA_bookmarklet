@@ -1789,6 +1789,11 @@
         padding: 8px !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        /* 상단 시안 1px — DialogContent(세로 스크롤 영역) 와의 경계선.
+           .MuiDialog-paper 의 inset 4면 그림자가 좌/우/하단은 그대로 보이지만
+           상단은 스크롤 컨텐츠가 맞닿아 끊겨 보이던 현상 해결. inset 사용으로
+           레이아웃에는 영향을 주지 않음. */
+        box-shadow: inset 0 1px 0 0 ${CG.accent} !important;
       }
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root,
