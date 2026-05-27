@@ -1792,11 +1792,9 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions 상단 시안 라인 — pseudo-element ::before 로 y=1px 위치에
-         1px 라인. 스크롤바와 1px 떨어진 위치. 부모 컨테이너는 position:relative
-         만 추가하고 layout(display/padding/gap 등)은 절대 건들지 않음 →
-         BGM 미니 팝업 등 fullWidth 가 아닌 액션 바의 MUI 기본 layout 보존.
-         하단 모서리도 라운드 제거(border-radius:0). */
+      /* DialogActions 공통 — 모든 cree-grrr DialogActions 에 적용. layout 은
+         건드리지 않고 상단 시안 라인(::before) + sharp 모서리만. BGM 미니 팝업
+         도 여기에 포함되어 시안 라인 + 라운드 제거만 받고 layout 은 MUI 기본 유지. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing {
         position: relative !important;
         border-radius: 0 !important;
@@ -1813,11 +1811,20 @@
         z-index: 1 !important;
       }
 
-      /* 캐릭터 편집 팝업 fullWidth 버튼만 강제 균등 분배. :has() 미지원 브라우저
-         호환 위해 부모는 건드리지 않고 자식 버튼만 직접 스타일 — MuiButton-fullWidth
-         가 붙은 버튼에만 flex:1 1 0 + width:0 으로 동일 분배. BGM 등 fullWidth 없는
-         케이스는 이 셀렉터에 매칭되지 않아 영향 없음 (MUI 기본 layout 유지). */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-fullWidth {
+      /* 캐릭터 편집 팝업(.MuiDialog-paper 안) 의 DialogActions 만 강제 flex 균등 분배.
+         BGM 미니 팝업은 .MuiDialog-paper 가 아닌 별도 컨테이너(.MuiPopover-paper 등)
+         라 이 셀렉터에 매칭되지 않음 → MUI 기본 layout 유지. */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root.MuiDialogActions-spacing {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
+        justify-content: stretch !important;
+        gap: 8px !important;
+        padding: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root.MuiDialogActions-spacing > * {
         flex: 1 1 0 !important;
         flex-grow: 1 !important;
         flex-shrink: 1 !important;
@@ -1825,6 +1832,7 @@
         width: 0 !important;
         min-width: 0 !important;
         max-width: none !important;
+        margin: 0 !important;
         white-space: nowrap !important;
         box-sizing: border-box !important;
       }
