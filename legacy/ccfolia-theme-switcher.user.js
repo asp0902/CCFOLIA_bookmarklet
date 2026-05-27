@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.5
+// @version      0.2.6
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -59,6 +59,7 @@
 
   // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
+  const CREE_GRRR_MESSAGE_ROW_ATTR = "data-ccf-cree-grrr-message-row";
   const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
   const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
   // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃 (CC<= 판정용)
@@ -211,7 +212,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.5"),
+    version: getUserscriptVersion("0.2.6"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -278,6 +279,7 @@
         `[${UNSUNG_DUET_MSG_INJECTED_ATTR}]`,
         `.${UNSUNG_DUET_IMG_CLASS}`,
         `[${CREE_GRRR_FORMATTED_ATTR}]`,
+        `[${CREE_GRRR_MESSAGE_ROW_ATTR}]`,
         `[${CREE_GRRR_ORIGINAL_ATTR}]`,
         `.${CREE_GRRR_CARD_CLASS}`,
         `.${CREE_GRRR_SIMPLE_CARD_CLASS}`,
@@ -298,6 +300,7 @@
         el.removeAttribute(UNSUNG_DUET_FIELD_BOUND_ATTR);
         el.removeAttribute(UNSUNG_DUET_MSG_INJECTED_ATTR);
         el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
+        el.removeAttribute(CREE_GRRR_MESSAGE_ROW_ATTR);
         el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       });
     } catch (error) { /* dom sweep failed */ }
@@ -1974,9 +1977,9 @@
       /* === [CREE-GRRR!] 다이스 롤 채팅 메시지 ======================= */
       /* Roll20 시트의 .sheet-rolltemplate-coc 박스 디자인을 CCFOLIA 채팅
          메시지(li)에 차용 — 검은 카드 + 시안 보더 + DungGeunMo 폰트 */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"],
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"],
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] {
         background: ${CG.bgGlass} !important;
         border: 1px solid ${CG.accent} !important;
         border-radius: 10px !important;
@@ -1987,26 +1990,26 @@
       }
 
       /* 본문 텍스트 — 어두운 톤에서 가독성 위해 #d1d1d1 */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li p.MuiTypography-body2,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li p.MuiTypography-body2,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li p.MuiTypography-body2 {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2 {
         color: ${CG.muted} !important;
         font-family: inherit !important;
       }
 
       /* 다이스 결과 강조 (굵은 텍스트 → 시안) */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li strong,
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li b,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li strong,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li strong {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong,
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] b,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong {
         color: ${CG.accent} !important;
         font-weight: normal !important; /* 픽셀 폰트라 굵게 처리 불필요 */
       }
 
       /* 인라인 롤 결과 — 시안 강조 */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li .inlinerollresult,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li .inlinerollresult,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li .inlinerollresult {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult {
         background: none !important;
         border: none !important;
         color: ${CG.accent} !important;
@@ -2015,14 +2018,14 @@
       }
 
       /* 캐릭터 이름(닉네임) — 시안 액센트 */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li .MuiTypography-caption,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li .MuiTypography-caption,
-      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li .MuiTypography-caption {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption {
         color: ${CG.accent} !important;
       }
 
       /* 채팅 입력창 영역에도 폰트 톤 통일 (선택 사항) */
-      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li a {
+      html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] a {
         color: ${CG.accent} !important;
       }
 
@@ -4532,6 +4535,9 @@
       el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
     });
+    document.querySelectorAll(`[${CREE_GRRR_MESSAGE_ROW_ATTR}]`).forEach((row) => {
+      row.removeAttribute(CREE_GRRR_MESSAGE_ROW_ATTR);
+    });
     // 혹시 어딘가 남아 있는 카드 노드 정리 (방어적) — 스킬 카드 + 일반 카드 둘 다
     document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}, .${CREE_GRRR_SIMPLE_CARD_CLASS}`).forEach((card) => card.remove());
     cleanupLegacyCreeGrrrSpans();
@@ -4563,6 +4569,7 @@
     `[role="tooltip"]`,
     `.MuiTooltip-popper`,
     `.MuiDialog-paper`,
+    `.MuiPopover-paper`,
     `.MuiSnackbar-root`
   ].join(", ");
   // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과.
@@ -4665,6 +4672,7 @@
         const card = buildCreeGrrrDiceCard(parsed);
         host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
         host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+        host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
         host.replaceChildren(card);
         return;
       }
@@ -4676,6 +4684,7 @@
         const card = buildCreeGrrrSimpleDiceCard(simple);
         host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
         host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+        host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
         host.replaceChildren(card);
         return;
       }
