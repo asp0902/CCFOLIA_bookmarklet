@@ -1774,13 +1774,17 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: 삭제/복제/화면에 추가 — 명시적 flex 강제 균등 분배.
-         조상 .MuiDialog-paper 요구를 제거해 cree-grrr 테마의 어떤 컨텍스트
-         에서도 동일하게 균등 분배되게 한다. 자식 폭은 width:0 + flex:1 1 0
-         으로 초기화한 후 flex-grow 로 똑같이 키운다.
-         (이전에 grid-auto-columns:1fr 만으로는 일부 빌드에서 자식의 컨텐츠
-          폭 차이/min-width:64px 잔류 등으로 셀 너비 불균등이 남아 있었음.) */
+      /* DialogActions 상단 시안 라인 — 모든 cree-grrr DialogActions 에 공통 적용.
+         스크롤 컨텐츠와의 경계선이 끊겨 보이는 현상 해결. inset 사용으로
+         레이아웃에는 영향 없음. (BGM 미니 팝업 등 다른 액션 바에도 일관 적용) */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing {
+        box-shadow: inset 0 1px 0 0 ${CG.accent} !important;
+      }
+
+      /* 캐릭터 편집 팝업의 삭제/복제/화면에 추가 — fullWidth 버튼이 있는 액션
+         바에 한해 flex 강제 균등 분배. (BGM 미니 팝업처럼 fullWidth 없이
+         자연 폭으로 우측 정렬되어야 하는 액션 바는 :has 셀렉터로 제외) */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing:has(> .MuiButton-fullWidth) {
         display: flex !important;
         flex-direction: row !important;
         align-items: stretch !important;
@@ -1789,28 +1793,27 @@
         padding: 8px !important;
         width: 100% !important;
         box-sizing: border-box !important;
-        /* 상단 시안 1px — DialogContent(세로 스크롤 영역) 와의 경계선.
-           .MuiDialog-paper 의 inset 4면 그림자가 좌/우/하단은 그대로 보이지만
-           상단은 스크롤 컨텐츠가 맞닿아 끊겨 보이던 현상 해결. inset 사용으로
-           레이아웃에는 영향을 주지 않음. */
-        box-shadow: inset 0 1px 0 0 ${CG.accent} !important;
       }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing:has(> .MuiButton-fullWidth) > * {
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        box-sizing: border-box !important;
+      }
+
+      /* 폰트는 캐릭터 편집(fullWidth) 이든 BGM 미니 팝업(자연 폭) 이든 공통.
+         시트 픽셀 폰트 + 14px 로 통일. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > * {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root {
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         font-size: 14px !important;
         letter-spacing: 0 !important;
-        flex: 1 1 0 !important;       /* shorthand */
-        flex-grow: 1 !important;       /* 명시적 redundant */
-        flex-shrink: 1 !important;
-        flex-basis: 0 !important;      /* 컨텐츠 폭 무시하고 0 에서 시작 → flex-grow 가 동일 분배 */
-        width: 0 !important;           /* MuiButton-fullWidth 의 width:100% 무력화 */
-        min-width: 0 !important;       /* MuiButton 의 min-width:64px 무력화 */
-        max-width: none !important;
-        margin: 0 !important;          /* MuiDialogActions-spacing 의 margin-left:8px 무력화 (gap 사용) */
-        white-space: nowrap !important;
-        box-sizing: border-box !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인.
