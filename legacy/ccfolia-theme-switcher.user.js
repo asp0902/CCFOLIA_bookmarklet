@@ -56,7 +56,6 @@
   // 신규/마이그레이션 시 normalizeSettings 가 "기본" 으로 떨어뜨리지 않도록 함.
   const DEFAULT_SHEET_THEME_ID = "unsung-duet";
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
-  const SHEET_THEME_SELECT_TOOLKIT_ID = "ccf-theme-switcher-sheet-theme-select-toolkit";
 
   // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
@@ -338,8 +337,6 @@
   let panelDragState = null;
   let lastDicebotAnchor = null;
   let unsungDuetEnterReentry = false;
-  let toolkitToggleObserver = null;
-  let toolkitToggleObserverHost = null;
   let lastThemePreview = normalizeOptionalTheme(settings.defaultTheme) || null;
   const pendingCharacterColorSelections = new WeakMap();
   const pendingCharacterColorAddSelections = new WeakSet();
@@ -2247,9 +2244,6 @@
     try { injectUnsungDuetMessageImages(); } catch (e) { try { console.warn("[CCF Theme] injectUnsungDuetMessageImages failed", e); } catch (_) {} }
     try { injectCreeGrrrDiceFormatting(); } catch (e) { try { console.warn("[CCF Theme] injectCreeGrrrDiceFormatting failed", e); } catch (_) {} }
     try { installYouTubePauseInterceptor(); } catch (e) { try { console.warn("[CCF Theme] installYouTubePauseInterceptor failed", e); } catch (_) {} }
-    try { ensureToolkitToggleWatcher(); } catch (e) { try { console.warn("[CCF Theme] ensureToolkitToggleWatcher failed", e); } catch (_) {} }
-    try { mountUnsungDuetToolkitToggle(); } catch (e) { try { console.warn("[CCF Theme] mountUnsungDuetToolkitToggle failed", e); } catch (_) {} }
-
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
       panel.id = PANEL_ID;
@@ -4496,168 +4490,6 @@
     if (panelSelect instanceof HTMLSelectElement && panelSelect.value !== selectedId) {
       panelSelect.value = selectedId;
     }
-    syncUnsungDuetToolkitToggle();
-  }
-
-  // === 카피바라 툴킷 패널의 "테마 커스텀" 카드 안에 토글 인젝트 =============
-  function findToolkitThemeCard() {
-    const toolkitRoot = document.getElementById("capybara-toolkit-root");
-    const shadow = toolkitRoot?.shadowRoot;
-    if (!shadow) return null;
-    return shadow.querySelector('article.feature[data-feature="ccf-theme-switcher"]');
-  }
-
-  function mountUnsungDuetToolkitToggle() {
-    const card = findToolkitThemeCard();
-    if (!card) return;
-
-    let row = card.querySelector("[data-ccf-unsung-duet-row]");
-    if (!row) {
-      row = document.createElement("div");
-      row.setAttribute("data-ccf-unsung-duet-row", "1");
-      // 툴킷은 shadow DOM 이라 외부 CSS 가 안 먹음 → 인라인 스타일로 처리
-      row.style.cssText =
-        "display:flex;flex-direction:column;gap:6px;" +
-        // 상단 여백을 줄여 카드 설명문과 드롭다운 사이가 너무 떨어져 보이지 않게 함
-        "padding:4px 0 0 0;margin-top:4px;" +
-        "border-top:1px solid rgba(255,255,255,0.08);";
-
-      // 상단: 드롭다운(테마 선택) + ON/OFF 버튼
-      const topLine = document.createElement("div");
-      topLine.style.cssText =
-        "display:flex;align-items:center;justify-content:space-between;gap:8px;";
-
-      const select = document.createElement("select");
-      select.id = SHEET_THEME_SELECT_TOOLKIT_ID;
-      select.setAttribute("data-ccf-sheet-theme-select", "toolkit");
-      select.setAttribute("aria-label", "커스텀 시트 테마 선택");
-      // shadow DOM이라 외부 .ccf-theme-select 스타일이 안 먹어서 인라인으로 톤만 맞춤
-      // 네이티브 select 의 쉐브론은 항상 우측 끝에 붙어 위치를 못 옮긴다.
-      // 우측 여백을 주기 위해 appearance:none + 커스텀 SVG 쉐브론으로 교체하고
-      // background-position 으로 쉐브론을 오른쪽 끝에서 떼어 놓는다.
-      const CHEVRON_SVG =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'>" +
-        "<path d='M1 1l4 4 4-4' stroke='%23333' stroke-width='1.5' fill='none' " +
-        "stroke-linecap='round' stroke-linejoin='round'/></svg>";
-      select.style.cssText =
-        "flex:1 1 auto;min-width:0;font-size:13px;line-height:1.3;" +
-        "appearance:none;-webkit-appearance:none;-moz-appearance:none;" +
-        "background-color:#ffffff;color:#222;" +
-        "background-image:url(\"" + CHEVRON_SVG + "\");" +
-        "background-repeat:no-repeat;background-position:right 12px center;" +
-        "background-size:10px 6px;" +
-        "border:1px solid rgba(0,0,0,0.2);border-radius:4px;" +
-        // 우측 패딩 = 쉐브론(10px) + 우측 여백(12px) + 텍스트와 쉐브론 사이 간격(8px)
-        "padding:4px 30px 4px 8px;";
-      for (const theme of SHEET_THEMES) {
-        const opt = document.createElement("option");
-        opt.value = theme.id;
-        opt.textContent = theme.name;
-        select.appendChild(opt);
-      }
-      select.addEventListener("change", (event) => {
-        event.stopPropagation();
-        const value = event.currentTarget.value;
-        if (!SHEET_THEMES.some((t) => t.id === value)) return;
-        settings = { ...settings, selectedSheetTheme: value };
-        persistSettings();
-        applyDicebotAttribute();
-        // 다른 테마로 전환할 때 이전 테마의 DOM 인젝션(이미지 치환 등) 흔적 정리
-        revertUnsungDuetDomState();
-        // 새 테마 인젝션을 즉시 재실행 — 옵저버를 기다리지 않고 기존 메시지도 처리
-        reapplySheetThemeInjections();
-        syncUnsungDuetToggle();
-        const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
-        setStatus(`커스텀 시트 테마: ${themeName}`, "success");
-      });
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn toggle"; // 툴킷 기존 버튼 스타일 차용
-      btn.setAttribute("data-ccf-unsung-duet-btn", "1");
-      btn.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const next = !isSheetThemeEnabled();
-        settings = { ...settings, unsungDuetEnabled: next };
-        persistSettings();
-        applyDicebotAttribute();
-        if (!next) revertUnsungDuetDomState();
-        else reapplySheetThemeInjections();
-        syncUnsungDuetToggle();
-        const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
-        setStatus(
-          next ? `${themeName} 테마를 활성화했습니다.` : `${themeName} 테마를 비활성화했습니다.`,
-          "success"
-        );
-      });
-
-      topLine.appendChild(select);
-      topLine.appendChild(btn);
-
-      // 하단: 현재 선택된 테마의 설명
-      const desc = document.createElement("div");
-      desc.setAttribute("data-ccf-sheet-theme-desc", "toolkit");
-      desc.style.cssText = "font-size:11px;opacity:0.7;line-height:1.4;";
-
-      row.appendChild(topLine);
-      row.appendChild(desc);
-      card.appendChild(row);
-    }
-
-    syncUnsungDuetToolkitToggle();
-  }
-
-  function syncUnsungDuetToolkitToggle() {
-    const card = findToolkitThemeCard();
-    if (!card) return;
-    const btn = card.querySelector('[data-ccf-unsung-duet-btn="1"]');
-    if (btn instanceof HTMLButtonElement) {
-      const enabled = isSheetThemeEnabled();
-      btn.textContent = enabled ? "ON" : "OFF";
-      btn.setAttribute("aria-pressed", enabled ? "true" : "false");
-      btn.setAttribute("data-on", enabled ? "1" : "0");
-    }
-    const select = card.querySelector(`#${SHEET_THEME_SELECT_TOOLKIT_ID}`);
-    const selectedId = getSelectedSheetThemeId();
-    if (select instanceof HTMLSelectElement && select.value !== selectedId) {
-      select.value = selectedId;
-    }
-    const desc = card.querySelector('[data-ccf-sheet-theme-desc="toolkit"]');
-    if (desc instanceof HTMLElement) {
-      const theme = SHEET_THEMES.find((t) => t.id === selectedId);
-      desc.textContent = theme?.description || "";
-    }
-  }
-
-  function ensureToolkitToggleWatcher() {
-    const toolkitRoot = document.getElementById("capybara-toolkit-root");
-    const shadow = toolkitRoot?.shadowRoot;
-    if (!shadow) return;
-    const body = shadow.querySelector(".body");
-    if (!(body instanceof HTMLElement)) return;
-
-    // 기존 옵저버가 같은 body 를 보고 있으면 그대로 둠
-    if (toolkitToggleObserver && toolkitToggleObserverHost === body) return;
-    if (toolkitToggleObserver) {
-      try { toolkitToggleObserver.disconnect(); } catch (error) { /* ignore */ }
-    }
-
-    toolkitToggleObserver = new MutationObserver(() => {
-      if (!ccfThemeActive) return;
-      mountUnsungDuetToolkitToggle();
-    });
-    toolkitToggleObserver.observe(body, { childList: true, subtree: false });
-    toolkitToggleObserverHost = body;
-
-    ccfThemeRegisterTeardown(() => {
-      try { toolkitToggleObserver?.disconnect(); } catch (error) { /* ignore */ }
-      toolkitToggleObserver = null;
-      toolkitToggleObserverHost = null;
-    });
-
-    // 옵저버 설정 직후, 이미 렌더된 카드에 한 번 인젝트
-    mountUnsungDuetToolkitToggle();
   }
 
   // 토글 OFF 시 — 이미 채팅에 인젝트된 <img>와 마킹된 li 속성을 청소해

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.19";
-  const BUILD_ID = "2026-05-24-bgm-init-scan-diagnostic-1";
+  const VERSION = "0.1.20";
+  const BUILD_ID = "2026-05-27-panel-cleanup-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
@@ -38,7 +38,7 @@
   const FEATURE_CATALOG = Object.freeze([
     {
       id: "ccf-chat-notifier",
-      title: "채팅 알림 / BGM / YouTube",
+      title: "BGM / Alarm",
       summary: "새 채팅 알림음, BGM 진행바, YouTube BGM 목록과 재생 UI",
       scripts: ["legacy/ccfolia-chat-notifier.user.js"],
       roomOnly: true,
@@ -390,7 +390,7 @@
         .panel {
           width: min(420px, calc(100vw - 32px)); max-height: min(660px, calc(100vh - 88px));
           display: none; flex-direction: column; overflow: hidden;
-          background: #fff; border: 1px solid #d7d7d7; border-radius: 8px;
+          background: #fff; border: 1px solid #d7d7d7; border-radius: 0;
           box-shadow: 0 18px 60px rgba(0,0,0,.24);
           position: absolute; bottom: 58px; right: 0; z-index: 1;
         }
@@ -434,14 +434,13 @@
         .btn.toggle[data-on="0"] { border-color: #d1d1d1; background: #fff; color: #222; }
         .btn.toggle[data-on="1"] { border-color: #111; background: #111; color: #fff; }
         .btn[disabled] { opacity: .55; cursor: default; }
-        footer { border-top: 1px solid #e5e5e5; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-        .status { flex: 1 1 160px; font-size: 12px; color: #555; line-height: 1.35; }
+        footer { border-top: 1px solid #e5e5e5; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
         @media (prefers-color-scheme: dark) {
           :host { color: #eee; }
           .panel { background: #171717; border-color: #333; }
           header, footer { border-color: #303030; }
           h1, .name { color: #f5f5f5; }
-          .sub, .summary, .status { color: #aaa; }
+          .sub, .summary { color: #aaa; }
           .feature { background: #202020; border-color: #333; }
           .feature[data-loaded="1"] { background: #2a2a2a; border-color: #555; }
           .drag-clone { background: rgba(32, 32, 32, 0.95); border-color: #333; }
@@ -459,7 +458,6 @@
         </header>
         <div class="body"></div>
         <footer>
-          <div class="status"></div>
           <button class="btn secondary" type="button" data-action="cache">캐시 갱신</button>
           <button class="btn secondary" type="button" data-action="backup">저장</button>
         </footer>
@@ -749,10 +747,8 @@
     const panel = state.shadow.querySelector(".panel");
     const body = state.shadow.querySelector(".body");
     const sub = state.shadow.querySelector(".sub");
-    const status = state.shadow.querySelector(".status");
     panel.dataset.open = state.isOpen ? "1" : "0";
     sub.textContent = `v${VERSION} · ${isCcfoliaHost() ? "ccfolia" : "다른 사이트"} · ${state.baseUrl.href}`;
-    status.textContent = state.status;
 
     const records = await Promise.all(FEATURE_CATALOG.map((feature) => getFeatureRecord(feature.id).catch(() => null)));
     const recordMap = new Map(records.filter(Boolean).map((record) => [record.id, record]));
