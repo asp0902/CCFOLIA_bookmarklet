@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.38
+// @version      0.0.39
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -822,11 +822,20 @@
     if (el.querySelector('button, form, textarea, input, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return false;
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
-    if (el.children.length > 3) return false;
 
+    // [CCF-DBG v0.0.39] INVIS 포함 요소 발견 — 이후 체크 결과를 로그
+    const dbgChildren = el.children.length;
     const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
     const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
-    if (!knownTextElement && !insideMessageSurface) return false;
+
+    if (dbgChildren > 8) {
+      console.info("[CCF-DBG] isLikelyMessageTextElement: REJECTED children=%o (>8), el=%o", dbgChildren, el);
+      return false;
+    }
+    if (!knownTextElement && !insideMessageSurface) {
+      console.info("[CCF-DBG] isLikelyMessageTextElement: REJECTED no selector match, el=%o", el);
+      return false;
+    }
 
     const nestedEncodedElement = [...el.children].some((child) => {
       const childText = child.textContent || "";
@@ -834,6 +843,7 @@
     });
     if (nestedEncodedElement) return false;
 
+    console.info("[CCF-DBG] isLikelyMessageTextElement: ACCEPTED, el=%o", el);
     return true;
   }
 
@@ -850,6 +860,12 @@
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
+
+    // [CCF-DBG v0.0.39] 렌더 측 진단 로그
+    if (narration) {
+      console.info("[CCF-DBG] tryRenderEncodedMessage: narration=true, renderText=%o, el=%o", renderText, el);
+    }
+
     const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
 
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
@@ -10272,6 +10288,13 @@
     const outgoing = rawText + encoded;
     if (currentText === outgoing) return true;
 
+    // [CCF-DBG v0.0.39] 전송 측 진단 로그
+    console.info("[CCF-DBG] preparePayloadForSend: narration=%o, flushSync=%o, outgoing.length=%o",
+      blockStyle.narration === true,
+      getCcfFlushSync() !== null,
+      outgoing.length
+    );
+
     setEditorText(editor, outgoing);
     state.roll20Source = roll20Source;
     schedulePendingSendRestore(editor, rawText, outgoing);
@@ -12038,6 +12061,48 @@
     return normalizeEditorText(editor.textContent || "");
   }
 
+  // React 18 flushSync 탐색 캐시 (undefined = 미확인, null = 없음, function = 발견)
+  let _cachedFlushSync = undefined;
+
+  function getCcfFlushSync() {
+    if (_cachedFlushSync !== undefined) return _cachedFlushSync;
+    try {
+      // 방법 1: window.ReactDOM (CDN 사용 시)
+      if (typeof window.ReactDOM?.flushSync === "function") {
+        _cachedFlushSync = window.ReactDOM.flushSync;
+        return _cachedFlushSync;
+      }
+      // 방법 2: React DevTools 글로벌 훅에서 렌더러 탐색
+      const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      if (hook?.renderers?.size) {
+        for (const [, renderer] of hook.renderers) {
+          if (typeof renderer?.flushSync === "function") {
+            _cachedFlushSync = (fn) => renderer.flushSync(fn);
+            return _cachedFlushSync;
+          }
+        }
+      }
+    } catch (_) {}
+    _cachedFlushSync = null;
+    return null;
+  }
+
+  function dispatchInputWithFlush(editor) {
+    const flushSync = getCcfFlushSync();
+    if (flushSync) {
+      try {
+        // React 18 자동 배칭 우회: input 이벤트를 동기적으로 플러시
+        flushSync(() => {
+          editor.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        return;
+      } catch (_) {
+        // flushSync 실패 시 폴백
+      }
+    }
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
   function setEditorText(editor, value) {
     if (!editor) return;
     const nextValue = normalizeEditorText(value);
@@ -12049,7 +12114,7 @@
       } else {
         editor.value = nextValue;
       }
-      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      dispatchInputWithFlush(editor);
       return;
     }
 
