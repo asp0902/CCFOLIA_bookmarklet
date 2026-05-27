@@ -2152,53 +2152,45 @@
       }
 
       /* === [CREE-GRRR!] 일반 다이스 카드 (CC<= 가 아닌 일반 굴림용) =======
-         데미지 굴림(1d10+33+1d5), 단순 1D100, 2D6 같이 판정 키워드(target/단계)
-         가 없는 다이스 결과용 컴팩트 카드. 좌측에 결과값 원, 우측에 수식 라벨. */
+         원본 시트의 .sheet-rolltemplate-coc-dice-roll 사양 1:1 이식.
+         - 카드 프레임: 293mfNY.png (시안 보더 + 어두운 배경이 이미지에 포함)
+         - 사이즈: 243 × 86 고정
+         - 좌측: 65×65 결과 원(QxyXISE.png), font 30px, 시안색
+         - 우측: caption 텍스트 139px, font 16px, 흰색 (#fff)
+         - 별도 border / border-radius 없음 (프레임 PNG 가 처리) */
       .${CREE_GRRR_SIMPLE_CARD_CLASS} {
-        display: inline-flex;
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 14px;
-        padding: 10px 18px 10px 12px;
+        width: 243px;
+        height: 86px;
         margin: 6px 0;
-        background-color: rgba(7, 12, 25, 0.85);
-        border: 1px solid ${CG.accent};
-        border-radius: 8px;
-        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
+        padding: 0 15px;
+        background: url(https://i.imgur.com/293mfNY.png) 0 0 no-repeat;
+        background-size: contain;
         color: ${CG.accent};
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
         box-sizing: border-box;
-        max-width: 100%;
         vertical-align: top;
       }
       .${CREE_GRRR_SIMPLE_CARD_CLASS}__result {
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 56px;
-        height: 56px;
-        background-color: rgba(7, 12, 25, 0.55);
-        background-image: url(https://i.imgur.com/QxyXISE.png);
-        background-repeat: no-repeat;
-        background-position: center;
+        width: 65px;
+        height: 65px;
+        background: url(https://i.imgur.com/QxyXISE.png) center no-repeat;
         background-size: contain;
-        border: 1.5px solid ${CG.accent};
-        border-radius: 50%;
-        box-sizing: border-box;
-        font-size: 22px;
-        line-height: 1;
+        line-height: 65px;
+        font-size: 30px;
+        text-align: center;
         color: ${CG.accent};
         font-family: inherit;
+        flex: 0 0 auto;
       }
       .${CREE_GRRR_SIMPLE_CARD_CLASS}__formula {
-        flex: 1 1 auto;
-        min-width: 0;
+        width: 139px;
         font-size: 16px;
-        line-height: 1.3;
-        color: ${CG.accent};
+        text-align: center;
+        color: #fff;
         font-family: inherit;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
     `;
   }
