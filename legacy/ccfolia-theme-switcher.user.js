@@ -1774,22 +1774,26 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: 삭제/복제/화면에 추가 — 시트 픽셀 폰트(DungGeunMo) 적용.
-         - flex:1 1 0 + width:auto 로 MuiButton-fullWidth 의 width:100% 를
-           무력화. width 가 flex-basis 를 override 해서 폭이 불균등해지는
-           현상이 있었음. width:auto 로 flex-basis(=0) 가 살아나 균등 분배됨.
-         - min-width:0 으로 컨텐츠 최소폭이 컬럼보다 커도 강제로 셀에 맞춰 줄임.
-         - white-space:nowrap 으로 픽셀 폰트가 좁은 컬럼에서 줄바꿈되는 현상 차단.
-         - font-size 14px (사용자 지정 — 기본 MUI 와 동일).
-         - 간격(margin-left:8px) 은 MUI 네이티브 MuiDialogActions-spacing 그대로. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
+      /* DialogActions: 삭제/복제/화면에 추가 — 강제 grid 레이아웃으로 완전 균등 분배.
+         flex + MuiButton-fullWidth(width:100%) 조합으로는 미세한 폭 불균등이
+         계속 발생해, 컨테이너를 grid 로 바꾸고 grid-auto-columns:1fr 로 각 셀이
+         정확히 동일 폭이 되게 강제한다. (자식 수에 무관 — 3개든 4개든 균등 분배)
+         자식 버튼의 width:100% 와 margin-left:8px 도 grid 셀 기준으로 재정의. */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root {
+        display: grid !important;
+        grid-auto-flow: column !important;
+        grid-auto-columns: 1fr !important;
+        gap: 8px !important;
+        align-items: center !important;
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root > .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root > .MuiButtonBase-root {
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         font-size: 14px !important;
         letter-spacing: 0 !important;
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
-        width: auto !important;
+        width: 100% !important;      /* grid 셀 가득 채움 */
+        min-width: 0 !important;     /* 컨텐츠가 셀보다 크더라도 셀에 맞게 축소 */
+        margin: 0 !important;        /* MuiDialogActions-spacing 의 margin-left:8px 무력화 (gap 으로 통일) */
         white-space: nowrap !important;
       }
 
@@ -4779,15 +4783,18 @@
     if (targetSource) target = parseInt(targetSource[1], 10);
     if (target === null || !Number.isFinite(target) || target < 1) return null;
 
-    // 스킬명 — 여러 위치에서 차례로 시도:
-    //   (1) "CC<=N <skill> (1D100" 사이 (가장 흔함 — BCDice 표준 출력)
-    //   (2) "<skill> CC<=N" 앞쪽 (시트 매크로가 스킬명 prefix 로 붙이는 케이스)
-    //   (3) "(1D100<=N) <skill>" 뒤쪽 (일부 매크로의 trailing 케이스)
-    // 모든 위치에서 따옴표/콜론/세미콜론/하이픈/괄호 등 구두점은 trim.
+    // 스킬명 — "CC<=N <skill> (1D100<=N)" 형식이 BCDice 표준 출력.
+    // 스킬명에 괄호가 포함될 수 있음 (예: "교육(지식)", "심리학(인간)") 이므로
+    // 이전의 [^()]+? 는 부적합. `.+?` 로 모든 문자 허용하되 종료 마커를
+    // `\(\s*1D100\s*<=` 로 잡아 후속 매칭이 깨지지 않게 한다.
+    // 또한 CCFOLIA 가 메시지에 삽입하는 zero-width 문자(U+200B~U+200F, U+2060,
+    // U+FEFF, U+2028~U+202F)는 모두 제거.
     let skill = "";
-    const skillBetween = text.match(/CC[BS]?<=\d+\s+([^()]+?)\s*\(\s*1D100/i);
+    const skillBetween = text.match(/CC[BS]?<=\d+\s+(.+?)\s*\(\s*1D100\s*<=/i);
     if (skillBetween) {
-      skill = skillBetween[1].trim();
+      skill = skillBetween[1]
+        .replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "")
+        .trim();
     }
     if (!skill) {
       // (2) prefix 케이스: 줄 시작부터 CC<=N 직전까지의 텍스트 중 마지막 단어구.
@@ -4795,26 +4802,19 @@
       //     채팅 닉네임/콜론 등은 마지막 ':' 이후 부분만 사용.
       const prefixMatch = text.match(/^([^\n]*?)\s*CC[BS]?<=/i);
       if (prefixMatch) {
-        let prefix = prefixMatch[1];
+        let prefix = prefixMatch[1]
+          .replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "");
         const lastColon = Math.max(prefix.lastIndexOf(":"), prefix.lastIndexOf("："));
         if (lastColon >= 0) prefix = prefix.slice(lastColon + 1);
-        prefix = prefix.trim().replace(/^["“'‘<\[\(]+|["”'’>\]\)]+$/g, "").trim();
-        // 닉네임 같은 너무 긴 prefix 는 스킬명으로 안 쳐도 됨 (10자 이하만)
+        prefix = prefix.trim().replace(/^["“'‘<\[]+|["”'’>\]]+$/g, "").trim();
+        // 닉네임 같은 너무 긴 prefix 는 스킬명으로 안 쳐도 됨 (20자 이하만)
         if (prefix && prefix.length <= 20 && !/^\d+$/.test(prefix)) {
           skill = prefix;
         }
       }
     }
-    if (!skill) {
-      // (3) trailing 케이스: ")" 뒤 ~ 화살표/주사위 텍스트 직전까지의 단어구
-      const trailingMatch = text.match(/\(\s*1D100\s*<=\s*\d+\s*\)\s*([^→＞>0-9\s][^→＞>]*?)(?=\s*(?:보너스|패널티|주사위|[→＞>]|$))/i);
-      if (trailingMatch) {
-        const trailing = trailingMatch[1].trim().replace(/[,，;；:]$/, "").trim();
-        if (trailing && trailing.length <= 20) {
-          skill = trailing;
-        }
-      }
-    }
+    // (3) trailing 전략은 "보너스, 패널티 주사위" 같은 BCDice 정형 텍스트를
+    //     오인식할 위험이 커서 제거. 위 (1)(2) 가 실패하면 스킬명 비움.
 
     // 굴림값 (rollValue): 모든 "＞/>/→ N" 중 마지막 숫자 (보너스/페널티 적용 후 최종값)
     const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
