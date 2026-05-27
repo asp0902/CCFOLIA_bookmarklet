@@ -1760,6 +1760,9 @@
       ${CG.fontImport}
 
       /* === [CREE-GRRR!] 캐릭터 편집 팝업 ============================ */
+      /* paper 의 4면 inset 시안 → 상/하단만 유지. 좌/우 시안은 AppBar 와
+         DialogContent 에 개별 inset 으로 옮겨, DialogActions 구간에는 좌우
+         시안이 비치지 않게 한다. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper {
@@ -1770,15 +1773,30 @@
         min-width: min(600px, calc(100vw - 64px)) !important;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         box-shadow:
-          inset 0 0 0 1px ${CG.accent},
+          inset 0 1px 0 0 ${CG.accent},
+          inset 0 -1px 0 0 ${CG.accent},
           0 18px 40px ${CG.shadow} !important;
       }
 
       /* DialogActions 상단 시안 라인 — 모든 cree-grrr DialogActions 에 공통 적용.
-         스크롤 컨텐츠와의 경계선이 끊겨 보이는 현상 해결. inset 사용으로
-         레이아웃에는 영향 없음. (BGM 미니 팝업 등 다른 액션 바에도 일관 적용) */
+         이전엔 inset 0 1px 으로 그렸으나 스크롤바 끝(트랙 하단) 과 같은 픽셀
+         위치에 겹쳐 보였음. ::before pseudo-element 로 y=1px 위치에 그려 1px
+         숨김 여백을 위쪽에 둔다(스크롤바와 분리). 부모는 position:relative.
+         그리고 paper 의 좌/우 inset 시안이 이미 제거되었으므로 DialogActions
+         의 좌/우는 자동으로 시안 라인 없음. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing {
-        box-shadow: inset 0 1px 0 0 ${CG.accent} !important;
+        position: relative !important;
+      }
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing::before {
+        content: "" !important;
+        position: absolute !important;
+        top: 1px !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 1px !important;
+        background: ${CG.accent} !important;
+        pointer-events: none !important;
+        z-index: 1 !important;
       }
 
       /* 캐릭터 편집 팝업의 삭제/복제/화면에 추가 — fullWidth 버튼이 있는 액션
@@ -1816,11 +1834,10 @@
         letter-spacing: 0 !important;
       }
 
-      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인.
-         상단 inset 1px 으로 다이얼로그 최상단 시안 테두리를 복원 — .MuiDialog-paper
-         의 inset 0 0 0 1px 가 AppBar 의 솔리드 배경에 가려져 보이지 않던
-         현상(좌/우/하단만 시안, 상단은 비어 있음) 해결.
-         하단 inset 1px 은 기존대로 AppBar↔Content 구분선. */
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 4면 시안 라인.
+         paper 가 좌/우 inset 을 가지지 않게 변경되어, AppBar 가 직접 좌/우
+         시안을 그리도록 LR inset 추가. 상/하단은 기존대로(상단 = 다이얼로그
+         최상단 라인, 하단 = AppBar↔Content 구분선). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root,
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] .MuiAppBar-root {
         background: ${CG.bgSolid} !important;
@@ -1830,6 +1847,8 @@
         box-shadow:
           inset 0 1px 0 0 ${CG.accent},
           inset 0 -1px 0 0 ${CG.accent},
+          inset 1px 0 0 0 ${CG.accent},
+          inset -1px 0 0 0 ${CG.accent},
           0 4px 14px ${CG.shadow} !important;
       }
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiTypography-root,
@@ -1842,7 +1861,9 @@
         background: ${CG.accentHover} !important;
       }
 
-      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이 */
+      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이 + 좌/우 시안 inset.
+         paper 의 좌/우 inset 시안이 제거되어, DialogContent 가 직접 자신의
+         세로 영역(스크롤 영역) 의 좌/우 시안 라인을 그린다. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root {
         background-image:
           linear-gradient(${CG.bgGlassInner}, ${CG.bgGlassInner}),
@@ -1851,6 +1872,9 @@
         background-position: center top, center top !important;
         background-size: cover, cover !important;
         background-color: transparent !important;
+        box-shadow:
+          inset 1px 0 0 0 ${CG.accent},
+          inset -1px 0 0 0 ${CG.accent} !important;
       }
 
       /* 내부 Paper/카드/아코디언 */
