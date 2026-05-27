@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.5.6
+// @version      0.5.7
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,7 +33,7 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.5.6"),
+    version: getUserscriptVersion("0.5.7"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
@@ -385,6 +385,11 @@
         setPanelOpen(false);
       }
     }, ccfSuiteWithSignal());
+
+    window.addEventListener("capybara-toolkit-presence:panel-state", (event) => {
+      state.panelOpen = !!event.detail?.open;
+      render();
+    }, ccfSuiteWithSignal());
   }
 
   function ensureUi() {
@@ -408,12 +413,12 @@
           type="button"
           id="ccf-suite-toggle"
           aria-expanded="false"
-          aria-controls="ccf-suite-panel"
+          aria-controls="capybara-toolkit-presence"
           aria-label="CCF Suite ????繹먮굟爰?
           title="CCF Suite ????繹먮굟爰?
         >
           <img class="ccf-suite-toggle-icon" src="${CAPYBARA_ICON_DATA_URL}" alt="">
-          <span class="ccf-suite-sr-only">CCF Suite</span>
+          <span class="ccf-suite-sr-only">&#xD234;&#xD0B7; &#xC0AC;&#xC6A9;&#xC790;</span>
           <span id="ccf-suite-badge" hidden>0</span>
         </button>
         <aside id="ccf-suite-panel" hidden>
@@ -443,11 +448,11 @@
           type="button"
           id="ccf-suite-toggle"
           aria-expanded="false"
-          aria-controls="ccf-suite-panel"
-          aria-label="CCF Suite 열기"
+          aria-controls="capybara-toolkit-presence"
+          aria-label="&#xD234;&#xD0B7; &#xC0AC;&#xC6A9;&#xC790; &#xC5F4;&#xAE30;"
         >
           <img class="ccf-suite-toggle-icon" alt="">
-          <span class="ccf-suite-sr-only">CCF Suite</span>
+          <span class="ccf-suite-sr-only">&#xD234;&#xD0B7; &#xC0AC;&#xC6A9;&#xC790;</span>
           <span id="ccf-suite-badge" hidden>0</span>
         </button>
         <aside id="ccf-suite-panel" hidden>
@@ -475,10 +480,12 @@
         <div id="ccf-suite-toast" hidden></div>
       `;
 
+      root.querySelector("#ccf-suite-panel")?.remove();
       root.querySelector(".ccf-suite-toggle-icon")?.setAttribute("src", CAPYBARA_ICON_DATA_URL);
 
       root.querySelector("#ccf-suite-toggle")?.addEventListener("click", () => {
-        setPanelOpen(!state.panelOpen);
+        const isOpen = window.__CAPYBARA_TOOLKIT_PRESENCE__?.isPanelOpen?.() === true;
+        setPanelOpen(!isOpen);
       });
 
       root.querySelector("#ccf-suite-close")?.addEventListener("click", () => {
@@ -903,7 +910,10 @@
     const notify = root.querySelector("#ccf-suite-notify");
     const autoOpen = root.querySelector("#ccf-suite-auto-open");
 
-    if (!managerEntryContainer) {
+    toggle?.setAttribute("aria-expanded", state.panelOpen ? "true" : "false");
+    if (badge) badge.hidden = true;
+
+    if (!managerEntryContainer && panel) {
       managerEntryContainer = document.createElement("div");
       managerEntryContainer.id = "ccf-suite-manager-entry";
       managerEntryContainer.className = "ccf-suite-list ccf-suite-manager-list";
@@ -912,9 +922,7 @@
 
     if (!toggle || !badge || !panel || !managerEntryContainer || !list || !summary) return;
 
-    toggle.setAttribute("aria-expanded", state.panelOpen ? "true" : "false");
-    panel.hidden = !state.panelOpen;
-    badge.hidden = outdated.length < 1;
+    panel.hidden = true;
     badge.textContent = String(outdated.length);
     if (notify) notify.checked = !!state.settings.notifyUpdates;
     if (autoOpen) autoOpen.checked = !!state.settings.autoOpenOnUpdate;
@@ -1250,6 +1258,7 @@
 
   function setPanelOpen(open) {
     state.panelOpen = !!open;
+    window.__CAPYBARA_TOOLKIT_PRESENCE__?.setPanelOpen?.(state.panelOpen);
     render();
   }
 
@@ -3479,9 +3488,17 @@
   const CLIENT_ID_KEY = "capybara-toolkit-presence-client-id";
   const PRESENCE_KEY = "capybaraToolkitPresence";
   const PRESENCE_VERSION = 1;
-  const TOOLKIT_VERSION = "0.1.6";
-  const ACTIVE_MS = 5 * 60 * 1000;
-  const STALE_MS = 30 * 60 * 1000;
+  const FALLBACK_TOOLKIT_VERSION = "0.1.23";
+  const ACTIVE_MS = 12 * 1000;
+  const STALE_MS = 20 * 1000;
+  const SYNC_INTERVAL_MS = 5000;
+  const FIRESTORE_PROJECT_ID = "ccfolia-160aa";
+  const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
+  const FIRESTORE_SUBCOLLECTION = "capybaraToolkitBgm";
+  const FIRESTORE_DOC_PREFIX = "presence_";
+  const FIRESTORE_TOKEN_TTL_MS = 5 * 60 * 1000;
+  const FIREBASE_AUTH_DB_NAME = "firebaseLocalStorageDb";
+  const FIREBASE_AUTH_STORE_NAME = "firebaseLocalStorage";
   const INVIS_START = "\u2063\u2063\u2063";
   const INVIS_END = "\u2062\u2062\u2062";
   const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
@@ -3505,6 +3522,11 @@
   const peers = new Map();
   const clientId = getClientId();
   let refreshTimer = 0;
+  let panelOpen = false;
+  let syncInFlight = false;
+  let wasToolkitRunning = false;
+  let cachedDisplayName = "";
+  let tokenCache = { token: "", fetchedAt: 0 };
 
   const api = {
     integration: "ccfolia-suite",
@@ -3512,6 +3534,10 @@
     decorateEnvelope,
     decorateOutgoingText,
     getPeers: () => [...peers.values()],
+    isPanelOpen: () => panelOpen,
+    setPanelOpen,
+    togglePanel: () => setPanelOpen(!panelOpen),
+    syncNow: () => syncPresenceNow(),
     disable
   };
 
@@ -3527,19 +3553,13 @@
     if (!active) return;
     injectStyles();
     ensurePanel();
-    if (isCcfoliaRoom()) {
-      rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
-    }
     bindSendTriggers();
     observeMessages();
     scanMessages();
     renderPanel();
-    refreshTimer = window.setInterval(() => {
-      if (isCcfoliaRoom()) {
-        rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
-      }
-      renderPanel();
-    }, 15000);
+    void syncPresenceNow();
+    refreshTimer = window.setInterval(() => void syncPresenceNow(), SYNC_INTERVAL_MS);
+    window.addEventListener("resize", renderPanel, { signal: abort.signal });
   }
 
   function disable() {
@@ -3582,17 +3602,28 @@
 
   function createPresencePayload(name) {
     return {
+      type: "toolkitPresence",
       v: PRESENCE_VERSION,
       roomKey: getRoomKey(),
       clientId,
       name: sanitizeName(name) || "\uB098",
       at: Date.now(),
-      toolkitVersion: TOOLKIT_VERSION
+      toolkitVersion: String(window.__CAPYBARA_TOOLKIT__?.version || FALLBACK_TOOLKIT_VERSION)
     };
   }
 
   function sanitizeName(value) {
     return String(value || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+
+  function isToolkitRunning() {
+    return !!window.__CAPYBARA_TOOLKIT__;
+  }
+
+  function getPresenceDisplayName() {
+    const current = sanitizeName(getLocalDisplayName());
+    if (current && current !== "\uB098") cachedDisplayName = current;
+    return cachedDisplayName || current || "\uB098";
   }
 
   function rememberPresence(payload, options = {}) {
@@ -3608,14 +3639,217 @@
       name,
       at: Number(payload.at) || Date.now(),
       toolkitVersion: String(payload.toolkitVersion || ""),
-      self: options.self || payload.clientId === clientId
+      self: options.self === true
     });
     return true;
   }
 
+  function setPanelOpen(open) {
+    panelOpen = !!open;
+    renderPanel();
+    try {
+      window.dispatchEvent(new CustomEvent("capybara-toolkit-presence:panel-state", {
+        detail: { open: panelOpen }
+      }));
+    } catch (error) {
+      // Ignore event dispatch failures in restricted contexts.
+    }
+  }
+
+  async function syncPresenceNow() {
+    if (!active || syncInFlight || !isCcfoliaRoom()) return;
+    syncInFlight = true;
+    try {
+      const running = isToolkitRunning();
+      if (running) {
+        const payload = createPresencePayload(getPresenceDisplayName());
+        rememberPresence(payload, { self: true });
+        await writeRemotePresence(payload);
+      } else {
+        peers.delete(clientId);
+        if (wasToolkitRunning) {
+          await removeRemotePresence();
+        }
+      }
+      wasToolkitRunning = running;
+      await readRemotePresence();
+      renderPanel();
+    } finally {
+      syncInFlight = false;
+    }
+  }
+
+  function getPresenceDocumentUrl() {
+    const docId = `${FIRESTORE_DOC_PREFIX}${clientId.replace(/[^a-z0-9_-]/gi, "_").slice(0, 900)}`;
+    return `${FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(getRoomKey())}/${FIRESTORE_SUBCOLLECTION}/${encodeURIComponent(docId)}`;
+  }
+
+  function getPresenceCollectionUrl() {
+    return `${FIRESTORE_BASE_URL}/rooms/${encodeURIComponent(getRoomKey())}/${FIRESTORE_SUBCOLLECTION}?pageSize=100`;
+  }
+
+  async function writeRemotePresence(payload) {
+    const token = await readFirebaseIdToken();
+    if (!token) return;
+    try {
+      const response = await fetch(getPresenceDocumentUrl(), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ fields: encodeFirestoreFields(payload) }),
+        credentials: "omit",
+        mode: "cors"
+      });
+      if (response.status === 401) tokenCache = { token: "", fetchedAt: 0 };
+    } catch (error) {
+      // Chat-envelope presence remains available if remote sync is unavailable.
+    }
+  }
+
+  async function removeRemotePresence() {
+    const token = await readFirebaseIdToken();
+    if (!token) return;
+    try {
+      const response = await fetch(getPresenceDocumentUrl(), {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` },
+        credentials: "omit",
+        mode: "cors"
+      });
+      if (response.status === 401) tokenCache = { token: "", fetchedAt: 0 };
+    } catch (error) {
+      // The short expiry removes a disconnected user if DELETE cannot be sent.
+    }
+  }
+
+  async function readRemotePresence() {
+    let token = "";
+    try {
+      token = await readFirebaseIdToken();
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const response = await fetch(getPresenceCollectionUrl(), {
+        method: "GET",
+        headers,
+        credentials: "omit",
+        mode: "cors"
+      });
+      if (response.status === 401) tokenCache = { token: "", fetchedAt: 0 };
+      if (response.status === 404) return;
+      if (!response.ok) return;
+      const data = await response.json();
+      const now = Date.now();
+      for (const document of Array.isArray(data?.documents) ? data.documents : []) {
+        const payload = decodeFirestoreFields(document?.fields);
+        if (payload.type !== "toolkitPresence" || payload.roomKey !== getRoomKey()) continue;
+        if (!payload.clientId || now - Number(payload.at || 0) > STALE_MS) continue;
+        if (payload.clientId === clientId && !isToolkitRunning()) continue;
+        rememberPresence(payload, { self: payload.clientId === clientId && isToolkitRunning() });
+      }
+    } catch (error) {
+      // Keep the last recent snapshot while the remote channel is unavailable.
+    }
+
+    const now = Date.now();
+    for (const [id, peer] of peers) {
+      if (id === clientId && isToolkitRunning()) continue;
+      if (now - peer.at > STALE_MS) peers.delete(id);
+    }
+  }
+
+  function encodeFirestoreFields(payload) {
+    const fields = {};
+    for (const [key, value] of Object.entries(payload || {})) {
+      if (typeof value === "string") fields[key] = { stringValue: value };
+      else if (typeof value === "boolean") fields[key] = { booleanValue: value };
+      else if (typeof value === "number" && Number.isFinite(value)) {
+        fields[key] = Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+      }
+    }
+    return fields;
+  }
+
+  function decodeFirestoreFields(fields) {
+    const out = {};
+    for (const [key, value] of Object.entries(fields || {})) {
+      if (typeof value?.stringValue === "string") out[key] = value.stringValue;
+      else if (typeof value?.booleanValue === "boolean") out[key] = value.booleanValue;
+      else if (typeof value?.integerValue === "string") out[key] = Number(value.integerValue);
+      else if (typeof value?.doubleValue === "number") out[key] = value.doubleValue;
+    }
+    return out;
+  }
+
+  async function readFirebaseIdToken() {
+    const now = Date.now();
+    if (tokenCache.token && now - tokenCache.fetchedAt < FIRESTORE_TOKEN_TTL_MS) return tokenCache.token;
+    try {
+      const token = await openFirebaseAuthDbAndExtractToken();
+      tokenCache = { token: token || "", fetchedAt: now };
+      return token || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function openFirebaseAuthDbAndExtractToken() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finalize = (value, error) => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error);
+        else resolve(value);
+      };
+      let request;
+      try {
+        request = indexedDB.open(FIREBASE_AUTH_DB_NAME);
+      } catch (error) {
+        finalize("", error);
+        return;
+      }
+      request.onerror = () => finalize("", request.error || new Error("firebase auth db open failed"));
+      request.onblocked = () => finalize("");
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(FIREBASE_AUTH_STORE_NAME)) {
+          db.close();
+          finalize("");
+          return;
+        }
+        let transaction;
+        try {
+          transaction = db.transaction(FIREBASE_AUTH_STORE_NAME, "readonly");
+        } catch (error) {
+          db.close();
+          finalize("", error);
+          return;
+        }
+        const result = transaction.objectStore(FIREBASE_AUTH_STORE_NAME).getAll();
+        result.onerror = () => {
+          db.close();
+          finalize("", result.error);
+        };
+        result.onsuccess = () => {
+          const rows = Array.isArray(result.result) ? result.result : [];
+          db.close();
+          let token = "";
+          for (const row of rows) {
+            const candidate = row?.value?.stsTokenManager?.accessToken;
+            if (typeof candidate !== "string" || candidate.length < 20) continue;
+            token = candidate;
+            if (String(row?.fbase_key || "").startsWith("firebase:authUser:")) break;
+          }
+          finalize(token);
+        };
+      };
+    });
+  }
+
   function decorateEnvelope(envelope, visibleText = "") {
-    if (!active || !envelope || typeof envelope !== "object") return envelope;
-    const name = getLocalDisplayName();
+    if (!active || !isToolkitRunning() || !envelope || typeof envelope !== "object") return envelope;
+    const name = getPresenceDisplayName();
     envelope[PRESENCE_KEY] = createPresencePayload(name);
     if (!envelope.text && typeof visibleText === "string") {
       envelope.text = visibleText;
@@ -3627,6 +3861,7 @@
 
   function decorateOutgoingText(value) {
     const currentText = normalizeText(value);
+    if (!isToolkitRunning()) return currentText;
     const extracted = extractEnvelope(currentText);
     const visibleText = extracted ? extracted.visibleText : stripInvisibleEnvelope(currentText);
     if (!visibleText.trim()) return currentText;
@@ -3791,16 +4026,28 @@
       document.getElementById(ROOT_ID)?.remove();
       return null;
     }
-    if (document.getElementById(ROOT_ID)) return document.getElementById(ROOT_ID);
+    const existing = document.getElementById(ROOT_ID);
+    if (existing) {
+      existing.hidden = !panelOpen;
+      return existing;
+    }
     const root = document.createElement("section");
     root.id = ROOT_ID;
     root.setAttribute(SAFE_UI_ATTR, "1");
-    root.setAttribute("aria-live", "polite");
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", "\uD234\uD0B7 \uC0AC\uC6A9\uC790");
+    root.hidden = !panelOpen;
     root.innerHTML = `
-      <div class="capybara-presence-title">\uD234\uD0B7 \uC0AC\uC6A9\uC790</div>
+      <div class="capybara-presence-head">
+        <div class="capybara-presence-title">\uD234\uD0B7 \uC0AC\uC6A9\uC790</div>
+        <button class="capybara-presence-close" type="button" aria-label="\uB2EB\uAE30">&times;</button>
+      </div>
       <div class="capybara-presence-list"></div>
-      <div class="capybara-presence-note">\uCD5C\uADFC \uBA54\uC2DC\uC9C0 \uC2E0\uD638 \uAE30\uC900</div>
+      <div class="capybara-presence-note">\uC2E4\uC2DC\uAC04 \uC2E4\uD589 \uC0C1\uD0DC \uAE30\uC900</div>
     `;
+    root.querySelector(".capybara-presence-close")?.addEventListener("click", () => {
+      setPanelOpen(false);
+    }, { signal: abort.signal });
     (document.body || document.documentElement).appendChild(root);
     return root;
   }
@@ -3813,10 +4060,13 @@
     if (peerRoomKey !== getRoomKey()) {
       peers.clear();
       peerRoomKey = getRoomKey();
-      rememberPresence(createPresencePayload(getLocalDisplayName()), { self: true });
+      if (isToolkitRunning()) {
+        rememberPresence(createPresencePayload(getPresenceDisplayName()), { self: true });
+      }
     }
     const root = ensurePanel();
     if (!root) return;
+    root.hidden = !panelOpen;
     const list = root.querySelector(".capybara-presence-list");
     if (!list) return;
 
@@ -3826,6 +4076,12 @@
       .sort((a, b) => Number(b.self) - Number(a.self) || b.at - a.at || a.name.localeCompare(b.name));
 
     list.innerHTML = "";
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "capybara-presence-empty";
+      empty.textContent = "\uC2E4\uD589 \uC911\uC778 \uD234\uD0B7 \uC0AC\uC6A9\uC790\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.";
+      list.appendChild(empty);
+    }
     rows.forEach((peer) => {
       const row = document.createElement("div");
       const age = Math.max(0, now - peer.at);
@@ -3834,10 +4090,39 @@
       row.innerHTML = `
         <span class="capybara-presence-dot" aria-hidden="true"></span>
         <span class="capybara-presence-name">${escapeHtml(peer.self ? `${peer.name} (\uB098)` : peer.name)}</span>
-        <span class="capybara-presence-age">${escapeHtml(peer.self ? "\uC811\uC18D \uC911" : formatAge(age))}</span>
+        <span class="capybara-presence-age">${escapeHtml(peer.self ? "\uC2E4\uD589 \uC911" : formatAge(age))}</span>
       `;
       list.appendChild(row);
     });
+    if (panelOpen) positionPanel(root);
+  }
+
+  function positionPanel(root) {
+    const toggle = document.getElementById("ccf-suite-toggle");
+    if (!(toggle instanceof HTMLElement) || !isVisible(toggle)) {
+      root.style.left = "auto";
+      root.style.top = "auto";
+      root.style.right = "14px";
+      root.style.bottom = "70px";
+      return;
+    }
+
+    root.style.right = "auto";
+    root.style.bottom = "auto";
+    const padding = 12;
+    const gap = 10;
+    const toggleRect = toggle.getBoundingClientRect();
+    const panelRect = root.getBoundingClientRect();
+    const width = panelRect.width || 240;
+    const height = panelRect.height || 120;
+    const maxLeft = Math.max(padding, window.innerWidth - width - padding);
+    const left = Math.max(padding, Math.min(maxLeft, toggleRect.right - width));
+    let top = toggleRect.top - height - gap;
+    if (top < padding) {
+      top = Math.min(window.innerHeight - height - padding, toggleRect.bottom + gap);
+    }
+    root.style.left = `${Math.round(left)}px`;
+    root.style.top = `${Math.max(padding, Math.round(top))}px`;
   }
 
   function injectStyles() {
@@ -3847,23 +4132,41 @@
     style.textContent = `
       #${ROOT_ID} {
         position: fixed;
-        left: 14px;
-        bottom: 14px;
         z-index: 2147482400;
-        width: min(220px, calc(100vw - 28px));
+        width: min(240px, calc(100vw - 28px));
         box-sizing: border-box;
         padding: 9px 10px;
         border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 8px;
+        border-radius: 0;
         background: rgba(28, 28, 28, 0.92);
         color: #fff;
         box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
         font: 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
+      #${ROOT_ID}[hidden] {
+        display: none !important;
+      }
+
+      #${ROOT_ID} .capybara-presence-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+
       #${ROOT_ID} .capybara-presence-title {
         font-weight: 800;
-        margin-bottom: 6px;
+      }
+
+      #${ROOT_ID} .capybara-presence-close {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        padding: 0 2px;
+        font: 18px/1 system-ui, sans-serif;
       }
 
       #${ROOT_ID} .capybara-presence-list {
@@ -3903,7 +4206,8 @@
       }
 
       #${ROOT_ID} .capybara-presence-age,
-      #${ROOT_ID} .capybara-presence-note {
+      #${ROOT_ID} .capybara-presence-note,
+      #${ROOT_ID} .capybara-presence-empty {
         color: rgba(255, 255, 255, 0.62);
         font-size: 11px;
       }
