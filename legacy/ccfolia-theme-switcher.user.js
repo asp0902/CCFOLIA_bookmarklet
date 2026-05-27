@@ -1808,7 +1808,11 @@
         box-sizing: border-box !important;
       }
 
-      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인.
+         상단 inset 1px 으로 다이얼로그 최상단 시안 테두리를 복원 — .MuiDialog-paper
+         의 inset 0 0 0 1px 가 AppBar 의 솔리드 배경에 가려져 보이지 않던
+         현상(좌/우/하단만 시안, 상단은 비어 있음) 해결.
+         하단 inset 1px 은 기존대로 AppBar↔Content 구분선. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root,
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] .MuiAppBar-root {
         background: ${CG.bgSolid} !important;
@@ -1816,6 +1820,7 @@
         color: ${CG.text} !important;
         border-bottom: 0 !important;
         box-shadow:
+          inset 0 1px 0 0 ${CG.accent},
           inset 0 -1px 0 0 ${CG.accent},
           0 4px 14px ${CG.shadow} !important;
       }
