@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.37
+// @version      0.0.38
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -688,6 +688,10 @@
         text-align: center !important;
         font-style: italic !important;
       }
+
+      [data-ccf-narration-hidden="1"] {
+        display: none !important;
+      }
     `;
     document.documentElement.appendChild(style);
   }
@@ -905,6 +909,82 @@
     });
   }
 
+  function hideNarrationElements(item, messageEl) {
+    if (!(item instanceof HTMLElement) || !(messageEl instanceof HTMLElement)) return;
+
+    // React 재렌더/재스캔 시 이전 숨김 마크가 남지 않도록 먼저 정리
+    item.querySelectorAll('[data-ccf-narration-hidden="1"]').forEach((el) => {
+      el.removeAttribute("data-ccf-narration-hidden");
+    });
+
+    // 1. 프로필/아바타 영역 숨김
+    const profiles = item.querySelectorAll(
+      ".MuiAvatar-root, .MuiListItemAvatar-root, img:not(.ccf-image)"
+    );
+
+    profiles.forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (messageEl.contains(node)) return;
+
+      let target = node;
+      let depth = 0;
+
+      // 단독 래퍼 상승 제한:
+      // - 최대 3단계까지만 상승
+      // - 상위 래퍼가 본문(messageEl)을 포함하면 중단
+      // - item 자체까지는 올라가지 않음
+      while (
+        target.parentElement &&
+        target.parentElement !== item &&
+        target.parentElement.children.length === 1 &&
+        !target.parentElement.contains(messageEl) &&
+        depth < 3
+      ) {
+        target = target.parentElement;
+        depth += 1;
+      }
+
+      target.setAttribute("data-ccf-narration-hidden", "1");
+    });
+
+    // 2. 캐릭터 이름/시간 헤더 영역 숨김
+    let current = messageEl;
+
+    while (current && current !== item && current.parentElement) {
+      let sibling = current.parentElement.firstElementChild;
+
+      while (sibling && sibling !== current) {
+        const hasText =
+          sibling.matches?.(MESSAGE_TEXT_SELECTOR) ||
+          sibling.querySelector?.(MESSAGE_TEXT_SELECTOR);
+
+        const hasRenderRoot =
+          sibling.matches?.(".ccf-render-root") ||
+          sibling.querySelector?.(".ccf-render-root");
+
+        const text = (sibling.textContent || "").trim();
+
+        // 메시지 본문이 아니면서 실제 텍스트가 있는 헤더만 숨김
+        // 빈 레이아웃 래퍼/여백용 Box/아이콘 전용 요소 오탐 방지
+        if (!hasText && !hasRenderRoot && text) {
+          sibling.setAttribute("data-ccf-narration-hidden", "1");
+        }
+
+        sibling = sibling.nextElementSibling;
+      }
+
+      current = current.parentElement;
+    }
+  }
+
+  function showNarrationElements(item) {
+    if (!(item instanceof HTMLElement)) return;
+
+    item.querySelectorAll('[data-ccf-narration-hidden="1"]').forEach((el) => {
+      el.removeAttribute("data-ccf-narration-hidden");
+    });
+  }
+
   function applyNarrationMessageLayout(el, narration) {
     if (!(el instanceof HTMLElement)) return;
 
@@ -919,11 +999,13 @@
 
     if (narration) {
       item.setAttribute(CCF_NARRATION_ATTR, "1");
+      hideNarrationElements(item, el);
       return;
     }
 
     if (!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`)) {
       item.removeAttribute(CCF_NARRATION_ATTR);
+      showNarrationElements(item);
     }
   }
 
