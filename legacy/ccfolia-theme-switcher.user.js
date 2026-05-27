@@ -1774,27 +1774,38 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions: 삭제/복제/화면에 추가 — 강제 grid 레이아웃으로 완전 균등 분배.
-         flex + MuiButton-fullWidth(width:100%) 조합으로는 미세한 폭 불균등이
-         계속 발생해, 컨테이너를 grid 로 바꾸고 grid-auto-columns:1fr 로 각 셀이
-         정확히 동일 폭이 되게 강제한다. (자식 수에 무관 — 3개든 4개든 균등 분배)
-         자식 버튼의 width:100% 와 margin-left:8px 도 grid 셀 기준으로 재정의. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root {
-        display: grid !important;
-        grid-auto-flow: column !important;
-        grid-auto-columns: 1fr !important;
+      /* DialogActions: 삭제/복제/화면에 추가 — 명시적 flex 강제 균등 분배.
+         조상 .MuiDialog-paper 요구를 제거해 cree-grrr 테마의 어떤 컨텍스트
+         에서도 동일하게 균등 분배되게 한다. 자식 폭은 width:0 + flex:1 1 0
+         으로 초기화한 후 flex-grow 로 똑같이 키운다.
+         (이전에 grid-auto-columns:1fr 만으로는 일부 빌드에서 자식의 컨텐츠
+          폭 차이/min-width:64px 잔류 등으로 셀 너비 불균등이 남아 있었음.) */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
+        justify-content: stretch !important;
         gap: 8px !important;
-        align-items: center !important;
+        padding: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root > .MuiButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root > .MuiButtonBase-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > * {
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         font-size: 14px !important;
         letter-spacing: 0 !important;
-        width: 100% !important;      /* grid 셀 가득 채움 */
-        min-width: 0 !important;     /* 컨텐츠가 셀보다 크더라도 셀에 맞게 축소 */
-        margin: 0 !important;        /* MuiDialogActions-spacing 의 margin-left:8px 무력화 (gap 으로 통일) */
+        flex: 1 1 0 !important;       /* shorthand */
+        flex-grow: 1 !important;       /* 명시적 redundant */
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;      /* 컨텐츠 폭 무시하고 0 에서 시작 → flex-grow 가 동일 분배 */
+        width: 0 !important;           /* MuiButton-fullWidth 의 width:100% 무력화 */
+        min-width: 0 !important;       /* MuiButton 의 min-width:64px 무력화 */
+        max-width: none !important;
+        margin: 0 !important;          /* MuiDialogActions-spacing 의 margin-left:8px 무력화 (gap 사용) */
         white-space: nowrap !important;
+        box-sizing: border-box !important;
       }
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 시안 라인 */
