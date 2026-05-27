@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.35
+// @version      0.0.36
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -56,7 +56,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.0.35"),
+    version: getUserscriptVersion("0.0.36"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10082,6 +10082,12 @@
     const candidate = node.matches?.(EDITOR_SELECTOR) ? node : node.closest?.(EDITOR_SELECTOR);
     if (!(candidate instanceof HTMLElement)) return null;
     if (isCharacterNameInput(candidate)) return null;
+    // MUI 다이얼로그(캐릭터 편집 팝업 등) 내부의 textarea는 채팅 입력창이 아니므로
+    // 서식 편집 대상에서 제외한다. chatPalette, 캐릭터 소개 등이 이 경로로 필터링된다.
+    if (
+      candidate instanceof HTMLTextAreaElement &&
+      candidate.closest('.MuiDialog-paper, [role="dialog"]')
+    ) return null;
     return candidate;
   }
 
@@ -11396,6 +11402,8 @@
 
   function looksLikeComposerBar(el) {
     if (!(el instanceof HTMLElement)) return false;
+    // MUI 다이얼로그 컨테이너는 채팅 컴포저가 아니다.
+    if (el.closest('[role="dialog"], .MuiDialog-root') || el.getAttribute('role') === 'dialog') return false;
     const submit = el.querySelector('button[type="submit"]');
     if (!submit) return false;
     if (findDiceButtons(el).length >= 1) return true;
