@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.39
+// @version      0.0.40
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -9819,6 +9819,10 @@
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
+        // [CCF-DBG v0.0.40] keydown 핸들러 진입 확인
+        console.info("[CCF-DBG] bindEnterSendForEditors keydown: Enter detected, editor=%o, isCcfSuiteScriptEnabled=%o",
+          editor, typeof isCcfSuiteScriptEnabled === "function" ? isCcfSuiteScriptEnabled() : "N/A"
+        );
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
@@ -10260,9 +10264,23 @@
     }
 
     const runs = preparedRuns.runs;
+    // [CCF-DBG v0.0.40] ① early return 전 — 항상 실행됨
+    const _dbgSpeaker = getCurrentSpeakerName();
+    const _dbgNarratorSet = readNarratorNameSet();
+    console.info(
+      "[CCF-DBG] preparePayloadForSend ENTRY: speaker=%o, narratorSetSize=%o, state.blockStyle.narration=%o, runs=%o",
+      _dbgSpeaker, _dbgNarratorSet.size, state.blockStyle?.narration, runs.length
+    );
     const blockStyle = applyAutomaticNarration(state.blockStyle);
+    console.info(
+      "[CCF-DBG] preparePayloadForSend AFTER applyAutomaticNarration: blockStyle.narration=%o, narratorSetHasSpeaker=%o",
+      blockStyle.narration, _dbgSpeaker ? _dbgNarratorSet.has(_dbgSpeaker) : "no-speaker"
+    );
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
-    if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
+    if (!runs.length && !alignRuns.length && !blockStyle.narration) {
+      console.info("[CCF-DBG] preparePayloadForSend EARLY-RETURN: no encoding needed");
+      return true;
+    }
     const roll20Source = state.roll20Source;
     state.text = rawText;
     state.runs = runs;
@@ -10288,8 +10306,8 @@
     const outgoing = rawText + encoded;
     if (currentText === outgoing) return true;
 
-    // [CCF-DBG v0.0.39] 전송 측 진단 로그
-    console.info("[CCF-DBG] preparePayloadForSend: narration=%o, flushSync=%o, outgoing.length=%o",
+    // [CCF-DBG v0.0.40] ② 실제 전송 경로
+    console.info("[CCF-DBG] preparePayloadForSend SEND: narration=%o, flushSync=%o, outgoing.length=%o",
       blockStyle.narration === true,
       getCcfFlushSync() !== null,
       outgoing.length
