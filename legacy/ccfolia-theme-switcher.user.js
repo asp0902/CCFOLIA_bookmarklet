@@ -62,8 +62,10 @@
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
   const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
   const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
-  // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃
+  // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃 (CC<= 판정용)
   const CREE_GRRR_CARD_CLASS = "ccf-cree-grrr-dicecard";
+  // 일반 다이스 카드 — CC<= 가 아닌 일반 굴림(1D10+5, 데미지 굴림 등) 용 컴팩트 카드
+  const CREE_GRRR_SIMPLE_CARD_CLASS = "ccf-cree-grrr-simpledicecard";
   const CREE_GRRR_ORIGINAL_ATTR = "data-ccf-cree-grrr-original";
   // 인식할 판정 결과 상태 키워드 — CCFOLIA(CoC 7판 BCDice) 가 실제로 출력하는 텍스트.
   // CREE-GRRR! 시트(Roll20)는 다른 명칭을 쓰므로 매칭한 다음 mapCcfStatusToCreeGrrr 로
@@ -279,6 +281,7 @@
         `[${CREE_GRRR_FORMATTED_ATTR}]`,
         `[${CREE_GRRR_ORIGINAL_ATTR}]`,
         `.${CREE_GRRR_CARD_CLASS}`,
+        `.${CREE_GRRR_SIMPLE_CARD_CLASS}`,
         `.${CREE_GRRR_ROLLRESULT_CLASS}`,
         `.${CREE_GRRR_STATUS_CLASS}`
       ].join(", ")).forEach((el) => {
@@ -2151,6 +2154,56 @@
       }
       .${CREE_GRRR_CARD_CLASS}__status--success {
         color: ${CG.accent};
+      }
+
+      /* === [CREE-GRRR!] 일반 다이스 카드 (CC<= 가 아닌 일반 굴림용) =======
+         데미지 굴림(1d10+33+1d5), 단순 1D100, 2D6 같이 판정 키워드(target/단계)
+         가 없는 다이스 결과용 컴팩트 카드. 좌측에 결과값 원, 우측에 수식 라벨. */
+      .${CREE_GRRR_SIMPLE_CARD_CLASS} {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 18px 10px 12px;
+        margin: 6px 0;
+        background-color: rgba(7, 12, 25, 0.85);
+        border: 1px solid ${CG.accent};
+        border-radius: 8px;
+        font-family: 'DungGeunMo', 'Galmuri', sans-serif;
+        color: ${CG.accent};
+        box-sizing: border-box;
+        max-width: 100%;
+        vertical-align: top;
+      }
+      .${CREE_GRRR_SIMPLE_CARD_CLASS}__result {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        background-color: rgba(7, 12, 25, 0.55);
+        background-image: url(https://i.imgur.com/QxyXISE.png);
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+        border: 1.5px solid ${CG.accent};
+        border-radius: 50%;
+        box-sizing: border-box;
+        font-size: 22px;
+        line-height: 1;
+        color: ${CG.accent};
+        font-family: inherit;
+      }
+      .${CREE_GRRR_SIMPLE_CARD_CLASS}__formula {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 16px;
+        line-height: 1.3;
+        color: ${CG.accent};
+        font-family: inherit;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     `;
   }
@@ -4659,8 +4712,8 @@
       el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       el.removeAttribute(CREE_GRRR_FORMATTED_ATTR);
     });
-    // 혹시 어딘가 남아 있는 카드 노드 정리 (방어적)
-    document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}`).forEach((card) => card.remove());
+    // 혹시 어딘가 남아 있는 카드 노드 정리 (방어적) — 스킬 카드 + 일반 카드 둘 다
+    document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}, .${CREE_GRRR_SIMPLE_CARD_CLASS}`).forEach((card) => card.remove());
     cleanupLegacyCreeGrrrSpans();
   }
 
@@ -4692,9 +4745,13 @@
     `.MuiDialog-paper`,
     `.MuiSnackbar-root`
   ].join(", ");
-  // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과
+  // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과.
+  // 트리거 종류:
+  //   (1) CC<=N / CCB<=N / CCS<=N        — 스킬 판정 카드 (243×370)
+  //   (2) (1D100<=N)                      — 스킬 판정 카드 (CC 없이 d100 만 있는 케이스)
+  //   (3) \d*[dD]\d+ (일반 다이스 표기)   — 일반 다이스 카드 (간단한 원+수식)
   const CREE_GRRR_TEXT_FAST_PATTERN =
-    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d).*[→＞>]\s*\d/is;
+    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d|\d*[dD]\d+).*[→＞>]\s*\d/is;
 
   // 디버그용 상태 — 첫 호출 시 한 번만 진단 로그를 띄워 함수 도달 여부와
   // 테마 게이트 상태를 콘솔로 확인할 수 있게 한다. 매 mutation 마다 로그가
@@ -4775,28 +4832,36 @@
       }
 
       if (!sampleText) sampleText = text.slice(0, 120);
+
+      // (a) CC<= 스킬 판정 카드 우선 시도. 매칭되면 큰 카드(243×370) 생성.
       const parsed = parseCreeGrrrDiceRoll(text);
-      if (!parsed) {
-        parserMissed++;
+      if (parsed) {
+        transformed++;
+        if (!parsed.skill) {
+          try {
+            console.warn("[CREE-GRRR!] skill name empty — raw text follows:", text);
+          } catch (_) { /* ignore */ }
+        }
+        const card = buildCreeGrrrDiceCard(parsed);
+        host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
+        host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+        host.replaceChildren(card);
         return;
       }
-      transformed++;
 
-      // 스킬명 추출에 실패한 케이스는 원본 텍스트를 한 번 로깅해서 추후
-      // 파서를 개선할 수 있게 한다. (메시지마다 한 번씩만)
-      if (!parsed.skill) {
-        try {
-          console.warn(
-            "[CREE-GRRR!] skill name empty — raw text follows:",
-            text
-          );
-        } catch (_) { /* ignore */ }
+      // (b) CC<= 가 아닌 일반 다이스 굴림(1D10+5, 데미지 등)은 컴팩트 카드 시도.
+      const simple = parseCreeGrrrSimpleDiceRoll(text);
+      if (simple) {
+        transformed++;
+        const card = buildCreeGrrrSimpleDiceCard(simple);
+        host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
+        host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+        host.replaceChildren(card);
+        return;
       }
 
-      const card = buildCreeGrrrDiceCard(parsed);
-      host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
-      host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-      host.replaceChildren(card);
+      // 어느 쪽도 매칭 안 됨
+      parserMissed++;
     });
 
     // 다이스 패턴은 보였는데 파싱이 실패했거나, 변환이 일어났을 때만 로그.
@@ -4939,6 +5004,65 @@
       statusEl.textContent = parsed.status;
       card.appendChild(statusEl);
     }
+
+    return card;
+  }
+
+  // 일반 다이스 굴림 파싱 (CC<= 가 아닌 모든 다이스 결과).
+  //   입력 예: "(1D10+33+1D5) ＞ 5[1D10]+33+3[1D5] ＞ 41"
+  //           "1D100 ＞ 84"
+  //           "(2D6) ＞ 5+3 ＞ 8"
+  //   반환: { formula: "1D10+33+1D5", result: 41 } 또는 null
+  //   CC<= 또는 (1D100<=N) 이 포함된 텍스트는 스킬 판정 카드 쪽으로 양보.
+  function parseCreeGrrrSimpleDiceRoll(text) {
+    if (!text || typeof text !== "string") return null;
+    // CC<= 스킬 판정/d100 판정은 스킬 카드 쪽에서 처리하므로 여기선 양보
+    if (/CC[BS]?<=\d/i.test(text)) return null;
+    if (/\(\s*1D100\s*<=\s*\d/i.test(text)) return null;
+
+    // 다이스 수식 매칭 — NdM 형태(+/-/* 로 연결된 추가 항 포함).
+    // 시도 우선순위:
+    //   1. "(formula)" 처럼 괄호로 둘러싸인 BCDice 명령부 우선
+    //   2. 없으면 첫 등장하는 NdM 토큰부터 수식 끝까지
+    const cleaned = text.replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "");
+
+    let formula = "";
+    const parenForm = cleaned.match(/\(\s*(\d*[dD]\d+(?:\s*[+\-*\/]\s*(?:\d+|\d*[dD]\d+))*)\s*\)/);
+    if (parenForm) {
+      formula = parenForm[1].replace(/\s+/g, "");
+    } else {
+      const bareForm = cleaned.match(/(\d*[dD]\d+(?:\s*[+\-*\/]\s*(?:\d+|\d*[dD]\d+))*)/);
+      if (bareForm) formula = bareForm[1].replace(/\s+/g, "");
+    }
+    if (!formula) return null;
+
+    // 최종 결과 — 마지막 화살표 뒤 숫자
+    const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
+    const rolls = [];
+    let m;
+    while ((m = arrowRe.exec(cleaned)) !== null) {
+      rolls.push(parseInt(m[1], 10));
+    }
+    if (rolls.length === 0) return null;
+    const result = rolls[rolls.length - 1];
+
+    return { formula, result };
+  }
+
+  // 일반 다이스 카드 DOM — 좌측 원형 결과값 + 우측 수식 라벨.
+  function buildCreeGrrrSimpleDiceCard(parsed) {
+    const card = document.createElement("div");
+    card.className = CREE_GRRR_SIMPLE_CARD_CLASS;
+
+    const resultEl = document.createElement("div");
+    resultEl.className = `${CREE_GRRR_SIMPLE_CARD_CLASS}__result`;
+    resultEl.textContent = String(parsed.result);
+    card.appendChild(resultEl);
+
+    const formulaEl = document.createElement("div");
+    formulaEl.className = `${CREE_GRRR_SIMPLE_CARD_CLASS}__formula`;
+    formulaEl.textContent = `${parsed.formula} Roll`;
+    card.appendChild(formulaEl);
 
     return card;
   }
