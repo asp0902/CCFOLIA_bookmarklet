@@ -1774,9 +1774,8 @@
       ${CG.fontImport}
 
       /* === [CREE-GRRR!] 캐릭터 편집 팝업 ============================ */
-      /* paper 의 4면 inset 시안 → 상/하단만 유지. 좌/우 시안은 AppBar 와
-         DialogContent 에 개별 inset 으로 옮겨, DialogActions 구간에는 좌우
-         시안이 비치지 않게 한다. */
+      /* paper: 상/하단 시안 라인만, border-radius 0 으로 모서리 라운드 제거.
+         좌/우 시안은 어디에도 그리지 않음(체크된 위치의 LR 시안 모두 삭제). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper {
@@ -1784,6 +1783,7 @@
         background-image: none !important;
         color: ${CG.text} !important;
         border: 0 !important;
+        border-radius: 0 !important;
         min-width: min(600px, calc(100vw - 64px)) !important;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         box-shadow:
@@ -1792,14 +1792,14 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions 상단 시안 라인 — 모든 cree-grrr DialogActions 에 공통 적용.
-         이전엔 inset 0 1px 으로 그렸으나 스크롤바 끝(트랙 하단) 과 같은 픽셀
-         위치에 겹쳐 보였음. ::before pseudo-element 로 y=1px 위치에 그려 1px
-         숨김 여백을 위쪽에 둔다(스크롤바와 분리). 부모는 position:relative.
-         그리고 paper 의 좌/우 inset 시안이 이미 제거되었으므로 DialogActions
-         의 좌/우는 자동으로 시안 라인 없음. */
+      /* DialogActions 상단 시안 라인 — pseudo-element ::before 로 y=1px 위치에
+         1px 라인. 스크롤바와 1px 떨어진 위치. 부모 컨테이너는 position:relative
+         만 추가하고 layout(display/padding/gap 등)은 절대 건들지 않음 →
+         BGM 미니 팝업 등 fullWidth 가 아닌 액션 바의 MUI 기본 layout 보존.
+         하단 모서리도 라운드 제거(border-radius:0). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing {
         position: relative !important;
+        border-radius: 0 !important;
       }
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing::before {
         content: "" !important;
@@ -1813,20 +1813,11 @@
         z-index: 1 !important;
       }
 
-      /* 캐릭터 편집 팝업의 삭제/복제/화면에 추가 — fullWidth 버튼이 있는 액션
-         바에 한해 flex 강제 균등 분배. (BGM 미니 팝업처럼 fullWidth 없이
-         자연 폭으로 우측 정렬되어야 하는 액션 바는 :has 셀렉터로 제외) */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing:has(> .MuiButton-fullWidth) {
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: stretch !important;
-        justify-content: stretch !important;
-        gap: 8px !important;
-        padding: 8px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-      }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing:has(> .MuiButton-fullWidth) > * {
+      /* 캐릭터 편집 팝업 fullWidth 버튼만 강제 균등 분배. :has() 미지원 브라우저
+         호환 위해 부모는 건드리지 않고 자식 버튼만 직접 스타일 — MuiButton-fullWidth
+         가 붙은 버튼에만 flex:1 1 0 + width:0 으로 동일 분배. BGM 등 fullWidth 없는
+         케이스는 이 셀렉터에 매칭되지 않아 영향 없음 (MUI 기본 layout 유지). */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-fullWidth {
         flex: 1 1 0 !important;
         flex-grow: 1 !important;
         flex-shrink: 1 !important;
@@ -1834,7 +1825,6 @@
         width: 0 !important;
         min-width: 0 !important;
         max-width: none !important;
-        margin: 0 !important;
         white-space: nowrap !important;
         box-sizing: border-box !important;
       }
@@ -1848,21 +1838,18 @@
         letter-spacing: 0 !important;
       }
 
-      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스 + 4면 시안 라인.
-         paper 가 좌/우 inset 을 가지지 않게 변경되어, AppBar 가 직접 좌/우
-         시안을 그리도록 LR inset 추가. 상/하단은 기존대로(상단 = 다이얼로그
-         최상단 라인, 하단 = AppBar↔Content 구분선). */
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스. 좌/우 시안 제거(체크 지점),
+         상/하단만 시안 라인 유지(상단=다이얼로그 최상단, 하단=AppBar↔Content 구분선). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root,
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] .MuiAppBar-root {
         background: ${CG.bgSolid} !important;
         background-image: none !important;
         color: ${CG.text} !important;
         border-bottom: 0 !important;
+        border-radius: 0 !important;
         box-shadow:
           inset 0 1px 0 0 ${CG.accent},
           inset 0 -1px 0 0 ${CG.accent},
-          inset 1px 0 0 0 ${CG.accent},
-          inset -1px 0 0 0 ${CG.accent},
           0 4px 14px ${CG.shadow} !important;
       }
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiAppBar-root .MuiTypography-root,
@@ -1875,9 +1862,9 @@
         background: ${CG.accentHover} !important;
       }
 
-      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이 + 좌/우 시안 inset.
-         paper 의 좌/우 inset 시안이 제거되어, DialogContent 가 직접 자신의
-         세로 영역(스크롤 영역) 의 좌/우 시안 라인을 그린다. */
+      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이.
+         좌/우 시안 inset 제거(체크 지점) — 다이얼로그는 상/하단 가로 라인과
+         AppBar↔Content / Content↔Actions 구분선만 갖는 미니멀 구성. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogContent-root {
         background-image:
           linear-gradient(${CG.bgGlassInner}, ${CG.bgGlassInner}),
@@ -1886,9 +1873,6 @@
         background-position: center top, center top !important;
         background-size: cover, cover !important;
         background-color: transparent !important;
-        box-shadow:
-          inset 1px 0 0 0 ${CG.accent},
-          inset -1px 0 0 0 ${CG.accent} !important;
       }
 
       /* 내부 Paper/카드/아코디언 */
