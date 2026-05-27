@@ -1775,19 +1775,21 @@
       }
 
       /* DialogActions: 삭제/복제/화면에 추가 — 시트 픽셀 폰트(DungGeunMo) 적용.
-         - flex:1 1 0 + min-width:0 으로 세 버튼이 가로 폭을 정확히 균등 분배
-           (MuiButton-fullWidth 의 width:100% 가 flex 컨테이너에서 일으키는
-            폭 불균등을 막음)
-         - white-space:nowrap 으로 픽셀 폰트가 좁은 컬럼에서 줄바꿈되는 현상 차단
-         - font-size 12px 로 DungGeunMo 가 1/3 폭에 안정적으로 들어가게 축소
-         - 간격(margin-left:8px) 은 MUI 네이티브 MuiDialogActions-spacing 그대로 */
+         - flex:1 1 0 + width:auto 로 MuiButton-fullWidth 의 width:100% 를
+           무력화. width 가 flex-basis 를 override 해서 폭이 불균등해지는
+           현상이 있었음. width:auto 로 flex-basis(=0) 가 살아나 균등 분배됨.
+         - min-width:0 으로 컨텐츠 최소폭이 컬럼보다 커도 강제로 셀에 맞춰 줄임.
+         - white-space:nowrap 으로 픽셀 폰트가 좁은 컬럼에서 줄바꿈되는 현상 차단.
+         - font-size 14px (사용자 지정 — 기본 MUI 와 동일).
+         - 간격(margin-left:8px) 은 MUI 네이티브 MuiDialogActions-spacing 그대로. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
-        font-size: 12px !important;
+        font-size: 14px !important;
         letter-spacing: 0 !important;
         flex: 1 1 0 !important;
         min-width: 0 !important;
+        width: auto !important;
         white-space: nowrap !important;
       }
 
@@ -4728,6 +4730,17 @@
       }
       transformed++;
 
+      // 스킬명 추출에 실패한 케이스는 원본 텍스트를 한 번 로깅해서 추후
+      // 파서를 개선할 수 있게 한다. (메시지마다 한 번씩만)
+      if (!parsed.skill) {
+        try {
+          console.warn(
+            "[CREE-GRRR!] skill name empty — raw text follows:",
+            text
+          );
+        } catch (_) { /* ignore */ }
+      }
+
       const card = buildCreeGrrrDiceCard(parsed);
       host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
       host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
@@ -4766,10 +4779,42 @@
     if (targetSource) target = parseInt(targetSource[1], 10);
     if (target === null || !Number.isFinite(target) || target < 1) return null;
 
-    // 스킬명: "CC<=N <skillname> (1D100" 사이의 문자열 (선택적)
+    // 스킬명 — 여러 위치에서 차례로 시도:
+    //   (1) "CC<=N <skill> (1D100" 사이 (가장 흔함 — BCDice 표준 출력)
+    //   (2) "<skill> CC<=N" 앞쪽 (시트 매크로가 스킬명 prefix 로 붙이는 케이스)
+    //   (3) "(1D100<=N) <skill>" 뒤쪽 (일부 매크로의 trailing 케이스)
+    // 모든 위치에서 따옴표/콜론/세미콜론/하이픈/괄호 등 구두점은 trim.
     let skill = "";
-    const skillMatch = text.match(/CC[BS]?<=\d+\s+([^()]+?)\s*\(\s*1D100/i);
-    if (skillMatch) skill = skillMatch[1].trim();
+    const skillBetween = text.match(/CC[BS]?<=\d+\s+([^()]+?)\s*\(\s*1D100/i);
+    if (skillBetween) {
+      skill = skillBetween[1].trim();
+    }
+    if (!skill) {
+      // (2) prefix 케이스: 줄 시작부터 CC<=N 직전까지의 텍스트 중 마지막 단어구.
+      //     예: "진천: 법률 CC<=5 (1D100<=5) ..." → "법률"
+      //     채팅 닉네임/콜론 등은 마지막 ':' 이후 부분만 사용.
+      const prefixMatch = text.match(/^([^\n]*?)\s*CC[BS]?<=/i);
+      if (prefixMatch) {
+        let prefix = prefixMatch[1];
+        const lastColon = Math.max(prefix.lastIndexOf(":"), prefix.lastIndexOf("："));
+        if (lastColon >= 0) prefix = prefix.slice(lastColon + 1);
+        prefix = prefix.trim().replace(/^["“'‘<\[\(]+|["”'’>\]\)]+$/g, "").trim();
+        // 닉네임 같은 너무 긴 prefix 는 스킬명으로 안 쳐도 됨 (10자 이하만)
+        if (prefix && prefix.length <= 20 && !/^\d+$/.test(prefix)) {
+          skill = prefix;
+        }
+      }
+    }
+    if (!skill) {
+      // (3) trailing 케이스: ")" 뒤 ~ 화살표/주사위 텍스트 직전까지의 단어구
+      const trailingMatch = text.match(/\(\s*1D100\s*<=\s*\d+\s*\)\s*([^→＞>0-9\s][^→＞>]*?)(?=\s*(?:보너스|패널티|주사위|[→＞>]|$))/i);
+      if (trailingMatch) {
+        const trailing = trailingMatch[1].trim().replace(/[,，;；:]$/, "").trim();
+        if (trailing && trailing.length <= 20) {
+          skill = trailing;
+        }
+      }
+    }
 
     // 굴림값 (rollValue): 모든 "＞/>/→ N" 중 마지막 숫자 (보너스/페널티 적용 후 최종값)
     const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
