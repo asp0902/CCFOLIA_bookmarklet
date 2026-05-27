@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Suite Manager by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-suite
-// @version      0.5.7
+// @version      0.5.8
 // @description  Manages installed CCFOLIA suite scripts and shows update notices.
 // @description:ko CCFOLIA용 스위트 스크립트 설치 상태를 확인하고 업데이트 알림을 보여줍니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -33,7 +33,7 @@
   const SUITE_MANAGER_SCRIPT = Object.freeze({
     id: "ccf-suite-manager",
     name: "CCFOLIA Suite Manager",
-    version: getUserscriptVersion("0.5.7"),
+    version: getUserscriptVersion("0.5.8"),
     greasyForkScriptId: 570244,
     installUrl: "https://greasyfork.org/ko/scripts/570244-ccf-suite-manager-by-capybara-korea"
   });
@@ -3633,13 +3633,17 @@
       peerRoomKey = payload.roomKey;
     }
 
+    const at = Number(payload.at) || Date.now();
+    const previous = peers.get(payload.clientId);
+    if (!options.self && Date.now() - at > STALE_MS) return false;
+    if (previous && at < previous.at) return false;
     const name = sanitizeName(payload.name) || (payload.clientId === clientId ? "\uB098" : "\uD234\uD0B7 \uC0AC\uC6A9\uC790");
     peers.set(payload.clientId, {
       clientId: payload.clientId,
       name,
-      at: Number(payload.at) || Date.now(),
+      at,
       toolkitVersion: String(payload.toolkitVersion || ""),
-      self: options.self === true
+      self: options.self === true || (previous?.self === true && payload.clientId === clientId && isToolkitRunning())
     });
     return true;
   }
@@ -4034,20 +4038,13 @@
     const root = document.createElement("section");
     root.id = ROOT_ID;
     root.setAttribute(SAFE_UI_ATTR, "1");
-    root.setAttribute("role", "dialog");
-    root.setAttribute("aria-label", "\uD234\uD0B7 \uC0AC\uC6A9\uC790");
+    root.setAttribute("aria-live", "polite");
     root.hidden = !panelOpen;
     root.innerHTML = `
-      <div class="capybara-presence-head">
-        <div class="capybara-presence-title">\uD234\uD0B7 \uC0AC\uC6A9\uC790</div>
-        <button class="capybara-presence-close" type="button" aria-label="\uB2EB\uAE30">&times;</button>
-      </div>
+      <div class="capybara-presence-title">\uD234\uD0B7 \uC0AC\uC6A9\uC790</div>
       <div class="capybara-presence-list"></div>
       <div class="capybara-presence-note">\uC2E4\uC2DC\uAC04 \uC2E4\uD589 \uC0C1\uD0DC \uAE30\uC900</div>
     `;
-    root.querySelector(".capybara-presence-close")?.addEventListener("click", () => {
-      setPanelOpen(false);
-    }, { signal: abort.signal });
     (document.body || document.documentElement).appendChild(root);
     return root;
   }
@@ -4076,12 +4073,6 @@
       .sort((a, b) => Number(b.self) - Number(a.self) || b.at - a.at || a.name.localeCompare(b.name));
 
     list.innerHTML = "";
-    if (!rows.length) {
-      const empty = document.createElement("div");
-      empty.className = "capybara-presence-empty";
-      empty.textContent = "\uC2E4\uD589 \uC911\uC778 \uD234\uD0B7 \uC0AC\uC6A9\uC790\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.";
-      list.appendChild(empty);
-    }
     rows.forEach((peer) => {
       const row = document.createElement("div");
       const age = Math.max(0, now - peer.at);
@@ -4090,7 +4081,7 @@
       row.innerHTML = `
         <span class="capybara-presence-dot" aria-hidden="true"></span>
         <span class="capybara-presence-name">${escapeHtml(peer.self ? `${peer.name} (\uB098)` : peer.name)}</span>
-        <span class="capybara-presence-age">${escapeHtml(peer.self ? "\uC2E4\uD589 \uC911" : formatAge(age))}</span>
+        <span class="capybara-presence-age">${escapeHtml(peer.self ? "\uC811\uC18D \uC911" : formatAge(age))}</span>
       `;
       list.appendChild(row);
     });
@@ -4113,7 +4104,7 @@
     const gap = 10;
     const toggleRect = toggle.getBoundingClientRect();
     const panelRect = root.getBoundingClientRect();
-    const width = panelRect.width || 240;
+    const width = panelRect.width || 220;
     const height = panelRect.height || 120;
     const maxLeft = Math.max(padding, window.innerWidth - width - padding);
     const left = Math.max(padding, Math.min(maxLeft, toggleRect.right - width));
@@ -4133,11 +4124,11 @@
       #${ROOT_ID} {
         position: fixed;
         z-index: 2147482400;
-        width: min(240px, calc(100vw - 28px));
+        width: min(220px, calc(100vw - 28px));
         box-sizing: border-box;
         padding: 9px 10px;
         border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 0;
+        border-radius: 8px;
         background: rgba(28, 28, 28, 0.92);
         color: #fff;
         box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
@@ -4148,25 +4139,9 @@
         display: none !important;
       }
 
-      #${ROOT_ID} .capybara-presence-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 6px;
-      }
-
       #${ROOT_ID} .capybara-presence-title {
         font-weight: 800;
-      }
-
-      #${ROOT_ID} .capybara-presence-close {
-        appearance: none;
-        border: 0;
-        background: transparent;
-        color: rgba(255, 255, 255, 0.8);
-        cursor: pointer;
-        padding: 0 2px;
-        font: 18px/1 system-ui, sans-serif;
+        margin-bottom: 6px;
       }
 
       #${ROOT_ID} .capybara-presence-list {
@@ -4206,8 +4181,7 @@
       }
 
       #${ROOT_ID} .capybara-presence-age,
-      #${ROOT_ID} .capybara-presence-note,
-      #${ROOT_ID} .capybara-presence-empty {
+      #${ROOT_ID} .capybara-presence-note {
         color: rgba(255, 255, 255, 0.62);
         font-size: 11px;
       }
