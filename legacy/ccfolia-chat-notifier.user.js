@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.39
+// @version      0.2.40
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.39"),
+    version: getUserscriptVersion("0.2.40"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -5530,8 +5530,8 @@
         return;
       }
 
-      if (isCcfRoomSettingsDialog(dialog) || isLikelyCcfImageLibraryDialog(dialog)) {
-        // 룸 설정 또는 이미지 라이브러리(배경/전경 선택 등) → BGM 다이얼로그 아님.
+      if (isCcfNativeAudioEditPopover(dialog) || isCcfRoomSettingsDialog(dialog) || isLikelyCcfImageLibraryDialog(dialog)) {
+        // 네이티브 음원 편집 팝업, 룸 설정, 이미지 라이브러리는 크기 잠금 대상이 아니다.
         // 이전 폴링에서 잘못 마크됐을 수 있으니 size lock 속성을 모두 정리.
         dialog.removeAttribute("data-ccf-bgm-dialog-root");
         dialog.removeAttribute("data-ccf-bgm-slot-key");
@@ -5600,6 +5600,24 @@
     return paper instanceof HTMLElement ? paper : null;
   }
 
+  function isCcfNativeAudioEditPopover(dialog) {
+    if (!(dialog instanceof HTMLElement)) {
+      return false;
+    }
+
+    const paper = findCcfBgmDialogPaper(dialog);
+    if (!(paper instanceof HTMLElement) || !paper.classList.contains("MuiPopover-paper")) {
+      return false;
+    }
+    if (paper.classList.contains("ccf-youtube-bgm-popover")) {
+      return false;
+    }
+
+    return !!paper.querySelector(':scope > .MuiPaper-root > form input[name="name"]')
+      && !!paper.querySelector('input[name="volume"][type="range"]')
+      && !!paper.querySelector('button[type="submit"]');
+  }
+
   function isLikelyCcfImageLibraryDialog(dialog) {
     // 필드 설정 → 배경 선택 / 전경 선택 등에서 뜨는 이미지 라이브러리 팝업 판별.
     // 명확한 구분 표시:
@@ -5638,6 +5656,10 @@
     }
 
     if (isCcfRoomSettingsDialog(dialog)) {
+      return false;
+    }
+
+    if (isCcfNativeAudioEditPopover(dialog)) {
       return false;
     }
 

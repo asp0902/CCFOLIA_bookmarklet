@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.6
+// @version      0.2.7
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -212,7 +212,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.6"),
+    version: getUserscriptVersion("0.2.7"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -621,6 +621,16 @@
         html[data-ccf-theme-active="1"] .MuiAccordion-root {
           background: var(--ccf-theme-paper) !important;
           color: var(--ccf-theme-text) !important;
+        }
+
+        /* Native audio editing renders its visible card inside a Popover carrier.
+           Leave the carrier invisible so the original CCFOLIA mini-modal remains intact. */
+        html[data-ccf-theme-active="1"] .MuiPopover-paper:not(.ccf-youtube-bgm-popover):has(> .MuiPaper-root > form input[name="name"]):has(input[name="volume"][type="range"]):has(button[type="submit"]) {
+          min-width: 0 !important;
+          padding: 0 !important;
+          border: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
         }
 
         html[data-ccf-theme-active="1"] .MuiDivider-root {
@@ -1777,7 +1787,7 @@
       /* paper: 상/하단 시안 라인만, border-radius 0 으로 모서리 라운드 제거.
          BGM 편집 미니모달은 네이티브 크기/외관을 유지하기 위해 제외한다. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]),
-      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root:not([data-ccf-bgm-dialog-paper="1"]),
+      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root:not(.MuiPopover-paper):not([data-ccf-bgm-dialog-paper="1"]),
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) {
         background-color: ${CG.bgGlass} !important;
         background-image: none !important;
