@@ -961,12 +961,23 @@
           height: 38px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
-          padding: 0 12px;
+          /* 우측 패딩 30px = 쉐브론(10px) + 우측 여백(12px) + 텍스트와 쉐브론 사이(8px) */
+          padding: 0 30px 0 12px;
           box-sizing: border-box;
-          background: var(--ccf-theme-input-bg, rgba(21, 20, 20, 0.88));
+          background-color: var(--ccf-theme-input-bg, rgba(21, 20, 20, 0.88));
+          /* 네이티브 쉐브론이 항상 우측 끝에 붙어 위치 조절이 불가능하므로,
+             appearance:none + 커스텀 SVG 쉐브론으로 교체하고 background-position
+             으로 쉐브론을 우측에서 12px 떼어 놓는다. */
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23f4f0eb' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+          background-repeat: no-repeat;
+          background-position: right 12px center;
+          background-size: 10px 6px;
           color: var(--ccf-theme-text, #f4f0eb);
           font: inherit;
           outline: none;
+          appearance: none;
+          -webkit-appearance: none;
+          -moz-appearance: none;
         }
 
         #${PANEL_ID} .ccf-theme-grid {
