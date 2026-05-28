@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.46
+// @version      0.0.47
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.46 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.47 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -981,6 +981,19 @@
       el.removeAttribute("data-ccf-narration-hidden");
     });
 
+    // [v0.0.47] 본문 텍스트 트리에 속하는지 판단하는 단일 기준:
+    // 해당 요소가 messageEl 자체이거나, messageEl을 포함하거나, messageEl 안에 들어있으면 보존.
+    // 그 외 모든 형제 요소(아바타/이름/시간 등)는 무차별 숨김.
+    const isPartOfMessageTree = (node) => {
+      if (!(node instanceof Element)) return true;
+      if (node === messageEl) return true;
+      if (node.contains?.(messageEl)) return true;
+      if (messageEl.contains?.(node)) return true;
+      // .ccf-render-root는 본문 텍스트 영역으로 간주
+      if (node.matches?.(".ccf-render-root") || node.querySelector?.(".ccf-render-root")) return true;
+      return false;
+    };
+
     // 1. 프로필/아바타 영역 숨김
     const profiles = item.querySelectorAll(
       ".MuiAvatar-root, .MuiListItemAvatar-root, img:not(.ccf-image)"
@@ -988,20 +1001,17 @@
 
     profiles.forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
-      if (messageEl.contains(node)) return;
+      if (isPartOfMessageTree(node)) return;
 
       let target = node;
       let depth = 0;
 
-      // 단독 래퍼 상승 제한:
-      // - 최대 3단계까지만 상승
-      // - 상위 래퍼가 본문(messageEl)을 포함하면 중단
-      // - item 자체까지는 올라가지 않음
+      // 단독 래퍼 상승 제한: 최대 3단계까지, 상위가 본문을 포함하지 않으면 상승
       while (
         target.parentElement &&
         target.parentElement !== item &&
         target.parentElement.children.length === 1 &&
-        !target.parentElement.contains(messageEl) &&
+        !isPartOfMessageTree(target.parentElement) &&
         depth < 3
       ) {
         target = target.parentElement;
@@ -1011,33 +1021,25 @@
       target.setAttribute("data-ccf-narration-hidden", "1");
     });
 
-    // 2. 캐릭터 이름/시간 헤더 영역 숨김
+    // 2. messageEl 위쪽으로 올라가며, 본문 트리 밖의 형제를 전부 숨김
     let current = messageEl;
-
     while (current && current !== item && current.parentElement) {
-      let sibling = current.parentElement.firstElementChild;
-
-      while (sibling && sibling !== current) {
-        const hasText =
-          sibling.matches?.(MESSAGE_TEXT_SELECTOR) ||
-          sibling.querySelector?.(MESSAGE_TEXT_SELECTOR);
-
-        const hasRenderRoot =
-          sibling.matches?.(".ccf-render-root") ||
-          sibling.querySelector?.(".ccf-render-root");
-
-        const text = (sibling.textContent || "").trim();
-
-        // 메시지 본문이 아니면서 실제 텍스트가 있는 헤더만 숨김
-        // 빈 레이아웃 래퍼/여백용 Box/아이콘 전용 요소 오탐 방지
-        if (!hasText && !hasRenderRoot && text) {
-          sibling.setAttribute("data-ccf-narration-hidden", "1");
+      const parent = current.parentElement;
+      let sibling = parent.firstElementChild;
+      while (sibling) {
+        if (sibling !== current && !isPartOfMessageTree(sibling)) {
+          const text = (sibling.textContent || "").trim();
+          // 텍스트가 있거나 아바타/이미지를 품고 있으면 숨김
+          // 빈 레이아웃 래퍼는 그대로 둠 (간격 유지)
+          const hasMeaningfulContent = !!text ||
+            !!sibling.querySelector?.(".MuiAvatar-root, .MuiListItemAvatar-root, img:not(.ccf-image)");
+          if (hasMeaningfulContent) {
+            sibling.setAttribute("data-ccf-narration-hidden", "1");
+          }
         }
-
         sibling = sibling.nextElementSibling;
       }
-
-      current = current.parentElement;
+      current = parent;
     }
   }
 
@@ -1104,6 +1106,8 @@
   }
 
   // [v0.0.42] CSS가 무력화되는 케이스를 위한 fallback - JS로 직접 display:none 주입
+  // [v0.0.47] 캐릭터 이름(MuiListItemText-primary)이 .MuiListItemText-root > span.MuiTypography-root와 매칭되어
+  // hideNarrationElements가 보존했던 문제 해결. 그리고 italic도 인라인 강제.
   function forceInlineNarrationStyles(item, messageEl) {
     if (!(item instanceof HTMLElement)) return;
 
@@ -1111,13 +1115,23 @@
       ".MuiListItemAvatar-root",
       ".MuiAvatar-root",
       ".MuiListItemText-primary",
+      // [v0.0.47] CCFOLIA가 MuiListItemText-primary가 아닌 다른 클래스로 이름을 노출할 수도 있음
+      ".MuiListItemText-root > span:not(.ccf-render-root):not(.ccf-line)",
+      ".MuiListItemText-root > div:first-child",
     ];
 
     let hiddenCount = 0;
     for (const sel of hideSelectors) {
-      item.querySelectorAll(sel).forEach((node) => {
+      let nodes;
+      try { nodes = item.querySelectorAll(sel); } catch (_) { continue; }
+      nodes.forEach((node) => {
         if (!(node instanceof HTMLElement)) return;
         if (messageEl && messageEl.contains(node)) return; // 본문 내부의 동명 요소는 건드리지 않음
+        if (node === messageEl) return;
+        if (node.contains?.(messageEl)) return; // 본문을 품고 있는 컨테이너는 숨기면 안 됨
+        if (node.classList?.contains("ccf-render-root")) return;
+        if (node.classList?.contains("ccf-line")) return;
+        if (node.dataset.ccfNarrationForceHidden === "1") return; // 중복 처리 방지
         node.dataset.ccfNarrationForceHidden = "1";
         node.style.setProperty("display", "none", "important");
         hiddenCount += 1;
@@ -1132,6 +1146,17 @@
       node.style.setProperty("margin", "0 auto", "important");
       node.style.setProperty("text-align", "center", "important");
     });
+
+    // [v0.0.47] 이탤릭 + 가운데 정렬을 messageEl(.ccf-render-root) 자체와 그 안의 .ccf-line에 인라인 강제
+    if (messageEl instanceof HTMLElement) {
+      messageEl.style.setProperty("font-style", "italic", "important");
+      messageEl.style.setProperty("text-align", "center", "important");
+      messageEl.querySelectorAll(".ccf-line, .ccf-frag").forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        node.style.setProperty("font-style", "italic", "important");
+        node.style.setProperty("text-align", "center", "important");
+      });
+    }
 
     console.info("[CCF NAR] forceInlineNarrationStyles: hidden=%o, item=%o", hiddenCount, item);
   }
@@ -1149,6 +1174,16 @@
       node.style.removeProperty("margin");
       node.style.removeProperty("text-align");
       delete node.dataset.ccfNarrationForceCenter;
+    });
+    // [v0.0.47] render-root에 강제 주입했던 italic/text-align도 정리
+    item.querySelectorAll(".ccf-render-root, .ccf-line, .ccf-frag").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      // 인라인 italic만 정리. text-align은 다른 정상 정렬을 깨뜨릴 수 있으니 ccf-render-root만 처리
+      if (node.classList.contains("ccf-render-root")) {
+        node.style.removeProperty("font-style");
+      } else {
+        node.style.removeProperty("font-style");
+      }
     });
   }
 
