@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.43
+// @version      0.0.44
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -13,6 +13,9 @@
 
 (() => {
   "use strict";
+
+  // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.44 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -163,10 +166,14 @@
   // Self-register with the suite manager so installation and version status can be tracked centrally.
   registerWithCcfSuite(CCF_FORMAT_SYNC_SCRIPT_INFO);
   window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, ccfFsWithSignal());
-  if (!isCcfSuiteScriptEnabled(CCF_FORMAT_SYNC_SCRIPT_INFO.id)) {
+  const _ccfEnabled = isCcfSuiteScriptEnabled(CCF_FORMAT_SYNC_SCRIPT_INFO.id);
+  console.info("[CCF NAR] suite-script-enabled gate: %o, scriptId=%o", _ccfEnabled, CCF_FORMAT_SYNC_SCRIPT_INFO.id);
+  if (!_ccfEnabled) {
     return;
   }
+  console.info("[CCF NAR] initRenderer about to run");
   initRenderer();
+  console.info("[CCF NAR] initRenderer completed");
 
   function handleCcfSuiteRegisterRequest(event) {
     const targetId = event?.detail?.targetId;
@@ -2044,11 +2051,13 @@
   }
 
   function init() {
+    console.info("[CCF NAR] init() called");
     injectStyles();
     cleanupKnownArtifacts();
     ensureUi();
     observeDom();
     bindGlobalEvents();
+    console.info("[CCF NAR] init() complete - toolbar should now exist");
     console.info("[CCF] formatter userscript loaded (v0.0.5: %NEWLINE% + direct image URL)");
   }
 
@@ -3575,6 +3584,11 @@
     bindEnterSendForEditors();
     bindEditorVisualPreview();
     bindEditorInputSync();
+    // [CCF NAR] ensureUi가 호출됐는지 확인. 호출되면 bindEnterSendForEditors도 매번 실행됨
+    if (!window.__CCF_NAR_ENSUREUI_LOGGED) {
+      console.info("[CCF NAR] ensureUi() FIRST PASS — bindEnterSendForEditors invoked");
+      window.__CCF_NAR_ENSUREUI_LOGGED = true;
+    }
   }
 
   function isHomeRoute() {
@@ -9967,18 +9981,26 @@
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
+    let newBindings = 0;
     editors.forEach((candidate) => {
       const editor = normalizeEditorCandidate(candidate);
       if (!editor) return;
       if (editor.dataset.ccfEnterBound === "1") return;
 
       editor.dataset.ccfEnterBound = "1";
+      newBindings += 1;
       // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
+        // [CCF NAR] keydown 진입 가장 윗단 - 가드 통과 전이라도 무조건 로그
+        if (event.key === "Enter") {
+          console.info("[CCF NAR] keydown ENTER on bound editor: isComposing=%o, shiftKey=%o, macroMenu=%o, editor=%o",
+            event.isComposing, event.shiftKey, isVisibleChatMacroMenuForEditor(editor), editor);
+        }
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
+        console.info("[CCF NAR] keydown ENTER passed guards — calling preparePayloadForSend");
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
@@ -9992,6 +10014,9 @@
         }
       });
     });
+    if (newBindings > 0) {
+      console.info("[CCF NAR] bindEnterSendForEditors: newBindings=%o (total editors=%o)", newBindings, editors.length);
+    }
   }
 
   function bindEditorVisualPreview() {
