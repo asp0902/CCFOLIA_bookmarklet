@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.44
+// @version      0.0.45
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.44 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.45 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -9914,16 +9914,18 @@
   function isVisibleChatMacroMenuForEditor(editor) {
     if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
 
+    // [v0.0.45] aria-expanded만으로는 판단 불가 — downshift는 입력 도중 항상 true로 둠.
+    // 사용자가 실제 메뉴 항목을 하이라이트 중일 때만 activeDescendant가 set되므로 그것만 신뢰.
     const controls = [editor, editor.closest?.('[role="combobox"]')]
       .filter((control) => control instanceof HTMLElement);
     if (controls.some((control) => {
-      if (control.getAttribute("aria-expanded") === "true") return true;
       const activeDescendant = control.getAttribute("aria-activedescendant");
       return !!activeDescendant && !!document.getElementById(activeDescendant);
     })) {
       return true;
     }
 
+    // 추가로, 실제 메뉴 요소가 화면에 보이고 텍스트가 있는지 검증
     const inputId = editor.id || "";
     const relatedIds = new Set([
       editor.getAttribute("aria-controls"),
@@ -9939,7 +9941,16 @@
       if (!(menu instanceof HTMLElement)) return false;
       if (menu.closest?.(`[${SAFE_UI_ATTR}="1"], #${MODAL_ID}`)) return false;
       if (!isVisible(menu) || !String(menu.textContent || "").trim()) return false;
-      if (relatedIds.has(menu.id)) return true;
+
+      // [v0.0.45] 빈 메뉴(자식 없음)는 visible로 안 침
+      const hasItems = menu.querySelector('[role="option"], li, [data-index]');
+      if (!hasItems) return false;
+
+      if (relatedIds.has(menu.id)) {
+        // 관련 메뉴라도 실제로 박스 크기가 의미 있어야 함
+        const menuRect = menu.getBoundingClientRect();
+        return menuRect.width > 0 && menuRect.height > 0;
+      }
 
       const editorRect = editor.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
