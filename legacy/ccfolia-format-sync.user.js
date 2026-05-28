@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.40
+// @version      0.0.41
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -665,30 +665,72 @@
         user-select: none;
       }
 
-      [${CCF_NARRATION_ATTR}="1"] .MuiListItemAvatar-root,
-      [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-primary,
-      [${CCF_NARRATION_ATTR}="1"] > img:not(.ccf-image),
-      [${CCF_NARRATION_ATTR}="1"] img:not(.ccf-image):not(.ccf-render-root img) {
+      /* ===== 나레이션 레이아웃 (v0.0.41) =====
+       * 핵심 원칙: 모든 셀렉터의 '식별 앵커'는 .ccf-render-root[data-ccf-narration="1"]이다.
+       * render-root는 우리가 innerHTML을 관리하므로 React 재렌더에 영향받지 않는다.
+       * :has()로 LI 조상을 역참조해서 아바타/이름을 숨기므로
+       * 부모 LI에 별도 속성을 붙일 필요가 없다.
+       */
+
+      /* 아바타/이름 숨김 — LI(또는 listitem) 조상 안에 narration render-root가 있으면 발동 */
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemAvatar-root,
+      li:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemAvatar-root,
+      [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemAvatar-root,
+      [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemAvatar-root,
+
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiAvatar-root,
+      li:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiAvatar-root,
+      [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiAvatar-root,
+      [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiAvatar-root,
+
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-primary,
+      li:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-primary,
+      [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-primary,
+      [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-primary,
+
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) > img:not(.ccf-image),
+      li:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) > img:not(.ccf-image),
+      [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) > img:not(.ccf-image),
+      [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) > img:not(.ccf-image) {
         display: none !important;
       }
 
-      .MuiPaper-root[${CCF_NARRATION_PANEL_ATTR}="1"] > img {
-        display: none !important;
-      }
-
-      [${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root {
+      /* 본문 영역 가운데 정렬/폭 확장 */
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      li:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root {
         width: 100% !important;
         margin: 0 auto !important;
         text-align: center !important;
       }
 
+      /* 본문 텍스트 자체 — 가운데 + 이탤릭 */
       .ccf-render-root[${CCF_NARRATION_ATTR}="1"],
-      [${CCF_NARRATION_ATTR}="1"] .ccf-render-root,
-      [${CCF_NARRATION_ATTR}="1"] .ccf-render-root .ccf-line {
+      .ccf-render-root[${CCF_NARRATION_ATTR}="1"] .ccf-line {
         text-align: center !important;
         font-style: italic !important;
       }
 
+      /* === 호환성: 구버전에서 LI에 직접 data-ccf-narration이 붙은 경우(있다면)도 처리 === */
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiListItemAvatar-root,
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiAvatar-root,
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiListItemText-primary,
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) > img:not(.ccf-image) {
+        display: none !important;
+      }
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiListItemText-root {
+        width: 100% !important;
+        margin: 0 auto !important;
+        text-align: center !important;
+      }
+
+      /* 미리보기 패널 등 */
+      .MuiPaper-root[${CCF_NARRATION_PANEL_ATTR}="1"] > img {
+        display: none !important;
+      }
+
+      /* hideNarrationElements가 마킹한 헤더/타임스탬프류 */
       [data-ccf-narration-hidden="1"] {
         display: none !important;
       }
@@ -823,19 +865,11 @@
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
 
-    // [CCF-DBG v0.0.39] INVIS 포함 요소 발견 — 이후 체크 결과를 로그
-    const dbgChildren = el.children.length;
+    if (el.children.length > 8) return false;
+
     const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
     const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
-
-    if (dbgChildren > 8) {
-      console.info("[CCF-DBG] isLikelyMessageTextElement: REJECTED children=%o (>8), el=%o", dbgChildren, el);
-      return false;
-    }
-    if (!knownTextElement && !insideMessageSurface) {
-      console.info("[CCF-DBG] isLikelyMessageTextElement: REJECTED no selector match, el=%o", el);
-      return false;
-    }
+    if (!knownTextElement && !insideMessageSurface) return false;
 
     const nestedEncodedElement = [...el.children].some((child) => {
       const childText = child.textContent || "";
@@ -843,7 +877,6 @@
     });
     if (nestedEncodedElement) return false;
 
-    console.info("[CCF-DBG] isLikelyMessageTextElement: ACCEPTED, el=%o", el);
     return true;
   }
 
@@ -860,11 +893,6 @@
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
-
-    // [CCF-DBG v0.0.39] 렌더 측 진단 로그
-    if (narration) {
-      console.info("[CCF-DBG] tryRenderEncodedMessage: narration=true, renderText=%o, el=%o", renderText, el);
-    }
 
     const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
 
@@ -9807,33 +9835,18 @@
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
-    // [CCF-DBG v0.0.40] 바인딩 대상 에디터 진단
-    console.info("[CCF-DBG] bindEnterSendForEditors: candidates=%o", editors.length);
     editors.forEach((candidate) => {
       const editor = normalizeEditorCandidate(candidate);
-      if (!editor) {
-        console.info("[CCF-DBG] bindEnterSendForEditors: normalizeEditorCandidate → null for", candidate);
-        return;
-      }
+      if (!editor) return;
       if (editor.dataset.ccfEnterBound === "1") return;
 
-      console.info("[CCF-DBG] bindEnterSendForEditors: NEW binding for", editor);
       editor.dataset.ccfEnterBound = "1";
       // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
-        // [CCF-DBG v0.0.40] keydown 핸들러 진입 확인 (가드 이전 — 바인딩 여부 판별용)
-        if (event.key === "Enter") {
-          console.info("[CCF-DBG] bindEnterSendForEditors keydown PRE-GUARD: key=Enter, isComposing=%o, shiftKey=%o, macroMenu=%o",
-            event.isComposing, event.shiftKey, isVisibleChatMacroMenuForEditor(editor)
-          );
-        }
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
-        console.info("[CCF-DBG] bindEnterSendForEditors keydown POST-GUARD: Enter detected, editor=%o, isCcfSuiteScriptEnabled=%o",
-          editor, typeof isCcfSuiteScriptEnabled === "function" ? isCcfSuiteScriptEnabled() : "N/A"
-        );
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
         if (preparePayloadForSend(editor) === false) {
           event.preventDefault();
@@ -10275,23 +10288,9 @@
     }
 
     const runs = preparedRuns.runs;
-    // [CCF-DBG v0.0.40] ① early return 전 — 항상 실행됨
-    const _dbgSpeaker = getCurrentSpeakerName();
-    const _dbgNarratorSet = readNarratorNameSet();
-    console.info(
-      "[CCF-DBG] preparePayloadForSend ENTRY: speaker=%o, narratorSetSize=%o, state.blockStyle.narration=%o, runs=%o",
-      _dbgSpeaker, _dbgNarratorSet.size, state.blockStyle?.narration, runs.length
-    );
     const blockStyle = applyAutomaticNarration(state.blockStyle);
-    console.info(
-      "[CCF-DBG] preparePayloadForSend AFTER applyAutomaticNarration: blockStyle.narration=%o, narratorSetHasSpeaker=%o",
-      blockStyle.narration, _dbgSpeaker ? _dbgNarratorSet.has(_dbgSpeaker) : "no-speaker"
-    );
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
-    if (!runs.length && !alignRuns.length && !blockStyle.narration) {
-      console.info("[CCF-DBG] preparePayloadForSend EARLY-RETURN: no encoding needed");
-      return true;
-    }
+    if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;
     state.text = rawText;
     state.runs = runs;
@@ -10316,13 +10315,6 @@
     const encoded = encodeEnvelopeToInvisible(envelope);
     const outgoing = rawText + encoded;
     if (currentText === outgoing) return true;
-
-    // [CCF-DBG v0.0.40] ② 실제 전송 경로
-    console.info("[CCF-DBG] preparePayloadForSend SEND: narration=%o, flushSync=%o, outgoing.length=%o",
-      blockStyle.narration === true,
-      getCcfFlushSync() !== null,
-      outgoing.length
-    );
 
     setEditorText(editor, outgoing);
     state.roll20Source = roll20Source;
