@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.23";
-  const BUILD_ID = "2026-05-27-narration-send-fix-1";
+  const VERSION = "0.1.24";
+  const BUILD_ID = "2026-05-28-palette-filter-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
@@ -12,7 +12,8 @@
     { key: "__CCF_THEME_SWITCHER_DEBUG__" },
     { key: "__CCF_LOG_PACKAGE_DEBUG__" },
     { key: "__CCF_STANDING_PICKER_DEBUG__", toolkitScriptPrefix: "ccfolia-standing-picker:" },
-    { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" }
+    { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" },
+    { key: "__CCF_PALETTE_FILTER_DEBUG__" }
   ]);
   const EXISTING = window[GLOBAL_KEY];
   if (EXISTING && typeof EXISTING.closePanel === "function") {
@@ -67,6 +68,13 @@
       title: "로그 패키지",
       summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
       scripts: ["legacy/ccfolia-log-package.user.js"],
+      roomOnly: true
+    },
+    {
+      id: "ccf-palette-filter",
+      title: "매크로 드롭다운 정리",
+      summary: "활성 화자 매크로 드롭다운에 끼어드는 다른 캐릭터 팔레트 통짜 항목 숨김",
+      scripts: ["legacy/ccfolia-palette-filter.user.js"],
       roomOnly: true
     }
   ]);
