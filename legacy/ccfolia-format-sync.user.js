@@ -9807,11 +9807,17 @@
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
+    // [CCF-DBG v0.0.40] 바인딩 대상 에디터 진단
+    console.info("[CCF-DBG] bindEnterSendForEditors: candidates=%o", editors.length);
     editors.forEach((candidate) => {
       const editor = normalizeEditorCandidate(candidate);
-      if (!editor) return;
+      if (!editor) {
+        console.info("[CCF-DBG] bindEnterSendForEditors: normalizeEditorCandidate → null for", candidate);
+        return;
+      }
       if (editor.dataset.ccfEnterBound === "1") return;
 
+      console.info("[CCF-DBG] bindEnterSendForEditors: NEW binding for", editor);
       editor.dataset.ccfEnterBound = "1";
       // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
