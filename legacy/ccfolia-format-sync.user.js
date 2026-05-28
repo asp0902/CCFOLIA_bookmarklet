@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.48
+// @version      0.0.49
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.48 (rollback of v0.0.47) @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.49 (manual enter-send) @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -10026,7 +10026,13 @@
         }
 
         if (hadMessage) {
+          // CCFOLIA removed native Enter→send binding; manually trigger the composer submit
+          // button so format-sync's Enter-to-send behavior is preserved.
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
           scheduleInlineFormatResetAfterSend(editor);
+          triggerComposerSubmit(editor);
         }
       });
     });
@@ -11709,6 +11715,24 @@
       el = el.parentElement;
     }
     return null;
+  }
+
+  function triggerComposerSubmit(editor) {
+    const composer = findClosestComposerBar(editor);
+    const submitBtn = composer?.querySelector('button[type="submit"]');
+    if (!submitBtn) {
+      console.warn("[CCF NAR] triggerComposerSubmit: send button not found");
+      return;
+    }
+    // Defer one microtask so React processes the input event from setEditorText
+    // before the submit click reads the current value.
+    setTimeout(() => {
+      try {
+        submitBtn.click();
+      } catch (error) {
+        console.warn("[CCF NAR] triggerComposerSubmit: click failed", error);
+      }
+    }, 0);
   }
 
   function looksLikeComposerBar(el) {
