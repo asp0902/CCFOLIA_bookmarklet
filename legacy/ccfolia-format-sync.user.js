@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.45
+// @version      0.0.46
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.45 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.46 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -906,11 +906,13 @@
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
 
-    // [CCF NAR] 메시지 디코딩 결과 — narration 여부 + envelope의 blockStyle 통째 노출
-    if (narration || envelope.blockStyle) {
-      console.info("[CCF NAR] tryRenderEncodedMessage: narration=%o, blockStyle=%o, renderText=%o",
-        narration, envelope.blockStyle, renderText);
-    }
+    // [CCF NAR] 메시지 디코딩 결과 — 무조건 출력 (envelope 통째 + narration 판정)
+    console.info("[CCF NAR] tryRenderEncodedMessage: narration=%o, envelope.blockStyle=%o, envelope.alignRuns=%o, hasPresence=%o, renderText=%o",
+      narration,
+      envelope.blockStyle,
+      envelope.alignRuns,
+      !!(envelope.presence || envelope["@p"] || envelope["@presence"]),
+      renderText);
 
     const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
 
@@ -1052,6 +1054,9 @@
 
   function applyNarrationMessageLayout(el, narration) {
     if (!(el instanceof HTMLElement)) return;
+
+    // [CCF NAR] 진입 즉시 무조건 로그
+    console.info("[CCF NAR] applyNarrationMessageLayout ENTRY: narration=%o, el=%o", narration, el);
 
     if (narration) {
       el.setAttribute(CCF_NARRATION_ATTR, "1");
