@@ -9815,12 +9815,17 @@
       editor.dataset.ccfEnterBound = "1";
       // React reads the value at an ancestor during bubbling; finalize formatting at the input first.
       editor.addEventListener("keydown", (event) => {
+        // [CCF-DBG v0.0.40] keydown 핸들러 진입 확인 (가드 이전 — 바인딩 여부 판별용)
+        if (event.key === "Enter") {
+          console.info("[CCF-DBG] bindEnterSendForEditors keydown PRE-GUARD: key=Enter, isComposing=%o, shiftKey=%o, macroMenu=%o",
+            event.isComposing, event.shiftKey, isVisibleChatMacroMenuForEditor(editor)
+          );
+        }
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
-        // [CCF-DBG v0.0.40] keydown 핸들러 진입 확인
-        console.info("[CCF-DBG] bindEnterSendForEditors keydown: Enter detected, editor=%o, isCcfSuiteScriptEnabled=%o",
+        console.info("[CCF-DBG] bindEnterSendForEditors keydown POST-GUARD: Enter detected, editor=%o, isCcfSuiteScriptEnabled=%o",
           editor, typeof isCcfSuiteScriptEnabled === "function" ? isCcfSuiteScriptEnabled() : "N/A"
         );
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
