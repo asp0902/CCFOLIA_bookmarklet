@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.41
+// @version      0.0.42
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -894,6 +894,12 @@
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
 
+    // [CCF NAR] 메시지 디코딩 결과 — narration 여부 + envelope의 blockStyle 통째 노출
+    if (narration || envelope.blockStyle) {
+      console.info("[CCF NAR] tryRenderEncodedMessage: narration=%o, blockStyle=%o, renderText=%o",
+        narration, envelope.blockStyle, renderText);
+    }
+
     const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
 
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
@@ -1029,20 +1035,45 @@
     });
   }
 
+  // [v0.0.42] 나레이션 디버그 모드 (window.__CCF_NARRATION_DEBUG = true로 시각 외곽선 표시)
+  const NARRATION_GUARDIANS = new WeakMap();
+
   function applyNarrationMessageLayout(el, narration) {
     if (!(el instanceof HTMLElement)) return;
 
     if (narration) {
       el.setAttribute(CCF_NARRATION_ATTR, "1");
+      // [CCF NAR] render-root에 narration 어트리뷰트 부착
+      console.info("[CCF NAR] render-root attr SET, el=%o", el);
     } else {
       el.removeAttribute(CCF_NARRATION_ATTR);
     }
 
     const item = findNarrationMessageItem(el);
-    if (!(item instanceof HTMLElement) || item === el) return;
+    if (!(item instanceof HTMLElement) || item === el) {
+      if (narration) {
+        console.warn("[CCF NAR] findNarrationMessageItem returned %o (no LI ancestor)", item);
+      }
+      return;
+    }
 
     if (narration) {
       item.setAttribute(CCF_NARRATION_ATTR, "1");
+      console.info("[CCF NAR] LI item attr SET, item=%o", item);
+
+      // [v0.0.42] 인라인 스타일 강제 주입 - CSS 미적용 케이스에도 동작
+      forceInlineNarrationStyles(item, el);
+
+      // [v0.0.42] React 재렌더 대비 가디언 설치
+      installNarrationGuardian(item, el);
+
+      // [v0.0.42] 시각 디버그: 1초간 빨간 외곽선 (window.__CCF_NARRATION_DEBUG === true일 때)
+      if (window.__CCF_NARRATION_DEBUG === true) {
+        const prevOutline = item.style.outline;
+        item.style.outline = "2px solid red";
+        setTimeout(() => { item.style.outline = prevOutline || ""; }, 1500);
+      }
+
       hideNarrationElements(item, el);
       return;
     }
@@ -1050,6 +1081,102 @@
     if (!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`)) {
       item.removeAttribute(CCF_NARRATION_ATTR);
       showNarrationElements(item);
+      uninstallNarrationGuardian(item);
+      clearForcedInlineNarrationStyles(item);
+    }
+  }
+
+  // [v0.0.42] CSS가 무력화되는 케이스를 위한 fallback - JS로 직접 display:none 주입
+  function forceInlineNarrationStyles(item, messageEl) {
+    if (!(item instanceof HTMLElement)) return;
+
+    const hideSelectors = [
+      ".MuiListItemAvatar-root",
+      ".MuiAvatar-root",
+      ".MuiListItemText-primary",
+    ];
+
+    let hiddenCount = 0;
+    for (const sel of hideSelectors) {
+      item.querySelectorAll(sel).forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        if (messageEl && messageEl.contains(node)) return; // 본문 내부의 동명 요소는 건드리지 않음
+        node.dataset.ccfNarrationForceHidden = "1";
+        node.style.setProperty("display", "none", "important");
+        hiddenCount += 1;
+      });
+    }
+
+    // 본문 영역 가운데 정렬
+    item.querySelectorAll(".MuiListItemText-root").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.dataset.ccfNarrationForceCenter = "1";
+      node.style.setProperty("width", "100%", "important");
+      node.style.setProperty("margin", "0 auto", "important");
+      node.style.setProperty("text-align", "center", "important");
+    });
+
+    console.info("[CCF NAR] forceInlineNarrationStyles: hidden=%o, item=%o", hiddenCount, item);
+  }
+
+  function clearForcedInlineNarrationStyles(item) {
+    if (!(item instanceof HTMLElement)) return;
+    item.querySelectorAll('[data-ccf-narration-force-hidden="1"]').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.style.removeProperty("display");
+      delete node.dataset.ccfNarrationForceHidden;
+    });
+    item.querySelectorAll('[data-ccf-narration-force-center="1"]').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.style.removeProperty("width");
+      node.style.removeProperty("margin");
+      node.style.removeProperty("text-align");
+      delete node.dataset.ccfNarrationForceCenter;
+    });
+  }
+
+  function installNarrationGuardian(item, messageEl) {
+    if (!(item instanceof HTMLElement)) return;
+    // 기존 가디언이 있으면 재사용
+    if (NARRATION_GUARDIANS.has(item)) return;
+
+    const observer = new MutationObserver(() => {
+      // render-root가 여전히 narration이면 어트리뷰트/스타일 재적용
+      const hasNarrationChild = !!item.querySelector(`.ccf-render-root[${CCF_NARRATION_ATTR}="1"]`);
+      if (!hasNarrationChild) {
+        // 더 이상 narration 메시지가 없으면 가디언 해제
+        uninstallNarrationGuardian(item);
+        clearForcedInlineNarrationStyles(item);
+        item.removeAttribute(CCF_NARRATION_ATTR);
+        return;
+      }
+      if (item.getAttribute(CCF_NARRATION_ATTR) !== "1") {
+        item.setAttribute(CCF_NARRATION_ATTR, "1");
+      }
+      // 인라인 스타일이 사라졌으면 재주입
+      const sampleHidden = item.querySelector('[data-ccf-narration-force-hidden="1"]');
+      if (!sampleHidden) {
+        forceInlineNarrationStyles(item, messageEl);
+      }
+    });
+
+    observer.observe(item, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "data-ccf-narration"],
+    });
+
+    NARRATION_GUARDIANS.set(item, observer);
+    console.info("[CCF NAR] guardian installed on item=%o", item);
+  }
+
+  function uninstallNarrationGuardian(item) {
+    if (!(item instanceof HTMLElement)) return;
+    const observer = NARRATION_GUARDIANS.get(item);
+    if (observer) {
+      observer.disconnect();
+      NARRATION_GUARDIANS.delete(item);
     }
   }
 
@@ -10290,6 +10417,18 @@
     const runs = preparedRuns.runs;
     const blockStyle = applyAutomaticNarration(state.blockStyle);
     const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
+
+    // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
+    const _narSpeaker = getCurrentSpeakerName();
+    const _narSet = readNarratorNameSet();
+    console.info("[CCF NAR] preparePayloadForSend: speaker=%o, narratorList=[%s], stateNarration=%o, autoNarration=%o, runs=%o",
+      _narSpeaker,
+      [..._narSet].join(", "),
+      state.blockStyle?.narration === true,
+      blockStyle.narration === true,
+      runs.length
+    );
+
     if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
     const roll20Source = state.roll20Source;
     state.text = rawText;
