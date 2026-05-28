@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.25";
-  const BUILD_ID = "2026-05-28-enter-send-fix-2";
+  const VERSION = "0.1.26";
+  const BUILD_ID = "2026-05-28-envelope-conflict-fix-1";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
