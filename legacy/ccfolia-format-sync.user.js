@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.42
+// @version      0.0.43
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -154,6 +154,11 @@
     isActive() { return ccfFsActive; },
     disable() { return ccfFsTeardown(); }
   };
+
+  // [v0.0.42] 나레이션 가디언 WeakMap — initRenderer()가 즉시 기존 메시지를 스캔하면서
+  // applyNarrationMessageLayout()→installNarrationGuardian/uninstallNarrationGuardian를
+  // 호출할 수 있으므로 반드시 initRenderer() 호출 전에 선언/초기화되어야 한다(TDZ 방지).
+  const NARRATION_GUARDIANS = new WeakMap();
 
   // Self-register with the suite manager so installation and version status can be tracked centrally.
   registerWithCcfSuite(CCF_FORMAT_SYNC_SCRIPT_INFO);
@@ -1036,7 +1041,7 @@
   }
 
   // [v0.0.42] 나레이션 디버그 모드 (window.__CCF_NARRATION_DEBUG = true로 시각 외곽선 표시)
-  const NARRATION_GUARDIANS = new WeakMap();
+  // NARRATION_GUARDIANS WeakMap은 IIFE 상단(initRenderer 이전)에 선언됨 — TDZ 방지
 
   function applyNarrationMessageLayout(el, narration) {
     if (!(el instanceof HTMLElement)) return;
