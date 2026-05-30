@@ -794,8 +794,11 @@
           opacity: 1 !important;
         }
 
-        html[data-ccf-theme-active="1"] .MuiBackdrop-root {
+        html[data-ccf-theme-active="1"] .MuiBackdrop-root:not(.MuiBackdrop-invisible) {
           background: var(--ccf-theme-overlay) !important;
+        }
+        html[data-ccf-theme-active="1"] .MuiBackdrop-invisible {
+          background: transparent !important;
         }
 
         html[data-ccf-theme-active="1"] .MuiPaper-root canvas,
