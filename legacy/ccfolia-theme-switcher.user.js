@@ -2051,7 +2051,9 @@
       }
 
       /* 카드를 머금은 host 요소 — 강제 display:block 으로 인라인 컨텍스트의 클리핑 회피.
-         배경/패딩/마진 모두 해제해 카드가 자기 레이아웃 그대로 보이게 함. */
+         배경/패딩/마진 모두 해제해 카드가 자기 레이아웃 그대로 보이게 함.
+         React-safe: host 의 원본 텍스트/엘리먼트 children 은 DOM 에 남아 있되 화면에서만 숨김.
+         (font-size: 0 으로 텍스트 노드 시각적 제거 + 엘리먼트 child 는 display:none) */
       [${CREE_GRRR_FORMATTED_ATTR}="1"] {
         display: block !important;
         background: transparent !important;
@@ -2060,6 +2062,16 @@
         height: auto !important;
         max-height: none !important;
         overflow: visible !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+      }
+      [${CREE_GRRR_FORMATTED_ATTR}="1"] > *:not(.${CREE_GRRR_CARD_CLASS}):not(.${CREE_GRRR_SIMPLE_CARD_CLASS}) {
+        display: none !important;
+      }
+      [${CREE_GRRR_FORMATTED_ATTR}="1"] > .${CREE_GRRR_CARD_CLASS},
+      [${CREE_GRRR_FORMATTED_ATTR}="1"] > .${CREE_GRRR_SIMPLE_CARD_CLASS} {
+        font-size: 14px !important;
+        line-height: normal !important;
       }
 
       /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
@@ -4530,17 +4542,28 @@
     } catch (error) { /* 인젝션 실패는 무시 — 다음 mutation 에서 재시도 */ }
   }
 
-  // CREE-GRRR! 인젝션 복원 — 결과 숫자/상태 span 을 원래 텍스트 노드로 되돌림
-  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 원본 텍스트를 되돌림.
+  // React-safe 카드 부착: host(p.MuiTypography-*)의 원본 children 은 손대지 않고
+  // 카드만 마지막에 append. CCFOLIA React 가 host 의 firstChild(텍스트 노드)를
+  // 그대로 찾을 수 있어야 reconciliation 이 깨지지 않음. 원본 텍스트는 CSS 로 숨김.
+  function attachCreeGrrrCard(host, card, text) {
+    if (!(host instanceof HTMLElement) || !(card instanceof HTMLElement)) return;
+    host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
+    host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
+    host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
+    // 같은 host 에 이미 다른 카드가 붙어 있으면 제거 (재실행 대비)
+    host.querySelectorAll(`:scope > .${CREE_GRRR_CARD_CLASS}, :scope > .${CREE_GRRR_SIMPLE_CARD_CLASS}`)
+      .forEach((existing) => existing.remove());
+    host.appendChild(card);
+  }
+
+  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 host 의 마킹만 제거.
+  // 원본 텍스트는 그대로 두므로 textContent 복원이 불필요. (그게 React-safe.)
   function revertCreeGrrrDomState() {
     document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
       if (!(el instanceof HTMLElement)) return;
-      const original = el.getAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      if (original !== null) {
-        // 내부 카드 노드 제거하고 원본 텍스트로 되돌리기
-        el.textContent = original;
-        el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
-      }
+      // 내부 카드만 제거 — host 의 원본 텍스트/엘리먼트 children 은 그대로 보존
+      el.querySelectorAll(`:scope > .${CREE_GRRR_CARD_CLASS}, :scope > .${CREE_GRRR_SIMPLE_CARD_CLASS}`)
+        .forEach((card) => card.remove());
       // 혹시 display:none 으로 숨겨놨던 케이스 호환 복원
       if (el.style && el.style.display === "none") {
         el.style.display = "";
@@ -4683,10 +4706,7 @@
           } catch (_) { /* ignore */ }
         }
         const card = buildCreeGrrrDiceCard(parsed);
-        host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
-        host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-        host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
-        host.replaceChildren(card);
+        attachCreeGrrrCard(host, card, text);
         return;
       }
 
@@ -4695,10 +4715,7 @@
       if (simple) {
         transformed++;
         const card = buildCreeGrrrSimpleDiceCard(simple);
-        host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
-        host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
-        host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
-        host.replaceChildren(card);
+        attachCreeGrrrCard(host, card, text);
         return;
       }
 
