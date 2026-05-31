@@ -495,6 +495,20 @@
     style.id = "ccf-render-style";
     style.setAttribute("data-ccf-fs-style", "1");
     style.textContent = `
+      /* CCFOLIA 우하단 연필 FAB가 펼치는 "추가 메뉴"의 폭을 북마클릿 실행 전 상태로 고정.
+         WallpaperIcon(전경/배경 변경 항목)이 들어있는 메뉴만 선택적으로 타깃하므로
+         다른 컨텍스트 메뉴(드롭다운/팔레트 등)에는 영향이 없다.
+         항목이 추가되어도 폭이 유지되어 메뉴가 FAB 기준으로 같은 위치에 표시된다. */
+      .MuiPopover-paper.MuiMenu-paper:has([data-testid="WallpaperIcon"]) {
+        max-width: 392.781px !important;
+        width: 392.781px !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        box-sizing: border-box !important;
+      }
+
       .ccf-render-root {
         white-space: pre-wrap;
         word-break: break-word;
