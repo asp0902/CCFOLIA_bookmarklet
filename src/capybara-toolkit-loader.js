@@ -69,13 +69,6 @@
       summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
       scripts: ["legacy/ccfolia-log-package.user.js"],
       roomOnly: true
-    },
-    {
-      id: "ccf-palette-filter",
-      title: "매크로 드롭다운 정리",
-      summary: "활성 화자 매크로 드롭다운에 끼어드는 다른 캐릭터 팔레트 통짜 항목 숨김",
-      scripts: ["legacy/ccfolia-palette-filter.user.js"],
-      roomOnly: true
     }
   ]);
 

@@ -1765,7 +1765,18 @@
       mountRoot(root, anchor);
     };
 
-    const observer = new MutationObserver(syncRootPlacement);
+    // 모든 DOM 변경마다 syncRootPlacement(querySelectorAll + getBoundingClientRect)을
+    // 실행하면 React가 룸 목록을 그리는 동안 레이아웃 thrash가 심하다. rAF로 디바운스.
+    let placementPending = false;
+    const scheduledSync = () => {
+      if (placementPending) return;
+      placementPending = true;
+      window.requestAnimationFrame(() => {
+        placementPending = false;
+        syncRootPlacement();
+      });
+    };
+    const observer = new MutationObserver(scheduledSync);
 
     observer.observe(document.body, {
       childList: true,
@@ -1809,33 +1820,62 @@
     try { localStorage.setItem(key, JSON.stringify(value)); }
     catch (err) { console.warn("[CCFH] save failed", key, err); }
   }
+
+  // 같은 refresh 사이클 안에서 ccfhFavorites / ccfhHistory / ccfhRoomMeta가
+  // 여러 번 호출되며 매번 JSON.parse 비용을 치르던 문제를 막기 위한 캐시.
+  // 쓰기 시 즉시 무효화하므로 같은 탭에서의 데이터 일관성은 보장된다.
+  const _ccfhCache = { fav: null, hist: null, meta: null };
+  function _ccfhInvalidate(keys) {
+    if (!keys) { _ccfhCache.fav = null; _ccfhCache.hist = null; _ccfhCache.meta = null; return; }
+    for (const k of keys) _ccfhCache[k] = null;
+  }
+  // 다른 탭에서의 변경에도 캐시를 비운다.
+  window.addEventListener("storage", (event) => {
+    if (!event || !event.key) return;
+    if (event.key === CCFH_STORAGE_FAV) _ccfhCache.fav = null;
+    else if (event.key === CCFH_STORAGE_HISTORY) _ccfhCache.hist = null;
+    else if (event.key === CCFH_STORAGE_META) _ccfhCache.meta = null;
+  });
+
   function ccfhFavorites() {
+    if (_ccfhCache.fav) return _ccfhCache.fav;
     const a = ccfhReadJson(CCFH_STORAGE_FAV, []);
-    return Array.isArray(a) ? a.filter((x) => typeof x === "string") : [];
+    const list = Array.isArray(a) ? a.filter((x) => typeof x === "string") : [];
+    _ccfhCache.fav = list;
+    return list;
   }
   function ccfhSaveFavorites(arr) {
+    _ccfhCache.fav = null;
     ccfhWriteJson(CCFH_STORAGE_FAV, [...new Set(arr.filter(Boolean))]);
   }
   function ccfhIsFavorite(id) { return ccfhFavorites().includes(id); }
   function ccfhToggleFavorite(id) {
-    const favs = ccfhFavorites();
+    const favs = ccfhFavorites().slice();
     const i = favs.indexOf(id);
     if (i >= 0) favs.splice(i, 1); else favs.unshift(id);
     ccfhSaveFavorites(favs);
     return i < 0;
   }
   function ccfhHistory() {
+    if (_ccfhCache.hist) return _ccfhCache.hist;
     const a = ccfhReadJson(CCFH_STORAGE_HISTORY, []);
-    return Array.isArray(a) ? a.filter((e) => e && typeof e.id === "string") : [];
+    const list = Array.isArray(a) ? a.filter((e) => e && typeof e.id === "string") : [];
+    _ccfhCache.hist = list;
+    return list;
   }
   function ccfhSaveHistory(arr) {
+    _ccfhCache.hist = null;
     ccfhWriteJson(CCFH_STORAGE_HISTORY, arr);
   }
   function ccfhRoomMeta() {
+    if (_ccfhCache.meta) return _ccfhCache.meta;
     const data = ccfhReadJson(CCFH_STORAGE_META, {});
-    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    const obj = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    _ccfhCache.meta = obj;
+    return obj;
   }
   function ccfhSaveRoomMeta(meta) {
+    _ccfhCache.meta = null;
     ccfhWriteJson(CCFH_STORAGE_META, meta);
   }
   function ccfhCachedRoomMeta(id) {
@@ -3308,23 +3348,39 @@
     input.click();
   }
 
-  function ccfhRenderRoomShortcutSections() {
+  let ccfhLastShortcutSignature = "";
+  function ccfhRenderRoomShortcutSections(force) {
     if (!ccfhIsHomePage()) return;
+
+    const history = ccfhHistory().map(ccfhResolveHistoryEntry);
+    const favIds = ccfhFavorites();
+
+    const favoriteRooms = favIds
+      .map((id) => history.find((entry) => entry.id === id) || ccfhEntryFromMeta(id))
+      .filter(Boolean);
+
+    const recentRooms = history.filter((entry) => !favIds.includes(entry.id));
+
+    if (!favoriteRooms.length && !recentRooms.length) {
+      const existing0 = document.getElementById("ccfh-shortcut-sections");
+      if (existing0) existing0.remove();
+      ccfhLastShortcutSignature = "";
+      return;
+    }
+
+    // 동일한 데이터/펼침 상태라면 비싼 DOM 재생성을 건너뛴다.
+    const sigFav = favoriteRooms.map((r) => `${r.id}|${r.name || ""}|${r.thumbnail || ""}`).join(",");
+    const sigRec = recentRooms.map((r) => `${r.id}|${r.name || ""}|${r.thumbnail || ""}|${r.visitedAt || 0}`).join(",");
+    const sigExpand = JSON.stringify(ccfhExpandedSections || {});
+    const signature = `${sigFav}::${sigRec}::${sigExpand}`;
+    const existing = document.getElementById("ccfh-shortcut-sections");
+    if (!force && existing && signature === ccfhLastShortcutSignature) {
+      return;
+    }
+
     ccfhShortcutRenderInProgress = true;
     try {
-      const existing = document.getElementById("ccfh-shortcut-sections");
       if (existing) existing.remove();
-
-      const history = ccfhHistory().map(ccfhResolveHistoryEntry);
-      const favIds = ccfhFavorites();
-
-      const favoriteRooms = favIds
-        .map((id) => history.find((entry) => entry.id === id) || ccfhEntryFromMeta(id))
-        .filter(Boolean);
-
-      const recentRooms = history.filter((entry) => !favIds.includes(entry.id));
-
-      if (!favoriteRooms.length && !recentRooms.length) return;
 
       const root = document.createElement("section");
       root.id = "ccfh-shortcut-sections";
@@ -3357,6 +3413,7 @@
       if (cocoGap > 0) {
         root.style.setProperty("--ccfh-grid-gap", `${cocoGap}px`);
       }
+      ccfhLastShortcutSignature = signature;
     } finally {
       setTimeout(() => { ccfhShortcutRenderInProgress = false; }, 0);
     }
@@ -3422,19 +3479,51 @@
     ccfhInjectStyle();
     ccfhBindGlobalRoomNavigation();
 
-    let pending = false;
-    const obs = new MutationObserver(() => {
+    // 우리가 관심 있는 경로에서만 MutationObserver를 가동한다.
+    // (홈/룸 목록/룸 진입 페이지가 아니면 옵저버 콜백을 통째로 스킵)
+    const isRelevantRoute = () => ccfhIsHomePage() || !!ccfhCurrentRoomId();
+
+    let pendingTimer = 0;
+    const schedule = () => {
+      if (pendingTimer) return;
+      pendingTimer = window.setTimeout(() => {
+        pendingTimer = 0;
+        ccfhRefresh();
+      }, 120);
+    };
+    const obs = new MutationObserver((mutations) => {
       if (ccfhReorderInProgress) return;
       if (ccfhShortcutRenderInProgress) return;
       if (ccfhDraggingCard) return;
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(() => {
-        pending = false;
-        ccfhRefresh();
-      });
+      if (!isRelevantRoute()) return;
+      // 룸 링크가 추가/제거되었거나, 우리가 관리하는 노드 변경이 있을 때만 갱신
+      let interesting = false;
+      for (const m of mutations) {
+        if (m.target && m.target.id === "ccfh-shortcut-sections") continue;
+        const added = m.addedNodes;
+        for (let i = 0; i < added.length; i++) {
+          const n = added[i];
+          if (n.nodeType !== 1) continue;
+          if (n.matches && (n.matches('a[href*="/rooms/"]') || n.querySelector('a[href*="/rooms/"]'))) {
+            interesting = true; break;
+          }
+        }
+        if (interesting) break;
+        const removed = m.removedNodes;
+        for (let i = 0; i < removed.length; i++) {
+          const n = removed[i];
+          if (n.nodeType !== 1) continue;
+          if (n.hasAttribute && (n.hasAttribute(CCFH_CARD_ATTR) || n.hasAttribute(CCFH_VISITED_ATTR))) {
+            interesting = true; break;
+          }
+        }
+        if (interesting) break;
+      }
+      if (!interesting) return;
+      schedule();
     });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
+    // documentElement 전체 → body로 축소 (head 변동에는 관심 없음)
+    obs.observe(document.body, { childList: true, subtree: true });
 
     // SPA 네비게이션 후킹
     const fire = () => window.dispatchEvent(new Event("ccfh:locationchange"));
@@ -3456,17 +3545,19 @@
       if (!document.getElementById("ccfh-shortcut-sections")) return;
       clearTimeout(ccfhResizeTimer);
       ccfhResizeTimer = setTimeout(() => {
-        ccfhRenderRoomShortcutSections();
+        ccfhRenderRoomShortcutSections(true);
       }, 150);
     });
 
     // 룸 페이지 제목이 늦게 채워지는 경우를 위한 폴링
+    // (룸 페이지가 아닐 때는 작업 없음 + 주기 완화)
     setInterval(() => {
-      if (ccfhCurrentRoomId()) ccfhMaybeRecordCurrent();
-    }, 1500);
+      if (!ccfhCurrentRoomId()) return;
+      ccfhMaybeRecordCurrent();
+    }, 4000);
 
     ccfhRefresh();
-    console.info("[CCFH] Home enhancer integrated v0.1.1 (left-trash, DOM-reorder, integrated cards)");
+    console.info("[CCFH] Home enhancer integrated v0.1.2 (scoped observer, throttled refresh)");
   }
 
   if (document.readyState === "loading") {
