@@ -1390,15 +1390,15 @@
       }
 
       [${CHARACTER_LIST_ATTR}="1"] > [${CHARACTER_ITEM_ATTR}="1"]::before {
-        content: "\\22ee  \\22ee";
+        content: "\\22ee \\22ee";
         position: absolute;
         top: 50%;
-        left: 9px;
+        left: 10px;
         transform: translateY(-50%);
         color: currentColor;
         font-size: 15px;
         line-height: 1;
-        letter-spacing: 0;
+        letter-spacing: -1px;
         opacity: 0.42;
         pointer-events: none;
       }
