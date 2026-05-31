@@ -926,12 +926,13 @@
 
     if (!runs.length && !alignRuns.length && !narration) {
       el.textContent = renderText;
+      preserveBottomScrollAfterRender(el, bottomScrollTarget);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
 
     renderStyledText(el, renderText, runs, alignRuns);
-    preserveBottomScrollForRenderedImages(el, bottomScrollTarget);
+    preserveBottomScrollAfterRender(el, bottomScrollTarget);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
   }
@@ -949,10 +950,8 @@
     return null;
   }
 
-  function preserveBottomScrollForRenderedImages(el, scrollTarget) {
+  function preserveBottomScrollAfterRender(el, scrollTarget) {
     if (!(scrollTarget instanceof HTMLElement)) return;
-    const images = [...el.querySelectorAll("img.ccf-image")];
-    if (!images.length) return;
 
     const scrollToBottom = () => {
       requestAnimationFrame(() => {
@@ -962,7 +961,13 @@
       });
     };
 
+    // 텍스트 서식만 적용된 메시지도 높이가 달라지므로 매번 즉시 하단 스냅.
     scrollToBottom();
+
+    // 이미지가 늦게 로드되면 그때 또 한 번 스냅(이미지 디코드로 추가 높이 변화).
+    const images = el.querySelectorAll
+      ? [...el.querySelectorAll("img.ccf-image")]
+      : [];
     images.forEach((image) => {
       if (image.complete) {
         scrollToBottom();
