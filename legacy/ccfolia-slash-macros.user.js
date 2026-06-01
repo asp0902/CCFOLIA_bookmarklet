@@ -79,46 +79,51 @@
 
   // /m <name> 자동완성 발동 패턴. 입력 전체가 정확히 /m 또는 /m <이름>일 때만 동작.
   const TRIGGER_PATTERN = /^\/m(?:\s+([^\n]*))?$/;
-  const ROOM_ID_PATTERN = /^\/rooms\/([^/?#]+)/i;
 
   const EDITOR_SELECTOR = 'textarea, [contenteditable="true"], [role="textbox"]';
   const HELP_BUTTON_SELECTOR = 'button[aria-label="채팅 커맨드에 대해"], button[aria-label*="チャットコマンド"], button[aria-label*="chat command" i]';
   const HELP_DIALOG_HINTS = ["/roll", "/desc", "/cc", "roll-table", "채팅 커맨드", "チャットコマンド"];
 
-  // ----- storage --------------------------------------------------------------
+  // ----- storage (전역 — 모든 룸에서 공유) -------------------------------------
 
   let _macrosCache = null;
-  let _macrosCacheRoom = "";
-
-  function getCurrentRoomId() {
-    const m = location.pathname.match(ROOM_ID_PATTERN);
-    return m ? m[1] : "_global";
-  }
-
-  function readAllMacros() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch (error) {
-      return {};
-    }
-  }
-
-  function writeAllMacros(all) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); }
-    catch (error) { console.warn("[CCF Slash] save failed", error); }
-  }
 
   function readMacros() {
-    const roomId = getCurrentRoomId();
-    if (_macrosCache && _macrosCacheRoom === roomId) return _macrosCache;
-    const all = readAllMacros();
-    const list = Array.isArray(all[roomId]) ? all[roomId].filter(isValidMacro) : [];
+    if (_macrosCache) return _macrosCache;
+    let list = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          list = parsed.filter(isValidMacro);
+        } else if (parsed && typeof parsed === "object") {
+          // 이전 버전(룸별 사전) 데이터가 있으면 합쳐서 마이그레이션.
+          const merged = [];
+          const seen = new Set();
+          for (const value of Object.values(parsed)) {
+            if (!Array.isArray(value)) continue;
+            for (const m of value) {
+              if (!isValidMacro(m) || seen.has(m.name)) continue;
+              seen.add(m.name);
+              merged.push({ name: m.name, body: m.body, updatedAt: m.updatedAt || Date.now() });
+            }
+          }
+          merged.sort((a, b) => a.name.localeCompare(b.name));
+          list = merged;
+          writeMacros(list); // 새 스키마로 즉시 저장
+        }
+      }
+    } catch (error) {
+      list = [];
+    }
     _macrosCache = list;
-    _macrosCacheRoom = roomId;
     return list;
+  }
+
+  function writeMacros(list) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+    catch (error) { console.warn("[CCF Slash] save failed", error); }
   }
 
   function isValidMacro(m) {
@@ -129,26 +134,20 @@
     const cleanName = String(name || "").trim();
     const cleanBody = String(body || "");
     if (!cleanName) throw new Error("매크로 이름이 비어있습니다.");
-    const roomId = getCurrentRoomId();
-    const all = readAllMacros();
-    const list = Array.isArray(all[roomId]) ? all[roomId].filter(isValidMacro) : [];
+    const list = readMacros().slice();
     const idx = list.findIndex((m) => m.name === cleanName);
     const entry = { name: cleanName, body: cleanBody, updatedAt: Date.now() };
     if (idx >= 0) list[idx] = entry; else list.push(entry);
     list.sort((a, b) => a.name.localeCompare(b.name));
-    all[roomId] = list;
-    writeAllMacros(all);
+    writeMacros(list);
     _macrosCache = null;
   }
 
   function deleteMacro(name) {
-    const roomId = getCurrentRoomId();
-    const all = readAllMacros();
-    const list = Array.isArray(all[roomId]) ? all[roomId].filter(isValidMacro) : [];
+    const list = readMacros();
     const next = list.filter((m) => m.name !== name);
     if (next.length === list.length) return false;
-    all[roomId] = next;
-    writeAllMacros(all);
+    writeMacros(next);
     _macrosCache = null;
     return true;
   }
@@ -432,7 +431,7 @@
       <div class="ccf-sm-modal-backdrop"></div>
       <div class="ccf-sm-modal-card" role="dialog" aria-modal="true">
         <div class="ccf-sm-modal-head">
-          <strong>내 슬래시 매크로 (이 룸 전용)</strong>
+          <strong>내 슬래시 매크로 (모든 룸 공용)</strong>
           <button type="button" class="ccf-sm-modal-close" aria-label="닫기">×</button>
         </div>
         <div class="ccf-sm-modal-body">

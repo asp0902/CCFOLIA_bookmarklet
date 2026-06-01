@@ -73,7 +73,7 @@
     {
       id: "ccf-slash-macros",
       title: "슬래시 매크로",
-      summary: "/m <이름>으로 저장한 멀티라인 슬래시 커맨드를 입력창에 펼침 (룸별 저장)",
+      summary: "/m <이름>으로 저장한 멀티라인 슬래시 커맨드를 입력창에 펼침 (모든 룸 공용)",
       scripts: ["legacy/ccfolia-slash-macros.user.js"],
       roomOnly: true
     }
