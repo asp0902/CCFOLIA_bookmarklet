@@ -427,6 +427,10 @@
     closeManageModal();
     const root = document.createElement("div");
     root.id = MODAL_ID;
+    // 다른 스크립트(roll20-css-bridge, format-sync 등)가 우리 모달의 textarea +
+    // submit 버튼 조합을 채팅 입력칸으로 오인해 자기 버튼을 주입하는 걸 막는다.
+    root.setAttribute("data-ccr20-safe-ui", "1");
+    root.setAttribute("data-ccf-safe-ui", "1");
     root.innerHTML = `
       <div class="ccf-sm-modal-backdrop"></div>
       <div class="ccf-sm-modal-card" role="dialog" aria-modal="true">
@@ -436,7 +440,7 @@
         </div>
         <div class="ccf-sm-modal-body">
           <div class="ccf-sm-modal-list" data-role="list"></div>
-          <form class="ccf-sm-modal-form" data-role="form">
+          <div class="ccf-sm-modal-form" data-role="form">
             <label class="ccf-sm-modal-label">
               <span>이름 (예: roll-weather)</span>
               <input type="text" data-role="name" autocomplete="off" spellcheck="false" />
@@ -447,10 +451,10 @@
             </label>
             <div class="ccf-sm-modal-actions">
               <button type="button" data-role="clear">새로 작성</button>
-              <button type="submit" data-role="save">저장 / 덮어쓰기</button>
+              <button type="button" data-role="save">저장 / 덮어쓰기</button>
             </div>
             <div class="ccf-sm-modal-status" data-role="status" aria-live="polite"></div>
-          </form>
+          </div>
         </div>
       </div>
     `;
@@ -502,7 +506,7 @@
       }
     }, ccfSmWithSignal());
 
-    formEl.addEventListener("submit", (event) => {
+    root.querySelector('[data-role="save"]').addEventListener("click", (event) => {
       event.preventDefault();
       try {
         saveMacro(nameEl.value, bodyEl.value);
@@ -520,6 +524,16 @@
     root.querySelector(".ccf-sm-modal-close").addEventListener("click", closeManageModal, ccfSmWithSignal());
     root.querySelector(".ccf-sm-modal-backdrop").addEventListener("click", closeManageModal, ccfSmWithSignal());
     document.addEventListener("keydown", escapeModalListener, ccfSmWithSignal());
+
+    // 다른 스크립트가 우리 모달 안으로 자기 버튼을 주입했다가 SAFE_UI 마커보다
+    // 늦게 떨어지면 잔존할 수 있어, 모달 열 때마다 우리 영역 안의 외부 주입 버튼을 정리.
+    const cleanForeignInjections = () => {
+      root.querySelectorAll(".ccr20-open-btn, [data-ccr20-open-btn], .ccf-open-btn[data-ccf-open-btn]")
+        .forEach((el) => el.remove());
+    };
+    cleanForeignInjections();
+    requestAnimationFrame(cleanForeignInjections);
+    setTimeout(cleanForeignInjections, 200);
 
     refresh();
     nameEl.focus();
