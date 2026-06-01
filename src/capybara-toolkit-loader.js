@@ -69,6 +69,13 @@
       summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
       scripts: ["legacy/ccfolia-log-package.user.js"],
       roomOnly: true
+    },
+    {
+      id: "ccf-slash-macros",
+      title: "슬래시 매크로",
+      summary: "/m <이름>으로 저장한 멀티라인 슬래시 커맨드를 입력창에 펼침 (룸별 저장)",
+      scripts: ["legacy/ccfolia-slash-macros.user.js"],
+      roomOnly: true
     }
   ]);
 
