@@ -594,11 +594,11 @@
       .ccf-sm-toolbar-btn {
         margin-left: auto;
         padding: 4px 10px;
-        border: 1px solid rgba(255,255,255,0.22);
-        border-radius: 999px;
+        border: 0;
+        border-radius: 0;
         background: rgba(255,255,255,0.06);
         color: inherit;
-        font-size: 12px;
+        font-size: 15px;
         cursor: pointer;
       }
       .ccf-sm-toolbar-btn:hover { background: rgba(255,255,255,0.12); }
