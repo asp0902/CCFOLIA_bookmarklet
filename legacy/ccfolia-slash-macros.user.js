@@ -754,17 +754,30 @@
       #${MODAL_ID} .ccf-sm-modal-actions {
         display: flex; gap: 8px; justify-content: flex-end;
       }
+      /* CCFOLIA 캐릭터 편집 팝업 하단의 MUI Button(text variant) 디자인을 차용:
+         배경 투명 / 굵은 대문자 / 보조=핑크 / 메인=블루. */
       #${MODAL_ID} .ccf-sm-modal-actions button {
-        appearance: none; padding: 7px 14px; border-radius: 0;
-        border: 1px solid rgba(255,255,255,0.22);
-        background: rgba(255,255,255,0.06); color: inherit;
-        font-size: 12px; cursor: pointer;
+        appearance: none;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: 0;
+        background: rgba(0,0,0,0);
+        color: rgb(220, 0, 78);
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        min-width: 64px;
+        line-height: 1.75;
+        box-shadow: none;
+        cursor: pointer;
       }
       #${MODAL_ID} .ccf-sm-modal-actions button[data-role="save"] {
-        background: #ffb74d; color: #2a1a00; border-color: transparent;
-        font-weight: 700;
+        color: rgb(33, 150, 243);
       }
-      #${MODAL_ID} .ccf-sm-modal-actions button:hover { filter: brightness(1.08); }
+      #${MODAL_ID} .ccf-sm-modal-actions button:hover {
+        background-color: rgba(255,255,255,0.06);
+      }
       #${MODAL_ID} .ccf-sm-modal-status {
         font-size: 11px; opacity: 0.7; min-height: 14px;
       }
