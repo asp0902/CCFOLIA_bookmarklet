@@ -1746,25 +1746,54 @@
     }
   }
 
-  // text-shadow 기법으로 블러 글로우 효과. filter: blur과 달리 박스 클리핑이 없고,
-  // 텍스트 글리프 자체가 발광체처럼 퍼지므로 도형 경계가 보이지 않는 자연스러운 결과.
-  // 글자 자체는 transparent로 만들고 텍스트 그림자만 보이도록 한다.
+  // 단순 filter:blur (시각적으로 가장 안정) + 텍스트 선택 차단(드래그/더블클릭으로
+  // 내용 노출 방지). Ctrl(또는 ⌘)+클릭으로 일시 토글 reveal — 핸들러는 한 번만 바인딩.
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
-    const px = Math.max(parseFloat(blurValue) || 0, 0);
-    if (px <= 0) return;
-    // 의도된 텍스트 색을 그림자 색으로 보존(없으면 currentColor 사용).
-    let color = "currentColor";
-    try {
-      const computed = window.getComputedStyle(el).color;
-      if (computed && computed !== "rgba(0, 0, 0, 0)" && computed !== "transparent") {
-        color = computed;
+    el.style.filter = `blur(${blurValue})`;
+    el.style.userSelect = "none";
+    el.style.webkitUserSelect = "none";
+    el.setAttribute("data-ccf-blurred", "1");
+    el.style.cursor = "help";
+    el.title = "Ctrl+클릭으로 내용 표시/숨김";
+    ensureBlurRevealHandler();
+  }
+
+  let _blurRevealHandlerBound = false;
+  function ensureBlurRevealHandler() {
+    if (_blurRevealHandlerBound) return;
+    _blurRevealHandlerBound = true;
+    // capture 단계에서 가로채 다른 핸들러보다 먼저 처리.
+    document.addEventListener("click", (event) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const target = event.target instanceof Element
+        ? event.target.closest('[data-ccf-blurred="1"]')
+        : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (target.getAttribute("data-ccf-blur-revealed") === "1") {
+        target.removeAttribute("data-ccf-blur-revealed");
+      } else {
+        target.setAttribute("data-ccf-blur-revealed", "1");
       }
-    } catch (error) { /* getComputedStyle failed */ }
-    el.style.color = "transparent";
-    // 같은 그림자를 두 번 겹쳐 그려 약한 글로우가 더 또렷이 보이도록.
-    const radius = Math.round(px * 2);
-    el.style.textShadow = `0 0 ${radius}px ${color}, 0 0 ${radius}px ${color}`;
+    }, true);
+    // reveal/hide를 CSS로 처리하기 위한 전용 스타일 한 번 주입.
+    if (!document.getElementById("ccf-blur-reveal-style")) {
+      const style = document.createElement("style");
+      style.id = "ccf-blur-reveal-style";
+      style.textContent = `
+        [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] {
+          filter: none !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          color: inherit !important;
+          text-shadow: none !important;
+          cursor: text !important;
+        }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
   }
 
   function mergeStyles(styleList) {

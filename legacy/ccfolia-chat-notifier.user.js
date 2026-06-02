@@ -5295,6 +5295,7 @@
   }
 
   let ccfBgmLoopNudgeAt = 0;
+  let ccfBgmLoopNudgeFromTotal = 0; // 직전 루프 시점의 트랙 총 길이 — stale getCurrentTime 식별용
   function updateCcfBgmProgressBar() {
     if (!ccfBgmProgressRoot) {
       return;
@@ -5307,16 +5308,23 @@
     let ratio = playback.total > 0 ? Math.max(0, Math.min(1, playback.now / playback.total)) : 0;
     let displayNow = playback.now;
 
-    // YouTube ENDED 콜백이 늦거나 안 들어오는 케이스 대비. 종료 임박(1.0s 이내) 판정 범위를 키웠다.
-    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 1.0;
     const nowMs = Date.now();
-    const justLooped = nowMs - ccfBgmLoopNudgeAt < 1200;
+    // 임박 판정 1.0s — YouTube가 끝까지 안 가는 케이스 대응.
+    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 1.0;
+    // 직전 루프 점프 후 4초 동안은 stale getCurrentTime 가능성을 의심.
+    const sinceLoopNudge = nowMs - ccfBgmLoopNudgeAt;
+    const justLooped = sinceLoopNudge < 4000;
+    // 루프 점프 시점에 기록한 total과 같은 트랙이고, 현재 시각이 거의 끝 부근이면 → 아직 stale 상태.
+    const staleAfterLoop = justLooped
+      && playback.total > 0
+      && Math.abs(playback.total - ccfBgmLoopNudgeFromTotal) < 1
+      && ratio > 0.5;
 
     if (nearEnd && ccfBgmActiveLoop) {
-      // 루프 모드: 직접 처음으로 되감아 다시 재생하고, 슬라이더는 즉시 0으로 리셋해서
-      // "끝→처음" 점프가 시각적으로 자연스럽게 보이도록.
-      if (nowMs - ccfBgmLoopNudgeAt > 2000 && ccfBgmPlayer) {
+      // 루프: 처음으로 되감기 + 진행바 즉시 0.
+      if (sinceLoopNudge > 2000 && ccfBgmPlayer) {
         ccfBgmLoopNudgeAt = nowMs;
+        ccfBgmLoopNudgeFromTotal = playback.total;
         try {
           ccfBgmPlayer.seekTo?.(0, true);
           ccfBgmPlayer.playVideo?.();
@@ -5327,17 +5335,19 @@
       ratio = 0;
       displayNow = 0;
     } else if (nearEnd && !ccfBgmActiveLoop) {
-      // 비루프 + 종료 임박: getCurrentTime이 끝까지 다 가지 않는 YouTube 특성을 보정해
-      // 진행바를 100%로 스냅 (시각적 완성도).
+      // 비루프 + 종료 임박: 진행바를 100%로 스냅(시각적 완성도).
       ratio = 1;
       displayNow = playback.total;
-    } else if (justLooped) {
-      // 직전에 루프 nudge가 발생한 직후, YouTube getCurrentTime이 아직 갱신되지 않아
-      // 큰 값을 돌려주는 짧은 구간이 있다. 그 동안에는 0으로 강제 표시.
-      if (ratio > 0.5) {
-        ratio = 0;
-        displayNow = 0;
+    } else if (staleAfterLoop) {
+      // 루프 점프 직후이지만 getCurrentTime이 아직 끝 부근 값을 돌려주는 상황 — 강제 0 표시.
+      // 추가로 한 번 더 seekTo 보강(스로틀하여 1초 간격).
+      if (ccfBgmPlayer && sinceLoopNudge > 1000) {
+        try {
+          ccfBgmPlayer.seekTo?.(0, true);
+        } catch (error) { /* nudge reinforcement failed */ }
       }
+      ratio = 0;
+      displayNow = 0;
     }
 
     if (range instanceof HTMLInputElement && document.activeElement !== range) {
