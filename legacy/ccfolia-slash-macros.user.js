@@ -211,7 +211,8 @@
     listEl: null,
     boundEditor: null,
     items: [],
-    activeIndex: 0
+    activeIndex: 0,
+    mode: "review"  // "review" = 펼치고 사용자가 Enter, "send" = 본문 펼친 직후 자동 전송
   };
 
   function ensurePopup() {
@@ -251,13 +252,15 @@
     popup.boundEditor = null;
     popup.items = [];
     popup.activeIndex = 0;
+    popup.mode = "review";
   }
 
-  function renderPopup(editor, items) {
+  function renderPopup(editor, items, mode) {
     ensurePopup();
     popup.boundEditor = editor;
     popup.items = items;
     popup.activeIndex = 0;
+    popup.mode = mode === "send" ? "send" : "review";
 
     popup.listEl.innerHTML = items.map((m, i) => `
       <li role="option" data-macro-index="${i}" class="ccf-sm-popup-item${i === 0 ? " is-active" : ""}">
@@ -302,10 +305,39 @@
     if (!popup.boundEditor || popup.el?.hidden) return false;
     const macro = popup.items[popup.activeIndex];
     if (!macro) return false;
-    setEditorValue(popup.boundEditor, macro.body);
-    popup.boundEditor.focus();
+    const editor = popup.boundEditor;
+    const mode = popup.mode;
+    setEditorValue(editor, macro.body);
+    editor.focus();
     hidePopup();
+    if (mode === "send") {
+      // 본문을 입력칸에 채운 직후 컴포저의 전송 버튼을 자동으로 클릭.
+      setTimeout(() => triggerComposerSubmit(editor), 30);
+    }
     return true;
+  }
+
+  // 컴포저(채팅 입력 영역)의 전송 버튼을 찾아 클릭. submit 버튼 우선,
+  // 없으면 "전송/send" 라벨의 일반 버튼 폴백.
+  function triggerComposerSubmit(editor) {
+    if (!(editor instanceof HTMLElement)) return;
+    let cur = editor.parentElement;
+    for (let i = 0; i < 10 && cur; i += 1, cur = cur.parentElement) {
+      const submit = cur.querySelector('button[type="submit"]:not([disabled])');
+      if (submit instanceof HTMLElement && isVisible(submit)) {
+        submit.click();
+        return;
+      }
+      const sendBtn = [...cur.querySelectorAll("button")].find((b) => {
+        if (!(b instanceof HTMLElement) || b.disabled) return false;
+        const label = (b.getAttribute("aria-label") || b.textContent || "").trim();
+        return /^(전송|send|送信)$/i.test(label);
+      });
+      if (sendBtn instanceof HTMLElement && isVisible(sendBtn)) {
+        sendBtn.click();
+        return;
+      }
+    }
   }
 
   // ----- editor binding -------------------------------------------------------
@@ -315,21 +347,31 @@
     if (!(editor instanceof HTMLElement)) return;
     if (!isChatEditor(editor)) return;
     const value = getEditorValue(editor);
-    const match = value.match(TRIGGER_PATTERN);
-    if (!match) {
+
+    // /m 프리픽스 모드 — 펼침만 하고 사용자가 다시 Enter로 전송 (review)
+    const triggerMatch = value.match(TRIGGER_PATTERN);
+    if (triggerMatch) {
+      const filter = (triggerMatch[1] || "").trim().toLowerCase();
+      const all = readMacros();
+      const items = !filter ? all : all.filter((m) => m.name.toLowerCase().includes(filter));
+      if (items.length) renderPopup(editor, items, "review");
+      else if (popup.boundEditor === editor) hidePopup();
+      return;
+    }
+
+    // 직접 이름 매칭 모드 — 매크로 이름의 프리픽스와 일치하면 팝업, Enter 시 즉시 전송 (send)
+    const trimmed = value.trim();
+    if (!trimmed) {
       if (popup.boundEditor === editor) hidePopup();
       return;
     }
-    const filter = (match[1] || "").trim().toLowerCase();
-    const all = readMacros();
-    const items = !filter
-      ? all
-      : all.filter((m) => m.name.toLowerCase().includes(filter));
-    if (!items.length) {
+    const lower = trimmed.toLowerCase();
+    const matches = readMacros().filter((m) => m.name.toLowerCase().startsWith(lower));
+    if (matches.length) {
+      renderPopup(editor, matches, "send");
+    } else if (popup.boundEditor === editor) {
       hidePopup();
-      return;
     }
-    renderPopup(editor, items);
   }
 
   function handleEditorKeydown(event) {
@@ -477,10 +519,10 @@
               <textarea data-role="body" rows="8" spellcheck="false"></textarea>
             </label>
             <div class="ccf-sm-modal-actions">
+              <div class="ccf-sm-modal-status" data-role="status" aria-live="polite"></div>
               <button type="button" data-role="clear">새로 작성</button>
               <button type="button" data-role="save">저장 / 덮어쓰기</button>
             </div>
-            <div class="ccf-sm-modal-status" data-role="status" aria-live="polite"></div>
           </div>
         </div>
       </div>
@@ -662,7 +704,9 @@
         max-height: calc(100vh - 48px);
         display: flex;
         flex-direction: column;
-        background: #232323;
+        background: rgba(30,30,30,0.55);
+        backdrop-filter: blur(10px) saturate(140%);
+        -webkit-backdrop-filter: blur(10px) saturate(140%);
         color: #f4f0eb;
         border-radius: 0;
         box-shadow: 0 28px 60px rgba(0,0,0,0.5);
@@ -752,7 +796,18 @@
         min-height: 140px;
       }
       #${MODAL_ID} .ccf-sm-modal-actions {
-        display: flex; gap: 8px; justify-content: flex-end;
+        display: flex; gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      /* 상태 메시지를 액션 바 왼쪽에 두고 남는 공간 차지 → 버튼은 우측 고정. */
+      #${MODAL_ID} .ccf-sm-modal-actions .ccf-sm-modal-status {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       /* CCFOLIA 캐릭터 편집 팝업 하단의 MUI Button(text variant) 디자인을 차용:
          배경 투명 / 굵은 대문자 / 보조=핑크 / 메인=블루. */
