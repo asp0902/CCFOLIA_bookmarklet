@@ -567,6 +567,9 @@
     root.querySelector(".ccf-sm-modal-backdrop").addEventListener("click", closeManageModal, ccfSmWithSignal());
     document.addEventListener("keydown", escapeModalListener, ccfSmWithSignal());
 
+    // 헤더 드래그로 카드 이동
+    enableModalDrag(root);
+
     // 다른 스크립트가 우리 모달 안으로 자기 버튼을 주입했다가 SAFE_UI 마커보다
     // 늦게 떨어지면 잔존할 수 있어, 모달 열 때마다 우리 영역 안의 외부 주입 버튼을 정리.
     const cleanForeignInjections = () => {
@@ -585,6 +588,63 @@
     if (event.key === "Escape" && document.getElementById(MODAL_ID)) {
       closeManageModal();
     }
+  }
+
+  function enableModalDrag(root) {
+    const card = root.querySelector(".ccf-sm-modal-card");
+    const head = root.querySelector(".ccf-sm-modal-head");
+    if (!(card instanceof HTMLElement) || !(head instanceof HTMLElement)) return;
+
+    const state = { dragging: false, startX: 0, startY: 0, originLeft: 0, originTop: 0 };
+
+    const onPointerDown = (event) => {
+      if (event.button !== 0) return;
+      // 헤더 안의 인터랙티브 요소(닫기 버튼 등)에서는 드래그 시작 금지
+      if (event.target instanceof Element && event.target.closest("button, input, textarea, a, [contenteditable]")) return;
+
+      // 첫 드래그 직전, 중앙 정렬(transform: translate(-50%, -50%))을 명시적 left/top(px)으로 고정.
+      const rect = card.getBoundingClientRect();
+      card.style.left = `${rect.left}px`;
+      card.style.top = `${rect.top}px`;
+      card.style.transform = "none";
+
+      state.dragging = true;
+      state.startX = event.clientX;
+      state.startY = event.clientY;
+      state.originLeft = rect.left;
+      state.originTop = rect.top;
+
+      head.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+
+    const onPointerMove = (event) => {
+      if (!state.dragging) return;
+      const dx = event.clientX - state.startX;
+      const dy = event.clientY - state.startY;
+      const w = card.offsetWidth;
+      const h = card.offsetHeight;
+      // 카드가 뷰포트를 완전히 벗어나지 않도록 살짝의 마진(헤더 일부는 항상 보이게).
+      const minLeft = -w + 80;
+      const maxLeft = window.innerWidth - 80;
+      const minTop = 0;
+      const maxTop = window.innerHeight - 40;
+      const nextLeft = Math.min(Math.max(state.originLeft + dx, minLeft), maxLeft);
+      const nextTop = Math.min(Math.max(state.originTop + dy, minTop), maxTop);
+      card.style.left = `${nextLeft}px`;
+      card.style.top = `${nextTop}px`;
+    };
+
+    const onPointerUp = (event) => {
+      if (!state.dragging) return;
+      state.dragging = false;
+      try { head.releasePointerCapture?.(event.pointerId); } catch (error) { /* release failed */ }
+    };
+
+    head.addEventListener("pointerdown", onPointerDown, ccfSmWithSignal());
+    head.addEventListener("pointermove", onPointerMove, ccfSmWithSignal());
+    head.addEventListener("pointerup", onPointerUp, ccfSmWithSignal());
+    head.addEventListener("pointercancel", onPointerUp, ccfSmWithSignal());
   }
 
   function closeManageModal() {
@@ -677,10 +737,12 @@
         max-height: calc(100vh - 48px);
         display: flex;
         flex-direction: column;
-        background: rgba(0, 0, 0, 0);
-        color: #f4f0eb;
+        background: rgba(44, 44, 44, 0.87);
+        color: #ffffff;
         border-radius: 0;
-        box-shadow: none;
+        box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2),
+                    0 6px 10px 0 rgba(0,0,0,0.14),
+                    0 1px 18px 0 rgba(0,0,0,0.12);
         overflow: hidden;
       }
       #${MODAL_ID} .ccf-sm-modal-head {
@@ -688,7 +750,12 @@
         padding: 14px 18px;
         border-bottom: 1px solid rgba(255,255,255,0.08);
         font-size: 14px;
+        cursor: move;
+        user-select: none;
       }
+      /* 드래그 핸들로 잡혀선 안 되는 인터랙티브 요소들은 별도 커서 */
+      #${MODAL_ID} .ccf-sm-modal-head button { cursor: pointer; }
+      #${MODAL_ID} .ccf-sm-modal-head .ccf-sm-toolbar-btn { cursor: pointer; }
       #${MODAL_ID} .ccf-sm-modal-close {
         appearance: none; background: transparent; color: inherit;
         border: 0; font-size: 22px; line-height: 1; cursor: pointer;
@@ -721,7 +788,7 @@
       #${MODAL_ID} .ccf-sm-modal-row-main {
         flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
       }
-      #${MODAL_ID} .ccf-sm-modal-row-main strong { font-size: 13px; color: #ffe9c2; }
+      #${MODAL_ID} .ccf-sm-modal-row-main strong { font-size: 13px; color: #ffffff; }
       #${MODAL_ID} .ccf-sm-modal-row-main code {
         font-size: 11px; opacity: 0.7;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
