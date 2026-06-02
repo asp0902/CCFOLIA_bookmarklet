@@ -79,6 +79,15 @@
       // 항상 동작해야 하므로 패널 카드 목록에서 숨기고, 룸 진입 시 자동 로드.
       alwaysOn: true,
       hiddenFromPanel: true
+    },
+    {
+      id: "ccf-roll-triggers",
+      title: "판정 매크로 자동 실행",
+      summary: "/desc로 렌더된 판정 알약을 클릭하면 채팅 팔레트를 자동 선택해 굴림",
+      scripts: ["legacy/ccfolia-roll-triggers.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
     }
   ]);
 
