@@ -435,7 +435,7 @@
       <div class="ccf-sm-modal-backdrop"></div>
       <div class="ccf-sm-modal-card" role="dialog" aria-modal="true">
         <div class="ccf-sm-modal-head">
-          <strong>내 슬래시 매크로 (모든 룸 공용)</strong>
+          <strong>내 매크로</strong>
           <button type="button" class="ccf-sm-modal-close" aria-label="닫기">×</button>
         </div>
         <div class="ccf-sm-modal-body">
