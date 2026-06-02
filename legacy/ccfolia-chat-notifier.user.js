@@ -5671,6 +5671,15 @@
 
     const text = normalizeSpace(dialog.innerText || dialog.textContent || "");
 
+    // 캐릭터 편집/시트 등의 다이얼로그는 BGM 마킹 대상이 아니다.
+    // 특징 텍스트("삭제" + "복제" + "화면에 추가" 등)나 시트 관련 마커가 있으면 즉시 제외.
+    if (
+      (/삭제|削除|Delete/.test(text) && /복제|複製|Duplicate/.test(text) && /(화면|画面|Screen|추가|追加|Add)/.test(text))
+      || dialog.querySelector('[data-testid="DeleteIcon"]') && dialog.querySelector('[data-testid="ContentCopyIcon"]')
+    ) {
+      return false;
+    }
+
     const hasExternalUrlInput = [...dialog.querySelectorAll("input, textarea")]
       .some((input) => isLikelyCcfBgmUrlInput(input));
 
@@ -5682,12 +5691,31 @@
       return list instanceof HTMLElement && isCcfBgmNativeMusicList(list);
     });
 
-    if (hasExternalUrlInput || hasNativeMusicList) {
+    // BGM 다이얼로그의 강한 신호: 음악 리스트 자체.
+    if (hasNativeMusicList) {
+      return true;
+    }
+
+    // URL 입력칸만으로는 부족 — 음악 관련 마커(볼륨 슬라이더 / 음악 아이콘 / 재생 버튼)가
+    // 함께 있을 때만 BGM으로 인정. 캐릭터 편집 등 URL 입력만 있는 다이얼로그 오탐 방지.
+    const hasMusicMarker = !!dialog.querySelector(
+      'input[type="range"][name="volume"], '
+      + 'input[type="range"][aria-label*="volume" i], '
+      + 'input[type="range"][aria-label*="음량"], '
+      + 'input[type="range"][aria-label*="音量"], '
+      + 'button[aria-label*="play" i], '
+      + '[data-testid="PlayArrowIcon"], '
+      + '[data-testid="MusicNoteIcon"], '
+      + '[data-testid="LibraryMusicIcon"]'
+    );
+
+    if (hasExternalUrlInput && hasMusicMarker) {
       return true;
     }
 
     return isRecentCcfBgmClick()
       && !!dialog.querySelector("input, textarea")
+      && hasMusicMarker
       && /external\s*file|file\s*url|youtube|YouTube|유튜브|외부\s*파일|파일\s*URL/i.test(text);
   }
 
