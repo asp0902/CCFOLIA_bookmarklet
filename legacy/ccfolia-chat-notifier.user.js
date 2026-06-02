@@ -2127,13 +2127,21 @@
         && !nativeItem.classList.contains("ccf-youtube-bgm-item")
         && isBgmDialog
       ) {
-        const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
-        if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
-          stopCcfYoutubeBgm("native-library-selected");
-          ccfBgmNativeLoadedSlots.add(targetSlotKey);
-          markCcfYoutubeBgmSlotButtons();
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
-          window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
+        // 複数選択(multi-select) 모드에서 row 클릭은 "선택 토글"이지 "전환 재생"이 아니다.
+        // 체크박스가 row나 다이얼로그에 노출돼 있으면 우리는 정지/마킹 로직을 스킵.
+        const inMultiSelect = !!(
+          nativeItem.querySelector('input[type="checkbox"], .MuiCheckbox-root')
+          || (dialogHost instanceof HTMLElement && dialogHost.querySelector('input[type="checkbox"]:not([hidden]), .MuiCheckbox-root'))
+        );
+        if (!inMultiSelect) {
+          const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
+          if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
+            stopCcfYoutubeBgm("native-library-selected");
+            ccfBgmNativeLoadedSlots.add(targetSlotKey);
+            markCcfYoutubeBgmSlotButtons();
+            window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
+            window.setTimeout(markCcfYoutubeBgmSlotButtons, 500);
+          }
         }
       }
     }
@@ -5297,15 +5305,17 @@
     const duration = ccfBgmProgressRoot.querySelector(".ccf-bgm-duration");
     const playback = readCcfBgmPlaybackTime();
     let ratio = playback.total > 0 ? Math.max(0, Math.min(1, playback.now / playback.total)) : 0;
+    let displayNow = playback.now;
 
-    // YouTube ENDED 콜백이 늦거나 안 들어오는 케이스가 있어, 종료 직전(0.5s 이내)에는
-    // 진행바를 100%로 스냅하고 루프가 켜져 있으면 우리가 직접 처음으로 되감아 재생한다.
-    // (다중 호출 방지를 위해 2초 쿨다운)
-    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 0.5;
-    if (nearEnd) {
-      ratio = 1;
-      const nowMs = Date.now();
-      if (ccfBgmActiveLoop && nowMs - ccfBgmLoopNudgeAt > 2000 && ccfBgmPlayer) {
+    // YouTube ENDED 콜백이 늦거나 안 들어오는 케이스 대비. 종료 임박(1.0s 이내) 판정 범위를 키웠다.
+    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 1.0;
+    const nowMs = Date.now();
+    const justLooped = nowMs - ccfBgmLoopNudgeAt < 1200;
+
+    if (nearEnd && ccfBgmActiveLoop) {
+      // 루프 모드: 직접 처음으로 되감아 다시 재생하고, 슬라이더는 즉시 0으로 리셋해서
+      // "끝→처음" 점프가 시각적으로 자연스럽게 보이도록.
+      if (nowMs - ccfBgmLoopNudgeAt > 2000 && ccfBgmPlayer) {
         ccfBgmLoopNudgeAt = nowMs;
         try {
           ccfBgmPlayer.seekTo?.(0, true);
@@ -5314,13 +5324,27 @@
           debugLog?.("bgm-youtube-loop-nudge-failed", serializeError?.(error) || String(error));
         }
       }
+      ratio = 0;
+      displayNow = 0;
+    } else if (nearEnd && !ccfBgmActiveLoop) {
+      // 비루프 + 종료 임박: getCurrentTime이 끝까지 다 가지 않는 YouTube 특성을 보정해
+      // 진행바를 100%로 스냅 (시각적 완성도).
+      ratio = 1;
+      displayNow = playback.total;
+    } else if (justLooped) {
+      // 직전에 루프 nudge가 발생한 직후, YouTube getCurrentTime이 아직 갱신되지 않아
+      // 큰 값을 돌려주는 짧은 구간이 있다. 그 동안에는 0으로 강제 표시.
+      if (ratio > 0.5) {
+        ratio = 0;
+        displayNow = 0;
+      }
     }
 
     if (range instanceof HTMLInputElement && document.activeElement !== range) {
       range.value = String(Math.round(ratio * 1000));
     }
     if (current) {
-      current.textContent = formatCcfBgmTime(playback.now);
+      current.textContent = formatCcfBgmTime(displayNow);
     }
     if (duration) {
       duration.textContent = formatCcfBgmTime(playback.total);

@@ -1746,11 +1746,25 @@
     }
   }
 
-  // 단순 filter: blur — 텍스트에만 블러를 거는 가장 자연스러운 형태.
-  // 도형적인 경계가 보이지 않도록 마스크/패딩을 일절 적용하지 않는다.
+  // text-shadow 기법으로 블러 글로우 효과. filter: blur과 달리 박스 클리핑이 없고,
+  // 텍스트 글리프 자체가 발광체처럼 퍼지므로 도형 경계가 보이지 않는 자연스러운 결과.
+  // 글자 자체는 transparent로 만들고 텍스트 그림자만 보이도록 한다.
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
-    el.style.filter = `blur(${blurValue})`;
+    const px = Math.max(parseFloat(blurValue) || 0, 0);
+    if (px <= 0) return;
+    // 의도된 텍스트 색을 그림자 색으로 보존(없으면 currentColor 사용).
+    let color = "currentColor";
+    try {
+      const computed = window.getComputedStyle(el).color;
+      if (computed && computed !== "rgba(0, 0, 0, 0)" && computed !== "transparent") {
+        color = computed;
+      }
+    } catch (error) { /* getComputedStyle failed */ }
+    el.style.color = "transparent";
+    // 같은 그림자를 두 번 겹쳐 그려 약한 글로우가 더 또렷이 보이도록.
+    const radius = Math.round(px * 2);
+    el.style.textShadow = `0 0 ${radius}px ${color}, 0 0 ${radius}px ${color}`;
   }
 
   function mergeStyles(styleList) {
