@@ -398,6 +398,29 @@
     );
   }
 
+  // MUI Dialog는 FocusTrap으로 포커스를 가두므로, 외부 모달(우리 매크로 관리 모달)을
+  // 열기 전에 반드시 닫아야 입력칸 클릭/타이핑이 정상 동작한다.
+  function closeMuiDialog(dialog) {
+    if (!(dialog instanceof HTMLElement)) return;
+    // 1) backdrop 클릭 시뮬레이션 (가장 자연스러운 종료 경로)
+    const backdrop = dialog.querySelector(".MuiBackdrop-root")
+      || document.querySelector("body > .MuiDialog-root .MuiBackdrop-root")
+      || document.querySelector('body > [role="presentation"] .MuiBackdrop-root');
+    if (backdrop instanceof HTMLElement) {
+      try {
+        backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+        backdrop.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+        return;
+      } catch (error) { /* fall through */ }
+    }
+    // 2) Esc 키 폴백
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true, cancelable: true }));
+    } catch (error) { /* dispatch failed */ }
+  }
+
   function injectHelpDialogButton(dialog) {
     const title = findDialogTitleHost(dialog);
     if (!title) return;
@@ -412,7 +435,11 @@
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openManageModal();
+      // MUI 다이얼로그의 FocusTrap이 우리 모달 입력칸으로의 포커스 이동을 막으므로,
+      // 도움말 다이얼로그를 먼저 닫고 우리 모달을 연다.
+      closeMuiDialog(dialog);
+      // dialog 닫힘 transition이 끝난 뒤 열어야 backdrop이 우리 모달을 가리지 않는다.
+      setTimeout(openManageModal, 60);
     }, ccfSmWithSignal());
 
     // 제목 영역 우측 끝에 배치
