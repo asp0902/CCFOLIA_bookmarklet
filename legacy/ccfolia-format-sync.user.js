@@ -957,7 +957,9 @@
       const overflowY = getComputedStyle(current).overflowY || "";
       if (/(?:auto|scroll|overlay)/i.test(overflowY)) {
         const distanceFromBottom = current.scrollHeight - current.scrollTop - current.clientHeight;
-        return distanceFromBottom <= 72 ? current : null;
+        // 일괄 렌더 동안에는 누적 높이 변화가 수백 px까지 가는 경우가 있어
+        // 72px 임계로는 초반에 사슬이 끊긴다. 400px까지는 "사용자가 하단 보고 있던 것"으로 간주.
+        return distanceFromBottom <= 400 ? current : null;
       }
       current = current.parentElement;
     }
@@ -967,28 +969,43 @@
   function preserveBottomScrollAfterRender(el, scrollTarget) {
     if (!(scrollTarget instanceof HTMLElement)) return;
 
-    const scrollToBottom = () => {
+    // 1) 동기 스냅 — 다음 렌더의 거리 측정이 stale한 scrollTop을 보지 않게 즉시 반영.
+    if (scrollTarget.isConnected) {
+      scrollTarget.scrollTop = scrollTarget.scrollHeight;
+    }
+
+    // 2) rAF 스냅 — 본문 DOM이 추가 reflow되며 높이가 더 늘어나는 케이스 대응.
+    requestAnimationFrame(() => {
+      if (scrollTarget.isConnected) {
+        scrollTarget.scrollTop = scrollTarget.scrollHeight;
+      }
+    });
+
+    // 3) 짧은 타임아웃 — React가 비동기로 후속 update를 끼우는 경우 마지막으로 한 번 더 보정.
+    setTimeout(() => {
+      if (scrollTarget.isConnected) {
+        scrollTarget.scrollTop = scrollTarget.scrollHeight;
+      }
+    }, 50);
+
+    // 4) 이미지가 늦게 로드되면 그때 또 한 번 스냅(이미지 디코드로 추가 높이 변화).
+    const scrollToBottomDeferred = () => {
       requestAnimationFrame(() => {
         if (scrollTarget.isConnected) {
           scrollTarget.scrollTop = scrollTarget.scrollHeight;
         }
       });
     };
-
-    // 텍스트 서식만 적용된 메시지도 높이가 달라지므로 매번 즉시 하단 스냅.
-    scrollToBottom();
-
-    // 이미지가 늦게 로드되면 그때 또 한 번 스냅(이미지 디코드로 추가 높이 변화).
     const images = el.querySelectorAll
       ? [...el.querySelectorAll("img.ccf-image")]
       : [];
     images.forEach((image) => {
       if (image.complete) {
-        scrollToBottom();
+        scrollToBottomDeferred();
         return;
       }
-      image.addEventListener("load", scrollToBottom, { once: true });
-      image.addEventListener("error", scrollToBottom, { once: true });
+      image.addEventListener("load", scrollToBottomDeferred, { once: true });
+      image.addEventListener("error", scrollToBottomDeferred, { once: true });
     });
   }
 
@@ -1729,6 +1746,24 @@
     }
   }
 
+  // CSS `filter: blur()`은 박스 가장자리에서 알파가 갑자기 끊겨 사각 모서리가 보인다.
+  // 박스를 padding으로 키우고(블러 헤일로가 텍스트에서 멀리 뻗도록) 마스크로
+  // 경계를 fade-out 시켜 자연스럽게 보이게 한다. 인라인 흐름은 음수 margin으로 보정.
+  function applySoftBlur(el, blurValue) {
+    if (!(el instanceof HTMLElement)) return;
+    const px = Math.max(parseFloat(blurValue) || 0, 0);
+    el.style.filter = `blur(${blurValue})`;
+    if (px <= 0) return;
+    const padH = Math.round(px * 3);
+    const padV = Math.round(px * 1.5);
+    if (!el.style.display) el.style.display = "inline-block";
+    el.style.padding = `${padV}px ${padH}px`;
+    el.style.margin = `${-padV}px ${-padH}px`;
+    const mask = "radial-gradient(ellipse closest-side, #000 60%, transparent 100%)";
+    el.style.webkitMaskImage = mask;
+    el.style.maskImage = mask;
+  }
+
   function mergeStyles(styleList) {
     const out = {};
     for (const style of styleList) {
@@ -1765,7 +1800,7 @@
     if (style.lineHeight) el.style.lineHeight = style.lineHeight;
     if (style.textAlign) el.style.textAlign = style.textAlign;
     if (style.textShadow) el.style.textShadow = style.textShadow;
-    if (style.blur) el.style.filter = `blur(${style.blur})`;
+    if (style.blur) applySoftBlur(el, style.blur);
     if (style.opacity != null) el.style.opacity = String(style.opacity);
   }
 
@@ -1859,7 +1894,7 @@
     if (frag.style?.italic) wrapper.style.fontStyle = "italic";
     if (frag.style?.letterSpacing) wrapper.style.letterSpacing = frag.style.letterSpacing;
     if (frag.style?.lineHeight) wrapper.style.lineHeight = frag.style.lineHeight;
-    if (frag.style?.blur) wrapper.style.filter = `blur(${frag.style.blur})`;
+    if (frag.style?.blur) applySoftBlur(wrapper, frag.style.blur);
 
     const base = document.createElement("span");
     base.className = "ccf-ruby-base";
@@ -11576,7 +11611,7 @@
     if (style.lineHeight) el.style.lineHeight = style.lineHeight;
     if (style.textAlign) el.style.textAlign = style.textAlign;
     if (style.textShadow) el.style.textShadow = style.textShadow;
-    if (style.blur) el.style.filter = `blur(${style.blur})`;
+    if (style.blur) applySoftBlur(el, style.blur);
     if (style.opacity != null) el.style.opacity = String(style.opacity);
   }
 
@@ -11670,7 +11705,7 @@
     if (frag.style?.italic) wrapper.style.fontStyle = "italic";
     if (frag.style?.letterSpacing) wrapper.style.letterSpacing = frag.style.letterSpacing;
     if (frag.style?.lineHeight) wrapper.style.lineHeight = frag.style.lineHeight;
-    if (frag.style?.blur) wrapper.style.filter = `blur(${frag.style.blur})`;
+    if (frag.style?.blur) applySoftBlur(wrapper, frag.style.blur);
 
     const base = document.createElement("span");
     base.className = "ccf-ruby-base";
