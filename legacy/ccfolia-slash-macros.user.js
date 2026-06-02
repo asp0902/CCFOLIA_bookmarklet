@@ -681,7 +681,7 @@
       }
       #${MODAL_ID} .ccf-sm-modal-close:hover { background: rgba(255,255,255,0.08); }
       #${MODAL_ID} .ccf-sm-modal-body {
-        padding: 14px 18px 18px;
+        padding: 14px 18px 10px;
         overflow: auto;
         display: grid;
         gap: 14px;
@@ -779,7 +779,11 @@
         background-color: rgba(255,255,255,0.06);
       }
       #${MODAL_ID} .ccf-sm-modal-status {
-        font-size: 11px; opacity: 0.7; min-height: 14px;
+        font-size: 11px; opacity: 0.7;
+      }
+      /* 메시지가 비어 있을 때는 grid에서 빠져 행 간격(gap)·하단 여백을 차지하지 않도록. */
+      #${MODAL_ID} .ccf-sm-modal-status:empty {
+        display: none;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
