@@ -306,38 +306,10 @@
     const macro = popup.items[popup.activeIndex];
     if (!macro) return false;
     const editor = popup.boundEditor;
-    const mode = popup.mode;
     setEditorValue(editor, macro.body);
     editor.focus();
     hidePopup();
-    if (mode === "send") {
-      // 본문을 입력칸에 채운 직후 컴포저의 전송 버튼을 자동으로 클릭.
-      setTimeout(() => triggerComposerSubmit(editor), 30);
-    }
     return true;
-  }
-
-  // 컴포저(채팅 입력 영역)의 전송 버튼을 찾아 클릭. submit 버튼 우선,
-  // 없으면 "전송/send" 라벨의 일반 버튼 폴백.
-  function triggerComposerSubmit(editor) {
-    if (!(editor instanceof HTMLElement)) return;
-    let cur = editor.parentElement;
-    for (let i = 0; i < 10 && cur; i += 1, cur = cur.parentElement) {
-      const submit = cur.querySelector('button[type="submit"]:not([disabled])');
-      if (submit instanceof HTMLElement && isVisible(submit)) {
-        submit.click();
-        return;
-      }
-      const sendBtn = [...cur.querySelectorAll("button")].find((b) => {
-        if (!(b instanceof HTMLElement) || b.disabled) return false;
-        const label = (b.getAttribute("aria-label") || b.textContent || "").trim();
-        return /^(전송|send|送信)$/i.test(label);
-      });
-      if (sendBtn instanceof HTMLElement && isVisible(sendBtn)) {
-        sendBtn.click();
-        return;
-      }
-    }
   }
 
   // ----- editor binding -------------------------------------------------------
@@ -359,7 +331,8 @@
       return;
     }
 
-    // 직접 이름 매칭 모드 — 매크로 이름의 프리픽스와 일치하면 팝업, Enter 시 즉시 전송 (send)
+    // 직접 이름 매칭 모드 — 매크로 이름의 프리픽스와 일치하면 팝업.
+    // 동작은 /m 모드와 동일 (펼침만, 사용자가 다시 Enter로 전송).
     const trimmed = value.trim();
     if (!trimmed) {
       if (popup.boundEditor === editor) hidePopup();
@@ -368,7 +341,7 @@
     const lower = trimmed.toLowerCase();
     const matches = readMacros().filter((m) => m.name.toLowerCase().startsWith(lower));
     if (matches.length) {
-      renderPopup(editor, matches, "send");
+      renderPopup(editor, matches, "review");
     } else if (popup.boundEditor === editor) {
       hidePopup();
     }
@@ -664,7 +637,7 @@
       }
       #${POPUP_ID} .ccf-sm-popup-name {
         font-weight: 700;
-        color: #ffe9c2;
+        color: #ffffff;
       }
       #${POPUP_ID} .ccf-sm-popup-preview {
         opacity: 0.7;
@@ -704,12 +677,10 @@
         max-height: calc(100vh - 48px);
         display: flex;
         flex-direction: column;
-        background: rgba(30,30,30,0.55);
-        backdrop-filter: blur(10px) saturate(140%);
-        -webkit-backdrop-filter: blur(10px) saturate(140%);
+        background: rgba(0, 0, 0, 0);
         color: #f4f0eb;
         border-radius: 0;
-        box-shadow: 0 28px 60px rgba(0,0,0,0.5);
+        box-shadow: none;
         overflow: hidden;
       }
       #${MODAL_ID} .ccf-sm-modal-head {
