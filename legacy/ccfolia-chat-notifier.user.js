@@ -7847,6 +7847,27 @@
     });
   }
 
+  // 음악 라이브러리 헤더에 "複数選択 / 복수 선택 / multi select" 토글이 활성화돼 있는지 감지.
+  // CCFOLIA는 토글 버튼에 aria-pressed="true" 또는 active 색상 변형 클래스(MuiButton-contained 등)를
+  // 부여한다. 우리가 정확한 active class를 알 수 없으므로 "라벨로 식별 → 부모/형제에 active 단서 탐색"
+  // 휴리스틱을 사용한다.
+  function isCcfBgmMultiSelectActive(scope) {
+    const root = scope instanceof Element ? scope.closest('[role="dialog"], .MuiDialog-root, .MuiDrawer-root') : null;
+    const container = root || scope;
+    if (!(container instanceof Element)) return false;
+    const buttons = container.querySelectorAll("button");
+    for (const btn of buttons) {
+      if (!(btn instanceof HTMLElement)) continue;
+      const label = (btn.getAttribute("aria-label") || btn.textContent || "").trim();
+      if (!/(複数選択|複数選 ?択|복수\s*선택|multi[-\s]?select|multiselect)/i.test(label)) continue;
+      // active 단서: aria-pressed="true" 또는 MuiButton-contained variant
+      if (btn.getAttribute("aria-pressed") === "true") return true;
+      if (/\bMuiButton-contained\b/.test(btn.className || "")) return true;
+      if (btn.matches?.(".Mui-selected, .is-active, [data-active='1']")) return true;
+    }
+    return false;
+  }
+
   function handleCcfNativeBgmPointerDownDelegated(event) {
     if (event.button !== 0) return;
     if (ccfYoutubeBgmDragState) return;
@@ -7867,6 +7888,17 @@
 
     if (!muiList.querySelector('[data-testid="LibraryMusicIcon"]')
         && !muiList.querySelector('.ccf-youtube-bgm-row-wrap')) {
+      return;
+    }
+
+    // 複数選択(multi-select) 모드에서는 우리가 끼면 안 된다:
+    // CCFOLIA가 row 클릭을 "선택 토글"로 처리하는데 우리가 stopImmediatePropagation/preventDefault를
+    // 걸어버리면 선택 로직이 막히고, 그 와중에 재생 상태도 어긋난다. 마커:
+    // (1) 리스트 안에 체크박스가 보이거나, (2) "複数選택/複数選択/multi" 라벨 버튼이 active 상태
+    if (
+      muiList.querySelector('input[type="checkbox"], .MuiCheckbox-root')
+      || isCcfBgmMultiSelectActive(muiList)
+    ) {
       return;
     }
 
