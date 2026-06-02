@@ -1393,7 +1393,7 @@
         content: "\\22ee \\22ee";
         position: absolute;
         top: 50%;
-        left: 13px;
+        left: 14px;
         transform: translateY(-50%);
         color: currentColor;
         font-size: 15px;

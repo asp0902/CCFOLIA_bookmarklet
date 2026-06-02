@@ -1746,16 +1746,11 @@
     }
   }
 
-  // CSS `filter: blur()`은 박스 가장자리에서 알파가 갑자기 끊겨 사각 모서리가 보인다.
-  // padding 확장은 주변 레이아웃에 영향을 줘 제외하고, 마스크로만 경계를 fade-out.
+  // 단순 filter: blur — 텍스트에만 블러를 거는 가장 자연스러운 형태.
+  // 도형적인 경계가 보이지 않도록 마스크/패딩을 일절 적용하지 않는다.
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
     el.style.filter = `blur(${blurValue})`;
-    const px = Math.max(parseFloat(blurValue) || 0, 0);
-    if (px <= 0) return;
-    const mask = "radial-gradient(ellipse closest-side, #000 60%, transparent 100%)";
-    el.style.webkitMaskImage = mask;
-    el.style.maskImage = mask;
   }
 
   function mergeStyles(styleList) {

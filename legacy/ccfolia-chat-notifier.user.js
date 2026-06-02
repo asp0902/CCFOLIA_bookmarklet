@@ -5286,6 +5286,7 @@
     ccfBgmProgressTimer = window.setTimeout(tick, BGM_PROGRESS_UPDATE_MS);
   }
 
+  let ccfBgmLoopNudgeAt = 0;
   function updateCcfBgmProgressBar() {
     if (!ccfBgmProgressRoot) {
       return;
@@ -5295,7 +5296,25 @@
     const current = ccfBgmProgressRoot.querySelector(".ccf-bgm-current");
     const duration = ccfBgmProgressRoot.querySelector(".ccf-bgm-duration");
     const playback = readCcfBgmPlaybackTime();
-    const ratio = playback.total > 0 ? Math.max(0, Math.min(1, playback.now / playback.total)) : 0;
+    let ratio = playback.total > 0 ? Math.max(0, Math.min(1, playback.now / playback.total)) : 0;
+
+    // YouTube ENDED 콜백이 늦거나 안 들어오는 케이스가 있어, 종료 직전(0.5s 이내)에는
+    // 진행바를 100%로 스냅하고 루프가 켜져 있으면 우리가 직접 처음으로 되감아 재생한다.
+    // (다중 호출 방지를 위해 2초 쿨다운)
+    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 0.5;
+    if (nearEnd) {
+      ratio = 1;
+      const nowMs = Date.now();
+      if (ccfBgmActiveLoop && nowMs - ccfBgmLoopNudgeAt > 2000 && ccfBgmPlayer) {
+        ccfBgmLoopNudgeAt = nowMs;
+        try {
+          ccfBgmPlayer.seekTo?.(0, true);
+          ccfBgmPlayer.playVideo?.();
+        } catch (error) {
+          debugLog?.("bgm-youtube-loop-nudge-failed", serializeError?.(error) || String(error));
+        }
+      }
+    }
 
     if (range instanceof HTMLInputElement && document.activeElement !== range) {
       range.value = String(Math.round(ratio * 1000));
@@ -7891,17 +7910,6 @@
       return;
     }
 
-    // 複数選択(multi-select) 모드에서는 우리가 끼면 안 된다:
-    // CCFOLIA가 row 클릭을 "선택 토글"로 처리하는데 우리가 stopImmediatePropagation/preventDefault를
-    // 걸어버리면 선택 로직이 막히고, 그 와중에 재생 상태도 어긋난다. 마커:
-    // (1) 리스트 안에 체크박스가 보이거나, (2) "複数選택/複数選択/multi" 라벨 버튼이 active 상태
-    if (
-      muiList.querySelector('input[type="checkbox"], .MuiCheckbox-root')
-      || isCcfBgmMultiSelectActive(muiList)
-    ) {
-      return;
-    }
-
     const container = findCcfYoutubeBgmInsertionContainer(muiList) || muiList;
     if (!(container instanceof HTMLElement)) return;
 
@@ -7912,9 +7920,52 @@
     if (!(row instanceof HTMLElement) || row.parentElement !== container) return;
     if (row.classList.contains('ccf-youtube-bgm-row-wrap')) return;
 
-    event.stopImmediatePropagation();
+    // 즉시 가로채지 않고 "드래그 후보"로만 표시한다.
+    // 사용자가 일정 거리 이상 움직였을 때만 우리 드래그 로직을 발동시키고,
+    // 단순 클릭(복수선택 토글 등)은 CCFOLIA 네이티브 동작이 그대로 처리되도록 한다.
+    queuePendingNativeBgmDrag(event, row);
+  }
+
+  // 드래그 후보 단계 — pointermove가 임계를 넘기 전까지는 CCFOLIA 동작을 막지 않는다.
+  const NATIVE_BGM_DRAG_THRESHOLD_PX = 6;
+  let pendingNativeBgmDrag = null;
+  function queuePendingNativeBgmDrag(downEvent, row) {
+    cancelPendingNativeBgmDrag();
+    pendingNativeBgmDrag = {
+      pointerId: downEvent.pointerId,
+      startX: downEvent.clientX,
+      startY: downEvent.clientY,
+      row,
+      latestEvent: downEvent
+    };
+    document.addEventListener("pointermove", handleNativeBgmDragMove, withTeardownSignal(true));
+    document.addEventListener("pointerup", cancelPendingNativeBgmDrag, withTeardownSignal(true));
+    document.addEventListener("pointercancel", cancelPendingNativeBgmDrag, withTeardownSignal(true));
+  }
+
+  function handleNativeBgmDragMove(event) {
+    if (!pendingNativeBgmDrag) return;
+    if (event.pointerId !== pendingNativeBgmDrag.pointerId) return;
+    const dx = event.clientX - pendingNativeBgmDrag.startX;
+    const dy = event.clientY - pendingNativeBgmDrag.startY;
+    if (Math.hypot(dx, dy) < NATIVE_BGM_DRAG_THRESHOLD_PX) return;
+
+    const row = pendingNativeBgmDrag.row;
+    const seed = pendingNativeBgmDrag.latestEvent;
+    cancelPendingNativeBgmDrag();
+    if (!(row instanceof HTMLElement) || !row.isConnected) return;
+
+    // 임계를 넘긴 시점부터 우리 드래그 로직 시작.
     event.preventDefault();
-    beginCcfYoutubeBgmRowDrag(event, row, "__ccf_native__");
+    beginCcfYoutubeBgmRowDrag(seed, row, "__ccf_native__");
+  }
+
+  function cancelPendingNativeBgmDrag() {
+    if (!pendingNativeBgmDrag) return;
+    pendingNativeBgmDrag = null;
+    document.removeEventListener("pointermove", handleNativeBgmDragMove, true);
+    document.removeEventListener("pointerup", cancelPendingNativeBgmDrag, true);
+    document.removeEventListener("pointercancel", cancelPendingNativeBgmDrag, true);
   }
 
   document.addEventListener("pointerdown", handleCcfNativeBgmPointerDownDelegated, withTeardownSignal(true));

@@ -850,17 +850,30 @@
         background: rgba(255,255,255,0.04);
         border-radius: 0;
         position: relative;
+        transition: transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+                    box-shadow 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+                    background 160ms ease;
+        will-change: transform;
       }
-      #${MODAL_ID} .ccf-sm-modal-row.is-dragging { opacity: 0.45; }
+      #${MODAL_ID} .ccf-sm-modal-row.is-dragging {
+        opacity: 0.55;
+        background: rgba(255,255,255,0.10);
+        transform: scale(1.01);
+        box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+        z-index: 1;
+      }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-before { transform: translateY(4px); }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-after { transform: translateY(-4px); }
       #${MODAL_ID} .ccf-sm-modal-row.is-drop-before::before,
       #${MODAL_ID} .ccf-sm-modal-row.is-drop-after::after {
         content: "";
         position: absolute;
         left: 4px; right: 4px; height: 2px;
         background: rgb(33, 150, 243);
+        box-shadow: 0 0 6px rgba(33, 150, 243, 0.6);
       }
-      #${MODAL_ID} .ccf-sm-modal-row.is-drop-before::before { top: -1px; }
-      #${MODAL_ID} .ccf-sm-modal-row.is-drop-after::after { bottom: -1px; }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-before::before { top: -3px; }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-after::after { bottom: -3px; }
       #${MODAL_ID} .ccf-sm-modal-row-grip {
         flex: 0 0 auto;
         cursor: grab;

@@ -466,7 +466,7 @@
         .footer-toast {
           margin-right: auto;
           font-size: 12px;
-          color: #2e7d32;
+          color: #424242;
           opacity: 0;
           transform: translateY(2px);
           transition: opacity 160ms ease, transform 160ms ease;
@@ -474,7 +474,7 @@
         }
         .footer-toast[data-visible="1"] { opacity: 1; transform: translateY(0); }
         @media (prefers-color-scheme: dark) {
-          .footer-toast { color: #81c784; }
+          .footer-toast { color: #9e9e9e; }
         }
         @media (prefers-color-scheme: dark) {
           :host { color: #eee; }
