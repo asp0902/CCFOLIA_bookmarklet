@@ -109,7 +109,6 @@
               merged.push({ name: m.name, body: m.body, updatedAt: m.updatedAt || Date.now() });
             }
           }
-          merged.sort((a, b) => a.name.localeCompare(b.name));
           list = merged;
           writeMacros(list); // 새 스키마로 즉시 저장
         }
@@ -137,8 +136,8 @@
     const list = readMacros().slice();
     const idx = list.findIndex((m) => m.name === cleanName);
     const entry = { name: cleanName, body: cleanBody, updatedAt: Date.now() };
+    // 사용자가 정한 순서를 유지: 새 항목은 끝에 추가, 기존 항목은 자리 그대로 갱신.
     if (idx >= 0) list[idx] = entry; else list.push(entry);
-    list.sort((a, b) => a.name.localeCompare(b.name));
     writeMacros(list);
     _macrosCache = null;
   }
@@ -148,6 +147,21 @@
     const next = list.filter((m) => m.name !== name);
     if (next.length === list.length) return false;
     writeMacros(next);
+    _macrosCache = null;
+    return true;
+  }
+
+  // 드래그 앤 드롭으로 순서 변경. fromIdx에 있는 항목을 toIdx 위치로 이동.
+  function reorderMacro(fromIdx, toIdx) {
+    const list = readMacros().slice();
+    if (fromIdx < 0 || fromIdx >= list.length) return false;
+    if (toIdx < 0 || toIdx > list.length) return false;
+    if (fromIdx === toIdx) return false;
+    const [item] = list.splice(fromIdx, 1);
+    // splice 이후 toIdx 조정: fromIdx보다 뒤로 옮길 때 인덱스가 1 줄어든다.
+    const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
+    list.splice(adjusted, 0, item);
+    writeMacros(list);
     _macrosCache = null;
     return true;
   }
@@ -514,8 +528,9 @@
         listEl.innerHTML = '<p class="ccf-sm-modal-empty">저장된 매크로가 없습니다. 아래에서 추가하세요.</p>';
         return;
       }
-      listEl.innerHTML = macros.map((m) => `
-        <div class="ccf-sm-modal-row" data-name="${escapeHtml(m.name)}">
+      listEl.innerHTML = macros.map((m, i) => `
+        <div class="ccf-sm-modal-row" data-name="${escapeHtml(m.name)}" data-index="${i}" draggable="true">
+          <span class="ccf-sm-modal-row-grip" aria-hidden="true" title="드래그해서 순서 변경">⋮⋮</span>
           <div class="ccf-sm-modal-row-main">
             <strong>${escapeHtml(m.name)}</strong>
             <code>${escapeHtml(previewBody(m.body))}</code>
@@ -526,6 +541,7 @@
           </div>
         </div>
       `).join("");
+      bindRowDragHandlers(listEl, refresh);
     };
 
     listEl.addEventListener("click", (event) => {
@@ -588,6 +604,55 @@
     if (event.key === "Escape" && document.getElementById(MODAL_ID)) {
       closeManageModal();
     }
+  }
+
+  function bindRowDragHandlers(listEl, refresh) {
+    if (!(listEl instanceof HTMLElement)) return;
+    let draggingIdx = -1;
+
+    listEl.querySelectorAll(".ccf-sm-modal-row").forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+
+      row.addEventListener("dragstart", (event) => {
+        draggingIdx = Number(row.getAttribute("data-index"));
+        row.classList.add("is-dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          // FF에서 dragstart가 발화되도록 데이터를 한 번 세팅
+          try { event.dataTransfer.setData("text/plain", row.getAttribute("data-name") || ""); } catch (error) { /* setData failed */ }
+        }
+      });
+
+      row.addEventListener("dragend", () => {
+        row.classList.remove("is-dragging");
+        draggingIdx = -1;
+        listEl.querySelectorAll(".ccf-sm-modal-row").forEach((r) => r.classList.remove("is-drop-before", "is-drop-after"));
+      });
+
+      row.addEventListener("dragover", (event) => {
+        if (draggingIdx < 0) return;
+        const overIdx = Number(row.getAttribute("data-index"));
+        if (overIdx === draggingIdx) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        const rect = row.getBoundingClientRect();
+        const before = (event.clientY - rect.top) < rect.height / 2;
+        listEl.querySelectorAll(".ccf-sm-modal-row").forEach((r) => r.classList.remove("is-drop-before", "is-drop-after"));
+        row.classList.add(before ? "is-drop-before" : "is-drop-after");
+      });
+
+      row.addEventListener("drop", (event) => {
+        if (draggingIdx < 0) return;
+        event.preventDefault();
+        const overIdx = Number(row.getAttribute("data-index"));
+        const rect = row.getBoundingClientRect();
+        const before = (event.clientY - rect.top) < rect.height / 2;
+        const targetIdx = before ? overIdx : overIdx + 1;
+        if (reorderMacro(draggingIdx, targetIdx)) {
+          refresh();
+        }
+      });
+    });
   }
 
   function enableModalDrag(root) {
@@ -784,7 +849,29 @@
         padding: 8px 12px;
         background: rgba(255,255,255,0.04);
         border-radius: 0;
+        position: relative;
       }
+      #${MODAL_ID} .ccf-sm-modal-row.is-dragging { opacity: 0.45; }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-before::before,
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-after::after {
+        content: "";
+        position: absolute;
+        left: 4px; right: 4px; height: 2px;
+        background: rgb(33, 150, 243);
+      }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-before::before { top: -1px; }
+      #${MODAL_ID} .ccf-sm-modal-row.is-drop-after::after { bottom: -1px; }
+      #${MODAL_ID} .ccf-sm-modal-row-grip {
+        flex: 0 0 auto;
+        cursor: grab;
+        font-size: 16px;
+        line-height: 1;
+        opacity: 0.45;
+        user-select: none;
+        letter-spacing: -2px;
+      }
+      #${MODAL_ID} .ccf-sm-modal-row-grip:active { cursor: grabbing; }
+      #${MODAL_ID} .ccf-sm-modal-row:hover .ccf-sm-modal-row-grip { opacity: 0.75; }
       #${MODAL_ID} .ccf-sm-modal-row-main {
         flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
       }

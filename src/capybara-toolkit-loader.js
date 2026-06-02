@@ -75,7 +75,10 @@
       title: "슬래시 매크로",
       summary: "/m <이름>으로 저장한 멀티라인 슬래시 커맨드를 입력창에 펼침 (모든 룸 공용)",
       scripts: ["legacy/ccfolia-slash-macros.user.js"],
-      roomOnly: true
+      roomOnly: true,
+      // 항상 동작해야 하므로 패널 카드 목록에서 숨기고, 룸 진입 시 자동 로드.
+      alwaysOn: true,
+      hiddenFromPanel: true
     }
   ]);
 
@@ -290,13 +293,18 @@
 
   async function restoreFeatureStates() {
     if (!isCcfoliaHost()) return;
-    
+
     const records = await Promise.all(FEATURE_CATALOG.map((f) => getFeatureRecord(f.id).catch(() => null)));
     for (let i = 0; i < FEATURE_CATALOG.length; i++) {
       const feature = FEATURE_CATALOG[i];
       const record = records[i];
+      const disabledByPage = feature.roomOnly && !isRoomPage();
+      // 항상 동작해야 하는 기능은 IndexedDB 기록 유무와 무관하게 자동 로드.
+      if (feature.alwaysOn) {
+        if (!disabledByPage) loadFeature(feature).catch(reportError);
+        continue;
+      }
       if (record && record.enabled) {
-        const disabledByPage = feature.roomOnly && !isRoomPage();
         if (!disabledByPage) {
           loadFeature(feature).catch(reportError);
         }
@@ -357,11 +365,14 @@
 
   function getOrderedFeatures() {
     const orderMap = new Map(state.customOrder.map((id, index) => [id, index]));
-    return [...FEATURE_CATALOG].sort((a, b) => {
-      const indexA = orderMap.has(a.id) ? orderMap.get(a.id) : 999;
-      const indexB = orderMap.has(b.id) ? orderMap.get(b.id) : 999;
-      return indexA - indexB;
-    });
+    // 카드 목록에서는 hiddenFromPanel/alwaysOn 기능을 제외.
+    return [...FEATURE_CATALOG]
+      .filter((feature) => !feature.hiddenFromPanel)
+      .sort((a, b) => {
+        const indexA = orderMap.has(a.id) ? orderMap.get(a.id) : 999;
+        const indexB = orderMap.has(b.id) ? orderMap.get(b.id) : 999;
+        return indexA - indexB;
+      });
   }
 
   function ensurePanel() {
@@ -443,6 +454,19 @@
         .btn.toggle[data-on="1"] { border-color: #111; background: #111; color: #fff; }
         .btn[disabled] { opacity: .55; cursor: default; }
         footer { border-top: 1px solid #e5e5e5; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+        .footer-toast {
+          margin-right: auto;
+          font-size: 12px;
+          color: #2e7d32;
+          opacity: 0;
+          transform: translateY(2px);
+          transition: opacity 160ms ease, transform 160ms ease;
+          pointer-events: none;
+        }
+        .footer-toast[data-visible="1"] { opacity: 1; transform: translateY(0); }
+        @media (prefers-color-scheme: dark) {
+          .footer-toast { color: #81c784; }
+        }
         @media (prefers-color-scheme: dark) {
           :host { color: #eee; }
           .panel { background: #171717; border-color: #333; }
@@ -466,6 +490,7 @@
         </header>
         <div class="body"></div>
         <footer>
+          <span class="footer-toast" aria-live="polite"></span>
           <button class="btn secondary" type="button" data-action="cache">캐시 갱신</button>
           <button class="btn secondary" type="button" data-action="backup">저장</button>
         </footer>
@@ -800,6 +825,23 @@
     renderPanel().catch(reportError);
   }
 
+  let footerToastTimer = 0;
+  function showFooterToast(text) {
+    const el = state.shadow?.querySelector(".footer-toast");
+    if (!(el instanceof HTMLElement)) return;
+    el.textContent = text;
+    el.setAttribute("data-visible", "1");
+    if (footerToastTimer) clearTimeout(footerToastTimer);
+    footerToastTimer = window.setTimeout(() => {
+      footerToastTimer = 0;
+      el.removeAttribute("data-visible");
+      // fade-out transition 끝난 뒤 텍스트 비우기
+      setTimeout(() => {
+        if (el.getAttribute("data-visible") !== "1") el.textContent = "";
+      }, 200);
+    }, 1800);
+  }
+
   function togglePanel() {
     state.isOpen = !state.isOpen;
     renderPanel().catch(reportError);
@@ -926,13 +968,14 @@
       return;
     }
     if (action === "cache") {
-      refreshCache().catch(reportError);
+      refreshCache().then(() => showFooterToast("저장되었습니다")).catch(reportError);
       return;
     }
     if (action === "backup") {
       backupKnownLocalStorage().then((count) => {
         state.status = `localStorage 저장값 ${count}개를 IndexedDB에 백업했습니다.`;
         renderPanel().catch(reportError);
+        showFooterToast("저장되었습니다");
       }).catch(reportError);
       return;
     }

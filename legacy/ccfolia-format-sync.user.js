@@ -1747,18 +1747,12 @@
   }
 
   // CSS `filter: blur()`은 박스 가장자리에서 알파가 갑자기 끊겨 사각 모서리가 보인다.
-  // 박스를 padding으로 키우고(블러 헤일로가 텍스트에서 멀리 뻗도록) 마스크로
-  // 경계를 fade-out 시켜 자연스럽게 보이게 한다. 인라인 흐름은 음수 margin으로 보정.
+  // padding 확장은 주변 레이아웃에 영향을 줘 제외하고, 마스크로만 경계를 fade-out.
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
-    const px = Math.max(parseFloat(blurValue) || 0, 0);
     el.style.filter = `blur(${blurValue})`;
+    const px = Math.max(parseFloat(blurValue) || 0, 0);
     if (px <= 0) return;
-    const padH = Math.round(px * 3);
-    const padV = Math.round(px * 1.5);
-    if (!el.style.display) el.style.display = "inline-block";
-    el.style.padding = `${padV}px ${padH}px`;
-    el.style.margin = `${-padV}px ${-padH}px`;
     const mask = "radial-gradient(ellipse closest-side, #000 60%, transparent 100%)";
     el.style.webkitMaskImage = mask;
     el.style.maskImage = mask;
