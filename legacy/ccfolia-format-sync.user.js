@@ -1746,11 +1746,13 @@
     }
   }
 
-  // 단순 filter:blur (시각적으로 가장 안정) + 텍스트 선택 차단(드래그/더블클릭으로
-  // 내용 노출 방지). Ctrl(또는 ⌘)+클릭으로 일시 토글 reveal — 핸들러는 한 번만 바인딩.
+  // -webkit-text-fill-color:transparent + text-shadow blur 방식.
+  // filter:blur 는 stacking context를 생성해 overflow:hidden 부모 안에서 sibling까지
+  // invisible 처리되는 Chrome 버그를 유발함. text-shadow 방식은 stacking context 없음.
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
-    el.style.filter = `blur(${blurValue})`;
+    const radius = Math.max(2, parseFloat(blurValue) || 4);
+    el.style.setProperty("--ccf-blur-r", `${radius * 2}px`);
     el.style.userSelect = "none";
     el.style.webkitUserSelect = "none";
     el.setAttribute("data-ccf-blurred", "1");
@@ -1783,12 +1785,18 @@
       const style = document.createElement("style");
       style.id = "ccf-blur-reveal-style";
       style.textContent = `
+        [data-ccf-blurred="1"] {
+          -webkit-text-fill-color: transparent !important;
+          text-shadow: 0 0 var(--ccf-blur-r, 8px) currentColor !important;
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          cursor: help !important;
+        }
         [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] {
-          filter: none !important;
+          -webkit-text-fill-color: inherit !important;
+          text-shadow: none !important;
           user-select: text !important;
           -webkit-user-select: text !important;
-          color: inherit !important;
-          text-shadow: none !important;
           cursor: text !important;
         }
       `;
