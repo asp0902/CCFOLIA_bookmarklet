@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.49
+// @version      0.0.50
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.49 (manual enter-send) @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.50 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -483,6 +483,11 @@
   }
 
   function initRenderer() {
+    // 이전 코드(filter:blur 방식)로 렌더된 메시지를 강제 재렌더해 새 text-shadow 방식 적용.
+    // data-ccf-rendered 마커가 남아있으면 isLikelyMessageTextElement()가 skip하므로 제거.
+    document.querySelectorAll(`[${CCF_RENDERED_ATTR}="1"]`).forEach((el) => {
+      el.removeAttribute(CCF_RENDERED_ATTR);
+    });
     injectStyle();
     scanAndRenderAll();
     observeRenderDom();
@@ -2156,6 +2161,19 @@
     ensureUi();
     observeDom();
     bindGlobalEvents();
+    // CCFOLIA React 초기 마운트 직후엔 textarea getBoundingClientRect()가 0 이어서
+    // isVisible() 실패 → findComposerBars() 빈 결과 → 툴바 미생성 가능.
+    // 일정 간격으로 재시도해 레이아웃이 완료된 후 툴바를 보장.
+    [200, 800, 2000, 4000].forEach((delay) => {
+      window.setTimeout(() => {
+        if (!ccfFsIsActive()) return;
+        const toolbars = document.querySelectorAll(INLINE_TOOLBAR_SELECTOR);
+        if (toolbars.length === 0) {
+          console.info("[CCF NAR] init retry at %oms: no toolbar found, calling ensureUi()", delay);
+          ensureUi();
+        }
+      }, delay);
+    });
     console.info("[CCF NAR] init() complete - toolbar should now exist");
     console.info("[CCF] formatter userscript loaded (v0.0.5: %NEWLINE% + direct image URL)");
   }
@@ -3704,7 +3722,12 @@
     document.querySelectorAll(OPEN_BTN_SELECTOR).forEach((btn) => btn.remove());
     cleanupOrphanInlineToolbars();
 
-    for (const composer of findComposerBars()) {
+    const composers = findComposerBars();
+    if (composers.length === 0) {
+      console.info("[CCF NAR] ensureFormatButtons: no visible composer bars found (submit buttons=%o)",
+        document.querySelectorAll('button[type="submit"]').length);
+    }
+    for (const composer of composers) {
       ensureInlineToolbarForComposer(composer);
     }
   }
@@ -4030,8 +4053,17 @@
 
     if (command === "blur") {
       const selection = getInlineToolbarSelection(toolbar);
-      applyBlurToCurrentSelection();
-      restoreRoomSelectionSoon(editor, selection);
+      const applied = applyBlurToCurrentSelection(selection);
+      if (applied) {
+        restoreRoomSelectionSoon(editor, selection);
+        const editorState = ensureEditorState(editor);
+        const editorText = getEditorText(editor);
+        const nowBlur = selection
+          ? getSharedStyleValueForSelection(editorState.runs, selection, "blur", editorText.length)
+          : null;
+        commandButton.classList.toggle("active", !!nowBlur);
+        commandButton.setAttribute("aria-pressed", nowBlur ? "true" : "false");
+      }
       return;
     }
 
@@ -9192,7 +9224,7 @@
     return true;
   }
 
-  function applyBlurToCurrentSelection() {
+  function applyBlurToCurrentSelection(selectionOverride = null) {
     const editor = getResolvedActiveEditor();
     if (!editor) return false;
 
@@ -9214,7 +9246,10 @@
     const text = targetEditor === modalEditor
       ? (modalDraftText ?? getEditorText(modalEditor))
       : getEditorText(targetEditor);
-    const selection = useModalSelection ? modalEditorSelection : getEditorSelection(targetEditor);
+    // selectionOverride: 인라인 툴바 mousedown에서 캡처한 selection 우선 사용.
+    // 버튼 클릭 시 textarea focus가 유지되더라도 React 이벤트 핸들러로 인해 live selection이
+    // 초기화될 수 있으므로 캡처된 값을 우선 신뢰.
+    const selection = useModalSelection ? modalEditorSelection : (selectionOverride || getEditorSelection(targetEditor));
 
     if (!selection || selection.start === selection.end) {
       alert("\uBE14\uB7EC\uB97C \uC801\uC6A9\uD560 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
