@@ -21,6 +21,9 @@
   const ROOT_ID = "ccfolia-handout-root";
   const STYLE_ID = "ccfolia-handout-style";
   const ICON_MARKER = "data-ccf-handout-icon";
+  // Roll20 저널 책 아이콘 (Lucide book 기반)
+  const JOURNAL_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 6h7"/><path d="M9 10h7"/></svg>`;
+
   const PANEL_TITLES_MY_CHARS = [
     "내 캐릭터 목록", "내 캐릭터 리스트",
     "My character list", "My characters", "Character list", "Characters",
@@ -729,12 +732,12 @@
     btn.setAttribute("aria-label", "핸드아웃");
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer;
-      width: 28px; height: 28px; border-radius: 8px;
+      width: 30px; height: 30px; border-radius: 8px;
       background: #1a1a1a; color: #fff; display: inline-grid; place-items: center;
-      font-size: 13px; font-weight: 800; margin-left: 6px; vertical-align: middle;
+      margin-left: 6px; vertical-align: middle;
       border: 1px solid rgba(255,255,255,.18);
     `;
-    btn.textContent = "H";
+    btn.innerHTML = JOURNAL_SVG;
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
     return btn;
   }
@@ -857,11 +860,11 @@
     btn.setAttribute("aria-label", "핸드아웃");
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer;
-      width: 36px; height: 36px; border-radius: 50%;
+      width: 40px; height: 40px; border-radius: 50%;
       color: #fff; display: inline-grid; place-items: center;
-      font-size: 14px; font-weight: 800; margin: 0 4px; vertical-align: middle;
+      margin: 0 4px; vertical-align: middle;
     `;
-    btn.textContent = "H";
+    btn.innerHTML = JOURNAL_SVG;
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.12)"; }, { signal });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
@@ -874,14 +877,13 @@
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "floating");
     btn.title = "핸드아웃 (Capybara Toolkit) — 폴백 위치";
-    btn.textContent = "H";
+    btn.innerHTML = JOURNAL_SVG;
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
       top: 64px; right: 80px; z-index: 2147483647;
-      width: 40px; height: 40px; border-radius: 50%;
+      width: 42px; height: 42px; border-radius: 50%;
       background: #b53030; color: #fff; display: grid; place-items: center;
-      font-size: 15px; font-weight: 800; border: 2px solid #fff;
-      box-shadow: 0 8px 24px rgba(0,0,0,.42);
+      border: 2px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,.42);
     `;
     btn.addEventListener("click", openPanel, true);
     (document.body || document.documentElement).appendChild(btn);
