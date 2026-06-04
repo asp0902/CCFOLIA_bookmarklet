@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.47
+// @version      0.2.48
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1608,34 +1608,34 @@
   function primeAutoplayFastPath() {
     try {
       const persisted = readCcfBgmPersistedActiveSlot();
-      if (persisted?.state !== "playing") return;
-      // YT iframe API preload — load 자체는 prepare 도 호출하지만, 미리 시작해
-      // network round-trip 을 init 흐름과 병렬화.
+      console.info("[CCF BGM] fastpath start: readyState=%o body=%o persisted=%o activeSlot=%o player=%o",
+        document.readyState, !!document.body, persisted, ccfBgmActiveSlotKey, !!ccfBgmPlayer);
+      if (persisted?.state !== "playing") { console.info("[CCF BGM] fastpath skip: state!=playing"); return; }
       loadYoutubeIframeApi();
 
-      // body 마운트 전이면 skip — ensureYoutubePlayerHost 가 body 의존.
-      if (document.readyState === "loading" || !document.body) return;
-      if (ccfBgmActiveSlotKey || ccfBgmPlayer) return;
+      if (document.readyState === "loading" || !document.body) { console.info("[CCF BGM] fastpath skip: body not ready"); return; }
+      if (ccfBgmActiveSlotKey || ccfBgmPlayer) { console.info("[CCF BGM] fastpath skip: already active"); return; }
 
-      // library 동기 read → entry lookup → 즉시 play.
-      // 기존 흐름: init 300ms → loadCcfBgmSlotMap Promise → prepare → play.
-      // fast path: schedule 진입 직후 localStorage 직접 read → play.
       const raw = window.localStorage.getItem(BGM_STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) { console.info("[CCF BGM] fastpath skip: library key empty"); return; }
       let library;
-      try { library = JSON.parse(raw); } catch (_) { return; }
-      if (!library || typeof library !== "object") return;
+      try { library = JSON.parse(raw); } catch (e) { console.info("[CCF BGM] fastpath skip: parse failed", e); return; }
+      if (!library || typeof library !== "object") { console.info("[CCF BGM] fastpath skip: library invalid"); return; }
 
       const entry = library[persisted.entryKey];
-      if (!entry?.videoId) return;
+      console.info("[CCF BGM] fastpath entry lookup: key=%o entry=%o", persisted.entryKey, entry);
+      if (!entry?.videoId) { console.info("[CCF BGM] fastpath skip: entry missing or no videoId"); return; }
 
-      // 후속 흐름이 ccfBgmSlotMap 의존하므로 동시에 hydrate.
       if (!ccfBgmSlotMap.has(persisted.entryKey)) {
         ccfBgmSlotMap.set(persisted.entryKey, entry);
       }
 
+      console.info("[CCF BGM] fastpath calling playCcfYoutubeBgmSlot: slot=%o videoId=%o", persisted.slotKey, entry.videoId);
       playCcfYoutubeBgmSlot(persisted.slotKey, entry, null, 0, persisted.entryKey);
-    } catch (_) { /* fast path 실패해도 정상 init 흐름이 처리 */ }
+      console.info("[CCF BGM] fastpath play returned. activeSlot=%o player=%o", ccfBgmActiveSlotKey, !!ccfBgmPlayer);
+    } catch (error) {
+      console.warn("[CCF BGM] fastpath threw", error);
+    }
   }
 
   function initCcfBgmEnhancer() {
