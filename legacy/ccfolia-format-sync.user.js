@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.66
+// @version      0.0.67
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.66 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.67 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3889,72 +3889,135 @@
       ? dialog
       : (dialog.closest('.MuiDialog-paper') || dialog.querySelector('.MuiDialog-paper'));
 
-    const targets = [];
-    if (paper instanceof HTMLElement) targets.push(paper);
-    if (dialog instanceof HTMLElement && dialog !== paper) targets.push(dialog);
-
-    targets.forEach((el) => {
-      forceStyle(el, {
-        background: "#1e1e1e",
+    const paperTarget = paper instanceof HTMLElement ? paper : (dialog instanceof HTMLElement ? dialog : null);
+    if (paperTarget) {
+      forceStyle(paperTarget, {
+        "background-color": "#1e1e1e",
         "background-image": "none",
+        "background-attachment": "scroll",
         color: EDIT_DIALOG_TEXT_COLOR,
         border: "none",
+        "border-radius": "4px",
+        "box-shadow": "0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12)",
+        "font-family": EDIT_DIALOG_FONT,
+        "text-shadow": "none",
+        "letter-spacing": "normal",
+        "backdrop-filter": "none",
+        filter: "none"
+      });
+    }
+
+    dialog.querySelectorAll('form, [class^="sc-"], [class*=" sc-"]').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      if (el.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      forceStyle(el, {
+        "background-color": "transparent",
+        "background-image": "none",
+        border: "none",
+        "box-shadow": "none",
+        color: EDIT_DIALOG_TEXT_COLOR,
         "font-family": EDIT_DIALOG_FONT,
         "text-shadow": "none",
         "letter-spacing": "normal"
       });
     });
 
-    const title = dialog.querySelector('.MuiDialogTitle-root');
-    if (title instanceof HTMLElement) {
-      forceStyle(title, {
+    dialog.querySelectorAll('.MuiDialogContent-root').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      forceStyle(el, {
+        "background-color": "transparent",
+        "background-image": "none",
+        padding: "20px 24px",
         color: EDIT_DIALOG_TEXT_COLOR,
-        background: "transparent",
+        "font-family": EDIT_DIALOG_FONT
+      });
+    });
+
+    dialog.querySelectorAll('.MuiDialogActions-root').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      forceStyle(el, {
+        "background-color": "transparent",
+        "background-image": "none",
+        padding: "8px",
+        color: EDIT_DIALOG_TEXT_COLOR
+      });
+    });
+
+    dialog.querySelectorAll('.MuiInputLabel-root, .MuiFormLabel-root').forEach((label) => {
+      if (!(label instanceof HTMLElement)) return;
+      if (label.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      forceStyle(label, {
+        color: "rgba(255, 255, 255, 0.7)",
+        "background-color": "transparent",
         "background-image": "none",
         "font-family": EDIT_DIALOG_FONT,
+        "font-size": "12px",
+        "font-weight": "400",
         "text-shadow": "none",
-        "letter-spacing": "normal",
-        "font-weight": "500"
+        "letter-spacing": "normal"
       });
-    }
+    });
 
-    const textarea = dialog.querySelector('textarea[name="text"]');
-    if (textarea instanceof HTMLElement) {
+    dialog.querySelectorAll('textarea').forEach((textarea) => {
+      if (!(textarea instanceof HTMLElement)) return;
       forceStyle(textarea, {
         color: EDIT_DIALOG_TEXT_COLOR,
-        background: "transparent",
+        "background-color": "transparent",
         "background-image": "none",
         "font-family": EDIT_DIALOG_FONT,
         "font-size": "16px",
         "font-weight": "400",
         "letter-spacing": "normal",
-        "text-shadow": "none"
+        "text-shadow": "none",
+        "caret-color": EDIT_DIALOG_TEXT_COLOR
       });
-    }
+    });
 
-    const filledInput = dialog.querySelector('.MuiFilledInput-root');
-    if (filledInput instanceof HTMLElement) {
-      forceStyle(filledInput, {
+    dialog.querySelectorAll('.MuiFilledInput-root, .MuiInputBase-root').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      forceStyle(el, {
         "background-color": "rgba(255, 255, 255, 0.09)",
         "background-image": "none",
-        border: "none"
+        border: "none",
+        "border-radius": "4px 4px 0 0",
+        "box-shadow": "none",
+        color: EDIT_DIALOG_TEXT_COLOR,
+        "font-family": EDIT_DIALOG_FONT
       });
-    }
+    });
 
     dialog.querySelectorAll('.MuiButton-root').forEach((btn) => {
       if (!(btn instanceof HTMLElement)) return;
       if (btn.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       forceStyle(btn, {
         color: "#90caf9",
-        background: "transparent",
+        "background-color": "transparent",
         "background-image": "none",
         "font-family": EDIT_DIALOG_FONT,
+        "font-size": "14px",
         "font-weight": "500",
         "letter-spacing": "0.02857em",
+        "text-transform": "uppercase",
         "text-shadow": "none",
-        border: "none"
+        border: "none",
+        "border-radius": "4px"
       });
     });
+
+    const toolbar = dialog.querySelector(`[${INLINE_TOOLBAR_ATTR}="1"]`);
+    if (toolbar instanceof HTMLElement) {
+      forceStyle(toolbar, {
+        "border-radius": "0",
+        "margin-left": "-24px",
+        "margin-right": "-24px",
+        "margin-top": "0",
+        "margin-bottom": "12px",
+        "border-left": "none",
+        "border-right": "none",
+        "border-top": "none",
+        "border-bottom": "1px solid rgba(255,255,255,0.12)"
+      });
+    }
   }
 
   function forceStyle(el, styleMap) {
