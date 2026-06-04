@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.48
+// @version      0.2.49
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -8486,7 +8486,9 @@
   // 마지막으로 본 신호의 시그니처(sender:startedAt:state:entryKey). 변경 감지용.
   let ccfBgmFirestoreLastPlaybackSignature = "";
   // 원격 신호를 적용하는 동안 켜지는 플래그. 켜져 있으면 play/stop 훅이 송신을 건너뜀.
-  let ccfBgmFirestorePlaybackApplying = false;
+  // var: fastpath 흐름이 IIFE 상단에서 ccfBgmFirestoreEmitPlayback 호출 시
+  // 이 선언 도달 전이라 let 사용 시 TDZ. 함수 스코프 hoist 로 회피.
+  var ccfBgmFirestorePlaybackApplying = false;
 
   async function ccfBgmFirestoreWritePlayback(payload) {
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) return;
