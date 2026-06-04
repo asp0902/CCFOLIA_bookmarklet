@@ -62,6 +62,9 @@
     isActive() { return active; },
     open() { openPanel(); },
     close() { closePanel(); },
+    locateAnchor() { return diagnoseAnchors(); },
+    forceFloating() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountFloatingIcon(); return true; },
+    remount() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountIcon(); return true; },
     disable() { return teardown(); }
   };
 
@@ -736,26 +739,133 @@
     return btn;
   }
 
+  // ===== 앵커 탐색 =====
+  // 1) 상단 탑바의 "내 캐릭터 목록" 토글 버튼 옆 (가장 우선)
+  // 2) 상단 탑바 우측 끝
+  // 3) 사이드 패널 h6 (열려 있을 때만)
+  // 4) floating fallback
+  const TOOLBAR_BUTTON_LABELS = [
+    "내 캐릭터", "캐릭터 목록", "캐릭터",
+    "My character", "My characters", "Character list", "Characters",
+    "マイキャラクター", "キャラクター一覧", "キャラクター",
+    "我的角色", "角色一覽", "角色一览", "角色"
+  ];
+
+  function findCharacterToolbarButton() {
+    const candidates = [];
+    // aria-label, title, data-testid에서 매칭
+    for (const label of TOOLBAR_BUTTON_LABELS) {
+      const esc = label.replace(/"/g, '\\"');
+      const sel = [
+        `button[aria-label*="${esc}"]`,
+        `[role="button"][aria-label*="${esc}"]`,
+        `button[title*="${esc}"]`,
+        `[role="button"][title*="${esc}"]`
+      ].join(",");
+      try {
+        document.querySelectorAll(sel).forEach((el) => {
+          if (!candidates.includes(el)) candidates.push(el);
+        });
+      } catch (error) { /* selector error */ }
+    }
+    // 상단 탑바(MuiAppBar 등) 안에 있는 것 우선
+    const appbar = findTopAppBar();
+    const inAppbar = candidates.find((el) => appbar?.contains(el));
+    if (inAppbar) return inAppbar;
+    return candidates[0] || null;
+  }
+
+  function findTopAppBar() {
+    return document.querySelector("header.MuiAppBar-root")
+        || document.querySelector("nav.MuiAppBar-root")
+        || document.querySelector("header[role='banner']")
+        || document.querySelector(".MuiAppBar-root")
+        || null;
+  }
+
   function findCharPanelH6() {
     const titles = new Set(PANEL_TITLES_MY_CHARS.map(removeSpaces));
     const h6s = Array.from(document.querySelectorAll("h6"));
     return h6s.find((h) => titles.has(removeSpaces(h.textContent))) || null;
   }
 
+  function diagnoseAnchors() {
+    const charBtn = findCharacterToolbarButton();
+    const appbar = findTopAppBar();
+    const h6 = findCharPanelH6();
+    const report = {
+      charToolbarButton: charBtn ? describe(charBtn) : null,
+      topAppBar: appbar ? describe(appbar) : null,
+      charPanelH6: h6 ? describe(h6) : null,
+      existingIcons: Array.from(document.querySelectorAll(`[${ICON_MARKER}]`)).map(describe)
+    };
+    console.info("[ccf-handout] anchor diagnosis", report, { charBtn, appbar, h6 });
+    return report;
+  }
+
+  function describe(el) {
+    if (!el) return null;
+    return {
+      tag: el.tagName,
+      cls: el.className && typeof el.className === "string" ? el.className.slice(0, 80) : "",
+      aria: el.getAttribute?.("aria-label") || "",
+      title: el.getAttribute?.("title") || "",
+      text: (el.textContent || "").trim().slice(0, 40)
+    };
+  }
+
   function mountIcon() {
     if (!active) return;
-    // 이미 마운트되어 있고 DOM에 살아있으면 skip
     const existing = document.querySelector(`[${ICON_MARKER}]`);
     if (existing && existing.isConnected) return;
-    const h6 = findCharPanelH6();
-    if (h6) {
-      // h6 옆에 인라인으로 붙이기
-      const icon = buildIcon();
-      h6.appendChild(icon);
+
+    // 1순위: 상단 탑바의 "내 캐릭터 목록" 토글 버튼 옆
+    const charBtn = findCharacterToolbarButton();
+    if (charBtn?.parentElement) {
+      const icon = buildToolbarIcon();
+      charBtn.parentElement.insertBefore(icon, charBtn.nextSibling);
+      console.info("[ccf-handout] mounted next to character toolbar button");
       return;
     }
-    // fallback: 우측 상단에 fixed FAB
+    // 2순위: 상단 탑바 우측 끝
+    const appbar = findTopAppBar();
+    if (appbar) {
+      const icon = buildToolbarIcon();
+      icon.setAttribute(ICON_MARKER, "appbar");
+      appbar.appendChild(icon);
+      console.info("[ccf-handout] mounted at app bar end");
+      return;
+    }
+    // 3순위: 사이드 패널 h6
+    const h6 = findCharPanelH6();
+    if (h6) {
+      const icon = buildIcon();
+      h6.appendChild(icon);
+      console.info("[ccf-handout] mounted next to side panel h6");
+      return;
+    }
+    // 4순위: floating
     mountFloatingIcon();
+    console.info("[ccf-handout] mounted as floating fallback (no anchor found)");
+  }
+
+  function buildToolbarIcon() {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute(ICON_MARKER, "toolbar");
+    btn.title = "핸드아웃 (Capybara Toolkit)";
+    btn.setAttribute("aria-label", "핸드아웃");
+    btn.style.cssText = `
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      color: #fff; display: inline-grid; place-items: center;
+      font-size: 14px; font-weight: 800; margin: 0 4px; vertical-align: middle;
+    `;
+    btn.textContent = "H";
+    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.12)"; }, { signal });
+    btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
+    btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
+    return btn;
   }
 
   function mountFloatingIcon() {
@@ -763,15 +873,15 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "floating");
-    btn.title = "핸드아웃 (Capybara Toolkit)";
+    btn.title = "핸드아웃 (Capybara Toolkit) — 폴백 위치";
     btn.textContent = "H";
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
-      top: 70px; right: 16px; z-index: 2147483645;
-      width: 36px; height: 36px; border-radius: 50%;
-      background: #1a1a1a; color: #fff; display: grid; place-items: center;
-      font-size: 14px; font-weight: 800; border: 1px solid rgba(255,255,255,.18);
-      box-shadow: 0 8px 24px rgba(0,0,0,.32);
+      top: 64px; right: 80px; z-index: 2147483647;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #b53030; color: #fff; display: grid; place-items: center;
+      font-size: 15px; font-weight: 800; border: 2px solid #fff;
+      box-shadow: 0 8px 24px rgba(0,0,0,.42);
     `;
     btn.addEventListener("click", openPanel, true);
     (document.body || document.documentElement).appendChild(btn);
@@ -815,10 +925,14 @@
 
   // ===== 초기화 =====
   function init() {
+    console.info("[ccf-handout] init — version 0.1.1");
     bindRouteEvents();
     startMountObserver();
-    // 최초 시도
+    // 최초 + 지연 재시도 (React 렌더 늦을 수 있음)
     mountIcon();
+    [200, 600, 1500, 3000].forEach((ms) => {
+      setTimeout(() => { if (active) mountIcon(); }, ms);
+    });
     // 데이터 사전 로드
     loadAll().then((d) => { state.data = d; }).catch(() => {});
   }
