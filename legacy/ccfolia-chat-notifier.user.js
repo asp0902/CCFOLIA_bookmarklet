@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.43
+// @version      0.2.44
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -415,13 +415,10 @@
   function readCcfBgmPersistedActiveSlot() {
     try {
       const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
-      console.info("[CCF BGM] read raw=%o key=%o", raw, CCF_BGM_ACTIVE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      console.info("[CCF BGM] read parsed=%o", parsed);
       return parsed && typeof parsed.entryKey === "string" ? parsed : null;
-    } catch (error) {
-      console.warn("[CCF BGM] read threw", error);
+    } catch (_) {
       return null;
     }
   }
@@ -2908,10 +2905,7 @@
   }
 
   function prepareCcfYoutubeBgmPlayerFromEntries(entries) {
-    const guardActive = ccfBgmActiveSlotKey || ccfBgmPlayer;
-    console.info("[CCF BGM] prepare called: guardActive=%o activeSlot=%o player=%o entries=%o",
-      !!guardActive, ccfBgmActiveSlotKey, !!ccfBgmPlayer, (entries || []).length);
-    if (guardActive) {
+    if (ccfBgmActiveSlotKey || ccfBgmPlayer) {
       return;
     }
 
@@ -2924,20 +2918,16 @@
     // 새로고침 직전 마지막으로 활성화된 entry 우선 cue. 없으면 기존 정렬 사용.
     let hit = null;
     const persisted = readCcfBgmPersistedActiveSlot();
-    console.info("[CCF BGM] persisted=%o candidates=%o", persisted, candidates.length);
     if (persisted?.entryKey) {
       hit = candidates.find(([entryKey]) => entryKey === persisted.entryKey) || null;
-      console.info("[CCF BGM] persisted match=%o (entryKey=%o)", !!hit, persisted.entryKey);
     }
     if (!hit) {
       hit = candidates.sort(compareCcfYoutubeBgmEntries)[0];
-      console.info("[CCF BGM] fallback sort hit=%o", hit?.[0]);
     }
     if (!hit) {
       return;
     }
 
-    console.info("[CCF BGM] prepare cue: %o (videoId=%o)", hit[0], hit[1]?.videoId);
     cueCcfYoutubeBgmSlot(getCcfBgmEntrySlotKey(hit[0], hit[1]), hit[1], hit[0]);
   }
 
@@ -2945,9 +2935,6 @@
     const normalizedSlotKey = normalizeCcfBgmSlotKey(slotKey);
     const videoId = entry?.videoId || extractCcfYoutubeVideoId(entry?.url || "");
     const resolvedEntryKey = entryKey || findCcfYoutubeEntryKey(normalizedSlotKey, entry);
-    console.info("[CCF BGM] cueCcfYoutubeBgmSlot called: slot=%o videoId=%o entryKey=%o activeSlot=%o",
-      normalizedSlotKey, videoId, resolvedEntryKey, ccfBgmActiveSlotKey);
-    console.trace("[CCF BGM] cue caller trace");
     if (!normalizedSlotKey || !videoId || ccfBgmActiveSlotKey) {
       return;
     }
@@ -8667,7 +8654,9 @@ function migrateLegacyRoomDataToGlobal() {
       // 로컬 스토리지 전체를 순회하며 과거 룸별 키를 찾음
       for (let i = 0; i < window.localStorage.length; i++) {
         const key = window.localStorage.key(i);
-        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY) {
+        // CCF_BGM_ACTIVE_KEY 는 BGM_STORAGE_PREFIX 로 시작하지만 legacy 룸 데이터가
+        // 아니라 last-played 상태 저장용. migration wipe 대상서 제외.
+        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY && key !== CCF_BGM_ACTIVE_KEY) {
           try {
             const raw = window.localStorage.getItem(key);
             const parsed = raw ? JSON.parse(raw) : null;
