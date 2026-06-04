@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.50
+// @version      0.2.51
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -7372,7 +7372,7 @@
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
-        height: 16px !important;
+        height: 4px !important;
         margin: 0 !important;
         accent-color: #2196f3;
         cursor: pointer;
