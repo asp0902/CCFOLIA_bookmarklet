@@ -227,8 +227,8 @@
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
-      background: rgba(44, 44, 44, 0.87);
-      color: #fff;
+      background-color: rgba(44, 44, 44, 0.87);
+      color: rgba(255, 255, 255, 1);
       border: 0;
       border-radius: 0;
       /* MUI elevation6 */
@@ -238,7 +238,6 @@
         0px 1px 18px 0px rgba(0,0,0,0.12);
       overflow: hidden;
       min-width: 320px; min-height: 240px;
-      backdrop-filter: blur(2px);
     }
     /* MUI AppBar colorTransparent + Toolbar dense */
     header {
