@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.52
+// @version      0.0.53
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.52 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.53 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -172,8 +172,14 @@
     return;
   }
   console.info("[CCF NAR] initRenderer about to run");
-  initRenderer();
-  console.info("[CCF NAR] initRenderer completed");
+  // initRenderer() throw 가 같은 <script> tag 안 다음 IIFE 들을 차단하지 않도록 격리.
+  // throw 가 발생해도 stack trace 를 console.error 로 남겨 진단 가능하게 유지.
+  try {
+    initRenderer();
+    console.info("[CCF NAR] initRenderer completed");
+  } catch (error) {
+    console.error("[CCF NAR] initRenderer threw, continuing to next IIFE", error);
+  }
 
   function handleCcfSuiteRegisterRequest(event) {
     const targetId = event?.detail?.targetId;
