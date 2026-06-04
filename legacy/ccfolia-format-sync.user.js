@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.55
+// @version      0.0.56
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.55 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.56 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -504,9 +504,17 @@
     } catch (error) {
       console.warn("[CCF NAR] legacy blur marker migration schedule failed", error);
     }
-    injectStyle();
-    scanAndRenderAll();
-    observeRenderDom();
+    // 각 단계 try/catch 로 격리 — scanAndRenderAll 가 throw 해도 observeRenderDom
+    // mount 보장. mount 안 되면 새 메시지 수신 시 디코딩 흐름 자체 발동 안 됨.
+    try { injectStyle(); } catch (error) {
+      console.error("[CCF NAR] injectStyle threw", error);
+    }
+    try { scanAndRenderAll(); } catch (error) {
+      console.error("[CCF NAR] scanAndRenderAll threw, observeRenderDom 는 계속 진행", error);
+    }
+    try { observeRenderDom(); } catch (error) {
+      console.error("[CCF NAR] observeRenderDom threw — 메시지 수신 디코딩 불가", error);
+    }
   }
 
   function injectStyle() {
