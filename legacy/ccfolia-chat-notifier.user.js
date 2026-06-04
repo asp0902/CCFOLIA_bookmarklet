@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.40
+// @version      0.2.41
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -395,6 +395,33 @@
   let ccfBgmPlayerReady = false;
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
+  const CCF_BGM_ACTIVE_KEY = "ccf-chat-notifier:youtube-bgm:active";
+
+  function persistCcfBgmActiveSlot(slotKey, entryKey, videoId) {
+    try {
+      if (!slotKey || !entryKey) {
+        window.localStorage.removeItem(CCF_BGM_ACTIVE_KEY);
+        return;
+      }
+      window.localStorage.setItem(CCF_BGM_ACTIVE_KEY, JSON.stringify({
+        slotKey,
+        entryKey,
+        videoId: videoId || "",
+        updatedAt: Date.now()
+      }));
+    } catch (_) { /* persist 실패는 무시 — 새로고침 후 fallback 정렬로 cue */ }
+  }
+
+  function readCcfBgmPersistedActiveSlot() {
+    try {
+      const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed.entryKey === "string" ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
   let ccfBgmActiveLoop = true;
   let ccfBgmLastControlSeed = null;
   let ccfBgmEditingSlotKey = "";
@@ -2882,13 +2909,21 @@
       return;
     }
 
-    const hit = (entries || [])
-      .filter(([entryKey, entry]) => {
-        return entryKey
-          && entry?.videoId
-          && getCcfBgmEntrySlotKey(entryKey, entry);
-      })
-      .sort(compareCcfYoutubeBgmEntries)[0];
+    const candidates = (entries || []).filter(([entryKey, entry]) => {
+      return entryKey
+        && entry?.videoId
+        && getCcfBgmEntrySlotKey(entryKey, entry);
+    });
+
+    // 새로고침 직전 마지막으로 활성화된 entry 우선 cue. 없으면 기존 정렬 사용.
+    let hit = null;
+    const persisted = readCcfBgmPersistedActiveSlot();
+    if (persisted?.entryKey) {
+      hit = candidates.find(([entryKey]) => entryKey === persisted.entryKey) || null;
+    }
+    if (!hit) {
+      hit = candidates.sort(compareCcfYoutubeBgmEntries)[0];
+    }
     if (!hit) {
       return;
     }
@@ -2975,6 +3010,8 @@
     ccfBgmActiveSlotKey = normalizedSlotKey;
     ccfBgmActiveEntryKey = resolvedEntryKey;
     ccfBgmActiveLoop = state.loop;
+    // 새로고침 후 같은 트랙 복원을 위해 last active slot persist.
+    persistCcfBgmActiveSlot(normalizedSlotKey, resolvedEntryKey, entry?.videoId);
     markCcfYoutubeBgmSlotButtons();
 
     if (typeof ccfBgmFirestoreEmitPlayback === "function") {
