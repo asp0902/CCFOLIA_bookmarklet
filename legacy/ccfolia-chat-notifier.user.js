@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.41
+// @version      0.2.42
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2905,7 +2905,10 @@
   }
 
   function prepareCcfYoutubeBgmPlayerFromEntries(entries) {
-    if (ccfBgmActiveSlotKey || ccfBgmPlayer) {
+    const guardActive = ccfBgmActiveSlotKey || ccfBgmPlayer;
+    console.info("[CCF BGM] prepare called: guardActive=%o activeSlot=%o player=%o entries=%o",
+      !!guardActive, ccfBgmActiveSlotKey, !!ccfBgmPlayer, (entries || []).length);
+    if (guardActive) {
       return;
     }
 
@@ -2918,24 +2921,30 @@
     // 새로고침 직전 마지막으로 활성화된 entry 우선 cue. 없으면 기존 정렬 사용.
     let hit = null;
     const persisted = readCcfBgmPersistedActiveSlot();
+    console.info("[CCF BGM] persisted=%o candidates=%o", persisted, candidates.length);
     if (persisted?.entryKey) {
       hit = candidates.find(([entryKey]) => entryKey === persisted.entryKey) || null;
+      console.info("[CCF BGM] persisted match=%o (entryKey=%o)", !!hit, persisted.entryKey);
     }
     if (!hit) {
       hit = candidates.sort(compareCcfYoutubeBgmEntries)[0];
+      console.info("[CCF BGM] fallback sort hit=%o", hit?.[0]);
     }
     if (!hit) {
       return;
     }
 
-    const [entryKey, entry] = hit;
-    cueCcfYoutubeBgmSlot(getCcfBgmEntrySlotKey(entryKey, entry), entry, entryKey);
+    console.info("[CCF BGM] prepare cue: %o (videoId=%o)", hit[0], hit[1]?.videoId);
+    cueCcfYoutubeBgmSlot(getCcfBgmEntrySlotKey(hit[0], hit[1]), hit[1], hit[0]);
   }
 
   function cueCcfYoutubeBgmSlot(slotKey, entry, entryKey = "", options = {}) {
     const normalizedSlotKey = normalizeCcfBgmSlotKey(slotKey);
     const videoId = entry?.videoId || extractCcfYoutubeVideoId(entry?.url || "");
     const resolvedEntryKey = entryKey || findCcfYoutubeEntryKey(normalizedSlotKey, entry);
+    console.info("[CCF BGM] cueCcfYoutubeBgmSlot called: slot=%o videoId=%o entryKey=%o activeSlot=%o",
+      normalizedSlotKey, videoId, resolvedEntryKey, ccfBgmActiveSlotKey);
+    console.trace("[CCF BGM] cue caller trace");
     if (!normalizedSlotKey || !videoId || ccfBgmActiveSlotKey) {
       return;
     }
