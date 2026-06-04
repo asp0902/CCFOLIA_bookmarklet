@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.51
+// @version      0.2.52
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -5398,8 +5398,10 @@
     let displayNow = playback.now;
 
     const nowMs = Date.now();
-    // 임박 판정 1.0s — YouTube가 끝까지 안 가는 케이스 대응.
-    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 1.0;
+    // 임박 판정 0.25s — 시각적으로 슬라이더가 거의 끝까지 도달한 후 nudge.
+    // 너무 크면(이전 1.0s) 우측 끝 도달 전 강제 0 으로 점프해 사용자가 끝을 못 봄.
+    // YouTube ENDED 이벤트가 정상 발화하면 그 흐름이 우선 처리하고, 안 올 때만 backup.
+    const nearEnd = playback.total > 0 && (playback.total - playback.now) <= 0.25;
     // 직전 루프 점프 후 4초 동안은 stale getCurrentTime 가능성을 의심.
     const sinceLoopNudge = nowMs - ccfBgmLoopNudgeAt;
     const justLooped = sinceLoopNudge < 4000;
