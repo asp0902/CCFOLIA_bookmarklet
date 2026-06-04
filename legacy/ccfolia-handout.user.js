@@ -227,101 +227,124 @@
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
-      background: #26262c; color: #e8e8e8;
-      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(44, 44, 44, 0.87);
+      color: #fff;
+      border: 0;
       border-radius: 0;
-      box-shadow: 0 24px 72px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+      /* MUI elevation6 */
+      box-shadow:
+        0px 3px 5px -1px rgba(0,0,0,0.20),
+        0px 6px 10px 0px rgba(0,0,0,0.14),
+        0px 1px 18px 0px rgba(0,0,0,0.12);
       overflow: hidden;
-      min-width: 360px; min-height: 280px;
+      min-width: 320px; min-height: 240px;
+      backdrop-filter: blur(2px);
     }
+    /* MUI AppBar colorTransparent + Toolbar dense */
     header {
-      padding: 8px 10px 8px 14px;
-      background: #1c1c22;
-      border-bottom: 1px solid rgba(255,255,255,.06);
-      display: flex; align-items: center; gap: 10px;
-      cursor: grab; user-select: none;
+      padding: 0 8px 0 16px;
+      min-height: 48px;
+      background: transparent;
+      border: 0;
+      display: flex; align-items: center; gap: 8px;
+      cursor: move; user-select: none;
       flex: 0 0 auto;
     }
     header.dragging { cursor: grabbing; }
-    header h1 { margin: 0; font-size: 14px; font-weight: 700; color: #f2f2f2; letter-spacing: .01em; }
-    header .meta { font-size: 11px; color: #8c8c93; }
-    header .spacer { flex: 1; }
-    header .close {
-      all: unset; box-sizing: border-box; cursor: pointer;
-      width: 28px; height: 28px; border-radius: 50%;
-      display: inline-grid; place-items: center; color: #c9c9d1;
-      transition: background-color 120ms ease;
+    /* MUI Typography subtitle2 */
+    header h1 {
+      margin: 0; font-size: 0.875rem; font-weight: 500; line-height: 1.57;
+      color: #fff; letter-spacing: .00714em;
     }
-    header .close:hover { background: rgba(255,255,255,.08); color: #fff; }
+    header .meta { font-size: 11px; color: rgba(255,255,255,.55); }
+    header .spacer { flex: 1; }
+    /* MUI IconButton sizeSmall */
+    header .header-btn {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      padding: 5px; border-radius: 50%;
+      display: inline-grid; place-items: center; color: #fff;
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    header .header-btn:hover { background: rgba(255,255,255,.08); }
+    header .header-btn.edge-end { margin-right: -3px; }
     .tabs {
-      display: flex; gap: 0; padding: 0 8px; background: #1f1f25;
-      border-bottom: 1px solid rgba(255,255,255,.06); flex: 0 0 auto;
+      display: flex; gap: 0; padding: 0; background: transparent;
+      border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto;
     }
     .tab {
-      padding: 10px 16px; border: 0; background: transparent; cursor: pointer;
-      font-size: 12px; font-weight: 600; color: #8c8c93;
-      border-bottom: 2px solid transparent; letter-spacing: .04em; text-transform: uppercase;
-      transition: color 120ms ease, border-color 120ms ease;
+      padding: 9px 16px; border: 0; background: transparent; cursor: pointer;
+      font-size: 0.8125rem; font-weight: 500; color: rgba(255,255,255,.7);
+      border-bottom: 2px solid transparent; letter-spacing: .02857em;
+      transition: color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms cubic-bezier(0.4,0,0.2,1);
     }
-    .tab:hover { color: #c9c9d1; }
+    .tab:hover { color: #fff; background: rgba(255,255,255,.04); }
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
-    .body { overflow: auto; padding: 14px; flex: 1; background: #26262c; }
+    .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
+    .body-pad { padding: 14px; }
     .body::-webkit-scrollbar { width: 10px; }
     .body::-webkit-scrollbar-track { background: transparent; }
     .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 6px; }
     .body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
     .field label {
-      font-size: 11px; font-weight: 700; color: #b9b9c1;
-      letter-spacing: .04em; text-transform: uppercase;
+      font-size: 12px; font-weight: 400; color: rgba(255,255,255,.7);
+      letter-spacing: .00938em;
     }
     .field input[type="text"], .field textarea, .field input[type="url"] {
-      padding: 9px 11px; border: 1px solid rgba(255,255,255,.12); border-radius: 6px;
-      background: #1c1c22; color: #f2f2f2;
-      font-size: 13px; width: 100%; resize: vertical;
-      transition: border-color 120ms ease;
+      padding: 8.5px 14px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px;
+      background: transparent; color: #fff;
+      font-size: 1rem; width: 100%; resize: vertical;
+      transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    .field input[type="text"]:hover, .field textarea:hover, .field input[type="url"]:hover {
+      border-color: #fff;
     }
     .field input[type="text"]:focus, .field textarea:focus, .field input[type="url"]:focus {
-      outline: none; border-color: rgba(255,255,255,.4);
+      outline: none; border-color: #fff; border-width: 2px; padding: 7.5px 13px;
     }
-    .field textarea { min-height: 110px; line-height: 1.55; font-family: ui-monospace, "SF Mono", Consolas, monospace; }
-    .field .hint { font-size: 11px; color: #8c8c93; }
+    .field textarea { min-height: 110px; line-height: 1.5; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 0.875rem; }
+    .field .hint { font-size: 0.75rem; color: rgba(255,255,255,.5); margin: 3px 14px 0; }
+    /* MUI Button contained */
     .btn {
-      height: 32px; padding: 0 14px; border: 0; border-radius: 6px;
-      background: #fff; color: #111; cursor: pointer;
-      font-size: 12px; font-weight: 700; letter-spacing: .02em;
-      transition: background-color 120ms ease, opacity 120ms ease;
+      height: 36.5px; padding: 0 16px; border: 0; border-radius: 4px;
+      background: #fff; color: rgba(0,0,0,.87); cursor: pointer;
+      font-size: 0.875rem; font-weight: 500; letter-spacing: .02857em; text-transform: uppercase;
+      transition: background-color 250ms cubic-bezier(0.4,0,0.2,1), box-shadow 250ms;
+      box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
     }
-    .btn:hover { background: #e0e0e0; }
-    .btn.secondary { background: rgba(255,255,255,.08); color: #e8e8e8; }
-    .btn.secondary:hover { background: rgba(255,255,255,.16); }
-    .btn.danger { background: transparent; color: #ef5350; border: 1px solid rgba(239,83,80,.4); }
-    .btn.danger:hover { background: rgba(239,83,80,.12); }
-    .btn.small { height: 28px; padding: 0 10px; font-size: 11px; }
-    .btn[disabled] { opacity: .4; cursor: default; }
-    .list { display: flex; flex-direction: column; gap: 8px; }
+    .btn:hover { background: #e0e0e0; box-shadow: 0 2px 4px -1px rgba(0,0,0,.2), 0 4px 5px 0 rgba(0,0,0,.14), 0 1px 10px 0 rgba(0,0,0,.12); }
+    .btn.secondary { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); box-shadow: none; }
+    .btn.secondary:hover { background: rgba(255,255,255,.08); border-color: #fff; box-shadow: none; }
+    .btn.danger { background: transparent; color: #f44336; border: 1px solid rgba(244,67,54,.5); box-shadow: none; }
+    .btn.danger:hover { background: rgba(244,67,54,.08); border-color: #f44336; box-shadow: none; }
+    .btn.small { height: 30.75px; padding: 0 10px; font-size: 0.8125rem; }
+    .btn[disabled] { opacity: .38; cursor: default; pointer-events: none; }
+    /* MUI List dense — 카드는 ListItem 톤 */
+    .list { display: flex; flex-direction: column; }
     .card {
-      border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 12px;
-      background: #2c2c33;
-      transition: background-color 120ms ease;
+      border: 0; border-radius: 0; padding: 8px 16px;
+      background: transparent;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+      cursor: default;
     }
-    .card:hover { background: #32323a; }
+    .card:hover { background: rgba(255,255,255,.04); }
     .card .head { display: flex; align-items: center; gap: 10px; }
-    .card .title { font-size: 14px; font-weight: 700; flex: 1; color: #f2f2f2; }
+    .card .title { font-size: 0.875rem; font-weight: 500; flex: 1; color: #fff; line-height: 1.43; }
     .card .badge {
-      font-size: 10px; padding: 2px 7px; border-radius: 10px;
-      border: 1px solid rgba(255,255,255,.16); color: #b9b9c1; background: transparent;
-      letter-spacing: .02em;
+      font-size: 0.6875rem; padding: 2px 8px; border-radius: 4px;
+      border: 0; color: rgba(255,255,255,.7); background: rgba(255,255,255,.08);
+      letter-spacing: .02em; font-weight: 500;
     }
-    .card .badge.secret { border-color: rgba(239,83,80,.5); color: #ef9a93; }
-    .card .summary { margin-top: 6px; font-size: 12px; color: #a9a9b0; max-height: 60px; overflow: hidden; line-height: 1.5; }
-    .card .actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-    .empty { padding: 48px 12px; text-align: center; color: #6e6e75; font-size: 13px; }
+    .card .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
+    .card .summary { margin-top: 4px; font-size: 0.8125rem; color: rgba(255,255,255,.6); max-height: 40px; overflow: hidden; line-height: 1.43; }
+    .card .actions { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .empty { padding: 56px 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 0.875rem; }
     .preview {
-      border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 12px;
-      background: #1c1c22; margin-top: 6px;
-      max-height: 220px; overflow: auto; font-size: 13px; line-height: 1.6; color: #e0e0e0;
+      border: 1px solid rgba(255,255,255,.12); border-radius: 4px; padding: 12px;
+      background: rgba(0,0,0,.25); margin-top: 6px;
+      max-height: 220px; overflow: auto; font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.92);
     }
     .preview img.cch-img { max-width: 100%; height: auto; display: block; margin: 6px 0; border-radius: 6px; }
     .preview a { color: #82b1ff; }
@@ -334,30 +357,38 @@
     .preview ul { padding-left: 20px; margin: 4px 0; }
     .preview strong { color: #fff; }
     /* 상세 다이얼로그 (핸드아웃 1장 열람) */
-    .detail-img { width: 100%; max-height: 280px; object-fit: cover; border-radius: 8px; margin-bottom: 14px; background: #1c1c22; }
+    .detail-img { width: 100%; max-height: 280px; object-fit: cover; border-radius: 4px; margin-bottom: 14px; background: rgba(0,0,0,.25); }
     .secret-block {
-      margin-top: 14px; border: 1px dashed rgba(239,83,80,.45); border-radius: 8px;
-      padding: 12px 14px; background: rgba(239,83,80,.06);
+      margin-top: 14px; border: 1px dashed rgba(244,67,54,.5); border-radius: 4px;
+      padding: 12px 14px; background: rgba(244,67,54,.06);
     }
     .secret-block .secret-head {
-      font-size: 11px; font-weight: 700; color: #ef9a93; margin-bottom: 8px; letter-spacing: .08em;
+      font-size: 0.75rem; font-weight: 500; color: #ff8a80; margin-bottom: 8px; letter-spacing: .08em; text-transform: uppercase;
     }
     .hidden-secret {
-      margin-top: 14px; border: 1px dashed rgba(255,255,255,.18); border-radius: 8px;
+      margin-top: 14px; border: 1px dashed rgba(255,255,255,.18); border-radius: 4px;
       padding: 18px; background: rgba(255,255,255,.03);
-      color: #8c8c93; text-align: center; font-size: 12px;
+      color: rgba(255,255,255,.5); text-align: center; font-size: 0.8125rem;
     }
     .chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-    .chip { font-size: 11px; padding: 3px 9px; border-radius: 10px; background: rgba(255,255,255,.08); color: #c9c9d1; }
+    .chip {
+      font-size: 0.75rem; padding: 3px 10px; border-radius: 4px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.85); font-weight: 500;
+    }
+    /* MUI Snackbar */
     .toast {
-      position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
-      background: #fff; color: #111; padding: 8px 16px; border-radius: 6px; font-size: 12px;
-      font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.4);
-      opacity: 0; transition: opacity 160ms ease, transform 160ms ease; pointer-events: none;
-      z-index: 10;
+      position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+      background: rgba(50,50,50,1); color: #fff; padding: 6px 16px; border-radius: 4px;
+      font-size: 0.875rem; font-weight: 400; line-height: 1.43;
+      box-shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
+      opacity: 0; transition: opacity 195ms cubic-bezier(0.4,0,0.2,1), transform 195ms cubic-bezier(0.4,0,0.2,1);
+      pointer-events: none; z-index: 10;
     }
     .toast[data-visible="1"] { opacity: 1; transform: translateX(-50%) translateY(-2px); }
-    .checkbox { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: #b9b9c1; cursor: pointer; }
+    .checkbox {
+      display: inline-flex; gap: 6px; align-items: center;
+      font-size: 0.875rem; color: rgba(255,255,255,.7); cursor: pointer;
+    }
     .checkbox input { accent-color: #fff; }
     /* 리사이즈 핸들 (우하단 코너) */
     .resize-handle {
@@ -420,8 +451,11 @@
             <h1>핸드아웃</h1>
             <span class="meta"></span>
             <span class="spacer"></span>
-            <button class="close" data-action="close" title="닫기" aria-label="닫기">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+            <button class="header-btn" data-action="new-handout" title="추가" aria-label="추가">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
+            <button class="header-btn edge-end" data-action="close" title="닫기" aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
           </header>
           <div class="tabs">
@@ -618,9 +652,11 @@
       t.setAttribute("data-active", t.dataset.tab === state.activeTab ? "1" : "0");
     });
     const body = state.shadow.querySelector(".body");
-    if (state.activeTab === "list") body.innerHTML = renderList();
-    else if (state.activeTab === "edit") body.innerHTML = renderEdit();
-    else body.innerHTML = renderSettings();
+    let inner;
+    if (state.activeTab === "list") inner = renderList();
+    else if (state.activeTab === "edit") inner = renderEdit();
+    else inner = renderSettings();
+    body.innerHTML = `<div class="body-pad">${inner}</div>`;
   }
 
   function renderList() {
