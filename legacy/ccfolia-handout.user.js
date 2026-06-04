@@ -21,9 +21,9 @@
   const ROOT_ID = "ccfolia-handout-root";
   const STYLE_ID = "ccfolia-handout-style";
   const ICON_MARKER = "data-ccf-handout-icon";
-  // Roll20 저널 탭 아이콘 모방 — Pictos "N" 글리프(펼쳐진 책)와 시각적으로 동일.
-  // 원본 Pictos는 유료 폰트(라이선스상 재배포 불가)라 무료 Lucide book-open 채택.
-  const JOURNAL_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
+  // 사용자 제공 PNG 캡처 (개인 사용 fair use). base64 임베드.
+  const JOURNAL_ICON_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADYAAAA7CAIAAAC/ue5UAAACRUlEQVR42mP8//8/w+AGjKNOHHXiIAGjThx14mABo06ktxP/fbx1aPu+C08//vxDtn0sIkYRia7STLRw4tdr6+dvvvWVCqEibJGRYs9PdSc+3T1jybmPVHAfEPAbxmS4SVPZiT9PLplw4Cl1HEgjJ15a3bn9Hk4blczF356+9fHfgDrx3PLO3Y+wS7Fr+Rb4at3dNmXNZWLTKS2ciDMhitsVJFiyQ9g/jy+YcOjloHMiAxO7sKFviovy08NLVp94+pO4uKavE8E26vlqvdx6/OWApkWSSxwWGTtPwYubL2PXMxicyK0XnuMpfmrJlP1PsQXtIHCimGVKop0wA8O1jRM23/g5uJzILqHn5OqkJ8UOF/nz9u7pfdsP3UMpjwbQiSzipiGBDvL8KE2EPy8vrl+/4x6y7oGOaGAxpO0W66UFDMmvV9cv3nHrI0araKCdCALCZikpjsIPt09ZcQlbjTMYnMjArR2SKHp8Co6Wx6BwIn4w6sRRJw4SJ3Jrheb4KpGggXQnMnGLK4hzY1HGIiAtzc+KIfz53rHTDyH1IIuYnquznZ4cNwMpgFQnkhwGDM92z1gM0y3nWh5pRJL7iHQicsdA3rU8gjRL6ONE5O6VuG1GghUJvWA6ORGtk8rCzs5M/HDCv78/4aMXTNzypm6+DmokJcYB6OrLu5VHGFLfiUNgwAQMIMNO5x9+/EWu65hY2IX0Qmk17DRwYNSJo04cLGDUiaNOHCxgKDjx7t27A+0GQk4cAqE46sRRJw4SMOpEagAAQGLZNDSzqzoAAAAASUVORK5CYII=";
+  const JOURNAL_ICON_HTML = `<img src="${JOURNAL_ICON_DATA_URI}" alt="" width="22" height="22" draggable="false" style="display:block;pointer-events:none;object-fit:contain;">`;
 
   const PANEL_TITLES_MY_CHARS = [
     "내 캐릭터 목록", "내 캐릭터 리스트",
@@ -738,7 +738,7 @@
       margin-left: 6px; vertical-align: middle;
       border: 1px solid rgba(255,255,255,.18);
     `;
-    btn.innerHTML = JOURNAL_SVG;
+    btn.innerHTML = JOURNAL_ICON_HTML;
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
     return btn;
   }
@@ -865,7 +865,7 @@
       color: #fff; display: inline-grid; place-items: center;
       margin: 0 4px; vertical-align: middle;
     `;
-    btn.innerHTML = JOURNAL_SVG;
+    btn.innerHTML = JOURNAL_ICON_HTML;
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.12)"; }, { signal });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
@@ -878,7 +878,7 @@
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "floating");
     btn.title = "핸드아웃 (Capybara Toolkit) — 폴백 위치";
-    btn.innerHTML = JOURNAL_SVG;
+    btn.innerHTML = JOURNAL_ICON_HTML;
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
       top: 64px; right: 80px; z-index: 2147483647;
