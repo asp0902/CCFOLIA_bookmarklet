@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.60
+// @version      0.0.61
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.60 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.61 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3841,6 +3841,23 @@
     for (const composer of composers) {
       ensureInlineToolbarForComposer(composer);
     }
+    for (const dialog of findEditMessageDialogBars()) {
+      ensureInlineToolbarForComposer(dialog);
+    }
+  }
+
+  function findEditMessageDialogBars() {
+    const result = [];
+    document.querySelectorAll('[role="dialog"], .MuiDialog-root').forEach((dialog) => {
+      if (!(dialog instanceof HTMLElement)) return;
+      if (dialog.id === MODAL_ID || dialog.querySelector(`#${MODAL_ID}`)) return;
+      if (!isVisible(dialog)) return;
+      const textarea = dialog.querySelector('textarea[name="text"]');
+      if (textarea instanceof HTMLElement && isVisible(textarea)) {
+        result.push(dialog);
+      }
+    });
+    return result;
   }
 
   function cleanupOrphanInlineToolbars() {
@@ -12086,6 +12103,15 @@
   function findEditorFromComposer(bar) {
     if (!bar) return null;
 
+    if (bar instanceof HTMLElement
+        && (bar.matches('[role="dialog"], .MuiDialog-root')
+            || bar.getAttribute('role') === 'dialog')) {
+      const textarea = bar.querySelector('textarea[name="text"]');
+      if (textarea instanceof HTMLElement && isVisible(textarea)) {
+        return textarea;
+      }
+    }
+
     const candidates = [];
     const drawer = bar.closest(".MuiDrawer-paper");
     if (drawer) {
@@ -12112,6 +12138,13 @@
     for (const bar of findComposerBars()) {
       if (findEditorFromComposer(bar) === editor) {
         return bar;
+      }
+    }
+
+    if (editor instanceof HTMLElement) {
+      const dialog = editor.closest('[role="dialog"], .MuiDialog-root');
+      if (dialog instanceof HTMLElement && findEditorFromComposer(dialog) === editor) {
+        return dialog;
       }
     }
 
