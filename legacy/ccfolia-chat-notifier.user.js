@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.42
+// @version      0.2.43
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -415,10 +415,13 @@
   function readCcfBgmPersistedActiveSlot() {
     try {
       const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
+      console.info("[CCF BGM] read raw=%o key=%o", raw, CCF_BGM_ACTIVE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
+      console.info("[CCF BGM] read parsed=%o", parsed);
       return parsed && typeof parsed.entryKey === "string" ? parsed : null;
-    } catch (_) {
+    } catch (error) {
+      console.warn("[CCF BGM] read threw", error);
       return null;
     }
   }
