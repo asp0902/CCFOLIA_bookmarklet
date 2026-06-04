@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.53
+// @version      0.2.54
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -5114,6 +5114,14 @@
       range.addEventListener("input", () => {
         seekCcfBgmByRatio(Number(range.value) / 1000);
       });
+      // dragging 동안만 자동 갱신 차단. focus 만으로는 차단 안 함 — 사용자가
+      // 클릭 후 떼면 즉시 다시 자동 갱신되어 loop reset / 진행이 시각화됨.
+      const setDragging = () => { range.dataset.ccfDragging = "1"; };
+      const clearDragging = () => { delete range.dataset.ccfDragging; };
+      range.addEventListener("pointerdown", setDragging);
+      range.addEventListener("pointerup", clearDragging);
+      range.addEventListener("pointercancel", clearDragging);
+      range.addEventListener("blur", clearDragging);
     }
 
     insertCcfBgmProgressRoot(panel, mountTarget, root);
@@ -5444,7 +5452,8 @@
       displayNow = 0;
     }
 
-    if (range instanceof HTMLInputElement && document.activeElement !== range) {
+    // dragging 중에만 자동 갱신 차단. focus 자체엔 영향 없음.
+    if (range instanceof HTMLInputElement && range.dataset.ccfDragging !== "1") {
       range.value = String(Math.round(ratio * 1000));
     }
     if (current) {
