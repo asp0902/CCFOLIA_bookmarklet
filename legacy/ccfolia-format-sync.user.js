@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.51
+// @version      0.0.52
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.51 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.52 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -483,11 +483,21 @@
   }
 
   function initRenderer() {
-    // 이전 코드(filter:blur 방식)로 렌더된 메시지를 강제 재렌더해 새 text-shadow 방식 적용.
-    // data-ccf-rendered 마커가 남아있으면 isLikelyMessageTextElement()가 skip하므로 제거.
-    document.querySelectorAll(`[${CCF_RENDERED_ATTR}="1"]`).forEach((el) => {
-      el.removeAttribute(CCF_RENDERED_ATTR);
-    });
+    // v0.0.51: 마커 전체 제거가 첫 진입 시 throw/지연 유발해 init() 호출이 차단되는 회귀를 일으킴.
+    // 일회 마이그레이션은 try/catch + 비동기 dispatch 로 분리해 동기 흐름 차단 방지.
+    try {
+      window.setTimeout(() => {
+        try {
+          document.querySelectorAll(`[${CCF_RENDERED_ATTR}="1"][style*="filter"]`).forEach((el) => {
+            el.removeAttribute(CCF_RENDERED_ATTR);
+          });
+        } catch (error) {
+          console.warn("[CCF NAR] legacy blur marker migration failed", error);
+        }
+      }, 0);
+    } catch (error) {
+      console.warn("[CCF NAR] legacy blur marker migration schedule failed", error);
+    }
     injectStyle();
     scanAndRenderAll();
     observeRenderDom();
