@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.53
+// @version      0.0.54
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.53 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.54 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -1770,6 +1770,10 @@
   // -webkit-text-fill-color:transparent + text-shadow blur 방식.
   // filter:blur 는 stacking context를 생성해 overflow:hidden 부모 안에서 sibling까지
   // invisible 처리되는 Chrome 버그를 유발함. text-shadow 방식은 stacking context 없음.
+  // _blurRevealHandlerBound: applySoftBlur 호출 흐름(initRenderer → scanAndRenderAll → ...)
+  // 이 IIFE 상단에서 실행될 때 TDZ 위반이 나지 않도록 함수 정의 위로 hoist.
+  let _blurRevealHandlerBound = false;
+
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
     const radius = Math.max(2, parseFloat(blurValue) || 4);
@@ -1782,7 +1786,6 @@
     ensureBlurRevealHandler();
   }
 
-  let _blurRevealHandlerBound = false;
   function ensureBlurRevealHandler() {
     if (_blurRevealHandlerBound) return;
     _blurRevealHandlerBound = true;
