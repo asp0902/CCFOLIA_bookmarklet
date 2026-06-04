@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.44
+// @version      0.2.45
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -397,7 +397,7 @@
   let ccfBgmActiveEntryKey = "";
   const CCF_BGM_ACTIVE_KEY = "ccf-chat-notifier:youtube-bgm:active";
 
-  function persistCcfBgmActiveSlot(slotKey, entryKey, videoId) {
+  function persistCcfBgmActiveSlot(slotKey, entryKey, videoId, state = "playing") {
     try {
       if (!slotKey || !entryKey) {
         window.localStorage.removeItem(CCF_BGM_ACTIVE_KEY);
@@ -407,9 +407,24 @@
         slotKey,
         entryKey,
         videoId: videoId || "",
+        state,
         updatedAt: Date.now()
       }));
     } catch (_) { /* persist 실패는 무시 — 새로고침 후 fallback 정렬로 cue */ }
+  }
+
+  // ccfBgmActiveSlotKey reset 시점에 entry 정보는 유지하되 state 만 갱신.
+  // 새로고침 후 자동재생 여부 판단을 위해 last state 보존.
+  function updateCcfBgmPersistedState(state) {
+    try {
+      const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.entryKey !== "string") return;
+      parsed.state = state;
+      parsed.updatedAt = Date.now();
+      window.localStorage.setItem(CCF_BGM_ACTIVE_KEY, JSON.stringify(parsed));
+    } catch (_) {}
   }
 
   function readCcfBgmPersistedActiveSlot() {
@@ -2928,7 +2943,13 @@
       return;
     }
 
-    cueCcfYoutubeBgmSlot(getCcfBgmEntrySlotKey(hit[0], hit[1]), hit[1], hit[0]);
+    const targetSlotKey = getCcfBgmEntrySlotKey(hit[0], hit[1]);
+    // 새로고침 직전 state 가 "playing" 이었으면 자동재생, 아니면 cue 만.
+    if (persisted?.state === "playing") {
+      playCcfYoutubeBgmSlot(targetSlotKey, hit[1], findCcfBgmButtonBySlot(targetSlotKey), 0, hit[0]);
+    } else {
+      cueCcfYoutubeBgmSlot(targetSlotKey, hit[1], hit[0]);
+    }
   }
 
   function cueCcfYoutubeBgmSlot(slotKey, entry, entryKey = "", options = {}) {
@@ -3140,6 +3161,7 @@
         ccfBgmActiveSlotKey = "";
         ccfBgmActiveEntryKey = "";
         ccfBgmPlayerVisible = false;
+        updateCcfBgmPersistedState("stopped");
         syncCcfYoutubeBgmPlayerDockVisibility();
         markCcfYoutubeBgmSlotButtons();
       }
@@ -3171,6 +3193,7 @@
       ccfBgmActiveSlotKey = "";
       ccfBgmActiveEntryKey = "";
       ccfBgmPlayerVisible = false;
+      updateCcfBgmPersistedState("stopped");
       syncCcfYoutubeBgmPlayerDockVisibility();
       markCcfYoutubeBgmSlotButtons();
       if (shouldEmit && typeof ccfBgmFirestoreEmitPlayback === "function") {
@@ -3191,6 +3214,7 @@
     ccfBgmActiveSlotKey = "";
     ccfBgmActiveEntryKey = "";
     ccfBgmPlayerVisible = false;
+    updateCcfBgmPersistedState("stopped");
     syncCcfYoutubeBgmPlayerDockVisibility();
     markCcfYoutubeBgmSlotButtons();
     if (shouldEmit && typeof ccfBgmFirestoreEmitPlayback === "function") {
