@@ -21,9 +21,9 @@
   const ROOT_ID = "ccfolia-handout-root";
   const STYLE_ID = "ccfolia-handout-style";
   const ICON_MARKER = "data-ccf-handout-icon";
-  // 사용자 제공 PNG 캡처 (개인 사용 fair use). base64 임베드.
-  const JOURNAL_ICON_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADYAAAA7CAIAAAC/ue5UAAACRUlEQVR42mP8//8/w+AGjKNOHHXiIAGjThx14mABo06ktxP/fbx1aPu+C08//vxDtn0sIkYRia7STLRw4tdr6+dvvvWVCqEibJGRYs9PdSc+3T1jybmPVHAfEPAbxmS4SVPZiT9PLplw4Cl1HEgjJ15a3bn9Hk4blczF356+9fHfgDrx3PLO3Y+wS7Fr+Rb4at3dNmXNZWLTKS2ciDMhitsVJFiyQ9g/jy+YcOjloHMiAxO7sKFviovy08NLVp94+pO4uKavE8E26vlqvdx6/OWApkWSSxwWGTtPwYubL2PXMxicyK0XnuMpfmrJlP1PsQXtIHCimGVKop0wA8O1jRM23/g5uJzILqHn5OqkJ8UOF/nz9u7pfdsP3UMpjwbQiSzipiGBDvL8KE2EPy8vrl+/4x6y7oGOaGAxpO0W66UFDMmvV9cv3nHrI0araKCdCALCZikpjsIPt09ZcQlbjTMYnMjArR2SKHp8Co6Wx6BwIn4w6sRRJw4SJ3Jrheb4KpGggXQnMnGLK4hzY1HGIiAtzc+KIfz53rHTDyH1IIuYnquznZ4cNwMpgFQnkhwGDM92z1gM0y3nWh5pRJL7iHQicsdA3rU8gjRL6ONE5O6VuG1GghUJvWA6ORGtk8rCzs5M/HDCv78/4aMXTNzypm6+DmokJcYB6OrLu5VHGFLfiUNgwAQMIMNO5x9+/EWu65hY2IX0Qmk17DRwYNSJo04cLGDUiaNOHCxgKDjx7t27A+0GQk4cAqE46sRRJw4SMOpEagAAQGLZNDSzqzoAAAAASUVORK5CYII=";
-  const JOURNAL_ICON_HTML = `<img src="${JOURNAL_ICON_DATA_URI}" alt="" width="22" height="22" draggable="false" style="display:block;pointer-events:none;object-fit:contain;">`;
+  // 사용자 제공 PNG(assets/handout-icon.png) 형태를 SVG로 재현.
+  // 투명 배경, currentColor로 다크/라이트 자동 적응, MUI IconButton 표준 24px.
+  const JOURNAL_ICON_HTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M16 4.2l.7 1.5 1.5.7-1.5.7L16 8.5l-.7-1.4-1.5-.7 1.5-.7z" fill="currentColor" stroke="none"/></svg>`;
 
   const PANEL_TITLES_MY_CHARS = [
     "내 캐릭터 목록", "내 캐릭터 리스트",
@@ -733,10 +733,9 @@
     btn.setAttribute("aria-label", "핸드아웃");
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer;
-      width: 30px; height: 30px; border-radius: 8px;
-      background: #1a1a1a; color: #fff; display: inline-grid; place-items: center;
-      margin-left: 6px; vertical-align: middle;
-      border: 1px solid rgba(255,255,255,.18);
+      width: 32px; height: 32px; border-radius: 50%;
+      color: currentColor; display: inline-grid; place-items: center;
+      margin-left: 4px; vertical-align: middle;
     `;
     btn.innerHTML = JOURNAL_ICON_HTML;
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
@@ -859,14 +858,16 @@
     btn.setAttribute(ICON_MARKER, "toolbar");
     btn.title = "핸드아웃 (Capybara Toolkit)";
     btn.setAttribute("aria-label", "핸드아웃");
+    // MUI IconButton 매치 — 40x40 hit, 24 icon, color inherits from app bar
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer;
       width: 40px; height: 40px; border-radius: 50%;
-      color: #fff; display: inline-grid; place-items: center;
-      margin: 0 4px; vertical-align: middle;
+      color: inherit; display: inline-grid; place-items: center;
+      margin: 0 2px; vertical-align: middle;
+      transition: background-color 120ms ease;
     `;
     btn.innerHTML = JOURNAL_ICON_HTML;
-    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.12)"; }, { signal });
+    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.1)"; }, { signal });
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openPanel(); }, true);
     return btn;
@@ -882,7 +883,7 @@
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
       top: 64px; right: 80px; z-index: 2147483647;
-      width: 42px; height: 42px; border-radius: 50%;
+      width: 44px; height: 44px; border-radius: 50%;
       background: #b53030; color: #fff; display: grid; place-items: center;
       border: 2px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,.42);
     `;
