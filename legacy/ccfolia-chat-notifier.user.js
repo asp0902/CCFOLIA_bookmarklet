@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.46
+// @version      0.2.47
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1612,7 +1612,30 @@
       // YT iframe API preload — load 자체는 prepare 도 호출하지만, 미리 시작해
       // network round-trip 을 init 흐름과 병렬화.
       loadYoutubeIframeApi();
-    } catch (_) {}
+
+      // body 마운트 전이면 skip — ensureYoutubePlayerHost 가 body 의존.
+      if (document.readyState === "loading" || !document.body) return;
+      if (ccfBgmActiveSlotKey || ccfBgmPlayer) return;
+
+      // library 동기 read → entry lookup → 즉시 play.
+      // 기존 흐름: init 300ms → loadCcfBgmSlotMap Promise → prepare → play.
+      // fast path: schedule 진입 직후 localStorage 직접 read → play.
+      const raw = window.localStorage.getItem(BGM_STORAGE_KEY);
+      if (!raw) return;
+      let library;
+      try { library = JSON.parse(raw); } catch (_) { return; }
+      if (!library || typeof library !== "object") return;
+
+      const entry = library[persisted.entryKey];
+      if (!entry?.videoId) return;
+
+      // 후속 흐름이 ccfBgmSlotMap 의존하므로 동시에 hydrate.
+      if (!ccfBgmSlotMap.has(persisted.entryKey)) {
+        ccfBgmSlotMap.set(persisted.entryKey, entry);
+      }
+
+      playCcfYoutubeBgmSlot(persisted.slotKey, entry, null, 0, persisted.entryKey);
+    } catch (_) { /* fast path 실패해도 정상 init 흐름이 처리 */ }
   }
 
   function initCcfBgmEnhancer() {
