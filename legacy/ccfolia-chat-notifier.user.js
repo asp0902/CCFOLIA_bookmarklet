@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.45
+// @version      0.2.46
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1585,12 +1585,13 @@
   }
 
   function scheduleCcfBgmEnhancerInit() {
-    const run = () => {
-      window.setTimeout(initCcfBgmEnhancer, 300);
-    };
+    // 새로고침 후 autoplay 케이스: persisted state==="playing" 이면 init 흐름을
+    // 기다리지 않고 즉시 YT API preload + slotMap 로드 + play. 사용자 클릭부터
+    // 재생까지 딜레이 최소화.
+    primeAutoplayFastPath();
 
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", run, { once: true });
+      document.addEventListener("DOMContentLoaded", initCcfBgmEnhancer, { once: true });
       window.setTimeout(() => {
         if (!ccfBgmEnhancerInitialized) {
           initCcfBgmEnhancer();
@@ -1599,7 +1600,19 @@
       return;
     }
 
-    run();
+    // 이전엔 setTimeout 300ms 지연 — 그러나 readyState 가 이미 complete/interactive
+    // 이면 ccfolia DOM 도 대부분 mount 끝남. 지연 제거.
+    initCcfBgmEnhancer();
+  }
+
+  function primeAutoplayFastPath() {
+    try {
+      const persisted = readCcfBgmPersistedActiveSlot();
+      if (persisted?.state !== "playing") return;
+      // YT iframe API preload — load 자체는 prepare 도 호출하지만, 미리 시작해
+      // network round-trip 을 init 흐름과 병렬화.
+      loadYoutubeIframeApi();
+    } catch (_) {}
   }
 
   function initCcfBgmEnhancer() {
