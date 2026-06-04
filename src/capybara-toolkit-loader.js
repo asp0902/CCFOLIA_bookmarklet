@@ -13,7 +13,8 @@
     { key: "__CCF_LOG_PACKAGE_DEBUG__" },
     { key: "__CCF_STANDING_PICKER_DEBUG__", toolkitScriptPrefix: "ccfolia-standing-picker:" },
     { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" },
-    { key: "__CCF_PALETTE_FILTER_DEBUG__" }
+    { key: "__CCF_PALETTE_FILTER_DEBUG__" },
+    { key: "__CCF_HANDOUT_DEBUG__", toolkitScriptPrefix: "ccf-handout:" }
   ]);
   const EXISTING = window[GLOBAL_KEY];
   if (EXISTING && typeof EXISTING.closePanel === "function") {
@@ -88,6 +89,13 @@
       roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
+    },
+    {
+      id: "ccf-handout",
+      title: "핸드아웃",
+      summary: "Roll20 스타일 핸드아웃 — 제목/공개 본문/GM 전용 본문, 이미지, 캐릭터별 비밀 권한. 룸 상단 캐릭터 패널 옆 H 아이콘으로 열기. (1단계: 본인 화면 전용)",
+      scripts: ["legacy/ccfolia-handout.user.js"],
+      roomOnly: true
     }
   ]);
 
@@ -1023,7 +1031,8 @@
     "ccf-theme-switcher": () => callLegacyDisable("__CCF_THEME_SWITCHER_DEBUG__"),
     "ccf-log-package": () => callLegacyDisable("__CCF_LOG_PACKAGE_DEBUG__"),
     "ccfolia-standing-picker": () => callLegacyDisable("__CCF_STANDING_PICKER_DEBUG__"),
-    "ccf-suite-manager": () => callLegacyDisable("__CCF_SUITE_DEBUG__")
+    "ccf-suite-manager": () => callLegacyDisable("__CCF_SUITE_DEBUG__"),
+    "ccf-handout": () => callLegacyDisable("__CCF_HANDOUT_DEBUG__")
   });
 
   async function disableFeature(feature) {
