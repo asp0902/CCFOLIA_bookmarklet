@@ -229,7 +229,7 @@
       display: flex; flex-direction: column;
       background: #26262c; color: #e8e8e8;
       border: 1px solid rgba(255,255,255,.08);
-      border-radius: 10px;
+      border-radius: 0;
       box-shadow: 0 24px 72px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
       overflow: hidden;
       min-width: 360px; min-height: 280px;
