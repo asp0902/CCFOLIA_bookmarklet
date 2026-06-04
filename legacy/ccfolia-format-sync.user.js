@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.63
+// @version      0.0.64
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.63 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.64 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3850,6 +3850,9 @@
     const editor = dialog.querySelector('textarea[name="text"]');
     if (!(editor instanceof HTMLTextAreaElement) || !isVisible(editor)) return null;
 
+    hydrateEditDialogStateFromEnvelope(editor);
+    ensureEditDialogSaveHook(dialog, editor);
+
     const dialogContent = dialog.querySelector('.MuiDialogContent-root') || dialog;
     if (!(dialogContent instanceof HTMLElement)) return null;
 
@@ -3871,6 +3874,49 @@
     bindInlineToolbarToEditor(toolbar, editor, dialog);
     updateInlineToolbarVisuals(toolbar);
     return toolbar;
+  }
+
+  function hydrateEditDialogStateFromEnvelope(editor) {
+    if (editor.dataset.ccfEditDialogHydrated === "1") return;
+    editor.dataset.ccfEditDialogHydrated = "1";
+
+    const fullText = editor.value || "";
+    const state = ensureEditorState(editor);
+    const decoded = extractEnvelope(fullText);
+    if (decoded) {
+      const { visibleText, envelope } = decoded;
+      state.text = visibleText;
+      state.runs = normalizeRuns(envelope.formatRuns || [], visibleText.length);
+      state.alignRuns = Array.isArray(envelope.alignRuns) ? envelope.alignRuns : [];
+      state.blockStyle = envelope.blockStyle || {};
+      setEditorText(editor, visibleText);
+    } else {
+      state.text = fullText;
+      state.runs = [];
+      state.alignRuns = [];
+      state.blockStyle = {};
+    }
+  }
+
+  function ensureEditDialogSaveHook(dialog, editor) {
+    if (dialog.dataset.ccfEditSaveBound === "1") return;
+    dialog.dataset.ccfEditSaveBound = "1";
+
+    dialog.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const button = target.closest("button");
+      if (!(button instanceof HTMLButtonElement)) return;
+      if (!dialog.contains(button)) return;
+      if (button.closest(`[${INLINE_TOOLBAR_ATTR}="1"]`)) return;
+      const label = (button.textContent || "").trim();
+      if (!/^(저장|Save|保存)/i.test(label)) return;
+      try {
+        preparePayloadForSend(editor);
+      } catch (error) {
+        console.warn("[CCF NAR] edit-dialog save hook failed", error);
+      }
+    }, true);
   }
 
   function findEditMessageDialogBars() {
@@ -10729,8 +10775,13 @@
   }
 
   function preparePayloadForSend(editor) {
-    editor = normalizeEditorCandidate(editor);
-    if (!editor) return true;
+    const isEditDialogEditor = editor instanceof HTMLTextAreaElement
+      && editor.closest('[role="dialog"], .MuiDialog-paper')
+      && editor.getAttribute("name") === "text";
+    if (!isEditDialogEditor) {
+      editor = normalizeEditorCandidate(editor);
+      if (!editor) return true;
+    }
 
     if (isModalOpen() && activeEditor && editor === activeEditor) {
       syncModalEditorToRoomEditor(true);
