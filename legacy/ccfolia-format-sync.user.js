@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.57
+// @version      0.0.58
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.57 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.58 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1794,8 +1794,7 @@
     el.style.userSelect = "none";
     el.style.webkitUserSelect = "none";
     el.setAttribute("data-ccf-blurred", "1");
-    el.style.cursor = "help";
-    el.title = "Ctrl+클릭으로 내용 표시/숨김";
+    // cursor 모양 변경 / title 툴팁 부여 안 함 — 일반 사용자가 reveal 기능 존재를 알아채면 안 됨.
     ensureBlurRevealHandler();
   }
 
@@ -1827,14 +1826,14 @@
           text-shadow: 0 0 var(--ccf-blur-r, 8px) currentColor !important;
           user-select: none !important;
           -webkit-user-select: none !important;
-          cursor: help !important;
+          /* cursor: help 제거 — reveal 기능 존재 단서 차단 */
         }
         [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] {
           -webkit-text-fill-color: inherit !important;
           text-shadow: none !important;
           user-select: text !important;
           -webkit-user-select: text !important;
-          cursor: text !important;
+          /* cursor: text 제거 — reveal 상태에서도 hover 단서 안 남김 */
         }
       `;
       (document.head || document.documentElement).appendChild(style);
