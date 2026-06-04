@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.54
+// @version      0.0.55
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.54 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.55 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -1828,6 +1828,11 @@
     }
   }
 
+  // 두 번째 IIFE(syncEditorVisualPreview / appendStyledFragment 흐름)도
+  // applySoftBlur 를 호출하므로 cross-IIFE bridge 로 노출.
+  // 첫 IIFE 의 _blurRevealHandlerBound 클로저를 공유하므로 click handler 도 1회만 bind.
+  window.__CCF_FS_APPLY_SOFT_BLUR__ = applySoftBlur;
+
   function mergeStyles(styleList) {
     const out = {};
     for (const style of styleList) {
@@ -2017,6 +2022,13 @@
   });
   const ccfFsRegisterTeardown = CCF_FS_RUNTIME?.registerTeardown || (() => {});
   const ccfFsIsActive = () => CCF_FS_RUNTIME?.isActive?.() !== false;
+
+  // 첫 IIFE 의 applySoftBlur 를 cross-IIFE bridge 로 가져온다.
+  // 두 번째 IIFE 의 applyInlineStyle/appendStyledFragment 가 직접 호출하므로
+  // 정의 안 되면 ReferenceError → syncEditorVisualPreview 등 미리보기 렌더 흐름 throw.
+  const applySoftBlur = window.__CCF_FS_APPLY_SOFT_BLUR__ || (() => {
+    console.warn("[CCF NAR] applySoftBlur bridge missing; blur preview skipped");
+  });
 
   const OPEN_BTN_ATTR = "data-ccf-open-btn";
   const OPEN_BTN_SELECTOR = `.ccf-open-btn[${OPEN_BTN_ATTR}="1"]`;
