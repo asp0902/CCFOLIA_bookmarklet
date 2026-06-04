@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.52
+// @version      0.2.53
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -5412,7 +5412,10 @@
       && ratio > 0.5;
 
     if (nearEnd && ccfBgmActiveLoop) {
-      // 루프: 처음으로 되감기 + 진행바 즉시 0.
+      // 루프: 처음으로 되감기 + 진행바 시각 100% (한 frame 동안). 다음 frame 의
+      // staleAfterLoop 분기가 자연스럽게 0 으로 reset 함. 이렇게 안 하면
+      // 0.5s 갱신 주기 탓에 슬라이더가 ~98% 에서 0% 로 점프하여 사용자가
+      // 끝 도달 시각을 못 봄.
       if (sinceLoopNudge > 2000 && ccfBgmPlayer) {
         ccfBgmLoopNudgeAt = nowMs;
         ccfBgmLoopNudgeFromTotal = playback.total;
@@ -5423,8 +5426,8 @@
           debugLog?.("bgm-youtube-loop-nudge-failed", serializeError?.(error) || String(error));
         }
       }
-      ratio = 0;
-      displayNow = 0;
+      ratio = 1;
+      displayNow = playback.total;
     } else if (nearEnd && !ccfBgmActiveLoop) {
       // 비루프 + 종료 임박: 진행바를 100%로 스냅(시각적 완성도).
       ratio = 1;
