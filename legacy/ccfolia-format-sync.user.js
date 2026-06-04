@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.59
+// @version      0.0.60
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.59 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.60 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -830,7 +830,51 @@
   }
 
   function scanAndRenderAll() {
+    // 기존 메시지 재렌더로 DOM mutation → scrollHeight 변동 → 채팅 영역 스크롤 위치
+    // 미보존. 사용자가 init 직전 바닥에 있었다면 재렌더 후 다시 바닥으로 보정.
+    const scrollables = collectChatScrollables();
+    const snapshots = scrollables.map((el) => ({
+      el,
+      wasAtBottom: isScrolledToBottom(el)
+    }));
+
     scanWithin(document.body || document.documentElement);
+
+    // 동기 렌더 직후 + 비동기 reflow 후 각각 보정 (CCFOLIA React 가 자체 scrollTop
+    // 조정하는 시점에 덮어쓰기 위해 2회).
+    const restore = () => {
+      snapshots.forEach(({ el, wasAtBottom }) => {
+        if (wasAtBottom && document.contains(el)) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+    };
+    restore();
+    window.requestAnimationFrame(restore);
+    window.setTimeout(restore, 50);
+  }
+
+  function collectChatScrollables() {
+    const out = new Set();
+    document.querySelectorAll(MESSAGE_SCOPE_SELECTOR).forEach((el) => {
+      let node = el;
+      while (node && node !== document.body) {
+        if (node instanceof HTMLElement) {
+          const overflowY = getComputedStyle(node).overflowY;
+          if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+            out.add(node);
+            break;
+          }
+        }
+        node = node.parentElement;
+      }
+    });
+    return [...out];
+  }
+
+  function isScrolledToBottom(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 32;
   }
 
   function scanWithin(root) {
