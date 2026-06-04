@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.64
+// @version      0.0.65
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.64 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.65 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3852,6 +3852,7 @@
 
     hydrateEditDialogStateFromEnvelope(editor);
     ensureEditDialogSaveHook(dialog, editor);
+    markEditDialogForThemeOverride(dialog);
 
     const dialogContent = dialog.querySelector('.MuiDialogContent-root') || dialog;
     if (!(dialogContent instanceof HTMLElement)) return null;
@@ -3874,6 +3875,96 @@
     bindInlineToolbarToEditor(toolbar, editor, dialog);
     updateInlineToolbarVisuals(toolbar);
     return toolbar;
+  }
+
+  function markEditDialogForThemeOverride(dialog) {
+    if (dialog.getAttribute("data-ccf-edit-dialog") === "1") return;
+    dialog.setAttribute("data-ccf-edit-dialog", "1");
+    const paper = dialog.closest('.MuiDialog-paper') || dialog.querySelector('.MuiDialog-paper');
+    if (paper instanceof HTMLElement) {
+      paper.setAttribute("data-ccf-edit-dialog", "1");
+    }
+    if (dialog.matches('.MuiDialog-paper')) {
+      dialog.setAttribute("data-ccf-edit-dialog", "1");
+    }
+    ensureEditDialogResetStyles();
+  }
+
+  function ensureEditDialogResetStyles() {
+    if (document.getElementById("ccf-edit-dialog-reset-style")) return;
+    const style = document.createElement("style");
+    style.id = "ccf-edit-dialog-reset-style";
+    style.setAttribute(SAFE_UI_ATTR, "1");
+    style.textContent = `
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"],
+      html [role="dialog"][data-ccf-edit-dialog="1"],
+      html[data-ccf-theme-active="1"] .MuiDialog-paper[data-ccf-edit-dialog="1"],
+      html[data-ccf-theme-active="1"] .MuiPaper-root.MuiDialog-paper[data-ccf-edit-dialog="1"],
+      html[data-ccf-theme-active="1"] div[role="dialog"][data-ccf-edit-dialog="1"] {
+        background: #1e1e1e !important;
+        background-image: none !important;
+        color: rgba(255, 255, 255, 0.87) !important;
+        border: none !important;
+        box-shadow: 0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12) !important;
+        font-family: Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] *:not([${SAFE_UI_ATTR}="1"]):not([${SAFE_UI_ATTR}="1"] *),
+      html [role="dialog"][data-ccf-edit-dialog="1"] *:not([${SAFE_UI_ATTR}="1"]):not([${SAFE_UI_ATTR}="1"] *) {
+        font-family: Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        text-shadow: none !important;
+        letter-spacing: normal !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiDialogTitle-root,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiDialogTitle-root,
+      html[data-ccf-theme-active="1"] .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiDialogTitle-root {
+        color: rgba(255, 255, 255, 0.87) !important;
+        background: transparent !important;
+        background-image: none !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] textarea[name="text"],
+      html [role="dialog"][data-ccf-edit-dialog="1"] textarea[name="text"],
+      html[data-ccf-theme-active="1"] .MuiDialog-paper[data-ccf-edit-dialog="1"] textarea[name="text"] {
+        color: rgba(255, 255, 255, 0.87) !important;
+        background: transparent !important;
+        background-image: none !important;
+        font-family: Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        letter-spacing: normal !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiFilledInput-root,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiFilledInput-root,
+      html[data-ccf-theme-active="1"] .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiFilledInput-root {
+        background-color: rgba(255, 255, 255, 0.09) !important;
+        background-image: none !important;
+        border: none !important;
+        border-radius: 4px 4px 0 0 !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiFilledInput-root::before,
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiFilledInput-root::after,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiFilledInput-root::before,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiFilledInput-root::after {
+        border-bottom-color: rgba(255, 255, 255, 0.42) !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiButton-root,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiButton-root,
+      html[data-ccf-theme-active="1"] .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiButton-root {
+        color: #90caf9 !important;
+        background: transparent !important;
+        background-image: none !important;
+        font-family: Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.02857em !important;
+        text-transform: uppercase !important;
+        text-shadow: none !important;
+        border: none !important;
+      }
+      html .MuiDialog-paper[data-ccf-edit-dialog="1"] .MuiButton-root:hover,
+      html [role="dialog"][data-ccf-edit-dialog="1"] .MuiButton-root:hover {
+        background: rgba(144, 202, 249, 0.08) !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function hydrateEditDialogStateFromEnvelope(editor) {
