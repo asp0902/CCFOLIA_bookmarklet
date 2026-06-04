@@ -21,8 +21,9 @@
   const ROOT_ID = "ccfolia-handout-root";
   const STYLE_ID = "ccfolia-handout-style";
   const ICON_MARKER = "data-ccf-handout-icon";
-  // Roll20 저널 책 아이콘 (Lucide book 기반)
-  const JOURNAL_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 6h7"/><path d="M9 10h7"/></svg>`;
+  // Roll20 저널 탭 아이콘 모방 — Pictos "N" 글리프(펼쳐진 책)와 시각적으로 동일.
+  // 원본 Pictos는 유료 폰트(라이선스상 재배포 불가)라 무료 Lucide book-open 채택.
+  const JOURNAL_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
 
   const PANEL_TITLES_MY_CHARS = [
     "내 캐릭터 목록", "내 캐릭터 리스트",
