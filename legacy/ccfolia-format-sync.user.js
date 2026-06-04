@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.50
+// @version      0.0.51
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.50 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.51 @", new Date().toISOString());
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -3532,11 +3532,28 @@
   }
 
   function observeDom() {
+    // mutation 폭주 방지: rAF 1회로 합쳐 ensureUi() 호출.
+    let scheduled = 0;
+    const scheduleEnsure = () => {
+      if (scheduled) return;
+      scheduled = window.requestAnimationFrame(() => {
+        scheduled = 0;
+        ensureUi();
+      });
+    };
+
     const mo = new MutationObserver((mutations) => {
       const shouldRefresh = mutations.some((mutation) => {
         const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
         if (target?.closest?.(`[${SAFE_UI_ATTR}="1"]`)) {
           return false;
+        }
+
+        // attribute 변경(style/class/hidden 등): React 마운트 직후 textarea getBoundingClientRect
+        // 가 0 → layout 완료 시 style/class 변경으로 가시화되는 시점을 캐치.
+        // childList 변동 없이 display:none→block 만 토글되는 경우 기존 옵저버가 놓침.
+        if (mutation.type === "attributes") {
+          return true;
         }
 
         const nodes = [
@@ -3551,15 +3568,22 @@
       });
 
       if (shouldRefresh) {
-        ensureUi();
+        scheduleEnsure();
       }
     });
 
     mo.observe(document.documentElement || document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
+      attributes: true
     });
-    ccfFsRegisterTeardown(() => mo.disconnect());
+    ccfFsRegisterTeardown(() => {
+      if (scheduled) {
+        window.cancelAnimationFrame(scheduled);
+        scheduled = 0;
+      }
+      mo.disconnect();
+    });
   }
 
   function bindGlobalEvents() {
