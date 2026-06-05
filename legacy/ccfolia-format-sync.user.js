@@ -22,6 +22,7 @@
   // 해서 TDZ 위반 방지.
   var _blurRevealHandlerBound = false;
   let lastChatScrollUpAt = 0;
+  let chatRenderPausedUntil = 0;
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -49,6 +50,7 @@
   ].join(", ");
   const HISTORY_RENDER_BOTTOM_THRESHOLD_PX = 160;
   const CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS = 1200;
+  const CHAT_HISTORY_LOAD_PAUSE_MS = 6000;
 
   const INVIS_START = "\u2063\u2063\u2063";
   const INVIS_END = "\u2062\u2062\u2062";
@@ -803,6 +805,10 @@
 
   function observeRenderDom() {
     const mo = new MutationObserver((mutations) => {
+      if (shouldPauseChatRenderForHistoryLoad(mutations)) {
+        chatRenderPausedUntil = Math.max(chatRenderPausedUntil, Date.now() + CHAT_HISTORY_LOAD_PAUSE_MS);
+        return;
+      }
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
           for (const node of mutation.addedNodes) {
@@ -830,6 +836,22 @@
       characterData: true
     });
     ccfFsRegisterTeardown(() => mo.disconnect());
+  }
+
+  function shouldPauseChatRenderForHistoryLoad(mutations) {
+    if (Date.now() - lastChatScrollUpAt > CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS) return false;
+    let addedItems = 0;
+    for (const mutation of mutations) {
+      if (mutation.type !== "childList") continue;
+      for (const node of mutation.addedNodes || []) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches?.(MESSAGE_ITEM_SELECTOR) || node.querySelector?.(MESSAGE_ITEM_SELECTOR)) {
+          addedItems += 1;
+          if (addedItems >= 2) return true;
+        }
+      }
+    }
+    return false;
   }
 
   function scanAndRenderAll() {
@@ -972,6 +994,7 @@
   function isNearChatBottom(el) {
     const scroller = findChatScrollContainer(el);
     if (!scroller) return true;
+    if (Date.now() < chatRenderPausedUntil) return false;
     if (Date.now() - lastChatScrollUpAt < CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS) return false;
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= HISTORY_RENDER_BOTTOM_THRESHOLD_PX;
   }

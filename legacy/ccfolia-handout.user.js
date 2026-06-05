@@ -679,9 +679,10 @@
       padding: 0 16px 12px 16px; overflow: auto;
     }
     .pl-modal .pl-row {
-      display: grid; grid-template-columns: 1fr 1fr 110px 28px;
+      display: grid; grid-template-columns: 24px 1fr 1fr 110px 28px;
       gap: 8px; align-items: center; margin-bottom: 8px;
     }
+    .pl-modal .pl-merge-check { width: 16px; height: 16px; accent-color: #fff; justify-self: center; }
     .pl-modal .pl-row input, .pl-modal .pl-row select {
       background-color: #1a1a1a; border: 0; border-radius: 4px;
       color: #fff; padding: 9px 12px; font-size: 0.875rem;
@@ -753,6 +754,7 @@
               </div>
               <div class="pl-modal-body" data-pl-rows-host="1"></div>
               <div class="pl-modal-foot">
+                <button class="btn secondary small" data-action="pl-modal-merge">선택 병합</button>
                 <button class="btn secondary small" data-action="pl-modal-add">추가</button>
                 <button class="btn small" data-action="pl-modal-save">저장</button>
               </div>
@@ -1608,6 +1610,7 @@
     if (action === "pl-modal-open") { openPlListDialog(); return; }
     if (action === "pl-modal-close") { closePlListDialog(); return; }
     if (action === "pl-modal-add") { addPlRow(); return; }
+    if (action === "pl-modal-merge") { mergeSelectedPlRows(); return; }
     if (action === "pl-modal-save") { savePlListFromDialog(); return; }
     if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
     if (action === "reload-my-characters") { reloadMyCharacterOptions(); return; }
@@ -1715,6 +1718,7 @@
     const row = document.createElement("div");
     row.className = "pl-row";
     row.innerHTML = `
+      <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
       <input type="text" placeholder="대표 이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
       <input type="text" placeholder="ID (같으면 병합)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
       <select data-pl-field="role">
@@ -1742,6 +1746,48 @@
     if (host && host.children.length === 0) appendPlRow(host, { name: "", id: "", role: "player" });
   }
 
+  function readPlRow(row) {
+    if (!(row instanceof HTMLElement)) return null;
+    const name = row.querySelector('[data-pl-field="name"]')?.value.trim() || "";
+    const id = row.querySelector('[data-pl-field="id"]')?.value.trim() || "";
+    const role = row.querySelector('[data-pl-field="role"]')?.value === "gm" ? "gm" : "player";
+    return name ? { name, id, role, aliases: findExistingPlAliases(name, id) } : null;
+  }
+
+  function writePlRow(row, item) {
+    if (!(row instanceof HTMLElement) || !item) return;
+    const name = row.querySelector('[data-pl-field="name"]');
+    const id = row.querySelector('[data-pl-field="id"]');
+    const role = row.querySelector('[data-pl-field="role"]');
+    if (name) name.value = item.name || "";
+    if (id) id.value = item.id || "";
+    if (role) role.value = item.role === "gm" ? "gm" : "player";
+  }
+
+  function mergeSelectedPlRows() {
+    const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
+    if (!host) return;
+    const selected = Array.from(host.querySelectorAll(".pl-row"))
+      .filter((row) => row.querySelector("[data-pl-merge-check]")?.checked);
+    if (selected.length < 2) { toast("병합할 행을 2개 이상 선택하세요."); return; }
+
+    const items = selected.map(readPlRow).filter(Boolean);
+    if (items.length < 2) { toast("병합할 이름이 부족합니다."); return; }
+    const base = { ...items[0], aliases: [...(items[0].aliases || [])] };
+    const aliases = new Set(base.aliases || []);
+    for (const item of items.slice(1)) {
+      if (item.name && item.name !== base.name) aliases.add(item.name);
+      (item.aliases || []).forEach((alias) => { if (alias && alias !== base.name) aliases.add(alias); });
+      if (!base.id && item.id) base.id = item.id;
+      if (base.role !== "gm" && item.role === "gm") base.role = "gm";
+    }
+    base.aliases = [...aliases];
+    writePlRow(selected[0], base);
+    selected.slice(1).forEach((row) => row.remove());
+    selected[0].querySelector("[data-pl-merge-check]").checked = false;
+    toast(`${items.length}개 행 병합됨`);
+  }
+
   function findExistingPlAliases(name, id) {
     const nameKey = normalizePlNameKey(name);
     const idKey = normalizePlNameKey(id);
@@ -1757,10 +1803,8 @@
     if (!host) return;
     const items = [];
     host.querySelectorAll(".pl-row").forEach((row) => {
-      const name = row.querySelector('[data-pl-field="name"]').value.trim();
-      const id = row.querySelector('[data-pl-field="id"]').value.trim();
-      const role = row.querySelector('[data-pl-field="role"]').value === "gm" ? "gm" : "player";
-      if (name) items.push({ name, id, role, aliases: findExistingPlAliases(name, id) });
+      const item = readPlRow(row);
+      if (item) items.push(item);
     });
     state.data.plList = mergePlListById(items);
     await saveAll(state.data);
