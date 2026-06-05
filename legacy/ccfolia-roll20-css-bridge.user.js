@@ -4879,7 +4879,7 @@
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 9px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 14px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
@@ -4888,7 +4888,7 @@
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
       // === leader li === 자기 아래쪽 경계만 제거 (위쪽 = 이전 화자 경계 유지)
       // padding-bottom은 cont와 동일 18px (그래야 leader-cont 사이도 cont-cont 사이와 같은 간격)
-      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 9px !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 14px !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
       // === leader 부모 wrapper === 아래쪽 경계 + 아래쪽 padding/margin만 제거
       `[${LEADER_WRAP}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
@@ -4965,7 +4965,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.11 (gap 9px)");
+    console.info("[ccf-prose-mode] active v0.0.12 (gap 14px temp)");
   }
 
   function teardown() {
@@ -4984,7 +4984,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.11",
+    version: "0.0.12",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
