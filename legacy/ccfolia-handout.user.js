@@ -606,10 +606,11 @@
     .panel-footer .footer-meta {
       flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.55);
     }
-    .panel-footer .btn { box-shadow: none; }
+    .panel-footer .btn { box-shadow: none; border-radius: 0; }
     .panel-footer .btn.secondary {
       border: 0; background: transparent;
       color: rgba(255,255,255,.85);
+      border-radius: 0;
     }
     .panel-footer .btn.secondary:hover {
       background: rgba(255,255,255,.08); color: #fff;
@@ -621,7 +622,7 @@
       color: rgba(255,255,255,.55);
       font-size: 0.75rem;
       padding: 4px 16px;
-      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
       border-top: 1px solid rgba(255,255,255,.04);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
