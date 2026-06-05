@@ -1268,7 +1268,17 @@
       // 확인 시점부터 자동 감시 활성화. 다음 실행 때도 유지.
       markGreeted(roomKey);
       scanChatForAuthors();
+      // myCharacter 자동 감지 (비어있을 때만)
+      autoDetectMyCharacter().catch(() => {});
       toast("카피바라 툴킷이 활성화되었습니다.");
+      // Firebase 연결 + 실시간 구독 (사용자 동의 후 자동)
+      initFirebase().then((fb) => {
+        toast(`송신 채널 연결됨 (uid: ${fb.uid.slice(0, 8)}...)`);
+        return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows()]);
+      }).catch((error) => {
+        toast("송신 채널 연결 실패 — 콘솔 확인");
+        console.error(error);
+      });
     });
     (document.body || document.documentElement).appendChild(host);
     greetingRoot = host;
@@ -1938,6 +1948,44 @@
     return scanMyCharacters() !== null;
   }
 
+  // myCharacter 자동 감지 — input[name="name"] 의 visible 값 (코코포리아 채팅 발화 캐릭터)
+  async function autoDetectMyCharacter({ force = false } = {}) {
+    if (!active) return null;
+    if (!force && state.data.myCharacter) return null;
+    const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
+    const visible = inputs.find((i) => i.offsetParent !== null && !i.disabled);
+    const name = (visible?.value || "").trim();
+    if (!name) {
+      console.info("[ccf-handout] auto-detect myCharacter: no visible name input");
+      return null;
+    }
+    if (state.data.myCharacter === name) return name;
+    state.data.myCharacter = name;
+    try { await saveAll(state.data); } catch (_) {}
+    console.info("[ccf-handout] myCharacter auto-detected:", name);
+    if (state.isOpen) render();
+    return name;
+  }
+
+  // input[name="name"] 변경 감시 — myCharacter 비어있을 때만 자동 채움
+  function watchMyCharacterInput() {
+    if (!active) return;
+    if (watchMyCharacterInput._bound) return;
+    watchMyCharacterInput._bound = true;
+    document.addEventListener("change", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.name !== "name") return;
+      if (state.data.myCharacter) return; // 이미 설정됨
+      const name = (t.value || "").trim();
+      if (!name) return;
+      state.data.myCharacter = name;
+      saveAll(state.data).catch(() => {});
+      console.info("[ccf-handout] myCharacter detected on input change:", name);
+      if (state.isOpen) render();
+    }, true);
+  }
+
   async function reloadMyCharacterOptions() {
     const opened = await ensureCharPanelOpen();
     if (!opened) {
@@ -2564,7 +2612,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.4 (Show to Players: real send)");
+    console.info("[ccf-handout] init — version 0.2.5 (auto myCharacter + greeting wires Firebase)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
@@ -2577,6 +2625,11 @@
     loadAll().then((d) => {
       state.data = d;
       startChatWatcher();
+      watchMyCharacterInput();
+      // 이미 인사 끝났으면 즉시 자동 감지 시도
+      if (state.data.myCharacter === "") {
+        setTimeout(() => autoDetectMyCharacter().catch(() => {}), 1000);
+      }
       setTimeout(() => maybeShowGreeting(), 800);
     }).catch(reportError);
   }
