@@ -4881,9 +4881,8 @@
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 12px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { border-bottom: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; padding-left: 56px !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
@@ -4897,11 +4896,10 @@
       `[${LEADER_WRAP}="1"] > hr:last-child, [${LEADER_WRAP}="1"] > .MuiDivider-root:last-child { display: none !important; }`,
       // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
       `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; min-height: 0 !important; }`,
-      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) { border-bottom: 0 !important; }`,
-      `[${WRAP}="1"]::before { display: none !important; }`,
-      `[${WRAP}="1"]:not([${WRAP_LAST}="1"])::after { display: none !important; }`,
+      `[${WRAP}="1"] { border-bottom: 0 !important; }`,
+      `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`,
+      `[${WRAP}="1"] + hr { display: none !important; }`,
       // === 화자 다른 메시지 시작 = 명시적 구분선 추가 ===
       `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.1) !important; padding-top: 12px !important; margin-top: 12px !important; }`
     ].join("\n");
@@ -4973,7 +4971,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.15 (define SPEAKER_START in injectStyle)");
+    console.info("[ccf-prose-mode] active v0.0.16 (single divider via SPEAKER_START only)");
   }
 
   function teardown() {
@@ -4992,7 +4990,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.15",
+    version: "0.0.16",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
