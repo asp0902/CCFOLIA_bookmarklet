@@ -643,7 +643,7 @@
       display: none; align-items: center; justify-content: center;
       z-index: 20;
     }
-    .pl-modal-overlay[data-open="1"] { display: flex; }
+    .pl-modal-overlay[data-pl-modal-open="1"] { display: flex; }
     .pl-modal {
       width: min(560px, 92%); max-height: 88%;
       background-color: #2c2c2c; color: #fff;
@@ -896,12 +896,29 @@
   // ===== 채팅 발신자 감시 (plList 자동 추가) =====
   function startChatWatcher() {
     if (state.chatWatcher || !active) return;
-    state.chatWatcher = new MutationObserver(() => debouncedScanChat());
-    state.chatWatcher.observe(document.documentElement, { childList: true, subtree: true });
+    const target = document.body || document.documentElement;
+    if (!target) return;
+    state.chatWatcher = new MutationObserver((mutations) => {
+      if (mutations.some(isChatAuthorRelevantMutation)) debouncedScanChat();
+    });
+    state.chatWatcher.observe(target, { childList: true, subtree: true });
     debouncedScanChat();
     registerTeardown(() => {
       state.chatWatcher?.disconnect();
       state.chatWatcher = null;
+    });
+  }
+
+  function isChatAuthorRelevantMutation(mutation) {
+    if (mutation.type !== "childList") return false;
+    if (mutation.target instanceof Element && mutation.target.closest(`#${ROOT_ID}, [data-ccf-handout-greeting]`)) return false;
+    return Array.from(mutation.addedNodes || []).some((node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      if (node.closest(`#${ROOT_ID}, [data-ccf-handout-greeting]`)) return false;
+      return node.matches?.(CHAT_AUTHOR_ITEM_SELECTOR)
+        || !!node.querySelector?.(CHAT_AUTHOR_ITEM_SELECTOR)
+        || node.matches?.(CHAT_AUTHOR_HEADING_SELECTOR)
+        || !!node.querySelector?.(CHAT_AUTHOR_HEADING_SELECTOR);
     });
   }
 
@@ -957,23 +974,32 @@
   function collectChatAuthorNames() {
     const names = [];
     const seen = new Set();
-    document.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR).forEach((item) => {
-      if (!(item instanceof HTMLElement)) return;
-      if (!isLikelyChatAuthorItem(item)) return;
-      const name = extractChatAuthorName(item);
-      const key = normalizePlNameKey(name);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      names.push(name);
+    const scopes = findChatAuthorScopes();
+    scopes.forEach((scope) => {
+      scope.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR).forEach((item) => {
+        if (!(item instanceof HTMLElement)) return;
+        const name = extractChatAuthorName(item);
+        const key = normalizePlNameKey(name);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        names.push(name);
+      });
     });
     return names;
   }
 
-  function isLikelyChatAuthorItem(item) {
-    if (!(item instanceof HTMLElement)) return false;
-    const scope = item.closest(CHAT_AUTHOR_SCOPE_SELECTOR);
+  function findChatAuthorScopes() {
+    const scopes = new Set();
+    document.querySelectorAll(CHAT_AUTHOR_SCOPE_SELECTOR).forEach((scope) => {
+      if (!(scope instanceof HTMLElement)) return;
+      if (isLikelyChatAuthorScope(scope)) scopes.add(scope);
+    });
+    return Array.from(scopes);
+  }
+
+  function isLikelyChatAuthorScope(scope) {
     if (!(scope instanceof HTMLElement)) return false;
-    if (scope.closest(`[${ICON_MARKER}], #${ROOT_ID}, [data-ccf-handout-greeting]`)) return false;
+    if (scope.closest(`#${ROOT_ID}, [data-ccf-handout-greeting]`)) return false;
     if (scope.closest("[role='dialog'], .MuiDialog-root, .MuiModal-root, .MuiPopover-root")) return false;
     if (scope.matches?.("[role='log'], [aria-live='polite'], [aria-live='assertive']")) return true;
     if (scope.matches?.(".MuiDrawer-paper") && looksLikeChatScope(scope)) return true;
@@ -1926,7 +1952,7 @@
       const room = getCurrentRoomKey();
       if (room !== state.lastRoomKey) {
         state.lastRoomKey = room;
-        loadAll().then((d) => { state.data = d; if (state.isOpen) render(); }).catch(() => {});
+        loadAll().then((d) => { state.data = d; resetChatSeenAuthorsForRoom(room); debouncedScanChat(); if (state.isOpen) render(); }).catch(() => {});
       }
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
@@ -1942,7 +1968,7 @@
         const room = getCurrentRoomKey();
         if (room !== state.lastRoomKey) {
           state.lastRoomKey = room;
-          loadAll().then((d) => { state.data = d; if (state.isOpen) render(); }).catch(() => {});
+          loadAll().then((d) => { state.data = d; resetChatSeenAuthorsForRoom(room); debouncedScanChat(); if (state.isOpen) render(); }).catch(() => {});
         }
       }, 50);
     };
