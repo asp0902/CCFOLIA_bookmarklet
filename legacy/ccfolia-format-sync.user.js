@@ -21,6 +21,7 @@
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
   // 해서 TDZ 위반 방지.
   var _blurRevealHandlerBound = false;
+  let lastChatScrollUpAt = 0;
 
   const CCF_RENDERED_ATTR = "data-ccf-rendered";
   const CCF_RAW_ATTR = "data-ccf-raw";
@@ -47,6 +48,7 @@
     'li p'
   ].join(", ");
   const HISTORY_RENDER_BOTTOM_THRESHOLD_PX = 160;
+  const CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS = 1200;
 
   const INVIS_START = "\u2063\u2063\u2063";
   const INVIS_END = "\u2062\u2062\u2062";
@@ -970,6 +972,7 @@
   function isNearChatBottom(el) {
     const scroller = findChatScrollContainer(el);
     if (!scroller) return true;
+    if (Date.now() - lastChatScrollUpAt < CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS) return false;
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= HISTORY_RENDER_BOTTOM_THRESHOLD_PX;
   }
 
@@ -3794,7 +3797,10 @@
       syncAllEditorVisualPreviews();
     }, ccfFsWithSignal());
 
-    document.addEventListener("scroll", () => {
+    document.addEventListener("scroll", (event) => {
+      if (event.target instanceof HTMLElement && !isScrolledToBottom(event.target)) {
+        lastChatScrollUpAt = Date.now();
+      }
       if (inlinePopoverState?.kind === "narrator") {
         positionInlineNarratorPopover(inlinePopoverState.toolbar);
       }
@@ -10458,9 +10464,12 @@
         const composer = findClosestComposerBar(btn);
         const editor = composer ? findEditorFromComposer(composer) : findEditorFromNode(btn);
         if (!editor) return;
+        activeComposer = composer || findComposerForEditor(editor);
+        activeEditor = editor;
+        lastFocusedEditor = editor;
 
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
-        if (preparePayloadForSend(editor) === false) {
+        if (preparePayloadForSend(editor, { composer: activeComposer }) === false) {
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
@@ -10496,8 +10505,12 @@
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
         console.info("[CCF NAR] keydown ENTER passed guards — calling preparePayloadForSend");
+        const composer = findComposerForEditor(editor);
+        activeComposer = composer;
+        activeEditor = editor;
+        lastFocusedEditor = editor;
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
-        if (preparePayloadForSend(editor) === false) {
+        if (preparePayloadForSend(editor, { composer }) === false) {
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
@@ -10923,7 +10936,7 @@
     return pickBestEditor([...candidates], origin || composer) || null;
   }
 
-  function preparePayloadForSend(editor) {
+  function preparePayloadForSend(editor, options = {}) {
     const isEditDialogEditor = editor instanceof HTMLTextAreaElement
       && editor.closest('[role="dialog"], .MuiDialog-paper')
       && editor.getAttribute("name") === "text";
@@ -10933,7 +10946,7 @@
     }
 
     if (isModalOpen() && activeEditor && editor === activeEditor) {
-      syncModalEditorToRoomEditor(true);
+      syncModalEditorToRoomEditor(true, { editor, composer: options.composer || findComposerForEditor(editor) });
     }
 
     const currentText = getEditorText(editor);
@@ -12453,7 +12466,13 @@
     return document.getElementById("ccf-preview");
   }
 
-  function getResolvedActiveEditor() {
+  function getResolvedActiveEditor(preferred = null) {
+    const preferredEditor = normalizeEditorCandidate(preferred);
+    if (preferredEditor && document.contains(preferredEditor) && isVisible(preferredEditor)) {
+      activeEditor = preferredEditor;
+      activeComposer = findComposerForEditor(preferredEditor) || activeComposer;
+      return preferredEditor;
+    }
     const composerEditor =
       activeComposer && document.contains(activeComposer) ? findEditorFromComposer(activeComposer) : null;
 
@@ -12672,16 +12691,18 @@
     setModalSelection(safeSelection, getEditorText(editor).length);
   }
 
-  function isCurrentRoomEditor(editor) {
+  function isCurrentRoomEditor(editor, composer = null) {
+    const resolvedComposer = composer || findComposerForEditor(editor);
     return !!(
       editor instanceof HTMLElement &&
       document.contains(editor) &&
       isVisible(editor) &&
-      findComposerForEditor(editor)
+      resolvedComposer &&
+      findEditorFromComposer(resolvedComposer) === editor
     );
   }
 
-  function syncModalEditorToRoomEditor(commit = false) {
+  function syncModalEditorToRoomEditor(commit = false, options = {}) {
     if (modalMode === MODAL_MODE_ROLL20) {
       syncModalRoll20Draft();
     } else {
@@ -12689,17 +12710,17 @@
     }
 
     if (!commit) return true;
-    return commitModalDraftToRoomEditor();
+    return commitModalDraftToRoomEditor(options);
   }
 
-  function commitModalDraftToRoomEditor() {
-    const roomEditor = getResolvedActiveEditor();
+  function commitModalDraftToRoomEditor(options = {}) {
+    const roomEditor = getResolvedActiveEditor(options.editor || null);
     if (!roomEditor) return false;
 
     if (modalMode === MODAL_MODE_ROLL20) {
       const converted = ensureRoll20DraftConverted({ silent: false, forceRender: true });
       if (!converted) return false;
-      if (!isCurrentRoomEditor(roomEditor)) return false;
+      if (!isCurrentRoomEditor(roomEditor, options.composer || null)) return false;
 
       const nextText = converted.text ?? "";
       const nextRuns = cloneRuns(converted.runs, nextText.length);

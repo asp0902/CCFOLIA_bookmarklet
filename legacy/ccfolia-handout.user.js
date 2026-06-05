@@ -116,12 +116,17 @@
   function normalizePlList(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.map((item) => {
-      if (typeof item === "string") return { name: item.trim(), id: "", role: "player" };
+      if (typeof item === "string") return { name: item.trim(), id: "", role: "player", aliases: [] };
       if (item && typeof item === "object") {
+        const name = String(item.name || "").trim();
+        const aliases = Array.isArray(item.aliases)
+          ? item.aliases.map((alias) => String(alias || "").trim()).filter((alias) => alias && alias !== name)
+          : [];
         return {
-          name: String(item.name || "").trim(),
+          name,
           id: String(item.id || "").trim(),
-          role: item.role === "gm" ? "gm" : "player"
+          role: item.role === "gm" ? "gm" : "player",
+          aliases: [...new Set(aliases)]
         };
       }
       return null;
@@ -959,8 +964,9 @@
     if (!names.length) return;
 
     const me = normalizePlNameKey(state.data.myCharacter || "");
-    const existing = new Set((state.data.plList || []).map((p) => normalizePlNameKey(p.name || "")));
+    const existing = new Set((state.data.plList || []).flatMap((p) => [p.name, ...(p.aliases || [])].map(normalizePlNameKey)));
     const added = [];
+    let merged = 0;
 
     names.forEach((name) => {
       const key = normalizePlNameKey(name);
@@ -969,16 +975,37 @@
       state.chatSeenAuthors.add(key);
       if (key === me) return;
       if (existing.has(key)) return;
+      const sameId = findPlEntryByInferredId(name);
+      if (sameId) {
+        sameId.aliases = [...new Set([...(sameId.aliases || []), name].filter(Boolean))];
+        existing.add(key);
+        merged += 1;
+        return;
+      }
       existing.add(key);
-      added.push({ name, id: "", role: "player" });
+      added.push({ name, id: "", role: "player", aliases: [] });
     });
 
-    if (!added.length) return;
+    if (!added.length && !merged) return;
     state.data.plList.push(...added);
-    console.info("[ccf-handout] chat autoadd", added, "total plList:", state.data.plList.length);
+    console.info("[ccf-handout] chat autoadd", { added, merged }, "total plList:", state.data.plList.length);
     await saveAll(state.data);
-    toast(`PL ${added.length}명 자동 추가: ${added.map((a) => a.name).join(", ")}`);
+    const parts = [];
+    if (added.length) parts.push(`PL ${added.length}명 자동 추가: ${added.map((a) => a.name).join(", ")}`);
+    if (merged) parts.push(`${merged}명 별칭 병합`);
+    toast(parts.join(" / "));
     if (state.isOpen && state.activeTab === "settings") render();
+  }
+
+  function findPlEntryByInferredId(name) {
+    const inferred = inferPlayerIdFromName(name);
+    if (!inferred) return null;
+    return (state.data.plList || []).find((p) => normalizePlNameKey(p.id) === inferred) || null;
+  }
+
+  function inferPlayerIdFromName(name) {
+    const match = String(name || "").match(/(?:^|\s)[@#]([A-Za-z0-9_.-]{2,})(?:\s|$)/);
+    return match ? normalizePlNameKey(match[1]) : "";
   }
 
   function resetChatSeenAuthorsForRoom(room) {
@@ -1361,7 +1388,7 @@
   // 권한 표에 표시할 행 목록 만들기
   function permissionRowKeys(h) {
     const myChar = removeSpaces(state.data.myCharacter);
-    const plList = (state.data.plList || []).filter((p) => p && p.name);
+    const plList = mergePlListById(state.data.plList || []).filter((p) => p && p.name);
     const rows = [];
     rows.push({ key: ALL_KEY, label: "플레이어 전체" });
     if (myChar) rows.push({ key: myChar, label: `${myChar} (GM)` });
@@ -1370,7 +1397,8 @@
       if (!name) continue;
       if (name === myChar) continue;
       if (rows.some((r) => r.key === name)) continue;
-      const label = pl.role === "gm" ? `${name} (GM)` : name;
+      const aliasText = (pl.aliases || []).filter(Boolean).length ? ` (${(pl.aliases || []).join(", ")})` : "";
+      const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}`;
       rows.push({ key: name, label });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
@@ -1380,6 +1408,27 @@
       rows.push({ key: k, label: k });
     }
     return rows;
+  }
+
+  function mergePlListById(list) {
+    const out = [];
+    const byId = new Map();
+    for (const raw of normalizePlList(list)) {
+      const idKey = normalizePlNameKey(raw.id || "");
+      if (!idKey) { out.push(raw); continue; }
+      const existing = byId.get(idKey);
+      if (!existing) {
+        byId.set(idKey, raw);
+        out.push(raw);
+        continue;
+      }
+      const aliases = new Set([...(existing.aliases || [])]);
+      if (raw.name && raw.name !== existing.name) aliases.add(raw.name);
+      (raw.aliases || []).forEach((alias) => { if (alias && alias !== existing.name) aliases.add(alias); });
+      existing.aliases = [...aliases];
+      if (existing.role !== "gm" && raw.role === "gm") existing.role = "gm";
+    }
+    return out;
   }
 
   const ICON_SAVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`;
@@ -1666,8 +1715,8 @@
     const row = document.createElement("div");
     row.className = "pl-row";
     row.innerHTML = `
-      <input type="text" placeholder="이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
-      <input type="text" placeholder="ID (영문/숫자)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
+      <input type="text" placeholder="대표 이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
+      <input type="text" placeholder="ID (같으면 병합)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
       <select data-pl-field="role">
         <option value="player" ${item?.role !== "gm" ? "selected" : ""}>player</option>
         <option value="gm" ${item?.role === "gm" ? "selected" : ""}>gm</option>
@@ -1693,6 +1742,16 @@
     if (host && host.children.length === 0) appendPlRow(host, { name: "", id: "", role: "player" });
   }
 
+  function findExistingPlAliases(name, id) {
+    const nameKey = normalizePlNameKey(name);
+    const idKey = normalizePlNameKey(id);
+    const found = (state.data.plList || []).find((p) => {
+      if (idKey && normalizePlNameKey(p.id) === idKey) return true;
+      return normalizePlNameKey(p.name) === nameKey;
+    });
+    return Array.isArray(found?.aliases) ? found.aliases : [];
+  }
+
   async function savePlListFromDialog() {
     const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
     if (!host) return;
@@ -1701,9 +1760,9 @@
       const name = row.querySelector('[data-pl-field="name"]').value.trim();
       const id = row.querySelector('[data-pl-field="id"]').value.trim();
       const role = row.querySelector('[data-pl-field="role"]').value === "gm" ? "gm" : "player";
-      if (name) items.push({ name, id, role });
+      if (name) items.push({ name, id, role, aliases: findExistingPlAliases(name, id) });
     });
-    state.data.plList = items;
+    state.data.plList = mergePlListById(items);
     await saveAll(state.data);
     closePlListDialog();
     toast(`PL 목록 ${items.length}명 저장됨`);
