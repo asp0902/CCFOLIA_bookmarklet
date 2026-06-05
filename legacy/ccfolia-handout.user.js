@@ -86,6 +86,12 @@
     forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
     fb() { return fbState; },
     initFirebase() { return initFirebase(); },
+    pushHandout(id) {
+      const h = state.data.handouts.find((x) => x.id === id);
+      if (!h) return Promise.reject(new Error("not found"));
+      return pushHandoutToFirestore(h);
+    },
+    fetchAll() { return fetchAllFromFirestore(); },
     disable() { return teardown(); }
   };
 
@@ -798,6 +804,55 @@
 
   let fbState = null;       // { app, auth, db, user, uid, modules }
   let fbInitPromise = null;
+
+  // Firestore 핸드아웃 push (GM → 룸 컬렉션)
+  async function pushHandoutToFirestore(handout) {
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") throw new Error("not in a room");
+    const docRef = doc(fb.db, "rooms", roomKey, "handouts", handout.id);
+    const payload = {
+      id: handout.id,
+      title: handout.title || "",
+      image: handout.image || "",
+      description: handout.description || "",
+      gmNotes: handout.gmNotes || "",
+      permissions: handout.permissions || {},
+      tags: handout.tags || [],
+      ownerUid: fb.uid,
+      ownerName: state.data.myCharacter || "",
+      updatedAt: serverTimestamp(),
+      createdAt: handout.createdAt || new Date().toISOString()
+    };
+    await setDoc(docRef, payload);
+    console.info("[ccf-handout] Firestore push OK:", handout.id);
+    return docRef.path;
+  }
+
+  // Firestore 핸드아웃 삭제
+  async function deleteHandoutFromFirestore(id) {
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { doc, deleteDoc } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") throw new Error("not in a room");
+    await deleteDoc(doc(fb.db, "rooms", roomKey, "handouts", id));
+    console.info("[ccf-handout] Firestore delete OK:", id);
+  }
+
+  // 디버그 — 현재 룸의 모든 핸드아웃 한 번 조회
+  async function fetchAllFromFirestore() {
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { collection, getDocs } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    const snap = await getDocs(collection(fb.db, "rooms", roomKey, "handouts"));
+    const docs = [];
+    snap.forEach((d) => docs.push(d.data()));
+    return docs;
+  }
 
   function initFirebase() {
     if (fbState) return Promise.resolve(fbState);
@@ -1739,6 +1794,11 @@
     state.formPermissions = {};
     toast(existing ? "변경 저장됨" : "새 핸드아웃 추가됨");
     setTab("list");
+    // Firestore에도 push (실패해도 local 저장은 유지)
+    pushHandoutToFirestore(handout).catch((error) => {
+      console.warn("[ccf-handout] Firestore push 실패:", error);
+      toast("송신 실패 — 콘솔 확인 (로컬은 저장됨)");
+    });
   }
 
   async function saveSettingsFromForm() {
@@ -1873,6 +1933,10 @@
     state.editingId = null;
     toast("삭제됨");
     setTab("list");
+    // Firestore에서도 삭제
+    deleteHandoutFromFirestore(id).catch((error) => {
+      console.warn("[ccf-handout] Firestore delete 실패:", error);
+    });
   }
 
   // ===== 상세 다이얼로그 (Roll20 핸드아웃 다이얼로그 모방) =====
@@ -2196,7 +2260,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.0 (Firebase channel: auth)");
+    console.info("[ccf-handout] init — version 0.2.1 (Firestore push + delete)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
