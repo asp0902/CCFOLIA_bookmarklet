@@ -723,6 +723,7 @@
 
   // ===== "카피바라와 함께합니다" 인사 팝업 =====
   const GREETING_STORAGE_PREFIX = "ccf-handout:greeted:";
+  const GREETING_SKIP_DAY_KEY = "ccf-handout:greeted-skip-day";
   let greetingRoot = null;
 
   function isGreeted(roomKey) {
@@ -733,12 +734,25 @@
     try { localStorage.setItem(GREETING_STORAGE_PREFIX + roomKey, "1"); }
     catch (error) { /* quota */ }
   }
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function isSkippedToday() {
+    try { return localStorage.getItem(GREETING_SKIP_DAY_KEY) === todayKey(); }
+    catch (error) { return false; }
+  }
+  function markSkipToday() {
+    try { localStorage.setItem(GREETING_SKIP_DAY_KEY, todayKey()); }
+    catch (error) { /* quota */ }
+  }
 
   function maybeShowGreeting() {
     if (!active) return;
     const room = getCurrentRoomKey();
     if (room === "global") return;            // 룸 밖에서는 안 띄움
     if (isGreeted(room)) return;
+    if (isSkippedToday()) return;
     if (greetingRoot && greetingRoot.isConnected) return;
     mountGreeting(room);
   }
@@ -766,7 +780,13 @@
             0px 9px 46px 8px rgba(0,0,0,0.12);
         }
         .gd-title { font-size: 1.125rem; font-weight: 700; margin: 0 0 10px; }
-        .gd-body { font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.85); margin-bottom: 20px; }
+        .gd-body { font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.85); margin-bottom: 18px; }
+        .gd-options { margin-bottom: 14px; }
+        .gd-check {
+          display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+          font-size: 0.8125rem; color: rgba(255,255,255,.85);
+        }
+        .gd-check input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; margin: 0; }
         .gd-actions { display: flex; justify-content: flex-end; }
         .gd-ok {
           background: #fff; color: rgba(0,0,0,.87); border: 0;
@@ -781,7 +801,10 @@
       <div class="gd-overlay">
         <div class="gd-paper" role="dialog" aria-modal="true" aria-label="카피바라 안내">
           <h2 class="gd-title">카피바라와 함께합니다</h2>
-          <p class="gd-body">카피바라 핸드아웃 툴킷이 이 룸에서 활성화되었습니다.<br>아래 '확인'을 누르면 채팅 발신자 자동 인식이 시작됩니다.</p>
+          <p class="gd-body">카피바라 툴킷이 활성화되었습니다.<br>아래 '확인'을 누르면 채팅 발신자 자동 인식이 시작됩니다.</p>
+          <div class="gd-options">
+            <label class="gd-check"><input type="checkbox" data-skip-today> 오늘은 다시 보지 않기</label>
+          </div>
           <div class="gd-actions"><button class="gd-ok" data-action="greeting-ok">확인</button></div>
         </div>
       </div>
@@ -789,7 +812,9 @@
     sh.addEventListener("click", (e) => {
       const b = e.target.closest('button[data-action="greeting-ok"]');
       if (!b) return;
+      const skipToday = !!sh.querySelector('input[data-skip-today]')?.checked;
       markGreeted(roomKey);
+      if (skipToday) markSkipToday();
       greetingRoot?.remove();
       greetingRoot = null;
       // 확인 시점에 한 번 풀스캔
@@ -856,6 +881,7 @@
 
     if (!added.length) return;
     state.data.plList.push(...added);
+    console.info("[ccf-handout] chat autoadd", added, "total plList:", state.data.plList.length);
     await saveAll(state.data);
     toast(`PL ${added.length}명 자동 추가: ${added.map((a) => a.name).join(", ")}`);
     if (state.isOpen && state.activeTab === "settings") render();
