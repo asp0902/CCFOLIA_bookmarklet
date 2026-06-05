@@ -92,12 +92,16 @@
       return pushHandoutToFirestore(h);
     },
     fetchAll() { return fetchAllFromFirestore(); },
-    subscribe() { return subscribeToRoomHandouts(); },
+    subscribe() {
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows()]);
+    },
     unsubscribe() {
       try { unsubHandouts?.(); } catch (_) {}
-      unsubHandouts = null;
+      try { unsubShows?.(); } catch (_) {}
+      unsubHandouts = null; unsubShows = null;
       subscribedRoom = null;
     },
+    sendShow(handoutId, audience) { return sendShowSignal(handoutId, audience || "all"); },
     disable() { return teardown(); }
   };
 
@@ -944,6 +948,164 @@
     }
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
     if (state.isOpen) render();
+  }
+
+  // ===== Show to Players — 일회용 강제 팝업 신호 =====
+  let unsubShows = null;
+  const seenShowIds = new Set();
+  let initialShowsBatch = true;
+
+  async function sendShowSignal(handoutId, audience) {
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { collection, addDoc, serverTimestamp } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") throw new Error("not in a room");
+    const docRef = await addDoc(collection(fb.db, "rooms", roomKey, "shows"), {
+      handoutId,
+      audience: audience || "all",
+      atUid: fb.uid,
+      atName: state.data.myCharacter || "",
+      at: serverTimestamp()
+    });
+    console.info("[ccf-handout] show signal:", docRef.id, handoutId, audience);
+    return docRef.id;
+  }
+
+  async function subscribeToRoomShows() {
+    const fb = await initFirebase();
+    if (!fb) return;
+    const { collection, onSnapshot } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") return;
+    if (unsubShows) { try { unsubShows(); } catch (_) {} unsubShows = null; }
+    initialShowsBatch = true;
+    const col = collection(fb.db, "rooms", roomKey, "shows");
+    unsubShows = onSnapshot(col, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type !== "added") return;
+        if (initialShowsBatch) {
+          // subscribe 시점에 이미 존재하던 신호는 stale 처리 — id만 기억하고 팝업 X
+          seenShowIds.add(change.doc.id);
+        } else {
+          ingestShowSignal(change.doc.id, change.doc.data());
+        }
+      });
+      initialShowsBatch = false;
+    }, (error) => console.error("[ccf-handout] shows subscribe error:", error));
+    registerTeardown(() => { try { unsubShows?.(); } catch (_) {} unsubShows = null; });
+  }
+
+  function ingestShowSignal(signalId, data) {
+    if (!data || !data.handoutId) return;
+    if (seenShowIds.has(signalId)) return;
+    seenShowIds.add(signalId);
+    if (data.atUid === fbState?.uid) return; // 본인이 보낸 신호는 자기 화면에 안 띄움
+    const me = state.data.myCharacter || "";
+    const audience = String(data.audience || "all").trim();
+    const matched = audience === "all" || audience === "*" ||
+                    removeSpaces(audience).toLowerCase() === removeSpaces(me).toLowerCase();
+    if (!matched) {
+      console.info("[ccf-handout] show signal skipped (audience mismatch):", audience, "vs", me);
+      return;
+    }
+    const tryShow = (attempt) => {
+      const h = state.data.handouts.find((x) => x.id === data.handoutId);
+      if (h) { showHandoutModal(h, data.atName); return; }
+      if (attempt < 5) setTimeout(() => tryShow(attempt + 1), 500);
+      else console.warn("[ccf-handout] show signal: handout not found locally", data.handoutId);
+    };
+    tryShow(0);
+  }
+
+  function showHandoutModal(handout, fromName) {
+    const me = state.data.myCharacter;
+    const hasSecret = canViewSecret(handout, me);
+    const host = document.createElement("div");
+    host.setAttribute("data-ccf-handout-show", "1");
+    host.style.cssText = "all: initial; position: fixed; inset: 0; z-index: 2147483645;";
+    const sh = host.attachShadow({ mode: "open" });
+    sh.innerHTML = `
+      <style>
+        :host { all: initial; }
+        * { box-sizing: border-box; }
+        .show-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,.55);
+          display: flex; align-items: center; justify-content: center; padding: 24px;
+          font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif;
+        }
+        .show-paper {
+          width: min(680px, 100%); max-height: 88%; display: flex; flex-direction: column;
+          background-color: rgba(44,44,44,0.95); color: #fff;
+          box-shadow:
+            0px 11px 15px -7px rgba(0,0,0,0.20),
+            0px 24px 38px 3px rgba(0,0,0,0.14),
+            0px 9px 46px 8px rgba(0,0,0,0.12);
+          overflow: hidden;
+        }
+        .show-head {
+          background-color: #212121; padding: 0 8px 0 20px; min-height: 56px;
+          display: flex; align-items: center; gap: 12px;
+        }
+        .show-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff; }
+        .show-head .from { font-size: 0.75rem; color: rgba(255,255,255,.6); }
+        .show-close {
+          all: unset; box-sizing: border-box; cursor: pointer;
+          width: 36px; height: 36px; border-radius: 50%; color: #fff;
+          display: inline-grid; place-items: center;
+          transition: background-color 150ms;
+        }
+        .show-close:hover { background: rgba(255,255,255,.1); }
+        .show-close svg { pointer-events: none; }
+        .show-body { padding: 20px 24px; overflow: auto; }
+        .show-img { width: 100%; max-height: 280px; object-fit: cover; margin-bottom: 16px; background: rgba(0,0,0,.25); }
+        .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); }
+        .rendered img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
+        .rendered a { color: #82b1ff; }
+        .rendered blockquote { border-left: 3px solid rgba(255,255,255,.2); padding: 2px 12px; color: rgba(255,255,255,.8); }
+        .rendered code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Consolas, monospace; font-size: 90%; }
+        .rendered h1 { font-size: 1.25rem; color: #fff; margin: 10px 0; }
+        .rendered h2 { font-size: 1.125rem; color: #fff; margin: 8px 0; }
+        .rendered h3 { font-size: 1rem; color: #fff; margin: 8px 0; }
+        .rendered hr { border: 0; border-top: 1px solid rgba(255,255,255,.12); margin: 10px 0; }
+        .secret-block {
+          margin-top: 18px; border: 1px dashed rgba(244,67,54,.5); padding: 12px 14px;
+          background: rgba(244,67,54,.06);
+        }
+        .secret-head {
+          font-size: 0.75rem; font-weight: 700; color: #ff8a80; margin-bottom: 8px;
+          letter-spacing: .08em; text-transform: uppercase;
+        }
+      </style>
+      <div class="show-overlay" data-overlay="1">
+        <div class="show-paper" role="dialog" aria-modal="true" aria-label="핸드아웃">
+          <div class="show-head">
+            <h2>${escapeHtml(handout.title || "(제목 없음)")}</h2>
+            ${fromName ? `<span class="from">from ${escapeHtml(fromName)}</span>` : ""}
+            <button class="show-close" data-action="close-show" aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+          <div class="show-body">
+            ${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
+            <div class="rendered">${renderMarkdown(handout.description)}</div>
+            ${hasSecret && handout.gmNotes ? `
+              <div class="secret-block">
+                <div class="secret-head">🔒 비밀 핸드아웃</div>
+                <div class="rendered">${renderMarkdown(handout.gmNotes)}</div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      </div>
+    `;
+    sh.addEventListener("click", (e) => {
+      const closeBtn = e.target.closest('[data-action="close-show"]');
+      const overlay = e.target.matches('.show-overlay');
+      if (closeBtn || overlay) host.remove();
+    });
+    (document.body || document.documentElement).appendChild(host);
+    registerTeardown(() => host.remove());
   }
 
   function ingestRemoteRemove(id) {
@@ -1844,7 +2006,13 @@
   }
 
   function rowPopupPlaceholder(key) {
-    toast(`(1단계) "${key === ALL_KEY ? "플레이어 전체" : key}" 팝업 송신은 B단계에서 활성화됩니다.`);
+    // 호환용 — 권한 표 행별 팝업 버튼 핸들러. 편집 중인 handout이 있어야 의미 있음.
+    const handoutId = (state.editingId && state.editingId !== "new") ? state.editingId : null;
+    if (!handoutId) {
+      toast("편집 중인 핸드아웃을 먼저 저장해주세요.");
+      return;
+    }
+    rowPopupSend(handoutId, key);
   }
 
   // 실시간 마크다운 프리뷰
@@ -2091,7 +2259,24 @@
   function showToPlayersPlaceholder(id) {
     const h = findHandout(id);
     if (!h) return;
-    toast(`(1단계 placeholder) "${h.title}" 송신은 B단계에서 활성화됩니다.`);
+    sendShowSignal(id, "all").then(() => {
+      toast(`"${h.title}" 권한자 전체에게 팝업 송신됨`);
+    }).catch((error) => {
+      console.error("[ccf-handout] show send failed:", error);
+      toast("팝업 송신 실패 — 콘솔 확인");
+    });
+  }
+
+  function rowPopupSend(handoutId, audienceKey) {
+    const h = findHandout(handoutId);
+    if (!h) return;
+    sendShowSignal(handoutId, audienceKey).then(() => {
+      const label = audienceKey === ALL_KEY ? "플레이어 전체" : audienceKey;
+      toast(`"${h.title}" → ${label} 팝업 송신됨`);
+    }).catch((error) => {
+      console.error("[ccf-handout] row show failed:", error);
+      toast("팝업 송신 실패 — 콘솔 확인");
+    });
   }
 
   // ===== JSON 내보내기/가져오기 =====
@@ -2325,7 +2510,10 @@
           state.data = d;
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
-          if (fbState) subscribeToRoomHandouts().catch(() => {});
+          if (fbState) {
+            subscribeToRoomHandouts().catch(() => {});
+            subscribeToRoomShows().catch(() => {});
+          }
         }).catch(() => {});
       }
     });
@@ -2346,7 +2534,10 @@
           state.data = d;
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
-          if (fbState) subscribeToRoomHandouts().catch(() => {});
+          if (fbState) {
+            subscribeToRoomHandouts().catch(() => {});
+            subscribeToRoomShows().catch(() => {});
+          }
         }).catch(() => {});
         }
       }, 50);
@@ -2373,7 +2564,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.3 (auto re-subscribe on room change)");
+    console.info("[ccf-handout] init — version 0.2.4 (Show to Players: real send)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
