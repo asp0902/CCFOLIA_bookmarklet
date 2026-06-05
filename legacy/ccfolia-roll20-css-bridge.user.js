@@ -4872,25 +4872,38 @@
     style.dataset.capybaraToolkitStyle = "prose-mode";
     const WRAP = CONT_ATTR + "-wrap";
     const LEADER = CONT_ATTR + "-leader";
+    const LAST = CONT_ATTR + "-last";
+    const WRAP_LAST = WRAP + "-last";
     style.textContent = [
-      // continuation — 아바타 자리 유지, 이름/시간 숨김
+      // === continuation li ===
+      // 아바타 자리 유지, 이름/시간 숨김
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; border: 0 !important; box-shadow: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
-      // leader (그룹 첫 메시지) — 아래쪽 border 제거 + bottom padding 줄임
-      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 2px !important; box-shadow: none !important; }`,
+      // 위쪽 border 항상 제거. 아래쪽은 last 아닐 때만 제거 (last는 다음 화자 경계 = 유지)
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
+      // === leader li === (그룹 첫 메시지 — 이전 화자 경계 보존)
+      // 자기 아래쪽 = cont 위쪽 경계만 제거. 위쪽은 그대로 (이전 화자와의 경계 유지)
+      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
-      // wrapper(부모) — cont + leader 둘 다. 모든 방향 보더/구분선 제거.
-      `[${WRAP}="1"] { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
-      `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
+      // === wrapper === (cont 의 부모만. leader 부모는 안 건드림 → 이전 화자 경계 보존)
+      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; }`,
+      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) { border-bottom: 0 !important; }`,
+      `[${WRAP}="1"]::before { display: none !important; }`,
+      `[${WRAP}="1"]:not([${WRAP_LAST}="1"])::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      `[${WRAP}="1"] + hr, [${WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
-      // :has() 보강
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]), *:has(> .MuiListItem-root[${LEADER}="1"]) { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${LEADER}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root, *:has(> .MuiListItem-root[${LEADER}="1"]) > .MuiDivider-root { display: none !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before, *:has(> .MuiListItem-root[${CONT_ATTR}="1"])::after, *:has(> .MuiListItem-root[${LEADER}="1"])::before, *:has(> .MuiListItem-root[${LEADER}="1"])::after { display: none !important; }`
+      // wrapper의 직전 형제 hr — leader wrapper와 cont wrapper 사이의 구분선만 제거
+      `[${WRAP}="1"] + hr:not(:last-of-type), [${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`,
+      // :has() 보강 — cont 부모만 (leader 부모는 제외)
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) { padding-top: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])) { border-bottom: 0 !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root { display: none !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before { display: none !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]))::after { display: none !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4910,6 +4923,7 @@
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
     const LEADER = CONT_ATTR + "-leader";
+    const LAST = CONT_ATTR + "-last";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
@@ -4921,19 +4935,23 @@
       const nextAuthor = i + 1 < authors.length ? authors[i + 1] : null;
       const isCont = !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
+      const isLast = isCont && nextAuthor !== author; // 그룹 마지막 cont
       // li attrs
-      if (isCont) { if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1"); }
-      else if (li.hasAttribute(CONT_ATTR)) li.removeAttribute(CONT_ATTR);
-      if (isLeader) { if (li.getAttribute(LEADER) !== "1") li.setAttribute(LEADER, "1"); }
-      else if (li.hasAttribute(LEADER)) li.removeAttribute(LEADER);
-      // 부모 wrapper — cont + leader 모두 그룹 안이므로 attr 부여
-      const inGroup = isCont || isLeader;
+      setOrRemove(li, CONT_ATTR, isCont);
+      setOrRemove(li, LEADER, isLeader);
+      setOrRemove(li, LAST, isLast);
+      // 부모 wrapper — cont만 wrap 부여 (leader는 이전 화자 경계 유지 위해 제외)
       const parent = li.parentElement;
       if (parent) {
-        if (inGroup) { if (parent.getAttribute(WRAP) !== "1") parent.setAttribute(WRAP, "1"); }
-        else if (parent.hasAttribute(WRAP)) parent.removeAttribute(WRAP);
+        setOrRemove(parent, WRAP, isCont);
+        setOrRemove(parent, WRAP + "-last", isLast);
       }
     }
+  }
+
+  function setOrRemove(el, attr, on) {
+    if (on) { if (el.getAttribute(attr) !== "1") el.setAttribute(attr, "1"); }
+    else if (el.hasAttribute(attr)) el.removeAttribute(attr);
   }
 
   function scheduleScan() {
@@ -4949,7 +4967,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.5 (leader attr + wrap)");
+    console.info("[ccf-prose-mode] active v0.0.6 (preserve speaker boundary)");
   }
 
   function teardown() {
@@ -4957,9 +4975,9 @@
     try { observer?.disconnect(); } catch (_) {}
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    document.querySelectorAll(`[${CONT_ATTR}]`).forEach((el) => el.removeAttribute(CONT_ATTR));
-    document.querySelectorAll(`[${CONT_ATTR}-wrap]`).forEach((el) => el.removeAttribute(CONT_ATTR + "-wrap"));
-    document.querySelectorAll(`[${CONT_ATTR}-leader]`).forEach((el) => el.removeAttribute(CONT_ATTR + "-leader"));
+    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-last"]) {
+      document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
+    }
     if (window.__CCF_PROSE_MODE_DEBUG__) {
       try { delete window.__CCF_PROSE_MODE_DEBUG__; } catch (_) {}
     }
@@ -4968,7 +4986,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.5",
+    version: "0.0.6",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
