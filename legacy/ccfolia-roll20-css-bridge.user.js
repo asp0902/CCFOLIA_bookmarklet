@@ -4902,8 +4902,8 @@
       `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
       `[${WRAP}="1"] + hr { display: none !important; }`,
-      // === 화자 다른 메시지 시작 = 명시적 구분선 추가 ===
-      `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.1) !important; padding-top: 12px !important; margin-top: 12px !important; }`
+      // === 화자 다른 메시지 시작 = 옅은 구분선 + 좁은 간격 (오리지널 카드 톤) ===
+      `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.05) !important; padding-top: 6px !important; margin-top: 6px !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4974,7 +4974,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.23 (symmetric lone boundaries)");
+    console.info("[ccf-prose-mode] active v0.0.24 (softer boundary tone)");
   }
 
   function teardown() {
@@ -4993,7 +4993,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.23",
+    version: "0.0.24",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
