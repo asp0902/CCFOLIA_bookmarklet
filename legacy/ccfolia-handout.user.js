@@ -480,8 +480,8 @@
       width: 100%; min-height: 140px; resize: vertical;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
       padding: 10px 12px; color: #fff;
-      font-family: ui-monospace, "SF Mono", Consolas, monospace;
-      font-size: 0.875rem; line-height: 1.55;
+      font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 0.875rem; line-height: 1.6;
       transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
     }
     .handout-edit-cols .col textarea:hover { border-color: rgba(255,255,255,.35); }
@@ -533,6 +533,15 @@
       transition: color 120ms;
     }
     .card-title-btn:hover { color: #82b1ff; text-decoration: underline; }
+    .card-icon-btn {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 28px; height: 28px; border-radius: 50%;
+      color: rgba(255,255,255,.6); display: inline-grid; place-items: center;
+      transition: background-color 120ms, color 120ms;
+      flex: 0 0 auto;
+    }
+    .card-icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .card-icon-btn.danger:hover { background: rgba(244,67,54,.16); color: #ff6e60; }
     /* 설정 select */
     .settings-select {
       background-color: #1a1a1a; border: 1px solid rgba(255,255,255,.18);
@@ -867,7 +876,7 @@
 
   function setTab(tab) {
     state.activeTab = tab;
-    if (tab !== "edit") state.editingId = null;
+    // 탭 이동만으로 editingId 비우지 않음 — 저장/취소 누를 때만 초기화 → 편집 탭 유지
     render();
   }
 
@@ -926,12 +935,12 @@
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
             ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
             <span class="badge">${escapeHtml(viewersLabel)}</span>
+            <button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>
+            <button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>
           </div>
           <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
           <div class="actions">
             <button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>
-            <button class="btn small secondary" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>
-            <button class="btn small danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}">삭제</button>
           </div>
         </article>
       `;
@@ -983,6 +992,10 @@
   const ICON_TRASH = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`;
   const ICON_X = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   const ICON_REFRESH = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>`;
+  // MUI EditIcon (코코포리아 스타일 연필)
+  const ICON_PENCIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+  // MUI CloseIcon (코코포리아 스타일 X)
+  const ICON_X_SMALL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
 
   function renderEdit() {
     // editingId === "new" → 새로 만들기 모드 (editing = null)
