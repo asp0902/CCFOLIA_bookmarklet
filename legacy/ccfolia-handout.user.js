@@ -94,8 +94,23 @@
     return {
       handouts,
       myCharacter: typeof value.myCharacter === "string" ? value.myCharacter : "",
-      plList: Array.isArray(value.plList) ? value.plList.filter((s) => typeof s === "string" && s.trim()) : []
+      plList: normalizePlList(value.plList)
     };
+  }
+
+  function normalizePlList(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item) => {
+      if (typeof item === "string") return { name: item.trim(), id: "", role: "player" };
+      if (item && typeof item === "object") {
+        return {
+          name: String(item.name || "").trim(),
+          id: String(item.id || "").trim(),
+          role: item.role === "gm" ? "gm" : "player"
+        };
+      }
+      return null;
+    }).filter((p) => p && p.name);
   }
 
   async function saveAll(data) {
@@ -503,6 +518,86 @@
     .perm-hint {
       margin-top: 12px; font-size: 0.75rem; color: rgba(255,255,255,.5);
     }
+    /* SVG 클릭 안 막힘 (button click 정상 통과) */
+    header .header-btn svg, .handout-edit-header .action-icon svg,
+    .pl-modal .action-icon svg, .pl-modal .row-x svg {
+      pointer-events: none;
+    }
+    /* 패널 푸터 (내보내기/가져오기) */
+    .panel-footer {
+      background-color: #212121;
+      padding: 6px 8px 6px 16px;
+      display: flex; align-items: center; gap: 8px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      flex: 0 0 auto;
+    }
+    .panel-footer .footer-meta {
+      flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.55);
+    }
+    .panel-footer .btn { box-shadow: none; }
+    /* PL 목록 관리 모달 (Shadow DOM 안의 nested overlay) */
+    .pl-modal-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,.55);
+      display: none; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    .pl-modal-overlay[data-open="1"] { display: flex; }
+    .pl-modal {
+      width: min(560px, 92%); max-height: 88%;
+      background-color: #2c2c2c; color: #fff;
+      box-shadow:
+        0px 11px 15px -7px rgba(0,0,0,0.20),
+        0px 24px 38px 3px rgba(0,0,0,0.14),
+        0px 9px 46px 8px rgba(0,0,0,0.12);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .pl-modal-head {
+      padding: 16px 8px 12px 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .pl-modal-head h2 {
+      margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff;
+    }
+    .pl-modal .action-icon {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      color: #fff; display: inline-grid; place-items: center;
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    .pl-modal .action-icon:hover { background: rgba(255,255,255,.08); }
+    .pl-modal-body {
+      padding: 0 16px 12px 16px; overflow: auto;
+    }
+    .pl-modal .pl-row {
+      display: grid; grid-template-columns: 1fr 1fr 110px 28px;
+      gap: 8px; align-items: center; margin-bottom: 8px;
+    }
+    .pl-modal .pl-row input, .pl-modal .pl-row select {
+      background-color: #1a1a1a; border: 0; border-radius: 4px;
+      color: #fff; padding: 9px 12px; font-size: 0.875rem;
+      outline: none;
+    }
+    .pl-modal .pl-row input::placeholder { color: rgba(255,255,255,.4); }
+    .pl-modal .pl-row input:focus, .pl-modal .pl-row select:focus {
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
+    }
+    .pl-modal .pl-row select {
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23fff' d='M6 8L0 0h12z'/></svg>");
+      background-repeat: no-repeat; background-position: right 12px center;
+      padding-right: 30px;
+    }
+    .pl-modal .row-x {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 26px; height: 26px; border-radius: 50%;
+      color: rgba(255,255,255,.7); display: grid; place-items: center;
+      transition: background-color 150ms;
+    }
+    .pl-modal .row-x:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .pl-modal-foot {
+      display: flex; justify-content: flex-end; gap: 8px;
+      padding: 8px 16px 16px;
+    }
     /* CCFOLIA는 dark 전용 → light prefers 분기 없음 */
   `;
 
@@ -532,6 +627,26 @@
             <button class="tab" data-tab="settings" data-active="0">설정</button>
           </div>
           <div class="body"></div>
+          <footer class="panel-footer">
+            <span class="footer-meta"></span>
+            <button class="btn secondary small" data-action="export" title="현재 룸의 핸드아웃을 JSON 파일로 내보내기">내보내기</button>
+            <button class="btn secondary small" data-action="import" title="JSON 파일에서 핸드아웃 가져오기 (기존 데이터 교체)">가져오기</button>
+          </footer>
+          <div class="pl-modal-overlay" data-pl-modal-open="0">
+            <div class="pl-modal" role="dialog" aria-label="플레이어 목록 설정">
+              <div class="pl-modal-head">
+                <h2>플레이어 목록 설정</h2>
+                <button class="action-icon" data-action="pl-modal-close" aria-label="닫기">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+              </div>
+              <div class="pl-modal-body" data-pl-rows-host="1"></div>
+              <div class="pl-modal-foot">
+                <button class="btn secondary small" data-action="pl-modal-add">추가</button>
+                <button class="btn small" data-action="pl-modal-save">저장</button>
+              </div>
+            </div>
+          </div>
           <div class="toast" aria-live="polite"></div>
           <div class="resize-handle" data-resize-handle="1" title="크기 조절"></div>
         </section>
@@ -733,13 +848,11 @@
     if (!state.data.handouts.length) {
       return `
         <div class="row" style="margin-bottom:12px;">
-          <button class="btn" data-action="new-handout">+ 새 핸드아웃</button>
           <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
             <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
             PL 시점 미리보기
           </label>
         </div>
-        <div class="empty">아직 핸드아웃이 없습니다. "+ 새 핸드아웃"으로 첫 카드를 만들어보세요.</div>
       `;
     }
     const cards = state.data.handouts.map((h) => {
@@ -769,7 +882,6 @@
     }).join("");
     return `
       <div class="row" style="margin-bottom:12px;">
-        <button class="btn" data-action="new-handout">+ 새 핸드아웃</button>
         <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
           <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
           PL 시점 미리보기
@@ -790,14 +902,17 @@
   // 권한 표에 표시할 행 목록 만들기
   function permissionRowKeys(h) {
     const myChar = removeSpaces(state.data.myCharacter);
-    const plList = (state.data.plList || []).map(removeSpaces).filter(Boolean);
+    const plList = (state.data.plList || []).filter((p) => p && p.name);
     const rows = [];
     rows.push({ key: ALL_KEY, label: "플레이어 전체" });
     if (myChar) rows.push({ key: myChar, label: `${myChar} (GM)` });
     for (const pl of plList) {
-      if (pl === myChar) continue;
-      if (rows.some((r) => r.key === pl)) continue;
-      rows.push({ key: pl, label: pl });
+      const name = removeSpaces(pl.name);
+      if (!name) continue;
+      if (name === myChar) continue;
+      if (rows.some((r) => r.key === name)) continue;
+      const label = pl.role === "gm" ? `${name} (GM)` : name;
+      rows.push({ key: name, label });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
     const perms = h.permissions || {};
@@ -871,7 +986,7 @@
   }
 
   function renderSettings() {
-    const plListStr = (state.data.plList || []).join(", ");
+    const plCount = (state.data.plList || []).length;
     return `
       <div class="field">
         <label>내 캐릭터명 (GM 본인 이름)</label>
@@ -879,20 +994,15 @@
         <span class="hint">상단 캐릭터 드롭다운에서 고른 이름과 정확히 같게 적어주세요.</span>
       </div>
       <div class="field">
-        <label>PL 목록</label>
-        <input type="text" data-field="plList" value="${escapeHtml(plListStr)}" placeholder="콤마로 구분 (예: PL1, PL2, 김탐정)">
-        <span class="hint">권한 표에 표시할 플레이어 이름들. (B단계: Suite Manager presence에서 자동 채움 예정)</span>
+        <label>플레이어 목록</label>
+        <div class="row">
+          <button class="btn secondary small" data-action="pl-modal-open">PL 목록 관리</button>
+          <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
+        </div>
+        <span class="hint">B단계: Suite Manager presence와 통합하여 자동 채움 예정.</span>
       </div>
       <div class="row">
         <button class="btn" data-action="save-settings">저장</button>
-      </div>
-      <div class="field" style="margin-top:24px;">
-        <label>데이터 내보내기 / 가져오기</label>
-        <div class="row">
-          <button class="btn secondary small" data-action="export">JSON 내보내기</button>
-          <button class="btn secondary small" data-action="import">JSON 가져오기</button>
-        </div>
-        <span class="hint">현재 룸(${escapeHtml(getCurrentRoomKey())})의 핸드아웃 전체. 다른 PC로 옮길 때 사용.</span>
       </div>
     `;
   }
@@ -919,6 +1029,11 @@
     if (action === "close-detail") { closeDetail(); return; }
     if (action === "toggle-detail-secret") { toggleDetailSecret(btn); return; }
     if (action === "row-popup") { rowPopupPlaceholder(btn.dataset.key); return; }
+    if (action === "pl-modal-open") { openPlListDialog(); return; }
+    if (action === "pl-modal-close") { closePlListDialog(); return; }
+    if (action === "pl-modal-add") { addPlRow(); return; }
+    if (action === "pl-modal-save") { savePlListFromDialog(); return; }
+    if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
   }
 
   function onShadowChange(event) {
@@ -995,12 +1110,74 @@
 
   async function saveSettingsFromForm() {
     const me = getFieldValue("myCharacter").trim();
-    const plListRaw = getFieldValue("plList");
-    const plList = plListRaw.split(",").map((s) => s.trim()).filter(Boolean);
     state.data.myCharacter = me;
-    state.data.plList = plList;
     await saveAll(state.data);
     toast("설정 저장됨");
+    render();
+  }
+
+  // ===== PL 목록 관리 모달 =====
+  function openPlListDialog() {
+    const overlay = state.shadow?.querySelector(".pl-modal-overlay");
+    if (!overlay) return;
+    // 현재 데이터로 행 생성
+    const host = overlay.querySelector("[data-pl-rows-host]");
+    host.innerHTML = "";
+    const plList = state.data.plList && state.data.plList.length ? state.data.plList : [];
+    if (!plList.length) plList.push({ name: "", id: "", role: "player" });
+    for (const item of plList) appendPlRow(host, item);
+    overlay.setAttribute("data-pl-modal-open", "1");
+  }
+
+  function closePlListDialog() {
+    state.shadow?.querySelector(".pl-modal-overlay")?.setAttribute("data-pl-modal-open", "0");
+  }
+
+  function appendPlRow(host, item) {
+    const row = document.createElement("div");
+    row.className = "pl-row";
+    row.innerHTML = `
+      <input type="text" placeholder="이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
+      <input type="text" placeholder="ID (영문/숫자)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
+      <select data-pl-field="role">
+        <option value="player" ${item?.role !== "gm" ? "selected" : ""}>player</option>
+        <option value="gm" ${item?.role === "gm" ? "selected" : ""}>gm</option>
+      </select>
+      <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    `;
+    host.appendChild(row);
+  }
+
+  function addPlRow() {
+    const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
+    if (!host) return;
+    appendPlRow(host, { name: "", id: "", role: "player" });
+  }
+
+  function removePlRow(btn) {
+    const row = btn.closest(".pl-row");
+    if (!row) return;
+    const host = row.parentElement;
+    row.remove();
+    if (host && host.children.length === 0) appendPlRow(host, { name: "", id: "", role: "player" });
+  }
+
+  async function savePlListFromDialog() {
+    const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
+    if (!host) return;
+    const items = [];
+    host.querySelectorAll(".pl-row").forEach((row) => {
+      const name = row.querySelector('[data-pl-field="name"]').value.trim();
+      const id = row.querySelector('[data-pl-field="id"]').value.trim();
+      const role = row.querySelector('[data-pl-field="role"]').value === "gm" ? "gm" : "player";
+      if (name) items.push({ name, id, role });
+    });
+    state.data.plList = items;
+    await saveAll(state.data);
+    closePlListDialog();
+    toast(`PL 목록 ${items.length}명 저장됨`);
     render();
   }
 
