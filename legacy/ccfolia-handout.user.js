@@ -70,8 +70,8 @@
     forceFloating() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountFloatingIcon(); return true; },
     remount() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountIcon(); return true; },
     showGreeting() { maybeShowGreeting(); },
-    resetGreetingFlags() { return resetGreetingFlags(); },
-    forceGreeting() { resetGreetingFlags(); maybeShowGreeting(); },
+    resetGreetingFlags() { return clearGreetingFlags(); },
+    forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
     disable() { return teardown(); }
   };
 
@@ -549,8 +549,13 @@
     .card-icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .card-icon-btn.danger:hover { background: rgba(244,67,54,.16); color: #ff6e60; }
     .card .badges-row {
-      display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
+      display: flex; gap: 4px; flex-wrap: wrap;
+      flex: 0 0 auto; align-self: flex-start; margin-left: 8px;
     }
+    .card .summary-row {
+      display: flex; align-items: flex-start; gap: 8px; margin-top: 4px;
+    }
+    .card .summary-row .summary { flex: 1; margin-top: 0; }
     /* 설정 select */
     .settings-select {
       background-color: #1a1a1a; border: 1px solid rgba(255,255,255,.18);
@@ -571,6 +576,14 @@
     }
     .settings-icon-btn:hover { background: rgba(255,255,255,.08); }
     .settings-icon-btn svg { pointer-events: none; }
+    /* 설정 탭 저장 버튼 — body 가장 아래에 붙여 푸터 바 바로 위에 위치 */
+    .settings-save-row {
+      justify-content: flex-end;
+      position: sticky; bottom: 0;
+      padding: 12px 0 4px;
+      background: linear-gradient(to top, rgba(44,44,44,0.87) 60%, transparent);
+      margin-top: 12px;
+    }
     .settings-room {
       padding: 9px 12px; background: rgba(0,0,0,.35);
       border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
@@ -594,6 +607,8 @@
       flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.55);
     }
     .panel-footer .btn { box-shadow: none; }
+    .panel-footer .btn.secondary { border: 0; background: rgba(255,255,255,.06); }
+    .panel-footer .btn.secondary:hover { background: rgba(255,255,255,.14); }
     /* PL 목록 관리 모달 (Shadow DOM 안의 nested overlay) */
     .pl-modal-overlay {
       position: absolute; inset: 0; background: rgba(0,0,0,.55);
@@ -755,25 +770,22 @@
 
   function maybeShowGreeting() {
     const room = getCurrentRoomKey();
-    const greeted = isGreeted(room);
     const skipped = isSkippedToday();
     const alreadyMounted = greetingRoot && greetingRoot.isConnected;
+    let skipValue = null;
+    try { skipValue = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
     console.info("[ccf-handout] maybeShowGreeting", {
-      active, room,
-      greeted, greetedKey: GREETING_STORAGE_PREFIX + room,
-      skipped, skipKey: GREETING_SKIP_DAY_KEY, skipValue: (()=>{ try{return localStorage.getItem(GREETING_SKIP_DAY_KEY)}catch{return null} })(),
-      alreadyMounted
+      active, room, skipped, skipKey: GREETING_SKIP_DAY_KEY, skipValue, alreadyMounted
     });
     if (!active) return;
     if (room === "global") return;            // 룸 밖에서는 안 띄움
-    if (greeted) return;
-    if (skipped) return;
+    if (skipped) return;                      // 오늘 다시 보지 않기 체크된 상태
     if (alreadyMounted) return;
     mountGreeting(room);
   }
 
   // 디버그 — 콘솔에서 호출 가능
-  function resetGreetingFlags() {
+  function clearGreetingFlags() {
     const room = getCurrentRoomKey();
     try {
       localStorage.removeItem(GREETING_STORAGE_PREFIX + room);
@@ -838,7 +850,7 @@
       const b = e.target.closest('button[data-action="greeting-ok"]');
       if (!b) return;
       const skipToday = !!sh.querySelector('input[data-skip-today]')?.checked;
-      markGreeted(roomKey);
+      // 체크박스 ON 일 때만 오늘 하루 skip. OFF 면 다음 실행 시 다시 팝업.
       if (skipToday) markSkipToday();
       greetingRoot?.remove();
       greetingRoot = null;
@@ -1130,11 +1142,13 @@
             <button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>
             <button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>
           </div>
-          <div class="badges-row">
-            ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
-            <span class="badge">${escapeHtml(viewersLabel)}</span>
+          <div class="summary-row">
+            <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
+            <div class="badges-row">
+              ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
+              <span class="badge">${escapeHtml(viewersLabel)}</span>
+            </div>
           </div>
-          <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
           <div class="actions">
             <button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>
           </div>
@@ -1283,7 +1297,7 @@
         <label>룸</label>
         <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
       </div>
-      <div class="row" style="justify-content:flex-end; margin-top:8px;">
+      <div class="row settings-save-row">
         <button class="btn" data-action="save-settings">저장</button>
       </div>
     `;
@@ -1847,7 +1861,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.5 (greeting tweaks + data race fix)");
+    console.info("[ccf-handout] init — version 0.1.6 (popup persistence fix)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
