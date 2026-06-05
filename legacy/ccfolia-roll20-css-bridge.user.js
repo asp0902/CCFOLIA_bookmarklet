@@ -4876,33 +4876,34 @@
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
     const SPEAKER_START = CONT_ATTR + "-speaker-start";
+    const MSG = CONT_ATTR + "-msg";
+    const MSG_WRAP = MSG + "-wrap";
     style.textContent = [
+      // === 모든 채팅 메시지 li/wrapper의 native border/separator 일괄 제거 ===
+      // (CCFOLIA가 박스 카드별로 가진 native border-top/bottom, ::before/::after, hr 등을
+      //  싹 끔. 우리는 SPEAKER_START에만 1px line을 추가해서 line 중복을 막는다.)
+      `.MuiListItem-root[${MSG}="1"] { border-top: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${MSG}="1"]::before, .MuiListItem-root[${MSG}="1"]::after { display: none !important; }`,
+      `[${MSG_WRAP}="1"] { border-top: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }`,
+      `[${MSG_WRAP}="1"]::before, [${MSG_WRAP}="1"]::after { display: none !important; }`,
+      `[${MSG_WRAP}="1"] > hr, [${MSG_WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
+      `[${MSG_WRAP}="1"] + hr, [${MSG_WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 6px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { border-bottom: 0 !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 6px !important; margin: 0 !important; min-height: 0 !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; padding-left: 56px !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
-      // === leader li === 자기 아래쪽 경계만 제거 (위쪽 = 이전 화자 경계 유지)
-      // padding-bottom은 cont와 동일 18px (그래야 leader-cont 사이도 cont-cont 사이와 같은 간격)
-      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 6px !important; box-shadow: none !important; }`,
+      // === leader li === 자기 아래쪽 padding만 cont와 맞춤
+      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 6px !important; }`,
       `.MuiListItem-root[${LEADER}="1"] .MuiListItemText-root { margin-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
-      `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
-      // === leader 부모 wrapper === 아래쪽 경계 + 아래쪽 padding/margin만 제거
-      `[${LEADER_WRAP}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
-      `[${LEADER_WRAP}="1"]::after { display: none !important; }`,
-      `[${LEADER_WRAP}="1"] > hr:last-child, [${LEADER_WRAP}="1"] > .MuiDivider-root:last-child { display: none !important; }`,
+      // === leader 부모 wrapper === 아래쪽 padding/margin만 제거
+      `[${LEADER_WRAP}="1"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }`,
       // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
-      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; min-height: 0 !important; }`,
-      `[${WRAP}="1"] { border-bottom: 0 !important; }`,
-      `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
-      `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      `[${WRAP}="1"] + hr { display: none !important; }`,
-      // === 화자 다른 메시지 시작 = 옅은 구분선 + 좁은 간격 (오리지널 카드 톤) ===
+      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; min-height: 0 !important; }`,
+      // === 화자 다른 메시지 시작 = 옅은 구분선 1개 + 좁은 간격 ===
       `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.05) !important; padding-top: 6px !important; margin-top: 6px !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
@@ -4927,6 +4928,8 @@
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
     const SPEAKER_START = CONT_ATTR + "-speaker-start";
+    const MSG = CONT_ATTR + "-msg";
+    const MSG_WRAP = MSG + "-wrap";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
@@ -4942,12 +4945,15 @@
       // 화자 시작 = 직전 화자와 다른 메시지 (첫 메시지 제외)
       // lone 메시지(양옆 다른 화자) 위아래 모두 명시적 boundary를 그려 대칭 유지.
       const isSpeakerStart = i > 0 && !!author && author !== prevAuthor;
+      // 모든 채팅 메시지에 MSG 마커 → native border/separator 일괄 제거 타겟
+      setOrRemove(li, MSG, true);
       setOrRemove(li, CONT_ATTR, isCont);
       setOrRemove(li, LEADER, isLeader);
       setOrRemove(li, LAST, isLast);
       setOrRemove(li, SPEAKER_START, isSpeakerStart);
       const parent = li.parentElement;
       if (parent) {
+        setOrRemove(parent, MSG_WRAP, true);
         setOrRemove(parent, WRAP, isCont);
         setOrRemove(parent, WRAP_LAST, isLast);
         setOrRemove(parent, LEADER_WRAP, isLeader);
@@ -4974,7 +4980,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.24 (softer boundary tone)");
+    console.info("[ccf-prose-mode] active v0.0.25 (suppress native message border to avoid double divider)");
   }
 
   function teardown() {
@@ -4982,7 +4988,7 @@
     try { observer?.disconnect(); } catch (_) {}
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap"]) {
+    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
       document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
     }
     if (window.__CCF_PROSE_MODE_DEBUG__) {
@@ -4993,7 +4999,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.24",
+    version: "0.0.25",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
