@@ -4880,7 +4880,7 @@
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 12px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 10px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
@@ -4888,7 +4888,7 @@
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
       // === leader li === 자기 아래쪽 경계만 제거 (위쪽 = 이전 화자 경계 유지)
       // padding-bottom은 cont와 동일 18px (그래야 leader-cont 사이도 cont-cont 사이와 같은 간격)
-      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 12px !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 10px !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${LEADER}="1"] .MuiListItemText-root { margin-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
@@ -4973,7 +4973,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.18 (leader body margin 0 actually applied)");
+    console.info("[ccf-prose-mode] active v0.0.19 (gap 10px)");
   }
 
   function teardown() {
@@ -4992,7 +4992,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.18",
+    version: "0.0.19",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
