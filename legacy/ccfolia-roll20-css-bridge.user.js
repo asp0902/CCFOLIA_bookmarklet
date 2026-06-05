@@ -4871,26 +4871,26 @@
     style.id = STYLE_ID;
     style.dataset.capybaraToolkitStyle = "prose-mode";
     const WRAP = CONT_ATTR + "-wrap";
+    const LEADER = CONT_ATTR + "-leader";
     style.textContent = [
-      // 아바타 자리는 유지 (들여쓰기 보존), 보이지만 않게
+      // continuation — 아바타 자리 유지, 이름/시간 숨김
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; }`,
-      // 이름 + 시간 가린다
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      // li 자체 패딩 + 보더
       `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; border: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
-      // wrapper(부모) — JS로 attr 부여. 모든 방향 보더/구분선 제거.
+      // leader (그룹 첫 메시지) — 아래쪽 border 제거 + bottom padding 줄임
+      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 2px !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
+      // wrapper(부모) — cont + leader 둘 다. 모든 방향 보더/구분선 제거.
       `[${WRAP}="1"] { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
       `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      // 그 wrapper의 인접 형제 divider도 숨김 (앞 wrapper의 아래쪽 hr 가능성)
       `[${WRAP}="1"] + hr, [${WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
-      `[${WRAP}="1"] ~ hr:first-of-type { display: none !important; }`,
-      // CSS :has() — 부모 자동 탐색 (Chrome 105+) 보강
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root { display: none !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before, *:has(> .MuiListItem-root[${CONT_ATTR}="1"])::after { display: none !important; }`
+      // :has() 보강
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]), *:has(> .MuiListItem-root[${LEADER}="1"]) { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${LEADER}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root, *:has(> .MuiListItem-root[${LEADER}="1"]) > .MuiDivider-root { display: none !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before, *:has(> .MuiListItem-root[${CONT_ATTR}="1"])::after, *:has(> .MuiListItem-root[${LEADER}="1"])::before, *:has(> .MuiListItem-root[${LEADER}="1"])::after { display: none !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4909,23 +4909,30 @@
   function processList() {
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
+    const LEADER = CONT_ATTR + "-leader";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
-    let prev = null;
-    for (const li of messages) {
-      const author = extractAuthor(li);
-      const isCont = !!(author && author === prev);
-      if (isCont) {
-        if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1");
-        if (li.parentElement && li.parentElement.getAttribute(WRAP) !== "1") {
-          li.parentElement.setAttribute(WRAP, "1");
-        }
-      } else {
-        if (li.hasAttribute(CONT_ATTR)) li.removeAttribute(CONT_ATTR);
-        if (li.parentElement?.hasAttribute(WRAP)) li.parentElement.removeAttribute(WRAP);
+    const authors = messages.map((li) => extractAuthor(li));
+    for (let i = 0; i < messages.length; i++) {
+      const li = messages[i];
+      const author = authors[i];
+      const prevAuthor = i > 0 ? authors[i - 1] : null;
+      const nextAuthor = i + 1 < authors.length ? authors[i + 1] : null;
+      const isCont = !!(author && author === prevAuthor);
+      const isLeader = !isCont && !!(author && author === nextAuthor);
+      // li attrs
+      if (isCont) { if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1"); }
+      else if (li.hasAttribute(CONT_ATTR)) li.removeAttribute(CONT_ATTR);
+      if (isLeader) { if (li.getAttribute(LEADER) !== "1") li.setAttribute(LEADER, "1"); }
+      else if (li.hasAttribute(LEADER)) li.removeAttribute(LEADER);
+      // 부모 wrapper — cont + leader 모두 그룹 안이므로 attr 부여
+      const inGroup = isCont || isLeader;
+      const parent = li.parentElement;
+      if (parent) {
+        if (inGroup) { if (parent.getAttribute(WRAP) !== "1") parent.setAttribute(WRAP, "1"); }
+        else if (parent.hasAttribute(WRAP)) parent.removeAttribute(WRAP);
       }
-      prev = author;
     }
   }
 
@@ -4942,7 +4949,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.4 (preserve avatar slot)");
+    console.info("[ccf-prose-mode] active v0.0.5 (leader attr + wrap)");
   }
 
   function teardown() {
@@ -4952,6 +4959,7 @@
     document.getElementById(STYLE_ID)?.remove();
     document.querySelectorAll(`[${CONT_ATTR}]`).forEach((el) => el.removeAttribute(CONT_ATTR));
     document.querySelectorAll(`[${CONT_ATTR}-wrap]`).forEach((el) => el.removeAttribute(CONT_ATTR + "-wrap"));
+    document.querySelectorAll(`[${CONT_ATTR}-leader]`).forEach((el) => el.removeAttribute(CONT_ATTR + "-leader"));
     if (window.__CCF_PROSE_MODE_DEBUG__) {
       try { delete window.__CCF_PROSE_MODE_DEBUG__; } catch (_) {}
     }
@@ -4960,7 +4968,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.4",
+    version: "0.0.5",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
