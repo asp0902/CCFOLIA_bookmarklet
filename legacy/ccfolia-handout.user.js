@@ -545,8 +545,13 @@
     .settings-select:hover { border-color: rgba(255,255,255,.4); }
     .settings-select:focus { border-color: #fff; }
     .settings-icon-btn {
+      all: unset; box-sizing: border-box; cursor: pointer;
       width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto;
+      background: transparent; color: #fff;
+      display: inline-grid; place-items: center;
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
     }
+    .settings-icon-btn:hover { background: rgba(255,255,255,.08); }
     .settings-icon-btn svg { pointer-events: none; }
     .settings-room {
       padding: 9px 12px; background: rgba(0,0,0,.35);
@@ -1039,14 +1044,10 @@
     }).join("");
     return `
       <div class="field">
-        <label>룸</label>
-        <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
-      </div>
-      <div class="field">
         <label>내 캐릭터명 (GM 본인 이름)</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
-          <button class="action-icon settings-icon-btn" data-action="reload-my-characters" title="목록 새로고침" aria-label="목록 새로고침">${ICON_REFRESH}</button>
+          <button class="settings-icon-btn" data-action="reload-my-characters" title="목록 새로고침" aria-label="목록 새로고침">${ICON_REFRESH}</button>
         </div>
       </div>
       <div class="field">
@@ -1058,6 +1059,10 @@
       </div>
       <div class="row">
         <button class="btn" data-action="save-settings">저장</button>
+      </div>
+      <div class="field" style="margin-top:24px;">
+        <label>룸</label>
+        <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
       </div>
     `;
   }
