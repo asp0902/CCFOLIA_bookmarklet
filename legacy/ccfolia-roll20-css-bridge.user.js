@@ -4875,6 +4875,7 @@
     const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
+    const SPEAKER_START = CONT_ATTR + "-speaker-start";
     style.textContent = [
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
@@ -4972,7 +4973,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.14 (gap 12px + explicit speaker divider)");
+    console.info("[ccf-prose-mode] active v0.0.15 (define SPEAKER_START in injectStyle)");
   }
 
   function teardown() {
@@ -4991,7 +4992,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.14",
+    version: "0.0.15",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
