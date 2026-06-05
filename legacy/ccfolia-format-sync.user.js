@@ -46,6 +46,7 @@
     '[data-index] span.MuiTypography-root',
     'li p'
   ].join(", ");
+  const HISTORY_RENDER_BOTTOM_THRESHOLD_PX = 160;
 
   const INVIS_START = "\u2063\u2063\u2063";
   const INVIS_END = "\u2062\u2062\u2062";
@@ -830,28 +831,9 @@
   }
 
   function scanAndRenderAll() {
-    // 기존 메시지 재렌더로 DOM mutation → scrollHeight 변동 → 채팅 영역 스크롤 위치
-    // 미보존. 사용자가 init 직전 바닥에 있었다면 재렌더 후 다시 바닥으로 보정.
-    const scrollables = collectChatScrollables();
-    const snapshots = scrollables.map((el) => ({
-      el,
-      wasAtBottom: isScrolledToBottom(el)
-    }));
-
+    // 초기 전체 이력 렌더는 virtualized list scrollHeight를 크게 흔든다.
+    // 현재 보이는 하단 메시지만 렌더하고, 과거 이력은 새로 추가될 때도 하단 근처일 때만 렌더한다.
     scanWithin(document.body || document.documentElement);
-
-    // 동기 렌더 직후 + 비동기 reflow 후 각각 보정 (CCFOLIA React 가 자체 scrollTop
-    // 조정하는 시점에 덮어쓰기 위해 2회).
-    const restore = () => {
-      snapshots.forEach(({ el, wasAtBottom }) => {
-        if (wasAtBottom && document.contains(el)) {
-          el.scrollTop = el.scrollHeight;
-        }
-      });
-    };
-    restore();
-    window.requestAnimationFrame(restore);
-    window.setTimeout(restore, 50);
   }
 
   function collectChatScrollables() {
@@ -974,6 +956,7 @@
     const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
     const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
     if (!knownTextElement && !insideMessageSurface) return false;
+    if (!isNearChatBottom(el)) return false;
 
     const nestedEncodedElement = [...el.children].some((child) => {
       const childText = child.textContent || "";
@@ -982,6 +965,24 @@
     if (nestedEncodedElement) return false;
 
     return true;
+  }
+
+  function isNearChatBottom(el) {
+    const scroller = findChatScrollContainer(el);
+    if (!scroller) return true;
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= HISTORY_RENDER_BOTTOM_THRESHOLD_PX;
+  }
+
+  function findChatScrollContainer(el) {
+    let current = el instanceof HTMLElement ? el.parentElement : null;
+    while (current && current !== document.documentElement) {
+      const overflowY = getComputedStyle(current).overflowY || "";
+      if (/(?:auto|scroll|overlay)/i.test(overflowY) && current.scrollHeight > current.clientHeight + 8) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return null;
   }
 
   function tryRenderEncodedMessage(el) {
@@ -12671,6 +12672,15 @@
     setModalSelection(safeSelection, getEditorText(editor).length);
   }
 
+  function isCurrentRoomEditor(editor) {
+    return !!(
+      editor instanceof HTMLElement &&
+      document.contains(editor) &&
+      isVisible(editor) &&
+      findComposerForEditor(editor)
+    );
+  }
+
   function syncModalEditorToRoomEditor(commit = false) {
     if (modalMode === MODAL_MODE_ROLL20) {
       syncModalRoll20Draft();
@@ -12689,6 +12699,7 @@
     if (modalMode === MODAL_MODE_ROLL20) {
       const converted = ensureRoll20DraftConverted({ silent: false, forceRender: true });
       if (!converted) return false;
+      if (!isCurrentRoomEditor(roomEditor)) return false;
 
       const nextText = converted.text ?? "";
       const nextRuns = cloneRuns(converted.runs, nextText.length);
@@ -12718,6 +12729,8 @@
       syncEditorVisualPreview(roomEditor);
       return true;
     }
+
+    if (!isCurrentRoomEditor(roomEditor)) return false;
 
     const nextText = modalDraftText ?? getEditorText(roomEditor);
     const nextRuns = modalDraftParentheticalGray
