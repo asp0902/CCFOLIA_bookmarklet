@@ -519,6 +519,11 @@
     .perm-hint {
       margin-top: 12px; font-size: 0.75rem; color: rgba(255,255,255,.5);
     }
+    .edit-footer-actions {
+      display: flex; justify-content: flex-end; gap: 8px;
+      margin-top: 20px; padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
     /* SVG 클릭 안 막힘 (button click 정상 통과) */
     header .header-btn svg, .handout-edit-header .action-icon svg,
     .pl-modal .action-icon svg, .pl-modal .row-x svg {
@@ -961,18 +966,16 @@
     return `
       <div class="handout-edit-header">
         <input class="title-input" type="text" data-field="title" value="${escapeHtml(h.title)}" placeholder="핸드아웃 제목">
-        <button class="action-icon" data-action="save-handout" title="저장" aria-label="저장">${ICON_SAVE}</button>
         ${editing ? `<button class="action-icon" data-action="delete-handout" data-id="${escapeHtml(editing.id)}" title="삭제" aria-label="삭제">${ICON_TRASH}</button>` : ""}
-        <button class="action-icon" data-action="cancel-edit" title="닫기" aria-label="닫기">${ICON_X}</button>
       </div>
       <div class="handout-edit-cols">
         <div class="col">
           <label>공개 핸드아웃</label>
-          <textarea data-field="description" placeholder="공개 권한자에게 보이는 본문 (마크다운)">${escapeHtml(h.description)}</textarea>
+          <textarea data-field="description">${escapeHtml(h.description)}</textarea>
         </div>
         <div class="col">
           <label>비밀 핸드아웃</label>
-          <textarea data-field="gmNotes" placeholder="비밀 권한자에게만 보이는 본문 (마크다운)">${escapeHtml(h.gmNotes)}</textarea>
+          <textarea data-field="gmNotes">${escapeHtml(h.gmNotes)}</textarea>
         </div>
       </div>
       <div class="perm-section">
@@ -985,7 +988,10 @@
           <div class="head">팝업</div>
           ${rowsHtml}
         </div>
-        <div class="perm-hint">PL 이름은 설정 탭에서 추가할 수 있습니다.</div>
+      </div>
+      <div class="edit-footer-actions">
+        <button class="btn secondary" data-action="cancel-edit">취소</button>
+        <button class="btn" data-action="save-handout">저장</button>
       </div>
       <input type="hidden" data-field="image" value="${escapeHtml(h.image || "")}">
     `;
@@ -996,8 +1002,10 @@
     return `
       <div class="field">
         <label>내 캐릭터명 (GM 본인 이름)</label>
-        <input type="text" data-field="myCharacter" value="${escapeHtml(state.data.myCharacter)}" placeholder="권한 표에 'GM'으로 표시될 이름">
-        <span class="hint">상단 캐릭터 드롭다운에서 고른 이름과 정확히 같게 적어주세요.</span>
+        <div class="row">
+          <input type="text" data-field="myCharacter" value="${escapeHtml(state.data.myCharacter)}" placeholder="(미설정)" readonly style="flex:1; cursor:default;">
+          <button class="btn secondary small" data-action="load-my-character">내 캐릭터 목록에서 불러오기</button>
+        </div>
       </div>
       <div class="field">
         <label>플레이어 목록</label>
@@ -1005,12 +1013,25 @@
           <button class="btn secondary small" data-action="pl-modal-open">PL 목록 관리</button>
           <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
         </div>
-        <span class="hint">B단계: Suite Manager presence와 통합하여 자동 채움 예정.</span>
       </div>
       <div class="row">
         <button class="btn" data-action="save-settings">저장</button>
       </div>
     `;
+  }
+
+  // 코코포리아 채팅 발화창의 캐릭터 input (= 현재 선택된 캐릭터)에서 이름 가져오기
+  function loadMyCharacterFromCcfolia() {
+    const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
+    const visible = inputs.find((i) => i.offsetParent !== null && !i.disabled);
+    const name = (visible?.value || "").trim();
+    if (!name) {
+      toast("현재 캐릭터를 찾지 못했습니다. 캐릭터 목록에서 캐릭터를 먼저 선택해주세요.");
+      return;
+    }
+    const el = state.shadow?.querySelector('[data-field="myCharacter"]');
+    if (el) el.value = name;
+    toast(`"${name}" 불러옴. '저장'을 눌러야 반영됩니다.`);
   }
 
   // ===== 이벤트 핸들러 =====
@@ -1041,6 +1062,7 @@
     if (action === "pl-modal-add") { addPlRow(); return; }
     if (action === "pl-modal-save") { savePlListFromDialog(); return; }
     if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
+    if (action === "load-my-character") { loadMyCharacterFromCcfolia(); return; }
   }
 
   function onShadowChange(event) {
