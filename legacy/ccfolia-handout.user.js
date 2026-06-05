@@ -2321,7 +2321,12 @@
       const room = getCurrentRoomKey();
       if (room !== state.lastRoomKey) {
         state.lastRoomKey = room;
-        loadAll().then((d) => { state.data = d; resetChatSeenAuthorsForRoom(room); if (state.isOpen) render(); }).catch(() => {});
+        loadAll().then((d) => {
+          state.data = d;
+          resetChatSeenAuthorsForRoom(room);
+          if (state.isOpen) render();
+          if (fbState) subscribeToRoomHandouts().catch(() => {});
+        }).catch(() => {});
       }
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
@@ -2337,7 +2342,12 @@
         const room = getCurrentRoomKey();
         if (room !== state.lastRoomKey) {
           state.lastRoomKey = room;
-          loadAll().then((d) => { state.data = d; resetChatSeenAuthorsForRoom(room); if (state.isOpen) render(); }).catch(() => {});
+          loadAll().then((d) => {
+          state.data = d;
+          resetChatSeenAuthorsForRoom(room);
+          if (state.isOpen) render();
+          if (fbState) subscribeToRoomHandouts().catch(() => {});
+        }).catch(() => {});
         }
       }, 50);
     };
@@ -2363,7 +2373,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.2 (subscribe + ingest)");
+    console.info("[ccf-handout] init — version 0.2.3 (auto re-subscribe on room change)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
