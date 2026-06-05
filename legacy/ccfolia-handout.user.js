@@ -607,8 +607,24 @@
       flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.55);
     }
     .panel-footer .btn { box-shadow: none; }
-    .panel-footer .btn.secondary { border: 0; background: rgba(255,255,255,.06); }
-    .panel-footer .btn.secondary:hover { background: rgba(255,255,255,.14); }
+    .panel-footer .btn.secondary {
+      border: 0; background: transparent;
+      color: rgba(255,255,255,.85);
+    }
+    .panel-footer .btn.secondary:hover {
+      background: rgba(255,255,255,.08); color: #fff;
+    }
+    /* 푸터 바로 위 룸 정보 한 줄 */
+    .room-strip {
+      flex: 0 0 auto;
+      background: rgba(0,0,0,.25);
+      color: rgba(255,255,255,.55);
+      font-size: 0.75rem;
+      padding: 4px 16px;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      border-top: 1px solid rgba(255,255,255,.04);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     /* PL 목록 관리 모달 (Shadow DOM 안의 nested overlay) */
     .pl-modal-overlay {
       position: absolute; inset: 0; background: rgba(0,0,0,.55);
@@ -701,6 +717,7 @@
             <button class="tab" data-tab="settings" data-active="0">설정</button>
           </div>
           <div class="body"></div>
+          <div class="room-strip" data-room-strip="1"></div>
           <footer class="panel-footer">
             <button class="btn secondary small" data-action="export" title="현재 룸의 핸드아웃을 JSON 파일로 내보내기">내보내기</button>
             <button class="btn secondary small" data-action="import" title="JSON 파일에서 핸드아웃 가져오기 (기존 데이터 교체)">가져오기</button>
@@ -1092,6 +1109,8 @@
     bd.setAttribute("data-open", state.isOpen ? "1" : "0");
     const meta = state.shadow.querySelector("header .meta");
     meta.textContent = "";
+    const roomStrip = state.shadow.querySelector("[data-room-strip]");
+    if (roomStrip) roomStrip.textContent = `룸 ${getCurrentRoomKey()} · 핸드아웃 ${state.data.handouts.length}건`;
     // 편집 탭 동적 표시 — editingId가 있을 때만 보임
     const editTab = state.shadow.querySelector('.tab[data-tab="edit"]');
     if (editTab) {
@@ -1292,10 +1311,6 @@
           <button class="btn secondary small" data-action="pl-modal-open">PL 목록 관리</button>
           <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
         </div>
-      </div>
-      <div class="field" style="margin-top:24px;">
-        <label>룸</label>
-        <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
       </div>
       <div class="row settings-save-row">
         <button class="btn" data-action="save-settings">저장</button>
