@@ -332,7 +332,7 @@
     .tab:hover { color: #fff; background: rgba(255,255,255,.04); }
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
-    .body-pad { padding: 14px; }
+    .body-pad { padding: 20px 24px 24px; }
     .body::-webkit-scrollbar { width: 10px; }
     .body::-webkit-scrollbar-track { background: transparent; }
     .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 6px; }
@@ -470,7 +470,7 @@
     }
     .handout-edit-header .action-icon:hover { background: rgba(255,255,255,.1); }
     .handout-edit-cols {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px;
     }
     .handout-edit-cols .col label {
       display: block; font-size: 0.9375rem; font-weight: 500; color: #fff;
@@ -486,9 +486,9 @@
     }
     .handout-edit-cols .col textarea:hover { border-color: rgba(255,255,255,.35); }
     .handout-edit-cols .col textarea:focus { outline: none; border-color: #fff; }
-    .perm-section { margin-top: 4px; }
+    .perm-section { margin-top: 8px; }
     .perm-title {
-      font-size: 0.9375rem; font-weight: 700; color: #fff; margin-bottom: 12px;
+      font-size: 0.9375rem; font-weight: 700; color: #fff; margin-bottom: 14px;
     }
     .perm-grid {
       display: grid; grid-template-columns: 1fr 56px 56px 56px 76px;
@@ -664,7 +664,7 @@
           </header>
           <div class="tabs">
             <button class="tab" data-tab="list" data-active="1">목록</button>
-            <button class="tab" data-tab="edit" data-active="0">새로 만들기</button>
+            <button class="tab" data-tab="edit" data-active="0" style="display:none;">새로 만들기</button>
             <button class="tab" data-tab="settings" data-active="0">설정</button>
           </div>
           <div class="body"></div>
@@ -877,6 +877,17 @@
     bd.setAttribute("data-open", state.isOpen ? "1" : "0");
     const meta = state.shadow.querySelector("header .meta");
     meta.textContent = "";
+    // 편집 탭 동적 표시 — editingId가 있을 때만 보임
+    const editTab = state.shadow.querySelector('.tab[data-tab="edit"]');
+    if (editTab) {
+      if (state.editingId) {
+        editTab.style.display = "";
+        editTab.textContent = state.editingId === "new" ? "새로 만들기" : "편집";
+      } else {
+        editTab.style.display = "none";
+        if (state.activeTab === "edit") state.activeTab = "list";
+      }
+    }
     state.shadow.querySelectorAll(".tab").forEach((t) => {
       t.setAttribute("data-active", t.dataset.tab === state.activeTab ? "1" : "0");
     });
@@ -974,7 +985,9 @@
   const ICON_REFRESH = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>`;
 
   function renderEdit() {
-    const editing = state.editingId ? findHandout(state.editingId) : null;
+    // editingId === "new" → 새로 만들기 모드 (editing = null)
+    // editingId === <uuid> → 편집 모드
+    const editing = (state.editingId && state.editingId !== "new") ? findHandout(state.editingId) : null;
     const base = editing || { id: "", title: "", image: "", description: "", gmNotes: "", permissions: {}, tags: [] };
     const h = ensurePermissions({ ...base, permissions: { ...(base.permissions || {}) } });
     // 폼 권한 상태 초기화 (editingId 변경 시마다 갱신)
@@ -1127,10 +1140,10 @@
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
     if (action === "close") { closePanel(); return; }
-    if (action === "new-handout") { state.editingId = null; state.formPermissionsForId = null; setTab("edit"); return; }
+    if (action === "new-handout") { state.editingId = "new"; state.formPermissionsForId = null; setTab("edit"); return; }
     if (action === "edit-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
+    if (action === "view-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
     if (action === "delete-handout") { deleteHandout(id); return; }
-    if (action === "view-handout") { openDetail(id); return; }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
     if (action === "cancel-edit") { state.editingId = null; state.formPermissionsForId = null; setTab("list"); return; }
@@ -1197,9 +1210,10 @@
         permissions[k] = { view: !!v.view, secret: !!v.secret, edit: !!v.edit };
       }
     }
-    const id = state.editingId || uuid();
+    const isNew = !state.editingId || state.editingId === "new";
+    const id = isNew ? uuid() : state.editingId;
     const now = new Date().toISOString();
-    const existing = state.editingId ? findHandout(state.editingId) : null;
+    const existing = isNew ? null : findHandout(state.editingId);
     const handout = {
       id, title, image, description, gmNotes, permissions,
       tags: existing?.tags || [],
@@ -1352,9 +1366,7 @@
   function showToPlayersPlaceholder(id) {
     const h = findHandout(id);
     if (!h) return;
-    // 1단계 placeholder — 본인 화면에 상세 팝업만 뜸. 2단계에서 실제 송신 연결.
-    toast("(1단계) 본인 화면에 미리보기만 표시됩니다.");
-    openDetail(id);
+    toast(`(1단계 placeholder) "${h.title}" 송신은 B단계에서 활성화됩니다.`);
   }
 
   // ===== JSON 내보내기/가져오기 =====
