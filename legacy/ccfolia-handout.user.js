@@ -127,6 +127,7 @@
     plPreview: false,       // PL 시점 미리보기 토글
     data: { handouts: [], myCharacter: "", plList: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
+    myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
     root: null,
     shadow: null,
     mountObserver: null,
@@ -524,6 +525,25 @@
       margin-top: 20px; padding-top: 14px;
       border-top: 1px solid rgba(255,255,255,.06);
     }
+    /* 목록 카드 — 제목 자체가 클릭 가능한 버튼 */
+    .card-title-btn {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      flex: 1; font-size: 0.875rem; font-weight: 500; color: #fff;
+      line-height: 1.43; padding: 2px 0;
+      transition: color 120ms;
+    }
+    .card-title-btn:hover { color: #82b1ff; text-decoration: underline; }
+    /* 설정 select */
+    .settings-select {
+      background-color: #1a1a1a; border: 1px solid rgba(255,255,255,.18);
+      color: #fff; padding: 9px 36px 9px 12px; font-size: 0.875rem;
+      border-radius: 4px; outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23fff' d='M6 8L0 0h12z'/></svg>");
+      background-repeat: no-repeat; background-position: right 12px center;
+    }
+    .settings-select:hover { border-color: rgba(255,255,255,.4); }
+    .settings-select:focus { border-color: #fff; }
     /* SVG 클릭 안 막힘 (button click 정상 통과) */
     header .header-btn svg, .handout-edit-header .action-icon svg,
     .pl-modal .action-icon svg, .pl-modal .row-x svg {
@@ -877,13 +897,12 @@
       return `
         <article class="card" data-id="${escapeHtml(h.id)}">
           <div class="head">
-            <div class="title">${escapeHtml(h.title || "(제목 없음)")}</div>
+            <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
             ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
             <span class="badge">${escapeHtml(viewersLabel)}</span>
           </div>
           <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
           <div class="actions">
-            <button class="btn small" data-action="view-handout" data-id="${escapeHtml(h.id)}">열기</button>
             <button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>
             <button class="btn small secondary" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>
             <button class="btn small danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}">삭제</button>
@@ -990,8 +1009,8 @@
         </div>
       </div>
       <div class="edit-footer-actions">
-        <button class="btn secondary" data-action="cancel-edit">취소</button>
         <button class="btn" data-action="save-handout">저장</button>
+        <button class="btn secondary" data-action="cancel-edit">취소</button>
       </div>
       <input type="hidden" data-field="image" value="${escapeHtml(h.image || "")}">
     `;
@@ -999,13 +1018,22 @@
 
   function renderSettings() {
     const plCount = (state.data.plList || []).length;
+    const myChars = state.myCharacterOptions || [];
+    const current = state.data.myCharacter || "";
+    const allOpts = [...myChars];
+    if (current && !allOpts.includes(current)) allOpts.unshift(current);
+    const options = `<option value="">(미설정)</option>` + allOpts.map((c) => {
+      const label = (c === current && !myChars.includes(c)) ? `${c} (저장됨)` : c;
+      return `<option value="${escapeAttr(c)}" ${c === current ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("");
     return `
       <div class="field">
         <label>내 캐릭터명 (GM 본인 이름)</label>
         <div class="row">
-          <input type="text" data-field="myCharacter" value="${escapeHtml(state.data.myCharacter)}" placeholder="(미설정)" readonly style="flex:1; cursor:default;">
-          <button class="btn secondary small" data-action="load-my-character">내 캐릭터 목록에서 불러오기</button>
+          <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
+          <button class="btn secondary small" data-action="reload-my-characters" title="코코포리아의 '내 캐릭터 목록' 패널을 스캔해서 옵션을 채웁니다">목록 새로고침</button>
         </div>
+        <span class="hint">"내 캐릭터 목록" 패널을 연 상태에서 새로고침을 누르세요.</span>
       </div>
       <div class="field">
         <label>플레이어 목록</label>
@@ -1020,18 +1048,33 @@
     `;
   }
 
-  // 코코포리아 채팅 발화창의 캐릭터 input (= 현재 선택된 캐릭터)에서 이름 가져오기
-  function loadMyCharacterFromCcfolia() {
-    const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
-    const visible = inputs.find((i) => i.offsetParent !== null && !i.disabled);
-    const name = (visible?.value || "").trim();
-    if (!name) {
-      toast("현재 캐릭터를 찾지 못했습니다. 캐릭터 목록에서 캐릭터를 먼저 선택해주세요.");
+  // 코코포리아 "내 캐릭터 목록" 패널에서 캐릭터 이름들 추출
+  function scanMyCharacters() {
+    const titles = new Set(PANEL_TITLES_MY_CHARS.map(removeSpaces));
+    const h6s = Array.from(document.querySelectorAll("h6"));
+    const titleEl = h6s.find((h) => titles.has(removeSpaces(h.textContent)));
+    if (!titleEl) return null; // 패널 자체 못 찾음
+    const panel = titleEl.closest("div.MuiPaper-root.MuiPaper-elevation6")
+              || titleEl.closest("div.MuiPaper-root");
+    if (!panel) return null;
+    const spans = Array.from(panel.querySelectorAll("span.MuiListItemText-primary"));
+    const names = [];
+    for (const s of spans) {
+      const t = removeSpaces(s.textContent);
+      if (t && !names.includes(t)) names.push(t);
+    }
+    return names;
+  }
+
+  function reloadMyCharacterOptions() {
+    const names = scanMyCharacters();
+    if (names === null) {
+      toast("'내 캐릭터 목록' 패널을 먼저 열어주세요.");
       return;
     }
-    const el = state.shadow?.querySelector('[data-field="myCharacter"]');
-    if (el) el.value = name;
-    toast(`"${name}" 불러옴. '저장'을 눌러야 반영됩니다.`);
+    state.myCharacterOptions = names;
+    toast(`캐릭터 ${names.length}명 불러옴`);
+    render();
   }
 
   // ===== 이벤트 핸들러 =====
@@ -1062,7 +1105,7 @@
     if (action === "pl-modal-add") { addPlRow(); return; }
     if (action === "pl-modal-save") { savePlListFromDialog(); return; }
     if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
-    if (action === "load-my-character") { loadMyCharacterFromCcfolia(); return; }
+    if (action === "reload-my-characters") { reloadMyCharacterOptions(); return; }
   }
 
   function onShadowChange(event) {
