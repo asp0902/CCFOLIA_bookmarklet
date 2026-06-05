@@ -4871,10 +4871,10 @@
     style.id = STYLE_ID;
     style.dataset.capybaraToolkitStyle = "prose-mode";
     style.textContent = [
-      `li.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; height: 0 !important; min-height: 0 !important; }`,
-      `li.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `li.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; }`,
-      `li.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; height: 0 !important; min-height: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4892,7 +4892,7 @@
 
   function processList() {
     if (!active) return;
-    const messages = Array.from(document.querySelectorAll("li.MuiListItem-root"))
+    const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
     // 부모(ul) 별로 그룹핑 — 한 채팅창 안에서만 비교
