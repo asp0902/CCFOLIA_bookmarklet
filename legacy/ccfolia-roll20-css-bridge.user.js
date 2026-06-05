@@ -4921,7 +4921,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active");
+    console.info("[ccf-prose-mode] active v0.0.2 (sync rescan + DOM order)");
   }
 
   function teardown() {
@@ -4938,8 +4938,19 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
+    version: "0.0.2",
     isActive() { return active; },
-    rescan() { scheduleScan(); },
+    rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
+    rescanAsync() { scheduleScan(); },
+    diag() {
+      const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
+        .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
+      return {
+        messages: messages.length,
+        authors: messages.map((li) => extractAuthor(li)),
+        flagged: document.querySelectorAll(`[${CONT_ATTR}="1"]`).length
+      };
+    },
     disable() { return teardown(); }
   };
 
