@@ -4879,7 +4879,7 @@
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 14px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 18px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
@@ -4964,7 +4964,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.8 (cont bottom 14px)");
+    console.info("[ccf-prose-mode] active v0.0.9 (cont bottom 18px)");
   }
 
   function teardown() {
@@ -4983,7 +4983,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.8",
+    version: "0.0.9",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
