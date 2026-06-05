@@ -628,9 +628,9 @@
           </div>
           <div class="body"></div>
           <footer class="panel-footer">
-            <span class="footer-meta"></span>
             <button class="btn secondary small" data-action="export" title="현재 룸의 핸드아웃을 JSON 파일로 내보내기">내보내기</button>
             <button class="btn secondary small" data-action="import" title="JSON 파일에서 핸드아웃 가져오기 (기존 데이터 교체)">가져오기</button>
+            <span class="footer-meta"></span>
           </footer>
           <div class="pl-modal-overlay" data-pl-modal-open="0">
             <div class="pl-modal" role="dialog" aria-label="플레이어 목록 설정">
@@ -653,6 +653,7 @@
       </div>
     `;
     (document.body || document.documentElement).appendChild(root);
+    // capture: false 로 등록 — pointerdown 캡처와 충돌 회피
     shadow.addEventListener("click", onShadowClick);
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
@@ -661,6 +662,10 @@
     state.shadow = shadow;
     applyStoredRect();
     registerTeardown(() => root.remove());
+    console.info("[ccf-handout] panel mounted; footer/PL-modal present:",
+      !!shadow.querySelector(".panel-footer"),
+      !!shadow.querySelector(".pl-modal-overlay")
+    );
   }
 
   // ===== floating window 위치/크기 =====
@@ -1015,6 +1020,7 @@
     if (!btn) return;
     const action = btn.dataset.action;
     const id = btn.dataset.id;
+    console.info("[ccf-handout] click", action, id || "");
     if (action === "close") { closePanel(); return; }
     if (action === "new-handout") { state.editingId = null; state.formPermissionsForId = null; setTab("edit"); return; }
     if (action === "edit-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
@@ -1514,7 +1520,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.2 (floating window)");
+    console.info("[ccf-handout] init — version 0.1.3 (PL modal + footer)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
