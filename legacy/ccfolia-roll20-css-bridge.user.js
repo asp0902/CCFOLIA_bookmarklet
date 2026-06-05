@@ -4872,38 +4872,34 @@
     style.dataset.capybaraToolkitStyle = "prose-mode";
     const WRAP = CONT_ATTR + "-wrap";
     const LEADER = CONT_ATTR + "-leader";
+    const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
     style.textContent = [
-      // === continuation li ===
-      // 아바타 자리 유지, 이름/시간 숨김
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; }`,
+      // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      // 위쪽 border 항상 제거. 아래쪽은 last 아닐 때만 제거 (last는 다음 화자 경계 = 유지)
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; }`,
+      // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; padding-left: 56px !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
-      // === leader li === (그룹 첫 메시지 — 이전 화자 경계 보존)
-      // 자기 아래쪽 = cont 위쪽 경계만 제거. 위쪽은 그대로 (이전 화자와의 경계 유지)
+      // === leader li === 자기 아래쪽 경계만 제거 (위쪽 = 이전 화자 경계 유지)
       `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
-      // === wrapper === (cont 의 부모만. leader 부모는 안 건드림 → 이전 화자 경계 보존)
-      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; }`,
+      // === leader 부모 wrapper === 아래쪽 경계 + 아래쪽 padding/margin만 제거
+      `[${LEADER_WRAP}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
+      `[${LEADER_WRAP}="1"]::after { display: none !important; }`,
+      `[${LEADER_WRAP}="1"] > hr:last-child, [${LEADER_WRAP}="1"] > .MuiDivider-root:last-child { display: none !important; }`,
+      // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
+      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; min-height: 0 !important; }`,
       `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) { border-bottom: 0 !important; }`,
       `[${WRAP}="1"]::before { display: none !important; }`,
       `[${WRAP}="1"]:not([${WRAP_LAST}="1"])::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      // wrapper의 직전 형제 hr — leader wrapper와 cont wrapper 사이의 구분선만 제거
-      `[${WRAP}="1"] + hr:not(:last-of-type), [${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`,
-      // :has() 보강 — cont 부모만 (leader 부모는 제외)
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) { padding-top: 0 !important; padding-bottom: 0 !important; box-shadow: none !important; border-top: 0 !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])) { border-bottom: 0 !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root { display: none !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before { display: none !important; }`,
-      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]))::after { display: none !important; }`
+      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4923,7 +4919,9 @@
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
     const LEADER = CONT_ATTR + "-leader";
+    const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
+    const WRAP_LAST = WRAP + "-last";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
@@ -4935,16 +4933,15 @@
       const nextAuthor = i + 1 < authors.length ? authors[i + 1] : null;
       const isCont = !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
-      const isLast = isCont && nextAuthor !== author; // 그룹 마지막 cont
-      // li attrs
+      const isLast = isCont && nextAuthor !== author;
       setOrRemove(li, CONT_ATTR, isCont);
       setOrRemove(li, LEADER, isLeader);
       setOrRemove(li, LAST, isLast);
-      // 부모 wrapper — cont만 wrap 부여 (leader는 이전 화자 경계 유지 위해 제외)
       const parent = li.parentElement;
       if (parent) {
         setOrRemove(parent, WRAP, isCont);
-        setOrRemove(parent, WRAP + "-last", isLast);
+        setOrRemove(parent, WRAP_LAST, isLast);
+        setOrRemove(parent, LEADER_WRAP, isLeader);
       }
     }
   }
@@ -4967,7 +4964,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.6 (preserve speaker boundary)");
+    console.info("[ccf-prose-mode] active v0.0.7 (avatar slot + leader-wrap)");
   }
 
   function teardown() {
@@ -4975,7 +4972,7 @@
     try { observer?.disconnect(); } catch (_) {}
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-last"]) {
+    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last"]) {
       document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
     }
     if (window.__CCF_PROSE_MODE_DEBUG__) {
@@ -4986,7 +4983,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.6",
+    version: "0.0.7",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
