@@ -102,6 +102,20 @@
       subscribedRoom = null;
     },
     sendShow(handoutId, audience) { return sendShowSignal(handoutId, audience || "all"); },
+    state() {
+      return {
+        myCharacter: state.data.myCharacter,
+        plList: state.data.plList,
+        handoutCount: state.data.handouts.length,
+        editingId: state.editingId,
+        activeTab: state.activeTab,
+        isOpen: state.isOpen,
+        room: getCurrentRoomKey(),
+        firebase: fbState ? { uid: fbState.uid } : null,
+        subscribed: subscribedRoom
+      };
+    },
+    autoDetect(force) { return autoDetectMyCharacter({ force: !!force }); },
     disable() { return teardown(); }
   };
 
@@ -2612,7 +2626,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.5 (auto myCharacter + greeting wires Firebase)");
+    console.info("[ccf-handout] init — version 0.2.6 (state + autoDetect debug API)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
