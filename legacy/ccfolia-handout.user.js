@@ -147,6 +147,7 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
+  const escapeAttr = escapeHtml;
 
   function removeSpaces(s) {
     return (s || "").replace(/\s+/g, " ").trim();
