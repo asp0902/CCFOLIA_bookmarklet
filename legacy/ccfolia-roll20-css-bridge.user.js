@@ -4895,25 +4895,16 @@
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
-    // 부모(ul) 별로 그룹핑 — 한 채팅창 안에서만 비교
-    const groups = new Map();
+    // 코코포리아는 메시지마다 별도 wrapper. 그룹핑 X — querySelectorAll DOM 순서대로 비교.
+    let prev = null;
     for (const li of messages) {
-      const parent = li.parentElement;
-      if (!parent) continue;
-      if (!groups.has(parent)) groups.set(parent, []);
-      groups.get(parent).push(li);
-    }
-    for (const items of groups.values()) {
-      let prev = null;
-      for (const li of items) {
-        const author = extractAuthor(li);
-        if (author && author === prev) {
-          if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1");
-        } else if (li.hasAttribute(CONT_ATTR)) {
-          li.removeAttribute(CONT_ATTR);
-        }
-        prev = author;
+      const author = extractAuthor(li);
+      if (author && author === prev) {
+        if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1");
+      } else if (li.hasAttribute(CONT_ATTR)) {
+        li.removeAttribute(CONT_ATTR);
       }
+      prev = author;
     }
   }
 
