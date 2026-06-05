@@ -128,6 +128,9 @@
     data: { handouts: [], myCharacter: "", plList: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
+    chatWatcher: null,      // 채팅 발신자 감시 MutationObserver
+    chatScanScheduled: 0,
+    chatSeenAuthors: new Set(), // 룸별 중복 처리 방지 (메모리)
     root: null,
     shadow: null,
     mountObserver: null,
@@ -716,6 +719,146 @@
       !!shadow.querySelector(".panel-footer"),
       !!shadow.querySelector(".pl-modal-overlay")
     );
+  }
+
+  // ===== "카피바라와 함께합니다" 인사 팝업 =====
+  const GREETING_STORAGE_PREFIX = "ccf-handout:greeted:";
+  let greetingRoot = null;
+
+  function isGreeted(roomKey) {
+    try { return localStorage.getItem(GREETING_STORAGE_PREFIX + roomKey) === "1"; }
+    catch (error) { return false; }
+  }
+  function markGreeted(roomKey) {
+    try { localStorage.setItem(GREETING_STORAGE_PREFIX + roomKey, "1"); }
+    catch (error) { /* quota */ }
+  }
+
+  function maybeShowGreeting() {
+    if (!active) return;
+    const room = getCurrentRoomKey();
+    if (room === "global") return;            // 룸 밖에서는 안 띄움
+    if (isGreeted(room)) return;
+    if (greetingRoot && greetingRoot.isConnected) return;
+    mountGreeting(room);
+  }
+
+  function mountGreeting(roomKey) {
+    const host = document.createElement("div");
+    host.setAttribute("data-ccf-handout-greeting", "1");
+    host.style.cssText = "all: initial; position: fixed; inset: 0; z-index: 2147483645;";
+    const sh = host.attachShadow({ mode: "open" });
+    sh.innerHTML = `
+      <style>
+        :host { all: initial; }
+        * { box-sizing: border-box; }
+        .gd-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,.55);
+          display: flex; align-items: center; justify-content: center;
+          font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif;
+        }
+        .gd-paper {
+          width: min(420px, 92%); background-color: rgba(44,44,44,0.95);
+          color: #fff; padding: 24px 24px 16px;
+          box-shadow:
+            0px 11px 15px -7px rgba(0,0,0,0.20),
+            0px 24px 38px 3px rgba(0,0,0,0.14),
+            0px 9px 46px 8px rgba(0,0,0,0.12);
+        }
+        .gd-title { font-size: 1.125rem; font-weight: 700; margin: 0 0 10px; }
+        .gd-body { font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.85); margin-bottom: 20px; }
+        .gd-actions { display: flex; justify-content: flex-end; }
+        .gd-ok {
+          background: #fff; color: rgba(0,0,0,.87); border: 0;
+          padding: 8px 20px; font-size: 0.875rem; font-weight: 600;
+          letter-spacing: .02857em; text-transform: uppercase; cursor: pointer;
+          border-radius: 4px;
+          box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+          transition: background-color 250ms cubic-bezier(0.4,0,0.2,1);
+        }
+        .gd-ok:hover { background: #e0e0e0; }
+      </style>
+      <div class="gd-overlay">
+        <div class="gd-paper" role="dialog" aria-modal="true" aria-label="카피바라 안내">
+          <h2 class="gd-title">카피바라와 함께합니다</h2>
+          <p class="gd-body">카피바라 핸드아웃 툴킷이 이 룸에서 활성화되었습니다.<br>아래 '확인'을 누르면 채팅 발신자 자동 인식이 시작됩니다.</p>
+          <div class="gd-actions"><button class="gd-ok" data-action="greeting-ok">확인</button></div>
+        </div>
+      </div>
+    `;
+    sh.addEventListener("click", (e) => {
+      const b = e.target.closest('button[data-action="greeting-ok"]');
+      if (!b) return;
+      markGreeted(roomKey);
+      greetingRoot?.remove();
+      greetingRoot = null;
+      // 확인 시점에 한 번 풀스캔
+      scanChatForAuthors();
+      toast("카피바라 툴킷이 활성화되었습니다.");
+    });
+    (document.body || document.documentElement).appendChild(host);
+    greetingRoot = host;
+    registerTeardown(() => host.remove());
+  }
+
+  // ===== 채팅 발신자 감시 (plList 자동 추가) =====
+  function startChatWatcher() {
+    if (state.chatWatcher || !active) return;
+    state.chatWatcher = new MutationObserver(() => debouncedScanChat());
+    state.chatWatcher.observe(document.documentElement, { childList: true, subtree: true });
+    registerTeardown(() => {
+      state.chatWatcher?.disconnect();
+      state.chatWatcher = null;
+    });
+  }
+
+  function debouncedScanChat() {
+    if (state.chatScanScheduled) return;
+    state.chatScanScheduled = requestAnimationFrame(() => {
+      state.chatScanScheduled = 0;
+      scanChatForAuthors();
+    });
+  }
+
+  async function scanChatForAuthors() {
+    if (!active) return;
+    // 인사 팝업 안 끝났으면 대기 (사용자 동의 후 시작)
+    const room = getCurrentRoomKey();
+    if (room !== "global" && !isGreeted(room)) return;
+    // 데이터 미로드 시 skip
+    if (!state.data || !Array.isArray(state.data.plList)) return;
+
+    const heads = document.querySelectorAll('li.MuiListItem-root h6.MuiListItemText-primary');
+    if (!heads.length) return;
+
+    const me = removeSpaces(state.data.myCharacter || "").toLowerCase();
+    const existing = new Set((state.data.plList || []).map((p) => removeSpaces(p.name || "").toLowerCase()));
+    const added = [];
+
+    heads.forEach((h6) => {
+      // 첫 텍스트 노드만 = 발신자명 (시간 span 제외)
+      let name = null;
+      for (const node of h6.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
+          name = node.nodeValue.trim();
+          break;
+        }
+      }
+      if (!name) return;
+      if (state.chatSeenAuthors.has(name)) return;
+      state.chatSeenAuthors.add(name);
+      const lower = removeSpaces(name).toLowerCase();
+      if (lower === me) return;
+      if (existing.has(lower)) return;
+      existing.add(lower);
+      added.push({ name, id: "", role: "player" });
+    });
+
+    if (!added.length) return;
+    state.data.plList.push(...added);
+    await saveAll(state.data);
+    toast(`PL ${added.length}명 자동 추가: ${added.map((a) => a.name).join(", ")}`);
+    if (state.isOpen && state.activeTab === "settings") render();
   }
 
   // ===== floating window 위치/크기 =====
@@ -1651,10 +1794,13 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.3 (PL modal + footer)");
+    console.info("[ccf-handout] init — version 0.1.4 (greeting + chat-watcher)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
+    startChatWatcher();
+    // 룸 진입 시 인사 팝업 (룸별 1회)
+    setTimeout(() => maybeShowGreeting(), 800);
     // 최초 + 지연 재시도 (React 렌더 늦을 수 있음)
     mountIcon();
     [200, 600, 1500, 3000].forEach((ms) => {
