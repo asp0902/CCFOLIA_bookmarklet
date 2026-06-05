@@ -31,6 +31,16 @@
     "マイキャラクター一覧", "自分のキャラクター一覧",
     "我的角色一覽", "我的角色一览", "我的角色列表"
   ];
+  const CHAT_AUTHOR_ITEM_SELECTOR = "li.MuiListItem-root, [role='listitem'], .MuiListItem-root";
+  const CHAT_AUTHOR_HEADING_SELECTOR = [
+    "h6.MuiListItemText-primary",
+    ".MuiListItemText-primary h6",
+    ".MuiListItemText-root h6",
+    "h6"
+  ].join(", ");
+  const CHAT_AUTHOR_SCOPE_SELECTOR = "[role='log'], [aria-live='polite'], [aria-live='assertive'], .MuiDrawer-paper, ul.MuiList-root, [role='list']";
+  const CHAT_DRAWER_TITLE_RE = /룸\s*채팅|room\s*chat|チャット|chat/i;
+  const CHAT_AUTHOR_IGNORE_RE = /^(?:룸\s*채팅|room\s*chat|chat|チャット|내\s*캐릭터\s*(?:목록|리스트)?|my\s*characters?|character\s*list|characters?)$/i;
 
   let active = true;
   const disposers = [];
@@ -134,6 +144,7 @@
     chatWatcher: null,      // 채팅 발신자 감시 MutationObserver
     chatScanScheduled: 0,
     chatSeenAuthors: new Set(), // 룸별 중복 처리 방지 (메모리)
+    chatSeenRoom: getCurrentRoomKey(),
     root: null,
     shadow: null,
     mountObserver: null,
@@ -872,7 +883,8 @@
       if (skipToday) markSkipToday();
       greetingRoot?.remove();
       greetingRoot = null;
-      // 확인 시점에 한 번 풀스캔
+      // 확인 시점부터 자동 감시 활성화. 다음 실행 때도 유지.
+      markGreeted(roomKey);
       scanChatForAuthors();
       toast("카피바라 툴킷이 활성화되었습니다.");
     });
@@ -886,6 +898,7 @@
     if (state.chatWatcher || !active) return;
     state.chatWatcher = new MutationObserver(() => debouncedScanChat());
     state.chatWatcher.observe(document.documentElement, { childList: true, subtree: true });
+    debouncedScanChat();
     registerTeardown(() => {
       state.chatWatcher?.disconnect();
       state.chatWatcher = null;
@@ -904,33 +917,26 @@
     if (!active) return;
     // 인사 팝업 안 끝났으면 대기 (사용자 동의 후 시작)
     const room = getCurrentRoomKey();
+    resetChatSeenAuthorsForRoom(room);
     if (room !== "global" && !isGreeted(room)) return;
     // 데이터 미로드 시 skip
     if (!state.data || !Array.isArray(state.data.plList)) return;
 
-    const heads = document.querySelectorAll('li.MuiListItem-root h6.MuiListItemText-primary');
-    if (!heads.length) return;
+    const names = collectChatAuthorNames();
+    if (!names.length) return;
 
-    const me = removeSpaces(state.data.myCharacter || "").toLowerCase();
-    const existing = new Set((state.data.plList || []).map((p) => removeSpaces(p.name || "").toLowerCase()));
+    const me = normalizePlNameKey(state.data.myCharacter || "");
+    const existing = new Set((state.data.plList || []).map((p) => normalizePlNameKey(p.name || "")));
     const added = [];
 
-    heads.forEach((h6) => {
-      // 첫 텍스트 노드만 = 발신자명 (시간 span 제외)
-      let name = null;
-      for (const node of h6.childNodes) {
-        if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
-          name = node.nodeValue.trim();
-          break;
-        }
-      }
-      if (!name) return;
-      if (state.chatSeenAuthors.has(name)) return;
-      state.chatSeenAuthors.add(name);
-      const lower = removeSpaces(name).toLowerCase();
-      if (lower === me) return;
-      if (existing.has(lower)) return;
-      existing.add(lower);
+    names.forEach((name) => {
+      const key = normalizePlNameKey(name);
+      if (!key) return;
+      if (state.chatSeenAuthors.has(key)) return;
+      state.chatSeenAuthors.add(key);
+      if (key === me) return;
+      if (existing.has(key)) return;
+      existing.add(key);
       added.push({ name, id: "", role: "player" });
     });
 
@@ -940,6 +946,91 @@
     await saveAll(state.data);
     toast(`PL ${added.length}명 자동 추가: ${added.map((a) => a.name).join(", ")}`);
     if (state.isOpen && state.activeTab === "settings") render();
+  }
+
+  function resetChatSeenAuthorsForRoom(room) {
+    if (state.chatSeenRoom === room) return;
+    state.chatSeenRoom = room;
+    state.chatSeenAuthors.clear();
+  }
+
+  function collectChatAuthorNames() {
+    const names = [];
+    const seen = new Set();
+    document.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR).forEach((item) => {
+      if (!(item instanceof HTMLElement)) return;
+      if (!isLikelyChatAuthorItem(item)) return;
+      const name = extractChatAuthorName(item);
+      const key = normalizePlNameKey(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+    return names;
+  }
+
+  function isLikelyChatAuthorItem(item) {
+    if (!(item instanceof HTMLElement)) return false;
+    const scope = item.closest(CHAT_AUTHOR_SCOPE_SELECTOR);
+    if (!(scope instanceof HTMLElement)) return false;
+    if (scope.closest(`[${ICON_MARKER}], #${ROOT_ID}, [data-ccf-handout-greeting]`)) return false;
+    if (scope.closest("[role='dialog'], .MuiDialog-root, .MuiModal-root, .MuiPopover-root")) return false;
+    if (scope.matches?.("[role='log'], [aria-live='polite'], [aria-live='assertive']")) return true;
+    if (scope.matches?.(".MuiDrawer-paper") && looksLikeChatScope(scope)) return true;
+    const drawer = scope.closest(".MuiDrawer-paper");
+    if (drawer instanceof HTMLElement) return looksLikeChatScope(drawer);
+    return looksLikeChatScope(scope);
+  }
+
+  function looksLikeChatScope(scope) {
+    if (!(scope instanceof HTMLElement)) return false;
+    const headings = Array.from(scope.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+      .map((node) => removeSpaces(node.textContent || ""))
+      .filter(Boolean)
+      .join(" ");
+    if (CHAT_DRAWER_TITLE_RE.test(headings)) return true;
+    const hasEditor = !!scope.querySelector('textarea, input[type="text"], [contenteditable="true"], [role="textbox"]');
+    const hasSubmit = Array.from(scope.querySelectorAll('button[type="submit"]'))
+      .some((button) => {
+        const label = removeSpaces(button.textContent || button.getAttribute("aria-label") || "");
+        return !label || /전송|send|送信/i.test(label);
+      });
+    return hasEditor && hasSubmit;
+  }
+
+  function extractChatAuthorName(item) {
+    const heading = item.querySelector(CHAT_AUTHOR_HEADING_SELECTOR);
+    if (!(heading instanceof HTMLElement)) return "";
+
+    const direct = getDirectText(heading);
+    const directName = cleanChatAuthorName(direct);
+    if (directName) return directName;
+
+    const aria = cleanChatAuthorName(heading.getAttribute("aria-label") || heading.getAttribute("title") || "");
+    if (aria) return aria;
+
+    return cleanChatAuthorName(heading.textContent || "");
+  }
+
+  function getDirectText(element) {
+    let out = "";
+    element.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) out += node.nodeValue || "";
+    });
+    return out;
+  }
+
+  function cleanChatAuthorName(value) {
+    let name = removeSpaces(value || "");
+    if (!name) return "";
+    name = name.replace(/\s*(?:\d{1,2}:\d{2}(?::\d{2})?|午前\s*\d{1,2}:\d{2}|午後\s*\d{1,2}:\d{2}|AM\s*\d{1,2}:\d{2}|PM\s*\d{1,2}:\d{2})\s*$/i, "").trim();
+    name = name.replace(/\s*(?:\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2})\s*$/i, "").trim();
+    if (!name || name.length > 80 || CHAT_AUTHOR_IGNORE_RE.test(name)) return "";
+    return name;
+  }
+
+  function normalizePlNameKey(value) {
+    return removeSpaces(value || "").toLowerCase();
   }
 
   // ===== floating window 위치/크기 =====
