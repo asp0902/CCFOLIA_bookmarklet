@@ -544,6 +544,16 @@
     }
     .settings-select:hover { border-color: rgba(255,255,255,.4); }
     .settings-select:focus { border-color: #fff; }
+    .settings-icon-btn {
+      width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto;
+    }
+    .settings-icon-btn svg { pointer-events: none; }
+    .settings-room {
+      padding: 9px 12px; background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+      color: rgba(255,255,255,.85); font-size: 0.875rem;
+      font-family: ui-monospace, Consolas, monospace;
+    }
     /* SVG 클릭 안 막힘 (button click 정상 통과) */
     header .header-btn svg, .handout-edit-header .action-icon svg,
     .pl-modal .action-icon svg, .pl-modal .row-x svg {
@@ -861,7 +871,7 @@
     const bd = state.shadow.querySelector(".container");
     bd.setAttribute("data-open", state.isOpen ? "1" : "0");
     const meta = state.shadow.querySelector("header .meta");
-    meta.textContent = `룸: ${getCurrentRoomKey()} · 내 캐릭터: ${state.data.myCharacter || "(미설정)"} · ${state.data.handouts.length}건`;
+    meta.textContent = "";
     state.shadow.querySelectorAll(".tab").forEach((t) => {
       t.setAttribute("data-active", t.dataset.tab === state.activeTab ? "1" : "0");
     });
@@ -956,6 +966,7 @@
   const ICON_SAVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`;
   const ICON_TRASH = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`;
   const ICON_X = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+  const ICON_REFRESH = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>`;
 
   function renderEdit() {
     const editing = state.editingId ? findHandout(state.editingId) : null;
@@ -1028,12 +1039,15 @@
     }).join("");
     return `
       <div class="field">
+        <label>룸</label>
+        <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
+      </div>
+      <div class="field">
         <label>내 캐릭터명 (GM 본인 이름)</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
-          <button class="btn secondary small" data-action="reload-my-characters" title="코코포리아의 '내 캐릭터 목록' 패널을 스캔해서 옵션을 채웁니다">목록 새로고침</button>
+          <button class="action-icon settings-icon-btn" data-action="reload-my-characters" title="목록 새로고침" aria-label="목록 새로고침">${ICON_REFRESH}</button>
         </div>
-        <span class="hint">"내 캐릭터 목록" 패널을 연 상태에서 새로고침을 누르세요.</span>
       </div>
       <div class="field">
         <label>플레이어 목록</label>
@@ -1066,10 +1080,31 @@
     return names;
   }
 
-  function reloadMyCharacterOptions() {
+  // 패널 닫혀 있으면 토글 버튼 click() 후 잠깐 대기
+  async function ensureCharPanelOpen() {
+    if (scanMyCharacters() !== null) return true;
+    const btn = findCharacterToolbarButton();
+    if (!btn) return false;
+    btn.click();
+    // React 렌더 + 사이드패널 열림 애니메이션 대기
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 80));
+      if (scanMyCharacters() !== null) return true;
+    }
+    return scanMyCharacters() !== null;
+  }
+
+  async function reloadMyCharacterOptions() {
+    const opened = await ensureCharPanelOpen();
+    if (!opened) {
+      toast("'내 캐릭터 목록' 패널을 찾지 못했습니다.");
+      return;
+    }
     const names = scanMyCharacters();
-    if (names === null) {
-      toast("'내 캐릭터 목록' 패널을 먼저 열어주세요.");
+    if (!names || !names.length) {
+      toast("패널은 열렸지만 캐릭터가 비어있습니다.");
+      state.myCharacterOptions = [];
+      render();
       return;
     }
     state.myCharacterOptions = names;
