@@ -4851,3 +4851,106 @@
     return Math.abs(ra.top - rb.top) + Math.abs(ra.left - rb.left);
   }
 })();
+
+// ===== Prose Mode — 장문 롤플 가독성 =====
+// 같은 발신자의 연속 메시지에서 아바타/이름/시간 숨김.
+// 첫 메시지는 그대로, 이어지는 같은 사람 메시지만 본문 중심 표시.
+(() => {
+  "use strict";
+  try { window.__CCF_PROSE_MODE_DEBUG__?.disable?.(); } catch (_) {}
+
+  const STYLE_ID = "ccfolia-prose-mode-style";
+  const CONT_ATTR = "data-ccf-prose-cont";
+  let active = true;
+  let observer = null;
+  let scanScheduled = 0;
+
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.dataset.capybaraToolkitStyle = "prose-mode";
+    style.textContent = [
+      `li.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; height: 0 !important; min-height: 0 !important; }`,
+      `li.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
+      `li.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; }`,
+      `li.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`
+    ].join("\n");
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function extractAuthor(li) {
+    const h6 = li.querySelector("h6.MuiListItemText-primary");
+    if (!h6) return null;
+    for (const node of h6.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
+        return node.nodeValue.trim();
+      }
+    }
+    return null;
+  }
+
+  function processList() {
+    if (!active) return;
+    const messages = Array.from(document.querySelectorAll("li.MuiListItem-root"))
+      .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
+    if (!messages.length) return;
+    // 부모(ul) 별로 그룹핑 — 한 채팅창 안에서만 비교
+    const groups = new Map();
+    for (const li of messages) {
+      const parent = li.parentElement;
+      if (!parent) continue;
+      if (!groups.has(parent)) groups.set(parent, []);
+      groups.get(parent).push(li);
+    }
+    for (const items of groups.values()) {
+      let prev = null;
+      for (const li of items) {
+        const author = extractAuthor(li);
+        if (author && author === prev) {
+          if (li.getAttribute(CONT_ATTR) !== "1") li.setAttribute(CONT_ATTR, "1");
+        } else if (li.hasAttribute(CONT_ATTR)) {
+          li.removeAttribute(CONT_ATTR);
+        }
+        prev = author;
+      }
+    }
+  }
+
+  function scheduleScan() {
+    if (scanScheduled) return;
+    scanScheduled = requestAnimationFrame(() => {
+      scanScheduled = 0;
+      processList();
+    });
+  }
+
+  function start() {
+    injectStyle();
+    observer = new MutationObserver(() => scheduleScan());
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    processList();
+    console.info("[ccf-prose-mode] active");
+  }
+
+  function teardown() {
+    active = false;
+    try { observer?.disconnect(); } catch (_) {}
+    observer = null;
+    document.getElementById(STYLE_ID)?.remove();
+    document.querySelectorAll(`[${CONT_ATTR}]`).forEach((el) => el.removeAttribute(CONT_ATTR));
+    if (window.__CCF_PROSE_MODE_DEBUG__) {
+      try { delete window.__CCF_PROSE_MODE_DEBUG__; } catch (_) {}
+    }
+    console.info("[ccf-prose-mode] teardown");
+    return true;
+  }
+
+  window.__CCF_PROSE_MODE_DEBUG__ = {
+    isActive() { return active; },
+    rescan() { scheduleScan(); },
+    disable() { return teardown(); }
+  };
+
+  start();
+})();
