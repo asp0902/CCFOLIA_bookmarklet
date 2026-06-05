@@ -4879,7 +4879,7 @@
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 22px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 12px !important; margin: 0 !important; min-height: 0 !important; border-top: 0 !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]::before { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"])::after { display: none !important; }`,
@@ -4888,7 +4888,7 @@
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
       // === leader li === 자기 아래쪽 경계만 제거 (위쪽 = 이전 화자 경계 유지)
       // padding-bottom은 cont와 동일 18px (그래야 leader-cont 사이도 cont-cont 사이와 같은 간격)
-      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 22px !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${LEADER}="1"] { border-bottom: 0 !important; padding-bottom: 12px !important; box-shadow: none !important; }`,
       `.MuiListItem-root[${LEADER}="1"]::after { display: none !important; }`,
       // === leader 부모 wrapper === 아래쪽 경계 + 아래쪽 padding/margin만 제거
       `[${LEADER_WRAP}="1"] { border-bottom: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
@@ -4900,7 +4900,9 @@
       `[${WRAP}="1"]::before { display: none !important; }`,
       `[${WRAP}="1"]:not([${WRAP_LAST}="1"])::after { display: none !important; }`,
       `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`
+      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) + hr { display: none !important; }`,
+      // === 화자 다른 메시지 시작 = 명시적 구분선 추가 ===
+      `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.1) !important; padding-top: 12px !important; margin-top: 12px !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4923,6 +4925,7 @@
     const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
+    const SPEAKER_START = CONT_ATTR + "-speaker-start";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
@@ -4935,14 +4938,18 @@
       const isCont = !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
       const isLast = isCont && nextAuthor !== author;
+      // 화자 시작 = 직전 화자와 다른 메시지 (첫 메시지 제외)
+      const isSpeakerStart = i > 0 && !!author && author !== prevAuthor;
       setOrRemove(li, CONT_ATTR, isCont);
       setOrRemove(li, LEADER, isLeader);
       setOrRemove(li, LAST, isLast);
+      setOrRemove(li, SPEAKER_START, isSpeakerStart);
       const parent = li.parentElement;
       if (parent) {
         setOrRemove(parent, WRAP, isCont);
         setOrRemove(parent, WRAP_LAST, isLast);
         setOrRemove(parent, LEADER_WRAP, isLeader);
+        setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart);
       }
     }
   }
@@ -4965,7 +4972,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.13 (gap 22px = line-height+2)");
+    console.info("[ccf-prose-mode] active v0.0.14 (gap 12px + explicit speaker divider)");
   }
 
   function teardown() {
@@ -4973,7 +4980,7 @@
     try { observer?.disconnect(); } catch (_) {}
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last"]) {
+    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap"]) {
       document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
     }
     if (window.__CCF_PROSE_MODE_DEBUG__) {
@@ -4984,7 +4991,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.13",
+    version: "0.0.14",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
