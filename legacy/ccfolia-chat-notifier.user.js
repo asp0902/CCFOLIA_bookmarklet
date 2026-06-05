@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.54
+// @version      0.2.55
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1579,6 +1579,54 @@
             count: result?.count || 0
           };
         });
+      },
+      multiSelect: {
+        state() {
+          return {
+            selected: [...ccfBgmMultiSelectedEntries],
+            mode: getCcfBgmActiveDialogScopes(document).some(isCcfBgmMultiSelectModeForScope)
+          };
+        },
+        sync() {
+          syncCcfBgmYoutubeMultiSelectUI();
+          return [...ccfBgmMultiSelectedEntries];
+        },
+        clear() {
+          clearCcfBgmMultiSelect();
+          syncCcfBgmYoutubeMultiSelectUI();
+        },
+        deleteSelected() {
+          return deleteCcfBgmSelectedYoutubeEntries("debug");
+        },
+        dumpNativeCheckbox() {
+          const scopes = getCcfBgmActiveDialogScopes(document);
+          for (const scope of scopes) {
+            const tpl = findNativeBgmCheckboxTemplate(scope);
+            if (tpl instanceof HTMLElement) {
+              return {
+                outerHtml: tpl.outerHTML,
+                tagName: tpl.tagName,
+                classes: tpl.className,
+                parent: tpl.parentElement?.tagName,
+                parentClass: tpl.parentElement?.className
+              };
+            }
+          }
+          return null;
+        },
+        dumpNativeRow() {
+          const scopes = getCcfBgmActiveDialogScopes(document);
+          for (const scope of scopes) {
+            if (!scope.querySelectorAll) continue;
+            const rows = scope.querySelectorAll('.MuiListItemButton-root:not(.ccf-youtube-bgm-item)');
+            for (const r of rows) {
+              if (r.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+              const wrap = r.closest('.MuiListItem-root') || r;
+              return wrap.outerHTML.slice(0, 4000);
+            }
+          }
+          return null;
+        }
       }
     };
     window.__CCF_CHAT_NOTIFIER_DEBUG__ = ccfChatNotifierDebugApi;
@@ -3478,6 +3526,7 @@
     renderCcfYoutubeBgmLibraryItems();
     markCcfYoutubeBgmSlotButtons();
     startCcfBgmProgressLoop();
+    syncCcfBgmYoutubeMultiSelectUI();
   }
 
   function markCcfBgmDrawerSizeLocks() {
@@ -3818,6 +3867,7 @@
 
     insertCcfYoutubeBgmRowsByPlan(container, placementPlan);
     prepareCcfYoutubeBgmPlayerFromEntries(entries);
+    syncCcfBgmYoutubeMultiSelectUI();
   }
 
   function findCcfYoutubeBgmInsertionContainer(listRoot) {
@@ -7464,6 +7514,16 @@
         will-change: transform !important;
       }
 
+      .ccf-youtube-bgm-multi-checkbox {
+        flex: 0 0 auto !important;
+        z-index: 2 !important;
+        pointer-events: auto !important;
+      }
+
+      .ccf-youtube-bgm-row-wrap[data-ccf-bgm-multi-selected="1"] > [role="button"] {
+        background-color: rgba(144, 202, 249, 0.12) !important;
+      }
+
       .ccf-youtube-bgm-row-wrap > [role="button"] {
         width: 100% !important;
         cursor: grab !important;
@@ -8023,6 +8083,270 @@
     }
     return false;
   }
+
+  // ========================================================================
+  // 복수선택 모드 연동: YouTube row에도 체크박스 + 일괄 작업 (delete/select-all)
+  // ========================================================================
+  const CCF_BGM_MS_CHECKBOX_CLASS = "ccf-youtube-bgm-multi-checkbox";
+  const CCF_BGM_MS_SELECTED_ATTR = "data-ccf-bgm-multi-selected";
+  const CCF_BGM_MS_BATCH_LABEL_RE = {
+    delete: /^(削除|削除する|消去|刪除|Delete|Remove|삭제|지우기)$/i,
+    selectAll: /(全て選択|全選択|すべて選択|Select\s*all|전체\s*선택|모두\s*선택)/i,
+    unselectAll: /(全て解除|全解除|すべて解除|Deselect|선택\s*해제|모두\s*해제)/i
+  };
+
+  const ccfBgmMultiSelectedEntries = new Set();
+
+  function getCcfBgmActiveDialogScopes(rootScope) {
+    const scope = rootScope instanceof Element ? rootScope : document;
+    const found = scope.querySelectorAll
+      ? scope.querySelectorAll('[role="dialog"], .MuiDialog-root, .MuiDrawer-root')
+      : [];
+    return found.length ? [...found] : [document];
+  }
+
+  function findNativeBgmCheckboxTemplate(scope) {
+    if (!scope || !scope.querySelectorAll) return null;
+    const muiBoxes = scope.querySelectorAll(
+      '.MuiListItem-root .MuiCheckbox-root,' +
+      ' .MuiListItemButton-root .MuiCheckbox-root'
+    );
+    for (const cb of muiBoxes) {
+      if (!(cb instanceof HTMLElement)) continue;
+      if (cb.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+      return cb;
+    }
+    const inputs = scope.querySelectorAll(
+      '.MuiListItem-root input[type="checkbox"],' +
+      ' .MuiListItemButton-root input[type="checkbox"]'
+    );
+    for (const inp of inputs) {
+      if (!(inp instanceof HTMLElement)) continue;
+      if (inp.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+      return inp.closest('.MuiCheckbox-root, .MuiButtonBase-root') || inp;
+    }
+    return null;
+  }
+
+  function isCcfBgmMultiSelectModeForScope(scope) {
+    return !!findNativeBgmCheckboxTemplate(scope);
+  }
+
+  function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {
+    if (!(row instanceof HTMLElement)) return;
+    let existing = row.querySelector('.' + CCF_BGM_MS_CHECKBOX_CLASS);
+
+    if (!template) {
+      if (existing) existing.remove();
+      row.removeAttribute(CCF_BGM_MS_SELECTED_ATTR);
+      return;
+    }
+
+    if (!existing) {
+      const clone = template.cloneNode(true);
+      if (!(clone instanceof HTMLElement)) return;
+      clone.classList.add(CCF_BGM_MS_CHECKBOX_CLASS);
+      // 키보드 포커스 가능
+      if (!clone.hasAttribute('tabindex')) {
+        clone.setAttribute('tabindex', '0');
+      }
+      clone.removeAttribute('data-ccf-bgm-slot-key');
+      // 우리 row의 MuiListItem-root 시작 위치에 prepend
+      const listItem = row.querySelector('.MuiListItem-root');
+      const mountTarget = listItem instanceof HTMLElement ? listItem : row;
+      mountTarget.insertBefore(clone, mountTarget.firstChild);
+
+      // 클릭 가로채기 — 우리 토글로 처리
+      clone.addEventListener('pointerdown', (event) => {
+        // drag 핸들러가 우리 체크박스를 잡아가지 않도록
+        event.stopPropagation();
+      }, true);
+      clone.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+        const entryKey = row.dataset.ccfYoutubeBgmEntry;
+        if (!entryKey) return;
+        toggleCcfBgmMultiSelect(entryKey);
+        syncCcfBgmYoutubeMultiSelectUI();
+      }, true);
+      clone.addEventListener('keydown', (event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        event.preventDefault();
+        event.stopPropagation();
+        const entryKey = row.dataset.ccfYoutubeBgmEntry;
+        if (!entryKey) return;
+        toggleCcfBgmMultiSelect(entryKey);
+        syncCcfBgmYoutubeMultiSelectUI();
+      }, true);
+
+      existing = clone;
+    }
+
+    existing.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
+      if (inp instanceof HTMLInputElement) {
+        inp.checked = !!selected;
+      }
+    });
+    if (selected) {
+      existing.classList.add('Mui-checked');
+      row.setAttribute(CCF_BGM_MS_SELECTED_ATTR, '1');
+    } else {
+      existing.classList.remove('Mui-checked');
+      row.removeAttribute(CCF_BGM_MS_SELECTED_ATTR);
+    }
+  }
+
+  function toggleCcfBgmMultiSelect(entryKey) {
+    if (!entryKey) return;
+    if (ccfBgmMultiSelectedEntries.has(entryKey)) {
+      ccfBgmMultiSelectedEntries.delete(entryKey);
+    } else {
+      ccfBgmMultiSelectedEntries.add(entryKey);
+    }
+  }
+
+  function clearCcfBgmMultiSelect() {
+    if (!ccfBgmMultiSelectedEntries.size) return;
+    ccfBgmMultiSelectedEntries.clear();
+  }
+
+  function syncCcfBgmYoutubeMultiSelectUI() {
+    try {
+      getCcfBgmActiveDialogScopes(document).forEach((scope) => {
+        const template = findNativeBgmCheckboxTemplate(scope);
+        const rows = (scope && scope.querySelectorAll)
+          ? scope.querySelectorAll('.ccf-youtube-bgm-row-wrap')
+          : [];
+        if (!template && ccfBgmMultiSelectedEntries.size) {
+          clearCcfBgmMultiSelect();
+        }
+        rows.forEach((row) => {
+          const entryKey = row.dataset.ccfYoutubeBgmEntry || "";
+          const selected = ccfBgmMultiSelectedEntries.has(entryKey);
+          ensureCcfBgmYoutubeRowCheckbox(row, template, selected);
+        });
+      });
+    } catch (err) {
+      debugLog("bgm-multi-select-sync-failed", serializeError(err));
+    }
+  }
+
+  function deleteCcfBgmSelectedYoutubeEntries(reason = "multi-select") {
+    if (!ccfBgmMultiSelectedEntries.size) return 0;
+    const keys = [...ccfBgmMultiSelectedEntries];
+    let removed = 0;
+    keys.forEach((entryKey) => {
+      if (!ccfBgmSlotMap.has(entryKey)) {
+        ccfBgmMultiSelectedEntries.delete(entryKey);
+        return;
+      }
+      if (ccfBgmActiveEntryKey === entryKey) {
+        try { stopCcfYoutubeBgm("youtube-bgm-remove"); } catch (_) {}
+      }
+      try { rememberCcfBgmDeletedEntry(entryKey); } catch (_) {}
+      ccfBgmSlotMap.delete(entryKey);
+      ccfBgmMultiSelectedEntries.delete(entryKey);
+      removed += 1;
+    });
+    if (removed) {
+      try { persistCcfBgmSlotMap(); } catch (_) {}
+      try { renderCcfYoutubeBgmLibraryItems(); } catch (_) {}
+      try { markCcfYoutubeBgmSlotButtons(); } catch (_) {}
+      try { updateCcfBgmProgressBar(); } catch (_) {}
+      debugLog("bgm-multi-select-delete", { reason, removed });
+    }
+    return removed;
+  }
+
+  function areAllNativeBgmRowsChecked(scope) {
+    if (!(scope instanceof Element)) return false;
+    const checkboxes = scope.querySelectorAll(
+      '.MuiListItem-root input[type="checkbox"],' +
+      ' .MuiListItemButton-root input[type="checkbox"]'
+    );
+    let total = 0, checked = 0;
+    for (const inp of checkboxes) {
+      if (!(inp instanceof HTMLInputElement)) continue;
+      if (inp.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+      total += 1;
+      if (inp.checked) checked += 1;
+    }
+    return total > 0 && total === checked;
+  }
+
+  function selectAllCcfBgmYoutubeEntriesInScope(scope) {
+    if (!(scope instanceof Element)) return;
+    const rows = scope.querySelectorAll('.ccf-youtube-bgm-row-wrap');
+    rows.forEach((row) => {
+      const entryKey = row.dataset.ccfYoutubeBgmEntry;
+      if (entryKey) ccfBgmMultiSelectedEntries.add(entryKey);
+    });
+  }
+
+  function handleCcfBgmMultiSelectBatchClick(event) {
+    const button = event.target instanceof Element
+      ? event.target.closest('button, [role="button"]')
+      : null;
+    if (!(button instanceof HTMLElement)) return;
+    if (button.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover, .ccf-youtube-bgm-player-dock')) return;
+    if (button.classList.contains(CCF_BGM_MS_CHECKBOX_CLASS)) return;
+    // 개별 row 안에 있는 액션 버튼은 일괄 액션이 아님 (개별 편집/재생/삭제)
+    if (button.closest('.MuiListItem-root, .MuiListItemButton-root')) return;
+
+    const scope = button.closest('[role="dialog"], .MuiDialog-root, .MuiDrawer-root');
+    if (!scope) return;
+    if (!isCcfBgmMultiSelectModeForScope(scope)) return;
+
+    const rawLabel = (button.getAttribute('aria-label') || button.textContent || '').trim();
+    if (!rawLabel) return;
+    const label = rawLabel.replace(/\s+/g, ' ');
+
+    if (CCF_BGM_MS_BATCH_LABEL_RE.delete.test(label)) {
+      if (ccfBgmMultiSelectedEntries.size) {
+        // 다음 tick에서 실행 — native delete가 끝난 뒤 우리 entry 정리
+        const targetScope = scope;
+        window.setTimeout(() => {
+          deleteCcfBgmSelectedYoutubeEntries("batch-delete");
+          syncCcfBgmYoutubeMultiSelectUI();
+        }, 0);
+      }
+    } else if (CCF_BGM_MS_BATCH_LABEL_RE.selectAll.test(label) || CCF_BGM_MS_BATCH_LABEL_RE.unselectAll.test(label)) {
+      const targetScope = scope;
+      window.setTimeout(() => {
+        if (areAllNativeBgmRowsChecked(targetScope)) {
+          selectAllCcfBgmYoutubeEntriesInScope(targetScope);
+        } else {
+          clearCcfBgmMultiSelect();
+        }
+        syncCcfBgmYoutubeMultiSelectUI();
+      }, 30);
+    }
+  }
+
+  function handleCcfBgmMultiSelectHeaderChange(event) {
+    const inp = event.target;
+    if (!(inp instanceof HTMLInputElement) || inp.type !== 'checkbox') return;
+    if (inp.closest('.MuiListItem-root, .MuiListItemButton-root, .ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) return;
+    const scope = inp.closest('[role="dialog"], .MuiDialog-root, .MuiDrawer-root');
+    if (!scope || !isCcfBgmMultiSelectModeForScope(scope)) return;
+    if (inp.checked) {
+      selectAllCcfBgmYoutubeEntriesInScope(scope);
+    } else {
+      clearCcfBgmMultiSelect();
+    }
+    syncCcfBgmYoutubeMultiSelectUI();
+  }
+
+  document.addEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
+  document.addEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
+  registerTeardown(() => {
+    document.removeEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
+    document.removeEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
+    clearCcfBgmMultiSelect();
+  });
 
   function handleCcfNativeBgmPointerDownDelegated(event) {
     if (event.button !== 0) return;
