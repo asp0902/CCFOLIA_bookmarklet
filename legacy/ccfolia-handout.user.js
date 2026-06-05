@@ -85,14 +85,16 @@
   async function loadAll() {
     const tk = toolkit();
     if (!tk?.storage?.getRoomData) {
-      return { handouts: [], myCharacter: "" };
+      return { handouts: [], myCharacter: "", plList: [] };
     }
     const record = await tk.storage.getRoomData(STORAGE_FEATURE, getCurrentRoomKey());
     const value = record?.value;
-    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "" };
+    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [] };
+    const handouts = Array.isArray(value.handouts) ? value.handouts.map(ensurePermissions) : [];
     return {
-      handouts: Array.isArray(value.handouts) ? value.handouts : [],
-      myCharacter: typeof value.myCharacter === "string" ? value.myCharacter : ""
+      handouts,
+      myCharacter: typeof value.myCharacter === "string" ? value.myCharacter : "",
+      plList: Array.isArray(value.plList) ? value.plList.filter((s) => typeof s === "string" && s.trim()) : []
     };
   }
 
@@ -108,7 +110,8 @@
     activeTab: "list",      // list | new | settings
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
-    data: { handouts: [], myCharacter: "" },
+    data: { handouts: [], myCharacter: "", plList: [] },
+    formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     root: null,
     shadow: null,
     mountObserver: null,
@@ -199,15 +202,48 @@
     return out.join("");
   }
 
-  // ===== viewers 매칭 =====
-  // viewers: 캐릭터명 배열. "*" 또는 "all" 포함 시 전체 공개.
-  function canViewSecret(handout, myCharacter) {
-    if (!handout) return false;
-    const viewers = Array.isArray(handout.viewers) ? handout.viewers : [];
-    if (viewers.some((v) => v === "*" || /^all$/i.test(String(v).trim()))) return true;
-    const me = removeSpaces(myCharacter).toLowerCase();
-    if (!me) return false;
-    return viewers.some((v) => removeSpaces(v).toLowerCase() === me);
+  // ===== 권한 모델 =====
+  // handout.permissions = { "<name|*>": { view, secret, edit } }
+  // "*" = 플레이어 전체
+  const PERM_COLS = ["view", "secret", "edit"];
+  const ALL_KEY = "*";
+
+  function ensurePermissions(h) {
+    if (!h.permissions || typeof h.permissions !== "object") h.permissions = {};
+    // 레거시 viewers 배열 → secret 권한자로 마이그레이션
+    if (Array.isArray(h.viewers)) {
+      for (const v of h.viewers) {
+        if (!v) continue;
+        const key = String(v).trim();
+        if (!key) continue;
+        if (!h.permissions[key]) h.permissions[key] = { view: false, secret: true, edit: false };
+      }
+    }
+    return h;
+  }
+
+  function permFlag(h, key, col) {
+    const p = h?.permissions?.[key];
+    return !!p?.[col];
+  }
+
+  function canView(h, name) {
+    if (!h) return false;
+    if (permFlag(h, ALL_KEY, "view")) return true;
+    if (!name) return false;
+    return permFlag(h, name, "view");
+  }
+  function canViewSecret(h, name) {
+    if (!h) return false;
+    if (permFlag(h, ALL_KEY, "secret")) return true;
+    if (!name) return false;
+    return permFlag(h, name, "secret");
+  }
+  function canEdit(h, name) {
+    if (!h) return false;
+    if (permFlag(h, ALL_KEY, "edit")) return true;
+    if (!name) return false;
+    return permFlag(h, name, "edit");
   }
 
   // ===== UI — 코코포리아 다크 톤, 이동/리사이즈 floating window =====
@@ -395,6 +431,77 @@
       cursor: nwse-resize; touch-action: none;
       background-image: linear-gradient(135deg, transparent 0%, transparent 50%, rgba(255,255,255,.18) 50%, rgba(255,255,255,.18) 60%, transparent 60%, transparent 70%, rgba(255,255,255,.18) 70%, rgba(255,255,255,.18) 80%, transparent 80%);
       z-index: 5;
+    }
+    /* ===== 편집 화면 (이미지 모방) ===== */
+    .handout-edit-header {
+      display: flex; align-items: center; gap: 4px; margin-bottom: 18px;
+    }
+    .handout-edit-header .title-input {
+      flex: 1; background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
+      color: #fff; font-size: 0.875rem; padding: 8px 12px;
+      transition: border-color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms;
+    }
+    .handout-edit-header .title-input::placeholder { color: rgba(255,255,255,.4); }
+    .handout-edit-header .title-input:hover { border-color: rgba(255,255,255,.4); }
+    .handout-edit-header .title-input:focus { outline: none; border-color: #fff; background: rgba(0,0,0,.5); }
+    .handout-edit-header .action-icon {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 4px;
+      color: #fff; display: inline-grid; place-items: center;
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    .handout-edit-header .action-icon:hover { background: rgba(255,255,255,.1); }
+    .handout-edit-cols {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px;
+    }
+    .handout-edit-cols .col label {
+      display: block; font-size: 0.9375rem; font-weight: 500; color: #fff;
+      margin-bottom: 8px;
+    }
+    .handout-edit-cols .col textarea {
+      width: 100%; min-height: 140px; resize: vertical;
+      background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
+      padding: 10px 12px; color: #fff;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 0.875rem; line-height: 1.55;
+      transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    .handout-edit-cols .col textarea:hover { border-color: rgba(255,255,255,.35); }
+    .handout-edit-cols .col textarea:focus { outline: none; border-color: #fff; }
+    .perm-section { margin-top: 4px; }
+    .perm-title {
+      font-size: 0.9375rem; font-weight: 700; color: #fff; margin-bottom: 12px;
+    }
+    .perm-grid {
+      display: grid; grid-template-columns: 1fr 56px 56px 56px 76px;
+      gap: 4px 12px; align-items: center;
+    }
+    .perm-grid .head {
+      font-size: 0.8125rem; color: rgba(255,255,255,.75);
+      padding: 6px 0; text-align: center; font-weight: 500;
+    }
+    .perm-grid .head.name-col { text-align: left; padding-left: 0; }
+    .perm-grid .perm-name {
+      color: #fff; padding: 8px 0; font-size: 0.875rem; line-height: 1.4;
+    }
+    .perm-grid .perm-cell {
+      display: flex; justify-content: center; align-items: center;
+    }
+    .perm-grid .perm-cell input[type="checkbox"] {
+      width: 18px; height: 18px; accent-color: #fff; cursor: pointer; margin: 0;
+    }
+    .popup-btn {
+      background: #c62828; color: #fff; border: 0; border-radius: 4px;
+      padding: 5px 16px; font-size: 0.8125rem; font-weight: 600;
+      cursor: pointer; letter-spacing: 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,.25);
+      transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+    }
+    .popup-btn:hover { background: #b71c1c; }
+    .popup-btn:active { background: #8e0000; }
+    .perm-hint {
+      margin-top: 12px; font-size: 0.75rem; color: rgba(255,255,255,.5);
     }
     /* CCFOLIA는 dark 전용 → light prefers 분기 없음 */
   `;
@@ -636,10 +743,12 @@
       `;
     }
     const cards = state.data.handouts.map((h) => {
+      ensurePermissions(h);
       const canSecret = previewAsPl ? canViewSecret(h, me) : true;
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
-      const viewersLabel = (Array.isArray(h.viewers) && h.viewers.length)
-        ? h.viewers.map((v) => v === "*" ? "전체" : v).join(", ")
+      const permKeys = Object.keys(h.permissions || {});
+      const viewersLabel = permKeys.length
+        ? permKeys.map((k) => k === ALL_KEY ? "전체" : k).join(", ")
         : "GM 전용";
       return `
         <article class="card" data-id="${escapeHtml(h.id)}">
@@ -678,54 +787,101 @@
     return state.data.handouts.find((h) => h.id === id) || null;
   }
 
+  // 권한 표에 표시할 행 목록 만들기
+  function permissionRowKeys(h) {
+    const myChar = removeSpaces(state.data.myCharacter);
+    const plList = (state.data.plList || []).map(removeSpaces).filter(Boolean);
+    const rows = [];
+    rows.push({ key: ALL_KEY, label: "플레이어 전체" });
+    if (myChar) rows.push({ key: myChar, label: `${myChar} (GM)` });
+    for (const pl of plList) {
+      if (pl === myChar) continue;
+      if (rows.some((r) => r.key === pl)) continue;
+      rows.push({ key: pl, label: pl });
+    }
+    // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
+    const perms = h.permissions || {};
+    for (const k of Object.keys(perms)) {
+      if (rows.some((r) => r.key === k)) continue;
+      rows.push({ key: k, label: k });
+    }
+    return rows;
+  }
+
+  const ICON_SAVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`;
+  const ICON_TRASH = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>`;
+  const ICON_X = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+
   function renderEdit() {
     const editing = state.editingId ? findHandout(state.editingId) : null;
-    const h = editing || { id: "", title: "", image: "", description: "", gmNotes: "", viewers: [], tags: [] };
-    const viewersStr = (h.viewers || []).join(", ");
-    const tagsStr = (h.tags || []).join(", ");
+    const base = editing || { id: "", title: "", image: "", description: "", gmNotes: "", permissions: {}, tags: [] };
+    const h = ensurePermissions({ ...base, permissions: { ...(base.permissions || {}) } });
+    // 폼 권한 상태 초기화 (editingId 변경 시마다 갱신)
+    if (state.formPermissionsForId !== state.editingId) {
+      state.formPermissions = JSON.parse(JSON.stringify(h.permissions || {}));
+      state.formPermissionsForId = state.editingId;
+    }
+    const permH = { permissions: state.formPermissions };
+    const rows = permissionRowKeys(h);
+    const rowsHtml = rows.map((r) => {
+      const key = r.key;
+      const view = permFlag(permH, key, "view");
+      const secret = permFlag(permH, key, "secret");
+      const edit = permFlag(permH, key, "edit");
+      return `
+        <div class="perm-name">${escapeHtml(r.label)}</div>
+        <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="view" ${view ? "checked" : ""}></div>
+        <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="secret" ${secret ? "checked" : ""}></div>
+        <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="edit" ${edit ? "checked" : ""}></div>
+        <div class="perm-cell"><button class="popup-btn" data-action="row-popup" data-key="${escapeAttr(key)}">팝업</button></div>
+      `;
+    }).join("");
+
     return `
-      <div class="field">
-        <label>제목</label>
-        <input type="text" data-field="title" value="${escapeHtml(h.title)}" placeholder="예: 0번 핸드아웃 - 마을의 비밀">
+      <div class="handout-edit-header">
+        <input class="title-input" type="text" data-field="title" value="${escapeHtml(h.title)}" placeholder="핸드아웃 제목">
+        <button class="action-icon" data-action="save-handout" title="저장" aria-label="저장">${ICON_SAVE}</button>
+        ${editing ? `<button class="action-icon" data-action="delete-handout" data-id="${escapeHtml(editing.id)}" title="삭제" aria-label="삭제">${ICON_TRASH}</button>` : ""}
+        <button class="action-icon" data-action="cancel-edit" title="닫기" aria-label="닫기">${ICON_X}</button>
       </div>
-      <div class="field">
-        <label>이미지 URL (선택)</label>
-        <input type="url" data-field="image" value="${escapeHtml(h.image)}" placeholder="https://...">
+      <div class="handout-edit-cols">
+        <div class="col">
+          <label>공개 핸드아웃</label>
+          <textarea data-field="description" placeholder="공개 권한자에게 보이는 본문 (마크다운)">${escapeHtml(h.description)}</textarea>
+        </div>
+        <div class="col">
+          <label>비밀 핸드아웃</label>
+          <textarea data-field="gmNotes" placeholder="비밀 권한자에게만 보이는 본문 (마크다운)">${escapeHtml(h.gmNotes)}</textarea>
+        </div>
       </div>
-      <div class="field">
-        <label>공개 본문 (마크다운)</label>
-        <textarea data-field="description" placeholder="모두 또는 viewer로 지정된 PL에게 보이는 내용">${escapeHtml(h.description)}</textarea>
-        <span class="hint">**굵게** *기울임* \`코드\` [링크](url) ![이미지](url) # 제목 - 리스트 > 인용</span>
-        <div class="preview" data-preview="description">${renderMarkdown(h.description)}</div>
+      <div class="perm-section">
+        <div class="perm-title">플레이어 권한</div>
+        <div class="perm-grid">
+          <div class="head name-col">이름</div>
+          <div class="head">공개</div>
+          <div class="head">비밀</div>
+          <div class="head">수정</div>
+          <div class="head">팝업</div>
+          ${rowsHtml}
+        </div>
+        <div class="perm-hint">PL 이름은 설정 탭에서 추가할 수 있습니다.</div>
       </div>
-      <div class="field">
-        <label>GM 전용 본문 (비밀)</label>
-        <textarea data-field="gmNotes" placeholder="GM만 볼 수 있는 내용. 1단계에선 본인 화면 + viewer로 지정된 PL의 툴킷에서만 노출">${escapeHtml(h.gmNotes)}</textarea>
-        <div class="preview" data-preview="gmNotes">${renderMarkdown(h.gmNotes)}</div>
-      </div>
-      <div class="field">
-        <label>비밀 열람 권한 (viewers)</label>
-        <input type="text" data-field="viewers" value="${escapeHtml(viewersStr)}" placeholder="캐릭터명을 콤마로 구분. * 입력 시 전체 공개">
-        <span class="hint">예: 김탐정, 이조수 / 전체 공개는 *</span>
-      </div>
-      <div class="field">
-        <label>태그 (선택)</label>
-        <input type="text" data-field="tags" value="${escapeHtml(tagsStr)}" placeholder="콤마로 구분">
-      </div>
-      <div class="row">
-        <button class="btn" data-action="save-handout">${editing ? "변경 저장" : "핸드아웃 만들기"}</button>
-        <button class="btn secondary" data-action="cancel-edit">취소</button>
-        ${editing ? `<span class="spacer" style="flex:1"></span><button class="btn danger" data-action="delete-handout" data-id="${escapeHtml(editing.id)}">삭제</button>` : ""}
-      </div>
+      <input type="hidden" data-field="image" value="${escapeHtml(h.image || "")}">
     `;
   }
 
   function renderSettings() {
+    const plListStr = (state.data.plList || []).join(", ");
     return `
       <div class="field">
-        <label>내 캐릭터명 (PL 시점 판정용)</label>
-        <input type="text" data-field="myCharacter" value="${escapeHtml(state.data.myCharacter)}" placeholder="현재 사용 중인 캐릭터의 이름. 핸드아웃 viewers와 일치하면 비밀 열람 가능">
-        <span class="hint">상단 캐릭터 드롭다운에서 고른 이름과 정확히 같게 적어주세요. (1단계는 수동 입력, 자동 감지는 2단계 예정)</span>
+        <label>내 캐릭터명 (GM 본인 이름)</label>
+        <input type="text" data-field="myCharacter" value="${escapeHtml(state.data.myCharacter)}" placeholder="권한 표에 'GM'으로 표시될 이름">
+        <span class="hint">상단 캐릭터 드롭다운에서 고른 이름과 정확히 같게 적어주세요.</span>
+      </div>
+      <div class="field">
+        <label>PL 목록</label>
+        <input type="text" data-field="plList" value="${escapeHtml(plListStr)}" placeholder="콤마로 구분 (예: PL1, PL2, 김탐정)">
+        <span class="hint">권한 표에 표시할 플레이어 이름들. (B단계: Suite Manager presence에서 자동 채움 예정)</span>
       </div>
       <div class="row">
         <button class="btn" data-action="save-settings">저장</button>
@@ -750,18 +906,19 @@
     const action = btn.dataset.action;
     const id = btn.dataset.id;
     if (action === "close") { closePanel(); return; }
-    if (action === "new-handout") { state.editingId = null; setTab("edit"); return; }
-    if (action === "edit-handout") { state.editingId = id; setTab("edit"); return; }
+    if (action === "new-handout") { state.editingId = null; state.formPermissionsForId = null; setTab("edit"); return; }
+    if (action === "edit-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "view-handout") { openDetail(id); return; }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
-    if (action === "cancel-edit") { state.editingId = null; setTab("list"); return; }
+    if (action === "cancel-edit") { state.editingId = null; state.formPermissionsForId = null; setTab("list"); return; }
     if (action === "save-settings") { saveSettingsFromForm(); return; }
     if (action === "export") { exportJson(); return; }
     if (action === "import") { importJson(); return; }
     if (action === "close-detail") { closeDetail(); return; }
     if (action === "toggle-detail-secret") { toggleDetailSecret(btn); return; }
+    if (action === "row-popup") { rowPopupPlaceholder(btn.dataset.key); return; }
   }
 
   function onShadowChange(event) {
@@ -769,7 +926,20 @@
     if (cb) {
       state.plPreview = !!cb.checked;
       render();
+      return;
     }
+    const perm = event.target.closest('input[data-perm-key][data-perm-col]');
+    if (perm) {
+      const key = perm.dataset.permKey;
+      const col = perm.dataset.permCol;
+      if (!state.formPermissions[key]) state.formPermissions[key] = { view: false, secret: false, edit: false };
+      state.formPermissions[key][col] = !!perm.checked;
+      return;
+    }
+  }
+
+  function rowPopupPlaceholder(key) {
+    toast(`(1단계) "${key === ALL_KEY ? "플레이어 전체" : key}" 팝업 송신은 B단계에서 활성화됩니다.`);
   }
 
   // 실시간 마크다운 프리뷰
@@ -793,13 +963,19 @@
     const image = getFieldValue("image").trim();
     const description = getFieldValue("description");
     const gmNotes = getFieldValue("gmNotes");
-    const viewers = getFieldValue("viewers").split(",").map((s) => s.trim()).filter(Boolean);
-    const tags = getFieldValue("tags").split(",").map((s) => s.trim()).filter(Boolean);
+    // 권한 — formPermissions 에서 비어있는(모두 false) 항목은 정리
+    const permissions = {};
+    for (const [k, v] of Object.entries(state.formPermissions || {})) {
+      if (v && (v.view || v.secret || v.edit)) {
+        permissions[k] = { view: !!v.view, secret: !!v.secret, edit: !!v.edit };
+      }
+    }
     const id = state.editingId || uuid();
     const now = new Date().toISOString();
     const existing = state.editingId ? findHandout(state.editingId) : null;
     const handout = {
-      id, title, image, description, gmNotes, viewers, tags,
+      id, title, image, description, gmNotes, permissions,
+      tags: existing?.tags || [],
       createdAt: existing?.createdAt || now,
       updatedAt: now
     };
@@ -811,13 +987,18 @@
     }
     await saveAll(state.data);
     state.editingId = null;
+    state.formPermissionsForId = null;
+    state.formPermissions = {};
     toast(existing ? "변경 저장됨" : "새 핸드아웃 추가됨");
     setTab("list");
   }
 
   async function saveSettingsFromForm() {
     const me = getFieldValue("myCharacter").trim();
+    const plListRaw = getFieldValue("plList");
+    const plList = plListRaw.split(",").map((s) => s.trim()).filter(Boolean);
     state.data.myCharacter = me;
+    state.data.plList = plList;
     await saveAll(state.data);
     toast("설정 저장됨");
     render();
