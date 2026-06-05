@@ -1820,20 +1820,21 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.4 (greeting + chat-watcher)");
+    console.info("[ccf-handout] init — version 0.1.5 (greeting tweaks + data race fix)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
-    startChatWatcher();
-    // 룸 진입 시 인사 팝업 (룸별 1회)
-    setTimeout(() => maybeShowGreeting(), 800);
     // 최초 + 지연 재시도 (React 렌더 늦을 수 있음)
     mountIcon();
     [200, 600, 1500, 3000].forEach((ms) => {
       setTimeout(() => { if (active) mountIcon(); }, ms);
     });
-    // 데이터 사전 로드
-    loadAll().then((d) => { state.data = d; }).catch(() => {});
+    // 데이터 로드 완료 후에야 watcher/팝업 시작 — 자동 추가 race 방지
+    loadAll().then((d) => {
+      state.data = d;
+      startChatWatcher();
+      setTimeout(() => maybeShowGreeting(), 800);
+    }).catch(reportError);
   }
 
   if (document.readyState === "loading") {
