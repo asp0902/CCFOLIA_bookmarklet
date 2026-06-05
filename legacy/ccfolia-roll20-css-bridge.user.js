@@ -4971,7 +4971,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.16 (single divider via SPEAKER_START only)");
+    console.info("[ccf-prose-mode] active v0.0.17 (leader body margin 0)");
   }
 
   function teardown() {
@@ -4990,7 +4990,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.16",
+    version: "0.0.17",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
