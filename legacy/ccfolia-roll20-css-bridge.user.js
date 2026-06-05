@@ -4872,16 +4872,25 @@
     style.dataset.capybaraToolkitStyle = "prose-mode";
     const WRAP = CONT_ATTR + "-wrap";
     style.textContent = [
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
+      // 아바타 자리는 유지 (들여쓰기 보존), 보이지만 않게
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { visibility: hidden !important; }`,
+      // 이름 + 시간 가린다
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; border: 0 !important; }`,
+      // li 자체 패딩 + 보더
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 2px !important; padding-bottom: 2px !important; border: 0 !important; box-shadow: none !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]::before, .MuiListItem-root[${CONT_ATTR}="1"]::after { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
-      // wrapper(부모) — JS로 attr 부여
-      `[${WRAP}="1"] { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; }`,
-      `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root, [${WRAP}="1"] + hr, [${WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
-      // CSS :has() — 부모 자동 탐색 (Chrome 105+)
-      `div:has(> .MuiListItem-root[${CONT_ATTR}="1"]) { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; }`,
-      `div:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, div:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root { display: none !important; }`
+      // wrapper(부모) — JS로 attr 부여. 모든 방향 보더/구분선 제거.
+      `[${WRAP}="1"] { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; }`,
+      `[${WRAP}="1"]::before, [${WRAP}="1"]::after { display: none !important; }`,
+      `[${WRAP}="1"] > hr, [${WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
+      // 그 wrapper의 인접 형제 divider도 숨김 (앞 wrapper의 아래쪽 hr 가능성)
+      `[${WRAP}="1"] + hr, [${WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
+      `[${WRAP}="1"] ~ hr:first-of-type { display: none !important; }`,
+      // CSS :has() — 부모 자동 탐색 (Chrome 105+) 보강
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) { border: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > hr, *:has(> .MuiListItem-root[${CONT_ATTR}="1"]) > .MuiDivider-root { display: none !important; }`,
+      `*:has(> .MuiListItem-root[${CONT_ATTR}="1"])::before, *:has(> .MuiListItem-root[${CONT_ATTR}="1"])::after { display: none !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -4933,7 +4942,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.3 (wrapper border + divider hide)");
+    console.info("[ccf-prose-mode] active v0.0.4 (preserve avatar slot)");
   }
 
   function teardown() {
@@ -4951,7 +4960,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.3",
+    version: "0.0.4",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
