@@ -92,6 +92,12 @@
       return pushHandoutToFirestore(h);
     },
     fetchAll() { return fetchAllFromFirestore(); },
+    subscribe() { return subscribeToRoomHandouts(); },
+    unsubscribe() {
+      try { unsubHandouts?.(); } catch (_) {}
+      unsubHandouts = null;
+      subscribedRoom = null;
+    },
     disable() { return teardown(); }
   };
 
@@ -852,6 +858,103 @@
     const docs = [];
     snap.forEach((d) => docs.push(d.data()));
     return docs;
+  }
+
+  // ===== Firestore 실시간 구독 (수신측) =====
+  let unsubHandouts = null;
+  let subscribedRoom = null;
+
+  async function subscribeToRoomHandouts() {
+    const fb = await initFirebase();
+    if (!fb) return;
+    const { collection, onSnapshot } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") return;
+    if (subscribedRoom === roomKey && unsubHandouts) return;
+
+    if (unsubHandouts) { try { unsubHandouts(); } catch (_) {} unsubHandouts = null; }
+
+    const col = collection(fb.db, "rooms", roomKey, "handouts");
+    subscribedRoom = roomKey;
+    console.info("[ccf-handout] subscribing to room:", roomKey);
+    unsubHandouts = onSnapshot(col,
+      (snap) => {
+        snap.docChanges().forEach((change) => {
+          const data = change.doc.data();
+          if (change.type === "removed") {
+            ingestRemoteRemove(data.id);
+          } else {
+            ingestRemoteHandout(data, change.type);
+          }
+        });
+      },
+      (error) => {
+        console.error("[ccf-handout] subscribe error:", error);
+        toast("실시간 수신 실패 — 콘솔 확인");
+      }
+    );
+    registerTeardown(() => {
+      try { unsubHandouts?.(); } catch (_) {}
+      unsubHandouts = null;
+      subscribedRoom = null;
+    });
+  }
+
+  function ingestRemoteHandout(data, changeType) {
+    if (!fbState) return;
+    if (!data || !data.id) return;
+    // 본인이 만든 핸드아웃 — 이미 local에 있음. skip
+    if (data.ownerUid === fbState.uid) return;
+
+    const me = state.data.myCharacter;
+    const hasPublic = canView(data, me);
+    const hasSecret = canViewSecret(data, me);
+    if (!hasPublic && !hasSecret) {
+      console.info("[ccf-handout] remote skipped (no permission):", data.id, "as", me || "(미설정)");
+      return;
+    }
+
+    const handout = {
+      id: data.id,
+      title: data.title || "",
+      image: data.image || "",
+      description: data.description || "",
+      // 비밀 권한 없으면 gmNotes 비움 (Firestore에서 받지만 안 보여줌)
+      gmNotes: hasSecret ? (data.gmNotes || "") : "",
+      permissions: data.permissions || {},
+      tags: data.tags || [],
+      ownerUid: data.ownerUid,
+      ownerName: data.ownerName || "",
+      createdAt: data.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      _remote: true
+    };
+
+    const idx = state.data.handouts.findIndex((h) => h.id === data.id);
+    const isNew = idx === -1;
+    if (isNew) {
+      state.data.handouts.unshift(handout);
+      const who = data.ownerName ? ` (from ${data.ownerName})` : "";
+      toast(`새 핸드아웃 도착: "${data.title || "(제목없음)"}"${who}`);
+    } else {
+      state.data.handouts[idx] = handout;
+      if (changeType === "modified") {
+        toast(`핸드아웃 갱신: "${data.title || "(제목없음)"}"`);
+      }
+    }
+    saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
+    if (state.isOpen) render();
+  }
+
+  function ingestRemoteRemove(id) {
+    if (!id) return;
+    const before = state.data.handouts.length;
+    state.data.handouts = state.data.handouts.filter((h) => h.id !== id);
+    if (state.data.handouts.length !== before) {
+      saveAll(state.data).catch(() => {});
+      if (state.isOpen) render();
+      toast("핸드아웃이 삭제되었습니다.");
+    }
   }
 
   function initFirebase() {
@@ -2260,7 +2363,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.1 (Firestore push + delete)");
+    console.info("[ccf-handout] init — version 0.2.2 (subscribe + ingest)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
