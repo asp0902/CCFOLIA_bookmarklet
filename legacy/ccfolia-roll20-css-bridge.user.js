@@ -4940,10 +4940,8 @@
       const isLeader = !isCont && !!(author && author === nextAuthor);
       const isLast = isCont && nextAuthor !== author;
       // 화자 시작 = 직전 화자와 다른 메시지 (첫 메시지 제외)
-      // 다만 직전 메시지가 "단독"(양옆 모두 다른 화자)이면 본인 SPEAKER_START 제외
-      // → 단독 메시지의 위쪽 line 1개로 두 화자 boundary 표현
-      const prevWasLone = i >= 2 && authors[i - 1] !== authors[i - 2] && authors[i - 1] !== author;
-      const isSpeakerStart = i > 0 && !!author && author !== prevAuthor && !prevWasLone;
+      // lone 메시지(양옆 다른 화자) 위아래 모두 명시적 boundary를 그려 대칭 유지.
+      const isSpeakerStart = i > 0 && !!author && author !== prevAuthor;
       setOrRemove(li, CONT_ATTR, isCont);
       setOrRemove(li, LEADER, isLeader);
       setOrRemove(li, LAST, isLast);
@@ -4976,7 +4974,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.22 (lone speaker dedup)");
+    console.info("[ccf-prose-mode] active v0.0.23 (symmetric lone boundaries)");
   }
 
   function teardown() {
@@ -4995,7 +4993,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.22",
+    version: "0.0.23",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
