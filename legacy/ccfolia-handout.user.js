@@ -69,6 +69,9 @@
     locateAnchor() { return diagnoseAnchors(); },
     forceFloating() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountFloatingIcon(); return true; },
     remount() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountIcon(); return true; },
+    showGreeting() { maybeShowGreeting(); },
+    resetGreetingFlags() { return resetGreetingFlags(); },
+    forceGreeting() { resetGreetingFlags(); maybeShowGreeting(); },
     disable() { return teardown(); }
   };
 
@@ -545,6 +548,9 @@
     }
     .card-icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .card-icon-btn.danger:hover { background: rgba(244,67,54,.16); color: #ff6e60; }
+    .card .badges-row {
+      display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
+    }
     /* 설정 select */
     .settings-select {
       background-color: #1a1a1a; border: 1px solid rgba(255,255,255,.18);
@@ -748,13 +754,32 @@
   }
 
   function maybeShowGreeting() {
-    if (!active) return;
     const room = getCurrentRoomKey();
+    const greeted = isGreeted(room);
+    const skipped = isSkippedToday();
+    const alreadyMounted = greetingRoot && greetingRoot.isConnected;
+    console.info("[ccf-handout] maybeShowGreeting", {
+      active, room,
+      greeted, greetedKey: GREETING_STORAGE_PREFIX + room,
+      skipped, skipKey: GREETING_SKIP_DAY_KEY, skipValue: (()=>{ try{return localStorage.getItem(GREETING_SKIP_DAY_KEY)}catch{return null} })(),
+      alreadyMounted
+    });
+    if (!active) return;
     if (room === "global") return;            // 룸 밖에서는 안 띄움
-    if (isGreeted(room)) return;
-    if (isSkippedToday()) return;
-    if (greetingRoot && greetingRoot.isConnected) return;
+    if (greeted) return;
+    if (skipped) return;
+    if (alreadyMounted) return;
     mountGreeting(room);
+  }
+
+  // 디버그 — 콘솔에서 호출 가능
+  function resetGreetingFlags() {
+    const room = getCurrentRoomKey();
+    try {
+      localStorage.removeItem(GREETING_STORAGE_PREFIX + room);
+      localStorage.removeItem(GREETING_SKIP_DAY_KEY);
+      console.info("[ccf-handout] greeting flags cleared for room", room);
+    } catch (error) { console.warn(error); }
   }
 
   function mountGreeting(roomKey) {
@@ -1102,10 +1127,12 @@
         <article class="card" data-id="${escapeHtml(h.id)}">
           <div class="head">
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
-            ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
-            <span class="badge">${escapeHtml(viewersLabel)}</span>
             <button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>
             <button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>
+          </div>
+          <div class="badges-row">
+            ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
+            <span class="badge">${escapeHtml(viewersLabel)}</span>
           </div>
           <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
           <div class="actions">
@@ -1252,12 +1279,12 @@
           <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
         </div>
       </div>
-      <div class="row">
-        <button class="btn" data-action="save-settings">저장</button>
-      </div>
       <div class="field" style="margin-top:24px;">
         <label>룸</label>
         <div class="settings-room">${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</div>
+      </div>
+      <div class="row" style="justify-content:flex-end; margin-top:8px;">
+        <button class="btn" data-action="save-settings">저장</button>
       </div>
     `;
   }
