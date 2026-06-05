@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.55
+// @version      0.2.56
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -8132,12 +8132,39 @@
     return !!findNativeBgmCheckboxTemplate(scope);
   }
 
+  // MUI CheckBox svg path (체크된/안 된)
+  const CCF_BGM_MS_SVG_UNCHECKED_PATH = "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z";
+  const CCF_BGM_MS_SVG_CHECKED_PATH = "M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z";
+
+  function updateCcfBgmCheckboxVisual(checkboxEl, selected) {
+    if (!(checkboxEl instanceof HTMLElement)) return;
+    checkboxEl.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
+      if (inp instanceof HTMLInputElement) inp.checked = !!selected;
+    });
+    const svg = checkboxEl.querySelector('svg');
+    if (svg) {
+      const path = svg.querySelector('path');
+      if (path instanceof SVGPathElement) {
+        path.setAttribute('d', selected ? CCF_BGM_MS_SVG_CHECKED_PATH : CCF_BGM_MS_SVG_UNCHECKED_PATH);
+      }
+      svg.setAttribute('data-testid', selected ? 'CheckBoxIcon' : 'CheckBoxOutlineBlankIcon');
+    }
+    if (selected) {
+      checkboxEl.classList.add('Mui-checked');
+    } else {
+      checkboxEl.classList.remove('Mui-checked');
+    }
+  }
+
   function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {
     if (!(row instanceof HTMLElement)) return;
+    const WRAP_CLASS = CCF_BGM_MS_CHECKBOX_CLASS + '-wrap';
+    let existingWrap = row.querySelector('.' + WRAP_CLASS);
     let existing = row.querySelector('.' + CCF_BGM_MS_CHECKBOX_CLASS);
 
     if (!template) {
-      if (existing) existing.remove();
+      if (existingWrap) existingWrap.remove();
+      else if (existing) existing.remove();
       row.removeAttribute(CCF_BGM_MS_SELECTED_ATTR);
       return;
     }
@@ -8146,55 +8173,75 @@
       const clone = template.cloneNode(true);
       if (!(clone instanceof HTMLElement)) return;
       clone.classList.add(CCF_BGM_MS_CHECKBOX_CLASS);
-      // 키보드 포커스 가능
       if (!clone.hasAttribute('tabindex')) {
         clone.setAttribute('tabindex', '0');
       }
       clone.removeAttribute('data-ccf-bgm-slot-key');
-      // 우리 row의 MuiListItem-root 시작 위치에 prepend
+
+      // native checkbox의 parent(MuiListItemIcon-root 등)도 함께 복제해서 정렬 맞춤
+      let mountUnit = clone;
+      const nativeParent = template.parentElement;
+      if (nativeParent instanceof HTMLElement) {
+        const wrap = nativeParent.cloneNode(false);
+        if (wrap instanceof HTMLElement) {
+          wrap.innerHTML = "";
+          wrap.classList.add(WRAP_CLASS);
+          wrap.appendChild(clone);
+          mountUnit = wrap;
+        }
+      }
+
+      // row의 MuiListItem-root 첫 자식으로 prepend (sortable button 형제 X — listItem 안 시작)
       const listItem = row.querySelector('.MuiListItem-root');
       const mountTarget = listItem instanceof HTMLElement ? listItem : row;
-      mountTarget.insertBefore(clone, mountTarget.firstChild);
+      mountTarget.insertBefore(mountUnit, mountTarget.firstChild);
 
-      // 클릭 가로채기 — 우리 토글로 처리
-      clone.addEventListener('pointerdown', (event) => {
-        // drag 핸들러가 우리 체크박스를 잡아가지 않도록
-        event.stopPropagation();
-      }, true);
-      clone.addEventListener('click', (event) => {
+      const toggleHandler = (event) => {
         event.preventDefault();
         event.stopPropagation();
         if (typeof event.stopImmediatePropagation === 'function') {
           event.stopImmediatePropagation();
         }
         const entryKey = row.dataset.ccfYoutubeBgmEntry;
-        if (!entryKey) return;
+        if (!entryKey) {
+          debugLog("bgm-ms-toggle-no-key", { row: row.outerHTML.slice(0, 200) });
+          return;
+        }
         toggleCcfBgmMultiSelect(entryKey);
         syncCcfBgmYoutubeMultiSelectUI();
-      }, true);
-      clone.addEventListener('keydown', (event) => {
-        if (event.key !== ' ' && event.key !== 'Enter') return;
-        event.preventDefault();
+      };
+
+      // pointerdown은 drag handler가 가로채지 못하게 capture에서 stop
+      mountUnit.addEventListener('pointerdown', (event) => {
         event.stopPropagation();
-        const entryKey = row.dataset.ccfYoutubeBgmEntry;
-        if (!entryKey) return;
-        toggleCcfBgmMultiSelect(entryKey);
-        syncCcfBgmYoutubeMultiSelectUI();
+      }, true);
+      mountUnit.addEventListener('mousedown', (event) => {
+        event.stopPropagation();
+      }, true);
+      mountUnit.addEventListener('click', toggleHandler, true);
+      // input 자체에도 등록 (capture로 못 잡힐 케이스 백업)
+      const innerInput = clone.querySelector('input[type="checkbox"]');
+      if (innerInput instanceof HTMLInputElement) {
+        innerInput.addEventListener('click', (event) => {
+          // input의 자연 토글이 일어나도록 두지 말고 우리 로직만 적용
+          toggleHandler(event);
+        });
+        innerInput.addEventListener('change', (event) => {
+          event.stopPropagation();
+        });
+      }
+      mountUnit.addEventListener('keydown', (event) => {
+        if (event.key !== ' ' && event.key !== 'Enter') return;
+        toggleHandler(event);
       }, true);
 
       existing = clone;
     }
 
-    existing.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
-      if (inp instanceof HTMLInputElement) {
-        inp.checked = !!selected;
-      }
-    });
+    updateCcfBgmCheckboxVisual(existing, !!selected);
     if (selected) {
-      existing.classList.add('Mui-checked');
       row.setAttribute(CCF_BGM_MS_SELECTED_ATTR, '1');
     } else {
-      existing.classList.remove('Mui-checked');
       row.removeAttribute(CCF_BGM_MS_SELECTED_ATTR);
     }
   }
