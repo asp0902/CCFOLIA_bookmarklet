@@ -239,11 +239,11 @@
       overflow: hidden;
       min-width: 320px; min-height: 240px;
     }
-    /* MUI AppBar colorTransparent + Toolbar dense */
+    /* MUI AppBar + Toolbar dense */
     header {
       padding: 0 8px 0 16px;
       min-height: 48px;
-      background: transparent;
+      background-color: #212121;
       border: 0;
       display: flex; align-items: center; gap: 8px;
       cursor: move; user-select: none;
@@ -267,7 +267,7 @@
     header .header-btn:hover { background: rgba(255,255,255,.08); }
     header .header-btn.edge-end { margin-right: -3px; }
     .tabs {
-      display: flex; gap: 0; padding: 0; background: transparent;
+      display: flex; gap: 0; padding: 0; background-color: #212121;
       border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto;
     }
     .tab {
@@ -396,45 +396,7 @@
       background-image: linear-gradient(135deg, transparent 0%, transparent 50%, rgba(255,255,255,.18) 50%, rgba(255,255,255,.18) 60%, transparent 60%, transparent 70%, rgba(255,255,255,.18) 70%, rgba(255,255,255,.18) 80%, transparent 80%);
       z-index: 5;
     }
-    @media (prefers-color-scheme: light) {
-      :host { color: #1a1a1a; }
-      .panel { background: #ffffff; border-color: rgba(0,0,0,.12); }
-      header { background: #f5f5f7; border-color: rgba(0,0,0,.08); }
-      header h1 { color: #1a1a1a; }
-      header .meta { color: #6e6e75; }
-      header .close { color: #555; }
-      header .close:hover { background: rgba(0,0,0,.06); color: #111; }
-      .tabs { background: #fafafa; border-color: rgba(0,0,0,.08); }
-      .tab { color: #6e6e75; }
-      .tab[data-active="1"] { color: #111; border-bottom-color: #111; }
-      .body { background: #ffffff; }
-      .field label { color: #555; }
-      .field input, .field textarea { background: #fafafa; border-color: rgba(0,0,0,.12); color: #1a1a1a; }
-      .field .hint { color: #888; }
-      .btn { background: #1a1a1a; color: #fff; }
-      .btn:hover { background: #000; }
-      .btn.secondary { background: rgba(0,0,0,.06); color: #1a1a1a; }
-      .btn.secondary:hover { background: rgba(0,0,0,.12); }
-      .card { background: #fafafa; border-color: rgba(0,0,0,.08); }
-      .card:hover { background: #f0f0f0; }
-      .card .title { color: #1a1a1a; }
-      .card .summary { color: #666; }
-      .card .badge { color: #666; border-color: rgba(0,0,0,.16); }
-      .preview { background: #fafafa; border-color: rgba(0,0,0,.08); color: #1a1a1a; }
-      .preview strong { color: #000; }
-      .preview a { color: #1763b8; }
-      .preview blockquote { color: #555; border-color: rgba(0,0,0,.18); }
-      .preview code { background: rgba(0,0,0,.06); }
-      .secret-block { background: rgba(239,83,80,.06); border-color: rgba(239,83,80,.4); }
-      .secret-block .secret-head { color: #c62828; }
-      .hidden-secret { background: rgba(0,0,0,.03); color: #888; border-color: rgba(0,0,0,.18); }
-      .chip { background: rgba(0,0,0,.06); color: #555; }
-      .checkbox { color: #555; }
-      .toast { background: #1a1a1a; color: #fff; }
-      .resize-handle {
-        background-image: linear-gradient(135deg, transparent 0%, transparent 50%, rgba(0,0,0,.2) 50%, rgba(0,0,0,.2) 60%, transparent 60%, transparent 70%, rgba(0,0,0,.2) 70%, rgba(0,0,0,.2) 80%, transparent 80%);
-      }
-    }
+    /* CCFOLIA는 dark 전용 → light prefers 분기 없음 */
   `;
 
   function ensureRoot() {
