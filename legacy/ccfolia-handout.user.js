@@ -84,6 +84,8 @@
     showGreeting() { maybeShowGreeting(); },
     resetGreetingFlags() { return clearGreetingFlags(); },
     forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
+    fb() { return fbState; },
+    initFirebase() { return initFirebase(); },
     disable() { return teardown(); }
   };
 
@@ -779,6 +781,56 @@
       !!shadow.querySelector(".panel-footer"),
       !!shadow.querySelector(".pl-modal-overlay")
     );
+  }
+
+  // ===== Firebase (송신 채널) =====
+  // apiKey는 Firebase 설계상 공개 안전. 실제 권한 보호는 Firestore 보안 규칙으로 함.
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCHCnY5n9gG2bMluU_QZa4m3ua1dpBDnUM",
+    authDomain: "ccfolia-handout-25c6b.firebaseapp.com",
+    projectId: "ccfolia-handout-25c6b",
+    storageBucket: "ccfolia-handout-25c6b.firebasestorage.app",
+    messagingSenderId: "821478721514",
+    appId: "1:821478721514:web:b909f3a85ea4d5a5795493"
+  };
+  const FIREBASE_SDK_VERSION = "10.13.2";
+  const FIREBASE_APP_NAME = "ccf-handout";
+
+  let fbState = null;       // { app, auth, db, user, uid, modules }
+  let fbInitPromise = null;
+
+  function initFirebase() {
+    if (fbState) return Promise.resolve(fbState);
+    if (fbInitPromise) return fbInitPromise;
+    fbInitPromise = (async () => {
+      try {
+        console.info("[ccf-handout] Firebase: loading SDK...");
+        const [appMod, authMod, fsMod] = await Promise.all([
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+        ]);
+        // 같은 페이지서 여러 번 init 충돌 방지 — 이름 지정
+        const existing = appMod.getApps?.().find((a) => a.name === FIREBASE_APP_NAME);
+        const app = existing || appMod.initializeApp(FIREBASE_CONFIG, FIREBASE_APP_NAME);
+        const auth = authMod.getAuth(app);
+        const db = fsMod.getFirestore(app);
+        const cred = await authMod.signInAnonymously(auth);
+        fbState = {
+          app, auth, db,
+          user: cred.user,
+          uid: cred.user.uid,
+          modules: { app: appMod, auth: authMod, fs: fsMod }
+        };
+        console.info("[ccf-handout] Firebase OK uid:", cred.user.uid);
+        return fbState;
+      } catch (error) {
+        console.error("[ccf-handout] Firebase init failed:", error);
+        fbInitPromise = null;
+        throw error;
+      }
+    })();
+    return fbInitPromise;
   }
 
   // ===== "카피바라와 함께합니다" 인사 팝업 =====
@@ -2144,7 +2196,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.6 (popup persistence fix)");
+    console.info("[ccf-handout] init — version 0.2.0 (Firebase channel: auth)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
