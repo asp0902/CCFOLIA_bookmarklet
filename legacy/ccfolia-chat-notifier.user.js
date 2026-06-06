@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.76
+// @version      0.2.77
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.76",
+      version: "0.2.77",
       href: location.href,
       title: document.title || ""
     });
@@ -7547,17 +7547,27 @@
         transform: scale(0);
         transform-origin: center center !important;
         opacity: 0;
-        animation: ccf-bgm-row-ripple-enter 350ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
         z-index: 0 !important;
       }
+      .ccf-youtube-bgm-row-ripple-main {
+        animation: ccf-bgm-row-ripple-main-enter 350ms linear forwards !important;
+      }
+      .ccf-youtube-bgm-row-ripple-pulse {
+        animation: ccf-bgm-row-ripple-pulse-enter 260ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
+      }
       .ccf-youtube-bgm-row-ripple.is-leaving {
-        animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-leave 250ms cubic-bezier(0.4, 0, 1, 1) forwards !important;
       }
       /* max opacity 0.28 — native checkbox click active tone.
-         사용자 관찰: v0.2.75(0.30)는 약간 밝고, ripple은 checkbox 중심 파동이어야 한다. */
-      @keyframes ccf-bgm-row-ripple-enter {
+         main wave: 편집 버튼 중간쯤부터 감속. pulse: checkbox 중심 파동 보강. */
+      @keyframes ccf-bgm-row-ripple-main-enter {
         0% { transform: scale(0); opacity: 0; }
-        66% { transform: scale(0.88); opacity: 0.28; }
+        60% { transform: scale(0.86); opacity: 0.28; }
+        82% { transform: scale(0.95); opacity: 0.28; }
+        100% { transform: scale(1); opacity: 0.28; }
+      }
+      @keyframes ccf-bgm-row-ripple-pulse-enter {
+        0% { transform: scale(0); opacity: 0; }
         100% { transform: scale(1); opacity: 0.28; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
@@ -8231,16 +8241,30 @@
     const radius = Math.max(leftRadius, rightRadius, rect.height * 2);
     const diameter = radius * 2;
 
-    const ripple = document.createElement('span');
-    ripple.className = 'ccf-youtube-bgm-row-ripple';
-    ripple.style.left = (ox - diameter / 2) + 'px';
-    ripple.style.top = (oy - diameter / 2) + 'px';
-    ripple.style.width = diameter + 'px';
-    ripple.style.height = diameter + 'px';
-    itemButton.appendChild(ripple);
+    const main = document.createElement('span');
+    main.className = 'ccf-youtube-bgm-row-ripple ccf-youtube-bgm-row-ripple-main';
+    main.style.left = (ox - diameter / 2) + 'px';
+    main.style.top = (oy - diameter / 2) + 'px';
+    main.style.width = diameter + 'px';
+    main.style.height = diameter + 'px';
+    itemButton.appendChild(main);
+
+    const pulseDiameter = Math.max(56, Math.min(96, rect.height * 2.4));
+    const pulse = document.createElement('span');
+    pulse.className = 'ccf-youtube-bgm-row-ripple ccf-youtube-bgm-row-ripple-pulse';
+    pulse.style.left = (ox - pulseDiameter / 2) + 'px';
+    pulse.style.top = (oy - pulseDiameter / 2) + 'px';
+    pulse.style.width = pulseDiameter + 'px';
+    pulse.style.height = pulseDiameter + 'px';
+    itemButton.appendChild(pulse);
+
     window.setTimeout(() => {
-      ripple.classList.add('is-leaving');
-      window.setTimeout(() => ripple.remove(), 360);
+      main.classList.add('is-leaving');
+      pulse.classList.add('is-leaving');
+      window.setTimeout(() => {
+        main.remove();
+        pulse.remove();
+      }, 260);
     }, 340);
   }
 
