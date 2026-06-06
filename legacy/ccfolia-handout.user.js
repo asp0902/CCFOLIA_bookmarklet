@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.0
+// @version      0.1.1
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -106,6 +106,9 @@
       return {
         myCharacter: state.data.myCharacter,
         plList: state.data.plList,
+        myCharacterOptions: state.myCharacterOptions,
+        visibleCharacter: getVisibleCharacterName(),
+        adminMode: isAdminMode(),
         handoutCount: state.data.handouts.length,
         editingId: state.editingId,
         activeTab: state.activeTab,
@@ -132,7 +135,7 @@
   async function loadAll() {
     const tk = toolkit();
     if (!tk?.storage?.getRoomData) {
-      return { handouts: [], myCharacter: "", plList: [] };
+      return { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [] };
     }
     const record = await tk.storage.getRoomData(STORAGE_FEATURE, getCurrentRoomKey());
     const value = record?.value;
@@ -141,6 +144,9 @@
     return {
       handouts,
       myCharacter: typeof value.myCharacter === "string" ? value.myCharacter : "",
+      myCharacterOptions: Array.isArray(value.myCharacterOptions)
+        ? [...new Set(value.myCharacterOptions.map((name) => String(name || "").trim()).filter(Boolean))]
+        : [],
       plList: normalizePlList(value.plList)
     };
   }
@@ -168,7 +174,13 @@
   async function saveAll(data) {
     const tk = toolkit();
     if (!tk?.storage?.setRoomData) return;
-    await tk.storage.setRoomData(STORAGE_FEATURE, getCurrentRoomKey(), data);
+    const payload = {
+      ...data,
+      myCharacterOptions: Array.isArray(state.myCharacterOptions)
+        ? state.myCharacterOptions
+        : (Array.isArray(data?.myCharacterOptions) ? data.myCharacterOptions : [])
+    };
+    await tk.storage.setRoomData(STORAGE_FEATURE, getCurrentRoomKey(), payload);
   }
 
   // ===== state =====
@@ -177,7 +189,7 @@
     activeTab: "list",      // list | new | settings
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
-    data: { handouts: [], myCharacter: "", plList: [] },
+    data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
     chatWatcher: null,      // 채팅 발신자 감시 MutationObserver
@@ -318,6 +330,32 @@
     if (permFlag(h, ALL_KEY, "edit")) return true;
     if (!name) return false;
     return permFlag(h, name, "edit");
+  }
+
+  function getVisibleCharacterName() {
+    const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
+    const visible = inputs.find((i) => i instanceof HTMLInputElement && i.offsetParent !== null && !i.disabled);
+    return (visible?.value || "").trim();
+  }
+
+  function isAdminCharacter(name = getVisibleCharacterName()) {
+    const admin = removeSpaces(state.data.myCharacter || "");
+    if (!admin) return true;
+    return removeSpaces(name || "") === admin;
+  }
+
+  function isAdminMode() {
+    return isAdminCharacter();
+  }
+
+  function canManageHandout(handout) {
+    return !!handout && isAdminMode();
+  }
+
+  function getPermissionCharacterName() {
+    const visible = getVisibleCharacterName();
+    if (isAdminCharacter(visible)) return state.data.myCharacter || visible;
+    return visible || state.data.myCharacter || "";
   }
 
   // ===== UI — 코코포리아 다크 톤, 이동/리사이즈 floating window =====
@@ -929,6 +967,7 @@
     const hasSecret = canViewSecret(data, me);
     if (!hasPublic && !hasSecret) {
       console.info("[ccf-handout] remote skipped (no permission):", data.id, "as", me || "(미설정)");
+      ingestRemoteRemove(data.id);
       return;
     }
 
@@ -939,13 +978,16 @@
       description: data.description || "",
       // 비밀 권한 없으면 gmNotes 비움 (Firestore에서 받지만 안 보여줌)
       gmNotes: hasSecret ? (data.gmNotes || "") : "",
-      permissions: data.permissions || {},
+      // 수신측 로컬 저장소에는 권한표를 남기지 않는다. 표시/비밀 여부는 수신 시점에 확정.
+      permissions: {},
       tags: data.tags || [],
       ownerUid: data.ownerUid,
       ownerName: data.ownerName || "",
       createdAt: data.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      _remote: true
+      _remote: true,
+      _canSecret: hasSecret,
+      _canView: hasPublic
     };
 
     const idx = state.data.handouts.findIndex((h) => h.id === data.id);
@@ -1670,8 +1712,10 @@
     if (room !== state.lastRoomKey) {
       state.lastRoomKey = room;
       state.data = await loadAll();
+      state.myCharacterOptions = Array.isArray(state.data.myCharacterOptions) ? state.data.myCharacterOptions : [];
     } else if (!state.data.handouts.length && !state.data.myCharacter) {
       state.data = await loadAll();
+      state.myCharacterOptions = Array.isArray(state.data.myCharacterOptions) ? state.data.myCharacterOptions : [];
     }
     state.isOpen = true;
     render();
@@ -1701,6 +1745,14 @@
     meta.textContent = "";
     const roomStrip = state.shadow.querySelector("[data-room-strip]");
     if (roomStrip) roomStrip.textContent = `룸 ${getCurrentRoomKey()} · 핸드아웃 ${state.data.handouts.length}건`;
+    const adminMode = isAdminMode();
+    const newButton = state.shadow.querySelector('[data-action="new-handout"]');
+    if (newButton) newButton.style.display = adminMode ? "" : "none";
+    const settingsTab = state.shadow.querySelector('.tab[data-tab="settings"]');
+    if (settingsTab) {
+      settingsTab.style.display = adminMode ? "" : "none";
+      if (!adminMode && state.activeTab === "settings") state.activeTab = "list";
+    }
     // 편집 탭 동적 표시 — editingId가 있을 때만 보임
     const editTab = state.shadow.querySelector('.tab[data-tab="edit"]');
     if (editTab) {
@@ -1725,52 +1777,51 @@
 
   function renderList() {
     const me = state.data.myCharacter;
-    const previewAsPl = state.plPreview && !!me;
-    if (!state.data.handouts.length) {
-      return `
-        <div class="row" style="margin-bottom:12px;">
-          <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
-            <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
-            PL 시점 미리보기
-          </label>
-        </div>
-      `;
-    }
-    const cards = state.data.handouts.map((h) => {
-      ensurePermissions(h);
-      const canSecret = previewAsPl ? canViewSecret(h, me) : true;
-      const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
-      const permKeys = Object.keys(h.permissions || {});
-      const viewersLabel = permKeys.length
-        ? permKeys.map((k) => k === ALL_KEY ? "전체" : k).join(", ")
-        : "GM 전용";
-      return `
-        <article class="card" data-id="${escapeHtml(h.id)}">
-          <div class="head">
-            <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
-            <button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>
-            <button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>
-          </div>
-          <div class="summary-row">
-            <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
-            <div class="badges-row">
-              ${hasSecret ? `<span class="badge secret">비밀</span>` : ""}
-              <span class="badge">${escapeHtml(viewersLabel)}</span>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>
-          </div>
-        </article>
-      `;
-    }).join("");
-    return `
+    const adminMode = isAdminMode();
+    const previewAsPl = adminMode && state.plPreview && !!me;
+    const previewToggle = adminMode ? `
       <div class="row" style="margin-bottom:12px;">
         <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
           <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
           PL 시점 미리보기
         </label>
       </div>
+    ` : "";
+    if (!state.data.handouts.length) {
+      return previewToggle;
+    }
+    const cards = state.data.handouts.map((h) => {
+      ensurePermissions(h);
+      const manageable = canManageHandout(h);
+      const permissionName = getPermissionCharacterName();
+      const canSecret = previewAsPl
+        ? canViewSecret(h, me)
+        : (adminMode || h._canSecret === true || canViewSecret(h, permissionName));
+      const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
+      const permKeys = Object.keys(h.permissions || {});
+      const viewersLabel = adminMode
+        ? (permKeys.length ? permKeys.map((k) => k === ALL_KEY ? "전체" : k).join(", ") : "GM 전용")
+        : "핸드아웃";
+      return `
+        <article class="card" data-id="${escapeHtml(h.id)}">
+          <div class="head">
+            <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
+            ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
+            ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
+          </div>
+          <div class="summary-row">
+            <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
+            <div class="badges-row">
+              ${hasSecret && canSecret ? `<span class="badge secret">비밀</span>` : ""}
+              <span class="badge">${escapeHtml(viewersLabel)}</span>
+            </div>
+          </div>
+          ${adminMode ? `<div class="actions"><button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button></div>` : ""}
+        </article>
+      `;
+    }).join("");
+    return `
+      ${previewToggle}
       <div class="list">${cards}</div>
     `;
   }
@@ -1789,7 +1840,7 @@
     const plList = mergePlListById(state.data.plList || []).filter((p) => p && p.name);
     const rows = [];
     rows.push({ key: ALL_KEY, label: "플레이어 전체" });
-    if (myChar) rows.push({ key: myChar, label: `${myChar} (GM)` });
+    if (myChar) rows.push({ key: myChar, label: "관리자 설정" });
     for (const pl of plList) {
       const name = removeSpaces(pl.name);
       if (!name) continue;
@@ -1842,6 +1893,17 @@
     // editingId === "new" → 새로 만들기 모드 (editing = null)
     // editingId === <uuid> → 편집 모드
     const editing = (state.editingId && state.editingId !== "new") ? findHandout(state.editingId) : null;
+    if ((editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode())) {
+      return `
+        <div class="field">
+          <label>읽기 전용 핸드아웃</label>
+          <div class="hint">현재 캐릭터는 이 핸드아웃의 관리자 권한이 없습니다.</div>
+        </div>
+        <div class="edit-footer-actions">
+          <button class="btn secondary" data-action="cancel-edit">목록으로</button>
+        </div>
+      `;
+    }
     const base = editing || { id: "", title: "", image: "", description: "", gmNotes: "", permissions: {}, tags: [] };
     const h = ensurePermissions({ ...base, permissions: { ...(base.permissions || {}) } });
     // 폼 권한 상태 초기화 (editingId 변경 시마다 갱신)
@@ -1911,7 +1973,7 @@
     }).join("");
     return `
       <div class="field">
-        <label>내 캐릭터명 (GM 본인 이름)</label>
+        <label>관리자 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
           <button class="settings-icon-btn" data-action="reload-my-characters" title="목록 새로고침" aria-label="목록 새로고침">${ICON_REFRESH}</button>
@@ -2014,6 +2076,8 @@
       return;
     }
     state.myCharacterOptions = names;
+    state.data.myCharacterOptions = names;
+    try { await saveAll(state.data); } catch (error) { console.warn("[ccf-handout] myCharacterOptions save failed", error); }
     toast(`캐릭터 ${names.length}명 불러옴`);
     render();
   }
@@ -2021,16 +2085,27 @@
   // ===== 이벤트 핸들러 =====
   function onShadowClick(event) {
     const tabBtn = event.target.closest(".tab");
-    if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+    if (tabBtn) {
+      if (tabBtn.dataset.tab === "settings" && !isAdminMode()) return;
+      setTab(tabBtn.dataset.tab);
+      return;
+    }
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
     if (action === "close") { closePanel(); return; }
-    if (action === "new-handout") { state.editingId = "new"; state.formPermissionsForId = null; setTab("edit"); return; }
-    if (action === "edit-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
-    if (action === "view-handout") { state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return; }
+    if (action === "new-handout") {
+      if (!isAdminMode()) return;
+      state.editingId = "new"; state.formPermissionsForId = null; setTab("edit"); return;
+    }
+    if (action === "edit-handout") {
+      const h = findHandout(id);
+      if (!canManageHandout(h)) return;
+      state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return;
+    }
+    if (action === "view-handout") { openDetail(id); return; }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
@@ -2112,6 +2187,9 @@
     const handout = {
       id, title, image, description, gmNotes, permissions,
       tags: existing?.tags || [],
+      ownerUid: existing?.ownerUid,
+      ownerName: existing?.ownerName,
+      _remote: existing?._remote === true,
       createdAt: existing?.createdAt || now,
       updatedAt: now
     };
@@ -2137,6 +2215,7 @@
   async function saveSettingsFromForm() {
     const me = getFieldValue("myCharacter").trim();
     state.data.myCharacter = me;
+    state.data.myCharacterOptions = state.myCharacterOptions;
     await saveAll(state.data);
     toast("설정 저장됨");
     render();
@@ -2277,18 +2356,21 @@
     const h = findHandout(id);
     if (!h) return;
     const me = state.data.myCharacter;
-    const previewAsPl = state.plPreview && !!me;
-    const canSecret = previewAsPl ? canViewSecret(h, me) : true;
+    const adminMode = isAdminMode();
+    const previewAsPl = adminMode && state.plPreview && !!me;
+    const permissionName = getPermissionCharacterName();
+    const canSecret = previewAsPl ? canViewSecret(h, me) : (adminMode || h._canSecret === true || canViewSecret(h, permissionName));
     const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
+    const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");
     body.innerHTML = `
       <div class="row" style="margin-bottom:12px;">
         <button class="btn secondary small" data-action="close-detail">← 목록</button>
-        <button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>
-        <button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>
-        ${hasSecret && canSecret ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
+        ${manageable ? `<button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>` : ""}
+        ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>` : ""}
+        ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
         <span class="spacer" style="flex:1"></span>
-        <span class="meta">${previewAsPl ? "PL 시점" : "GM 시점"}</span>
+        <span class="meta">${adminMode ? (previewAsPl ? "PL 시점" : "GM 시점") : "PL 시점"}</span>
       </div>
       <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
       ${h.image ? `<img class="detail-img" src="${escapeHtml(h.image)}" alt="">` : ""}
@@ -2377,8 +2459,11 @@
         if (!confirm(`현재 룸의 핸드아웃 ${state.data.handouts.length}건을 ${parsed.handouts.length}건으로 교체합니다. 진행할까요?`)) return;
         state.data = {
           handouts: parsed.handouts,
-          myCharacter: typeof parsed.myCharacter === "string" ? parsed.myCharacter : state.data.myCharacter
+          myCharacter: typeof parsed.myCharacter === "string" ? parsed.myCharacter : state.data.myCharacter,
+          myCharacterOptions: Array.isArray(parsed.myCharacterOptions) ? parsed.myCharacterOptions : state.myCharacterOptions,
+          plList: normalizePlList(parsed.plList || state.data.plList)
         };
+        state.myCharacterOptions = Array.isArray(state.data.myCharacterOptions) ? state.data.myCharacterOptions : [];
         await saveAll(state.data);
         toast("가져오기 완료");
         render();
@@ -2570,6 +2655,7 @@
         state.lastRoomKey = room;
         loadAll().then((d) => {
           state.data = d;
+          state.myCharacterOptions = Array.isArray(d.myCharacterOptions) ? d.myCharacterOptions : [];
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
           if (fbState) {
@@ -2594,6 +2680,7 @@
           state.lastRoomKey = room;
           loadAll().then((d) => {
           state.data = d;
+          state.myCharacterOptions = Array.isArray(d.myCharacterOptions) ? d.myCharacterOptions : [];
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
           if (fbState) {
@@ -2626,7 +2713,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.2.6 (state + autoDetect debug API)");
+    console.info("[ccf-handout] init — version 0.1.1 (admin visibility + persisted GM candidates)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
@@ -2638,6 +2725,7 @@
     // 데이터 로드 완료 후에야 watcher/팝업 시작 — 자동 추가 race 방지
     loadAll().then((d) => {
       state.data = d;
+      state.myCharacterOptions = Array.isArray(d.myCharacterOptions) ? d.myCharacterOptions : [];
       startChatWatcher();
       watchMyCharacterInput();
       // 이미 인사 끝났으면 즉시 자동 감지 시도
