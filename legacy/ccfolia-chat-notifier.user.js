@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.75
+// @version      0.2.76
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.75",
+      version: "0.2.76",
       href: location.href,
       title: document.title || ""
     });
@@ -7553,15 +7553,15 @@
       .ccf-youtube-bgm-row-ripple.is-leaving {
         animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
       }
-      /* max opacity 0.30 — native checkbox click active tone.
-         사용자 관찰: v0.2.74(0.33)는 약간 밝고, fade보다 우측 감속이 필요했다. */
+      /* max opacity 0.28 — native checkbox click active tone.
+         사용자 관찰: v0.2.75(0.30)는 약간 밝고, ripple은 checkbox 중심 파동이어야 한다. */
       @keyframes ccf-bgm-row-ripple-enter {
         0% { transform: scale(0); opacity: 0; }
-        45% { transform: scale(0.78); opacity: 0.30; }
-        100% { transform: scale(1); opacity: 0.30; }
+        66% { transform: scale(0.88); opacity: 0.28; }
+        100% { transform: scale(1); opacity: 0.28; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.30; }
+        0% { opacity: 0.28; }
         100% { opacity: 0; }
       }
 
@@ -8226,11 +8226,9 @@
     const rightLimit = actionRect
       ? Math.max(rect.left, Math.min(rect.right, actionRect.left + actionRect.width / 2)) - rect.left
       : rect.width * 0.82;
-    const radius = Math.max(
-      36,
-      rightLimit - ox,
-      rect.height * 2
-    );
+    const leftRadius = ox;
+    const rightRadius = Math.max(36, rightLimit - ox);
+    const radius = Math.max(leftRadius, rightRadius, rect.height * 2);
     const diameter = radius * 2;
 
     const ripple = document.createElement('span');
