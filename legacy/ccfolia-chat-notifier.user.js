@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.61
+// @version      0.2.62
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.61",
+      version: "0.2.62",
       href: location.href,
       title: document.title || ""
     });
@@ -7530,10 +7530,27 @@
       .ccf-youtube-bgm-multi-checkbox.Mui-checked:hover {
         background-color: rgba(245, 0, 87, 0.16) !important;
       }
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked svg,
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked svg path {
+      /* overlay svg: 왼→오 reveal 애니메이션으로 checked path 채움 */
+      .ccf-youtube-bgm-multi-checkbox-overlay {
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        width: 1em !important;
+        height: 1em !important;
+        font-size: 1.5rem !important;
+        transform: translate(-50%, -50%) !important;
         color: #f50057 !important;
         fill: currentColor !important;
+        pointer-events: none !important;
+        clip-path: inset(0 100% 0 0) !important;
+        transition: clip-path 280ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+        z-index: 1 !important;
+      }
+      .ccf-youtube-bgm-multi-checkbox-overlay path {
+        fill: currentColor !important;
+      }
+      .ccf-youtube-bgm-multi-checkbox.Mui-checked .ccf-youtube-bgm-multi-checkbox-overlay {
+        clip-path: inset(0 0% 0 0) !important;
       }
       /* click ripple — native MuiTouchRipple 시뮬 */
       .ccf-youtube-bgm-multi-checkbox-ripple {
@@ -8175,6 +8192,26 @@
   const CCF_BGM_MS_SVG_UNCHECKED_PATH = "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z";
   const CCF_BGM_MS_SVG_CHECKED_PATH = "M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z";
 
+  function ensureCcfBgmCheckedOverlay(checkboxEl) {
+    if (!(checkboxEl instanceof HTMLElement)) return null;
+    let overlay = checkboxEl.querySelector('.ccf-youtube-bgm-multi-checkbox-overlay');
+    if (overlay) return overlay;
+    // base svg와 동일 viewBox로 checked svg를 만들어 overlay
+    const baseSvg = checkboxEl.querySelector('svg');
+    if (!baseSvg) return null;
+    overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    overlay.setAttribute('class', 'MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ccf-youtube-bgm-multi-checkbox-overlay');
+    overlay.setAttribute('focusable', 'false');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.setAttribute('viewBox', baseSvg.getAttribute('viewBox') || '0 0 24 24');
+    overlay.setAttribute('data-testid', 'CheckBoxIcon');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', CCF_BGM_MS_SVG_CHECKED_PATH);
+    overlay.appendChild(path);
+    checkboxEl.appendChild(overlay);
+    return overlay;
+  }
+
   function updateCcfBgmCheckboxVisual(checkboxEl, selected) {
     if (!(checkboxEl instanceof HTMLElement)) return;
     const prevSelected = checkboxEl.classList.contains('Mui-checked');
@@ -8182,14 +8219,16 @@
     checkboxEl.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
       if (inp instanceof HTMLInputElement) inp.checked = !!selected;
     });
-    const svg = checkboxEl.querySelector('svg');
-    if (svg) {
-      const path = svg.querySelector('path');
-      if (path instanceof SVGPathElement) {
-        path.setAttribute('d', selected ? CCF_BGM_MS_SVG_CHECKED_PATH : CCF_BGM_MS_SVG_UNCHECKED_PATH);
+    // base svg는 항상 unchecked 외곽으로 두고, overlay svg가 좌→우 reveal로 채움
+    const baseSvg = checkboxEl.querySelector('svg:not(.ccf-youtube-bgm-multi-checkbox-overlay)');
+    if (baseSvg) {
+      const basePath = baseSvg.querySelector('path');
+      if (basePath instanceof SVGPathElement) {
+        basePath.setAttribute('d', CCF_BGM_MS_SVG_UNCHECKED_PATH);
       }
-      svg.setAttribute('data-testid', selected ? 'CheckBoxIcon' : 'CheckBoxOutlineBlankIcon');
+      baseSvg.setAttribute('data-testid', 'CheckBoxOutlineBlankIcon');
     }
+    ensureCcfBgmCheckedOverlay(checkboxEl);
     if (selected) {
       checkboxEl.classList.add('Mui-checked');
     } else {
