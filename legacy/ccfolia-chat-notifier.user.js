@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.57
+// @version      0.2.58
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.57",
+      version: "0.2.58",
       href: location.href,
       title: document.title || ""
     });
@@ -8114,7 +8114,10 @@
     );
     for (const cb of muiBoxes) {
       if (!(cb instanceof HTMLElement)) continue;
+      // 우리가 mount한 row/wrap/popover/checkbox 본인은 제외
       if (cb.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+      if (cb.classList.contains(CCF_BGM_MS_CHECKBOX_CLASS)) continue;
+      if (cb.closest('.' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap')) continue;
       return cb;
     }
     const inputs = scope.querySelectorAll(
@@ -8124,6 +8127,7 @@
     for (const inp of inputs) {
       if (!(inp instanceof HTMLElement)) continue;
       if (inp.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) continue;
+      if (inp.closest('.' + CCF_BGM_MS_CHECKBOX_CLASS + ', .' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap')) continue;
       return inp.closest('.MuiCheckbox-root, .MuiButtonBase-root') || inp;
     }
     return null;
@@ -8235,16 +8239,28 @@
     ccfBgmMultiSelectedEntries.clear();
   }
 
+  let ccfBgmLastMultiSelectMode = false;
   function syncCcfBgmYoutubeMultiSelectUI() {
     try {
-      getCcfBgmActiveDialogScopes(document).forEach((scope) => {
-        const template = findNativeBgmCheckboxTemplate(scope);
+      // 전체 dialog scope를 합쳐서 mode 한 번만 판정 (한 scope에서 잠시 sync race로
+      // template 못 찾으면 false → 곧바로 clear되는 사고 방지)
+      const scopes = getCcfBgmActiveDialogScopes(document);
+      let template = null;
+      for (const scope of scopes) {
+        const t = findNativeBgmCheckboxTemplate(scope);
+        if (t) { template = t; break; }
+      }
+      const modeOn = !!template;
+      // mode가 ON→OFF로 전환된 시점에만 selection clear
+      if (ccfBgmLastMultiSelectMode && !modeOn && ccfBgmMultiSelectedEntries.size) {
+        clearCcfBgmMultiSelect();
+      }
+      ccfBgmLastMultiSelectMode = modeOn;
+
+      scopes.forEach((scope) => {
         const rows = (scope && scope.querySelectorAll)
           ? scope.querySelectorAll('.ccf-youtube-bgm-row-wrap')
           : [];
-        if (!template && ccfBgmMultiSelectedEntries.size) {
-          clearCcfBgmMultiSelect();
-        }
         rows.forEach((row) => {
           const entryKey = row.dataset.ccfYoutubeBgmEntry || "";
           const selected = ccfBgmMultiSelectedEntries.has(entryKey);
