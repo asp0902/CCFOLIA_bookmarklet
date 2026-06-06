@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.73
+// @version      0.2.74
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.73",
+      version: "0.2.74",
       href: location.href,
       title: document.title || ""
     });
@@ -7542,7 +7542,7 @@
       .ccf-youtube-bgm-row-ripple {
         position: absolute !important;
         border-radius: 50% !important;
-        background-color: currentColor !important;
+        background: radial-gradient(circle, currentColor 0%, currentColor 42%, transparent 72%) !important;
         pointer-events: none !important;
         transform: scale(0);
         opacity: 0;
@@ -7552,14 +7552,14 @@
       .ccf-youtube-bgm-row-ripple.is-leaving {
         animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
       }
-      /* max opacity 0.42 — native checkbox click active tone.
-         사용자 관찰: v0.2.72(0.24)도 native보다 어둡고, native는 checkbox 중심 파동처럼 보인다. */
+      /* max opacity 0.33 — native checkbox click active tone.
+         사용자 관찰: v0.2.73(0.42)는 밝아 0.33 테스트. 가장자리는 radial gradient로 fade-out. */
       @keyframes ccf-bgm-row-ripple-enter {
-        0% { transform: scale(0); opacity: 0; }
-        100% { transform: scale(1); opacity: 0.42; }
+        0% { transform: translateX(0) scale(0); opacity: 0; }
+        100% { transform: translateX(0) scale(1); opacity: 0.33; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.42; }
+        0% { opacity: 0.33; }
         100% { opacity: 0; }
       }
 
@@ -8225,8 +8225,8 @@
       ? Math.max(rect.left, Math.min(rect.right, actionRect.left + actionRect.width / 2)) - rect.left
       : rect.width * 0.82;
     const radius = Math.max(
-      Math.abs(ox),
-      Math.abs(rightLimit - ox),
+      36,
+      rightLimit - ox,
       rect.height * 2
     );
     const diameter = radius * 2;
