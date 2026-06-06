@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.74
+// @version      0.2.75
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.74",
+      version: "0.2.75",
       href: location.href,
       title: document.title || ""
     });
@@ -7542,24 +7542,26 @@
       .ccf-youtube-bgm-row-ripple {
         position: absolute !important;
         border-radius: 50% !important;
-        background: radial-gradient(circle, currentColor 0%, currentColor 42%, transparent 72%) !important;
+        background-color: currentColor !important;
         pointer-events: none !important;
         transform: scale(0);
+        transform-origin: center center !important;
         opacity: 0;
-        animation: ccf-bgm-row-ripple-enter 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-enter 350ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
         z-index: 0 !important;
       }
       .ccf-youtube-bgm-row-ripple.is-leaving {
-        animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
       }
-      /* max opacity 0.33 — native checkbox click active tone.
-         사용자 관찰: v0.2.73(0.42)는 밝아 0.33 테스트. 가장자리는 radial gradient로 fade-out. */
+      /* max opacity 0.30 — native checkbox click active tone.
+         사용자 관찰: v0.2.74(0.33)는 약간 밝고, fade보다 우측 감속이 필요했다. */
       @keyframes ccf-bgm-row-ripple-enter {
-        0% { transform: translateX(0) scale(0); opacity: 0; }
-        100% { transform: translateX(0) scale(1); opacity: 0.33; }
+        0% { transform: scale(0); opacity: 0; }
+        45% { transform: scale(0.78); opacity: 0.30; }
+        100% { transform: scale(1); opacity: 0.30; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.33; }
+        0% { opacity: 0.30; }
         100% { opacity: 0; }
       }
 
