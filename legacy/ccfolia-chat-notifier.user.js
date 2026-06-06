@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.65
+// @version      0.2.66
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.65",
+      version: "0.2.66",
       href: location.href,
       title: document.title || ""
     });
@@ -7533,31 +7533,30 @@
       .ccf-youtube-bgm-multi-checkbox.Mui-checked {
         color: rgb(220, 0, 78) !important;
       }
-      /* native MuiTouchRipple 동일 동작:
-         enter(550ms): scale 0→1, opacity 0.1→0.3
-         leave(550ms): opacity 0.3→0
-         색: currentcolor (체크박스 color 따라감) */
-      .ccf-youtube-bgm-multi-checkbox-ripple {
+      /* native ListItemButton의 TouchRipple 시뮬:
+         row 전체에 클릭 위치 기준 원형 확산 (enter 550ms + leave 550ms = ~1.1s) */
+      .ccf-youtube-bgm-item {
+        position: relative !important;
+        overflow: hidden !important;
+      }
+      .ccf-youtube-bgm-row-ripple {
         position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
         border-radius: 50% !important;
         background-color: currentColor !important;
         pointer-events: none !important;
         transform: scale(0);
         opacity: 0.1;
-        animation: ccf-bgm-ripple-enter 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-enter 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        z-index: 0 !important;
       }
-      .ccf-youtube-bgm-multi-checkbox-ripple.is-leaving {
-        animation: ccf-bgm-ripple-leave 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+      .ccf-youtube-bgm-row-ripple.is-leaving {
+        animation: ccf-bgm-row-ripple-leave 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
       }
-      @keyframes ccf-bgm-ripple-enter {
+      @keyframes ccf-bgm-row-ripple-enter {
         0% { transform: scale(0); opacity: 0.1; }
         100% { transform: scale(1); opacity: 0.3; }
       }
-      @keyframes ccf-bgm-ripple-leave {
+      @keyframes ccf-bgm-row-ripple-leave {
         0% { opacity: 0.3; }
         100% { opacity: 0; }
       }
@@ -8180,8 +8179,6 @@
 
   function updateCcfBgmCheckboxVisual(checkboxEl, selected) {
     if (!(checkboxEl instanceof HTMLElement)) return;
-    const prevSelected = checkboxEl.classList.contains('Mui-checked');
-    const stateChanged = prevSelected !== !!selected;
     checkboxEl.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
       if (inp instanceof HTMLInputElement) inp.checked = !!selected;
     });
@@ -8199,18 +8196,32 @@
     } else {
       checkboxEl.classList.remove('Mui-checked');
     }
-    // 토글 시 ripple — native MuiTouchRipple 동일 keyframes/타이밍 사용
-    if (stateChanged) {
-      spawnCcfBgmCheckboxRipple(checkboxEl);
-    }
   }
 
-  function spawnCcfBgmCheckboxRipple(checkboxEl) {
-    if (!(checkboxEl instanceof HTMLElement)) return;
+  // native ListItemButton의 TouchRipple 시뮬:
+  // 체크박스 클릭 → row 전체에 클릭 위치 기준 원형 ripple 확산
+  function spawnCcfBgmRowRipple(row, clickX, clickY) {
+    if (!(row instanceof HTMLElement)) return;
+    const itemButton = row.querySelector('.ccf-youtube-bgm-item');
+    if (!(itemButton instanceof HTMLElement)) return;
+    const rect = itemButton.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const ox = clickX - rect.left;
+    const oy = clickY - rect.top;
+    // ripple 직경: 클릭 위치에서 row 네 모서리까지의 최장 거리 * 2
+    const diameter = Math.max(
+      Math.hypot(ox, oy),
+      Math.hypot(rect.width - ox, oy),
+      Math.hypot(ox, rect.height - oy),
+      Math.hypot(rect.width - ox, rect.height - oy)
+    ) * 2;
     const ripple = document.createElement('span');
-    ripple.className = 'ccf-youtube-bgm-multi-checkbox-ripple';
-    checkboxEl.appendChild(ripple);
-    // enter 550ms 끝나면 leave로 전환 → 또 550ms 후 제거 (총 ~1.1초, native와 동일)
+    ripple.className = 'ccf-youtube-bgm-row-ripple';
+    ripple.style.left = (ox - diameter / 2) + 'px';
+    ripple.style.top = (oy - diameter / 2) + 'px';
+    ripple.style.width = diameter + 'px';
+    ripple.style.height = diameter + 'px';
+    itemButton.appendChild(ripple);
     window.setTimeout(() => {
       ripple.classList.add('is-leaving');
       window.setTimeout(() => ripple.remove(), 560);
@@ -8434,7 +8445,7 @@
     syncCcfBgmYoutubeMultiSelectUI();
   }
 
-  // document level capture click — 우리 wrap/체크박스 클릭 시 토글
+  // document level capture click — 우리 wrap/체크박스 클릭 시 토글 + row ripple
   function handleCcfBgmYoutubeCheckboxClick(event) {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -8452,15 +8463,42 @@
       debugLog("bgm-ms-toggle-no-key", { row: row.outerHTML.slice(0, 200) });
       return;
     }
+    // 클릭 위치 — 마우스 event면 clientX/Y, dispatchEvent면 0 → wrap 중앙으로 fallback
+    let cx = event.clientX;
+    let cy = event.clientY;
+    if (!cx && !cy) {
+      const wrect = wrap.getBoundingClientRect();
+      cx = wrect.left + wrect.width / 2;
+      cy = wrect.top + wrect.height / 2;
+    }
+    spawnCcfBgmRowRipple(row, cx, cy);
     toggleCcfBgmMultiSelect(entryKey);
     syncCcfBgmYoutubeMultiSelectUI();
     debugLog("bgm-ms-toggle", { entryKey, selected: ccfBgmMultiSelectedEntries.has(entryKey) });
   }
 
+  // 복수선택 토글 버튼 클릭 즉시 sync — native checkbox 등장과 동시에 YouTube row 체크박스 mount
+  function handleCcfBgmMultiSelectToggleClick(event) {
+    const btn = event.target instanceof Element
+      ? event.target.closest('button, [role="button"]')
+      : null;
+    if (!(btn instanceof HTMLElement)) return;
+    if (btn.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) return;
+    const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim();
+    if (!/(複数選択|複数選 ?択|복수\s*선택|multi[-\s]?select|multiselect)/i.test(label)) return;
+    // React가 native checkbox mount/unmount 후 sync — 다음 frame + 짧은 폴링
+    requestAnimationFrame(() => syncCcfBgmYoutubeMultiSelectUI());
+    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 16);
+    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 60);
+    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 150);
+  }
+
+  document.addEventListener('click', handleCcfBgmMultiSelectToggleClick, true);
   document.addEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
   document.addEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
   document.addEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
   registerTeardown(() => {
+    document.removeEventListener('click', handleCcfBgmMultiSelectToggleClick, true);
     document.removeEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
     document.removeEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
     document.removeEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
