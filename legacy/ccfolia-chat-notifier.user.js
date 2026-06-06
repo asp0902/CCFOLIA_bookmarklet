@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.56
+// @version      0.2.57
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,6 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
+      version: "0.2.57",
       href: location.href,
       title: document.title || ""
     });
@@ -8191,25 +8192,14 @@
         }
       }
 
-      // row의 MuiListItem-root 첫 자식으로 prepend (sortable button 형제 X — listItem 안 시작)
+      // native와 동일 위치: ListItemButton(.ccf-youtube-bgm-item) 안 첫 자식으로 prepend
+      // (native checkbox도 MuiListItemButton-root 안의 MuiListItemIcon-root에 있음)
+      const itemButton = row.querySelector('.ccf-youtube-bgm-item');
       const listItem = row.querySelector('.MuiListItem-root');
-      const mountTarget = listItem instanceof HTMLElement ? listItem : row;
+      const mountTarget = itemButton instanceof HTMLElement
+        ? itemButton
+        : (listItem instanceof HTMLElement ? listItem : row);
       mountTarget.insertBefore(mountUnit, mountTarget.firstChild);
-
-      const toggleHandler = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-          event.stopImmediatePropagation();
-        }
-        const entryKey = row.dataset.ccfYoutubeBgmEntry;
-        if (!entryKey) {
-          debugLog("bgm-ms-toggle-no-key", { row: row.outerHTML.slice(0, 200) });
-          return;
-        }
-        toggleCcfBgmMultiSelect(entryKey);
-        syncCcfBgmYoutubeMultiSelectUI();
-      };
 
       // pointerdown은 drag handler가 가로채지 못하게 capture에서 stop
       mountUnit.addEventListener('pointerdown', (event) => {
@@ -8218,22 +8208,7 @@
       mountUnit.addEventListener('mousedown', (event) => {
         event.stopPropagation();
       }, true);
-      mountUnit.addEventListener('click', toggleHandler, true);
-      // input 자체에도 등록 (capture로 못 잡힐 케이스 백업)
-      const innerInput = clone.querySelector('input[type="checkbox"]');
-      if (innerInput instanceof HTMLInputElement) {
-        innerInput.addEventListener('click', (event) => {
-          // input의 자연 토글이 일어나도록 두지 말고 우리 로직만 적용
-          toggleHandler(event);
-        });
-        innerInput.addEventListener('change', (event) => {
-          event.stopPropagation();
-        });
-      }
-      mountUnit.addEventListener('keydown', (event) => {
-        if (event.key !== ' ' && event.key !== 'Enter') return;
-        toggleHandler(event);
-      }, true);
+      // click은 document level capture로 위임 처리 (wrap 자체 등록 시 fire 실패 케이스 대비)
 
       existing = clone;
     }
@@ -8387,9 +8362,34 @@
     syncCcfBgmYoutubeMultiSelectUI();
   }
 
+  // document level capture click — 우리 wrap/체크박스 클릭 시 토글
+  function handleCcfBgmYoutubeCheckboxClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const wrap = target.closest('.' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap, .' + CCF_BGM_MS_CHECKBOX_CLASS);
+    if (!(wrap instanceof Element)) return;
+    const row = wrap.closest('.ccf-youtube-bgm-row-wrap');
+    if (!(row instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+    const entryKey = row.dataset.ccfYoutubeBgmEntry;
+    if (!entryKey) {
+      debugLog("bgm-ms-toggle-no-key", { row: row.outerHTML.slice(0, 200) });
+      return;
+    }
+    toggleCcfBgmMultiSelect(entryKey);
+    syncCcfBgmYoutubeMultiSelectUI();
+    debugLog("bgm-ms-toggle", { entryKey, selected: ccfBgmMultiSelectedEntries.has(entryKey) });
+  }
+
+  document.addEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
   document.addEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
   document.addEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
   registerTeardown(() => {
+    document.removeEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
     document.removeEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
     document.removeEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
     clearCcfBgmMultiSelect();
