@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.29";
-  const BUILD_ID = "2026-06-06-cache-buster-bundle-fetch";
+  const VERSION = "0.1.30";
+  const BUILD_ID = "2026-06-06-loader-reinject-chat-notifier-0276";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
