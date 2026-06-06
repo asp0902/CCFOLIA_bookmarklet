@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.64
+// @version      0.2.65
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.64",
+      version: "0.2.65",
       href: location.href,
       title: document.title || ""
     });
@@ -7515,11 +7515,13 @@
         will-change: transform !important;
       }
 
-      /* native css-q3kgqo와 동일 — :hover/:active/ripple CSS 룰 없음, svg fill만 transition */
+      /* native css-q3kgqo 그대로 — color + padding + border-radius */
       .ccf-youtube-bgm-multi-checkbox {
+        position: relative !important;
         flex: 0 0 auto !important;
         pointer-events: auto !important;
         color: rgba(255, 255, 255, 0.7) !important;
+        overflow: visible !important;
       }
       .ccf-youtube-bgm-multi-checkbox svg {
         transition: fill 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -7530,6 +7532,34 @@
       }
       .ccf-youtube-bgm-multi-checkbox.Mui-checked {
         color: rgb(220, 0, 78) !important;
+      }
+      /* native MuiTouchRipple 동일 동작:
+         enter(550ms): scale 0→1, opacity 0.1→0.3
+         leave(550ms): opacity 0.3→0
+         색: currentcolor (체크박스 color 따라감) */
+      .ccf-youtube-bgm-multi-checkbox-ripple {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 50% !important;
+        background-color: currentColor !important;
+        pointer-events: none !important;
+        transform: scale(0);
+        opacity: 0.1;
+        animation: ccf-bgm-ripple-enter 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+      }
+      .ccf-youtube-bgm-multi-checkbox-ripple.is-leaving {
+        animation: ccf-bgm-ripple-leave 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+      }
+      @keyframes ccf-bgm-ripple-enter {
+        0% { transform: scale(0); opacity: 0.1; }
+        100% { transform: scale(1); opacity: 0.3; }
+      }
+      @keyframes ccf-bgm-ripple-leave {
+        0% { opacity: 0.3; }
+        100% { opacity: 0; }
       }
 
       .ccf-youtube-bgm-row-wrap > [role="button"] {
@@ -8150,6 +8180,8 @@
 
   function updateCcfBgmCheckboxVisual(checkboxEl, selected) {
     if (!(checkboxEl instanceof HTMLElement)) return;
+    const prevSelected = checkboxEl.classList.contains('Mui-checked');
+    const stateChanged = prevSelected !== !!selected;
     checkboxEl.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
       if (inp instanceof HTMLInputElement) inp.checked = !!selected;
     });
@@ -8167,6 +8199,22 @@
     } else {
       checkboxEl.classList.remove('Mui-checked');
     }
+    // 토글 시 ripple — native MuiTouchRipple 동일 keyframes/타이밍 사용
+    if (stateChanged) {
+      spawnCcfBgmCheckboxRipple(checkboxEl);
+    }
+  }
+
+  function spawnCcfBgmCheckboxRipple(checkboxEl) {
+    if (!(checkboxEl instanceof HTMLElement)) return;
+    const ripple = document.createElement('span');
+    ripple.className = 'ccf-youtube-bgm-multi-checkbox-ripple';
+    checkboxEl.appendChild(ripple);
+    // enter 550ms 끝나면 leave로 전환 → 또 550ms 후 제거 (총 ~1.1초, native와 동일)
+    window.setTimeout(() => {
+      ripple.classList.add('is-leaving');
+      window.setTimeout(() => ripple.remove(), 560);
+    }, 540);
   }
 
   function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {
