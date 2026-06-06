@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.77
+// @version      0.2.78
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.77",
+      version: "0.2.78",
       href: location.href,
       title: document.title || ""
     });
@@ -7550,28 +7550,21 @@
         z-index: 0 !important;
       }
       .ccf-youtube-bgm-row-ripple-main {
-        animation: ccf-bgm-row-ripple-main-enter 350ms linear forwards !important;
-      }
-      .ccf-youtube-bgm-row-ripple-pulse {
-        animation: ccf-bgm-row-ripple-pulse-enter 260ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-main-enter 420ms cubic-bezier(0.0, 0, 0.2, 1) forwards !important;
       }
       .ccf-youtube-bgm-row-ripple.is-leaving {
         animation: ccf-bgm-row-ripple-leave 250ms cubic-bezier(0.4, 0, 1, 1) forwards !important;
       }
-      /* max opacity 0.28 — native checkbox click active tone.
-         main wave: 편집 버튼 중간쯤부터 감속. pulse: checkbox 중심 파동 보강. */
+      /* max opacity 0.25 — native checkbox click active tone.
+         한 겹 ripple: checkbox 중심 pulse 뒤 main wave로 이어져 row 우측 끝까지 전개. */
       @keyframes ccf-bgm-row-ripple-main-enter {
         0% { transform: scale(0); opacity: 0; }
-        60% { transform: scale(0.86); opacity: 0.28; }
-        82% { transform: scale(0.95); opacity: 0.28; }
-        100% { transform: scale(1); opacity: 0.28; }
-      }
-      @keyframes ccf-bgm-row-ripple-pulse-enter {
-        0% { transform: scale(0); opacity: 0; }
-        100% { transform: scale(1); opacity: 0.28; }
+        35% { transform: scale(var(--ccf-bgm-ripple-pulse-scale, 0.18)); opacity: 0.25; }
+        72% { transform: scale(0.82); opacity: 0.25; }
+        100% { transform: scale(1); opacity: 0.25; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.28; }
+        0% { opacity: 0.25; }
         100% { opacity: 0; }
       }
 
@@ -8231,15 +8224,13 @@
       oy = (cbRect.top + cbRect.height / 2) - rect.top;
     }
 
-    const actionButton = row.querySelector('.ccf-youtube-bgm-edit, .ccf-youtube-bgm-remove, button');
-    const actionRect = actionButton instanceof HTMLElement ? actionButton.getBoundingClientRect() : null;
-    const rightLimit = actionRect
-      ? Math.max(rect.left, Math.min(rect.right, actionRect.left + actionRect.width / 2)) - rect.left
-      : rect.width * 0.82;
+    const rightLimit = rect.width;
     const leftRadius = ox;
     const rightRadius = Math.max(36, rightLimit - ox);
     const radius = Math.max(leftRadius, rightRadius, rect.height * 2);
     const diameter = radius * 2;
+    const pulseDiameter = Math.max(56, Math.min(96, rect.height * 2.4));
+    const pulseScale = Math.min(0.55, Math.max(0.08, pulseDiameter / diameter));
 
     const main = document.createElement('span');
     main.className = 'ccf-youtube-bgm-row-ripple ccf-youtube-bgm-row-ripple-main';
@@ -8247,25 +8238,13 @@
     main.style.top = (oy - diameter / 2) + 'px';
     main.style.width = diameter + 'px';
     main.style.height = diameter + 'px';
+    main.style.setProperty('--ccf-bgm-ripple-pulse-scale', String(pulseScale));
     itemButton.appendChild(main);
-
-    const pulseDiameter = Math.max(56, Math.min(96, rect.height * 2.4));
-    const pulse = document.createElement('span');
-    pulse.className = 'ccf-youtube-bgm-row-ripple ccf-youtube-bgm-row-ripple-pulse';
-    pulse.style.left = (ox - pulseDiameter / 2) + 'px';
-    pulse.style.top = (oy - pulseDiameter / 2) + 'px';
-    pulse.style.width = pulseDiameter + 'px';
-    pulse.style.height = pulseDiameter + 'px';
-    itemButton.appendChild(pulse);
 
     window.setTimeout(() => {
       main.classList.add('is-leaving');
-      pulse.classList.add('is-leaving');
-      window.setTimeout(() => {
-        main.remove();
-        pulse.remove();
-      }, 260);
-    }, 340);
+      window.setTimeout(() => main.remove(), 260);
+    }, 410);
   }
 
   function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {

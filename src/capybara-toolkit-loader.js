@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.31";
-  const BUILD_ID = "2026-06-06-loader-reinject-chat-notifier-0277";
+  const VERSION = "0.1.32";
+  const BUILD_ID = "2026-06-06-loader-reinject-chat-notifier-0278";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
