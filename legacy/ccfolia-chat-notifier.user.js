@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.63
+// @version      0.2.64
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.63",
+      version: "0.2.64",
       href: location.href,
       title: document.title || ""
     });
@@ -7515,52 +7515,21 @@
         will-change: transform !important;
       }
 
+      /* native css-q3kgqo와 동일 — :hover/:active/ripple CSS 룰 없음, svg fill만 transition */
       .ccf-youtube-bgm-multi-checkbox {
-        position: relative !important;
         flex: 0 0 auto !important;
-        z-index: 2 !important;
         pointer-events: auto !important;
-        border-radius: 50% !important;
-        overflow: visible !important;
-        transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+        color: rgba(255, 255, 255, 0.7) !important;
       }
-      .ccf-youtube-bgm-multi-checkbox:hover {
-        background-color: rgba(255, 255, 255, 0.08) !important;
-      }
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked:hover {
-        background-color: rgba(245, 0, 87, 0.16) !important;
-      }
-      /* native MUI와 동일: svg fill 색만 transition (path 자체는 즉시 교체) */
       .ccf-youtube-bgm-multi-checkbox svg {
         transition: fill 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-      }
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked svg,
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked svg path {
-        color: #f50057 !important;
         fill: currentColor !important;
       }
-      /* click ripple — native MuiTouchRipple 시뮬 */
-      .ccf-youtube-bgm-multi-checkbox-ripple {
-        position: absolute !important;
-        top: 50% !important;
-        left: 50% !important;
-        width: 100% !important;
-        height: 100% !important;
-        border-radius: 50% !important;
-        background-color: rgba(255, 255, 255, 0.2) !important;
-        transform: translate(-50%, -50%) scale(0) !important;
-        opacity: 0.6 !important;
-        pointer-events: none !important;
-        transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1), opacity 550ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+      .ccf-youtube-bgm-multi-checkbox svg path {
+        fill: currentColor !important;
       }
-      .ccf-youtube-bgm-multi-checkbox.Mui-checked .ccf-youtube-bgm-multi-checkbox-ripple {
-        background-color: rgba(245, 0, 87, 0.3) !important;
-      }
-      .ccf-youtube-bgm-multi-checkbox-ripple.is-active {
-        transform: translate(-50%, -50%) scale(1.6) !important;
-      }
-      .ccf-youtube-bgm-multi-checkbox-ripple.is-fading {
-        opacity: 0 !important;
+      .ccf-youtube-bgm-multi-checkbox.Mui-checked {
+        color: rgb(220, 0, 78) !important;
       }
 
       .ccf-youtube-bgm-row-wrap > [role="button"] {
@@ -8181,8 +8150,6 @@
 
   function updateCcfBgmCheckboxVisual(checkboxEl, selected) {
     if (!(checkboxEl instanceof HTMLElement)) return;
-    const prevSelected = checkboxEl.classList.contains('Mui-checked');
-    const stateChanged = prevSelected !== !!selected;
     checkboxEl.querySelectorAll('input[type="checkbox"]').forEach((inp) => {
       if (inp instanceof HTMLInputElement) inp.checked = !!selected;
     });
@@ -8200,24 +8167,6 @@
     } else {
       checkboxEl.classList.remove('Mui-checked');
     }
-    // click ripple — toggle 시점에만 (TouchRipple 시뮬)
-    if (stateChanged) {
-      spawnCcfBgmCheckboxRipple(checkboxEl);
-    }
-  }
-
-  function spawnCcfBgmCheckboxRipple(checkboxEl) {
-    if (!(checkboxEl instanceof HTMLElement)) return;
-    const ripple = document.createElement('span');
-    ripple.className = 'ccf-youtube-bgm-multi-checkbox-ripple';
-    checkboxEl.appendChild(ripple);
-    requestAnimationFrame(() => {
-      ripple.classList.add('is-active');
-    });
-    window.setTimeout(() => {
-      ripple.classList.add('is-fading');
-      window.setTimeout(() => ripple.remove(), 550);
-    }, 200);
   }
 
   function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {
