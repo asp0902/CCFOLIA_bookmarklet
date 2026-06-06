@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.66
+// @version      0.2.67
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.66",
+      version: "0.2.67",
       href: location.href,
       title: document.title || ""
     });
@@ -8477,7 +8477,7 @@
     debugLog("bgm-ms-toggle", { entryKey, selected: ccfBgmMultiSelectedEntries.has(entryKey) });
   }
 
-  // 복수선택 토글 버튼 클릭 즉시 sync — native checkbox 등장과 동시에 YouTube row 체크박스 mount
+  // 복수선택 토글 버튼 클릭 즉시 sync — native checkbox 등장/제거와 동시에 YouTube row 체크박스 mount/unmount
   function handleCcfBgmMultiSelectToggleClick(event) {
     const btn = event.target instanceof Element
       ? event.target.closest('button, [role="button"]')
@@ -8486,11 +8486,23 @@
     if (btn.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) return;
     const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim();
     if (!/(複数選択|複数選 ?択|복수\s*선택|multi[-\s]?select|multiselect)/i.test(label)) return;
-    // React가 native checkbox mount/unmount 후 sync — 다음 frame + 짧은 폴링
-    requestAnimationFrame(() => syncCcfBgmYoutubeMultiSelectUI());
-    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 16);
-    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 60);
-    window.setTimeout(syncCcfBgmYoutubeMultiSelectUI, 150);
+    // 토글 후 500ms 동안 매 frame native mode 변화 감지 → 즉시 sync (등장/제거 양방향)
+    let lastMode = !!findNativeBgmCheckboxTemplate(document);
+    const start = performance.now();
+    function poll() {
+      const currentMode = !!findNativeBgmCheckboxTemplate(document);
+      if (currentMode !== lastMode) {
+        lastMode = currentMode;
+        syncCcfBgmYoutubeMultiSelectUI();
+      }
+      if (performance.now() - start < 500) {
+        requestAnimationFrame(poll);
+      } else {
+        // 마지막 안전 정리
+        syncCcfBgmYoutubeMultiSelectUI();
+      }
+    }
+    requestAnimationFrame(poll);
   }
 
   document.addEventListener('click', handleCcfBgmMultiSelectToggleClick, true);
