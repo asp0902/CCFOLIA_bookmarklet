@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.28";
-  const BUILD_ID = "2026-05-30-cree-grrr-react-safe-card";
+  const VERSION = "0.1.29";
+  const BUILD_ID = "2026-06-06-cache-buster-bundle-fetch";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
@@ -1136,7 +1136,8 @@
 
   async function cacheBundle(featureId, kind, path) {
     const url = urlFor(path);
-    const response = await fetch(url, { cache: "no-cache" });
+    // CDN(GitHub Pages 등) 캐시 우회를 위해 cache buster 부여
+    const response = await fetch(withCacheBuster(url), { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Cache failed: ${response.status} ${response.statusText}`);
     }
