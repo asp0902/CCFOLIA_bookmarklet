@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.67
+// @version      0.2.68
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.67",
+      version: "0.2.68",
       href: location.href,
       title: document.title || ""
     });
@@ -7545,19 +7545,21 @@
         background-color: currentColor !important;
         pointer-events: none !important;
         transform: scale(0);
-        opacity: 0.1;
+        opacity: 0;
         animation: ccf-bgm-row-ripple-enter 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         z-index: 0 !important;
       }
       .ccf-youtube-bgm-row-ripple.is-leaving {
         animation: ccf-bgm-row-ripple-leave 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
       }
+      /* max opacity 0.08 — 정통 MUI dark theme의 ListItemButton:hover 톤
+         (currentColor가 rgba(255,255,255,0.7)이므로 실효 rgba(255,255,255,~0.056)) */
       @keyframes ccf-bgm-row-ripple-enter {
-        0% { transform: scale(0); opacity: 0.1; }
-        100% { transform: scale(1); opacity: 0.3; }
+        0% { transform: scale(0); opacity: 0; }
+        100% { transform: scale(1); opacity: 0.08; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.3; }
+        0% { opacity: 0.08; }
         100% { opacity: 0; }
       }
 
