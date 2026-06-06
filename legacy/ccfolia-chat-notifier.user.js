@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.70
+// @version      0.2.73
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.70",
+      version: "0.2.73",
       href: location.href,
       title: document.title || ""
     });
@@ -7534,7 +7534,7 @@
         color: rgb(220, 0, 78) !important;
       }
       /* native ListItemButton의 TouchRipple 시뮬:
-         row 전체에 클릭 위치 기준 원형 확산 (enter 550ms + leave 550ms = ~1.1s) */
+         checkbox 중심에서 편집 버튼 중간쯤까지 확산 (enter 350ms + leave 350ms = ~0.7s) */
       .ccf-youtube-bgm-item {
         position: relative !important;
         overflow: hidden !important;
@@ -7546,20 +7546,20 @@
         pointer-events: none !important;
         transform: scale(0);
         opacity: 0;
-        animation: ccf-bgm-row-ripple-enter 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-enter 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         z-index: 0 !important;
       }
       .ccf-youtube-bgm-row-ripple.is-leaving {
-        animation: ccf-bgm-row-ripple-leave 550ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: ccf-bgm-row-ripple-leave 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
       }
-      /* max opacity 0.08 — 정통 MUI dark theme의 ListItemButton:hover 톤
-         (currentColor가 rgba(255,255,255,0.7)이므로 실효 rgba(255,255,255,~0.056)) */
+      /* max opacity 0.42 — native checkbox click active tone.
+         사용자 관찰: v0.2.72(0.24)도 native보다 어둡고, native는 checkbox 중심 파동처럼 보인다. */
       @keyframes ccf-bgm-row-ripple-enter {
         0% { transform: scale(0); opacity: 0; }
-        100% { transform: scale(1); opacity: 0.08; }
+        100% { transform: scale(1); opacity: 0.42; }
       }
       @keyframes ccf-bgm-row-ripple-leave {
-        0% { opacity: 0.08; }
+        0% { opacity: 0.42; }
         100% { opacity: 0; }
       }
 
@@ -8209,15 +8209,28 @@
     if (!(itemButton instanceof HTMLElement)) return;
     const rect = itemButton.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    const ox = clickX - rect.left;
-    const oy = clickY - rect.top;
-    // ripple 직경: 클릭 위치에서 row 네 모서리까지의 최장 거리 * 2
-    const diameter = Math.max(
-      Math.hypot(ox, oy),
-      Math.hypot(rect.width - ox, oy),
-      Math.hypot(ox, rect.height - oy),
-      Math.hypot(rect.width - ox, rect.height - oy)
-    ) * 2;
+
+    const checkbox = row.querySelector('.' + CCF_BGM_MS_CHECKBOX_CLASS + ', .' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap');
+    let ox = clickX - rect.left;
+    let oy = clickY - rect.top;
+    if (checkbox instanceof HTMLElement) {
+      const cbRect = checkbox.getBoundingClientRect();
+      ox = (cbRect.left + cbRect.width / 2) - rect.left;
+      oy = (cbRect.top + cbRect.height / 2) - rect.top;
+    }
+
+    const actionButton = row.querySelector('.ccf-youtube-bgm-edit, .ccf-youtube-bgm-remove, button');
+    const actionRect = actionButton instanceof HTMLElement ? actionButton.getBoundingClientRect() : null;
+    const rightLimit = actionRect
+      ? Math.max(rect.left, Math.min(rect.right, actionRect.left + actionRect.width / 2)) - rect.left
+      : rect.width * 0.82;
+    const radius = Math.max(
+      Math.abs(ox),
+      Math.abs(rightLimit - ox),
+      rect.height * 2
+    );
+    const diameter = radius * 2;
+
     const ripple = document.createElement('span');
     ripple.className = 'ccf-youtube-bgm-row-ripple';
     ripple.style.left = (ox - diameter / 2) + 'px';
@@ -8227,8 +8240,8 @@
     itemButton.appendChild(ripple);
     window.setTimeout(() => {
       ripple.classList.add('is-leaving');
-      window.setTimeout(() => ripple.remove(), 560);
-    }, 540);
+      window.setTimeout(() => ripple.remove(), 360);
+    }, 340);
   }
 
   function ensureCcfBgmYoutubeRowCheckbox(row, template, selected) {
