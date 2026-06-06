@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.69
+// @version      0.2.70
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.69",
+      version: "0.2.70",
       href: location.href,
       title: document.title || ""
     });
@@ -8128,6 +8128,7 @@
   // ========================================================================
   const CCF_BGM_MS_CHECKBOX_CLASS = "ccf-youtube-bgm-multi-checkbox";
   const CCF_BGM_MS_SELECTED_ATTR = "data-ccf-bgm-multi-selected";
+  const CCF_BGM_MULTI_SELECT_LABEL_RE = /(複数選択|複数選 ?択|복수\s*선택|multi[-\s]?select|multiselect)/i;
   const CCF_BGM_MS_BATCH_LABEL_RE = {
     delete: /^(削除|削除する|消去|刪除|Delete|Remove|삭제|지우기)$/i,
     selectAll: /(全て選択|全選択|すべて選択|Select\s*all|전체\s*선택|모두\s*선택)/i,
@@ -8488,7 +8489,7 @@
     debugLog("bgm-ms-toggle", { entryKey, selected: ccfBgmMultiSelectedEntries.has(entryKey) });
   }
 
-  // 복수선택 토글 버튼 클릭 즉시 sync — native checkbox 등장/제거와 동시에 YouTube row 체크박스 mount/unmount
+  // 복수선택 토글 버튼 클릭 — OFF는 선반영(예측 제거), ON은 polling으로 native 따라감
   function handleCcfBgmMultiSelectToggleClick(event) {
     const btn = event.target instanceof Element
       ? event.target.closest('button, [role="button"]')
@@ -8496,9 +8497,27 @@
     if (!(btn instanceof HTMLElement)) return;
     if (btn.closest('.ccf-youtube-bgm-row-wrap, .ccf-youtube-bgm-popover')) return;
     const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim();
-    if (!/(複数選択|複数選 ?択|복수\s*선택|multi[-\s]?select|multiselect)/i.test(label)) return;
-    // 토글 후 500ms 동안 매 frame native mode 변화 감지 → 즉시 sync (등장/제거 양방향)
-    let lastMode = !!findNativeBgmCheckboxTemplate(document);
+    if (!CCF_BGM_MULTI_SELECT_LABEL_RE.test(label)) return;
+
+    const wasOn = !!findNativeBgmCheckboxTemplate(document);
+    if (wasOn) {
+      // ON → OFF 예측: 즉시 우리 row checkbox 제거 (native 응답 기다리지 않음, 0ms)
+      document.querySelectorAll('.ccf-youtube-bgm-row-wrap').forEach((row) => {
+        if (!(row instanceof HTMLElement)) return;
+        const w = row.querySelector('.' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap');
+        if (w) w.remove();
+        else {
+          const cb = row.querySelector('.' + CCF_BGM_MS_CHECKBOX_CLASS);
+          if (cb) cb.remove();
+        }
+        row.removeAttribute(CCF_BGM_MS_SELECTED_ATTR);
+      });
+      clearCcfBgmMultiSelect();
+      ccfBgmLastMultiSelectMode = false;
+    }
+
+    // polling으로 native 변화 따라감 — 예측 틀린 경우 정정
+    let lastMode = wasOn;
     const start = performance.now();
     function poll() {
       const currentMode = !!findNativeBgmCheckboxTemplate(document);
@@ -8509,7 +8528,6 @@
       if (performance.now() - start < 500) {
         requestAnimationFrame(poll);
       } else {
-        // 마지막 안전 정리
         syncCcfBgmYoutubeMultiSelectUI();
       }
     }
