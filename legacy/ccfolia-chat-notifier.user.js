@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.68
+// @version      0.2.69
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.68",
+      version: "0.2.69",
       href: location.href,
       title: document.title || ""
     });
@@ -8447,7 +8447,25 @@
     syncCcfBgmYoutubeMultiSelectUI();
   }
 
-  // document level capture click — 우리 wrap/체크박스 클릭 시 토글 + row ripple
+  // document level pointerdown capture — 클릭 시작 시점에 즉시 ripple 발동 (native와 동일)
+  function handleCcfBgmYoutubeCheckboxPointerDown(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const wrap = target.closest('.' + CCF_BGM_MS_CHECKBOX_CLASS + '-wrap, .' + CCF_BGM_MS_CHECKBOX_CLASS);
+    if (!(wrap instanceof Element)) return;
+    const row = wrap.closest('.ccf-youtube-bgm-row-wrap');
+    if (!(row instanceof HTMLElement)) return;
+    let cx = event.clientX;
+    let cy = event.clientY;
+    if (!cx && !cy) {
+      const wrect = wrap.getBoundingClientRect();
+      cx = wrect.left + wrect.width / 2;
+      cy = wrect.top + wrect.height / 2;
+    }
+    spawnCcfBgmRowRipple(row, cx, cy);
+  }
+
+  // document level capture click — 우리 wrap/체크박스 클릭 시 토글
   function handleCcfBgmYoutubeCheckboxClick(event) {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -8465,15 +8483,6 @@
       debugLog("bgm-ms-toggle-no-key", { row: row.outerHTML.slice(0, 200) });
       return;
     }
-    // 클릭 위치 — 마우스 event면 clientX/Y, dispatchEvent면 0 → wrap 중앙으로 fallback
-    let cx = event.clientX;
-    let cy = event.clientY;
-    if (!cx && !cy) {
-      const wrect = wrap.getBoundingClientRect();
-      cx = wrect.left + wrect.width / 2;
-      cy = wrect.top + wrect.height / 2;
-    }
-    spawnCcfBgmRowRipple(row, cx, cy);
     toggleCcfBgmMultiSelect(entryKey);
     syncCcfBgmYoutubeMultiSelectUI();
     debugLog("bgm-ms-toggle", { entryKey, selected: ccfBgmMultiSelectedEntries.has(entryKey) });
@@ -8507,11 +8516,13 @@
     requestAnimationFrame(poll);
   }
 
+  document.addEventListener('pointerdown', handleCcfBgmYoutubeCheckboxPointerDown, true);
   document.addEventListener('click', handleCcfBgmMultiSelectToggleClick, true);
   document.addEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
   document.addEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
   document.addEventListener('change', handleCcfBgmMultiSelectHeaderChange, true);
   registerTeardown(() => {
+    document.removeEventListener('pointerdown', handleCcfBgmYoutubeCheckboxPointerDown, true);
     document.removeEventListener('click', handleCcfBgmMultiSelectToggleClick, true);
     document.removeEventListener('click', handleCcfBgmYoutubeCheckboxClick, true);
     document.removeEventListener('click', handleCcfBgmMultiSelectBatchClick, true);
