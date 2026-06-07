@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.1
+// @version      0.1.2
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -749,9 +749,30 @@
       padding: 0 16px 12px 16px; overflow: auto;
     }
     .pl-modal .pl-row {
-      display: grid; grid-template-columns: 24px 1fr 1fr 110px 28px;
-      gap: 8px; align-items: center; margin-bottom: 8px;
+      display: flex; flex-direction: column; gap: 4px;
+      margin-bottom: 8px; padding: 4px 4px 4px 6px; border-radius: 4px;
+      border-left: 3px solid transparent; transition: background-color 150ms;
     }
+    .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
+    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,196,0,.05); }
+    .pl-modal .pl-row-main {
+      display: grid; grid-template-columns: 24px 1fr 1fr 110px 28px;
+      gap: 8px; align-items: center;
+    }
+    .pl-modal .pl-row-aliases {
+      font-size: 0.72rem; color: rgba(255,255,255,.6);
+      padding: 0 4px 0 32px; line-height: 1.3; word-break: break-word;
+    }
+    .pl-modal .pl-row-aliases::before { content: "별칭: "; opacity: .65; }
+    .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .pl-modal .pl-badge {
+      font-size: 0.65rem; padding: 2px 6px; border-radius: 8px;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.7);
+      line-height: 1.2;
+    }
+    .pl-modal .pl-badge[data-kind="admin"] { background: rgba(255,196,0,.18); color: #ffcd38; }
+    .pl-modal .pl-badge[data-kind="gm"] { background: rgba(120,200,255,.18); color: #78c8ff; }
+    .pl-modal .pl-badge[data-kind="group"] { background: rgba(180,180,255,.12); color: #b4b4ff; }
     .pl-modal .pl-merge-check { width: 16px; height: 16px; accent-color: #fff; justify-self: center; }
     .pl-modal .pl-row input, .pl-modal .pl-row select {
       background-color: #1a1a1a; border: 0; border-radius: 4px;
@@ -818,6 +839,9 @@
             <div class="pl-modal" role="dialog" aria-label="플레이어 목록 설정">
               <div class="pl-modal-head">
                 <h2>플레이어 목록 설정</h2>
+                <button class="action-icon" data-action="pl-modal-refresh" aria-label="새로고침" title="새로고침 (누락 PL 복구)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                </button>
                 <button class="action-icon" data-action="pl-modal-close" aria-label="닫기">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                 </button>
@@ -2120,6 +2144,7 @@
     if (action === "pl-modal-close") { closePlListDialog(); return; }
     if (action === "pl-modal-add") { addPlRow(); return; }
     if (action === "pl-modal-merge") { mergeSelectedPlRows(); return; }
+    if (action === "pl-modal-refresh") { refreshPlListInDialog(); return; }
     if (action === "pl-modal-save") { savePlListFromDialog(); return; }
     if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
     if (action === "reload-my-characters") { reloadMyCharacterOptions(); return; }
@@ -2222,15 +2247,40 @@
   }
 
   // ===== PL 목록 관리 모달 =====
+  function buildPlListForDialog() {
+    const base = mergePlListById(state.data.plList || []).filter((p) => p && (p.name || p.id || (p.aliases || []).length));
+    const adminName = String(state.data.myCharacter || "").trim();
+    if (!adminName) return base;
+    const adminKey = normalizePlNameKey(adminName);
+    const exists = base.some((p) => {
+      if (normalizePlNameKey(p.name) === adminKey) return true;
+      return (p.aliases || []).some((alias) => normalizePlNameKey(alias) === adminKey);
+    });
+    if (exists) {
+      return base.map((p) => {
+        const nameMatches = normalizePlNameKey(p.name) === adminKey;
+        const aliasMatches = (p.aliases || []).some((alias) => normalizePlNameKey(alias) === adminKey);
+        return nameMatches || aliasMatches ? { ...p, _isAdmin: true } : p;
+      });
+    }
+    return [{ name: adminName, id: "", role: "gm", aliases: [], _isAdmin: true }, ...base];
+  }
+
+  function colorForPlId(idKey) {
+    if (!idKey) return null;
+    let h = 0;
+    for (const c of String(idKey)) h = ((h * 31) + c.charCodeAt(0)) & 0xffff;
+    return `hsl(${h % 360}, 65%, 55%)`;
+  }
+
   function openPlListDialog() {
     const overlay = state.shadow?.querySelector(".pl-modal-overlay");
     if (!overlay) return;
-    // 현재 데이터로 행 생성
     const host = overlay.querySelector("[data-pl-rows-host]");
     host.innerHTML = "";
-    const plList = state.data.plList && state.data.plList.length ? state.data.plList : [];
-    if (!plList.length) plList.push({ name: "", id: "", role: "player" });
-    for (const item of plList) appendPlRow(host, item);
+    const list = buildPlListForDialog();
+    if (!list.length) list.push({ name: "", id: "", role: "player" });
+    for (const item of list) appendPlRow(host, item);
     overlay.setAttribute("data-pl-modal-open", "1");
   }
 
@@ -2241,19 +2291,77 @@
   function appendPlRow(host, item) {
     const row = document.createElement("div");
     row.className = "pl-row";
+    const idKey = normalizePlNameKey(item?.id || "");
+    if (idKey) {
+      row.setAttribute("data-pl-id-color", "1");
+      row.style.setProperty("--pl-id-color", colorForPlId(idKey));
+    }
+    if (item?._isAdmin) row.setAttribute("data-pl-admin", "1");
+
+    const aliases = (item?.aliases || []).filter(Boolean);
+    const aliasHtml = aliases.length
+      ? `<div class="pl-row-aliases">${escapeHtml(aliases.join(", "))}</div>`
+      : "";
+
+    const badges = [];
+    if (item?._isAdmin) badges.push(`<span class="pl-badge" data-kind="admin">관리자</span>`);
+    if (item?.role === "gm" && !item?._isAdmin) badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
+    if (idKey) badges.push(`<span class="pl-badge" data-kind="group">ID 그룹: ${escapeHtml(item.id)}</span>`);
+    const badgeHtml = badges.length ? `<div class="pl-row-badges">${badges.join("")}</div>` : "";
+
     row.innerHTML = `
-      <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
-      <input type="text" placeholder="대표 이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
-      <input type="text" placeholder="ID (같으면 병합)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
-      <select data-pl-field="role">
-        <option value="player" ${item?.role !== "gm" ? "selected" : ""}>player</option>
-        <option value="gm" ${item?.role === "gm" ? "selected" : ""}>gm</option>
-      </select>
-      <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-      </button>
+      <div class="pl-row-main">
+        <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
+        <input type="text" placeholder="대표 이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
+        <input type="text" placeholder="ID (같으면 병합)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
+        <select data-pl-field="role">
+          <option value="player" ${item?.role !== "gm" ? "selected" : ""}>player</option>
+          <option value="gm" ${item?.role === "gm" ? "selected" : ""}>gm</option>
+        </select>
+        <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      ${aliasHtml}
+      ${badgeHtml}
     `;
     host.appendChild(row);
+  }
+
+  async function refreshPlListInDialog() {
+    const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
+    if (!host) return;
+    state.chatSeenAuthors.clear();
+    try { scanCurrentBottomChatAuthors(); } catch (error) { console.warn("[ccf-handout] chat rescan failed", error); }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    const currentRows = Array.from(host.querySelectorAll(".pl-row"));
+    const currentItems = currentRows.map(readPlRow).filter(Boolean);
+    const currentKeys = new Set();
+    currentItems.forEach((item) => {
+      if (item.name) currentKeys.add(normalizePlNameKey(item.name));
+      if (item.id) currentKeys.add("id:" + normalizePlNameKey(item.id));
+      (item.aliases || []).forEach((alias) => currentKeys.add(normalizePlNameKey(alias)));
+    });
+
+    const known = buildPlListForDialog();
+    const missing = known.filter((p) => {
+      const nameKey = normalizePlNameKey(p.name);
+      const idKey = p.id ? "id:" + normalizePlNameKey(p.id) : "";
+      if (nameKey && currentKeys.has(nameKey)) return false;
+      if (idKey && currentKeys.has(idKey)) return false;
+      const aliasMatch = (p.aliases || []).some((alias) => currentKeys.has(normalizePlNameKey(alias)));
+      if (aliasMatch) return false;
+      return true;
+    });
+
+    if (currentRows.length === 1) {
+      const only = currentItems[0];
+      if (!only) host.innerHTML = "";
+    }
+
+    for (const item of missing) appendPlRow(host, item);
+    toast(missing.length ? `${missing.length}명 복구됨` : "복구할 PL이 없습니다.");
   }
 
   function addPlRow() {
@@ -2713,7 +2821,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.1 (admin visibility + persisted GM candidates)");
+    console.info("[ccf-handout] init — version 0.1.2 (PL modal: all players + admin + refresh)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
