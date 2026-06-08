@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.19
+// @version      0.1.20
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -330,6 +330,34 @@
     if (permFlag(h, ALL_KEY, "edit")) return true;
     if (!name) return false;
     return permFlag(h, name, "edit");
+  }
+
+  // PL 1명에 대해 전체 핸드아웃 통틀어 view/secret/edit 권한 한 번이라도 받은 적 있는지 집계.
+  // 대표 이름 + aliases 모두 검사. "*" (전체 공개) 도 점등 대상.
+  function aggregatePermissionsForPl(pl) {
+    const result = { view: false, secret: false, edit: false };
+    if (!pl) return result;
+    const handouts = Array.isArray(state.data?.handouts) ? state.data.handouts : [];
+    if (!handouts.length) return result;
+    const keys = [];
+    if (pl.name) keys.push(String(pl.name));
+    if (Array.isArray(pl.aliases)) {
+      for (const a of pl.aliases) {
+        const s = a == null ? "" : String(a);
+        if (s && !keys.includes(s)) keys.push(s);
+      }
+    }
+    for (const h of handouts) {
+      for (const col of PERM_COLS) {
+        if (result[col]) continue;
+        if (permFlag(h, ALL_KEY, col)) { result[col] = true; continue; }
+        for (const key of keys) {
+          if (permFlag(h, key, col)) { result[col] = true; break; }
+        }
+      }
+      if (result.view && result.secret && result.edit) break;
+    }
+    return result;
   }
 
   function getVisibleCharacterName() {
@@ -679,6 +707,85 @@
       color: rgba(255,255,255,.85); font-size: 0.875rem;
       font-family: ui-monospace, Consolas, monospace;
     }
+    /* 설정 탭 PL 리스트 + 권한 신호등 */
+    .settings-pl-list {
+      display: flex; flex-direction: column; gap: 4px;
+      margin-top: 6px;
+    }
+    .settings-pl-empty {
+      padding: 8px 4px; color: rgba(255,255,255,.45);
+      font-size: 0.8125rem;
+    }
+    .settings-pl-row {
+      display: grid;
+      grid-template-columns: 3px minmax(0, 1fr) auto;
+      gap: 8px; align-items: center;
+      padding: 6px 8px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 4px;
+      min-width: 0;
+    }
+    .settings-pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.06); }
+    .settings-pl-strip {
+      align-self: stretch; border-radius: 2px;
+      background: transparent;
+    }
+    .settings-pl-row[data-pl-role="gm"] .settings-pl-strip { background: #fff; }
+    .settings-pl-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .settings-pl-name-row {
+      display: flex; align-items: baseline; gap: 6px;
+      min-width: 0;
+    }
+    .settings-pl-name {
+      color: #fff; font-size: 0.875rem; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .settings-pl-role {
+      flex: 0 0 auto;
+      font-size: 0.6875rem; line-height: 1;
+      padding: 2px 5px; border-radius: 2px;
+      color: rgba(255,255,255,.55);
+      background: rgba(255,255,255,.06);
+      letter-spacing: .03em;
+    }
+    .settings-pl-row[data-pl-role="gm"] .settings-pl-role {
+      color: rgba(0,0,0,.85); background: #fff;
+    }
+    .settings-pl-id {
+      flex: 0 0 auto;
+      font-size: 0.6875rem;
+      color: rgba(255,255,255,.45);
+      font-family: ui-monospace, Consolas, monospace;
+    }
+    .settings-pl-aliases {
+      display: flex; flex-wrap: wrap; gap: 3px;
+      font-size: 0.6875rem;
+      color: rgba(255,255,255,.55);
+    }
+    .settings-pl-aliases::before {
+      content: "병합: "; opacity: .55;
+    }
+    .settings-pl-aliases:empty { display: none; }
+    .settings-pl-alias {
+      padding: 1px 5px;
+      background: rgba(255,255,255,.06);
+      border-radius: 2px;
+      max-width: 120px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .settings-pl-signals {
+      display: flex; gap: 4px; flex: 0 0 auto;
+    }
+    .settings-pl-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(255,255,255,.12);
+      transition: background-color 150ms;
+    }
+    .settings-pl-dot[data-on="1"][data-perm="view"]   { background: #4caf50; }
+    .settings-pl-dot[data-on="1"][data-perm="secret"] { background: #f44336; }
+    .settings-pl-dot[data-on="1"][data-perm="edit"]   { background: #ffc107; }
     /* SVG 클릭 안 막힘 (button click 정상 통과) */
     header .header-btn svg, .handout-edit-header .action-icon svg,
     .pl-modal .action-icon svg, .pl-modal .row-x svg {
@@ -2018,6 +2125,42 @@
     `;
   }
 
+  function renderSettingsPlList() {
+    const list = Array.isArray(state.data?.plList) ? state.data.plList : [];
+    if (!list.length) {
+      return `<div class="settings-pl-empty">등록된 플레이어가 없습니다.</div>`;
+    }
+    const rows = list.map((pl) => {
+      const role = pl?.role === "gm" ? "gm" : "player";
+      const roleLabel = role === "gm" ? "GM" : "PL";
+      const name = pl?.name ? String(pl.name) : "(이름 없음)";
+      const id = pl?.id ? String(pl.id) : "";
+      const aliases = Array.isArray(pl?.aliases) ? pl.aliases.filter((a) => a) : [];
+      const merged = aliases.length > 0 ? "1" : "0";
+      const perms = aggregatePermissionsForPl(pl);
+      const aliasHtml = aliases.map((a) => `<span class="settings-pl-alias" title="${escapeAttr(a)}">${escapeHtml(a)}</span>`).join("");
+      return `
+        <div class="settings-pl-row" data-pl-role="${role}" data-pl-merged="${merged}">
+          <span class="settings-pl-strip" aria-hidden="true"></span>
+          <div class="settings-pl-main">
+            <div class="settings-pl-name-row">
+              <span class="settings-pl-name" title="${escapeAttr(name)}">${escapeHtml(name)}</span>
+              <span class="settings-pl-role">${roleLabel}</span>
+              ${id ? `<span class="settings-pl-id">#${escapeHtml(id)}</span>` : ""}
+            </div>
+            ${aliases.length ? `<div class="settings-pl-aliases">${aliasHtml}</div>` : ""}
+          </div>
+          <div class="settings-pl-signals" aria-label="권한 신호등 (전체 핸드아웃 집계)">
+            <span class="settings-pl-dot" data-perm="view"   data-on="${perms.view   ? "1" : "0"}" title="공개${perms.view   ? "" : " (없음)"}"></span>
+            <span class="settings-pl-dot" data-perm="secret" data-on="${perms.secret ? "1" : "0"}" title="비밀${perms.secret ? "" : " (없음)"}"></span>
+            <span class="settings-pl-dot" data-perm="edit"   data-on="${perms.edit   ? "1" : "0"}" title="수정${perms.edit   ? "" : " (없음)"}"></span>
+          </div>
+        </div>
+      `;
+    }).join("");
+    return `<div class="settings-pl-list">${rows}</div>`;
+  }
+
   function renderSettings() {
     const plCount = (state.data.plList || []).length;
     const myChars = state.myCharacterOptions || [];
@@ -2042,6 +2185,7 @@
           <button class="btn secondary small" data-action="pl-modal-open">PL 목록 관리</button>
           <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
         </div>
+        ${renderSettingsPlList()}
       </div>
       <div class="row settings-save-row">
         <button class="btn" data-action="save-settings">저장</button>
@@ -3004,7 +3148,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.19 (edit tab perm-grid tighter columns)");
+    console.info("[ccf-handout] init — version 0.1.20 (settings tab PL list + perm signals)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
