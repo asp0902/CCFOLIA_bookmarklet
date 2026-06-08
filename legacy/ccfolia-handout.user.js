@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.21
+// @version      0.1.22
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -866,15 +866,19 @@
     .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
-      grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
+      grid-template-columns: 24px minmax(0,1fr) minmax(0,140px) 60px 28px;
       gap: 4px 8px; align-items: center; min-width: 0;
     }
     .pl-modal .pl-row-main > * { min-width: 0; }
     .pl-modal .pl-row-main input[data-pl-field],
     .pl-modal .pl-row-main select[data-pl-field] { width: 100%; box-sizing: border-box; }
+    .pl-modal .pl-row-main select[data-pl-field] {
+      padding-left: 8px; padding-right: 22px;
+      background-position: right 6px center;
+    }
     .pl-modal .pl-row-meta {
       display: grid;
-      grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
+      grid-template-columns: 24px minmax(0,1fr) minmax(0,140px) 60px 28px;
       gap: 0 8px; align-items: center;
     }
     .pl-modal .pl-row-meta:not(:has(> :not([hidden]))) { display: none; }
@@ -3149,7 +3153,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.21 (list tab full-width — no 24px side padding)");
+    console.info("[ccf-handout] init — version 0.1.22 (PL modal role select narrower, ID input wider)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
