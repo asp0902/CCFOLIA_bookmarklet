@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.11
+// @version      0.1.12
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -778,6 +778,17 @@
       line-height: 1.3; word-break: break-word; padding-left: 1px;
     }
     .pl-modal .pl-row-aliases::before { content: "병합: "; opacity: .65; }
+    .pl-modal .pl-alias-chip {
+      display: inline-block; padding: 1px 6px; margin: 0 4px 2px 0;
+      border-radius: 8px; background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.75); cursor: pointer; user-select: none;
+      font-size: 0.7rem; line-height: 1.3; transition: background-color 120ms;
+    }
+    .pl-modal .pl-alias-chip:hover { background: rgba(255,255,255,.14); color: #fff; }
+    .pl-modal .pl-alias-chip[data-selected="1"] {
+      background: rgba(120,200,255,.22); color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(120,200,255,.55);
+    }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
     .pl-modal .pl-badge {
       font-size: 0.65rem; padding: 2px 6px; border-radius: 8px;
@@ -862,6 +873,7 @@
               <div class="pl-modal-body" data-pl-rows-host="1"></div>
               <div class="pl-modal-foot">
                 <button class="btn secondary small" data-action="pl-modal-merge">병합</button>
+                <button class="btn secondary small" data-action="pl-modal-unmerge" hidden>해제</button>
                 <button class="btn secondary small" data-action="pl-modal-add">추가</button>
                 <button class="btn small" data-action="pl-modal-save">저장</button>
               </div>
@@ -2127,6 +2139,11 @@
       setTab(tabBtn.dataset.tab);
       return;
     }
+    const aliasChip = event.target.closest(".pl-alias-chip");
+    if (aliasChip) {
+      togglePlAliasChip(aliasChip);
+      return;
+    }
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
@@ -2157,6 +2174,7 @@
     if (action === "pl-modal-close") { closePlListDialog(); return; }
     if (action === "pl-modal-add") { addPlRow(); return; }
     if (action === "pl-modal-merge") { mergeSelectedPlRows(); return; }
+    if (action === "pl-modal-unmerge") { unmergeSelectedAliases(); return; }
     if (action === "pl-modal-refresh") { refreshPlListInDialog(); return; }
     if (action === "pl-modal-save") { savePlListFromDialog(); return; }
     if (action === "pl-modal-row-remove") { removePlRow(btn); return; }
@@ -2423,10 +2441,12 @@
     const aliasEl = row.querySelector("[data-pl-aliases-display]");
     if (aliasEl) {
       if (aliases.length) {
-        aliasEl.textContent = aliases.join(", ");
+        aliasEl.innerHTML = aliases
+          .map((alias) => `<span class="pl-alias-chip" data-alias="${escapeAttr(alias)}">${escapeHtml(alias)}</span>`)
+          .join("");
         aliasEl.hidden = false;
       } else {
-        aliasEl.textContent = "";
+        aliasEl.innerHTML = "";
         aliasEl.hidden = true;
       }
     }
@@ -2472,6 +2492,45 @@
     selected.slice(1).forEach((row) => row.remove());
     selected[0].querySelector("[data-pl-merge-check]").checked = false;
     toast(`${items.length}개 행 병합됨`);
+  }
+
+  function togglePlAliasChip(chip) {
+    if (!(chip instanceof HTMLElement)) return;
+    const selected = chip.getAttribute("data-selected") === "1";
+    if (selected) chip.removeAttribute("data-selected");
+    else chip.setAttribute("data-selected", "1");
+    updateUnmergeButtonVisibility();
+  }
+
+  function updateUnmergeButtonVisibility() {
+    const overlay = state.shadow?.querySelector(".pl-modal-overlay");
+    if (!overlay) return;
+    const anySelected = !!overlay.querySelector('.pl-alias-chip[data-selected="1"]');
+    const btn = overlay.querySelector('[data-action="pl-modal-unmerge"]');
+    if (btn) btn.hidden = !anySelected;
+  }
+
+  function unmergeSelectedAliases() {
+    const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
+    if (!host) return;
+    const rows = Array.from(host.querySelectorAll(".pl-row"));
+    const splitOff = [];
+    for (const row of rows) {
+      const selectedChips = Array.from(row.querySelectorAll('.pl-alias-chip[data-selected="1"]'));
+      if (!selectedChips.length) continue;
+      const item = readPlRow(row);
+      if (!item) continue;
+      const selectedNames = selectedChips.map((c) => c.dataset.alias || c.textContent.trim()).filter(Boolean);
+      const remaining = (item.aliases || []).filter((alias) => !selectedNames.includes(alias));
+      item.aliases = remaining;
+      writePlRow(row, item);
+      for (const aliasName of selectedNames) {
+        splitOff.push({ name: aliasName, id: item.id, role: "player", aliases: [] });
+      }
+    }
+    for (const newItem of splitOff) appendPlRow(host, newItem);
+    updateUnmergeButtonVisibility();
+    if (splitOff.length) toast(`${splitOff.length}명 분리됨 (ID 동일 그룹 유지)`);
   }
 
   function findExistingPlAliases(name, id) {
@@ -2875,7 +2934,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.11 (PL modal: nudge 병합 label 1px right)");
+    console.info("[ccf-handout] init — version 0.1.12 (PL modal: alias chip selection + unmerge button)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
