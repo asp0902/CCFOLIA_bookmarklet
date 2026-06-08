@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.2
+// @version      0.1.3
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -735,6 +735,7 @@
       padding: 16px 8px 12px 20px;
       display: flex; align-items: center; gap: 10px;
     }
+    .pl-modal-head .action-icon + .action-icon { margin-left: -10px; }
     .pl-modal-head h2 {
       margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff;
     }
@@ -746,7 +747,7 @@
     }
     .pl-modal .action-icon:hover { background: rgba(255,255,255,.08); }
     .pl-modal-body {
-      padding: 0 16px 12px 16px; overflow: auto;
+      padding: 0 16px 12px 16px; overflow-y: auto; overflow-x: hidden;
     }
     .pl-modal .pl-row {
       display: flex; flex-direction: column; gap: 4px;
@@ -754,11 +755,13 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
-    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,196,0,.05); }
+    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); }
     .pl-modal .pl-row-main {
-      display: grid; grid-template-columns: 24px 1fr 1fr 110px 28px;
-      gap: 8px; align-items: center;
+      display: grid; grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
+      gap: 8px; align-items: center; min-width: 0;
     }
+    .pl-modal .pl-row-main > input,
+    .pl-modal .pl-row-main > select { min-width: 0; width: 100%; box-sizing: border-box; }
     .pl-modal .pl-row-aliases {
       font-size: 0.72rem; color: rgba(255,255,255,.6);
       padding: 0 4px 0 32px; line-height: 1.3; word-break: break-word;
@@ -797,7 +800,7 @@
     }
     .pl-modal .row-x:hover { background: rgba(255,255,255,.08); color: #fff; }
     .pl-modal-foot {
-      display: flex; justify-content: flex-end; gap: 8px;
+      display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
       padding: 8px 16px 16px;
     }
     /* CCFOLIA는 dark 전용 → light prefers 분기 없음 */
@@ -2304,7 +2307,6 @@
       : "";
 
     const badges = [];
-    if (item?._isAdmin) badges.push(`<span class="pl-badge" data-kind="admin">관리자</span>`);
     if (item?.role === "gm" && !item?._isAdmin) badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
     if (idKey) badges.push(`<span class="pl-badge" data-kind="group">ID 그룹: ${escapeHtml(item.id)}</span>`);
     const badgeHtml = badges.length ? `<div class="pl-row-badges">${badges.join("")}</div>` : "";
@@ -2313,7 +2315,7 @@
       <div class="pl-row-main">
         <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
         <input type="text" placeholder="대표 이름" data-pl-field="name" value="${escapeHtml(item?.name || "")}">
-        <input type="text" placeholder="ID (같으면 병합)" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
+        <input type="text" placeholder="ID" title="같은 ID끼리 병합됨" data-pl-field="id" value="${escapeHtml(item?.id || "")}">
         <select data-pl-field="role">
           <option value="player" ${item?.role !== "gm" ? "selected" : ""}>player</option>
           <option value="gm" ${item?.role === "gm" ? "selected" : ""}>gm</option>
@@ -2821,7 +2823,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.2 (PL modal: all players + admin + refresh)");
+    console.info("[ccf-handout] init — version 0.1.3 (PL modal polish: scroll, badges, ID input, gap)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
