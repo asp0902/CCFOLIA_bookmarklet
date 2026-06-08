@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.5
+// @version      0.1.6
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -755,7 +755,7 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
-    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); padding-top: 5px; padding-bottom: 5px; }
+    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
       grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
@@ -764,11 +764,15 @@
     .pl-modal .pl-row-main > * { min-width: 0; }
     .pl-modal .pl-row-main input[data-pl-field],
     .pl-modal .pl-row-main select[data-pl-field] { width: 100%; box-sizing: border-box; }
-    .pl-modal .pl-row-id-badge-slot { grid-column: 3 / 4; min-width: 0; }
+    .pl-modal .pl-row-meta {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      padding: 0 4px 0 32px;
+    }
+    .pl-modal .pl-row-id-badge-slot { min-width: 0; }
     .pl-modal .pl-row-id-badge-slot[hidden] { display: none; }
     .pl-modal .pl-row-aliases {
       font-size: 0.72rem; color: rgba(255,255,255,.6);
-      padding: 0 4px 0 32px; line-height: 1.3; word-break: break-word;
+      line-height: 1.3; word-break: break-word;
     }
     .pl-modal .pl-row-aliases::before { content: "병합: "; opacity: .65; }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
@@ -2310,9 +2314,11 @@
         <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
+      </div>
+      <div class="pl-row-meta">
+        <div class="pl-row-aliases" data-pl-aliases-display hidden></div>
         <div class="pl-row-id-badge-slot" data-pl-id-badge hidden></div>
       </div>
-      <div class="pl-row-aliases" data-pl-aliases-display hidden></div>
       <div class="pl-row-badges" data-pl-badges hidden></div>
     `;
     host.appendChild(row);
@@ -2872,7 +2878,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.5 (PL modal polish 2: labels, admin propagate, id badge slot)");
+    console.info("[ccf-handout] init — version 0.1.6 (PL modal: admin padding +1, id badge inline with aliases)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
