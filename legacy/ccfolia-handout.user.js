@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.9
+// @version      0.1.10
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -785,8 +785,7 @@
       line-height: 1.2;
     }
     .pl-modal .pl-badge[data-kind="admin"] { background: rgba(255,196,0,.18); color: #ffcd38; }
-    .pl-modal .pl-badge[data-kind="gm"] { background: rgba(255,255,255,.12); color: #fff; }
-    .pl-modal .pl-badge[data-kind="group"] { background: rgba(180,180,255,.12); color: #b4b4ff; }
+    .pl-modal .pl-badge[data-kind="group"] { background: rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
     .pl-modal .pl-merge-check { width: 16px; height: 16px; accent-color: #fff; justify-self: center; }
     .pl-modal .pl-row input, .pl-modal .pl-row select {
       background-color: #1a1a1a; border: 0; border-radius: 4px;
@@ -2182,19 +2181,7 @@
     const roleSel = event.target.closest('.pl-row select[data-pl-field="role"]');
     if (roleSel) {
       const row = roleSel.closest('.pl-row');
-      if (row) {
-        row.setAttribute('data-pl-role', roleSel.value === 'gm' ? 'gm' : 'player');
-        const badgeEl = row.querySelector('[data-pl-badges]');
-        if (badgeEl) {
-          if (roleSel.value === 'gm') {
-            badgeEl.innerHTML = `<span class="pl-badge" data-kind="gm">GM</span>`;
-            badgeEl.hidden = false;
-          } else {
-            badgeEl.innerHTML = '';
-            badgeEl.hidden = true;
-          }
-        }
-      }
+      if (row) row.setAttribute('data-pl-role', roleSel.value === 'gm' ? 'gm' : 'player');
       return;
     }
   }
@@ -2457,15 +2444,8 @@
 
     const badgeEl = row.querySelector("[data-pl-badges]");
     if (badgeEl) {
-      const badges = [];
-      if (item.role === "gm") badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
-      if (badges.length) {
-        badgeEl.innerHTML = badges.join("");
-        badgeEl.hidden = false;
-      } else {
-        badgeEl.innerHTML = "";
-        badgeEl.hidden = true;
-      }
+      badgeEl.innerHTML = "";
+      badgeEl.hidden = true;
     }
   }
 
@@ -2895,7 +2875,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.9 (PL modal: role-driven left label strip, drop ID color cue)");
+    console.info("[ccf-handout] init — version 0.1.10 (PL modal: drop GM badge, unify ID badge text color gray)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
