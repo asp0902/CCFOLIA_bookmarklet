@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.16
+// @version      0.1.17
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2943,16 +2943,6 @@
       if (inShadow) return inShadow;
       return main;
     }
-    function isInOurScope(el) {
-      if (!el) return false;
-      if (state.shadow?.contains(el)) return true;
-      if (el.getRootNode?.() === state.shadow) return true;
-      const showHosts = Array.from(document.querySelectorAll('[data-ccf-handout-show="1"]'));
-      for (const h of showHosts) {
-        if (h.shadowRoot?.contains(el)) return true;
-      }
-      return false;
-    }
     function popTopModal() {
       // 1. 수신 핸드아웃 팝업 (가장 최근)
       const showHosts = document.querySelectorAll('[data-ccf-handout-show="1"]');
@@ -2976,7 +2966,7 @@
       if (state.isOpen) { closePanel(); return true; }
       return false;
     }
-    window.addEventListener("keydown", (e) => {
+    function onEscKey(e) {
       if (e.key !== "Escape") return;
       // 한글 IME 조합 중 → 브라우저 기본 동작에 맡김
       if (e.isComposing || e.keyCode === 229) return;
@@ -2986,23 +2976,22 @@
         || !!state.shadow?.querySelector('.pl-modal-overlay[data-pl-modal-open="1"]');
       if (!anyOpen) return;
       const active = getActiveInScope();
+      // 1단계: 어떤 입력창이든 포커스되어 있으면 blur만. 다음 ESC에서 모달 닫기.
+      // (작성 중인 내용 보호 — CCFolia 자체 input/textarea 포함)
       if (isInputLike(active)) {
-        // 우리 shadow/팝업 안 입력창 → 1단계: blur만. 다음 ESC가 모달 닫기.
-        if (isInOurScope(active)) {
-          try { active.blur(); } catch {}
-          e.preventDefault();
-          return;
-        }
-        // CCFolia 자체 입력창 → 작성 중 내용 보호, 간섭 안 함
+        try { active.blur(); } catch {}
+        e.preventDefault();
         return;
       }
       if (popTopModal()) e.preventDefault();
-    }, { signal });
+    }
+    // capture phase: React/CCFolia가 ESC를 stopPropagation 하더라도 먼저 받기
+    document.addEventListener("keydown", onEscKey, { signal, capture: true });
   }
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.16 (ESC: modal stack pop + 2-stage input)");
+    console.info("[ccf-handout] init — version 0.1.17 (ESC: document capture + blur any input)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
