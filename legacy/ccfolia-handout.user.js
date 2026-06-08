@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.10
+// @version      0.1.11
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -775,7 +775,7 @@
     .pl-modal .pl-row-id-badge-slot[hidden] { display: none; }
     .pl-modal .pl-row-aliases {
       font-size: 0.72rem; color: rgba(255,255,255,.6);
-      line-height: 1.3; word-break: break-word;
+      line-height: 1.3; word-break: break-word; padding-left: 1px;
     }
     .pl-modal .pl-row-aliases::before { content: "병합: "; opacity: .65; }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
@@ -2875,7 +2875,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.10 (PL modal: drop GM badge, unify ID badge text color gray)");
+    console.info("[ccf-handout] init — version 0.1.11 (PL modal: nudge 병합 label 1px right)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
