@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.13
+// @version      0.1.14
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -791,8 +791,8 @@
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.45);
     }
     .pl-modal .pl-alias-chip[data-selected="1"] {
-      background: rgba(120,200,255,.35); color: #fff;
-      box-shadow: inset 0 0 0 1.5px #78c8ff;
+      background: rgba(245,0,87,.25); color: #fff;
+      box-shadow: inset 0 0 0 1.5px #f50057;
     }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
     .pl-modal .pl-badge {
@@ -2939,7 +2939,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.13 (PL modal: bump alias chip visibility)");
+    console.info("[ccf-handout] init — version 0.1.14 (PL modal: selected chip outline #f50057)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
