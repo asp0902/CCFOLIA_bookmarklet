@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.8
+// @version      0.1.9
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -754,7 +754,7 @@
       margin-bottom: 8px; padding: 4px 4px 4px 6px; border-radius: 4px;
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
-    .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
+    .pl-modal .pl-row[data-pl-role="gm"] { border-left-color: #fff; }
     .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
@@ -2424,13 +2424,6 @@
     if (roleEl) roleEl.value = item.role === "gm" ? "gm" : "player";
 
     const idKey = normalizePlNameKey(item.id || "");
-    if (idKey) {
-      row.setAttribute("data-pl-id-color", "1");
-      row.style.setProperty("--pl-id-color", colorForPlId(idKey));
-    } else {
-      row.removeAttribute("data-pl-id-color");
-      row.style.removeProperty("--pl-id-color");
-    }
     if (item._isAdmin) row.setAttribute("data-pl-admin", "1");
     else row.removeAttribute("data-pl-admin");
     row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
@@ -2902,7 +2895,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.8 (PL modal: merge-driven shade, GM label white, no role shade)");
+    console.info("[ccf-handout] init — version 0.1.9 (PL modal: role-driven left label strip, drop ID color cue)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
