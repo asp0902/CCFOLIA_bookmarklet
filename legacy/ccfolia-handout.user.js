@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.12
+// @version      0.1.13
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -779,15 +779,20 @@
     }
     .pl-modal .pl-row-aliases::before { content: "병합: "; opacity: .65; }
     .pl-modal .pl-alias-chip {
-      display: inline-block; padding: 1px 6px; margin: 0 4px 2px 0;
-      border-radius: 8px; background: rgba(255,255,255,.06);
-      color: rgba(255,255,255,.75); cursor: pointer; user-select: none;
-      font-size: 0.7rem; line-height: 1.3; transition: background-color 120ms;
+      display: inline-block; padding: 2px 8px; margin: 0 4px 2px 0;
+      border-radius: 10px; background: rgba(255,255,255,.14);
+      color: rgba(255,255,255,.9); cursor: pointer; user-select: none;
+      font-size: 0.72rem; line-height: 1.3;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
+      transition: background-color 120ms, box-shadow 120ms;
     }
-    .pl-modal .pl-alias-chip:hover { background: rgba(255,255,255,.14); color: #fff; }
+    .pl-modal .pl-alias-chip:hover {
+      background: rgba(255,255,255,.22); color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.45);
+    }
     .pl-modal .pl-alias-chip[data-selected="1"] {
-      background: rgba(120,200,255,.22); color: #fff;
-      box-shadow: inset 0 0 0 1px rgba(120,200,255,.55);
+      background: rgba(120,200,255,.35); color: #fff;
+      box-shadow: inset 0 0 0 1.5px #78c8ff;
     }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
     .pl-modal .pl-badge {
@@ -2934,7 +2939,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.12 (PL modal: alias chip selection + unmerge button)");
+    console.info("[ccf-handout] init — version 0.1.13 (PL modal: bump alias chip visibility)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
