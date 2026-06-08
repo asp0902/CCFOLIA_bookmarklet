@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.14
+// @version      0.1.15
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1798,7 +1798,10 @@
     const meta = state.shadow.querySelector("header .meta");
     meta.textContent = "";
     const roomStrip = state.shadow.querySelector("[data-room-strip]");
-    if (roomStrip) roomStrip.textContent = `룸 ${getCurrentRoomKey()} · 핸드아웃 ${state.data.handouts.length}건`;
+    if (roomStrip) {
+      roomStrip.textContent = `룸 ${getCurrentRoomKey()} · 핸드아웃 ${state.data.handouts.length}건`;
+      roomStrip.style.display = state.activeTab === "settings" ? "" : "none";
+    }
     const adminMode = isAdminMode();
     const newButton = state.shadow.querySelector('[data-action="new-handout"]');
     if (newButton) newButton.style.display = adminMode ? "" : "none";
@@ -2939,7 +2942,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.14 (PL modal: selected chip outline #f50057)");
+    console.info("[ccf-handout] init — version 0.1.15 (room strip visible only on settings tab)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
