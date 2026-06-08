@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.57";
-  const BUILD_ID = "2026-06-08-loader-reinject-handout-settings-pl-signals-032";
+  const VERSION = "0.1.58";
+  const BUILD_ID = "2026-06-08-loader-reinject-handout-list-tab-full-width-033";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

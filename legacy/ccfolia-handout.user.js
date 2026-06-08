@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.20
+// @version      0.1.21
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -456,6 +456,7 @@
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
     .body-pad { padding: 20px 24px 24px; }
+    .body-pad[data-tab="list"] { padding-left: 0; padding-right: 0; }
     .body::-webkit-scrollbar { width: 10px; }
     .body::-webkit-scrollbar-track { background: transparent; }
     .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 6px; }
@@ -1936,7 +1937,7 @@
     if (state.activeTab === "list") inner = renderList();
     else if (state.activeTab === "edit") inner = renderEdit();
     else inner = renderSettings();
-    body.innerHTML = `<div class="body-pad">${inner}</div>`;
+    body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${inner}</div>`;
   }
 
   function renderList() {
@@ -3148,7 +3149,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.20 (settings tab PL list + perm signals)");
+    console.info("[ccf-handout] init — version 0.1.21 (list tab full-width — no 24px side padding)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
