@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.7
+// @version      0.1.8
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -755,7 +755,7 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
-    .pl-modal .pl-row[data-pl-role="gm"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
+    .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
       grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
@@ -785,7 +785,7 @@
       line-height: 1.2;
     }
     .pl-modal .pl-badge[data-kind="admin"] { background: rgba(255,196,0,.18); color: #ffcd38; }
-    .pl-modal .pl-badge[data-kind="gm"] { background: rgba(120,200,255,.18); color: #78c8ff; }
+    .pl-modal .pl-badge[data-kind="gm"] { background: rgba(255,255,255,.12); color: #fff; }
     .pl-modal .pl-badge[data-kind="group"] { background: rgba(180,180,255,.12); color: #b4b4ff; }
     .pl-modal .pl-merge-check { width: 16px; height: 16px; accent-color: #fff; justify-self: center; }
     .pl-modal .pl-row input, .pl-modal .pl-row select {
@@ -2182,7 +2182,19 @@
     const roleSel = event.target.closest('.pl-row select[data-pl-field="role"]');
     if (roleSel) {
       const row = roleSel.closest('.pl-row');
-      if (row) row.setAttribute('data-pl-role', roleSel.value === 'gm' ? 'gm' : 'player');
+      if (row) {
+        row.setAttribute('data-pl-role', roleSel.value === 'gm' ? 'gm' : 'player');
+        const badgeEl = row.querySelector('[data-pl-badges]');
+        if (badgeEl) {
+          if (roleSel.value === 'gm') {
+            badgeEl.innerHTML = `<span class="pl-badge" data-kind="gm">GM</span>`;
+            badgeEl.hidden = false;
+          } else {
+            badgeEl.innerHTML = '';
+            badgeEl.hidden = true;
+          }
+        }
+      }
       return;
     }
   }
@@ -2425,6 +2437,8 @@
 
     const aliases = (item.aliases || []).filter(Boolean);
     row.setAttribute("data-pl-aliases-json", JSON.stringify(aliases));
+    if (aliases.length) row.setAttribute("data-pl-merged", "1");
+    else row.removeAttribute("data-pl-merged");
 
     const aliasEl = row.querySelector("[data-pl-aliases-display]");
     if (aliasEl) {
@@ -2451,7 +2465,7 @@
     const badgeEl = row.querySelector("[data-pl-badges]");
     if (badgeEl) {
       const badges = [];
-      if (item.role === "gm" && !item._isAdmin) badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
+      if (item.role === "gm") badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
       if (badges.length) {
         badgeEl.innerHTML = badges.join("");
         badgeEl.hidden = false;
@@ -2888,7 +2902,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.7 (PL modal: role-driven shade live + id badge under id col)");
+    console.info("[ccf-handout] init — version 0.1.8 (PL modal: merge-driven shade, GM label white, no role shade)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
