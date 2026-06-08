@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.17
+// @version      0.1.18
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2966,6 +2966,8 @@
       if (state.isOpen) { closePanel(); return true; }
       return false;
     }
+    let escPrimedAt = 0;
+    const ESC_PRIME_WINDOW = 1500; // ms — 1단계 ESC 후 2단계 인정 시간
     function onEscKey(e) {
       if (e.key !== "Escape") return;
       // 한글 IME 조합 중 → 브라우저 기본 동작에 맡김
@@ -2974,15 +2976,26 @@
       const anyOpen = state.isOpen
         || !!document.querySelector('[data-ccf-handout-show="1"]')
         || !!state.shadow?.querySelector('.pl-modal-overlay[data-pl-modal-open="1"]');
-      if (!anyOpen) return;
+      if (!anyOpen) { escPrimedAt = 0; return; }
       const active = getActiveInScope();
-      // 1단계: 어떤 입력창이든 포커스되어 있으면 blur만. 다음 ESC에서 모달 닫기.
-      // (작성 중인 내용 보호 — CCFolia 자체 input/textarea 포함)
+      const now = Date.now();
+      const primed = (now - escPrimedAt) < ESC_PRIME_WINDOW;
       if (isInputLike(active)) {
+        if (primed) {
+          // 2단계: 이미 1차 ESC로 prime됨 → blur + 모달 닫기
+          // (React/CCFolia가 blur 후 input을 재포커스 했을 수 있음)
+          try { active.blur(); } catch {}
+          escPrimedAt = 0;
+          if (popTopModal()) e.preventDefault();
+          return;
+        }
+        // 1단계: blur만, prime 상태 진입
         try { active.blur(); } catch {}
+        escPrimedAt = now;
         e.preventDefault();
         return;
       }
+      escPrimedAt = 0;
       if (popTopModal()) e.preventDefault();
     }
     // capture phase: React/CCFolia가 ESC를 stopPropagation 하더라도 먼저 받기
@@ -2991,7 +3004,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.17 (ESC: document capture + blur any input)");
+    console.info("[ccf-handout] init — version 0.1.18 (ESC: time-primed 2-stage for refocus-prone inputs)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
