@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.6
+// @version      0.1.7
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -755,7 +755,7 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
-    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
+    .pl-modal .pl-row[data-pl-role="gm"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
       grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
@@ -765,10 +765,13 @@
     .pl-modal .pl-row-main input[data-pl-field],
     .pl-modal .pl-row-main select[data-pl-field] { width: 100%; box-sizing: border-box; }
     .pl-modal .pl-row-meta {
-      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-      padding: 0 4px 0 32px;
+      display: grid;
+      grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
+      gap: 0 8px; align-items: center;
     }
-    .pl-modal .pl-row-id-badge-slot { min-width: 0; }
+    .pl-modal .pl-row-meta:not(:has(> :not([hidden]))) { display: none; }
+    .pl-modal .pl-row-meta > .pl-row-aliases { grid-column: 2 / 3; min-width: 0; }
+    .pl-modal .pl-row-meta > .pl-row-id-badge-slot { grid-column: 3 / 4; min-width: 0; }
     .pl-modal .pl-row-id-badge-slot[hidden] { display: none; }
     .pl-modal .pl-row-aliases {
       font-size: 0.72rem; color: rgba(255,255,255,.6);
@@ -2176,6 +2179,12 @@
       state.formPermissions[key][col] = !!perm.checked;
       return;
     }
+    const roleSel = event.target.closest('.pl-row select[data-pl-field="role"]');
+    if (roleSel) {
+      const row = roleSel.closest('.pl-row');
+      if (row) row.setAttribute('data-pl-role', roleSel.value === 'gm' ? 'gm' : 'player');
+      return;
+    }
   }
 
   function rowPopupPlaceholder(key) {
@@ -2412,6 +2421,7 @@
     }
     if (item._isAdmin) row.setAttribute("data-pl-admin", "1");
     else row.removeAttribute("data-pl-admin");
+    row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
 
     const aliases = (item.aliases || []).filter(Boolean);
     row.setAttribute("data-pl-aliases-json", JSON.stringify(aliases));
@@ -2878,7 +2888,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.6 (PL modal: admin padding +1, id badge inline with aliases)");
+    console.info("[ccf-handout] init — version 0.1.7 (PL modal: role-driven shade live + id badge under id col)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
