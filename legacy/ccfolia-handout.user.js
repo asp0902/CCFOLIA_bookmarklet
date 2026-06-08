@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.4
+// @version      0.1.5
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -755,19 +755,22 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-id-color] { border-left-color: var(--pl-id-color, transparent); background: rgba(255,255,255,.02); }
-    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); }
+    .pl-modal .pl-row[data-pl-admin="1"] { background: rgba(255,255,255,.05); padding-top: 5px; padding-bottom: 5px; }
     .pl-modal .pl-row-main {
-      display: grid; grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
-      gap: 8px; align-items: center; min-width: 0;
+      display: grid;
+      grid-template-columns: 24px minmax(0,1fr) minmax(0,100px) 92px 28px;
+      gap: 4px 8px; align-items: center; min-width: 0;
     }
     .pl-modal .pl-row-main > * { min-width: 0; }
     .pl-modal .pl-row-main input[data-pl-field],
     .pl-modal .pl-row-main select[data-pl-field] { width: 100%; box-sizing: border-box; }
+    .pl-modal .pl-row-id-badge-slot { grid-column: 3 / 4; min-width: 0; }
+    .pl-modal .pl-row-id-badge-slot[hidden] { display: none; }
     .pl-modal .pl-row-aliases {
       font-size: 0.72rem; color: rgba(255,255,255,.6);
       padding: 0 4px 0 32px; line-height: 1.3; word-break: break-word;
     }
-    .pl-modal .pl-row-aliases::before { content: "별칭: "; opacity: .65; }
+    .pl-modal .pl-row-aliases::before { content: "병합: "; opacity: .65; }
     .pl-modal .pl-row-badges { padding: 0 4px 0 32px; display: flex; gap: 4px; flex-wrap: wrap; }
     .pl-modal .pl-badge {
       font-size: 0.65rem; padding: 2px 6px; border-radius: 8px;
@@ -852,7 +855,7 @@
               </div>
               <div class="pl-modal-body" data-pl-rows-host="1"></div>
               <div class="pl-modal-foot">
-                <button class="btn secondary small" data-action="pl-modal-merge">선택 병합</button>
+                <button class="btn secondary small" data-action="pl-modal-merge">병합</button>
                 <button class="btn secondary small" data-action="pl-modal-add">추가</button>
                 <button class="btn small" data-action="pl-modal-save">저장</button>
               </div>
@@ -2301,12 +2304,13 @@
         <input type="text" placeholder="대표 이름" data-pl-field="name">
         <input type="text" placeholder="ID" title="같은 ID끼리 병합됨" data-pl-field="id">
         <select data-pl-field="role">
-          <option value="player">player</option>
-          <option value="gm">gm</option>
+          <option value="player">PL</option>
+          <option value="gm">GM</option>
         </select>
         <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
+        <div class="pl-row-id-badge-slot" data-pl-id-badge hidden></div>
       </div>
       <div class="pl-row-aliases" data-pl-aliases-display hidden></div>
       <div class="pl-row-badges" data-pl-badges hidden></div>
@@ -2379,7 +2383,8 @@
       }
     } catch (error) { /* ignore */ }
     if (!aliases.length) aliases = findExistingPlAliases(name, id);
-    return name ? { name, id, role, aliases } : null;
+    const isAdmin = row.getAttribute("data-pl-admin") === "1";
+    return name ? { name, id, role, aliases, _isAdmin: isAdmin } : null;
   }
 
   function writePlRow(row, item) {
@@ -2416,11 +2421,21 @@
       }
     }
 
+    const idBadgeEl = row.querySelector("[data-pl-id-badge]");
+    if (idBadgeEl) {
+      if (idKey) {
+        idBadgeEl.innerHTML = `<span class="pl-badge" data-kind="group">ID: ${escapeHtml(item.id)}</span>`;
+        idBadgeEl.hidden = false;
+      } else {
+        idBadgeEl.innerHTML = "";
+        idBadgeEl.hidden = true;
+      }
+    }
+
     const badgeEl = row.querySelector("[data-pl-badges]");
     if (badgeEl) {
       const badges = [];
       if (item.role === "gm" && !item._isAdmin) badges.push(`<span class="pl-badge" data-kind="gm">GM</span>`);
-      if (idKey) badges.push(`<span class="pl-badge" data-kind="group">ID 그룹: ${escapeHtml(item.id)}</span>`);
       if (badges.length) {
         badgeEl.innerHTML = badges.join("");
         badgeEl.hidden = false;
@@ -2447,6 +2462,7 @@
       (item.aliases || []).forEach((alias) => { if (alias && alias !== base.name) aliases.add(alias); });
       if (!base.id && item.id) base.id = item.id;
       if (base.role !== "gm" && item.role === "gm") base.role = "gm";
+      if (item._isAdmin) base._isAdmin = true;
     }
     base.aliases = [...aliases];
     writePlRow(selected[0], base);
@@ -2856,7 +2872,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.4 (PL modal: ID input fix + merge alias persistence)");
+    console.info("[ccf-handout] init — version 0.1.5 (PL modal polish 2: labels, admin propagate, id badge slot)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
