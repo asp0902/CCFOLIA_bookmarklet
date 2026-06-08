@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.15
+// @version      0.1.16
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2925,24 +2925,84 @@
     window.addEventListener("capybara-toolkit:route-change", handler, { signal });
   }
 
-  // ESC로 패널 닫기
+  // ESC: 모달 스택 우선순위 pop + 입력 포커스 2단계 (blur → close)
   function bindGlobalKeys() {
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && state.isOpen) {
-        // 채팅 등 입력 중일 땐 무시
-        const active = document.activeElement;
-        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) {
-          // 단, 우리 shadow 안에서의 ESC는 닫기
-          if (!state.root?.contains(active) && active.getRootNode?.() !== state.shadow) return;
-        }
-        closePanel();
+    function isInputLike(el) {
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable === true;
+    }
+    function getActiveInScope() {
+      const main = document.activeElement;
+      const showHosts = Array.from(document.querySelectorAll('[data-ccf-handout-show="1"]'));
+      for (let i = showHosts.length - 1; i >= 0; i--) {
+        const sr = showHosts[i].shadowRoot;
+        if (sr?.activeElement) return sr.activeElement;
       }
+      const inShadow = state.shadow?.activeElement;
+      if (inShadow) return inShadow;
+      return main;
+    }
+    function isInOurScope(el) {
+      if (!el) return false;
+      if (state.shadow?.contains(el)) return true;
+      if (el.getRootNode?.() === state.shadow) return true;
+      const showHosts = Array.from(document.querySelectorAll('[data-ccf-handout-show="1"]'));
+      for (const h of showHosts) {
+        if (h.shadowRoot?.contains(el)) return true;
+      }
+      return false;
+    }
+    function popTopModal() {
+      // 1. 수신 핸드아웃 팝업 (가장 최근)
+      const showHosts = document.querySelectorAll('[data-ccf-handout-show="1"]');
+      if (showHosts.length) { showHosts[showHosts.length - 1].remove(); return true; }
+      // 2. PL 목록 관리 모달
+      const plOverlay = state.shadow?.querySelector('.pl-modal-overlay[data-pl-modal-open="1"]');
+      if (plOverlay) { closePlListDialog(); return true; }
+      // 3. 핸드아웃 상세 view (패널 내부)
+      if (state.isOpen && state.shadow?.querySelector('.body [data-action="close-detail"]')) {
+        closeDetail();
+        return true;
+      }
+      // 4. 핸드아웃 편집 view
+      if (state.isOpen && state.activeTab === "edit") {
+        state.editingId = null;
+        state.formPermissionsForId = null;
+        setTab("list");
+        return true;
+      }
+      // 5. 핸드아웃 패널 자체 (기존 동작 유지)
+      if (state.isOpen) { closePanel(); return true; }
+      return false;
+    }
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      // 한글 IME 조합 중 → 브라우저 기본 동작에 맡김
+      if (e.isComposing || e.keyCode === 229) return;
+      // 우리 UI가 아무것도 안 열렸으면 간섭 안 함
+      const anyOpen = state.isOpen
+        || !!document.querySelector('[data-ccf-handout-show="1"]')
+        || !!state.shadow?.querySelector('.pl-modal-overlay[data-pl-modal-open="1"]');
+      if (!anyOpen) return;
+      const active = getActiveInScope();
+      if (isInputLike(active)) {
+        // 우리 shadow/팝업 안 입력창 → 1단계: blur만. 다음 ESC가 모달 닫기.
+        if (isInOurScope(active)) {
+          try { active.blur(); } catch {}
+          e.preventDefault();
+          return;
+        }
+        // CCFolia 자체 입력창 → 작성 중 내용 보호, 간섭 안 함
+        return;
+      }
+      if (popTopModal()) e.preventDefault();
     }, { signal });
   }
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.15 (room strip visible only on settings tab)");
+    console.info("[ccf-handout] init — version 0.1.16 (ESC: modal stack pop + 2-stage input)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
