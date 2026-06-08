@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.81
+// @version      0.2.82
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4834,9 +4834,18 @@
       startCcfYoutubeBgmPreview(videoId, previewVolume);
     });
 
-    removeButton?.addEventListener("click", (event) => {
+    removeButton?.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      const current = ccfBgmSlotMap.get(entryKey) || entry;
+      const displayName = normalizeSpace(current?.displayName || current?.title || "YouTube BGM");
+      const confirmed = await showCcfBgmConfirmDialog({
+        title: "음원을 삭제하시겠습니까?",
+        message: `"${displayName}" 음원이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.`,
+        confirmText: "삭제",
+        cancelText: "취소"
+      });
+      if (!confirmed) return;
       if (ccfBgmActiveEntryKey === entryKey) {
         stopCcfYoutubeBgm("youtube-bgm-remove");
       }
@@ -4908,6 +4917,99 @@
       ccfBgmEditPopover.remove();
       ccfBgmEditPopover = null;
     }
+  }
+
+  // MUI Dialog 스타일 confirm — native CCFolia 음원 삭제 confirm과 시각적으로 일치
+  function showCcfBgmConfirmDialog({ title, message, confirmText = "확인", cancelText = "취소" } = {}) {
+    return new Promise((resolve) => {
+      const prior = document.getElementById("ccf-bgm-confirm-host");
+      if (prior) prior.remove();
+      const host = document.createElement("div");
+      host.id = "ccf-bgm-confirm-host";
+      host.style.cssText = "all: initial; position: fixed; inset: 0; z-index: 2147483646;";
+      const sh = host.attachShadow({ mode: "open" });
+      sh.innerHTML = `
+        <style>
+          :host { all: initial; }
+          * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
+          .overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            display: flex; align-items: center; justify-content: center; padding: 24px;
+          }
+          .paper {
+            background: #424242; color: #fff;
+            min-width: 280px; max-width: 480px;
+            border-radius: 4px;
+            box-shadow:
+              0px 11px 15px -7px rgba(0,0,0,0.20),
+              0px 24px 38px 3px rgba(0,0,0,0.14),
+              0px 9px 46px 8px rgba(0,0,0,0.12);
+            display: flex; flex-direction: column;
+          }
+          .title {
+            padding: 16px 24px;
+            font-size: 1.25rem; font-weight: 500; line-height: 1.6;
+            color: #fff;
+            margin: 0;
+          }
+          .content {
+            padding: 0 24px 20px;
+            font-size: 1rem; line-height: 1.5;
+            color: rgba(255,255,255,.7);
+          }
+          .actions {
+            padding: 8px;
+            display: flex; justify-content: flex-end; gap: 4px;
+          }
+          .btn {
+            all: unset; cursor: pointer;
+            padding: 6px 8px; min-width: 64px;
+            border-radius: 4px;
+            font-size: 0.875rem; font-weight: 500; line-height: 1.75;
+            letter-spacing: .02857em; text-transform: uppercase; text-align: center;
+            color: #ce93d8;
+            transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
+          }
+          .btn:hover { background: rgba(206,147,216,.08); }
+          .btn:focus-visible { background: rgba(206,147,216,.12); outline: none; }
+        </style>
+        <div class="overlay" data-overlay="1">
+          <div class="paper" role="dialog" aria-modal="true" aria-labelledby="ccf-bgm-confirm-title">
+            <h2 class="title" id="ccf-bgm-confirm-title">${escapeCcfHtml(title || "")}</h2>
+            <div class="content">${escapeCcfHtml(message || "")}</div>
+            <div class="actions">
+              <button class="btn" type="button" data-action="cancel">${escapeCcfHtml(cancelText)}</button>
+              <button class="btn" type="button" data-action="confirm">${escapeCcfHtml(confirmText)}</button>
+            </div>
+          </div>
+        </div>
+      `;
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        try { document.removeEventListener("keydown", onKey, true); } catch (_) {}
+        try { host.remove(); } catch (_) {}
+        resolve(result);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+        else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(true); }
+      };
+      sh.addEventListener("click", (e) => {
+        const target = e.target;
+        if (target instanceof Element && target.matches('[data-overlay="1"]')) { finish(false); return; }
+        const btn = target instanceof Element ? target.closest("button[data-action]") : null;
+        if (!btn) return;
+        finish(btn.getAttribute("data-action") === "confirm");
+      });
+      document.addEventListener("keydown", onKey, true);
+      (document.body || document.documentElement).appendChild(host);
+      registerTeardown(() => { if (!settled) finish(false); });
+      window.setTimeout(() => {
+        try { sh.querySelector('[data-action="confirm"]')?.focus(); } catch (_) {}
+      }, 0);
+    });
   }
 
   // --- 미리듣기: 본 재생과 별개인 로컬 전용 플레이어 ---
