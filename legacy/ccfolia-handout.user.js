@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.49
+// @version      0.1.50
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1509,8 +1509,12 @@
         .show-close:hover { background: rgba(255,255,255,.1); }
         .show-close svg { pointer-events: none; }
         .show-body { padding: 20px 24px; overflow: auto; }
+        .show-body > *:first-child { margin-top: 0 !important; }
+        .show-body > *:last-child { margin-bottom: 0 !important; }
         .show-img { width: 100%; max-height: 280px; object-fit: cover; margin-bottom: 16px; background: rgba(0,0,0,.25); }
         .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); }
+        .rendered > *:first-child { margin-top: 0 !important; }
+        .rendered > *:last-child { margin-bottom: 0 !important; }
         .rendered img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
         .rendered a { color: #82b1ff; }
         .rendered blockquote { border-left: 3px solid rgba(255,255,255,.2); padding: 2px 12px; color: rgba(255,255,255,.8); }
