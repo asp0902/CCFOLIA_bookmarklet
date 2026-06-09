@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.45
+// @version      0.1.46
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -959,6 +959,7 @@
     }
     .panel-footer .footer-actions {
       display: flex; align-items: center; gap: 8px;
+      margin-right: 22px;
     }
     .panel-footer .btn { box-shadow: none; border-radius: 0; }
     .panel-footer .btn.secondary {
@@ -2148,7 +2149,6 @@
       if (state.activeTab === "settings") {
         stripHtml = `
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
-          <button class="btn small" data-action="save-settings">저장</button>
         `;
       }
       const showStrip = stripHtml.length > 0;
@@ -2164,7 +2164,9 @@
         const isReadOnly = (editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode());
         actionsHtml = isReadOnly
           ? `<button class="btn small secondary" data-action="cancel-edit">목록으로</button>`
-          : `<button class="btn small secondary" data-action="cancel-edit">취소</button><button class="btn small" data-action="save-handout">저장</button>`;
+          : `<button class="btn small secondary" data-action="save-handout">저장</button><button class="btn small secondary" data-action="cancel-edit">취소</button>`;
+      } else if (state.activeTab === "settings") {
+        actionsHtml = `<button class="btn small secondary" data-action="save-settings">저장</button>`;
       }
       footerActions.innerHTML = actionsHtml;
       footerActions.hidden = actionsHtml.length === 0;
@@ -3736,7 +3738,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.45 (edit actions in footer)");
+    console.info("[ccf-handout] init — version 0.1.46 (footer actions order and spacing)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
