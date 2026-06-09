@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.44
+// @version      0.1.45
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -957,6 +957,9 @@
     .panel-footer .footer-meta {
       flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.55);
     }
+    .panel-footer .footer-actions {
+      display: flex; align-items: center; gap: 8px;
+    }
     .panel-footer .btn { box-shadow: none; border-radius: 0; }
     .panel-footer .btn.secondary {
       border: 0; background: transparent;
@@ -1134,6 +1137,7 @@
             <button class="btn secondary small" data-action="export" title="현재 룸의 핸드아웃을 JSON 파일로 내보내기">내보내기</button>
             <button class="btn secondary small" data-action="import" title="JSON 파일에서 핸드아웃 가져오기 (기존 데이터 교체)">가져오기</button>
             <span class="footer-meta"></span>
+            <span class="footer-actions" data-footer-actions="1"></span>
           </footer>
           <div class="pl-modal-overlay" data-pl-modal-open="0">
             <div class="pl-modal" role="dialog" aria-label="플레이어 목록 설정">
@@ -2146,26 +2150,24 @@
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
           <button class="btn small" data-action="save-settings">저장</button>
         `;
-      } else if (state.activeTab === "edit") {
-        const editing = (state.editingId && state.editingId !== "new") ? findHandout(state.editingId) : null;
-        const isReadOnly = (editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode());
-        if (isReadOnly) {
-          stripHtml = `
-            <span class="room-info"></span>
-            <button class="btn small secondary" data-action="cancel-edit">목록으로</button>
-          `;
-        } else {
-          stripHtml = `
-            <span class="room-info"></span>
-            <button class="btn small secondary" data-action="cancel-edit">취소</button>
-            <button class="btn small" data-action="save-handout">저장</button>
-          `;
-        }
       }
       const showStrip = stripHtml.length > 0;
       roomStrip.innerHTML = stripHtml;
       roomStrip.setAttribute("data-tab-visible", showStrip ? "1" : "0");
       roomStrip.style.display = "";
+    }
+    const footerActions = state.shadow.querySelector("[data-footer-actions]");
+    if (footerActions) {
+      let actionsHtml = "";
+      if (state.activeTab === "edit") {
+        const editing = (state.editingId && state.editingId !== "new") ? findHandout(state.editingId) : null;
+        const isReadOnly = (editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode());
+        actionsHtml = isReadOnly
+          ? `<button class="btn small secondary" data-action="cancel-edit">목록으로</button>`
+          : `<button class="btn small secondary" data-action="cancel-edit">취소</button><button class="btn small" data-action="save-handout">저장</button>`;
+      }
+      footerActions.innerHTML = actionsHtml;
+      footerActions.hidden = actionsHtml.length === 0;
     }
     const adminMode = isAdminMode();
     const newButton = state.shadow.querySelector('[data-action="new-handout"]');
@@ -3734,7 +3736,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.44 (format toolbar nudge up 9px)");
+    console.info("[ccf-handout] init — version 0.1.45 (edit actions in footer)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
