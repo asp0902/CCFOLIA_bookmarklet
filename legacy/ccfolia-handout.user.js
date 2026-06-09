@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.50
+// @version      0.1.51
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -522,6 +522,7 @@
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
     .body-pad { padding: 20px 24px 24px; }
+    .body-pad[data-tab="detail"] { padding: 24px; }
     .body-pad[data-tab="list"] {
       padding: 20px 0 9px;
       display: flex; flex-direction: column;
@@ -1500,14 +1501,14 @@
           pointer-events: none;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
         }
-        .show-close {
+        .show-close, .show-head-btn {
           all: unset; box-sizing: border-box; cursor: pointer;
           width: 36px; height: 36px; border-radius: 50%; color: #fff;
           display: inline-grid; place-items: center;
           transition: background-color 150ms;
         }
-        .show-close:hover { background: rgba(255,255,255,.1); }
-        .show-close svg { pointer-events: none; }
+        .show-close:hover, .show-head-btn:hover { background: rgba(255,255,255,.1); }
+        .show-close svg, .show-head-btn svg { pointer-events: none; }
         .show-body { padding: 20px 24px; overflow: auto; }
         .show-body > *:first-child { margin-top: 0 !important; }
         .show-body > *:last-child { margin-bottom: 0 !important; }
@@ -1535,6 +1536,12 @@
       <div class="show-paper" data-collapsed="0" role="dialog" aria-label="핸드아웃">
         <div class="show-head" data-drag-handle="1" title="더블클릭으로 접기/펼치기, 드래그로 이동">
           <h2 title="${escapeAttr(handout.title || "(제목 없음)")}">${escapeHtml(handout.title || "(제목 없음)")}</h2>
+          <button class="show-head-btn" data-action="show-go-list" aria-label="핸드아웃 목록으로 이동" title="핸드아웃 목록으로 이동">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+          </button>
+          ${canManageHandout(handout) ? `<button class="show-head-btn" data-action="show-edit" aria-label="이 핸드아웃 편집" title="이 핸드아웃 편집">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          </button>` : ""}
           <button class="show-close" data-action="close-show" aria-label="닫기">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
           </button>
@@ -1598,10 +1605,21 @@
     };
     head.addEventListener("pointerup", endDrag);
     head.addEventListener("pointercancel", endDrag);
-    // 닫기 버튼
+    // 헤더 버튼
     sh.addEventListener("click", (e) => {
       const closeBtn = e.target.closest('[data-action="close-show"]');
-      if (closeBtn) host.remove();
+      if (closeBtn) { host.remove(); return; }
+      const goListBtn = e.target.closest('[data-action="show-go-list"]');
+      if (goListBtn) {
+        openPanel().then(() => setTab("list")).catch(() => {});
+        return;
+      }
+      const editBtn = e.target.closest('[data-action="show-edit"]');
+      if (editBtn) {
+        state.editingId = handout.id;
+        openPanel().then(() => setTab("edit")).catch(() => {});
+        return;
+      }
     });
     (document.body || document.documentElement).appendChild(host);
     registerTeardown(() => host.remove());
@@ -3402,25 +3420,25 @@
     const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");
     body.innerHTML = `
-      <div class="row" style="margin-bottom:12px;">
-        <button class="btn secondary small" data-action="close-detail">← 목록</button>
-        ${manageable ? `<button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>` : ""}
-        ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>` : ""}
-        ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
-        <span class="spacer" style="flex:1"></span>
-        <span class="meta">${adminMode ? (previewAsPl ? "PL 시점" : "GM 시점") : "PL 시점"}</span>
-      </div>
-      <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
-      ${h.image ? `<img class="detail-img" src="${escapeHtml(h.image)}" alt="">` : ""}
-      <div class="preview" style="max-height:none;">${renderHandoutBody(h.description)}</div>
-      ${hasSecret ? (
-        canSecret
-          ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 GM NOTES (비밀)</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderHandoutBody(h.gmNotes)}</div></div>`
-          : `<div class="hidden-secret">이 핸드아웃에는 GM 전용 정보가 있지만, 현재 캐릭터(${escapeHtml(me)})에게는 공개되지 않았습니다.</div>`
-      ) : ""}
-      <div class="chip-row">
-        ${(h.viewers || []).map((v) => `<span class="chip">${v === "*" ? "전체 공개" : escapeHtml(v)}</span>`).join("")}
-        ${(h.tags || []).map((t) => `<span class="chip">#${escapeHtml(t)}</span>`).join("")}
+      <div class="body-pad" data-tab="detail">
+        <div class="row" style="margin-bottom:12px;">
+          <button class="btn secondary small" data-action="close-detail">← 목록</button>
+          ${manageable ? `<button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>` : ""}
+          ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>` : ""}
+          ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
+        </div>
+        <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
+        ${h.image ? `<img class="detail-img" src="${escapeHtml(h.image)}" alt="">` : ""}
+        <div class="preview" style="max-height:none;">${renderHandoutBody(h.description)}</div>
+        ${hasSecret ? (
+          canSecret
+            ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 GM NOTES (비밀)</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderHandoutBody(h.gmNotes)}</div></div>`
+            : `<div class="hidden-secret">이 핸드아웃에는 GM 전용 정보가 있지만, 현재 캐릭터(${escapeHtml(me)})에게는 공개되지 않았습니다.</div>`
+        ) : ""}
+        <div class="chip-row">
+          ${(h.viewers || []).map((v) => `<span class="chip">${v === "*" ? "전체 공개" : escapeHtml(v)}</span>`).join("")}
+          ${(h.tags || []).map((t) => `<span class="chip">#${escapeHtml(t)}</span>`).join("")}
+        </div>
       </div>
     `;
   }
@@ -3817,7 +3835,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.50 (equalize popup body padding)");
+    console.info("[ccf-handout] init — version 0.1.51 (detail padding + popup nav buttons)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
