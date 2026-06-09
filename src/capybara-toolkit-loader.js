@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.71";
-  const BUILD_ID = "2026-06-08-loader-reinject-handout-settings-room-strip-inline-save-046";
+  const VERSION = "0.1.72";
+  const BUILD_ID = "2026-06-08-loader-reinject-handout-drop-room-strip-divider-047";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
