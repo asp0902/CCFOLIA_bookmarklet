@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.27
+// @version      0.1.28
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1257,19 +1257,21 @@
     const hasSecret = canViewSecret(handout, me);
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
-    host.style.cssText = "all: initial; position: fixed; inset: 0; z-index: 2147483645;";
+    // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
+    const POPUP_W = 600;
+    const POPUP_H_INIT = 480;
+    const existingCount = document.querySelectorAll('[data-ccf-handout-show="1"]').length;
+    const offset = (existingCount % 8) * 24;
+    const initLeft = Math.max(8, Math.round((window.innerWidth - POPUP_W) / 2) + offset);
+    const initTop = Math.max(8, Math.round((window.innerHeight - POPUP_H_INIT) / 2) + offset);
+    host.style.cssText = `all: initial; position: fixed; left: ${initLeft}px; top: ${initTop}px; width: ${POPUP_W}px; max-width: 95vw; z-index: 2147483645;`;
     const sh = host.attachShadow({ mode: "open" });
     sh.innerHTML = `
       <style>
-        :host { all: initial; }
-        * { box-sizing: border-box; }
-        .show-overlay {
-          position: fixed; inset: 0; background: rgba(0,0,0,.55);
-          display: flex; align-items: center; justify-content: center; padding: 24px;
-          font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif;
-        }
+        :host { all: initial; display: block; }
+        * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
         .show-paper {
-          width: min(680px, 100%); max-height: 88%; display: flex; flex-direction: column;
+          width: 100%; max-height: 88vh; display: flex; flex-direction: column;
           background-color: rgba(44,44,44,0.95); color: #fff;
           box-shadow:
             0px 11px 15px -7px rgba(0,0,0,0.20),
@@ -1277,12 +1279,15 @@
             0px 9px 46px 8px rgba(0,0,0,0.12);
           overflow: hidden;
         }
+        .show-paper[data-collapsed="1"] { max-height: none; }
+        .show-paper[data-collapsed="1"] .show-body { display: none; }
         .show-head {
           background-color: #212121; padding: 0 8px 0 20px; min-height: 56px;
           display: flex; align-items: center; gap: 12px;
+          cursor: move; user-select: none; touch-action: none;
         }
-        .show-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff; }
-        .show-head .from { font-size: 0.75rem; color: rgba(255,255,255,.6); }
+        .show-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff; pointer-events: none; }
+        .show-head .from { font-size: 0.75rem; color: rgba(255,255,255,.6); pointer-events: none; }
         .show-close {
           all: unset; box-sizing: border-box; cursor: pointer;
           width: 36px; height: 36px; border-radius: 50%; color: #fff;
@@ -1311,32 +1316,77 @@
           letter-spacing: .08em; text-transform: uppercase;
         }
       </style>
-      <div class="show-overlay" data-overlay="1">
-        <div class="show-paper" role="dialog" aria-modal="true" aria-label="핸드아웃">
-          <div class="show-head">
-            <h2>${escapeHtml(handout.title || "(제목 없음)")}</h2>
-            ${fromName ? `<span class="from">from ${escapeHtml(fromName)}</span>` : ""}
-            <button class="show-close" data-action="close-show" aria-label="닫기">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-            </button>
-          </div>
-          <div class="show-body">
-            ${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
-            <div class="rendered">${renderMarkdown(handout.description)}</div>
-            ${hasSecret && handout.gmNotes ? `
-              <div class="secret-block">
-                <div class="secret-head">🔒 비밀 핸드아웃</div>
-                <div class="rendered">${renderMarkdown(handout.gmNotes)}</div>
-              </div>
-            ` : ""}
-          </div>
+      <div class="show-paper" data-collapsed="0" role="dialog" aria-label="핸드아웃">
+        <div class="show-head" data-drag-handle="1" title="더블클릭으로 접기/펼치기, 드래그로 이동">
+          <h2>${escapeHtml(handout.title || "(제목 없음)")}</h2>
+          ${fromName ? `<span class="from">from ${escapeHtml(fromName)}</span>` : ""}
+          <button class="show-close" data-action="close-show" aria-label="닫기">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="show-body">
+          ${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
+          <div class="rendered">${renderMarkdown(handout.description)}</div>
+          ${hasSecret && handout.gmNotes ? `
+            <div class="secret-block">
+              <div class="secret-head">🔒 비밀 핸드아웃</div>
+              <div class="rendered">${renderMarkdown(handout.gmNotes)}</div>
+            </div>
+          ` : ""}
         </div>
       </div>
     `;
+    const paper = sh.querySelector(".show-paper");
+    const head = sh.querySelector(".show-head");
+    // 더블클릭 = 접기/펼치기 토글 (닫기 버튼 위 더블클릭은 제외)
+    head.addEventListener("dblclick", (e) => {
+      if (e.target.closest("button")) return;
+      const collapsed = paper.getAttribute("data-collapsed") === "1";
+      paper.setAttribute("data-collapsed", collapsed ? "0" : "1");
+    });
+    // 드래그 — 헤더에서 시작
+    let dragState = null;
+    head.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest("button")) return;
+      const rect = host.getBoundingClientRect();
+      dragState = {
+        pointerId: e.pointerId,
+        startX: e.clientX, startY: e.clientY,
+        startLeft: rect.left, startTop: rect.top
+      };
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    head.addEventListener("pointermove", (e) => {
+      if (!dragState || e.pointerId !== dragState.pointerId) return;
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      const w = host.offsetWidth || POPUP_W;
+      const headerH = head.offsetHeight || 56;
+      // 헤더가 화면 밖으로 완전히 빠지지 않도록 clamp (최소 80px 잡힘)
+      const minLeft = -(w - 80);
+      const maxLeft = window.innerWidth - 80;
+      const minTop = 0;
+      const maxTop = window.innerHeight - headerH;
+      let newLeft = dragState.startLeft + dx;
+      let newTop = dragState.startTop + dy;
+      newLeft = Math.max(minLeft, Math.min(maxLeft, newLeft));
+      newTop = Math.max(minTop, Math.min(maxTop, newTop));
+      host.style.left = `${newLeft}px`;
+      host.style.top = `${newTop}px`;
+    });
+    const endDrag = (e) => {
+      if (!dragState || e.pointerId !== dragState.pointerId) return;
+      try { head.releasePointerCapture(e.pointerId); } catch (_) {}
+      dragState = null;
+    };
+    head.addEventListener("pointerup", endDrag);
+    head.addEventListener("pointercancel", endDrag);
+    // 닫기 버튼
     sh.addEventListener("click", (e) => {
       const closeBtn = e.target.closest('[data-action="close-show"]');
-      const overlay = e.target.matches('.show-overlay');
-      if (closeBtn || overlay) host.remove();
+      if (closeBtn) host.remove();
     });
     (document.body || document.documentElement).appendChild(host);
     registerTeardown(() => host.remove());
@@ -3166,7 +3216,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.27 (PL preview toggle bg transparent)");
+    console.info("[ccf-handout] init — version 0.1.28 (Roll20-style show popup: collapse + drag)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
