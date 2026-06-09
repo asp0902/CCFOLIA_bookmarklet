@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.34
+// @version      0.1.35
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -141,6 +141,7 @@
     const value = record?.value;
     if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [] };
     const handouts = Array.isArray(value.handouts) ? value.handouts.map(ensurePermissions) : [];
+    ensureOrderField(handouts);
     return {
       handouts,
       myCharacter: typeof value.myCharacter === "string" ? value.myCharacter : "",
@@ -286,6 +287,48 @@
     }
     closeBlocks();
     return out.join("");
+  }
+
+  // ===== 정렬 모델 =====
+  // 각 핸드아웃에 order: number. ORDER_STEP 간격으로 부여 → 중간 삽입 시 (prev + next) / 2.
+  const ORDER_STEP = 1000;
+
+  // 누락된 order 필드 채워넣기 — 현재 배열 인덱스 순서대로 ORDER_STEP 간격 부여.
+  // 이미 order 가진 핸드아웃은 그대로 두고, 누락된 항목만 max + ORDER_STEP 로 뒤에 붙임.
+  function ensureOrderField(handouts) {
+    if (!Array.isArray(handouts)) return handouts;
+    // 1차: 이미 유효한 order 가진 항목 분리
+    let maxOrder = -Infinity;
+    for (const h of handouts) {
+      if (h && Number.isFinite(h.order)) {
+        if (h.order > maxOrder) maxOrder = h.order;
+      }
+    }
+    if (!Number.isFinite(maxOrder)) maxOrder = -ORDER_STEP; // 비어있으면 첫 항목이 0 부터 시작하지 않게
+    // 2차: order 누락된 항목에 현재 배열 순서대로 뒤에 붙이기
+    for (const h of handouts) {
+      if (!h) continue;
+      if (Number.isFinite(h.order)) continue;
+      maxOrder += ORDER_STEP;
+      h.order = maxOrder;
+    }
+    return handouts;
+  }
+
+  // 새 핸드아웃 order — 현재 최대 + ORDER_STEP. 비어있으면 ORDER_STEP.
+  function getNextOrder() {
+    const handouts = Array.isArray(state.data?.handouts) ? state.data.handouts : [];
+    let max = -Infinity;
+    for (const h of handouts) {
+      if (h && Number.isFinite(h.order) && h.order > max) max = h.order;
+    }
+    return Number.isFinite(max) ? max + ORDER_STEP : ORDER_STEP;
+  }
+
+  function compareByOrder(a, b) {
+    const ao = Number.isFinite(a?.order) ? a.order : 0;
+    const bo = Number.isFinite(b?.order) ? b.order : 0;
+    return ao - bo;
   }
 
   // ===== 권한 모델 =====
@@ -1061,7 +1104,9 @@
       ownerUid: fb.uid,
       ownerName: state.data.myCharacter || "",
       updatedAt: serverTimestamp(),
-      createdAt: handout.createdAt || new Date().toISOString()
+      createdAt: handout.createdAt || new Date().toISOString(),
+      // 정렬용 order 필드 (#32) — 수신측 ingestRemoteHandout 가 이 값을 우선 사용
+      order: Number.isFinite(handout.order) ? handout.order : 0
     };
     await setDoc(docRef, payload);
     console.info("[ccf-handout] Firestore push OK:", handout.id);
@@ -1162,13 +1207,15 @@
       updatedAt: new Date().toISOString(),
       _remote: true,
       _canSecret: hasSecret,
-      _canView: hasPublic
+      _canView: hasPublic,
+      // 원격 order 우선, 없으면 로컬에서 끝에 부여 (#32)
+      order: Number.isFinite(data.order) ? data.order : getNextOrder()
     };
 
     const idx = state.data.handouts.findIndex((h) => h.id === data.id);
     const isNew = idx === -1;
     if (isNew) {
-      state.data.handouts.unshift(handout);
+      state.data.handouts.push(handout);
       const who = data.ownerName ? ` (from ${data.ownerName})` : "";
       toast(`새 핸드아웃 도착: "${data.title || "(제목없음)"}"${who}`);
     } else {
@@ -2038,7 +2085,9 @@
     if (!state.data.handouts.length) {
       return previewToggle;
     }
-    const cards = state.data.handouts.map((h) => {
+    // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
+    const sortedHandouts = [...state.data.handouts].sort(compareByOrder);
+    const cards = sortedHandouts.map((h) => {
       ensurePermissions(h);
       const manageable = canManageHandout(h);
       const permissionName = getPermissionCharacterName();
@@ -2490,13 +2539,15 @@
       ownerName: existing?.ownerName,
       _remote: existing?._remote === true,
       createdAt: existing?.createdAt || now,
-      updatedAt: now
+      updatedAt: now,
+      // order: 기존이면 유지, 신규면 getNextOrder 로 끝에 부여 (#32 사양)
+      order: existing && Number.isFinite(existing.order) ? existing.order : getNextOrder()
     };
     if (existing) {
       const idx = state.data.handouts.findIndex((h) => h.id === id);
       state.data.handouts[idx] = handout;
     } else {
-      state.data.handouts.unshift(handout);
+      state.data.handouts.push(handout);
     }
     await saveAll(state.data);
     state.editingId = null;
@@ -3237,7 +3288,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.34 (drop room-strip border-top divider)");
+    console.info("[ccf-handout] init — version 0.1.35 (handout order field + migration + sort)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
