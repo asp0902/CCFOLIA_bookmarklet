@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.10
+// @version      0.2.11
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3930,22 +3930,27 @@
     ccfThemeRegisterTeardown(() => { bodyObserver?.disconnect(); bodyObserver = null; });
   }
 
-  // #24 — 이미지 라이브러리/Unsplash 다이얼로그를 native 유지 대상으로 마킹.
-  // input[name="query"] 가 있는 다이얼로그는 CREE-GRRR! 커스텀 paper 룰 제외.
+  // #24 — 이미지 라이브러리(ROOM/ALL/Unsplash) 다이얼로그를 native 유지 대상으로 마킹.
+  // input[name="query"] 는 Unsplash 탭에서만 존재 → 안정적이지 않음.
+  // 대신 헤더 ButtonGroup 에 ROOM/ALL/Unsplash 텍스트 버튼이 있는지로 식별 (탭 무관).
   function markNativeDialogs() {
     try {
       const dialogs = document.querySelectorAll('.MuiDialog-root, div[role="dialog"]');
       dialogs.forEach((dlg) => {
         if (!(dlg instanceof HTMLElement)) return;
-        const isImageLib = !!dlg.querySelector('input[name="query"]');
+        if (dlg.getAttribute('data-ccf-native-dialog') === '1') return; // 이미 마킹됨
+        const buttons = dlg.querySelectorAll('header .MuiButtonGroup-root button, .MuiAppBar-root .MuiButtonGroup-root button');
+        let isImageLib = false;
+        for (const btn of buttons) {
+          const txt = (btn.textContent || '').trim();
+          if (txt === 'Unsplash' || txt === 'ROOM' || txt === 'ALL') { isImageLib = true; break; }
+        }
+        // fallback: input[name="query"] 가 있으면 (Unsplash 탭 활성 상태) 도 인정
+        if (!isImageLib && dlg.querySelector('input[name="query"]')) isImageLib = true;
         if (!isImageLib) return;
-        if (dlg.getAttribute('data-ccf-native-dialog') !== '1') {
-          dlg.setAttribute('data-ccf-native-dialog', '1');
-        }
+        dlg.setAttribute('data-ccf-native-dialog', '1');
         const paper = dlg.querySelector('.MuiDialog-paper, .MuiPaper-root');
-        if (paper instanceof HTMLElement && paper.getAttribute('data-ccf-native-dialog') !== '1') {
-          paper.setAttribute('data-ccf-native-dialog', '1');
-        }
+        if (paper instanceof HTMLElement) paper.setAttribute('data-ccf-native-dialog', '1');
       });
     } catch (_) { /* observer 한 번 실패는 무시 */ }
   }
