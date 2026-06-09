@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.68
+// @version      0.0.69
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4177,12 +4177,12 @@
       <button type="button" class="ccf-toggle" data-inline-command="italic" title="Italic" aria-label="Italic"><i>I</i></button>
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
-      <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
       <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
+      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false">Nr</button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -4202,8 +4202,8 @@
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
-      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false">Nr</button>
       <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
+      <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
@@ -5711,8 +5711,6 @@
             <button type="button" class="ccf-toggle" data-toggle="italic" title="\uAE30\uC6B8\uC784" aria-label="\uAE30\uC6B8\uC784"><i>I</i></button>
             <button type="button" class="ccf-toggle" data-toggle="underline" title="\uBC11\uC904" aria-label="\uBC11\uC904"><u>U</u></button>
             <button type="button" class="ccf-toggle" data-toggle="strike" title="\uCDE8\uC18C\uC120" aria-label="\uCDE8\uC18C\uC120"><s>S</s></button>
-            <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9" aria-pressed="false">()</button>
-            <button type="button" class="ccf-toggle" id="ccf-narration-toggle" title="\uB098\uB808\uC774\uC158" aria-label="\uB098\uB808\uC774\uC158" aria-pressed="false">Nr</button>
             <div class="ccf-code-tool ccf-ruby-tool" id="ccf-ruby-tool">
               <button
                 type="button"
@@ -5799,6 +5797,7 @@
                 </div>
               </div>
             </div>
+            <button type="button" class="ccf-toggle" id="ccf-narration-toggle" title="\uB098\uB808\uC774\uC158" aria-label="\uB098\uB808\uC774\uC158" aria-pressed="false">Nr</button>
             <span class="ccf-inline-divider" aria-hidden="true"></span>
             <div class="ccf-code-tool" id="ccf-style-clipboard-tool">
               <button
@@ -5820,6 +5819,7 @@
                 </div>
               </div>
             </div>
+            <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9" aria-pressed="false">()</button>
             <button type="button" class="ccf-toggle ccf-align-toggle active" data-align="left" title="\uC67C\uCABD \uC815\uB82C" aria-label="\uC67C\uCABD \uC815\uB82C">
               <svg viewBox="0 0 16 16" aria-hidden="true">
                 <path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/>
