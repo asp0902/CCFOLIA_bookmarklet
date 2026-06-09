@@ -3817,7 +3817,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.49 (refresh handout before show popup)");
+    console.info("[ccf-handout] init — version 0.1.50 (equalize popup body padding)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
