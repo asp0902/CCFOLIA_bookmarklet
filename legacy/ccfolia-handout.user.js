@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.30
+// @version      0.1.31
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2083,11 +2083,9 @@
     const rows = [];
     rows.push({ key: ALL_KEY, label: "플레이어 전체" });
     if (myChar) {
-      // 관리자 본인 행 — 실제 캐릭터명 + (관리자) 배지. plList 에서 GM 으로 설정돼 있으면 (GM) 추가.
-      const myPl = plList.find((p) => removeSpaces(p.name) === myChar);
+      // GM 본인 행 — 실제 캐릭터명 + (GM) 배지. 관리자 = GM 으로 통일.
       const adminLabel = state.data.myCharacter || myChar;
-      const roleSuffix = myPl?.role === "gm" ? " (관리자, GM)" : " (관리자)";
-      rows.push({ key: myChar, label: `${adminLabel}${roleSuffix}` });
+      rows.push({ key: myChar, label: `${adminLabel} (GM)` });
     }
     for (const pl of plList) {
       const name = removeSpaces(pl.name);
@@ -2145,7 +2143,7 @@
       return `
         <div class="field">
           <label>읽기 전용 핸드아웃</label>
-          <div class="hint">현재 캐릭터는 이 핸드아웃의 관리자 권한이 없습니다.</div>
+          <div class="hint">현재 캐릭터는 이 핸드아웃의 GM 권한이 없습니다.</div>
         </div>
         <div class="edit-footer-actions">
           <button class="btn secondary" data-action="cancel-edit">목록으로</button>
@@ -2257,7 +2255,7 @@
     }).join("");
     return `
       <div class="field">
-        <label>관리자 설정</label>
+        <label>GM 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
           <button class="settings-icon-btn" data-action="reload-my-characters" title="목록 새로고침" aria-label="목록 새로고침">${ICON_REFRESH}</button>
@@ -3232,7 +3230,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.30 (edit perm-grid: admin row shows character name + role)");
+    console.info("[ccf-handout] init — version 0.1.31 (unify 관리자 = GM across UI labels)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
