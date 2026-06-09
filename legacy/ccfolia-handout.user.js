@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.47
+// @version      0.1.48
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -220,6 +220,15 @@
   }
   const escapeAttr = escapeHtml;
 
+  function decodeHtmlEntities(value) {
+    return String(value ?? "")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
   function removeSpaces(s) {
     return (s || "").replace(/\s+/g, " ").trim();
   }
@@ -232,8 +241,11 @@
   function renderHandoutBody(src) {
     if (!src) return "";
     const t = String(src).trim();
-    if (/^<(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i.test(t)) {
-      return t;
+    const htmlTagRe = /^<(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i;
+    if (htmlTagRe.test(t)) return t;
+    if (/^&lt;(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i.test(t)) {
+      const decoded = decodeHtmlEntities(t);
+      if (htmlTagRe.test(decoded)) return decoded;
     }
     return renderMarkdown(src);
   }
@@ -3777,7 +3789,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.47 (preserve selection for color picker)");
+    console.info("[ccf-handout] init — version 0.1.48 (decode escaped rich body markup)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
