@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.29
+// @version      0.1.30
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2082,7 +2082,13 @@
     const plList = mergePlListById(state.data.plList || []).filter((p) => p && p.name);
     const rows = [];
     rows.push({ key: ALL_KEY, label: "플레이어 전체" });
-    if (myChar) rows.push({ key: myChar, label: "관리자 설정" });
+    if (myChar) {
+      // 관리자 본인 행 — 실제 캐릭터명 + (관리자) 배지. plList 에서 GM 으로 설정돼 있으면 (GM) 추가.
+      const myPl = plList.find((p) => removeSpaces(p.name) === myChar);
+      const adminLabel = state.data.myCharacter || myChar;
+      const roleSuffix = myPl?.role === "gm" ? " (관리자, GM)" : " (관리자)";
+      rows.push({ key: myChar, label: `${adminLabel}${roleSuffix}` });
+    }
     for (const pl of plList) {
       const name = removeSpaces(pl.name);
       if (!name) continue;
@@ -3226,7 +3232,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.29 (show popup: 2/3 size, no from, collapsed half + dim)");
+    console.info("[ccf-handout] init — version 0.1.30 (edit perm-grid: admin row shows character name + role)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
