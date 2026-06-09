@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.32
+// @version      0.1.33
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -706,14 +706,6 @@
     }
     .settings-icon-btn:hover { background: rgba(255,255,255,.08); }
     .settings-icon-btn svg { pointer-events: none; }
-    /* 설정 탭 저장 버튼 — body 가장 아래에 붙여 푸터 바 바로 위에 위치 */
-    .settings-save-row {
-      justify-content: flex-end;
-      position: sticky; bottom: 0;
-      padding: 12px 0 4px;
-      background: linear-gradient(to top, rgba(44,44,44,0.87) 60%, transparent);
-      margin-top: 12px;
-    }
     .settings-room {
       padding: 9px 12px; background: rgba(0,0,0,.35);
       border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
@@ -824,15 +816,21 @@
     .panel-footer .btn.secondary:hover {
       background: rgba(255,255,255,.08); color: #fff;
     }
-    /* 푸터 바로 위 룸 정보 한 줄 */
+    /* 푸터 바로 위 룸 정보 한 줄 — 패널 본체 배경 비치도록 transparent */
     .room-strip {
       flex: 0 0 auto;
-      background: rgba(0,0,0,.25);
+      background: transparent;
       color: rgba(255,255,255,.55);
       font-size: 0.75rem;
-      padding: 4px 16px;
+      padding: 6px 16px;
       font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
       border-top: 1px solid rgba(255,255,255,.04);
+      display: none;
+      align-items: center; gap: 8px;
+    }
+    .room-strip[data-tab-visible="1"] { display: flex; }
+    .room-strip .room-info {
+      flex: 1; min-width: 0;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     /* PL 목록 관리 모달 (Shadow DOM 안의 nested overlay) */
@@ -1983,8 +1981,17 @@
     meta.textContent = "";
     const roomStrip = state.shadow.querySelector("[data-room-strip]");
     if (roomStrip) {
-      roomStrip.textContent = `룸 ${getCurrentRoomKey()} · 핸드아웃 ${state.data.handouts.length}건`;
-      roomStrip.style.display = state.activeTab === "settings" ? "" : "none";
+      const showStrip = state.activeTab === "settings";
+      if (showStrip) {
+        roomStrip.innerHTML = `
+          <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
+          <button class="btn small" data-action="save-settings">저장</button>
+        `;
+      } else {
+        roomStrip.innerHTML = "";
+      }
+      roomStrip.setAttribute("data-tab-visible", showStrip ? "1" : "0");
+      roomStrip.style.display = "";
     }
     const adminMode = isAdminMode();
     const newButton = state.shadow.querySelector('[data-action="new-handout"]');
@@ -2268,9 +2275,6 @@
           <span class="hint" style="margin:0 0 0 8px;">현재 ${plCount}명 등록됨.</span>
         </div>
         ${renderSettingsPlList()}
-      </div>
-      <div class="row settings-save-row">
-        <button class="btn" data-action="save-settings">저장</button>
       </div>
     `;
   }
@@ -3234,7 +3238,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.32 (admin self-show on Show to Players/row popup)");
+    console.info("[ccf-handout] init — version 0.1.33 (settings: transparent room-strip + inline save btn)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
