@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.89";
-  const BUILD_ID = "2026-06-09-loader-handout-decode-escaped-rich-body-064";
+  const VERSION = "0.1.90";
+  const BUILD_ID = "2026-06-09-loader-handout-refresh-before-show-065";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

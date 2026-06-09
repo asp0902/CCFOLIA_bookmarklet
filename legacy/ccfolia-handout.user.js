@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.48
+// @version      0.1.49
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1269,6 +1269,22 @@
     return docs;
   }
 
+  async function refreshRemoteHandoutFromFirestore(handoutId) {
+    if (!handoutId) return null;
+    const fb = await initFirebase();
+    if (!fb) return null;
+    const { doc, getDoc } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") return null;
+    const snap = await getDoc(doc(fb.db, "rooms", roomKey, "handouts", handoutId));
+    if (!snap.exists()) {
+      ingestRemoteRemove(handoutId);
+      return null;
+    }
+    ingestRemoteHandout(snap.data(), "modified");
+    return findHandout(handoutId);
+  }
+
   // ===== Firestore 실시간 구독 (수신측) =====
   let unsubHandouts = null;
   let subscribedRoom = null;
@@ -1426,12 +1442,20 @@
       if (attempt < 5) setTimeout(() => tryShow(attempt + 1), 500);
       else console.warn("[ccf-handout] show signal: handout not found locally", data.handoutId);
     };
-    tryShow(0);
+    refreshRemoteHandoutFromFirestore(data.handoutId)
+      .then((fresh) => {
+        if (fresh) showHandoutModal(fresh, data.atName);
+        else tryShow(0);
+      })
+      .catch((error) => {
+        console.warn("[ccf-handout] show refresh failed:", error);
+        tryShow(0);
+      });
   }
 
   function showHandoutModal(handout, fromName) {
     const me = state.data.myCharacter;
-    const hasSecret = canViewSecret(handout, me);
+    const hasSecret = handout._canSecret === true || canViewSecret(handout, me);
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
@@ -3789,7 +3813,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.48 (decode escaped rich body markup)");
+    console.info("[ccf-handout] init — version 0.1.49 (refresh handout before show popup)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
