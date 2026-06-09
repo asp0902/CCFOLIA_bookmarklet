@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.9
+// @version      0.2.10
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1821,10 +1821,12 @@
 
       /* === [CREE-GRRR!] 캐릭터 편집 팝업 ============================ */
       /* paper: 상/하단 시안 라인만, border-radius 0 으로 모서리 라운드 제거.
-         BGM 편집 미니모달은 네이티브 크기/외관을 유지하기 위해 제외한다. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]),
-      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"] > .MuiPaper-root:not(.MuiPopover-paper):not([data-ccf-bgm-dialog-paper="1"]),
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) {
+         BGM 편집 미니모달은 네이티브 크기/외관을 유지하기 위해 제외한다.
+         data-ccf-native-dialog="1" 마커가 있는 모달(예: 이미지 라이브러리/
+         Unsplash) 도 native 유지를 위해 제외한다 (#24, JS observer 가 마킹). */
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]),
+      html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"]:not([data-ccf-native-dialog="1"]) > .MuiPaper-root:not(.MuiPopover-paper):not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]),
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) {
         background-color: ${CG.bgGlass} !important;
         background-image: none !important;
         color: ${CG.text} !important;
@@ -1839,11 +1841,11 @@
       }
 
       /* DialogActions는 캐릭터 편집 팝업에만 시안 스타일을 적용한다. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
         position: relative !important;
         border-radius: 0 !important;
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing::before {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing::before {
         content: "" !important;
         position: absolute !important;
         top: 1px !important;
@@ -1856,7 +1858,7 @@
       }
 
       /* 캐릭터 편집 팝업의 DialogActions만 강제 flex 균등 분배한다. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
         display: flex !important;
         flex-direction: row !important;
         align-items: stretch !important;
@@ -1866,7 +1868,7 @@
         width: 100% !important;
         box-sizing: border-box !important;
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > * {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > * {
         flex: 1 1 0 !important;
         flex-grow: 1 !important;
         flex-shrink: 1 !important;
@@ -1879,8 +1881,8 @@
         box-sizing: border-box !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing > .MuiButtonBase-root {
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
         font-size: 14px !important;
         letter-spacing: 0 !important;
@@ -1888,7 +1890,7 @@
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스. 좌/우 시안 제거(체크 지점),
          상/하단만 시안 라인 유지(상단=다이얼로그 최상단, 하단=AppBar↔Content 구분선). */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root {
         background: ${CG.bgSolid} !important;
         background-image: none !important;
         color: ${CG.text} !important;
@@ -1899,20 +1901,20 @@
           inset 0 -1px 0 0 ${CG.accent},
           0 4px 14px ${CG.shadow} !important;
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root .MuiTypography-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root .MuiIconButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root .MuiSvgIcon-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root .MuiTypography-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root .MuiIconButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root .MuiSvgIcon-root {
         color: ${CG.text} !important;
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root .MuiButtonBase-root:hover,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAppBar-root .MuiIconButton-root:hover {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root .MuiIconButton-root:hover {
         background: ${CG.accentHover} !important;
       }
 
       /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이.
          좌/우 시안 inset 제거(체크 지점) — 다이얼로그는 상/하단 가로 라인과
          AppBar↔Content / Content↔Actions 구분선만 갖는 미니멀 구성. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root {
         background-image:
           linear-gradient(${CG.bgGlassInner}, ${CG.bgGlassInner}),
           ${CG.sheetBg} !important;
@@ -1923,98 +1925,98 @@
       }
 
       /* 내부 Paper/카드/아코디언 */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiPaper-root:not(.MuiAppBar-root),
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiCard-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiAccordion-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiPaper-root:not(.MuiAppBar-root),
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiCard-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAccordion-root {
         background: ${CG.bgGlassInner} !important;
         color: ${CG.text} !important;
         border-color: ${CG.accentSoft} !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDivider-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDivider-root {
         border-color: ${CG.accentSoft} !important;
       }
 
       /* 필드 라벨(소항목) — 이름/이니셔티브/토큰 사이즈/참고 URL 등 캐릭터 편집
          팝업의 모든 input/select 라벨 텍스트. 색상은 CYAN(#1DE2E2),
          폰트는 입력창과 동일한 DungGeunMo 픽셀 폰트. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiInputLabel-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiFormLabel-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiFormControlLabel-label {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiInputLabel-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiFormLabel-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiFormControlLabel-label {
         color: #1DE2E2 !important;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
       /* 그 외 본문 텍스트 톤 — 흰색 (DialogContent 스코프로 한정, DialogActions 네이티브 유지) */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiTab-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiButton-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiButtonBase-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiSvgIcon-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogTitle-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogTitle-root .MuiTypography-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTab-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiButton-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiButtonBase-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiSvgIcon-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogTitle-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogTitle-root .MuiTypography-root {
         color: ${CG.text} !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiTypography-caption,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiFormHelperText-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiListItemText-secondary {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTypography-caption,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiFormHelperText-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiListItemText-secondary {
         color: ${CG.dim} !important;
       }
 
       /* 입력칸 — 검은 베이스 + 흰색 텍스트(사용자가 입력하는 실제 값은 화이트).
          라벨(소항목)은 별도 규칙으로 CYAN(#1DE2E2). 폰트는 DungGeunMo 픽셀 폰트. */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiInputBase-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiOutlinedInput-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiFilledInput-root,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiInputBase-input,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiSelect-select,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) textarea,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) input[type="text"],
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) input[type="number"],
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) input[type="url"] {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiInputBase-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiOutlinedInput-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiFilledInput-root,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiInputBase-input,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiSelect-select,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) textarea,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) input[type="text"],
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) input[type="number"],
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) input[type="url"] {
         background: ${CG.bgChip} !important;
         color: ${CG.text} !important;
         border-radius: 4px !important;
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiOutlinedInput-notchedOutline,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiInputBase-root fieldset {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiInputBase-root fieldset {
         border-color: ${CG.borderSoft} !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .Mui-focused .MuiOutlinedInput-notchedOutline,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiInputBase-root.Mui-focused fieldset {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .Mui-focused .MuiOutlinedInput-notchedOutline,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiInputBase-root.Mui-focused fieldset {
         border-color: ${CG.accent} !important;
         box-shadow: 0 0 0 2px rgba(31, 242, 242, 0.22) !important;
       }
 
       /* 탭/리스트 선택 — 시안 액센트 */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiTab-root.Mui-selected,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiListItemButton-root.Mui-selected,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .Mui-selected > .MuiListItemButton-root {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiTab-root.Mui-selected,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiListItemButton-root.Mui-selected,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .Mui-selected > .MuiListItemButton-root {
         background: ${CG.accentHover} !important;
         color: ${CG.accent} !important;
       }
 
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiTabs-indicator {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiTabs-indicator {
         background: ${CG.accent} !important;
       }
 
       /* 호버 — 시안 톤 */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiButtonBase-root:hover,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiTab-root:hover,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiListItemButton-root:hover,
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) .MuiDialogContent-root .MuiMenuItem-root:hover {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiButtonBase-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTab-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiListItemButton-root:hover,
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiMenuItem-root:hover {
         background: ${CG.accentHover} !important;
       }
 
       /* 캐릭터 시트 팝업 스크롤바 — 시안 액센트 */
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) ::-webkit-scrollbar-track {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) ::-webkit-scrollbar-track {
         background: ${CG.bgSolid};
       }
-      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]) ::-webkit-scrollbar-thumb {
+      html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) ::-webkit-scrollbar-thumb {
         background: ${CG.accent};
         border: 2px solid ${CG.bgSolid};
         border-radius: 999px;
@@ -3918,6 +3920,7 @@
     bodyObserver = new MutationObserver(() => {
       if (!ccfThemeActive) return;
       scheduleEnsureUi();
+      markNativeDialogs();
     });
 
     bodyObserver.observe(document.body, {
@@ -3925,6 +3928,26 @@
       subtree: true
     });
     ccfThemeRegisterTeardown(() => { bodyObserver?.disconnect(); bodyObserver = null; });
+  }
+
+  // #24 — 이미지 라이브러리/Unsplash 다이얼로그를 native 유지 대상으로 마킹.
+  // input[name="query"] 가 있는 다이얼로그는 CREE-GRRR! 커스텀 paper 룰 제외.
+  function markNativeDialogs() {
+    try {
+      const dialogs = document.querySelectorAll('.MuiDialog-root, div[role="dialog"]');
+      dialogs.forEach((dlg) => {
+        if (!(dlg instanceof HTMLElement)) return;
+        const isImageLib = !!dlg.querySelector('input[name="query"]');
+        if (!isImageLib) return;
+        if (dlg.getAttribute('data-ccf-native-dialog') !== '1') {
+          dlg.setAttribute('data-ccf-native-dialog', '1');
+        }
+        const paper = dlg.querySelector('.MuiDialog-paper, .MuiPaper-root');
+        if (paper instanceof HTMLElement && paper.getAttribute('data-ccf-native-dialog') !== '1') {
+          paper.setAttribute('data-ccf-native-dialog', '1');
+        }
+      });
+    } catch (_) { /* observer 한 번 실패는 무시 */ }
   }
 
   function scheduleEnsureUi() {
