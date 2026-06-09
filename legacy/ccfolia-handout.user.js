@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.37
+// @version      0.1.38
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -692,6 +692,20 @@
       width: 1px; align-self: stretch; margin: 2px 4px;
       background: rgba(255,255,255,.1);
     }
+    .ft-target-hint {
+      margin-left: auto;
+      padding: 0 8px;
+      font-size: 0.6875rem;
+      color: rgba(255,255,255,.45);
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+    .ft-target-hint.active {
+      color: #82b1ff;
+    }
+    textarea[data-format-receiver="1"]:focus {
+      box-shadow: inset 0 0 0 1px rgba(130,177,255,.4);
+    }
     .perm-section { margin-top: 8px; }
     .perm-title {
       font-size: 0.9375rem; font-weight: 700; color: #fff; margin-bottom: 14px;
@@ -1106,6 +1120,7 @@
     shadow.addEventListener("pointermove", onShadowPointerMove);
     shadow.addEventListener("pointerup", onShadowPointerEnd);
     shadow.addEventListener("pointercancel", onShadowPointerEnd);
+    shadow.addEventListener("focusin", onShadowFocusIn);
     bindWindowControls(shadow);
     state.root = root;
     state.shadow = shadow;
@@ -2245,21 +2260,23 @@
   // format-sync 의 inline-toolbar 는 shadow DOM 경계 + 내부 editor state 의존성 때문에 직접 attach 불가.
   // 대신 renderMarkdown 이 이미 지원하는 마크다운 syntax (**bold**, *italic*, `code`, # heading, > quote,
   // - list, --- hr, [text](url)) 를 textarea 에 직접 삽입하는 경량 툴바를 제공.
-  function renderFormatToolbar(target) {
+  // 핸드아웃 편집 공통 서식 툴바 — 공개/비밀 본문 양쪽에 공통 적용. 현재 focus 된 textarea 가 대상.
+  function renderFormatToolbar() {
     return `
-      <div class="handout-format-toolbar" data-format-toolbar="${escapeAttr(target)}">
-        <button type="button" class="ft-btn" data-format-cmd="bold" data-format-target="${escapeAttr(target)}" title="굵게 (**텍스트**)" aria-label="굵게"><b>B</b></button>
-        <button type="button" class="ft-btn" data-format-cmd="italic" data-format-target="${escapeAttr(target)}" title="기울임 (*텍스트*)" aria-label="기울임"><i>I</i></button>
-        <button type="button" class="ft-btn" data-format-cmd="code" data-format-target="${escapeAttr(target)}" title="인라인 코드 (\`텍스트\`)" aria-label="인라인 코드"><code>&lt;/&gt;</code></button>
+      <div class="handout-format-toolbar" data-format-toolbar="1">
+        <button type="button" class="ft-btn" data-format-cmd="bold" title="굵게 (**텍스트**)" aria-label="굵게"><b>B</b></button>
+        <button type="button" class="ft-btn" data-format-cmd="italic" title="기울임 (*텍스트*)" aria-label="기울임"><i>I</i></button>
+        <button type="button" class="ft-btn" data-format-cmd="code" title="인라인 코드 (\`텍스트\`)" aria-label="인라인 코드"><code>&lt;/&gt;</code></button>
         <span class="ft-sep" aria-hidden="true"></span>
-        <button type="button" class="ft-btn" data-format-cmd="h1" data-format-target="${escapeAttr(target)}" title="제목 1 (# 텍스트)" aria-label="제목 1">H1</button>
-        <button type="button" class="ft-btn" data-format-cmd="h2" data-format-target="${escapeAttr(target)}" title="제목 2 (## 텍스트)" aria-label="제목 2">H2</button>
-        <button type="button" class="ft-btn" data-format-cmd="h3" data-format-target="${escapeAttr(target)}" title="제목 3 (### 텍스트)" aria-label="제목 3">H3</button>
+        <button type="button" class="ft-btn" data-format-cmd="h1" title="제목 1 (# 텍스트)" aria-label="제목 1">H1</button>
+        <button type="button" class="ft-btn" data-format-cmd="h2" title="제목 2 (## 텍스트)" aria-label="제목 2">H2</button>
+        <button type="button" class="ft-btn" data-format-cmd="h3" title="제목 3 (### 텍스트)" aria-label="제목 3">H3</button>
         <span class="ft-sep" aria-hidden="true"></span>
-        <button type="button" class="ft-btn" data-format-cmd="list" data-format-target="${escapeAttr(target)}" title="목록 (- 텍스트)" aria-label="목록">•</button>
-        <button type="button" class="ft-btn" data-format-cmd="quote" data-format-target="${escapeAttr(target)}" title="인용 (&gt; 텍스트)" aria-label="인용">&ldquo;</button>
-        <button type="button" class="ft-btn" data-format-cmd="hr" data-format-target="${escapeAttr(target)}" title="가로줄 (---)" aria-label="가로줄">―</button>
-        <button type="button" class="ft-btn" data-format-cmd="link" data-format-target="${escapeAttr(target)}" title="링크 ([텍스트](URL))" aria-label="링크">🔗</button>
+        <button type="button" class="ft-btn" data-format-cmd="list" title="목록 (- 텍스트)" aria-label="목록">•</button>
+        <button type="button" class="ft-btn" data-format-cmd="quote" title="인용 (&gt; 텍스트)" aria-label="인용">&ldquo;</button>
+        <button type="button" class="ft-btn" data-format-cmd="hr" title="가로줄 (---)" aria-label="가로줄">―</button>
+        <button type="button" class="ft-btn" data-format-cmd="link" title="링크 ([텍스트](URL))" aria-label="링크">🔗</button>
+        <span class="ft-target-hint" data-format-target-hint="1">본문 클릭 후 사용</span>
       </div>
     `;
   }
@@ -2301,6 +2318,37 @@
     ta.setRangeText(text, start, start, "end");
     ta.dispatchEvent(new InputEvent("input", { bubbles: true }));
     ta.focus();
+  }
+
+  // 마지막으로 focus 된 본문 textarea (data-format-receiver="1"). 툴바 클릭 시 대상.
+  let lastFocusedFormatTextarea = null;
+
+  function getCurrentFormatTargetTextarea() {
+    // 현재 focus 된 게 본문 textarea 면 그걸 사용
+    const active = state.shadow?.activeElement;
+    if (active instanceof HTMLTextAreaElement && active.getAttribute("data-format-receiver") === "1") {
+      return active;
+    }
+    // 아니면 마지막 focus 본문 textarea
+    if (lastFocusedFormatTextarea && state.shadow?.contains(lastFocusedFormatTextarea)) {
+      return lastFocusedFormatTextarea;
+    }
+    return null;
+  }
+
+  function updateFormatToolbarTargetHint() {
+    const hint = state.shadow?.querySelector('[data-format-target-hint="1"]');
+    if (!hint) return;
+    const ta = getCurrentFormatTargetTextarea();
+    if (!ta) {
+      hint.textContent = "본문 클릭 후 사용";
+      hint.classList.remove("active");
+      return;
+    }
+    const field = ta.getAttribute("data-field");
+    const label = field === "gmNotes" ? "비밀 본문" : "공개 본문";
+    hint.textContent = `대상: ${label}`;
+    hint.classList.add("active");
   }
 
   function handleFormatToolbarCommand(cmd, ta) {
@@ -2378,15 +2426,15 @@
         <input class="title-input" type="text" data-field="title" value="${escapeHtml(h.title)}" placeholder="핸드아웃 제목">
         ${editing ? `<button class="action-icon" data-action="delete-handout" data-id="${escapeHtml(editing.id)}" title="삭제" aria-label="삭제">${ICON_TRASH}</button>` : ""}
       </div>
+      ${renderFormatToolbar()}
       <div class="handout-edit-cols">
         <div class="col">
           <label>공개 핸드아웃</label>
-          ${renderFormatToolbar("description")}
-          <textarea data-field="description" data-format-target="description">${escapeHtml(h.description)}</textarea>
+          <textarea data-field="description" data-format-receiver="1">${escapeHtml(h.description)}</textarea>
         </div>
         <div class="col">
           <label>비밀 핸드아웃</label>
-          <textarea data-field="gmNotes">${escapeHtml(h.gmNotes)}</textarea>
+          <textarea data-field="gmNotes" data-format-receiver="1">${escapeHtml(h.gmNotes)}</textarea>
         </div>
       </div>
       <div class="perm-section">
@@ -2576,13 +2624,16 @@
       togglePlAliasChip(aliasChip);
       return;
     }
-    // #40 — 마크다운 서식 툴바
+    // #40 — 마크다운 서식 툴바 (공용, 현재 focus 또는 마지막 focus 된 textarea 대상)
     const formatBtn = event.target.closest("button[data-format-cmd]");
     if (formatBtn) {
       event.preventDefault();
       const cmd = formatBtn.getAttribute("data-format-cmd");
-      const target = formatBtn.getAttribute("data-format-target");
-      const ta = state.shadow?.querySelector(`textarea[data-field="${target}"]`);
+      const ta = getCurrentFormatTargetTextarea();
+      if (!ta) {
+        toast("공개 또는 비밀 본문 입력칸을 먼저 클릭해주세요.");
+        return;
+      }
       handleFormatToolbarCommand(cmd, ta);
       return;
     }
@@ -2750,6 +2801,15 @@
       return prevOrder + 1;
     }
     return mid;
+  }
+
+  // 본문 textarea focus 추적 — 서식 툴바 대상 결정
+  function onShadowFocusIn(event) {
+    const t = event.target;
+    if (t instanceof HTMLTextAreaElement && t.getAttribute("data-format-receiver") === "1") {
+      lastFocusedFormatTextarea = t;
+      updateFormatToolbarTargetHint();
+    }
   }
 
   // 실시간 마크다운 프리뷰
@@ -3540,7 +3600,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.37 (description markdown toolbar)");
+    console.info("[ccf-handout] init — version 0.1.38 (shared markdown toolbar for both bodies)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
