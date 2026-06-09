@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.39
+// @version      0.1.40
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -669,20 +669,25 @@
     .handout-edit-cols .col .rich-editor {
       width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: vertical;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
-      padding: 10px 12px; color: #fff;
+      padding: 6px 10px; color: #fff;
       font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
-      font-size: 0.875rem; line-height: 1.6;
+      font-size: 0.875rem; line-height: 1.45;
       transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
       cursor: text;
     }
     .handout-edit-cols .col .rich-editor:hover { border-color: rgba(255,255,255,.35); }
     .handout-edit-cols .col .rich-editor:focus { outline: none; border-color: #fff; }
-    .handout-edit-cols .col .rich-editor h1 { font-size: 1.25rem; margin: 10px 0; color: #fff; }
-    .handout-edit-cols .col .rich-editor h2 { font-size: 1.125rem; margin: 8px 0; color: #fff; }
-    .handout-edit-cols .col .rich-editor h3 { font-size: 1rem; margin: 8px 0; color: #fff; }
+    /* contenteditable 블록 wrap 기본 margin 제거 — 텍스트가 너무 아래로 내려가는 문제 해결 */
+    .handout-edit-cols .col .rich-editor > * { margin-top: 0; }
+    .handout-edit-cols .col .rich-editor > *:first-child { margin-top: 0; }
+    .handout-edit-cols .col .rich-editor p,
+    .handout-edit-cols .col .rich-editor div { margin: 0; }
+    .handout-edit-cols .col .rich-editor h1 { font-size: 1.25rem; margin: 4px 0; color: #fff; }
+    .handout-edit-cols .col .rich-editor h2 { font-size: 1.125rem; margin: 4px 0; color: #fff; }
+    .handout-edit-cols .col .rich-editor h3 { font-size: 1rem; margin: 4px 0; color: #fff; }
     .handout-edit-cols .col .rich-editor blockquote {
       border-left: 3px solid rgba(255,255,255,.2); padding: 2px 12px;
-      color: rgba(255,255,255,.8); margin: 6px 0;
+      color: rgba(255,255,255,.8); margin: 4px 0;
     }
     .handout-edit-cols .col .rich-editor code {
       background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px;
@@ -1165,6 +1170,7 @@
     shadow.addEventListener("pointerup", onShadowPointerEnd);
     shadow.addEventListener("pointercancel", onShadowPointerEnd);
     shadow.addEventListener("focusin", onShadowFocusIn);
+    shadow.addEventListener("paste", onShadowPaste);
     bindWindowControls(shadow);
     state.root = root;
     state.shadow = shadow;
@@ -2134,15 +2140,30 @@
     meta.textContent = "";
     const roomStrip = state.shadow.querySelector("[data-room-strip]");
     if (roomStrip) {
-      const showStrip = state.activeTab === "settings";
-      if (showStrip) {
-        roomStrip.innerHTML = `
+      let stripHtml = "";
+      if (state.activeTab === "settings") {
+        stripHtml = `
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
           <button class="btn small" data-action="save-settings">저장</button>
         `;
-      } else {
-        roomStrip.innerHTML = "";
+      } else if (state.activeTab === "edit") {
+        const editing = (state.editingId && state.editingId !== "new") ? findHandout(state.editingId) : null;
+        const isReadOnly = (editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode());
+        if (isReadOnly) {
+          stripHtml = `
+            <span class="room-info"></span>
+            <button class="btn small secondary" data-action="cancel-edit">목록으로</button>
+          `;
+        } else {
+          stripHtml = `
+            <span class="room-info"></span>
+            <button class="btn small secondary" data-action="cancel-edit">취소</button>
+            <button class="btn small" data-action="save-handout">저장</button>
+          `;
+        }
       }
+      const showStrip = stripHtml.length > 0;
+      roomStrip.innerHTML = stripHtml;
       roomStrip.setAttribute("data-tab-visible", showStrip ? "1" : "0");
       roomStrip.style.display = "";
     }
@@ -2339,9 +2360,6 @@
           <span>A</span>
           <input type="color" data-format-cmd="color" value="#ffffff" aria-label="색상 선택">
         </label>
-        <button type="button" class="ft-btn" data-format-cmd="link" title="링크" aria-label="링크">🔗</button>
-        <button type="button" class="ft-btn" data-format-cmd="image" title="이미지 삽입" aria-label="이미지 삽입">🖼</button>
-        <span class="ft-target-hint" data-format-target-hint="1">본문 클릭 후 사용</span>
       </div>
     `;
   }
@@ -2401,20 +2419,8 @@
     return null;
   }
 
-  function updateFormatToolbarTargetHint() {
-    const hint = state.shadow?.querySelector('[data-format-target-hint="1"]');
-    if (!hint) return;
-    const editor = getCurrentFormatTargetEditor();
-    if (!editor) {
-      hint.textContent = "본문 클릭 후 사용";
-      hint.classList.remove("active");
-      return;
-    }
-    const field = editor.getAttribute("data-field");
-    const label = field === "gmNotes" ? "비밀 본문" : "공개 본문";
-    hint.textContent = `대상: ${label}`;
-    hint.classList.add("active");
-  }
+  // hint UI 제거됨 — no-op (이전 호출 부 호환용)
+  function updateFormatToolbarTargetHint() {}
 
   // contenteditable 본문에 execCommand 적용. shadow 안 selection 유지를 위해
   // 명령 직전에 editor.focus() — selection 이 다른 곳으로 빠진 상태에서도 안전.
@@ -2457,18 +2463,6 @@
         execEditor(editor, "foreColor", color);
         return;
       }
-      case "link": {
-        const url = window.prompt("링크 URL:");
-        if (!url) return;
-        execEditor(editor, "createLink", url);
-        return;
-      }
-      case "image": {
-        const url = window.prompt("이미지 URL:");
-        if (!url) return;
-        execEditor(editor, "insertImage", url);
-        return;
-      }
     }
   }
 
@@ -2481,9 +2475,6 @@
         <div class="field">
           <label>읽기 전용 핸드아웃</label>
           <div class="hint">현재 캐릭터는 이 핸드아웃의 GM 권한이 없습니다.</div>
-        </div>
-        <div class="edit-footer-actions">
-          <button class="btn secondary" data-action="cancel-edit">목록으로</button>
         </div>
       `;
     }
@@ -2536,10 +2527,6 @@
           <div class="head">팝업</div>
           ${rowsHtml}
         </div>
-      </div>
-      <div class="edit-footer-actions">
-        <button class="btn" data-action="save-handout">저장</button>
-        <button class="btn secondary" data-action="cancel-edit">취소</button>
       </div>
       <input type="hidden" data-field="image" value="${escapeHtml(h.image || "")}">
     `;
@@ -2907,8 +2894,51 @@
   function onShadowFocusIn(event) {
     if (isFormatReceiver(event.target)) {
       lastFocusedFormatEditor = event.target;
-      updateFormatToolbarTargetHint();
     }
+  }
+
+  // 본문 editor paste — 이미지 클립보드 / 이미지 URL / 일반 URL 자동 처리
+  function onShadowPaste(event) {
+    const editor = event.target instanceof Element ? event.target.closest('.rich-editor[contenteditable="true"]') : null;
+    if (!editor) return;
+    const cd = event.clipboardData;
+    if (!cd) return;
+    // 1) 이미지 파일 (스크린샷 등) — data URL 로 변환해 <img> 삽입
+    const items = cd.items || [];
+    for (const item of items) {
+      if (item && item.kind === "file" && item.type && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        event.preventDefault();
+        const reader = new FileReader();
+        reader.onload = () => {
+          editor.focus();
+          execEditor(editor, "insertImage", String(reader.result || ""));
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+    // 2) 텍스트가 URL 한 줄 — 이미지 확장자면 <img>, 아니면 <a>
+    const text = (cd.getData("text/plain") || "").trim();
+    if (/^https?:\/\/\S+$/i.test(text)) {
+      event.preventDefault();
+      editor.focus();
+      if (/\.(png|jpg|jpeg|gif|webp|svg|bmp)(\?|#|$)/i.test(text)) {
+        execEditor(editor, "insertImage", text);
+      } else {
+        const sel = state.shadow?.getSelection?.() || window.getSelection();
+        const hasSelection = !!(sel && String(sel).length > 0);
+        if (hasSelection) {
+          execEditor(editor, "createLink", text);
+        } else {
+          execEditor(editor, "insertHTML",
+            `<a href="${escapeAttr(text)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`);
+        }
+      }
+      return;
+    }
+    // 그 외: 브라우저 기본 paste 진행
   }
 
   // 실시간 마크다운 프리뷰
@@ -3704,7 +3734,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.39 (WYSIWYG contenteditable + extended toolbar)");
+    console.info("[ccf-handout] init — version 0.1.40 (paste auto-link/image + save/cancel in strip)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
