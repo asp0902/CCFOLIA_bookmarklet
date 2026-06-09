@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.35
+// @version      0.1.36
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -721,6 +721,23 @@
     }
     .card-icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .card-icon-btn.danger:hover { background: rgba(244,67,54,.16); color: #ff6e60; }
+    /* 핸드아웃 카드 드래그 핸들 (#33) */
+    .handout-drag-handle {
+      cursor: grab; touch-action: none; user-select: none;
+      width: 20px; height: 28px; flex: 0 0 auto;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,.35);
+      transition: color 120ms;
+    }
+    .handout-drag-handle:hover { color: rgba(255,255,255,.85); }
+    .handout-drag-handle:active { cursor: grabbing; color: #fff; }
+    .card[data-dragging="1"] { opacity: 0.5; }
+    .card[data-drag-over="above"] {
+      box-shadow: inset 0 2px 0 0 #82b1ff;
+    }
+    .card[data-drag-over="below"] {
+      box-shadow: inset 0 -2px 0 0 #82b1ff;
+    }
     .card .badges-row {
       display: flex; gap: 4px; flex-wrap: wrap;
       flex: 0 0 auto; align-self: flex-start; margin-left: 8px;
@@ -1058,6 +1075,10 @@
     shadow.addEventListener("click", onShadowClick);
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
+    shadow.addEventListener("pointerdown", onShadowPointerDown);
+    shadow.addEventListener("pointermove", onShadowPointerMove);
+    shadow.addEventListener("pointerup", onShadowPointerEnd);
+    shadow.addEventListener("pointercancel", onShadowPointerEnd);
     bindWindowControls(shadow);
     state.root = root;
     state.shadow = shadow;
@@ -2100,8 +2121,9 @@
         ? (permKeys.length ? permKeys.map((k) => k === ALL_KEY ? "전체" : k).join(", ") : "GM 전용")
         : "핸드아웃";
       return `
-        <article class="card" data-id="${escapeHtml(h.id)}">
+        <article class="card" data-id="${escapeHtml(h.id)}" data-order="${Number.isFinite(h.order) ? h.order : ""}">
           <div class="head">
+            ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
@@ -2189,6 +2211,8 @@
   const ICON_PENCIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   // MUI CloseIcon (코코포리아 스타일 X)
   const ICON_X_SMALL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+  // MUI DragIndicatorIcon (6-dot grip)
+  const ICON_DRAG_HANDLE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
 
   function renderEdit() {
     // editingId === "new" → 새로 만들기 모드 (editing = null)
@@ -2498,6 +2522,102 @@
       return;
     }
     rowPopupSend(handoutId, key);
+  }
+
+  // ===== 핸드아웃 D&D 정렬 (#33) =====
+  let handoutDragState = null;
+
+  function onShadowPointerDown(event) {
+    const handle = event.target.closest('[data-handout-drag-handle="1"]');
+    if (!handle) return;
+    if (event.button !== 0) return;
+    if (!isAdminMode()) return;
+    const card = handle.closest('.card');
+    if (!card) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handoutDragState = {
+      pointerId: event.pointerId,
+      cardId: card.dataset.id
+    };
+    card.setAttribute('data-dragging', '1');
+    try { handle.setPointerCapture(event.pointerId); } catch (_) {}
+  }
+
+  function onShadowPointerMove(event) {
+    if (!handoutDragState || event.pointerId !== handoutDragState.pointerId) return;
+    const list = state.shadow?.querySelector('.list');
+    if (!list) return;
+    const cards = Array.from(list.querySelectorAll('.card'));
+    cards.forEach((c) => c.removeAttribute('data-drag-over'));
+    for (const c of cards) {
+      if (c.dataset.id === handoutDragState.cardId) continue;
+      const rect = c.getBoundingClientRect();
+      if (event.clientY >= rect.top && event.clientY <= rect.bottom) {
+        const mid = rect.top + rect.height / 2;
+        c.setAttribute('data-drag-over', event.clientY < mid ? 'above' : 'below');
+        break;
+      }
+    }
+  }
+
+  function onShadowPointerEnd(event) {
+    if (!handoutDragState || event.pointerId !== handoutDragState.pointerId) return;
+    const draggedId = handoutDragState.cardId;
+    handoutDragState = null;
+    const list = state.shadow?.querySelector('.list');
+    if (!list) return;
+    const cards = Array.from(list.querySelectorAll('.card'));
+    let target = null, pos = null;
+    for (const c of cards) {
+      const over = c.getAttribute('data-drag-over');
+      if (over) { target = c; pos = over; }
+      c.removeAttribute('data-drag-over');
+      c.removeAttribute('data-dragging');
+    }
+    if (!target || !pos || target.dataset.id === draggedId) return;
+    const dragged = findHandout(draggedId);
+    const targetHandout = findHandout(target.dataset.id);
+    if (!dragged || !targetHandout) return;
+    const newOrder = computeInsertOrder(dragged, targetHandout, pos);
+    if (!Number.isFinite(newOrder)) return;
+    dragged.order = newOrder;
+    saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
+    // Firestore 부분 업데이트 — 변경된 항목만 push (관리자 본인이 만든 핸드아웃만)
+    if (!dragged._remote) {
+      pushHandoutToFirestore(dragged).catch((error) => {
+        console.warn("[ccf-handout] order push 실패:", error);
+      });
+    }
+    render();
+  }
+
+  // dragged 를 target 의 above/below 위치로 옮길 때 새 order 계산.
+  // 정밀도 한계 도달 시 가장자리에 step 단위로 부여 (다음 슬라이스에서 renumber 헬퍼 추가 가능).
+  function computeInsertOrder(dragged, target, pos) {
+    const sorted = state.data.handouts
+      .filter((h) => h && h.id !== dragged.id)
+      .sort(compareByOrder);
+    const targetIdx = sorted.findIndex((h) => h.id === target.id);
+    if (targetIdx === -1) return getNextOrder();
+    let prevOrder, nextOrder;
+    if (pos === 'above') {
+      prevOrder = targetIdx > 0 ? sorted[targetIdx - 1].order : null;
+      nextOrder = sorted[targetIdx].order;
+    } else {
+      prevOrder = sorted[targetIdx].order;
+      nextOrder = targetIdx < sorted.length - 1 ? sorted[targetIdx + 1].order : null;
+    }
+    if (!Number.isFinite(prevOrder) && !Number.isFinite(nextOrder)) return ORDER_STEP;
+    if (!Number.isFinite(prevOrder)) return nextOrder - ORDER_STEP;
+    if (!Number.isFinite(nextOrder)) return prevOrder + ORDER_STEP;
+    const mid = (prevOrder + nextOrder) / 2;
+    if (mid === prevOrder || mid === nextOrder) {
+      // 정밀도 한계 — 경고만 남기고 prev+1 사용 (충분한 floating point 여유 남음)
+      console.warn("[ccf-handout] order precision close — consider renumber");
+      return prevOrder + 1;
+    }
+    return mid;
   }
 
   // 실시간 마크다운 프리뷰
@@ -3288,7 +3408,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.35 (handout order field + migration + sort)");
+    console.info("[ccf-handout] init — version 0.1.36 (handout D&D ordering UI)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
