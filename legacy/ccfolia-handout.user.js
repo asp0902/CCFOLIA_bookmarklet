@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.22
+// @version      0.1.23
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -457,6 +457,14 @@
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
     .body-pad { padding: 20px 24px 24px; }
     .body-pad[data-tab="list"] { padding-left: 0; padding-right: 0; }
+    /* 목록 탭: PL 시점 미리보기 토글 — 푸터(.panel-footer) 바로 위 우하단에 sticky */
+    .list-pl-preview-bar {
+      position: sticky; bottom: 0;
+      display: flex; justify-content: flex-end;
+      padding: 8px 16px 4px 0;
+      margin-top: 12px;
+      background: linear-gradient(to top, rgba(44,44,44,0.87) 60%, transparent);
+    }
     .body::-webkit-scrollbar { width: 10px; }
     .body::-webkit-scrollbar-track { background: transparent; }
     .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 6px; }
@@ -1948,8 +1956,9 @@
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
     const previewAsPl = adminMode && state.plPreview && !!me;
+    // 내보내기/가져오기 바 (.panel-footer) 바로 위 우하단에 sticky로 배치
     const previewToggle = adminMode ? `
-      <div class="row" style="margin-bottom:12px;">
+      <div class="list-pl-preview-bar">
         <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
           <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
           PL 시점 미리보기
@@ -1990,8 +1999,8 @@
       `;
     }).join("");
     return `
-      ${previewToggle}
       <div class="list">${cards}</div>
+      ${previewToggle}
     `;
   }
 
@@ -3153,7 +3162,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.22 (PL modal role select narrower, ID input wider)");
+    console.info("[ccf-handout] init — version 0.1.23 (PL preview toggle moved to sticky bottom-right)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
