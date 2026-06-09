@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.69
+// @version      0.0.70
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2480,7 +2480,8 @@
 
       .ccf-toolbar-row {
         align-items: center;
-        gap: 6px;
+        row-gap: 4px;
+        column-gap: 6px;
         align-content: flex-start;
         position: relative;
       }
@@ -3305,7 +3306,8 @@
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: 6px;
+        row-gap: 4px;
+        column-gap: 6px;
         width: 100%;
         box-sizing: border-box;
         margin: 0 0 6px;
