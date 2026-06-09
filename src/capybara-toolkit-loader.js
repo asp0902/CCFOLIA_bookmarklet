@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.69";
-  const BUILD_ID = "2026-06-08-loader-reinject-handout-unify-admin-gm-044";
+  const VERSION = "0.1.70";
+  const BUILD_ID = "2026-06-08-loader-reinject-handout-admin-self-show-045";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
