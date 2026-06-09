@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.53
+// @version      0.1.54
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -578,7 +578,7 @@
     /* MUI List dense — 카드는 ListItem 톤 */
     .list { display: flex; flex-direction: column; }
     .card {
-      border: 0; border-radius: 0; padding: 8px 16px;
+      border: 0; border-radius: 0; padding: 8px 16px 12px;
       background: transparent;
       border-bottom: 1px solid rgba(255,255,255,.08);
       transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
@@ -1545,9 +1545,6 @@
           ${canManageHandout(handout) ? `<button class="show-head-btn" data-action="show-edit" aria-label="이 핸드아웃 편집" title="이 핸드아웃 편집">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           </button>` : ""}
-          ${isAdminMode() && canManageHandout(handout) ? `<button class="show-head-btn" data-action="show-broadcast" data-id="${escapeAttr(handout.id)}" aria-label="권한자에게 송신" title="권한자에게 송신">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>` : ""}
           <button class="show-close" data-action="close-show" aria-label="닫기">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
           </button>
@@ -1624,16 +1621,6 @@
       if (editBtn) {
         state.editingId = handout.id;
         openPanel().then(() => setTab("edit")).catch(() => {});
-        return;
-      }
-      const broadcastBtn = e.target.closest('[data-action="show-broadcast"]');
-      if (broadcastBtn) {
-        sendShowSignal(handout.id, "all").then(() => {
-          toast(`"${handout.title}" 권한자 전체에게 팝업 송신됨`);
-        }).catch((error) => {
-          console.error("[ccf-handout] broadcast failed:", error);
-          toast("팝업 송신 실패 — 콘솔 확인");
-        });
         return;
       }
     });
@@ -3855,7 +3842,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.53 (unified title click popup + manual broadcast)");
+    console.info("[ccf-handout] init — version 0.1.54 (drop broadcast btn + balance card hover)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
