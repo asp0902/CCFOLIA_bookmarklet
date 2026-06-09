@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.28
+// @version      0.1.29
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1258,36 +1258,47 @@
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
-    const POPUP_W = 600;
-    const POPUP_H_INIT = 480;
+    const POPUP_W = 400; // 기본 크기 (이전 600의 2/3)
+    const POPUP_W_COLLAPSED = 200; // 접혔을 때 = 기본의 절반
+    const POPUP_H_INIT = 320;
     const existingCount = document.querySelectorAll('[data-ccf-handout-show="1"]').length;
     const offset = (existingCount % 8) * 24;
     const initLeft = Math.max(8, Math.round((window.innerWidth - POPUP_W) / 2) + offset);
     const initTop = Math.max(8, Math.round((window.innerHeight - POPUP_H_INIT) / 2) + offset);
-    host.style.cssText = `all: initial; position: fixed; left: ${initLeft}px; top: ${initTop}px; width: ${POPUP_W}px; max-width: 95vw; z-index: 2147483645;`;
+    host.style.cssText = `all: initial; position: fixed; left: ${initLeft}px; top: ${initTop}px; z-index: 2147483645;`;
     const sh = host.attachShadow({ mode: "open" });
     sh.innerHTML = `
       <style>
         :host { all: initial; display: block; }
         * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
         .show-paper {
-          width: 100%; max-height: 88vh; display: flex; flex-direction: column;
+          width: ${POPUP_W}px; max-width: 95vw; max-height: 88vh;
+          display: flex; flex-direction: column;
           background-color: rgba(44,44,44,0.95); color: #fff;
           box-shadow:
             0px 11px 15px -7px rgba(0,0,0,0.20),
             0px 24px 38px 3px rgba(0,0,0,0.14),
             0px 9px 46px 8px rgba(0,0,0,0.12);
           overflow: hidden;
+          transition: opacity 150ms;
         }
-        .show-paper[data-collapsed="1"] { max-height: none; }
+        .show-paper[data-collapsed="1"] {
+          max-height: none;
+          width: ${POPUP_W_COLLAPSED}px;
+          opacity: 0.5;
+        }
+        .show-paper[data-collapsed="1"]:hover { opacity: 1; }
         .show-paper[data-collapsed="1"] .show-body { display: none; }
         .show-head {
           background-color: #212121; padding: 0 8px 0 20px; min-height: 56px;
           display: flex; align-items: center; gap: 12px;
           cursor: move; user-select: none; touch-action: none;
         }
-        .show-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff; pointer-events: none; }
-        .show-head .from { font-size: 0.75rem; color: rgba(255,255,255,.6); pointer-events: none; }
+        .show-head h2 {
+          margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff;
+          pointer-events: none;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+        }
         .show-close {
           all: unset; box-sizing: border-box; cursor: pointer;
           width: 36px; height: 36px; border-radius: 50%; color: #fff;
@@ -1318,8 +1329,7 @@
       </style>
       <div class="show-paper" data-collapsed="0" role="dialog" aria-label="핸드아웃">
         <div class="show-head" data-drag-handle="1" title="더블클릭으로 접기/펼치기, 드래그로 이동">
-          <h2>${escapeHtml(handout.title || "(제목 없음)")}</h2>
-          ${fromName ? `<span class="from">from ${escapeHtml(fromName)}</span>` : ""}
+          <h2 title="${escapeAttr(handout.title || "(제목 없음)")}">${escapeHtml(handout.title || "(제목 없음)")}</h2>
           <button class="show-close" data-action="close-show" aria-label="닫기">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
           </button>
@@ -3216,7 +3226,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.28 (Roll20-style show popup: collapse + drag)");
+    console.info("[ccf-handout] init — version 0.1.29 (show popup: 2/3 size, no from, collapsed half + dim)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
