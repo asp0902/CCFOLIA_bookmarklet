@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.7
+// @version      0.2.8
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,9 +52,10 @@
       description: "CREE-GRRR! 시트용 / 팝업·채팅 다이스 결과(원형/깃발 이미지) 디자인"
     })
   ]);
-  // 기존 사용자의 unsungDuetEnabled:true 설정을 그대로 보존하려고 기본값은 "unsung-duet" 유지.
-  // 신규/마이그레이션 시 normalizeSettings 가 "기본" 으로 떨어뜨리지 않도록 함.
-  const DEFAULT_SHEET_THEME_ID = "unsung-duet";
+  // 신규 활성화 사용자의 커스텀 시트 테마 기본 선택값. 사용자가 드롭다운에서 명시적으로
+  // 다른 테마를 골라 저장한 경우 (selectedSheetTheme가 SHEET_THEMES.id 중 하나와 일치) 는
+  // normalizeSettings 가 그 값을 그대로 보존한다.
+  const DEFAULT_SHEET_THEME_ID = SHEET_THEME_NONE_ID;
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
 
   // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스

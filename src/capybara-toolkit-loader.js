@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.59";
-  const BUILD_ID = "2026-06-08-loader-reinject-handout-pl-modal-role-narrow-034";
+  const VERSION = "0.1.60";
+  const BUILD_ID = "2026-06-08-loader-reinject-theme-sheet-default-none-035";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
