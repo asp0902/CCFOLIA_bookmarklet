@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.10
+// @version      0.3.11
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4367,6 +4367,8 @@
     if (!(node instanceof HTMLElement)) return null;
     if (node.id === SOURCE_ID) return null;
     if (node.closest?.(`#${MODAL_ID}`)) return null;
+    // #23 fix: CCFolia native MUI Dialog (이미지 변경, Unsplash 검색 등) 안 input 은 chat editor 가 아님 → 제외
+    if (node.closest?.('.MuiDialog-root, [role="dialog"]')) return null;
     if (node.matches?.(EDITOR_SELECTOR)) return node;
     const closest = node.closest?.(EDITOR_SELECTOR);
     return closest instanceof HTMLElement ? closest : null;

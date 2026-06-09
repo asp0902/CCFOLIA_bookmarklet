@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.8
+// @version      0.2.9
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -800,6 +800,38 @@
         }
         html[data-ccf-theme-active="1"] .MuiBackdrop-invisible {
           background: transparent !important;
+        }
+
+        /* #24 — 캐릭터 이미지 변경/Unsplash 등 native MUI Dialog 안 input 은
+           native 디자인 유지. 위의 input/select/placeholder/border 룰들을 모두
+           Dialog scope 안에서 revert 로 되돌린다. */
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-root,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiOutlinedInput-root,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiFilledInput-root,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiSelect-select,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-input,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-multiline {
+          background: revert !important;
+          color: revert !important;
+        }
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-root fieldset,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiOutlinedInput-notchedOutline,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-root.Mui-focused fieldset,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .Mui-focused .MuiOutlinedInput-notchedOutline {
+          border-color: revert !important;
+          box-shadow: revert !important;
+        }
+        html[data-ccf-theme-active="1"] .MuiDialog-root input,
+        html[data-ccf-theme-active="1"] .MuiDialog-root textarea,
+        html[data-ccf-theme-active="1"] .MuiDialog-root select {
+          color: revert !important;
+          caret-color: revert !important;
+        }
+        html[data-ccf-theme-active="1"] .MuiDialog-root input::placeholder,
+        html[data-ccf-theme-active="1"] .MuiDialog-root textarea::placeholder,
+        html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-input::placeholder {
+          color: revert !important;
+          opacity: revert !important;
         }
 
         html[data-ccf-theme-active="1"] .MuiPaper-root canvas,
