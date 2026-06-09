@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.51
+// @version      0.1.52
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1475,6 +1475,7 @@
         * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
         .show-paper {
           width: ${POPUP_W}px; max-width: 95vw; max-height: 88vh;
+          min-width: 240px; min-height: 160px;
           display: flex; flex-direction: column;
           background-color: rgba(44,44,44,0.95); color: #fff;
           box-shadow:
@@ -1483,11 +1484,13 @@
             0px 9px 46px 8px rgba(0,0,0,0.12);
           overflow: hidden;
           transition: opacity 150ms;
+          resize: both;
         }
         .show-paper[data-collapsed="1"] {
           max-height: none;
           width: ${POPUP_W_COLLAPSED}px;
           opacity: 0.5;
+          resize: none;
         }
         .show-paper[data-collapsed="1"]:hover { opacity: 1; }
         .show-paper[data-collapsed="1"] .show-body { display: none; }
@@ -2301,13 +2304,12 @@
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
           <div class="summary-row">
-            <div class="summary">${escapeHtml(stripMarkdown(h.description).slice(0, 140))}</div>
             <div class="badges-row">
               ${hasSecret && canSecret ? `<span class="badge secret">비밀</span>` : ""}
               <span class="badge">${escapeHtml(viewersLabel)}</span>
             </div>
           </div>
-          ${adminMode ? `<div class="actions"><button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button></div>` : ""}
+          ${adminMode ? `<div class="actions"><button class="btn small secondary" data-action="show-to-players" data-id="${escapeHtml(h.id)}">팝업</button></div>` : ""}
         </article>
       `;
     }).join("");
@@ -2828,7 +2830,17 @@
       if (!canManageHandout(h)) return;
       state.editingId = id; state.formPermissionsForId = null; setTab("edit"); return;
     }
-    if (action === "view-handout") { openDetail(id); return; }
+    if (action === "view-handout") {
+      if (isAdminMode()) {
+        openDetail(id);
+      } else {
+        const h = findHandout(id);
+        if (h) {
+          try { showHandoutModal(h, state.data.myCharacter || ""); } catch (_) {}
+        }
+      }
+      return;
+    }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
@@ -3424,7 +3436,7 @@
         <div class="row" style="margin-bottom:12px;">
           <button class="btn secondary small" data-action="close-detail">← 목록</button>
           ${manageable ? `<button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>` : ""}
-          ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">Show to Players</button>` : ""}
+          ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">팝업</button>` : ""}
           ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
         </div>
         <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
@@ -3835,7 +3847,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.51 (detail padding + popup nav buttons)");
+    console.info("[ccf-handout] init — version 0.1.52 (list/popup polish + resize)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
