@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.54
+// @version      0.1.55
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1494,11 +1494,13 @@
         }
         .show-paper[data-collapsed="1"]:hover { opacity: 1; }
         .show-paper[data-collapsed="1"] .show-body { display: none; }
+        .show-paper[data-collapsed="1"] .show-head-btn { display: none; }
         .show-head {
           background-color: #212121; padding: 0 8px 0 20px; min-height: 56px;
-          display: flex; align-items: center; gap: 12px;
+          display: flex; align-items: center; gap: 4px;
           cursor: move; user-select: none; touch-action: none;
         }
+        .show-head h2 + .show-head-btn { margin-left: 8px; }
         .show-head h2 {
           margin: 0; font-size: 1.0625rem; font-weight: 700; flex: 1; color: #fff;
           pointer-events: none;
@@ -3842,7 +3844,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.54 (drop broadcast btn + balance card hover)");
+    console.info("[ccf-handout] init — version 0.1.55 (popup head spacing + collapsed icons hidden)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();

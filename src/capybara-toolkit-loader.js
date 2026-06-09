@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.96";
-  const BUILD_ID = "2026-06-09-loader-format-toolbar-reorder-071";
+  const VERSION = "0.1.97";
+  const BUILD_ID = "2026-06-09-loader-popup-head-polish-072";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
