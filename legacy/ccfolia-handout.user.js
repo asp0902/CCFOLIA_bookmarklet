@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.38
+// @version      0.1.39
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -227,6 +227,17 @@
   // ===== 간소 마크다운 렌더러 =====
   // bold **x**, italic *x*, code `x`, link [t](u), image ![](u) and [image]u,
   // heading # ## ###, list -, quote >, hr ---, line break
+  // 핸드아웃 본문 렌더 — HTML 마크업(태그)으로 시작하면 그대로 사용 (contenteditable WYSIWYG 으로 편집된 본문),
+  // 그렇지 않으면 기존 마크다운 렌더 (legacy 호환).
+  function renderHandoutBody(src) {
+    if (!src) return "";
+    const t = String(src).trim();
+    if (/^<(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i.test(t)) {
+      return t;
+    }
+    return renderMarkdown(src);
+  }
+
   function renderMarkdown(src) {
     if (!src) return "";
     const lines = String(src).replace(/\r\n/g, "\n").split("\n");
@@ -653,18 +664,39 @@
     }
     .handout-edit-cols .col label {
       display: block; font-size: 0.9375rem; font-weight: 500; color: #fff;
-      margin-bottom: 8px;
+      margin-bottom: 8px; margin-left: 3px;
     }
-    .handout-edit-cols .col textarea {
-      width: 100%; min-height: 140px; resize: vertical;
+    .handout-edit-cols .col .rich-editor {
+      width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: vertical;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
       padding: 10px 12px; color: #fff;
       font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 0.875rem; line-height: 1.6;
       transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
+      cursor: text;
     }
-    .handout-edit-cols .col textarea:hover { border-color: rgba(255,255,255,.35); }
-    .handout-edit-cols .col textarea:focus { outline: none; border-color: #fff; }
+    .handout-edit-cols .col .rich-editor:hover { border-color: rgba(255,255,255,.35); }
+    .handout-edit-cols .col .rich-editor:focus { outline: none; border-color: #fff; }
+    .handout-edit-cols .col .rich-editor h1 { font-size: 1.25rem; margin: 10px 0; color: #fff; }
+    .handout-edit-cols .col .rich-editor h2 { font-size: 1.125rem; margin: 8px 0; color: #fff; }
+    .handout-edit-cols .col .rich-editor h3 { font-size: 1rem; margin: 8px 0; color: #fff; }
+    .handout-edit-cols .col .rich-editor blockquote {
+      border-left: 3px solid rgba(255,255,255,.2); padding: 2px 12px;
+      color: rgba(255,255,255,.8); margin: 6px 0;
+    }
+    .handout-edit-cols .col .rich-editor code {
+      background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 90%;
+    }
+    .handout-edit-cols .col .rich-editor hr {
+      border: 0; border-top: 1px solid rgba(255,255,255,.18); margin: 8px 0;
+    }
+    .handout-edit-cols .col .rich-editor a { color: #82b1ff; }
+    .handout-edit-cols .col .rich-editor img { max-width: 100%; height: auto; }
+    .handout-edit-cols .col .rich-editor ul { padding-left: 20px; }
+    .handout-edit-cols .col .rich-editor:empty::before {
+      content: attr(data-placeholder); color: rgba(255,255,255,.4); pointer-events: none;
+    }
     /* #40 — 공개 본문 마크다운 서식 툴바 */
     .handout-format-toolbar {
       display: flex; flex-wrap: wrap; align-items: center;
@@ -688,6 +720,18 @@
     .ft-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .ft-btn:active { background: rgba(255,255,255,.14); }
     .ft-btn code { font-family: ui-monospace, Consolas, monospace; font-size: 0.6875rem; }
+    .ft-color-btn {
+      position: relative; overflow: hidden;
+    }
+    .ft-color-btn > span {
+      font-weight: 700;
+      border-bottom: 2px solid currentColor;
+      padding-bottom: 1px;
+    }
+    .ft-color-btn input[type="color"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+      border: 0; padding: 0; background: transparent;
+    }
     .ft-sep {
       width: 1px; align-self: stretch; margin: 2px 4px;
       background: rgba(255,255,255,.1);
@@ -1443,11 +1487,11 @@
         </div>
         <div class="show-body">
           ${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
-          <div class="rendered">${renderMarkdown(handout.description)}</div>
+          <div class="rendered">${renderHandoutBody(handout.description)}</div>
           ${hasSecret && handout.gmNotes ? `
             <div class="secret-block">
               <div class="secret-head">🔒 비밀 핸드아웃</div>
-              <div class="rendered">${renderMarkdown(handout.gmNotes)}</div>
+              <div class="rendered">${renderHandoutBody(handout.gmNotes)}</div>
             </div>
           ` : ""}
         </div>
@@ -2188,7 +2232,16 @@
   }
 
   function stripMarkdown(s) {
-    return String(s || "").replace(/[#*`>!\[\]()]/g, " ").replace(/\s+/g, " ").trim();
+    // HTML 태그 먼저 제거 (contenteditable 본문) + 마크다운 기호 제거
+    return String(s || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/[#*`>!\[\]()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function findHandout(id) {
@@ -2260,22 +2313,34 @@
   // format-sync 의 inline-toolbar 는 shadow DOM 경계 + 내부 editor state 의존성 때문에 직접 attach 불가.
   // 대신 renderMarkdown 이 이미 지원하는 마크다운 syntax (**bold**, *italic*, `code`, # heading, > quote,
   // - list, --- hr, [text](url)) 를 textarea 에 직접 삽입하는 경량 툴바를 제공.
-  // 핸드아웃 편집 공통 서식 툴바 — 공개/비밀 본문 양쪽에 공통 적용. 현재 focus 된 textarea 가 대상.
+  // 핸드아웃 편집 공통 WYSIWYG 서식 툴바 — 공개/비밀 본문(contenteditable) 양쪽 적용.
   function renderFormatToolbar() {
     return `
       <div class="handout-format-toolbar" data-format-toolbar="1">
-        <button type="button" class="ft-btn" data-format-cmd="bold" title="굵게 (**텍스트**)" aria-label="굵게"><b>B</b></button>
-        <button type="button" class="ft-btn" data-format-cmd="italic" title="기울임 (*텍스트*)" aria-label="기울임"><i>I</i></button>
-        <button type="button" class="ft-btn" data-format-cmd="code" title="인라인 코드 (\`텍스트\`)" aria-label="인라인 코드"><code>&lt;/&gt;</code></button>
+        <button type="button" class="ft-btn" data-format-cmd="bold" title="굵게" aria-label="굵게"><b>B</b></button>
+        <button type="button" class="ft-btn" data-format-cmd="italic" title="기울임" aria-label="기울임"><i>I</i></button>
+        <button type="button" class="ft-btn" data-format-cmd="underline" title="밑줄" aria-label="밑줄"><u>U</u></button>
+        <button type="button" class="ft-btn" data-format-cmd="strike" title="취소선" aria-label="취소선"><s>S</s></button>
+        <button type="button" class="ft-btn" data-format-cmd="code" title="인라인 코드" aria-label="인라인 코드"><code>&lt;/&gt;</code></button>
         <span class="ft-sep" aria-hidden="true"></span>
-        <button type="button" class="ft-btn" data-format-cmd="h1" title="제목 1 (# 텍스트)" aria-label="제목 1">H1</button>
-        <button type="button" class="ft-btn" data-format-cmd="h2" title="제목 2 (## 텍스트)" aria-label="제목 2">H2</button>
-        <button type="button" class="ft-btn" data-format-cmd="h3" title="제목 3 (### 텍스트)" aria-label="제목 3">H3</button>
+        <button type="button" class="ft-btn" data-format-cmd="h1" title="제목 1" aria-label="제목 1">H1</button>
+        <button type="button" class="ft-btn" data-format-cmd="h2" title="제목 2" aria-label="제목 2">H2</button>
+        <button type="button" class="ft-btn" data-format-cmd="h3" title="제목 3" aria-label="제목 3">H3</button>
         <span class="ft-sep" aria-hidden="true"></span>
-        <button type="button" class="ft-btn" data-format-cmd="list" title="목록 (- 텍스트)" aria-label="목록">•</button>
-        <button type="button" class="ft-btn" data-format-cmd="quote" title="인용 (&gt; 텍스트)" aria-label="인용">&ldquo;</button>
-        <button type="button" class="ft-btn" data-format-cmd="hr" title="가로줄 (---)" aria-label="가로줄">―</button>
-        <button type="button" class="ft-btn" data-format-cmd="link" title="링크 ([텍스트](URL))" aria-label="링크">🔗</button>
+        <button type="button" class="ft-btn" data-format-cmd="list" title="목록" aria-label="목록">•</button>
+        <button type="button" class="ft-btn" data-format-cmd="quote" title="인용" aria-label="인용">&ldquo;</button>
+        <button type="button" class="ft-btn" data-format-cmd="hr" title="가로줄" aria-label="가로줄">―</button>
+        <span class="ft-sep" aria-hidden="true"></span>
+        <button type="button" class="ft-btn" data-format-cmd="align-left" title="왼쪽 정렬" aria-label="왼쪽 정렬">⯇</button>
+        <button type="button" class="ft-btn" data-format-cmd="align-center" title="가운데 정렬" aria-label="가운데 정렬">⯈⯇</button>
+        <button type="button" class="ft-btn" data-format-cmd="align-right" title="오른쪽 정렬" aria-label="오른쪽 정렬">⯈</button>
+        <span class="ft-sep" aria-hidden="true"></span>
+        <label class="ft-btn ft-color-btn" title="폰트 색상" aria-label="폰트 색상">
+          <span>A</span>
+          <input type="color" data-format-cmd="color" value="#ffffff" aria-label="색상 선택">
+        </label>
+        <button type="button" class="ft-btn" data-format-cmd="link" title="링크" aria-label="링크">🔗</button>
+        <button type="button" class="ft-btn" data-format-cmd="image" title="이미지 삽입" aria-label="이미지 삽입">🖼</button>
         <span class="ft-target-hint" data-format-target-hint="1">본문 클릭 후 사용</span>
       </div>
     `;
@@ -2320,18 +2385,18 @@
     ta.focus();
   }
 
-  // 마지막으로 focus 된 본문 textarea (data-format-receiver="1"). 툴바 클릭 시 대상.
-  let lastFocusedFormatTextarea = null;
+  // 마지막으로 focus 된 본문 editor (data-format-receiver="1" 인 contenteditable 또는 textarea).
+  let lastFocusedFormatEditor = null;
 
-  function getCurrentFormatTargetTextarea() {
-    // 현재 focus 된 게 본문 textarea 면 그걸 사용
+  function isFormatReceiver(el) {
+    return el instanceof HTMLElement && el.getAttribute && el.getAttribute("data-format-receiver") === "1";
+  }
+
+  function getCurrentFormatTargetEditor() {
     const active = state.shadow?.activeElement;
-    if (active instanceof HTMLTextAreaElement && active.getAttribute("data-format-receiver") === "1") {
-      return active;
-    }
-    // 아니면 마지막 focus 본문 textarea
-    if (lastFocusedFormatTextarea && state.shadow?.contains(lastFocusedFormatTextarea)) {
-      return lastFocusedFormatTextarea;
+    if (isFormatReceiver(active)) return active;
+    if (lastFocusedFormatEditor && state.shadow?.contains(lastFocusedFormatEditor)) {
+      return lastFocusedFormatEditor;
     }
     return null;
   }
@@ -2339,45 +2404,69 @@
   function updateFormatToolbarTargetHint() {
     const hint = state.shadow?.querySelector('[data-format-target-hint="1"]');
     if (!hint) return;
-    const ta = getCurrentFormatTargetTextarea();
-    if (!ta) {
+    const editor = getCurrentFormatTargetEditor();
+    if (!editor) {
       hint.textContent = "본문 클릭 후 사용";
       hint.classList.remove("active");
       return;
     }
-    const field = ta.getAttribute("data-field");
+    const field = editor.getAttribute("data-field");
     const label = field === "gmNotes" ? "비밀 본문" : "공개 본문";
     hint.textContent = `대상: ${label}`;
     hint.classList.add("active");
   }
 
-  function handleFormatToolbarCommand(cmd, ta) {
-    if (!cmd || !ta) return;
+  // contenteditable 본문에 execCommand 적용. shadow 안 selection 유지를 위해
+  // 명령 직전에 editor.focus() — selection 이 다른 곳으로 빠진 상태에서도 안전.
+  function execEditor(editor, command, value = null) {
+    if (!editor) return false;
+    editor.focus();
+    try {
+      const ok = document.execCommand(command, false, value);
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      return ok;
+    } catch (_) { return false; }
+  }
+
+  function handleFormatToolbarCommand(cmd, editor, payload = null) {
+    if (!cmd || !editor) return;
     switch (cmd) {
-      case "bold":    wrapTextareaSelection(ta, "**"); return;
-      case "italic":  wrapTextareaSelection(ta, "*"); return;
-      case "code":    wrapTextareaSelection(ta, "`"); return;
-      case "h1":      prefixTextareaLines(ta, "# "); return;
-      case "h2":      prefixTextareaLines(ta, "## "); return;
-      case "h3":      prefixTextareaLines(ta, "### "); return;
-      case "list":    prefixTextareaLines(ta, "- "); return;
-      case "quote":   prefixTextareaLines(ta, "> "); return;
-      case "hr": {
-        const value = ta.value;
-        const start = ta.selectionStart ?? 0;
-        const prefix = (start > 0 && value[start - 1] !== "\n") ? "\n" : "";
-        insertTextareaText(ta, `${prefix}---\n`);
+      case "bold":         execEditor(editor, "bold"); return;
+      case "italic":       execEditor(editor, "italic"); return;
+      case "underline":    execEditor(editor, "underline"); return;
+      case "strike":       execEditor(editor, "strikeThrough"); return;
+      case "code": {
+        editor.focus();
+        const sel = state.shadow?.getSelection?.() || window.getSelection();
+        const text = sel?.toString?.() || "";
+        const html = text ? `<code>${escapeHtml(text)}</code>` : `<code>코드</code>`;
+        execEditor(editor, "insertHTML", html);
+        return;
+      }
+      case "h1":           execEditor(editor, "formatBlock", "h1"); return;
+      case "h2":           execEditor(editor, "formatBlock", "h2"); return;
+      case "h3":           execEditor(editor, "formatBlock", "h3"); return;
+      case "list":         execEditor(editor, "insertUnorderedList"); return;
+      case "quote":        execEditor(editor, "formatBlock", "blockquote"); return;
+      case "hr":           execEditor(editor, "insertHTML", "<hr>"); return;
+      case "align-left":   execEditor(editor, "justifyLeft"); return;
+      case "align-center": execEditor(editor, "justifyCenter"); return;
+      case "align-right":  execEditor(editor, "justifyRight"); return;
+      case "color": {
+        const color = payload || "#ffffff";
+        execEditor(editor, "foreColor", color);
         return;
       }
       case "link": {
         const url = window.prompt("링크 URL:");
         if (!url) return;
-        const start = ta.selectionStart ?? 0;
-        const end = ta.selectionEnd ?? start;
-        const text = ta.value.substring(start, end) || "링크";
-        ta.setRangeText(`[${text}](${url})`, start, end, "end");
-        ta.dispatchEvent(new InputEvent("input", { bubbles: true }));
-        ta.focus();
+        execEditor(editor, "createLink", url);
+        return;
+      }
+      case "image": {
+        const url = window.prompt("이미지 URL:");
+        if (!url) return;
+        execEditor(editor, "insertImage", url);
         return;
       }
     }
@@ -2430,11 +2519,11 @@
       <div class="handout-edit-cols">
         <div class="col">
           <label>공개 핸드아웃</label>
-          <textarea data-field="description" data-format-receiver="1">${escapeHtml(h.description)}</textarea>
+          <div class="rich-editor" contenteditable="true" data-field="description" data-format-receiver="1" data-placeholder="공개 핸드아웃 본문...">${renderHandoutBody(h.description)}</div>
         </div>
         <div class="col">
           <label>비밀 핸드아웃</label>
-          <textarea data-field="gmNotes" data-format-receiver="1">${escapeHtml(h.gmNotes)}</textarea>
+          <div class="rich-editor" contenteditable="true" data-field="gmNotes" data-format-receiver="1" data-placeholder="비밀 핸드아웃 본문...">${renderHandoutBody(h.gmNotes)}</div>
         </div>
       </div>
       <div class="perm-section">
@@ -2624,17 +2713,17 @@
       togglePlAliasChip(aliasChip);
       return;
     }
-    // #40 — 마크다운 서식 툴바 (공용, 현재 focus 또는 마지막 focus 된 textarea 대상)
+    // #40 — WYSIWYG 서식 툴바 (공용, 현재 focus 또는 마지막 focus 된 본문 editor 대상)
     const formatBtn = event.target.closest("button[data-format-cmd]");
     if (formatBtn) {
       event.preventDefault();
       const cmd = formatBtn.getAttribute("data-format-cmd");
-      const ta = getCurrentFormatTargetTextarea();
-      if (!ta) {
+      const editor = getCurrentFormatTargetEditor();
+      if (!editor) {
         toast("공개 또는 비밀 본문 입력칸을 먼저 클릭해주세요.");
         return;
       }
-      handleFormatToolbarCommand(cmd, ta);
+      handleFormatToolbarCommand(cmd, editor);
       return;
     }
     const btn = event.target.closest("button[data-action]");
@@ -2675,6 +2764,17 @@
   }
 
   function onShadowChange(event) {
+    // 폰트 색상 picker — 선택된 색상을 현재 본문 editor 에 적용
+    const colorInp = event.target.closest('input[type="color"][data-format-cmd="color"]');
+    if (colorInp) {
+      const editor = getCurrentFormatTargetEditor();
+      if (!editor) {
+        toast("공개 또는 비밀 본문 입력칸을 먼저 클릭해주세요.");
+        return;
+      }
+      handleFormatToolbarCommand("color", editor, colorInp.value);
+      return;
+    }
     const cb = event.target.closest('input[data-action="toggle-pl-preview"]');
     if (cb) {
       state.plPreview = !!cb.checked;
@@ -2803,11 +2903,10 @@
     return mid;
   }
 
-  // 본문 textarea focus 추적 — 서식 툴바 대상 결정
+  // 본문 editor focus 추적 — 서식 툴바 대상 결정
   function onShadowFocusIn(event) {
-    const t = event.target;
-    if (t instanceof HTMLTextAreaElement && t.getAttribute("data-format-receiver") === "1") {
-      lastFocusedFormatTextarea = t;
+    if (isFormatReceiver(event.target)) {
+      lastFocusedFormatEditor = event.target;
       updateFormatToolbarTargetHint();
     }
   }
@@ -2824,7 +2923,12 @@
 
   function getFieldValue(name) {
     const el = state.shadow?.querySelector(`[data-field="${name}"]`);
-    return el ? (el.value || "") : "";
+    if (!el) return "";
+    // contenteditable 본문 (rich-editor) 은 innerHTML 사용
+    if (el.getAttribute && el.getAttribute("contenteditable") === "true") {
+      return el.innerHTML || "";
+    }
+    return el.value || "";
   }
 
   async function saveHandoutFromForm() {
@@ -3195,10 +3299,10 @@
       </div>
       <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
       ${h.image ? `<img class="detail-img" src="${escapeHtml(h.image)}" alt="">` : ""}
-      <div class="preview" style="max-height:none;">${renderMarkdown(h.description)}</div>
+      <div class="preview" style="max-height:none;">${renderHandoutBody(h.description)}</div>
       ${hasSecret ? (
         canSecret
-          ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 GM NOTES (비밀)</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderMarkdown(h.gmNotes)}</div></div>`
+          ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 GM NOTES (비밀)</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderHandoutBody(h.gmNotes)}</div></div>`
           : `<div class="hidden-secret">이 핸드아웃에는 GM 전용 정보가 있지만, 현재 캐릭터(${escapeHtml(me)})에게는 공개되지 않았습니다.</div>`
       ) : ""}
       <div class="chip-row">
@@ -3600,7 +3704,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.38 (shared markdown toolbar for both bodies)");
+    console.info("[ccf-handout] init — version 0.1.39 (WYSIWYG contenteditable + extended toolbar)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
