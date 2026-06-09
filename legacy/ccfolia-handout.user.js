@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.55
+// @version      0.1.56
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -3481,10 +3481,13 @@
   function rowPopupSend(handoutId, audienceKey) {
     const h = findHandout(handoutId);
     if (!h) return;
-    // 관리자 본인 화면에도 즉시 표시 (#52)
-    try { showHandoutModal(h, state.data.myCharacter || ""); } catch (_) {}
+    // 전체 대상일 때만 GM 본인 화면에 즉시 표시. 특정 대상에는 표시 X.
+    const isBroadcast = audienceKey === ALL_KEY || audienceKey === "all" || audienceKey === "*";
+    if (isBroadcast) {
+      try { showHandoutModal(h, state.data.myCharacter || ""); } catch (_) {}
+    }
     sendShowSignal(handoutId, audienceKey).then(() => {
-      const label = audienceKey === ALL_KEY ? "플레이어 전체" : audienceKey;
+      const label = isBroadcast ? "플레이어 전체" : audienceKey;
       toast(`"${h.title}" → ${label} 팝업 송신됨`);
     }).catch((error) => {
       console.error("[ccf-handout] row show failed:", error);
@@ -3844,7 +3847,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.55 (popup head spacing + collapsed icons hidden)");
+    console.info("[ccf-handout] init — version 0.1.56 (skip GM self-popup for targeted row send)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
