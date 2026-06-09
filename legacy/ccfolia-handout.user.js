@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.46
+// @version      0.1.47
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1175,6 +1175,9 @@
     shadow.addEventListener("pointerup", onShadowPointerEnd);
     shadow.addEventListener("pointercancel", onShadowPointerEnd);
     shadow.addEventListener("focusin", onShadowFocusIn);
+    shadow.addEventListener("selectionchange", rememberFormatSelection);
+    shadow.addEventListener("keyup", rememberFormatSelection);
+    shadow.addEventListener("mouseup", rememberFormatSelection);
     shadow.addEventListener("paste", onShadowPaste);
     bindWindowControls(shadow);
     state.root = root;
@@ -2409,6 +2412,7 @@
 
   // 마지막으로 focus 된 본문 editor (data-format-receiver="1" 인 contenteditable 또는 textarea).
   let lastFocusedFormatEditor = null;
+  let lastFormatRange = null;
 
   function isFormatReceiver(el) {
     return el instanceof HTMLElement && el.getAttribute && el.getAttribute("data-format-receiver") === "1";
@@ -2423,6 +2427,38 @@
     return null;
   }
 
+  function rememberFormatSelection() {
+    const sel = state.shadow?.getSelection?.() || window.getSelection?.();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const editor = findFormatEditorForNode(range.commonAncestorContainer);
+    if (!editor) return;
+    lastFocusedFormatEditor = editor;
+    lastFormatRange = range.cloneRange();
+  }
+
+  function findFormatEditorForNode(node) {
+    let el = node;
+    if (el && el.nodeType !== Node.ELEMENT_NODE) el = el.parentElement;
+    while (el && el !== state.shadow) {
+      if (isFormatReceiver(el)) return el;
+      el = el.parentElement || el.getRootNode?.().host || null;
+    }
+    return null;
+  }
+
+  function restoreFormatSelection(editor) {
+    if (!editor || !lastFormatRange) return false;
+    if (!editor.contains(lastFormatRange.commonAncestorContainer)) return false;
+    const sel = state.shadow?.getSelection?.() || window.getSelection?.();
+    if (!sel) return false;
+    try {
+      sel.removeAllRanges();
+      sel.addRange(lastFormatRange);
+      return true;
+    } catch (_) { return false; }
+  }
+
   // hint UI 제거됨 — no-op (이전 호출 부 호환용)
   function updateFormatToolbarTargetHint() {}
 
@@ -2431,8 +2467,10 @@
   function execEditor(editor, command, value = null) {
     if (!editor) return false;
     editor.focus();
+    restoreFormatSelection(editor);
     try {
       const ok = document.execCommand(command, false, value);
+      rememberFormatSelection();
       editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
       return ok;
     } catch (_) { return false; }
@@ -2898,6 +2936,7 @@
   function onShadowFocusIn(event) {
     if (isFormatReceiver(event.target)) {
       lastFocusedFormatEditor = event.target;
+      rememberFormatSelection();
     }
   }
 
@@ -3738,7 +3777,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.46 (footer actions order and spacing)");
+    console.info("[ccf-handout] init — version 0.1.47 (preserve selection for color picker)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
