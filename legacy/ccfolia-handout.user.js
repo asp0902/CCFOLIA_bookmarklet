@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.23
+// @version      0.1.24
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -456,13 +456,17 @@
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
     .body-pad { padding: 20px 24px 24px; }
-    .body-pad[data-tab="list"] { padding-left: 0; padding-right: 0; }
-    /* 목록 탭: PL 시점 미리보기 토글 — 푸터(.panel-footer) 바로 위 우하단에 sticky */
+    .body-pad[data-tab="list"] {
+      padding-left: 0; padding-right: 0;
+      display: flex; flex-direction: column;
+      min-height: 100%;
+    }
+    /* 목록 탭: PL 시점 미리보기 토글 — 푸터(.panel-footer) 바로 위 우하단에 위치 */
     .list-pl-preview-bar {
+      margin-top: auto;
       position: sticky; bottom: 0;
       display: flex; justify-content: flex-end;
       padding: 8px 16px 4px 0;
-      margin-top: 12px;
       background: linear-gradient(to top, rgba(44,44,44,0.87) 60%, transparent);
     }
     .body::-webkit-scrollbar { width: 10px; }
@@ -3162,7 +3166,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.23 (PL preview toggle moved to sticky bottom-right)");
+    console.info("[ccf-handout] init — version 0.1.24 (PL preview toggle pushed to footer-top via flex)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
