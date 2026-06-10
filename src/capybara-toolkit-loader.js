@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.05";
-  const BUILD_ID = "2026-06-10-loader-trim-trailing-space-080";
+  const VERSION = "0.2.06";
+  const BUILD_ID = "2026-06-10-loader-nr-group-split-081";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

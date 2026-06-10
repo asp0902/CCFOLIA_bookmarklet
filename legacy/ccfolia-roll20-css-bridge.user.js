@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.12
+// @version      0.3.13
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.12"),
+    version: getUserscriptVersion("0.3.13"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4937,7 +4937,14 @@
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
     if (!messages.length) return;
-    const authors = messages.map((li) => extractAuthor(li));
+    const authors = messages.map((li) => {
+      const author = extractAuthor(li);
+      if (!author) return author;
+      // #69 — 나레이션 메시지는 같은 화자라도 일반 발화와 묶지 않음 (별도 그룹 키)
+      const isNarration = li.getAttribute("data-ccf-narration") === "1" ||
+        !!li.querySelector('.ccf-render-root[data-ccf-narration="1"]');
+      return isNarration ? author + "\\u0000nr" : author;
+    });
     for (let i = 0; i < messages.length; i++) {
       const li = messages[i];
       const author = authors[i];
@@ -4982,9 +4989,9 @@
   function start() {
     injectStyle();
     observer = new MutationObserver(() => scheduleScan());
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.25 (suppress native message border to avoid double divider)");
+    console.info("[ccf-prose-mode] active v0.0.26 (narration messages get own grouping key)");
   }
 
   function teardown() {
@@ -5003,7 +5010,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.25",
+    version: "0.0.26",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
