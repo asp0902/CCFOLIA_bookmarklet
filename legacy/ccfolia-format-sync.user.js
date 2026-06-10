@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.81
+// @version      0.0.82
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.81 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.82 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -7749,6 +7749,9 @@
 
   const DATA_URL_PASTE_SOURCE_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
   const DATA_URL_TRANSPORT_MAX_CHARS = 128 * 1024;
+  const DATA_URL_IMAGE_MAX_DIMENSION = 1024;
+  const DATA_URL_IMAGE_MIN_DIMENSION = 360;
+  const DATA_URL_IMAGE_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.42, 0.34];
 
   async function uploadImageFilesToIfh(files) {
     const imageFiles = getImageFilesFromFileList(files);
@@ -7765,13 +7768,7 @@
     const uploads = [];
     for (const file of imageFiles) {
       try {
-        const imageUrl = await readFileAsDataUrl(file);
-        if (imageUrl.length > DATA_URL_TRANSPORT_MAX_CHARS) {
-          throw createIfhUploadError(
-            `채팅 동기화 한계 때문에 ${Math.floor(DATA_URL_TRANSPORT_MAX_CHARS / 1024)}KB 이하 Data URL만 전송할 수 있습니다. 이미지를 더 작게 줄여주세요: ${file.name || "image"}`,
-            "data-url-too-large"
-          );
-        }
+        const imageUrl = await readCompressedImageAsDataUrl(file);
         uploads.push({ imageUrl });
       } catch (error) {
         if (error?.code === "data-url-too-large") {
@@ -7825,6 +7822,107 @@
       };
       reader.readAsDataURL(file);
     });
+  }
+
+  function createImageBitmapFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("image-decode-failed"));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  function getScaledImageSize(width, height, maxDimension) {
+    const safeWidth = Math.max(1, Number(width) || 1);
+    const safeHeight = Math.max(1, Number(height) || 1);
+    const safeMax = Math.max(1, Number(maxDimension) || DATA_URL_IMAGE_MAX_DIMENSION);
+    const scale = Math.min(1, safeMax / Math.max(safeWidth, safeHeight));
+    return {
+      width: Math.max(1, Math.round(safeWidth * scale)),
+      height: Math.max(1, Math.round(safeHeight * scale))
+    };
+  }
+
+  function canvasToDataUrl(canvas, mimeType, quality) {
+    try {
+      return normalizeImageUrl(canvas.toDataURL(mimeType, quality));
+    } catch (error) {
+      console.warn("[CCF] canvas image export failed", error);
+      return "";
+    }
+  }
+
+  async function compressRasterImageToDataUrl(file) {
+    const image = await createImageBitmapFromFile(file);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) {
+      throw new Error("canvas-context-failed");
+    }
+
+    const sourceType = String(file?.type || "").toLowerCase();
+    const preferPng = sourceType === "image/png" && Number(file?.size || 0) <= DATA_URL_TRANSPORT_MAX_CHARS;
+    const mimeType = preferPng ? "image/png" : "image/webp";
+
+    for (let maxDimension = DATA_URL_IMAGE_MAX_DIMENSION; maxDimension >= DATA_URL_IMAGE_MIN_DIMENSION; maxDimension = Math.floor(maxDimension * 0.75)) {
+      const size = getScaledImageSize(image.naturalWidth || image.width, image.naturalHeight || image.height, maxDimension);
+      canvas.width = size.width;
+      canvas.height = size.height;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      if (preferPng) {
+        const pngUrl = canvasToDataUrl(canvas, "image/png");
+        if (pngUrl && pngUrl.length <= DATA_URL_TRANSPORT_MAX_CHARS) {
+          return pngUrl;
+        }
+      }
+
+      for (const quality of DATA_URL_IMAGE_QUALITY_STEPS) {
+        const dataUrl = canvasToDataUrl(canvas, mimeType, quality);
+        if (dataUrl && dataUrl.length <= DATA_URL_TRANSPORT_MAX_CHARS) {
+          return dataUrl;
+        }
+      }
+    }
+
+    throw createIfhUploadError(
+      `자동 압축 후에도 ${Math.floor(DATA_URL_TRANSPORT_MAX_CHARS / 1024)}KB 이하로 줄이지 못했습니다. 이미지를 더 작게 잘라주세요: ${file.name || "image"}`,
+      "data-url-too-large"
+    );
+  }
+
+  async function readCompressedImageAsDataUrl(file) {
+    const type = String(file?.type || "").toLowerCase();
+    const name = String(file?.name || "").toLowerCase();
+    const canCompress = /^(image\/png|image\/jpe?g|image\/webp|image\/bmp|image\/avif)$/i.test(type)
+      || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name);
+
+    if (canCompress) {
+      try {
+        return await compressRasterImageToDataUrl(file);
+      } catch (error) {
+        if (error?.code === "data-url-too-large") throw error;
+        console.warn("[CCF] image compression failed; fallback to raw Data URL", error);
+      }
+    }
+
+    const rawUrl = await readFileAsDataUrl(file);
+    if (rawUrl.length > DATA_URL_TRANSPORT_MAX_CHARS) {
+      throw createIfhUploadError(
+        `채팅 동기화 한계 때문에 ${Math.floor(DATA_URL_TRANSPORT_MAX_CHARS / 1024)}KB 이하 Data URL만 전송할 수 있습니다. 이미지를 더 작게 줄여주세요: ${file.name || "image"}`,
+        "data-url-too-large"
+      );
+    }
+    return rawUrl;
   }
 
   function getImageAltFromFile(file) {
@@ -10624,7 +10722,7 @@
         if (!insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file))) {
           return;
         }
-        console.info("[CCF] composer image paste — Data URL 삽입 완료");
+        console.info("[CCF] composer image paste — Data URL 삽입 완료 length=%o", imageUrl.length);
       }).catch((error) => {
         console.warn("[CCF] composer image upload failed:", error);
         alert(getIfhUploadErrorMessage(error));
