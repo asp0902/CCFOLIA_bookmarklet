@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.82
+// @version      0.0.83
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.82 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.83 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -60,6 +60,7 @@
   const FONT_SIZE_MAX = 200;
   const DEFAULT_BLUR_VALUE = "4px";
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
+  const FIRESTORE_IMAGE_TOKEN_PREFIX = "ccf-fs-image://";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
   const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
@@ -1535,7 +1536,7 @@
     let trimmed = value.trim();
     if (!trimmed) return "";
 
-    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX)) {
+    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX) || trimmed.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX)) {
       return trimmed;
     }
 
@@ -1567,6 +1568,47 @@
     return typeof value === "string" && value.startsWith(LOCAL_IMAGE_TOKEN_PREFIX);
   }
 
+  function isFirestoreImageToken(value) {
+    return typeof value === "string" && value.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX);
+  }
+
+  function parseFirestoreImageToken(value) {
+    if (!isFirestoreImageToken(value)) return null;
+    const body = value.slice(FIRESTORE_IMAGE_TOKEN_PREFIX.length);
+    const slash = body.indexOf("/");
+    if (slash <= 0) return null;
+    const roomId = decodeURIComponent(body.slice(0, slash));
+    const imageId = decodeURIComponent(body.slice(slash + 1));
+    return roomId && imageId ? { roomId, imageId } : null;
+  }
+
+  function getCachedFirestoreImageUrl(token) {
+    const api = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+    return api && typeof api.peek === "function" ? api.peek(token) : "";
+  }
+
+  function resolveFirestoreImageToken(token) {
+    const api = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+    if (api && typeof api.resolve === "function") return api.resolve(token);
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const waitForStore = () => {
+        const nextApi = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+        if (nextApi && typeof nextApi.resolve === "function") {
+          nextApi.resolve(token).then(resolve, reject);
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 40) {
+          reject(new Error("firestore-image-store-not-ready"));
+          return;
+        }
+        setTimeout(waitForStore, 250);
+      };
+      waitForStore();
+    });
+  }
+
   function getLocalImageTokenId(value) {
     return isLocalImageToken(value) ? value.slice(LOCAL_IMAGE_TOKEN_PREFIX.length) : "";
   }
@@ -1594,6 +1636,9 @@
     if (!normalized) return "";
     if (isLocalImageToken(normalized)) {
       return resolveStoredLocalImageUrl(normalized);
+    }
+    if (isFirestoreImageToken(normalized)) {
+      return getCachedFirestoreImageUrl(normalized);
     }
     return normalized;
   }
@@ -2083,12 +2128,22 @@
     token.textContent = frag.text || "";
     wrapper.appendChild(token);
 
-    const imageUrl = resolveRenderableImageUrl(frag.style.imageUrl);
+    const rawImageUrl = normalizeImageUrl(frag.style.imageUrl);
+    const imageUrl = resolveRenderableImageUrl(rawImageUrl);
     if (!imageUrl) {
       const fallback = document.createElement("span");
-      fallback.textContent = frag.style.imageAlt || frag.text || "image";
+      fallback.textContent = isFirestoreImageToken(rawImageUrl) ? "이미지 불러오는 중…" : (frag.style.imageAlt || frag.text || "image");
       applyInlineStyle(fallback, frag.style);
       wrapper.appendChild(fallback);
+      if (isFirestoreImageToken(rawImageUrl)) {
+        void resolveFirestoreImageToken(rawImageUrl).then(() => {
+          const next = createImageFragmentNode(frag);
+          wrapper.replaceWith(next);
+        }).catch((error) => {
+          console.warn("[CCF] failed to resolve Firestore image", error);
+          fallback.textContent = "이미지를 불러오지 못했습니다";
+        });
+      }
       return wrapper;
     }
 
@@ -2158,6 +2213,7 @@
   const DEFAULT_BLUR_VALUE = "4px";
   const PARENTHETICAL_GRAY_COLOR = "#878787";
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
+  const FIRESTORE_IMAGE_TOKEN_PREFIX = "ccf-fs-image://";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const LOCAL_IMAGE_INDEX_KEY = "ccf-inline-image:index";
   const LOCAL_IMAGE_MAX_ENTRIES = 24;
@@ -7747,20 +7803,157 @@
     return ifhHelperReadyPromise;
   }
 
-  const DATA_URL_PASTE_SOURCE_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCHCnY5n9gG2bMluU_QZa4m3ua1dpBDnUM",
+    authDomain: "ccfolia-handout-25c6b.firebaseapp.com",
+    projectId: "ccfolia-handout-25c6b",
+    storageBucket: "ccfolia-handout-25c6b.firebasestorage.app",
+    messagingSenderId: "821478721514",
+    appId: "1:821478721514:web:b909f3a85ea4d5a5795493"
+  };
+  const FIREBASE_SDK_VERSION = "10.13.2";
+  const FIREBASE_APP_NAME = "ccf-handout";
+  const FIRESTORE_IMAGE_MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+  const FIRESTORE_IMAGE_CHUNK_SIZE = 120 * 1024;
+  const FIRESTORE_IMAGE_MAX_DATA_URL_CHARS = 6 * 1024 * 1024;
+  const FIRESTORE_IMAGE_CACHE_LIMIT = 32;
+  const FIRESTORE_IMAGE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   const DATA_URL_TRANSPORT_MAX_CHARS = 128 * 1024;
   const DATA_URL_IMAGE_MAX_DIMENSION = 1024;
   const DATA_URL_IMAGE_MIN_DIMENSION = 360;
   const DATA_URL_IMAGE_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.42, 0.34];
+  let ccfFirebaseState = null;
+  let ccfFirebaseInitPromise = null;
+  const firestoreImageCache = new Map();
+
+  function initFirebase() {
+    if (ccfFirebaseState) return Promise.resolve(ccfFirebaseState);
+    if (ccfFirebaseInitPromise) return ccfFirebaseInitPromise;
+    ccfFirebaseInitPromise = (async () => {
+      const [appMod, authMod, fsMod] = await Promise.all([
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+      ]);
+      const existing = appMod.getApps?.().find((app) => app.name === FIREBASE_APP_NAME);
+      const app = existing || appMod.initializeApp(FIREBASE_CONFIG, FIREBASE_APP_NAME);
+      const auth = authMod.getAuth(app);
+      const db = fsMod.getFirestore(app);
+      const cred = auth.currentUser ? { user: auth.currentUser } : await authMod.signInAnonymously(auth);
+      ccfFirebaseState = { app, auth, db, user: cred.user, uid: cred.user.uid, modules: { app: appMod, auth: authMod, fs: fsMod } };
+      return ccfFirebaseState;
+    })();
+    ccfFirebaseInitPromise.catch(() => { ccfFirebaseInitPromise = null; });
+    return ccfFirebaseInitPromise;
+  }
+
+  function createFirestoreImageId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function createFirestoreImageToken(roomId, imageId) {
+    return `${FIRESTORE_IMAGE_TOKEN_PREFIX}${encodeURIComponent(roomId)}/${encodeURIComponent(imageId)}`;
+  }
+
+  function splitStringIntoChunks(value, chunkSize) {
+    const chunks = [];
+    const text = String(value || "");
+    for (let index = 0; index < text.length; index += chunkSize) {
+      chunks.push(text.slice(index, index + chunkSize));
+    }
+    return chunks;
+  }
+
+  async function uploadImageDataUrlToFirestore(dataUrl, file) {
+    const roomId = getCurrentRoomId();
+    if (!roomId) {
+      throw createIfhUploadError("CCFOLIA 룸 안에서만 이미지 붙여넣기를 사용할 수 있습니다.", "not-in-room");
+    }
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
+      throw createIfhUploadError("이미지 Data URL을 만들지 못했습니다.", "invalid-data-url");
+    }
+    if (dataUrl.length > FIRESTORE_IMAGE_MAX_DATA_URL_CHARS) {
+      throw createIfhUploadError(
+        `Firestore 저장 한계 때문에 ${Math.floor(FIRESTORE_IMAGE_MAX_DATA_URL_CHARS / 1024 / 1024)}MB 이하 이미지만 전송할 수 있습니다: ${file?.name || "image"}`,
+        "file-too-large"
+      );
+    }
+
+    const fb = await initFirebase();
+    const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+    const imageId = createFirestoreImageId();
+    const chunks = splitStringIntoChunks(dataUrl, FIRESTORE_IMAGE_CHUNK_SIZE);
+    const metaRef = doc(fb.db, "rooms", roomId, "images", imageId);
+    const mimeType = (String(dataUrl).match(/^data:([^;,]+);base64,/i) || [])[1] || file?.type || "image/png";
+    const metaPayload = {
+      id: imageId,
+      roomId,
+      ownerUid: fb.uid,
+      name: String(file?.name || "image").slice(0, 160),
+      mimeType,
+      size: Number(file?.size || 0),
+      dataUrlLength: dataUrl.length,
+      chunkCount: chunks.length,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      expiresAtMs: Date.now() + FIRESTORE_IMAGE_MAX_AGE_MS
+    };
+
+    await setDoc(metaRef, { ...metaPayload, status: "uploading" });
+    for (let index = 0; index < chunks.length; index += 1) {
+      await setDoc(doc(fb.db, "rooms", roomId, "images", imageId, "chunks", String(index).padStart(4, "0")), {
+        index,
+        data: chunks[index]
+      });
+    }
+    await setDoc(metaRef, { ...metaPayload, status: "ready", updatedAt: serverTimestamp() }, { merge: true });
+
+    const token = createFirestoreImageToken(roomId, imageId);
+    rememberFirestoreImageUrl(token, dataUrlToBlobUrl(dataUrl) || dataUrl);
+    console.info("[CCF] Firestore image upload OK:", imageId, `${chunks.length} chunks`, `${dataUrl.length} chars`);
+    return token;
+  }
+
+  async function resolveFirestoreImageTokenFromFirestore(token) {
+    const cached = getCachedFirestoreImageUrl(token);
+    if (cached) return cached;
+    const parsed = parseFirestoreImageToken(token);
+    if (!parsed) return "";
+
+    const fb = await initFirebase();
+    const { doc, getDoc } = fb.modules.fs;
+    const metaSnap = await getDoc(doc(fb.db, "rooms", parsed.roomId, "images", parsed.imageId));
+    if (!metaSnap.exists()) throw new Error("firestore-image-missing");
+    const meta = metaSnap.data() || {};
+    const chunkCount = Math.max(0, Math.min(200, Number(meta.chunkCount) || 0));
+    if (meta.status !== "ready" || !chunkCount) throw new Error("firestore-image-not-ready");
+
+    let dataUrl = "";
+    for (let index = 0; index < chunkCount; index += 1) {
+      const chunkSnap = await getDoc(doc(fb.db, "rooms", parsed.roomId, "images", parsed.imageId, "chunks", String(index).padStart(4, "0")));
+      if (!chunkSnap.exists()) throw new Error("firestore-image-chunk-missing");
+      dataUrl += String(chunkSnap.data()?.data || "");
+    }
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) throw new Error("firestore-image-invalid");
+    const blobUrl = dataUrlToBlobUrl(dataUrl) || dataUrl;
+    rememberFirestoreImageUrl(token, blobUrl);
+    return blobUrl;
+  }
+
+  window.__CCF_FORMAT_SYNC_IMAGE_STORE__ = {
+    peek: getCachedFirestoreImageUrl,
+    resolve: resolveFirestoreImageTokenFromFirestore
+  };
 
   async function uploadImageFilesToIfh(files) {
     const imageFiles = getImageFilesFromFileList(files);
     if (!imageFiles.length) return [];
 
-    const oversizedFile = imageFiles.find((file) => Number(file.size) > DATA_URL_PASTE_SOURCE_MAX_IMAGE_BYTES);
+    const oversizedFile = imageFiles.find((file) => Number(file.size) > FIRESTORE_IMAGE_MAX_SOURCE_BYTES);
     if (oversizedFile) {
       throw createIfhUploadError(
-        `Data URL 방식은 8MB 이하 이미지만 읽을 수 있습니다: ${oversizedFile.name || "image"}`,
+        `Firestore 이미지 저장은 8MB 이하 이미지만 처리할 수 있습니다: ${oversizedFile.name || "image"}`,
         "file-too-large"
       );
     }
@@ -7768,16 +7961,14 @@
     const uploads = [];
     for (const file of imageFiles) {
       try {
-        const imageUrl = await readCompressedImageAsDataUrl(file);
+        const imageUrl = await uploadImageDataUrlToFirestore(await readFileAsDataUrl(file), file);
         uploads.push({ imageUrl });
       } catch (error) {
-        if (error?.code === "data-url-too-large") {
-          throw error;
-        }
-        console.warn("[CCF] Data URL image read failed:", error);
+        if (error?.code) throw error;
+        console.warn("[CCF] Firestore image upload failed:", error);
         throw createIfhUploadError(
-          "이미지 파일을 읽지 못했습니다. 이미지 파일인지 확인하거나 더 작은 이미지로 다시 시도해주세요.",
-          "read-failed"
+          "이미지를 Firestore에 저장하지 못했습니다. Firestore 규칙과 네트워크 상태를 확인해주세요.",
+          "firestore-upload-failed"
         );
       }
     }
@@ -10712,17 +10903,17 @@
       event.stopPropagation();
       event.stopImmediatePropagation?.();
       const file = files[0];
-      console.info("[CCF] composer image paste — Data URL 변환 시작:", file.name || "(clipboard)");
+      console.info("[CCF] composer image paste — Firestore 저장 시작:", file.name || "(clipboard)");
       uploadImageFilesToIfh([file]).then((uploads) => {
         const imageUrl = normalizeImageUrl(uploads?.[0]?.imageUrl || "");
         if (!imageUrl) {
-          alert("이미지를 읽었지만 Data URL을 만들지 못했습니다.");
+          alert("이미지를 저장했지만 Firestore 이미지 토큰을 만들지 못했습니다.");
           return;
         }
         if (!insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file))) {
           return;
         }
-        console.info("[CCF] composer image paste — Data URL 삽입 완료 length=%o", imageUrl.length);
+        console.info("[CCF] composer image paste — Firestore 이미지 토큰 삽입 완료", imageUrl);
       }).catch((error) => {
         console.warn("[CCF] composer image upload failed:", error);
         alert(getIfhUploadErrorMessage(error));
@@ -11642,7 +11833,7 @@
     let trimmed = value.trim();
     if (!trimmed) return "";
 
-    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX)) {
+    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX) || trimmed.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX)) {
       return trimmed;
     }
 
@@ -11672,6 +11863,47 @@
 
   function isLocalImageToken(value) {
     return typeof value === "string" && value.startsWith(LOCAL_IMAGE_TOKEN_PREFIX);
+  }
+
+  function isFirestoreImageToken(value) {
+    return typeof value === "string" && value.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX);
+  }
+
+  function parseFirestoreImageToken(value) {
+    if (!isFirestoreImageToken(value)) return null;
+    const body = value.slice(FIRESTORE_IMAGE_TOKEN_PREFIX.length);
+    const slash = body.indexOf("/");
+    if (slash <= 0) return null;
+    const roomId = decodeURIComponent(body.slice(0, slash));
+    const imageId = decodeURIComponent(body.slice(slash + 1));
+    return roomId && imageId ? { roomId, imageId } : null;
+  }
+
+  function getCachedFirestoreImageUrl(token) {
+    const api = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+    return api && typeof api.peek === "function" ? api.peek(token) : "";
+  }
+
+  function resolveFirestoreImageToken(token) {
+    const api = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+    if (api && typeof api.resolve === "function") return api.resolve(token);
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const waitForStore = () => {
+        const nextApi = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+        if (nextApi && typeof nextApi.resolve === "function") {
+          nextApi.resolve(token).then(resolve, reject);
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 40) {
+          reject(new Error("firestore-image-store-not-ready"));
+          return;
+        }
+        setTimeout(waitForStore, 250);
+      };
+      waitForStore();
+    });
   }
 
   function getLocalImageTokenId(value) {
@@ -11756,7 +11988,48 @@
     if (isLocalImageToken(normalized)) {
       return resolveStoredLocalImageUrl(normalized);
     }
+    if (isFirestoreImageToken(normalized)) {
+      return getCachedFirestoreImageUrl(normalized);
+    }
     return normalized;
+  }
+
+  function getCachedFirestoreImageUrl(token) {
+    const cached = firestoreImageCache.get(token);
+    if (!cached) return "";
+    cached.lastUsed = Date.now();
+    return cached.url || "";
+  }
+
+  function rememberFirestoreImageUrl(token, url) {
+    if (!token || !url) return;
+    const old = firestoreImageCache.get(token);
+    if (old?.url && old.url !== url && old.url.startsWith("blob:")) {
+      URL.revokeObjectURL(old.url);
+    }
+    firestoreImageCache.set(token, { url, lastUsed: Date.now() });
+    if (firestoreImageCache.size <= FIRESTORE_IMAGE_CACHE_LIMIT) return;
+    const entries = [...firestoreImageCache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    while (entries.length && firestoreImageCache.size > FIRESTORE_IMAGE_CACHE_LIMIT) {
+      const [oldToken, oldEntry] = entries.shift();
+      firestoreImageCache.delete(oldToken);
+      if (oldEntry?.url?.startsWith("blob:")) URL.revokeObjectURL(oldEntry.url);
+    }
+  }
+
+  function dataUrlToBlobUrl(dataUrl) {
+    try {
+      const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.*)$/i);
+      if (!match) return "";
+      const mimeType = match[1] || "image/png";
+      const binary = atob(match[2] || "");
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    } catch (error) {
+      console.warn("[CCF] failed to build image blob URL", error);
+      return "";
+    }
   }
 
   function persistLocalImageDataUrl(value) {
@@ -11788,6 +12061,7 @@
     const normalized = normalizeImageUrl(value);
     if (!normalized) return "";
     if (isLocalImageToken(normalized)) return resolveStoredLocalImageUrl(normalized) || normalized;
+    if (isFirestoreImageToken(normalized)) return normalized;
     if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(normalized) && normalized.length > DATA_URL_TRANSPORT_MAX_CHARS) {
       return "";
     }
@@ -12451,12 +12725,22 @@
     token.textContent = frag.text || "";
     wrapper.appendChild(token);
 
-    const imageUrl = resolveRenderableImageUrl(frag.style.imageUrl);
+    const rawImageUrl = normalizeImageUrl(frag.style.imageUrl);
+    const imageUrl = resolveRenderableImageUrl(rawImageUrl);
     if (!imageUrl) {
       const fallback = document.createElement("span");
-      fallback.textContent = frag.style.imageAlt || frag.text || "image";
+      fallback.textContent = isFirestoreImageToken(rawImageUrl) ? "이미지 불러오는 중…" : (frag.style.imageAlt || frag.text || "image");
       applyInlineStyle(fallback, frag.style);
       wrapper.appendChild(fallback);
+      if (isFirestoreImageToken(rawImageUrl)) {
+        void resolveFirestoreImageToken(rawImageUrl).then(() => {
+          const next = createImageFragmentNode(frag);
+          wrapper.replaceWith(next);
+        }).catch((error) => {
+          console.warn("[CCF] failed to resolve Firestore image", error);
+          fallback.textContent = "이미지를 불러오지 못했습니다";
+        });
+      }
       return wrapper;
     }
 
