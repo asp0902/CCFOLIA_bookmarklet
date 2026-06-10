@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.60
+// @version      0.1.61
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -170,7 +170,7 @@
   function normalizePlList(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.map((item) => {
-      if (typeof item === "string") return { name: item.trim(), id: "", role: "player", aliases: [] };
+      if (typeof item === "string") return { name: item.trim(), id: "", role: "player", aliases: [], image: "" };
       if (item && typeof item === "object") {
         const name = String(item.name || "").trim();
         const aliases = Array.isArray(item.aliases)
@@ -180,7 +180,8 @@
           name,
           id: String(item.id || "").trim(),
           role: item.role === "gm" ? "gm" : "player",
-          aliases: [...new Set(aliases)]
+          aliases: [...new Set(aliases)],
+          image: typeof item.image === "string" ? item.image : ""
         };
       }
       return null;
@@ -1061,8 +1062,19 @@
     .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
-      grid-template-columns: 24px minmax(0,1fr) minmax(0,140px) 60px 28px;
+      grid-template-columns: 24px 28px minmax(0,1fr) minmax(0,140px) 60px 28px;
       gap: 4px 8px; align-items: center; min-width: 0;
+    }
+    /* PL 아바타 (#74) */
+    .pl-avatar {
+      display: inline-flex; width: 28px; height: 28px; border-radius: 50%;
+      overflow: hidden; background: rgba(255,255,255,.08); flex: 0 0 28px;
+      vertical-align: middle;
+    }
+    .pl-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pl-avatar[data-empty="1"] { opacity: .35; }
+    .perm-grid .perm-name .pl-avatar {
+      width: 22px; height: 22px; flex: 0 0 22px; margin-right: 6px;
     }
     .pl-modal .pl-row-main > * { min-width: 0; }
     .pl-modal .pl-row-main input[data-pl-field],
@@ -1940,17 +1952,24 @@
 
     const candidates = consumePendingChatAuthorItems();
     if (!candidates.length) return;
-    const names = collectChatAuthorNames(candidates);
-    if (!names.length) return;
+    const entries = collectChatAuthorEntries(candidates);
+    if (!entries.length) return;
 
     const me = normalizePlNameKey(state.data.myCharacter || "");
     const existing = new Set((state.data.plList || []).flatMap((p) => [p.name, ...(p.aliases || [])].map(normalizePlNameKey)));
     const added = [];
     let merged = 0;
+    let imageUpdated = 0;
 
-    names.forEach((name) => {
+    entries.forEach(({ name, image }) => {
       const key = normalizePlNameKey(name);
       if (!key) return;
+      // 기존 항목 이미지 백필 (#74) — seen 여부와 무관하게 이미지 없으면 채움
+      if (image) {
+        const owner = (state.data.plList || []).find((p) =>
+          [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) === key));
+        if (owner && !owner.image) { owner.image = image; imageUpdated += 1; }
+      }
       if (state.chatSeenAuthors.has(key)) return;
       state.chatSeenAuthors.add(key);
       if (key === me) return;
@@ -1958,15 +1977,21 @@
       const sameId = findPlEntryByInferredId(name);
       if (sameId) {
         sameId.aliases = [...new Set([...(sameId.aliases || []), name].filter(Boolean))];
+        if (image && !sameId.image) sameId.image = image;
         existing.add(key);
         merged += 1;
         return;
       }
       existing.add(key);
-      added.push({ name, id: "", role: "player", aliases: [] });
+      added.push({ name, id: "", role: "player", aliases: [], image: image || "" });
     });
 
-    if (!added.length && !merged) return;
+    if (!added.length && !merged && !imageUpdated) return;
+    if (!added.length && !merged) {
+      // 이미지만 갱신 — 토스트 없이 저장만
+      await saveAll(state.data);
+      return;
+    }
     state.data.plList.push(...added);
     console.info("[ccf-handout] chat autoadd", { added, merged }, "total plList:", state.data.plList.length);
     await saveAll(state.data);
@@ -2011,7 +2036,12 @@
   }
 
   function collectChatAuthorNames(items) {
-    const names = [];
+    return collectChatAuthorEntries(items).map((entry) => entry.name);
+  }
+
+  // 이름 + 아바타 이미지 쌍 수집 (#74)
+  function collectChatAuthorEntries(items) {
+    const entries = [];
     const seen = new Set();
     items.forEach((item) => {
       if (!(item instanceof HTMLElement)) return;
@@ -2020,9 +2050,15 @@
       const key = normalizePlNameKey(name);
       if (!key || seen.has(key)) return;
       seen.add(key);
-      names.push(name);
+      entries.push({ name, image: extractChatAuthorImage(item) });
     });
-    return names;
+    return entries;
+  }
+
+  function extractChatAuthorImage(item) {
+    const img = item.querySelector(".MuiAvatar-root img, .MuiListItemAvatar-root img");
+    const src = img?.getAttribute("src") || "";
+    return /^https?:\/\//i.test(src) ? src : "";
   }
 
   function isRecentChatAuthorItem(item) {
@@ -2429,7 +2465,7 @@
       if (rows.some((r) => r.key === name)) continue;
       const aliasText = (pl.aliases || []).filter(Boolean).length ? ` (${(pl.aliases || []).join(", ")})` : "";
       const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}`;
-      rows.push({ key: name, label });
+      rows.push({ key: name, label, image: pl.image || "" });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
     const perms = h.permissions || {};
@@ -2457,6 +2493,7 @@
       (raw.aliases || []).forEach((alias) => { if (alias && alias !== existing.name) aliases.add(alias); });
       existing.aliases = [...aliases];
       if (existing.role !== "gm" && raw.role === "gm") existing.role = "gm";
+      if (!existing.image && raw.image) existing.image = raw.image;
     }
     return out;
   }
@@ -2670,7 +2707,7 @@
       const secret = permFlag(permH, key, "secret");
       const edit = permFlag(permH, key, "edit");
       return `
-        <div class="perm-name">${escapeHtml(r.label)}</div>
+        <div class="perm-name">${r.image ? `<span class="pl-avatar" data-empty="0"><img src="${escapeAttr(r.image)}" alt="" loading="lazy"></span>` : ""}${escapeHtml(r.label)}</div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="view" ${view ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="secret" ${secret ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="edit" ${edit ? "checked" : ""}></div>
@@ -3257,6 +3294,7 @@
     row.innerHTML = `
       <div class="pl-row-main">
         <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
+        <span class="pl-avatar" data-pl-avatar aria-hidden="true"></span>
         <input type="text" placeholder="대표 이름" data-pl-field="name">
         <input type="text" placeholder="ID" title="같은 ID끼리 병합됨" data-pl-field="id">
         <select data-pl-field="role">
@@ -3342,7 +3380,8 @@
     } catch (error) { /* ignore */ }
     if (!aliases.length) aliases = findExistingPlAliases(name, id);
     const isAdmin = row.getAttribute("data-pl-admin") === "1";
-    return name ? { name, id, role, aliases, _isAdmin: isAdmin } : null;
+    const image = row.getAttribute("data-pl-image") || "";
+    return name ? { name, id, role, aliases, image, _isAdmin: isAdmin } : null;
   }
 
   function writePlRow(row, item) {
@@ -3358,6 +3397,18 @@
     if (item._isAdmin) row.setAttribute("data-pl-admin", "1");
     else row.removeAttribute("data-pl-admin");
     row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
+
+    // 아바타 (#74)
+    const image = typeof item.image === "string" ? item.image : "";
+    if (image) row.setAttribute("data-pl-image", image);
+    else row.removeAttribute("data-pl-image");
+    const avatarEl = row.querySelector("[data-pl-avatar]");
+    if (avatarEl) {
+      avatarEl.innerHTML = image
+        ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">`
+        : "";
+      avatarEl.setAttribute("data-empty", image ? "0" : "1");
+    }
 
     const aliases = (item.aliases || []).filter(Boolean);
     row.setAttribute("data-pl-aliases-json", JSON.stringify(aliases));
@@ -3935,7 +3986,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.60 (uid-based admin + GM recovery)");
+    console.info("[ccf-handout] init — version 0.1.61 (PL avatars in list/permission rows)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
