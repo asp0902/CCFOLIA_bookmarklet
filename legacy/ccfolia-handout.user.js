@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.63
+// @version      0.1.64
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,6 +52,51 @@
   function registerTeardown(fn) {
     if (typeof fn === "function") disposers.push(fn);
   }
+
+  // ----- Suite Manager 등록 (#37) ---------------------------------------------
+  const CCF_HO_SCRIPT_INFO = Object.freeze({
+    id: "ccf-handout",
+    name: "CCFOLIA Handout",
+    version: "0.1.64",
+    namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
+  });
+
+  function ccfHoRegisterWithSuite() {
+    try {
+      const REGISTRY_KEY = "ccf-suite-registry-v1";
+      let registry;
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
+        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+      } catch (error) {
+        registry = { scripts: {} };
+      }
+      const previous = registry.scripts[CCF_HO_SCRIPT_INFO.id] && typeof registry.scripts[CCF_HO_SCRIPT_INFO.id] === "object"
+        ? registry.scripts[CCF_HO_SCRIPT_INFO.id]
+        : {};
+      const now = new Date().toISOString();
+      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+        ? window.__CCF_SUITE_MANAGER_SESSION_ID
+        : "";
+      registry.scripts[CCF_HO_SCRIPT_INFO.id] = {
+        ...previous,
+        ...CCF_HO_SCRIPT_INFO,
+        installedAt: previous.installedAt || now,
+        lastSeenAt: now,
+        lastSeenUrl: location.href,
+        lastSeenSessionId: sessionId
+      };
+      window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCF_HO_SCRIPT_INFO.id] }));
+    } catch (error) { /* suite 등록 실패 무시 */ }
+  }
+
+  ccfHoRegisterWithSuite();
+  window.addEventListener("ccf-suite:request-register", (event) => {
+    const targetId = event?.detail?.targetId;
+    if (targetId && targetId !== CCF_HO_SCRIPT_INFO.id) return;
+    ccfHoRegisterWithSuite();
+  }, { signal });
 
   function teardown() {
     if (!active) return false;
@@ -4158,7 +4203,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.63 (GM-only handout folders)");
+    console.info("[ccf-handout] init — version 0.1.64 (suite registration)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();

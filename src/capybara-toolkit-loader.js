@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.25";
-  const BUILD_ID = "2026-06-10-loader-bgm-restore-silent-100";
+  const VERSION = "0.2.26";
+  const BUILD_ID = "2026-06-10-loader-suite-register-4-legacy-101";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Slash Macros by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-slash-macros
-// @version      0.1.0
+// @version      0.1.1
 // @description  Save and run multi-line slash command macros from the CCFOLIA chat input.
 // @description:ko 채팅 슬래시 커맨드 본문을 매크로로 저장하고 /m <이름>으로 펼쳐서 실행합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -37,6 +37,51 @@
     }
     return { signal: ccfSmSignal };
   }
+
+  // ----- Suite Manager 등록 (#37) ---------------------------------------------
+  const CCF_SM_SCRIPT_INFO = Object.freeze({
+    id: "ccf-slash-macros",
+    name: "CCFOLIA Slash Macros",
+    version: "0.1.1",
+    namespace: "https://greasyfork.org/users/Capybara_korea/ccf-slash-macros"
+  });
+
+  function ccfSmRegisterWithSuite() {
+    try {
+      const REGISTRY_KEY = "ccf-suite-registry-v1";
+      let registry;
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
+        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+      } catch (error) {
+        registry = { scripts: {} };
+      }
+      const previous = registry.scripts[CCF_SM_SCRIPT_INFO.id] && typeof registry.scripts[CCF_SM_SCRIPT_INFO.id] === "object"
+        ? registry.scripts[CCF_SM_SCRIPT_INFO.id]
+        : {};
+      const now = new Date().toISOString();
+      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+        ? window.__CCF_SUITE_MANAGER_SESSION_ID
+        : "";
+      registry.scripts[CCF_SM_SCRIPT_INFO.id] = {
+        ...previous,
+        ...CCF_SM_SCRIPT_INFO,
+        installedAt: previous.installedAt || now,
+        lastSeenAt: now,
+        lastSeenUrl: location.href,
+        lastSeenSessionId: sessionId
+      };
+      window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCF_SM_SCRIPT_INFO.id] }));
+    } catch (error) { /* suite 등록 실패 무시 */ }
+  }
+
+  ccfSmRegisterWithSuite();
+  window.addEventListener("ccf-suite:request-register", (event) => {
+    const targetId = event?.detail?.targetId;
+    if (targetId && targetId !== CCF_SM_SCRIPT_INFO.id) return;
+    ccfSmRegisterWithSuite();
+  }, ccfSmWithSignal());
 
   function ccfSmTeardown() {
     if (!ccfSmActive) return false;

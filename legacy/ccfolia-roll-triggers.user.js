@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll Triggers by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers
-// @version      0.1.0
+// @version      0.1.1
 // @description  Click rendered /desc judgement macros in chat to auto-roll the matching palette command.
 // @description:ko 채팅에 렌더된 판정 매크로(/desc 알약 버튼)를 클릭하면 채팅 팔레트를 자동으로 골라 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -37,6 +37,51 @@
     }
     return { signal: ccfRtSignal };
   }
+
+  // ----- Suite Manager 등록 (#37) ---------------------------------------------
+  const CCF_RT_SCRIPT_INFO = Object.freeze({
+    id: "ccf-roll-triggers",
+    name: "CCFOLIA Roll Triggers",
+    version: "0.1.1",
+    namespace: "https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers"
+  });
+
+  function ccfRtRegisterWithSuite() {
+    try {
+      const REGISTRY_KEY = "ccf-suite-registry-v1";
+      let registry;
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
+        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+      } catch (error) {
+        registry = { scripts: {} };
+      }
+      const previous = registry.scripts[CCF_RT_SCRIPT_INFO.id] && typeof registry.scripts[CCF_RT_SCRIPT_INFO.id] === "object"
+        ? registry.scripts[CCF_RT_SCRIPT_INFO.id]
+        : {};
+      const now = new Date().toISOString();
+      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+        ? window.__CCF_SUITE_MANAGER_SESSION_ID
+        : "";
+      registry.scripts[CCF_RT_SCRIPT_INFO.id] = {
+        ...previous,
+        ...CCF_RT_SCRIPT_INFO,
+        installedAt: previous.installedAt || now,
+        lastSeenAt: now,
+        lastSeenUrl: location.href,
+        lastSeenSessionId: sessionId
+      };
+      window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCF_RT_SCRIPT_INFO.id] }));
+    } catch (error) { /* suite 등록 실패 무시 */ }
+  }
+
+  ccfRtRegisterWithSuite();
+  window.addEventListener("ccf-suite:request-register", (event) => {
+    const targetId = event?.detail?.targetId;
+    if (targetId && targetId !== CCF_RT_SCRIPT_INFO.id) return;
+    ccfRtRegisterWithSuite();
+  }, ccfRtWithSignal());
 
   function ccfRtTeardown() {
     if (!ccfRtActive) return false;

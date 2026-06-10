@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.6
+// @version      0.1.7
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -42,6 +42,51 @@ function ccfspInjectStyle() {
 function ccfspRegisterTeardown(fn) {
   if (typeof fn === "function") ccfspDisposers.push(fn);
 }
+
+// ----- Suite Manager 등록 (#37) -----------------------------------------------
+const CCFSP_SCRIPT_INFO = Object.freeze({
+  id: "ccfolia-standing-picker",
+  name: "CCFOLIA Standing Picker",
+  version: "0.1.7",
+  namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
+});
+
+function ccfspRegisterWithSuite() {
+  try {
+    const REGISTRY_KEY = "ccf-suite-registry-v1";
+    let registry;
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
+      registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+    } catch (error) {
+      registry = { scripts: {} };
+    }
+    const previous = registry.scripts[CCFSP_SCRIPT_INFO.id] && typeof registry.scripts[CCFSP_SCRIPT_INFO.id] === "object"
+      ? registry.scripts[CCFSP_SCRIPT_INFO.id]
+      : {};
+    const now = new Date().toISOString();
+    const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+      ? window.__CCF_SUITE_MANAGER_SESSION_ID
+      : "";
+    registry.scripts[CCFSP_SCRIPT_INFO.id] = {
+      ...previous,
+      ...CCFSP_SCRIPT_INFO,
+      installedAt: previous.installedAt || now,
+      lastSeenAt: now,
+      lastSeenUrl: location.href,
+      lastSeenSessionId: sessionId
+    };
+    window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+    window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCFSP_SCRIPT_INFO.id] }));
+  } catch (error) { /* suite 등록 실패 무시 */ }
+}
+
+ccfspRegisterWithSuite();
+window.addEventListener("ccf-suite:request-register", (event) => {
+  const targetId = event?.detail?.targetId;
+  if (targetId && targetId !== CCFSP_SCRIPT_INFO.id) return;
+  ccfspRegisterWithSuite();
+}, { signal: ccfspSignal });
 
 function ccfspWithSignal(options) {
   if (options == null) return { signal: ccfspSignal };
