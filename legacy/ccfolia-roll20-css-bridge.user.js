@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.14
+// @version      0.3.15
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.14"),
+    version: getUserscriptVersion("0.3.15"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1474,6 +1474,9 @@
         item = createChatPromptToggleItem(menu);
         if (!(item instanceof HTMLElement)) return;
         menu.appendChild(item);
+        // 항목 주입으로 메뉴 높이가 커져 MUI Popover가 계산해둔 위치 아래로
+        // 삐져나와 FAB을 가림 (#20/#26). resize를 쏴서 위치 재계산 유도.
+        try { window.dispatchEvent(new Event("resize")); } catch (_) {}
       }
 
       updateChatPromptToggleItemSafe(item);
