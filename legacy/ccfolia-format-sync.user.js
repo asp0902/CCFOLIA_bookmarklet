@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.76
+// @version      0.0.77
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.76 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.77 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -10572,18 +10572,26 @@
   function handleComposerImagePaste(editor, event) {
     const clipboard = event?.clipboardData;
     if (!clipboard) return false;
-    // 1) 이미지 파일 (스크린샷 복사 등)
+    // 1) 이미지 파일 (스크린샷 복사 등) — iFH에 업로드해 실제 URL로 삽입.
+    // 로컬 저장(data URL) 방식은 본인 화면에만 보이므로 사용하지 않음.
     const files = getClipboardImageFiles(event);
     if (files.length) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
       const file = files[0];
-      readFileAsDataUrl(file).then((dataUrl) => {
-        insertImageIntoComposerEditor(editor, dataUrl, getImageAltFromFile(file));
+      console.info("[CCF] composer image paste — iFH 업로드 시작:", file.name || "(clipboard)");
+      uploadImageFilesToIfh([file]).then((uploads) => {
+        const imageUrl = normalizeImageUrl(uploads?.[0]?.imageUrl || "");
+        if (!imageUrl) {
+          alert("iFH 업로드는 완료됐지만 이미지 주소를 찾지 못했습니다.");
+          return;
+        }
+        insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file));
       }).catch((error) => {
-        console.warn("[CCF] composer image paste failed:", error);
-        alert("이미지를 읽지 못했습니다. 이미지 링크를 사용해주세요.");
+        console.warn("[CCF] composer image upload failed:", error);
+        alert("이미지 업로드에 실패했습니다. 이미지 링크를 직접 붙여넣어 주세요.");
+        maybeOpenIfhHelpPage(error);
       });
       return true;
     }
