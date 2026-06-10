@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.84
+// @version      0.0.85
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.84 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.85 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -7942,9 +7942,220 @@
     return blobUrl;
   }
 
+  function serializeFirestoreValue(value) {
+    if (value == null || typeof value !== "object") return value;
+    if (typeof value.toMillis === "function") {
+      return { __type: "timestamp", millis: value.toMillis() };
+    }
+    if (value instanceof Date) {
+      return { __type: "timestamp", millis: value.getTime() };
+    }
+    if (Array.isArray(value)) return value.map(serializeFirestoreValue);
+    const out = {};
+    Object.keys(value).forEach((key) => {
+      out[key] = serializeFirestoreValue(value[key]);
+    });
+    return out;
+  }
+
+  function deserializeBackupValue(value) {
+    if (value == null || typeof value !== "object") return value;
+    if (value.__type === "timestamp" && Number.isFinite(Number(value.millis))) {
+      return new Date(Number(value.millis));
+    }
+    if (Array.isArray(value)) return value.map(deserializeBackupValue);
+    const out = {};
+    Object.keys(value).forEach((key) => {
+      out[key] = deserializeBackupValue(value[key]);
+    });
+    return out;
+  }
+
+  function downloadJsonFile(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
+  function getBackupTimestampLabel() {
+    return new Date().toISOString().replace(/[:.]/g, "-");
+  }
+
+  async function readFirestoreImageRecord(fb, roomId, imageId, metaData = null) {
+    const { doc, getDoc } = fb.modules.fs;
+    const meta = metaData || (await getDoc(doc(fb.db, "rooms", roomId, "images", imageId))).data() || {};
+    const chunkCount = Math.max(0, Math.min(200, Number(meta.chunkCount) || 0));
+    const chunks = [];
+    for (let index = 0; index < chunkCount; index += 1) {
+      const chunkSnap = await getDoc(doc(fb.db, "rooms", roomId, "images", imageId, "chunks", String(index).padStart(4, "0")));
+      chunks.push(String(chunkSnap.data()?.data || ""));
+    }
+    return {
+      id: imageId,
+      token: createFirestoreImageToken(roomId, imageId),
+      meta: serializeFirestoreValue(meta),
+      chunks
+    };
+  }
+
+  async function backupFirestoreImages(options = {}) {
+    const roomId = options.roomId || getCurrentRoomId();
+    if (!roomId) throw createIfhUploadError("CCFOLIA 룸 안에서만 이미지 백업을 만들 수 있습니다.", "not-in-room");
+    const fb = await initFirebase();
+    const { collection, getDocs } = fb.modules.fs;
+    const snap = await getDocs(collection(fb.db, "rooms", roomId, "images"));
+    const now = Date.now();
+    const idFilter = Array.isArray(options.imageIds) ? new Set(options.imageIds.map(String)) : null;
+    const expiredOnly = options.expiredOnly === true;
+    const records = [];
+
+    for (const imageDoc of snap.docs) {
+      const meta = imageDoc.data() || {};
+      if (idFilter && !idFilter.has(imageDoc.id)) continue;
+      if (expiredOnly && !(Number(meta.expiresAtMs || 0) > 0 && Number(meta.expiresAtMs) <= now)) continue;
+      records.push(await readFirestoreImageRecord(fb, roomId, imageDoc.id, meta));
+    }
+
+    const backup = {
+      type: "ccf-firestore-image-backup",
+      version: 1,
+      roomId,
+      exportedAt: new Date().toISOString(),
+      exportedByUid: fb.uid,
+      expiredOnly,
+      count: records.length,
+      images: records
+    };
+
+    if (options.download !== false) {
+      downloadJsonFile(backup, `ccf-firestore-images-${roomId}-${getBackupTimestampLabel()}.json`);
+    }
+    return backup;
+  }
+
+  async function deleteFirestoreImageRecord(fb, roomId, imageId) {
+    const { collection, getDocs, doc, deleteDoc } = fb.modules.fs;
+    const chunksSnap = await getDocs(collection(fb.db, "rooms", roomId, "images", imageId, "chunks"));
+    for (const chunkDoc of chunksSnap.docs) {
+      await deleteDoc(chunkDoc.ref);
+    }
+    await deleteDoc(doc(fb.db, "rooms", roomId, "images", imageId));
+  }
+
+  async function backupAndCleanupFirestoreImages(options = {}) {
+    const backup = await backupFirestoreImages({ ...options, expiredOnly: options.expiredOnly !== false, download: options.download !== false });
+    if (!backup.images.length) return { backup, deleted: 0 };
+    if (options.deleteAfterBackup === false) return { backup, deleted: 0 };
+
+    if (options.skipConfirm !== true) {
+      const ok = window.confirm(`백업 JSON 다운로드를 시작했습니다. Firestore 이미지 ${backup.images.length}개를 삭제할까요? 삭제 후에는 백업 파일로만 복원할 수 있습니다.`);
+      if (!ok) return { backup, deleted: 0, cancelled: true };
+    }
+
+    const fb = await initFirebase();
+    let deleted = 0;
+    for (const image of backup.images) {
+      await deleteFirestoreImageRecord(fb, backup.roomId, image.id);
+      deleted += 1;
+    }
+    console.info("[CCF] Firestore image backup+cleanup OK:", `${deleted} images deleted`);
+    return { backup, deleted };
+  }
+
+  async function restoreFirestoreImageBackup(backup, options = {}) {
+    if (!backup || backup.type !== "ccf-firestore-image-backup" || !Array.isArray(backup.images)) {
+      throw new Error("invalid-firestore-image-backup");
+    }
+    const roomId = options.roomId || backup.roomId || getCurrentRoomId();
+    if (!roomId) throw createIfhUploadError("복원할 CCFOLIA 룸을 찾지 못했습니다.", "not-in-room");
+    const fb = await initFirebase();
+    const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+    let restored = 0;
+
+    for (const image of backup.images) {
+      const imageId = String(image.id || "");
+      const chunks = Array.isArray(image.chunks) ? image.chunks.map(String) : [];
+      if (!imageId || !chunks.length) continue;
+      const meta = deserializeBackupValue(image.meta || {});
+      const metaRef = doc(fb.db, "rooms", roomId, "images", imageId);
+      await setDoc(metaRef, {
+        ...meta,
+        id: imageId,
+        roomId,
+        chunkCount: chunks.length,
+        status: "uploading",
+        restoredAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      for (let index = 0; index < chunks.length; index += 1) {
+        await setDoc(doc(fb.db, "rooms", roomId, "images", imageId, "chunks", String(index).padStart(4, "0")), {
+          index,
+          data: chunks[index]
+        });
+      }
+      await setDoc(metaRef, { status: "ready", updatedAt: serverTimestamp() }, { merge: true });
+      restored += 1;
+    }
+    console.info("[CCF] Firestore image restore OK:", `${restored} images restored`);
+    return { restored, roomId };
+  }
+
+  function readJsonFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          resolve(JSON.parse(String(reader.result || "")));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(reader.error || new Error("file-read-failed"));
+      reader.readAsText(file);
+    });
+  }
+
+  function pickJsonFile() {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/json,.json";
+      input.style.display = "none";
+      input.addEventListener("change", () => resolve(input.files?.[0] || null), { once: true });
+      document.body.appendChild(input);
+      input.click();
+      setTimeout(() => input.remove(), 1000);
+    });
+  }
+
+  async function restoreFirestoreImageBackupFromFile(options = {}) {
+    const file = await pickJsonFile();
+    if (!file) return { restored: 0, roomId: options.roomId || getCurrentRoomId() };
+    return restoreFirestoreImageBackup(await readJsonFile(file), options);
+  }
+
   window.__CCF_FORMAT_SYNC_IMAGE_STORE__ = {
     peek: getCachedFirestoreImageUrl,
-    resolve: resolveFirestoreImageTokenFromFirestore
+    resolve: resolveFirestoreImageTokenFromFirestore,
+    backup: backupFirestoreImages,
+    backupAndCleanup: backupAndCleanupFirestoreImages,
+    backupExpiredAndCleanup: () => backupAndCleanupFirestoreImages({ expiredOnly: true, deleteAfterBackup: true }),
+    restore: restoreFirestoreImageBackup,
+    restoreFromFile: restoreFirestoreImageBackupFromFile
+  };
+  window.__CCF_FORMAT_SYNC_IMAGES__ = {
+    backup: backupFirestoreImages,
+    cleanupExpiredWithBackup: () => backupAndCleanupFirestoreImages({ expiredOnly: true, deleteAfterBackup: true }),
+    restoreFromFile: restoreFirestoreImageBackupFromFile
   };
 
   async function uploadImageFilesToIfh(files) {
