@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.61
+// @version      0.1.62
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -2027,6 +2027,29 @@
     debouncedScanChat();
   }
 
+  // 채팅 이력 전체(DOM에 렌더된 범위)에서 PL 이미지 백필 (#74)
+  // bottom 제한 없이 모든 보이는 메시지 스캔 — 새 PL 추가는 하지 않고 이미지만 채움.
+  async function backfillPlImagesFromChatHistory() {
+    if (!state.data || !Array.isArray(state.data.plList)) return 0;
+    const items = Array.from(document.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR))
+      .filter((item) => item instanceof HTMLElement && item.isConnected);
+    const entries = collectChatAuthorEntries(items);
+    let updated = 0;
+    entries.forEach(({ name, image }) => {
+      if (!image) return;
+      const key = normalizePlNameKey(name);
+      if (!key) return;
+      const owner = state.data.plList.find((p) =>
+        [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) === key));
+      if (owner && !owner.image) { owner.image = image; updated += 1; }
+    });
+    if (updated) {
+      await saveAll(state.data).catch(() => {});
+      console.info("[ccf-handout] PL image backfill:", updated);
+    }
+    return updated;
+  }
+
   function consumePendingChatAuthorItems() {
     const items = Array.from(state.chatPendingItems);
     state.chatPendingItems.clear();
@@ -2295,6 +2318,10 @@
     }
     state.isOpen = true;
     render();
+    // 채팅 이력 PL 이미지 백필 — 채워지면 화면 갱신 (#74)
+    backfillPlImagesFromChatHistory().then((updated) => {
+      if (updated && state.isOpen) render();
+    }).catch(() => {});
   }
 
   function closePanel() {
@@ -3282,6 +3309,14 @@
     if (!list.length) list.push({ name: "", id: "", role: "player" });
     for (const item of list) appendPlRow(host, item);
     overlay.setAttribute("data-pl-modal-open", "1");
+    // 채팅 이력에서 이미지 백필 — 새로 채워지면 행 다시 그림 (#74)
+    backfillPlImagesFromChatHistory().then((updated) => {
+      if (!updated) return;
+      if (overlay.getAttribute("data-pl-modal-open") !== "1") return;
+      const refreshed = buildPlListForDialog();
+      host.innerHTML = "";
+      for (const item of refreshed) appendPlRow(host, item);
+    }).catch(() => {});
   }
 
   function closePlListDialog() {
@@ -3986,7 +4021,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.61 (PL avatars in list/permission rows)");
+    console.info("[ccf-handout] init — version 0.1.62 (PL image backfill from chat history)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
