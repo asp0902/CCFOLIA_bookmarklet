@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.72
+// @version      0.0.73
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.72 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.73 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1276,13 +1276,16 @@
       });
     }
 
-    // 본문 영역 가운데 정렬
+    // 본문 영역 가운데 정렬 — roll20-css-bridge의 연속발화(CONT) padding-left 56px가
+    // center 중심을 우측으로 밀어내므로 좌우 패딩도 0으로 강제.
     item.querySelectorAll(".MuiListItemText-root").forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
       node.dataset.ccfNarrationForceCenter = "1";
       node.style.setProperty("width", "100%", "important");
       node.style.setProperty("margin", "0 auto", "important");
       node.style.setProperty("text-align", "center", "important");
+      node.style.setProperty("padding-left", "0", "important");
+      node.style.setProperty("padding-right", "0", "important");
     });
 
     console.info("[CCF NAR] forceInlineNarrationStyles: hidden=%o, item=%o", hiddenCount, item);
@@ -1300,6 +1303,8 @@
       node.style.removeProperty("width");
       node.style.removeProperty("margin");
       node.style.removeProperty("text-align");
+      node.style.removeProperty("padding-left");
+      node.style.removeProperty("padding-right");
       delete node.dataset.ccfNarrationForceCenter;
     });
   }
