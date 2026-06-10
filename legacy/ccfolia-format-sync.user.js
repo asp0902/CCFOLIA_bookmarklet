@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.79
+// @version      0.0.80
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.79 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.80 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -7747,60 +7747,17 @@
     return ifhHelperReadyPromise;
   }
 
-  // Firebase Storage 업로드 — ifh.cc는 X-Frame-Options로 iframe 임베드를 막아
-  // 브릿지 방식이 불가능했음. handout 모듈과 같은 Firebase 프로젝트의 Storage 사용.
-  const CCF_FB_CONFIG = {
-    apiKey: "AIzaSyCHCnY5n9gG2bMluU_QZa4m3ua1dpBDnUM",
-    authDomain: "ccfolia-handout-25c6b.firebaseapp.com",
-    projectId: "ccfolia-handout-25c6b",
-    storageBucket: "ccfolia-handout-25c6b.firebasestorage.app",
-    messagingSenderId: "821478721514",
-    appId: "1:821478721514:web:b909f3a85ea4d5a5795493"
-  };
-  const CCF_FB_SDK_VERSION = "10.13.2";
-  const CCF_FB_APP_NAME = "ccf-handout"; // handout 모듈이 만든 앱 재사용 (없으면 생성)
-  let ccfFbStoragePromise = null;
-
-  function initFirebaseStorage() {
-    if (ccfFbStoragePromise) return ccfFbStoragePromise;
-    ccfFbStoragePromise = (async () => {
-      const [appMod, authMod, stMod] = await Promise.all([
-        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-app.js`),
-        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-auth.js`),
-        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-storage.js`)
-      ]);
-      const existing = appMod.getApps?.().find((a) => a.name === CCF_FB_APP_NAME);
-      const app = existing || appMod.initializeApp(CCF_FB_CONFIG, CCF_FB_APP_NAME);
-      const auth = authMod.getAuth(app);
-      if (!auth.currentUser) {
-        await authMod.signInAnonymously(auth);
-      }
-      const storage = stMod.getStorage(app);
-      return { storage, stMod };
-    })();
-    ccfFbStoragePromise.catch(() => { ccfFbStoragePromise = null; });
-    return ccfFbStoragePromise;
-  }
-
-  async function uploadImageFileToFirebaseStorage(file) {
-    const { storage, stMod } = await initFirebaseStorage();
-    const roomKey = (location.pathname.match(/^\/rooms\/([^/?#]+)/i) || [])[1] || "global";
-    const ext = ((file.name || "").match(/\.(\w+)$/) || [])[1] ||
-      ((file.type || "").split("/")[1] || "png").replace(/[^\w]/g, "") || "png";
-    const path = `rooms/${roomKey}/images/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const fileRef = stMod.ref(storage, path);
-    await stMod.uploadBytes(fileRef, file, { contentType: file.type || "image/png" });
-    return stMod.getDownloadURL(fileRef);
-  }
+  const DATA_URL_PASTE_SOURCE_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+  const DATA_URL_TRANSPORT_MAX_CHARS = 40 * 1024;
 
   async function uploadImageFilesToIfh(files) {
     const imageFiles = getImageFilesFromFileList(files);
     if (!imageFiles.length) return [];
 
-    const oversizedFile = imageFiles.find((file) => Number(file.size) > IFH_MAX_IMAGE_BYTES);
+    const oversizedFile = imageFiles.find((file) => Number(file.size) > DATA_URL_PASTE_SOURCE_MAX_IMAGE_BYTES);
     if (oversizedFile) {
       throw createIfhUploadError(
-        `10MB 이하 이미지만 업로드할 수 있습니다: ${oversizedFile.name || "image"}`,
+        `Data URL 방식은 8MB 이하 이미지만 읽을 수 있습니다: ${oversizedFile.name || "image"}`,
         "file-too-large"
       );
     }
@@ -7808,13 +7765,22 @@
     const uploads = [];
     for (const file of imageFiles) {
       try {
-        const imageUrl = await uploadImageFileToFirebaseStorage(file);
+        const imageUrl = await readFileAsDataUrl(file);
+        if (imageUrl.length > DATA_URL_TRANSPORT_MAX_CHARS) {
+          throw createIfhUploadError(
+            `채팅 동기화 한계 때문에 ${Math.floor(DATA_URL_TRANSPORT_MAX_CHARS / 1024)}KB 이하 Data URL만 전송할 수 있습니다. 이미지를 더 작게 줄여주세요: ${file.name || "image"}`,
+            "data-url-too-large"
+          );
+        }
         uploads.push({ imageUrl });
       } catch (error) {
-        console.warn("[CCF] Firebase Storage upload failed:", error);
+        if (error?.code === "data-url-too-large") {
+          throw error;
+        }
+        console.warn("[CCF] Data URL image read failed:", error);
         throw createIfhUploadError(
-          "이미지 업로드에 실패했습니다. Firebase Storage 설정(활성화/규칙)을 확인해주세요.",
-          "storage-failed"
+          "이미지 파일을 읽지 못했습니다. 이미지 파일인지 확인하거나 더 작은 이미지로 다시 시도해주세요.",
+          "read-failed"
         );
       }
     }
@@ -8069,7 +8035,7 @@
     try {
       uploads = await uploadImageFilesToIfh(imageFiles);
     } catch (error) {
-      console.warn("[CCF] failed to upload image file to iFH", error);
+      console.warn("[CCF] failed to convert image file to Data URL", error);
       setImageStatus(getIfhUploadErrorMessage(error), "error");
       maybeOpenIfhHelpPage(error);
       return false;
@@ -8089,14 +8055,14 @@
     }
 
     if (!inserted) {
-      setImageStatus("iFH 업로드는 완료됐지만 삽입할 이미지 주소를 찾지 못했습니다.", "error");
+      setImageStatus("이미지를 읽었지만 삽입할 Data URL을 찾지 못했습니다.", "error");
       return false;
     }
 
     setImageStatus(
       inserted === 1
-        ? "이미지를 iFH 링크로 추가했습니다."
-        : `${inserted}개의 이미지를 iFH 링크로 추가했습니다.`,
+        ? "이미지를 Data URL로 추가했습니다. 작은 파일일수록 전송이 안정적입니다."
+        : `${inserted}개의 이미지를 Data URL로 추가했습니다. 작은 파일일수록 전송이 안정적입니다.`,
       "success"
     );
     return true;
@@ -10640,22 +10606,25 @@
   function handleComposerImagePaste(editor, event) {
     const clipboard = event?.clipboardData;
     if (!clipboard) return false;
-    // 1) 이미지 파일 (스크린샷 복사 등) — iFH에 업로드해 실제 URL로 삽입.
-    // 로컬 저장(data URL) 방식은 본인 화면에만 보이므로 사용하지 않음.
+    // 1) 이미지 파일 (스크린샷 복사 등) — Data URL로 변환해 메시지 본문에 직접 싣는다.
+    // 외부 업로드/Firebase Storage 없이 모두에게 보이게 하되, 큰 이미지는 제한한다.
     const files = getClipboardImageFiles(event);
     if (files.length) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
       const file = files[0];
-      console.info("[CCF] composer image paste — iFH 업로드 시작:", file.name || "(clipboard)");
+      console.info("[CCF] composer image paste — Data URL 변환 시작:", file.name || "(clipboard)");
       uploadImageFilesToIfh([file]).then((uploads) => {
         const imageUrl = normalizeImageUrl(uploads?.[0]?.imageUrl || "");
         if (!imageUrl) {
-          alert("iFH 업로드는 완료됐지만 이미지 주소를 찾지 못했습니다.");
+          alert("이미지를 읽었지만 Data URL을 만들지 못했습니다.");
           return;
         }
-        insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file));
+        if (!insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file))) {
+          return;
+        }
+        console.info("[CCF] composer image paste — Data URL 삽입 완료");
       }).catch((error) => {
         console.warn("[CCF] composer image upload failed:", error);
         alert(getIfhUploadErrorMessage(error));
@@ -11720,9 +11689,9 @@
   function prepareImageUrlForTransport(value) {
     const normalized = normalizeImageUrl(value);
     if (!normalized) return "";
-    if (isLocalImageToken(normalized)) return normalized;
-    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(normalized)) {
-      return persistLocalImageDataUrl(normalized);
+    if (isLocalImageToken(normalized)) return resolveStoredLocalImageUrl(normalized) || normalized;
+    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(normalized) && normalized.length > DATA_URL_TRANSPORT_MAX_CHARS) {
+      return "";
     }
     return normalized;
   }
