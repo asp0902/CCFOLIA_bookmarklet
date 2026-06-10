@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.58
+// @version      0.1.59
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -93,7 +93,7 @@
     },
     fetchAll() { return fetchAllFromFirestore(); },
     subscribe() {
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows()]);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]);
     },
     unsubscribe() {
       try { unsubHandouts?.(); } catch (_) {}
@@ -1424,6 +1424,61 @@
     registerTeardown(() => { try { unsubShows?.(); } catch (_) {} unsubShows = null; });
   }
 
+  // ===== GM 캐릭터 룸 단위 동기화 (#84) =====
+  // rooms/{roomKey}/meta/gm 에 GM 캐릭터를 기록하고 모든 참가자가 구독.
+  // 누가 새로고침하든 Firestore 기록이 진실 — 자동 감지가 덮어쓰지 않음.
+  let unsubGm = null;
+  let subscribedGmRoom = null;
+  let remoteGmInfo = null; // { gmCharacter, gmUid }
+
+  async function pushGmToFirestore(gmCharacter) {
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") throw new Error("not in a room");
+    await setDoc(doc(fb.db, "rooms", roomKey, "meta", "gm"), {
+      gmCharacter: gmCharacter || "",
+      gmUid: fb.uid,
+      updatedAt: serverTimestamp()
+    });
+    console.info("[ccf-handout] GM push OK:", gmCharacter);
+  }
+
+  async function subscribeToRoomGm() {
+    const fb = await initFirebase();
+    if (!fb) return;
+    const { doc, onSnapshot } = fb.modules.fs;
+    const roomKey = getCurrentRoomKey();
+    if (roomKey === "global") return;
+    if (subscribedGmRoom === roomKey && unsubGm) return;
+    if (unsubGm) { try { unsubGm(); } catch (_) {} unsubGm = null; }
+    subscribedGmRoom = roomKey;
+    remoteGmInfo = null;
+    unsubGm = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "gm"),
+      (snap) => {
+        if (!snap.exists()) { remoteGmInfo = null; return; }
+        const data = snap.data() || {};
+        const gmCharacter = String(data.gmCharacter || "").trim();
+        if (!gmCharacter) { remoteGmInfo = null; return; }
+        remoteGmInfo = { gmCharacter, gmUid: String(data.gmUid || "") };
+        if (state.data.myCharacter !== gmCharacter) {
+          state.data.myCharacter = gmCharacter;
+          saveAll(state.data).catch(() => {});
+          console.info("[ccf-handout] GM synced from room:", gmCharacter);
+          if (state.isOpen) render();
+        }
+      },
+      (error) => console.warn("[ccf-handout] GM subscribe error:", error)
+    );
+    registerTeardown(() => {
+      try { unsubGm?.(); } catch (_) {}
+      unsubGm = null;
+      subscribedGmRoom = null;
+      remoteGmInfo = null;
+    });
+  }
+
   function ingestShowSignal(signalId, data) {
     if (!data || !data.handoutId) return;
     if (seenShowIds.has(signalId)) return;
@@ -1796,7 +1851,7 @@
       // Firebase 연결 + 실시간 구독 (사용자 동의 후 자동)
       initFirebase().then((fb) => {
         toast(`송신 채널 연결됨 (uid: ${fb.uid.slice(0, 8)}...)`);
-        return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows()]);
+        return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]);
       }).catch((error) => {
         toast("송신 채널 연결 실패 — 콘솔 확인");
         console.error(error);
@@ -2735,6 +2790,7 @@
   // myCharacter 자동 감지 — input[name="name"] 의 visible 값 (코코포리아 채팅 발화 캐릭터)
   async function autoDetectMyCharacter({ force = false } = {}) {
     if (!active) return null;
+    if (remoteGmInfo?.gmCharacter) return null; // 룸 GM 동기화 중 — 자동 감지 금지 (#84)
     if (!force && state.data.myCharacter) return null;
     const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
     const visible = inputs.find((i) => i.offsetParent !== null && !i.disabled);
@@ -2760,6 +2816,7 @@
       const t = e.target;
       if (!(t instanceof HTMLInputElement)) return;
       if (t.name !== "name") return;
+      if (remoteGmInfo?.gmCharacter) return; // 룸 GM 동기화 중 — 자동 감지 금지 (#84)
       if (state.data.myCharacter) return; // 이미 설정됨
       const name = (t.value || "").trim();
       if (!name) return;
@@ -3125,6 +3182,12 @@
     await saveAll(state.data);
     toast("설정 저장됨");
     render();
+    // 룸 전체에 GM 캐릭터 공유 (#84) — 실패해도 로컬 저장은 유지
+    if (me) {
+      pushGmToFirestore(me).catch((error) => {
+        console.warn("[ccf-handout] GM push 실패:", error);
+      });
+    }
   }
 
   // ===== PL 목록 관리 모달 =====
@@ -3737,6 +3800,7 @@
           if (fbState) {
             subscribeToRoomHandouts().catch(() => {});
             subscribeToRoomShows().catch(() => {});
+            subscribeToRoomGm().catch(() => {});
           }
         }).catch(() => {});
       }
@@ -3762,6 +3826,7 @@
           if (fbState) {
             subscribeToRoomHandouts().catch(() => {});
             subscribeToRoomShows().catch(() => {});
+            subscribeToRoomGm().catch(() => {});
           }
         }).catch(() => {});
         }
@@ -3851,7 +3916,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.58 (header bold + toolbar bottom spacing)");
+    console.info("[ccf-handout] init — version 0.1.59 (room GM sync via Firestore)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
