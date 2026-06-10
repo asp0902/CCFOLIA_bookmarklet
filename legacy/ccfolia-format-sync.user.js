@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.75
+// @version      0.0.76
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.75 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.76 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -10537,7 +10537,7 @@
     const selection = normalizeSelectionRange(getEditorSelection(editor) || fallback, baseText.length) || fallback;
     const placeholderText = getImagePlaceholderText(imageAlt);
     const nextText = baseText.slice(0, selection.start) + placeholderText + baseText.slice(selection.end);
-    st.runs = rebaseRunsForTextReplacement(
+    const nextRuns = rebaseRunsForTextReplacement(
       cloneRuns(st.runs, baseText.length),
       selection,
       placeholderText,
@@ -10549,12 +10549,17 @@
         style: { imageUrl: normalizedUrl, imageAlt: normalizeImageAlt(imageAlt) || placeholderText }
       }]
     );
-    st.alignRuns = rebaseAlignRunsForTextReplacement(
+    const nextAlignRuns = rebaseAlignRunsForTextReplacement(
       cloneAlignRuns(st.alignRuns, getTextLineCount(baseText)),
       baseText, selection, placeholderText, nextText
     );
+    // setEditorText의 input 이벤트가 runs를 diff 기반으로 재계산하므로,
+    // 텍스트를 먼저 넣고 그 뒤에 최종 계산값으로 덮어쓴다.
     setEditorText(editor, nextText);
-    st.text = nextText;
+    const st2 = ensureEditorState(editor);
+    st2.runs = nextRuns;
+    st2.alignRuns = nextAlignRuns;
+    st2.text = nextText;
     try {
       const caret = selection.start + placeholderText.length;
       editor.setSelectionRange?.(caret, caret);
