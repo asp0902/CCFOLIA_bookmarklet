@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.83
+// @version      0.2.84
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3023,8 +3023,16 @@
 
     const targetSlotKey = getCcfBgmEntrySlotKey(hit[0], hit[1]);
     // 새로고침 직전 state 가 "playing" 이었으면 자동재생, 아니면 cue 만.
+    // 복원 재생은 "수신 전용" — Firestore 송신 금지 (#85).
+    // 송신하면 재실행자의 옛 곡이 룸 전체 BGM을 덮어씀. applying 가드로 emit 차단;
+    // 이후 폴링이 원격 nowPlaying 신호를 받으면 그쪽으로 자연 전환된다.
     if (persisted?.state === "playing") {
-      playCcfYoutubeBgmSlot(targetSlotKey, hit[1], findCcfBgmButtonBySlot(targetSlotKey), 0, hit[0]);
+      ccfBgmFirestorePlaybackApplying = true;
+      try {
+        playCcfYoutubeBgmSlot(targetSlotKey, hit[1], findCcfBgmButtonBySlot(targetSlotKey), 0, hit[0]);
+      } finally {
+        ccfBgmFirestorePlaybackApplying = false;
+      }
     } else {
       cueCcfYoutubeBgmSlot(targetSlotKey, hit[1], hit[0]);
     }
@@ -3093,13 +3101,16 @@
     });
   }
 
-  function playCcfYoutubeBgmSlot(slotKey, entry, button, retryCount = 0, entryKey = "") {
+  function playCcfYoutubeBgmSlot(slotKey, entry, button, retryCount = 0, entryKey = "", silent = false) {
     const normalizedSlotKey = normalizeCcfBgmSlotKey(slotKey);
     const videoId = entry?.videoId || extractCcfYoutubeVideoId(entry?.url || "");
     const resolvedEntryKey = entryKey || findCcfYoutubeEntryKey(normalizedSlotKey, entry);
     if (!normalizedSlotKey || !videoId) {
       return;
     }
+    // 수신/복원 재생은 송신 금지 (#85). retry 재귀 시점엔 applying 가드가 풀려
+    // 있으므로 silent 플래그로 재귀까지 전파한다.
+    const silentMode = silent === true || ccfBgmFirestorePlaybackApplying;
 
     ccfBgmNativeLoadedSlots.delete(normalizedSlotKey);
     ccfBgmLastWebAudio = null;
@@ -3112,7 +3123,7 @@
     persistCcfBgmActiveSlot(normalizedSlotKey, resolvedEntryKey, entry?.videoId);
     markCcfYoutubeBgmSlotButtons();
 
-    if (typeof ccfBgmFirestoreEmitPlayback === "function") {
+    if (!silentMode && typeof ccfBgmFirestoreEmitPlayback === "function") {
       ccfBgmFirestoreEmitPlayback({
         entryKey: resolvedEntryKey,
         slotKey: normalizedSlotKey,
@@ -3129,7 +3140,7 @@
     if (!ensureYoutubePlayerHost()) {
       if (retryCount < 50) {
         window.setTimeout(() => {
-          playCcfYoutubeBgmSlot(normalizedSlotKey, entry, button, retryCount + 1, resolvedEntryKey);
+          playCcfYoutubeBgmSlot(normalizedSlotKey, entry, button, retryCount + 1, resolvedEntryKey, silentMode);
         }, 100);
       } else {
         debugLog("bgm-youtube-player-host-missing", {
