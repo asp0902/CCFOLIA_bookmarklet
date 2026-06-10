@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.59
+// @version      0.1.60
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -119,6 +119,21 @@
       };
     },
     autoDetect(force) { return autoDetectMyCharacter({ force: !!force }); },
+    gmInfo() { return remoteGmInfo; },
+    // 잘못된 GM 기록 복구 — Firestore meta/gm 삭제 + 로컬 myCharacter 초기화
+    async clearRoomGm() {
+      const fb = await initFirebase();
+      const { doc, deleteDoc } = fb.modules.fs;
+      const roomKey = getCurrentRoomKey();
+      await deleteDoc(doc(fb.db, "rooms", roomKey, "meta", "gm"));
+      remoteGmInfo = null;
+      state.data.myCharacter = "";
+      await saveAll(state.data);
+      if (state.isOpen) render();
+      console.info("[ccf-handout] room GM cleared");
+      return true;
+    },
+    setRoomGm(name) { return pushGmToFirestore(String(name || "").trim()); },
     disable() { return teardown(); }
   };
 
@@ -439,6 +454,10 @@
   }
 
   function isAdminMode() {
+    // 룸 GM 동기화 중이면 uid가 진실 — GM 본인은 발화 캐릭터와 무관하게 항상 admin (#84)
+    if (remoteGmInfo?.gmUid && fbState?.uid) {
+      return remoteGmInfo.gmUid === fbState.uid;
+    }
     return isAdminCharacter();
   }
 
@@ -3916,7 +3935,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.59 (room GM sync via Firestore)");
+    console.info("[ccf-handout] init — version 0.1.60 (uid-based admin + GM recovery)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
