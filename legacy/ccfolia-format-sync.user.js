@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.74
+// @version      0.0.75
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.74 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.75 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -10524,12 +10524,101 @@
     });
   }
 
+  // 채팅 입력창에 이미지 삽입 (#72) — placeholder 텍스트 + image run
+  function insertImageIntoComposerEditor(editor, imageUrl, imageAlt = "") {
+    const normalizedUrl = prepareImageUrlForTransport(imageUrl);
+    if (!normalizedUrl) {
+      alert("이미지가 너무 크거나 저장 공간이 부족해 추가할 수 없습니다. 이미지 링크를 사용해주세요.");
+      return false;
+    }
+    const st = ensureEditorState(editor);
+    const baseText = stripInvisibleEnvelope(getEditorText(editor));
+    const fallback = { start: baseText.length, end: baseText.length };
+    const selection = normalizeSelectionRange(getEditorSelection(editor) || fallback, baseText.length) || fallback;
+    const placeholderText = getImagePlaceholderText(imageAlt);
+    const nextText = baseText.slice(0, selection.start) + placeholderText + baseText.slice(selection.end);
+    st.runs = rebaseRunsForTextReplacement(
+      cloneRuns(st.runs, baseText.length),
+      selection,
+      placeholderText,
+      baseText.length,
+      nextText.length,
+      [{
+        start: selection.start,
+        end: selection.start + placeholderText.length,
+        style: { imageUrl: normalizedUrl, imageAlt: normalizeImageAlt(imageAlt) || placeholderText }
+      }]
+    );
+    st.alignRuns = rebaseAlignRunsForTextReplacement(
+      cloneAlignRuns(st.alignRuns, getTextLineCount(baseText)),
+      baseText, selection, placeholderText, nextText
+    );
+    setEditorText(editor, nextText);
+    st.text = nextText;
+    try {
+      const caret = selection.start + placeholderText.length;
+      editor.setSelectionRange?.(caret, caret);
+    } catch (_) {}
+    try { syncEditorVisualPreview(editor); } catch (_) {}
+    return true;
+  }
+
+  // 채팅 입력창 paste — 이미지 파일/이미지 URL만 가로채고 일반 텍스트는 통과 (#72)
+  function handleComposerImagePaste(editor, event) {
+    const clipboard = event?.clipboardData;
+    if (!clipboard) return false;
+    // 1) 이미지 파일 (스크린샷 복사 등)
+    const files = getClipboardImageFiles(event);
+    if (files.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      const file = files[0];
+      readFileAsDataUrl(file).then((dataUrl) => {
+        insertImageIntoComposerEditor(editor, dataUrl, getImageAltFromFile(file));
+      }).catch((error) => {
+        console.warn("[CCF] composer image paste failed:", error);
+        alert("이미지를 읽지 못했습니다. 이미지 링크를 사용해주세요.");
+      });
+      return true;
+    }
+    // 2) plain text 자체가 이미지 URL
+    const plain = (clipboard.getData("text/plain") || "").trim();
+    if (plain && looksLikeClipboardImageUrl(plain)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      insertImageIntoComposerEditor(editor, normalizeClipboardImageUrlText(plain), getImageAltFromUrl(plain));
+      return true;
+    }
+    // 3) plain text 없이 html/uri-list 에 이미지만 있는 경우 (웹 이미지 우클릭 복사)
+    if (!plain) {
+      const payload = extractClipboardImagePayload(event);
+      if (payload?.imageUrl) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        insertImageIntoComposerEditor(editor, payload.imageUrl, payload.imageAlt);
+        return true;
+      }
+    }
+    return false; // 일반 텍스트 paste — 기본 동작 유지
+  }
+
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
     let newBindings = 0;
     editors.forEach((candidate) => {
       const editor = normalizeEditorCandidate(candidate);
       if (!editor) return;
+      if (editor.dataset.ccfPasteBound !== "1") {
+        editor.dataset.ccfPasteBound = "1";
+        editor.addEventListener("paste", (event) => {
+          try { handleComposerImagePaste(editor, event); } catch (error) {
+            console.warn("[CCF] composer paste handler error:", error);
+          }
+        }, true);
+      }
       if (editor.dataset.ccfEnterBound === "1") return;
 
       editor.dataset.ccfEnterBound = "1";
