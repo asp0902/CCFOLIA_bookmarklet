@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.11
+// @version      0.3.12
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1219,9 +1219,11 @@
 
   function loadChatPromptPanelPreference() {
     try {
-      return window.localStorage.getItem(CHAT_PROMPT_HIDDEN_KEY) === "1";
+      const value = window.localStorage.getItem(CHAT_PROMPT_HIDDEN_KEY);
+      if (value === null) return true; // 기본값: 숨김
+      return value === "1";
     } catch (_) {
-      return false;
+      return true;
     }
   }
 
