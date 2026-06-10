@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.13
+// @version      0.3.14
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.13"),
+    version: getUserscriptVersion("0.3.14"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4935,7 +4935,10 @@
     const MSG = CONT_ATTR + "-msg";
     const MSG_WRAP = MSG + "-wrap";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
-      .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
+      .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
+      // 보드 메뉴 FAB Popover/Menu 항목도 h6+p 구조라 채팅으로 오인됨 (#20/#26).
+      // 팝오버/메뉴/다이얼로그 내부 LI는 그룹핑 대상에서 제외.
+      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
     if (!messages.length) return;
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
