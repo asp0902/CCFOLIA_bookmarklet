@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.62
+// @version      0.1.63
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -150,11 +150,11 @@
   async function loadAll() {
     const tk = toolkit();
     if (!tk?.storage?.getRoomData) {
-      return { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [] };
+      return { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] };
     }
     const record = await tk.storage.getRoomData(STORAGE_FEATURE, getCurrentRoomKey());
     const value = record?.value;
-    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [] };
+    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [], folders: [] };
     const handouts = Array.isArray(value.handouts) ? value.handouts.map(ensurePermissions) : [];
     ensureOrderField(handouts);
     return {
@@ -163,8 +163,21 @@
       myCharacterOptions: Array.isArray(value.myCharacterOptions)
         ? [...new Set(value.myCharacterOptions.map((name) => String(name || "").trim()).filter(Boolean))]
         : [],
-      plList: normalizePlList(value.plList)
+      plList: normalizePlList(value.plList),
+      folders: normalizeFolders(value.folders)
     };
+  }
+
+  // 폴더 (#56) — GM 전용, 로컬 저장만. { id, name, collapsed }
+  function normalizeFolders(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((f) => {
+      if (!f || typeof f !== "object") return null;
+      const id = String(f.id || "").trim();
+      const name = String(f.name || "").trim();
+      if (!id || !name) return null;
+      return { id, name, collapsed: f.collapsed === true };
+    }).filter(Boolean);
   }
 
   function normalizePlList(raw) {
@@ -206,7 +219,7 @@
     activeTab: "list",      // list | new | settings
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
-    data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [] },
+    data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
     chatWatcher: null,      // 채팅 발신자 감시 MutationObserver
@@ -1065,6 +1078,25 @@
       grid-template-columns: 24px 28px minmax(0,1fr) minmax(0,140px) 60px 28px;
       gap: 4px 8px; align-items: center; min-width: 0;
     }
+    /* 폴더 (#56) */
+    .folder-bar { padding: 0 16px 8px; display: flex; justify-content: flex-end; }
+    .folder-head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 16px; cursor: default;
+      background: rgba(255,255,255,.03);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      user-select: none;
+    }
+    .folder-head[data-drag-over="into"] { background: rgba(130,177,255,.18); outline: 1px dashed rgba(130,177,255,.6); outline-offset: -1px; }
+    .folder-toggle {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 22px; height: 22px; display: inline-grid; place-items: center;
+      color: rgba(255,255,255,.7); font-size: 0.8125rem; border-radius: 4px;
+    }
+    .folder-toggle:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .folder-name { flex: 1; font-size: 0.875rem; font-weight: 700; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-count { font-size: 0.6875rem; color: rgba(255,255,255,.45); padding: 1px 7px; border-radius: 9px; background: rgba(255,255,255,.08); }
+    .folder-section .card { padding-left: 32px; }
     /* PL 아바타 (#74) */
     .pl-avatar {
       display: inline-flex; width: 28px; height: 28px; border-radius: 50%;
@@ -2417,12 +2449,18 @@
         </label>
       </div>
     ` : "";
-    if (!state.data.handouts.length) {
-      return previewToggle;
+    // 새 폴더 버튼 (#56) — GM 전용
+    const folderBar = adminMode ? `
+      <div class="folder-bar">
+        <button class="btn small secondary" data-action="folder-new">+ 새 폴더</button>
+      </div>
+    ` : "";
+    if (!state.data.handouts.length && !(state.data.folders || []).length) {
+      return folderBar + previewToggle;
     }
     // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
     const sortedHandouts = [...state.data.handouts].sort(compareByOrder);
-    const cards = sortedHandouts.map((h) => {
+    const renderCard = (h) => {
       ensurePermissions(h);
       const manageable = canManageHandout(h);
       const permissionName = getPermissionCharacterName();
@@ -2450,9 +2488,40 @@
           </div>
         </article>
       `;
+    };
+
+    // PL: 폴더 무시, 평면 목록 (#56 — 폴더는 GM 전용)
+    if (!adminMode) {
+      const cards = sortedHandouts.map(renderCard).join("");
+      return `
+        <div class="list">${cards}</div>
+        ${previewToggle}
+      `;
+    }
+
+    const folders = state.data.folders || [];
+    const folderIds = new Set(folders.map((f) => f.id));
+    const inFolder = (h) => h.folderId && folderIds.has(h.folderId);
+    const folderSections = folders.map((f) => {
+      const children = sortedHandouts.filter((h) => h.folderId === f.id);
+      const cards = f.collapsed ? "" : children.map(renderCard).join("");
+      return `
+        <div class="folder-section" data-folder-id="${escapeAttr(f.id)}">
+          <div class="folder-head" data-folder-head="1" data-folder-id="${escapeAttr(f.id)}">
+            <button class="folder-toggle" data-action="folder-toggle" data-id="${escapeAttr(f.id)}" title="${f.collapsed ? "펼치기" : "접기"}" aria-label="접기/펼치기">${f.collapsed ? "▸" : "▾"}</button>
+            <span class="folder-name">${escapeHtml(f.name)}</span>
+            <span class="folder-count">${children.length}</span>
+            <button class="card-icon-btn" data-action="folder-rename" data-id="${escapeAttr(f.id)}" title="이름 변경" aria-label="이름 변경">${ICON_PENCIL}</button>
+            <button class="card-icon-btn danger" data-action="folder-delete" data-id="${escapeAttr(f.id)}" title="폴더 삭제 (내용은 밖으로)" aria-label="폴더 삭제">${ICON_X_SMALL}</button>
+          </div>
+          ${cards}
+        </div>
+      `;
     }).join("");
+    const rootCards = sortedHandouts.filter((h) => !inFolder(h)).map(renderCard).join("");
     return `
-      <div class="list">${cards}</div>
+      ${folderBar}
+      <div class="list">${folderSections}${rootCards}</div>
       ${previewToggle}
     `;
   }
@@ -2979,6 +3048,46 @@
       return;
     }
     if (action === "delete-handout") { deleteHandout(id); return; }
+    if (action === "folder-new") {
+      if (!isAdminMode()) return;
+      const name = (prompt("폴더 이름") || "").trim();
+      if (!name) return;
+      if (!Array.isArray(state.data.folders)) state.data.folders = [];
+      state.data.folders.push({ id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, collapsed: false });
+      saveAll(state.data).catch(() => {});
+      render();
+      return;
+    }
+    if (action === "folder-toggle") {
+      const f = (state.data.folders || []).find((x) => x.id === id);
+      if (!f) return;
+      f.collapsed = !f.collapsed;
+      saveAll(state.data).catch(() => {});
+      render();
+      return;
+    }
+    if (action === "folder-rename") {
+      if (!isAdminMode()) return;
+      const f = (state.data.folders || []).find((x) => x.id === id);
+      if (!f) return;
+      const name = (prompt("폴더 이름", f.name) || "").trim();
+      if (!name || name === f.name) return;
+      f.name = name;
+      saveAll(state.data).catch(() => {});
+      render();
+      return;
+    }
+    if (action === "folder-delete") {
+      if (!isAdminMode()) return;
+      const f = (state.data.folders || []).find((x) => x.id === id);
+      if (!f) return;
+      if (!confirm(`"${f.name}" 폴더를 삭제할까요? 안의 핸드아웃은 목록 밖으로 이동합니다.`)) return;
+      state.data.handouts.forEach((h) => { if (h.folderId === id) delete h.folderId; });
+      state.data.folders = (state.data.folders || []).filter((x) => x.id !== id);
+      saveAll(state.data).catch(() => {});
+      render();
+      return;
+    }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
     if (action === "cancel-edit") { state.editingId = null; state.formPermissionsForId = null; setTab("list"); return; }
@@ -3069,6 +3178,16 @@
     if (!list) return;
     const cards = Array.from(list.querySelectorAll('.card'));
     cards.forEach((c) => c.removeAttribute('data-drag-over'));
+    const folderHeads = Array.from(list.querySelectorAll('[data-folder-head="1"]'));
+    folderHeads.forEach((fh) => fh.removeAttribute('data-drag-over'));
+    // 폴더 헤더 위 — 폴더로 넣기 (#56)
+    for (const fh of folderHeads) {
+      const rect = fh.getBoundingClientRect();
+      if (event.clientY >= rect.top && event.clientY <= rect.bottom) {
+        fh.setAttribute('data-drag-over', 'into');
+        return;
+      }
+    }
     for (const c of cards) {
       if (c.dataset.id === handoutDragState.cardId) continue;
       const rect = c.getBoundingClientRect();
@@ -3086,6 +3205,12 @@
     handoutDragState = null;
     const list = state.shadow?.querySelector('.list');
     if (!list) return;
+    // 폴더 헤더 드롭 — 폴더로 이동 (#56)
+    let dropFolderId = null;
+    list.querySelectorAll('[data-folder-head="1"]').forEach((fh) => {
+      if (fh.getAttribute('data-drag-over') === 'into') dropFolderId = fh.dataset.folderId || null;
+      fh.removeAttribute('data-drag-over');
+    });
     const cards = Array.from(list.querySelectorAll('.card'));
     let target = null, pos = null;
     for (const c of cards) {
@@ -3094,6 +3219,14 @@
       c.removeAttribute('data-drag-over');
       c.removeAttribute('data-dragging');
     }
+    if (dropFolderId) {
+      const dragged = findHandout(draggedId);
+      if (!dragged) return;
+      dragged.folderId = dropFolderId;
+      saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
+      render();
+      return;
+    }
     if (!target || !pos || target.dataset.id === draggedId) return;
     const dragged = findHandout(draggedId);
     const targetHandout = findHandout(target.dataset.id);
@@ -3101,6 +3234,9 @@
     const newOrder = computeInsertOrder(dragged, targetHandout, pos);
     if (!Number.isFinite(newOrder)) return;
     dragged.order = newOrder;
+    // 드롭 대상 카드의 폴더를 따라감 — 폴더 안/밖 정렬 자연 이동 (#56)
+    if (targetHandout.folderId) dragged.folderId = targetHandout.folderId;
+    else delete dragged.folderId;
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
     // Firestore 부분 업데이트 — 변경된 항목만 push (관리자 본인이 만든 핸드아웃만)
     if (!dragged._remote) {
@@ -3705,7 +3841,8 @@
           handouts: parsed.handouts,
           myCharacter: typeof parsed.myCharacter === "string" ? parsed.myCharacter : state.data.myCharacter,
           myCharacterOptions: Array.isArray(parsed.myCharacterOptions) ? parsed.myCharacterOptions : state.myCharacterOptions,
-          plList: normalizePlList(parsed.plList || state.data.plList)
+          plList: normalizePlList(parsed.plList || state.data.plList),
+          folders: normalizeFolders(parsed.folders || state.data.folders)
         };
         state.myCharacterOptions = Array.isArray(state.data.myCharacterOptions) ? state.data.myCharacterOptions : [];
         await saveAll(state.data);
@@ -4021,7 +4158,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.62 (PL image backfill from chat history)");
+    console.info("[ccf-handout] init — version 0.1.63 (GM-only handout folders)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.10";
-  const BUILD_ID = "2026-06-10-loader-pl-image-backfill-085";
+  const VERSION = "0.2.11";
+  const BUILD_ID = "2026-06-10-loader-handout-folders-086";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
