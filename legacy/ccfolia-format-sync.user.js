@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.83
+// @version      0.0.84
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.83 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.84 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -7816,12 +7816,13 @@
   const FIRESTORE_IMAGE_MAX_SOURCE_BYTES = 8 * 1024 * 1024;
   const FIRESTORE_IMAGE_CHUNK_SIZE = 120 * 1024;
   const FIRESTORE_IMAGE_MAX_DATA_URL_CHARS = 6 * 1024 * 1024;
+  const FIRESTORE_IMAGE_COMPACT_TARGET_CHARS = 900 * 1024;
   const FIRESTORE_IMAGE_CACHE_LIMIT = 32;
   const FIRESTORE_IMAGE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   const DATA_URL_TRANSPORT_MAX_CHARS = 128 * 1024;
-  const DATA_URL_IMAGE_MAX_DIMENSION = 1024;
-  const DATA_URL_IMAGE_MIN_DIMENSION = 360;
-  const DATA_URL_IMAGE_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.42, 0.34];
+  const DATA_URL_IMAGE_MAX_DIMENSION = 1600;
+  const DATA_URL_IMAGE_MIN_DIMENSION = 640;
+  const DATA_URL_IMAGE_QUALITY_STEPS = [0.86, 0.78, 0.7, 0.62, 0.54, 0.46];
   let ccfFirebaseState = null;
   let ccfFirebaseInitPromise = null;
   const firestoreImageCache = new Map();
@@ -7961,7 +7962,7 @@
     const uploads = [];
     for (const file of imageFiles) {
       try {
-        const imageUrl = await uploadImageDataUrlToFirestore(await readFileAsDataUrl(file), file);
+        const imageUrl = await uploadImageDataUrlToFirestore(await readCompactImageAsDataUrl(file), file);
         uploads.push({ imageUrl });
       } catch (error) {
         if (error?.code) throw error;
@@ -8051,7 +8052,7 @@
     }
   }
 
-  async function compressRasterImageToDataUrl(file) {
+  async function compressRasterImageToDataUrl(file, options = {}) {
     const image = await createImageBitmapFromFile(file);
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { alpha: true });
@@ -8059,11 +8060,13 @@
       throw new Error("canvas-context-failed");
     }
 
+    const targetChars = Math.max(1, Number(options.targetChars) || DATA_URL_TRANSPORT_MAX_CHARS);
+    const maxDimensionStart = Math.max(DATA_URL_IMAGE_MIN_DIMENSION, Number(options.maxDimension) || DATA_URL_IMAGE_MAX_DIMENSION);
     const sourceType = String(file?.type || "").toLowerCase();
-    const preferPng = sourceType === "image/png" && Number(file?.size || 0) <= DATA_URL_TRANSPORT_MAX_CHARS;
+    const preferPng = sourceType === "image/png" && Number(file?.size || 0) <= targetChars;
     const mimeType = preferPng ? "image/png" : "image/webp";
 
-    for (let maxDimension = DATA_URL_IMAGE_MAX_DIMENSION; maxDimension >= DATA_URL_IMAGE_MIN_DIMENSION; maxDimension = Math.floor(maxDimension * 0.75)) {
+    for (let maxDimension = maxDimensionStart; maxDimension >= DATA_URL_IMAGE_MIN_DIMENSION; maxDimension = Math.floor(maxDimension * 0.75)) {
       const size = getScaledImageSize(image.naturalWidth || image.width, image.naturalHeight || image.height, maxDimension);
       canvas.width = size.width;
       canvas.height = size.height;
@@ -8072,34 +8075,57 @@
 
       if (preferPng) {
         const pngUrl = canvasToDataUrl(canvas, "image/png");
-        if (pngUrl && pngUrl.length <= DATA_URL_TRANSPORT_MAX_CHARS) {
+        if (pngUrl && pngUrl.length <= targetChars) {
           return pngUrl;
         }
       }
 
       for (const quality of DATA_URL_IMAGE_QUALITY_STEPS) {
         const dataUrl = canvasToDataUrl(canvas, mimeType, quality);
-        if (dataUrl && dataUrl.length <= DATA_URL_TRANSPORT_MAX_CHARS) {
+        if (dataUrl && dataUrl.length <= targetChars) {
           return dataUrl;
         }
       }
     }
 
     throw createIfhUploadError(
-      `자동 압축 후에도 ${Math.floor(DATA_URL_TRANSPORT_MAX_CHARS / 1024)}KB 이하로 줄이지 못했습니다. 이미지를 더 작게 잘라주세요: ${file.name || "image"}`,
+      `자동 압축 후에도 ${Math.floor(targetChars / 1024)}KB 이하로 줄이지 못했습니다. 이미지를 더 작게 잘라주세요: ${file.name || "image"}`,
       "data-url-too-large"
     );
   }
 
-  async function readCompressedImageAsDataUrl(file) {
+  function canCompressImageFile(file) {
     const type = String(file?.type || "").toLowerCase();
     const name = String(file?.name || "").toLowerCase();
-    const canCompress = /^(image\/png|image\/jpe?g|image\/webp|image\/bmp|image\/avif)$/i.test(type)
+    return /^(image\/png|image\/jpe?g|image\/webp|image\/bmp|image\/avif)$/i.test(type)
       || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name);
+  }
 
-    if (canCompress) {
+  async function readCompactImageAsDataUrl(file) {
+    const rawUrl = await readFileAsDataUrl(file);
+    if (!canCompressImageFile(file) || rawUrl.length <= FIRESTORE_IMAGE_COMPACT_TARGET_CHARS) {
+      return rawUrl;
+    }
+
+    try {
+      const compactUrl = await compressRasterImageToDataUrl(file, {
+        targetChars: FIRESTORE_IMAGE_COMPACT_TARGET_CHARS,
+        maxDimension: DATA_URL_IMAGE_MAX_DIMENSION
+      });
+      return compactUrl.length < rawUrl.length ? compactUrl : rawUrl;
+    } catch (error) {
+      if (rawUrl.length <= FIRESTORE_IMAGE_MAX_DATA_URL_CHARS) {
+        console.warn("[CCF] image compact failed; storing raw image", error);
+        return rawUrl;
+      }
+      throw error;
+    }
+  }
+
+  async function readCompressedImageAsDataUrl(file) {
+    if (canCompressImageFile(file)) {
       try {
-        return await compressRasterImageToDataUrl(file);
+        return await compressRasterImageToDataUrl(file, { targetChars: DATA_URL_TRANSPORT_MAX_CHARS });
       } catch (error) {
         if (error?.code === "data-url-too-large") throw error;
         console.warn("[CCF] image compression failed; fallback to raw Data URL", error);
