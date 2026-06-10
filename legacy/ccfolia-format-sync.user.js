@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.78
+// @version      0.0.79
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.78 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.79 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -7747,51 +7747,78 @@
     return ifhHelperReadyPromise;
   }
 
+  // Firebase Storage 업로드 — ifh.cc는 X-Frame-Options로 iframe 임베드를 막아
+  // 브릿지 방식이 불가능했음. handout 모듈과 같은 Firebase 프로젝트의 Storage 사용.
+  const CCF_FB_CONFIG = {
+    apiKey: "AIzaSyCHCnY5n9gG2bMluU_QZa4m3ua1dpBDnUM",
+    authDomain: "ccfolia-handout-25c6b.firebaseapp.com",
+    projectId: "ccfolia-handout-25c6b",
+    storageBucket: "ccfolia-handout-25c6b.firebasestorage.app",
+    messagingSenderId: "821478721514",
+    appId: "1:821478721514:web:b909f3a85ea4d5a5795493"
+  };
+  const CCF_FB_SDK_VERSION = "10.13.2";
+  const CCF_FB_APP_NAME = "ccf-handout"; // handout 모듈이 만든 앱 재사용 (없으면 생성)
+  let ccfFbStoragePromise = null;
+
+  function initFirebaseStorage() {
+    if (ccfFbStoragePromise) return ccfFbStoragePromise;
+    ccfFbStoragePromise = (async () => {
+      const [appMod, authMod, stMod] = await Promise.all([
+        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-app.js`),
+        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-auth.js`),
+        import(`https://www.gstatic.com/firebasejs/${CCF_FB_SDK_VERSION}/firebase-storage.js`)
+      ]);
+      const existing = appMod.getApps?.().find((a) => a.name === CCF_FB_APP_NAME);
+      const app = existing || appMod.initializeApp(CCF_FB_CONFIG, CCF_FB_APP_NAME);
+      const auth = authMod.getAuth(app);
+      if (!auth.currentUser) {
+        await authMod.signInAnonymously(auth);
+      }
+      const storage = stMod.getStorage(app);
+      return { storage, stMod };
+    })();
+    ccfFbStoragePromise.catch(() => { ccfFbStoragePromise = null; });
+    return ccfFbStoragePromise;
+  }
+
+  async function uploadImageFileToFirebaseStorage(file) {
+    const { storage, stMod } = await initFirebaseStorage();
+    const roomKey = (location.pathname.match(/^\/rooms\/([^/?#]+)/i) || [])[1] || "global";
+    const ext = ((file.name || "").match(/\.(\w+)$/) || [])[1] ||
+      ((file.type || "").split("/")[1] || "png").replace(/[^\w]/g, "") || "png";
+    const path = `rooms/${roomKey}/images/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const fileRef = stMod.ref(storage, path);
+    await stMod.uploadBytes(fileRef, file, { contentType: file.type || "image/png" });
+    return stMod.getDownloadURL(fileRef);
+  }
+
   async function uploadImageFilesToIfh(files) {
     const imageFiles = getImageFilesFromFileList(files);
     if (!imageFiles.length) return [];
 
-    const unsupportedFile = imageFiles.find((file) => !isIfhCompatibleImageFile(file));
-    if (unsupportedFile) {
-      throw createIfhUploadError(
-        `iFH에서 지원하지 않는 이미지 형식입니다: ${unsupportedFile.name || "image"}`,
-        "unsupported-type"
-      );
-    }
-
     const oversizedFile = imageFiles.find((file) => Number(file.size) > IFH_MAX_IMAGE_BYTES);
     if (oversizedFile) {
       throw createIfhUploadError(
-        `iFH는 10MB 이하 이미지 업로드만 지원합니다: ${oversizedFile.name || "image"}`,
+        `10MB 이하 이미지만 업로드할 수 있습니다: ${oversizedFile.name || "image"}`,
         "file-too-large"
       );
     }
 
-    const frame = await ensureIfhHelperFrame();
-    if (!frame?.contentWindow) {
-      throw createIfhUploadError("iFH 업로드 창과 연결하지 못했습니다.", "bridge-unavailable");
+    const uploads = [];
+    for (const file of imageFiles) {
+      try {
+        const imageUrl = await uploadImageFileToFirebaseStorage(file);
+        uploads.push({ imageUrl });
+      } catch (error) {
+        console.warn("[CCF] Firebase Storage upload failed:", error);
+        throw createIfhUploadError(
+          "이미지 업로드에 실패했습니다. Firebase Storage 설정(활성화/규칙)을 확인해주세요.",
+          "storage-failed"
+        );
+      }
     }
-
-    const requestId = `ccf-ifh-${Date.now().toString(36)}-${(++ifhBridgeRequestCounter).toString(36)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        IFH_PENDING_REQUESTS.delete(requestId);
-        reject(createIfhUploadError("iFH 업로드 응답을 기다리다 시간이 초과되었습니다. 다시 시도해주세요.", "upload-timeout"));
-      }, IFH_HELPER_TIMEOUT_MS);
-
-      IFH_PENDING_REQUESTS.set(requestId, {
-        resolve,
-        reject,
-        timeoutId
-      });
-
-      frame.contentWindow.postMessage({
-        type: IFH_BRIDGE_REQUEST_TYPE,
-        requestId,
-        files: imageFiles
-      }, IFH_ORIGIN);
-    });
+    return uploads;
   }
 
   function maybeOpenIfhHelpPage(error) {
