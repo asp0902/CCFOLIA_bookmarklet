@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.23";
-  const BUILD_ID = "2026-06-10-loader-log-firestore-images-098";
+  const VERSION = "0.2.24";
+  const BUILD_ID = "2026-06-10-loader-toolkit-presence-099";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
@@ -86,6 +86,15 @@
       title: "판정 매크로 자동 실행",
       summary: "/desc로 렌더된 판정 알약을 클릭하면 채팅 팔레트를 자동 선택해 굴림",
       scripts: ["legacy/ccfolia-roll-triggers.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-toolkit-presence",
+      title: "툴킷 사용자 패널",
+      summary: "같은 룸의 카피바라 툴킷 사용자 목록 송수신 (자동 실행)",
+      scripts: ["legacy/ccfolia-toolkit-presence.user.js"],
       roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
