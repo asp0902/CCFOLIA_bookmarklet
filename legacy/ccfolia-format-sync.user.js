@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.77
+// @version      0.0.78
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.77 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.78 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -2222,6 +2222,47 @@
   let ifhBridgeListenerBound = false;
   let ifhBridgeRequestCounter = 0;
   const IFH_PENDING_REQUESTS = new Map();
+  // IFH 상수/헬퍼 — 첫 번째 IIFE(bridge 페이지용)와 별개 스코프라 여기 다시 정의.
+  // 이게 없어서 둘째 IIFE의 iFH 업로드 전체가 ReferenceError로 죽어 있었음.
+  const IFH_ORIGIN = "https://ifh.cc";
+  const IFH_HELPER_FRAME_ID = "ccf-ifh-helper-frame";
+  const IFH_HELPER_URL = `${IFH_ORIGIN}/ko?ccf_ifh_bridge=1`;
+  const IFH_BRIDGE_READY_TYPE = "ccf-ifh-ready";
+  const IFH_BRIDGE_REQUEST_TYPE = "ccf-ifh-upload";
+  const IFH_BRIDGE_RESULT_TYPE = "ccf-ifh-upload-result";
+  const IFH_BRIDGE_ERROR_TYPE = "ccf-ifh-upload-error";
+  const IFH_HELPER_TIMEOUT_MS = 60000;
+  const IFH_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+  const IFH_SUPPORTED_IMAGE_EXT_RE = /\.(gif|png|bmp|jpe?g|webp|heic)$/i;
+
+  function createIfhUploadError(message, code = "") {
+    const error = new Error(message || "iFH upload failed");
+    error.code = code;
+    return error;
+  }
+
+  function getIfhUploadErrorMessage(error) {
+    if (typeof error?.message === "string" && error.message.trim()) {
+      return error.message.trim();
+    }
+    return "iFH 이미지 업로드에 실패했습니다.";
+  }
+
+  function isIfhCompatibleImageFile(file) {
+    if (!(file instanceof File)) return false;
+    const lowerName = typeof file.name === "string" ? file.name.toLowerCase() : "";
+    const lowerType = typeof file.type === "string" ? file.type.toLowerCase() : "";
+    return IFH_SUPPORTED_IMAGE_EXT_RE.test(lowerName) || [
+      "image/gif",
+      "image/png",
+      "image/bmp",
+      "image/jpeg",
+      "image/jpg",
+      "image/webp",
+      "image/heic",
+      "image/heif"
+    ].includes(lowerType);
+  }
 
   const CHARACTER_SELECT_BUTTON_SELECTORS = [
     'button[aria-label="캐릭터 선택"]',
@@ -10590,7 +10631,7 @@
         insertImageIntoComposerEditor(editor, imageUrl, getImageAltFromFile(file));
       }).catch((error) => {
         console.warn("[CCF] composer image upload failed:", error);
-        alert("이미지 업로드에 실패했습니다. 이미지 링크를 직접 붙여넣어 주세요.");
+        alert(getIfhUploadErrorMessage(error));
         maybeOpenIfhHelpPage(error);
       });
       return true;
