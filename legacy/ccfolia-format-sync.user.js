@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.70
+// @version      0.0.71
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -10634,7 +10634,10 @@
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
-    const blockStyle = applyAutomaticNarration(state.blockStyle);
+    // #68 — 입력칸 미리보기에는 나레이션(이탤릭+가운데) 미적용. 커서 위치 확인 가능해야 함.
+    // 나레이션 스타일은 전송 후 채팅 로그 렌더에서만 적용.
+    const blockStyle = { ...applyAutomaticNarration(state.blockStyle) };
+    delete blockStyle.narration;
     const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
