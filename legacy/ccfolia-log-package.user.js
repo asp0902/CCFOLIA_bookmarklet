@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.24
+// @version      0.0.25
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -85,6 +85,7 @@
   const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
   const INVIS_REVERSE = new Map(INVIS_MAP.map((char, index) => [char, index]));
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
+  const FIRESTORE_IMAGE_TOKEN_PREFIX = "ccf-fs-image://";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const LOCAL_IMAGE_INDEX_KEY = "ccf-inline-image:index";
   const LOCAL_IMAGE_MAX_ENTRIES = 24;
@@ -98,7 +99,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.22"),
+  version: getUserscriptVersion("0.0.25"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -4815,7 +4816,7 @@
     let trimmed = value.trim();
     if (!trimmed) return "";
 
-    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX)) {
+    if (trimmed.startsWith(LOCAL_IMAGE_TOKEN_PREFIX) || trimmed.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX)) {
       return trimmed;
     }
 
@@ -4847,6 +4848,10 @@
     return typeof value === "string" && value.startsWith(LOCAL_IMAGE_TOKEN_PREFIX);
   }
 
+  function isFirestoreImageToken(value) {
+    return typeof value === "string" && value.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX);
+  }
+
   function getLocalImageTokenId(value) {
     return isLocalImageToken(value) ? value.slice(LOCAL_IMAGE_TOKEN_PREFIX.length) : "";
   }
@@ -4869,11 +4874,26 @@
     }
   }
 
+  function resolveFirestoreImageTokenFromFormatSync(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (!isFirestoreImageToken(normalized)) return "";
+    try {
+      const api = window.__CCF_FORMAT_SYNC_IMAGE_STORE__;
+      if (api && typeof api.peek === "function") return api.peek(normalized) || normalized;
+    } catch (error) {
+      console.warn("[CCF LOG PACKAGE] Firestore image cache lookup failed", error);
+    }
+    return normalized;
+  }
+
   function resolveRenderableImageUrl(value) {
     const normalized = normalizeImageUrl(value);
     if (!normalized) return "";
     if (isLocalImageToken(normalized)) {
       return resolveStoredLocalImageUrl(normalized);
+    }
+    if (isFirestoreImageToken(normalized)) {
+      return resolveFirestoreImageTokenFromFormatSync(normalized);
     }
     return normalized;
   }
@@ -7775,14 +7795,61 @@
     return assets;
   }
 
+  function getFormatSyncImageStore() {
+    return window.__CCF_FORMAT_SYNC_IMAGE_STORE__ || window.__CCF_FORMAT_SYNC_IMAGES__ || null;
+  }
+
+  function waitForFormatSyncImageStore(timeoutMs = 10000) {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        const store = getFormatSyncImageStore();
+        if (store && typeof store.resolve === "function") {
+          resolve(store);
+          return;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(null);
+          return;
+        }
+        setTimeout(tick, 250);
+      };
+      tick();
+    });
+  }
+
+  async function resolveFirestoreImageTokenForLog(token) {
+    const normalized = typeof token === "string" ? token.trim() : "";
+    if (!isFirestoreImageToken(normalized)) return "";
+    const store = await waitForFormatSyncImageStore();
+    if (!store || typeof store.resolve !== "function") {
+      throw new Error("format-sync-image-store-not-ready");
+    }
+    const resolved = await store.resolve(normalized);
+    const source = normalizeAssetSource(resolved || "");
+    if (!source || source === normalized) {
+      throw new Error("firestore-image-not-resolved");
+    }
+    return source;
+  }
+
   async function resolveAsset(source, index) {
+    const originalSource = source;
+    let fetchSource = source;
     let bytes = null;
     let mimeType = "";
     let error = "";
     let included = false;
 
-    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(source)) {
-      const parsed = parseDataUrl(source);
+    if (isFirestoreImageToken(fetchSource)) {
+      const resolved = await resolveFirestoreImageTokenForLog(fetchSource);
+      if (resolved && resolved !== fetchSource) {
+        fetchSource = resolved;
+      }
+    }
+
+    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(fetchSource)) {
+      const parsed = parseDataUrl(fetchSource);
       if (parsed) {
         bytes = parsed.bytes;
         mimeType = parsed.mimeType;
@@ -7792,13 +7859,13 @@
       }
     } else {
       try {
-        const response = await fetch(source);
+        const response = await fetch(fetchSource);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         const blob = await response.blob();
         bytes = new Uint8Array(await blob.arrayBuffer());
-        mimeType = blob.type || guessMimeTypeFromUrl(source);
+        mimeType = blob.type || guessMimeTypeFromUrl(fetchSource);
         included = true;
       } catch (fetchError) {
         error = fetchError?.message || String(fetchError);
@@ -7806,16 +7873,17 @@
     }
 
     const fileName = included
-      ? `images/asset-${String(index + 1).padStart(3, "0")}.${guessFileExtension(mimeType, source)}`
+      ? `images/asset-${String(index + 1).padStart(3, "0")}.${guessFileExtension(mimeType, fetchSource)}`
       : "";
 
     return {
       index: index + 1,
-      source,
+      source: originalSource,
+      resolvedSource: fetchSource,
       fileName,
       included,
-      renderUrl: fileName || source,
-      mimeType: mimeType || guessMimeTypeFromUrl(source),
+      renderUrl: fileName || fetchSource,
+      mimeType: mimeType || guessMimeTypeFromUrl(fetchSource),
       size: bytes?.length || 0,
       error,
       bytes
@@ -10495,6 +10563,10 @@ ${root.outerHTML}
     if (typeof value !== "string") return "";
     let trimmed = value.trim();
     if (!trimmed) return "";
+
+    if (trimmed.startsWith(FIRESTORE_IMAGE_TOKEN_PREFIX)) {
+      return trimmed;
+    }
 
     if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) {
       return trimmed.replace(/\s+/g, "");
