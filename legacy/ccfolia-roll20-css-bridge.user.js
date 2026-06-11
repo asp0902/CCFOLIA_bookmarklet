@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.30
+// @version      0.3.31
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.30"),
+    version: getUserscriptVersion("0.3.31"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4904,21 +4904,6 @@
   let active = true;
   let observer = null;
   let scanScheduled = 0;
-  // 바닥 스냅 가드 상태 — 새 메시지 감지 + 최근 위로 스크롤 여부
-  let prevLastMessageLi = null;
-  let prevLastMessageSignature = "";
-  let prevMessageCount = -1;
-  let prevVisibleMessageCount = -1;
-  let prevChatScroller = null;
-  let globalScrollIntentBound = false;
-  let lastUserScrollIntentAt = 0;
-  let bottomFollowFrame = 0;
-  let bottomFollowTimer = 0;
-  let bottomFollowTarget = null;
-  // 사용자가 위로 스크롤해 과거를 읽는 중인지 — 바닥 복귀 시 자동 해제
-  let userReadingHistory = false;
-  const USER_SCROLL_INTENT_MS = 1200;
-  const BOTTOM_FOLLOW_SETTLE_MS = 120;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4975,65 +4960,6 @@
     return null;
   }
 
-  function getMessageSignature(li) {
-    if (!li) return "";
-    const author = extractAuthor(li) || "";
-    const text = (li.innerText || li.textContent || "").replace(/\s+/g, " ").trim();
-    const mediaCount = li.querySelectorAll("img, video, canvas, .ccf-render-root").length;
-    return `${author}\u0001${text}\u0001${mediaCount}`;
-  }
-
-  function getBottomGap(scroller) {
-    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-  }
-
-  function markUserScrollIntent(event) {
-    if (event && event.type === "keydown") {
-      const key = event.key;
-      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"].includes(key)) return;
-    }
-    lastUserScrollIntentAt = Date.now();
-  }
-
-  function bindScrollIntent(scroller) {
-    if (scroller.__ccfSnapIntentBound) return;
-    scroller.__ccfSnapIntentBound = true;
-    scroller.addEventListener("wheel", markUserScrollIntent, { passive: true });
-    scroller.addEventListener("touchstart", markUserScrollIntent, { passive: true });
-    scroller.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
-    if (!globalScrollIntentBound) {
-      globalScrollIntentBound = true;
-      document.addEventListener("keydown", markUserScrollIntent, true);
-    }
-  }
-
-  function snapScrollerToBottom(scroller) {
-    if (!active || !scroller || !scroller.isConnected || userReadingHistory) return;
-    if (getBottomGap(scroller) > 1) {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
-  }
-
-  function flushBottomFollow() {
-    bottomFollowFrame = 0;
-    const scroller = bottomFollowTarget;
-    snapScrollerToBottom(scroller);
-  }
-
-  function scheduleBottomFollow(scroller) {
-    bottomFollowTarget = scroller;
-    if (!bottomFollowFrame) {
-      bottomFollowFrame = requestAnimationFrame(flushBottomFollow);
-    }
-    if (bottomFollowTimer) clearTimeout(bottomFollowTimer);
-    bottomFollowTimer = setTimeout(() => {
-      bottomFollowTimer = 0;
-      if (!bottomFollowFrame) {
-        bottomFollowFrame = requestAnimationFrame(flushBottomFollow);
-      }
-    }, BOTTOM_FOLLOW_SETTLE_MS);
-  }
-
   function processList() {
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
@@ -5054,48 +4980,15 @@
     // CCFolia가 이미 맞춰둔 바닥 스크롤이 모자라게 됨. 처리 전 바닥 근처였으면
     // 처리 후 다시 바닥으로 스냅.
     let chatScroller = null;
-    // 탭마다 별도 스크롤러 — 숨겨진 탭이 아니라 보이는 메시지 기준으로 탐색 (#88)
-    const visibleMessages = messages.filter((li) => li.offsetParent !== null);
-    const anchorMsg = visibleMessages[0] || messages[0];
-    for (let el = anchorMsg.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+    for (let el = messages[0].parentElement; el && el !== document.documentElement; el = el.parentElement) {
       const overflowY = getComputedStyle(el).overflowY || "";
       if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
         chatScroller = el;
         break;
       }
     }
-    // 새 메시지가 실제로 추가됐을 때만 + 최근에 위로 스크롤한 직후가 아닐 때만 스냅.
-    // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
-    const lastLi = visibleMessages[visibleMessages.length - 1] || messages[messages.length - 1];
-    const lastMessageSignature = getMessageSignature(lastLi);
-    const hasNewMessage = lastLi !== prevLastMessageLi
-      || lastMessageSignature !== prevLastMessageSignature
-      || messages.length !== prevMessageCount
-      || visibleMessages.length !== prevVisibleMessageCount;
-    prevLastMessageLi = lastLi;
-    prevLastMessageSignature = lastMessageSignature;
-    prevMessageCount = messages.length;
-    prevVisibleMessageCount = visibleMessages.length;
-    // 보이는 스크롤러가 바뀜 = 탭 전환 — 거리 무관 바닥 스냅 (#88)
-    const scrollerChanged = !!chatScroller && chatScroller !== prevChatScroller;
-    prevChatScroller = chatScroller || prevChatScroller;
-    if (chatScroller) bindScrollIntent(chatScroller);
-    if (scrollerChanged) {
-      userReadingHistory = false; // 탭 전환 — 최신 메시지 기대
-      if (chatScroller && !chatScroller.__ccfSnapScrollBound) {
-        chatScroller.__ccfSnapScrollBound = true;
-        let lastTop = chatScroller.scrollTop;
-        chatScroller.addEventListener("scroll", () => {
-          const top = chatScroller.scrollTop;
-          const gap = getBottomGap(chatScroller);
-          const hasRecentUserIntent = Date.now() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_MS;
-          if (top < lastTop - 1 && hasRecentUserIntent) userReadingHistory = true; // 위로 이동 = 읽는 중
-          if (gap <= 16) userReadingHistory = false;       // 바닥 복귀 = 추적 재개
-          lastTop = top;
-        }, { passive: true });
-      }
-    }
-    const wasNearBottom = hasNewMessage && !userReadingHistory && !!chatScroller;
+    const wasNearBottom = !!chatScroller &&
+      (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 80);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5132,7 +5025,7 @@
     }
     // 바닥 유지 (#62) — attr 적용 직후 동기 reflow 기준으로 스냅
     if (wasNearBottom && chatScroller && chatScroller.isConnected) {
-      scheduleBottomFollow(chatScroller);
+      chatScroller.scrollTop = chatScroller.scrollHeight;
     }
   }
 
@@ -5154,21 +5047,12 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.32 (coalesced bottom follow)");
+    console.info("[ccf-prose-mode] active v0.0.33 (scroll reset baseline)");
   }
 
   function teardown() {
     active = false;
     try { observer?.disconnect(); } catch (_) {}
-    if (bottomFollowFrame) {
-      try { cancelAnimationFrame(bottomFollowFrame); } catch (_) {}
-      bottomFollowFrame = 0;
-    }
-    if (bottomFollowTimer) {
-      clearTimeout(bottomFollowTimer);
-      bottomFollowTimer = 0;
-    }
-    bottomFollowTarget = null;
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
     for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
@@ -5182,7 +5066,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.32",
+    version: "0.0.33",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
