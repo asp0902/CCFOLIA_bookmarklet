@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.90
+// @version      0.0.91
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.90 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.91 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3501,13 +3501,13 @@
         display: flex; align-items: center; gap: 4px; margin-top: 6px;
       }
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
-      .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; }
+      .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; width: min(380px, calc(100vw - 24px)); }
       .ccf-style-preset-title-row {
         display: flex; align-items: center; justify-content: space-between; gap: 4px;
       }
       .ccf-style-preset-title-row .ccf-style-preset-remove { font-size: 16px; }
       .ccf-style-builder { display: flex; flex-direction: column; gap: 4px; }
-      .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+      .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
       .ccf-style-builder-row .ccf-toggle {
         min-width: 28px; width: 28px; height: 28px; padding: 0;
         border-radius: 0; font-size: 12px;
@@ -4442,6 +4442,12 @@
           if (preset && removeStylePreset(preset.name)) {
             openInlineStyleClipboardPopover(toolbar, { reuseContext: true }); // 목록 갱신
           }
+          return;
+        }
+        if (action === "edit") {
+          const idx = Number(styleAction.getAttribute("data-preset-index"));
+          const preset = readStylePresets()[idx];
+          if (preset) loadStylePresetIntoBuilder(state.popover, preset);
           return;
         }
         if (action === "apply") {
@@ -5591,6 +5597,7 @@
     const rows = presets.map((p, i) => `
       <div class="ccf-style-preset-row">
         <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9" style="${escapeHtml(stylePresetPreviewCss(p.style, p.align))}">${escapeHtml(p.name)}</button>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${i}" title="\uD3B8\uC9D1 \u2014 \uC11C\uC2DD\uC744 \uC544\uB798 \uBE4C\uB354\uC5D0 \uBD88\uB7EC\uC634" aria-label="\uD3B8\uC9D1">\u270E</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
       </div>
     `).join("");
@@ -5609,10 +5616,8 @@
           <button type="button" class="ccf-toggle" data-style-builder-align="left" data-active="1" title="\uC67C\uCABD \uC815\uB82C">\u2BC7</button>
           <button type="button" class="ccf-toggle" data-style-builder-align="center" title="\uAC00\uC6B4\uB370 \uC815\uB82C">\u2BC8\u2BC7</button>
           <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
-        </div>
-        <div class="ccf-style-builder-row">
-          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9">\uAE00\uC790<input type="color" data-style-builder-color value="#ffffff"></label>
-          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9">\uBC30\uACBD<input type="color" data-style-builder-bg value="#000000"></label>
+          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="color" data-style-builder-color value="#ffffff"></label>
+          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="color" data-style-builder-bg value="#000000"></label>
           <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="\uD06C\uAE30" title="\uAE00\uC790 \uD06C\uAE30(px)">
         </div>
       </div>
@@ -10223,6 +10228,39 @@
     if (Number.isFinite(sizePx) && sizePx > 0) parts.push(`font-size:${Math.min(sizePx, 20)}px`);
     if (align && align !== "left") parts.push(`text-align:${align}`);
     return parts.join(";");
+  }
+
+  // 프리셋을 빌더에 불러와 편집 — 같은 이름으로 + 누르면 덮어씀 (#70)
+  function loadStylePresetIntoBuilder(popover, preset) {
+    if (!(popover instanceof HTMLElement) || !preset) return;
+    const style = preset.style || {};
+    popover.querySelectorAll("[data-style-builder]").forEach((b) => {
+      if (style[b.getAttribute("data-style-builder")]) b.setAttribute("data-active", "1");
+      else b.removeAttribute("data-active");
+    });
+    const align = cleanupAlign(preset.align) || "left";
+    popover.querySelectorAll("[data-style-builder-align]").forEach((b) => {
+      if (b.getAttribute("data-style-builder-align") === align) b.setAttribute("data-active", "1");
+      else b.removeAttribute("data-active");
+    });
+    const colorInput = popover.querySelector("[data-style-builder-color]");
+    if (colorInput) {
+      if (style.color) { colorInput.value = style.color; colorInput.setAttribute("data-touched", "1"); }
+      else { colorInput.value = "#ffffff"; colorInput.removeAttribute("data-touched"); }
+    }
+    const bgInput = popover.querySelector("[data-style-builder-bg]");
+    if (bgInput) {
+      if (style.backgroundColor) { bgInput.value = style.backgroundColor; bgInput.setAttribute("data-touched", "1"); }
+      else { bgInput.value = "#000000"; bgInput.removeAttribute("data-touched"); }
+    }
+    const sizeInput = popover.querySelector("[data-style-builder-size]");
+    if (sizeInput) {
+      const px = parseInt(style.fontSize, 10);
+      sizeInput.value = Number.isFinite(px) && px > 0 ? String(px) : "";
+    }
+    const nameInput = popover.querySelector("[data-style-preset-name]");
+    if (nameInput) nameInput.value = preset.name || "";
+    updateStyleBuilderPreview(popover);
   }
 
   // 이름 입력칸에 현재 빌더 서식 실시간 미리보기 (#70)
