@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.22
+// @version      0.3.23
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.22"),
+    version: getUserscriptVersion("0.3.23"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4988,7 +4988,7 @@
       }
     }
     const wasNearBottom = !!chatScroller &&
-      (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 80);
+      (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
