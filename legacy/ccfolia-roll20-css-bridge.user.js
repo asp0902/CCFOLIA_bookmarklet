@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.29
+// @version      0.3.30
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.29"),
+    version: getUserscriptVersion("0.3.30"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4912,10 +4912,13 @@
   let prevChatScroller = null;
   let globalScrollIntentBound = false;
   let lastUserScrollIntentAt = 0;
+  let bottomFollowFrame = 0;
+  let bottomFollowTimer = 0;
+  let bottomFollowTarget = null;
   // 사용자가 위로 스크롤해 과거를 읽는 중인지 — 바닥 복귀 시 자동 해제
   let userReadingHistory = false;
   const USER_SCROLL_INTENT_MS = 1200;
-  const BOTTOM_FOLLOW_SNAP_DELAYS = [80, 240, 600, 1200];
+  const BOTTOM_FOLLOW_SETTLE_MS = 120;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -5005,18 +5008,30 @@
   }
 
   function snapScrollerToBottom(scroller) {
-    if (!scroller || !scroller.isConnected || userReadingHistory) return;
+    if (!active || !scroller || !scroller.isConnected || userReadingHistory) return;
     if (getBottomGap(scroller) > 1) {
       scroller.scrollTop = scroller.scrollHeight;
     }
   }
 
-  function followBottomForIncomingMessage(scroller) {
+  function flushBottomFollow() {
+    bottomFollowFrame = 0;
+    const scroller = bottomFollowTarget;
     snapScrollerToBottom(scroller);
-    requestAnimationFrame(() => snapScrollerToBottom(scroller));
-    for (const delay of BOTTOM_FOLLOW_SNAP_DELAYS) {
-      setTimeout(() => snapScrollerToBottom(scroller), delay);
+  }
+
+  function scheduleBottomFollow(scroller) {
+    bottomFollowTarget = scroller;
+    if (!bottomFollowFrame) {
+      bottomFollowFrame = requestAnimationFrame(flushBottomFollow);
     }
+    if (bottomFollowTimer) clearTimeout(bottomFollowTimer);
+    bottomFollowTimer = setTimeout(() => {
+      bottomFollowTimer = 0;
+      if (!bottomFollowFrame) {
+        bottomFollowFrame = requestAnimationFrame(flushBottomFollow);
+      }
+    }, BOTTOM_FOLLOW_SETTLE_MS);
   }
 
   function processList() {
@@ -5117,7 +5132,7 @@
     }
     // 바닥 유지 (#62) — attr 적용 직후 동기 reflow 기준으로 스냅
     if (wasNearBottom && chatScroller && chatScroller.isConnected) {
-      followBottomForIncomingMessage(chatScroller);
+      scheduleBottomFollow(chatScroller);
     }
   }
 
@@ -5139,12 +5154,21 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.31 (manual-scroll guarded bottom follow)");
+    console.info("[ccf-prose-mode] active v0.0.32 (coalesced bottom follow)");
   }
 
   function teardown() {
     active = false;
     try { observer?.disconnect(); } catch (_) {}
+    if (bottomFollowFrame) {
+      try { cancelAnimationFrame(bottomFollowFrame); } catch (_) {}
+      bottomFollowFrame = 0;
+    }
+    if (bottomFollowTimer) {
+      clearTimeout(bottomFollowTimer);
+      bottomFollowTimer = 0;
+    }
+    bottomFollowTarget = null;
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
     for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
@@ -5158,7 +5182,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.31",
+    version: "0.0.32",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
