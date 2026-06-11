@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.32
+// @version      0.3.33
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.32"),
+    version: getUserscriptVersion("0.3.33"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4904,6 +4904,8 @@
   let active = true;
   let observer = null;
   let scanScheduled = 0;
+  let tabSnapFrame = 0;
+  let tabSnapTimer = 0;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -5025,17 +5027,85 @@
     });
   }
 
+  function isChatTabLike(target) {
+    const el = target instanceof Element ? target : target?.parentElement;
+    const tab = el?.closest?.('[role="tab"], .MuiTab-root');
+    if (tab) return true;
+    const selected = el?.closest?.("[aria-selected]");
+    return !!selected?.closest?.('[role="tablist"], .MuiTabs-root');
+  }
+
+  function findVisibleChatScroller() {
+    const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
+      .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
+      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"))
+      .filter((li) => li.offsetParent !== null);
+    const anchor = messages[messages.length - 1];
+    if (!anchor) return null;
+    for (let el = anchor.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY || "";
+      if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function snapVisibleChatTabToBottom() {
+    tabSnapFrame = 0;
+    if (!active) return;
+    const scroller = findVisibleChatScroller();
+    if (scroller?.isConnected) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }
+
+  function scheduleTabBottomSnap() {
+    if (!active) return;
+    if (!tabSnapFrame) {
+      tabSnapFrame = requestAnimationFrame(snapVisibleChatTabToBottom);
+    }
+    if (tabSnapTimer) clearTimeout(tabSnapTimer);
+    tabSnapTimer = setTimeout(() => {
+      tabSnapTimer = 0;
+      if (!tabSnapFrame) {
+        tabSnapFrame = requestAnimationFrame(snapVisibleChatTabToBottom);
+      }
+    }, 160);
+  }
+
+  function handlePotentialChatTabActivation(event) {
+    if (isChatTabLike(event.target)) scheduleTabBottomSnap();
+  }
+
+  function handlePotentialChatTabKeydown(event) {
+    if (!["Enter", " ", "Spacebar", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    if (isChatTabLike(event.target)) scheduleTabBottomSnap();
+  }
+
   function start() {
     injectStyle();
+    document.addEventListener("click", handlePotentialChatTabActivation, true);
+    document.addEventListener("keydown", handlePotentialChatTabKeydown, true);
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.34 (native chat scroll)");
+    console.info("[ccf-prose-mode] active v0.0.35 (tab-only bottom snap)");
   }
 
   function teardown() {
     active = false;
     try { observer?.disconnect(); } catch (_) {}
+    document.removeEventListener("click", handlePotentialChatTabActivation, true);
+    document.removeEventListener("keydown", handlePotentialChatTabKeydown, true);
+    if (tabSnapFrame) {
+      try { cancelAnimationFrame(tabSnapFrame); } catch (_) {}
+      tabSnapFrame = 0;
+    }
+    if (tabSnapTimer) {
+      clearTimeout(tabSnapTimer);
+      tabSnapTimer = 0;
+    }
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
     for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
@@ -5049,7 +5119,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.34",
+    version: "0.0.35",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
