@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.27
+// @version      0.3.28
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.27"),
+    version: getUserscriptVersion("0.3.28"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4907,8 +4907,9 @@
   // 바닥 스냅 가드 상태 — 새 메시지 감지 + 최근 위로 스크롤 여부
   let prevLastMessageLi = null;
   let prevMessageCount = -1;
-  let lastUserScrollUpAt = 0;
   let prevChatScroller = null;
+  // 사용자가 위로 스크롤해 과거를 읽는 중인지 — 바닥 복귀 시 자동 해제
+  let userReadingHistory = false;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4999,18 +5000,26 @@
     // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
     const lastLi = visibleMessages[visibleMessages.length - 1] || messages[messages.length - 1];
     const hasNewMessage = lastLi !== prevLastMessageLi || messages.length !== prevMessageCount;
-    // 탭 전환 등으로 리스트가 통째로 재렌더되면 (#88) 이전 마지막 LI가 DOM에서
-    // 분리됨 — 이때는 스크롤 거리와 무관하게 최신 메시지(바닥)로 이동.
-    const listReplaced = prevLastMessageLi !== null && !prevLastMessageLi.isConnected;
     prevLastMessageLi = lastLi;
     prevMessageCount = messages.length;
     // 보이는 스크롤러가 바뀜 = 탭 전환 — 거리 무관 바닥 스냅 (#88)
     const scrollerChanged = !!chatScroller && chatScroller !== prevChatScroller;
     prevChatScroller = chatScroller || prevChatScroller;
-    const recentlyScrolledUp = Date.now() - lastUserScrollUpAt < 1500;
-    const wasNearBottom = hasNewMessage && !recentlyScrolledUp && !!chatScroller &&
-      (scrollerChanged || listReplaced ||
-        chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
+    if (scrollerChanged) {
+      userReadingHistory = false; // 탭 전환 — 최신 메시지 기대
+      if (chatScroller && !chatScroller.__ccfSnapScrollBound) {
+        chatScroller.__ccfSnapScrollBound = true;
+        let lastTop = chatScroller.scrollTop;
+        chatScroller.addEventListener("scroll", () => {
+          const top = chatScroller.scrollTop;
+          const gap = chatScroller.scrollHeight - top - chatScroller.clientHeight;
+          if (top < lastTop - 1) userReadingHistory = true; // 위로 이동 = 읽는 중
+          if (gap <= 16) userReadingHistory = false;       // 바닥 복귀 = 추적 재개
+          lastTop = top;
+        }, { passive: true });
+      }
+    }
+    const wasNearBottom = hasNewMessage && !userReadingHistory && !!chatScroller;
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5070,12 +5079,8 @@
     injectStyle();
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
-    // 위로 휠 = 과거 로그 읽기 의도 — 잠시 바닥 스냅 금지
-    window.addEventListener("wheel", (event) => {
-      if (event.deltaY < 0) lastUserScrollUpAt = Date.now();
-    }, { passive: true, capture: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.29 (visible-tab scroller + tab switch snap)");
+    console.info("[ccf-prose-mode] active v0.0.30 (reading-history aware bottom follow)");
   }
 
   function teardown() {
@@ -5094,7 +5099,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.29",
+    version: "0.0.30",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
