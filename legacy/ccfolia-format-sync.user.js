@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.86
+// @version      0.0.87
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.86 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.87 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -5518,10 +5518,9 @@
     const context = options.reuseContext === true && inlinePopoverState?.kind === "style-clipboard"
       ? inlinePopoverState.context
       : getInlineStyleClipboardContext(toolbar);
-    if (!context?.selection || context.selection.start === context.selection.end) {
-      alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uAC70\uB098 \uBD88\uB7EC\uC62C \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
-      return false;
-    }
+    // \uC120\uD0DD \uC5C6\uC774\uB3C4 \uBAA8\uB2EC\uC740 \uC5F0\uB2E4 (#70) \u2014 \uBAA9\uB85D \uD655\uC778/\uC0AD\uC81C\uB294 \uC120\uD0DD \uBD88\uD544\uC694.
+    // \uCD94\uAC00/\uC801\uC6A9 \uC561\uC158\uC774 \uAC01\uC790 selection\uC744 \uAC80\uC0AC\uD55C\uB2E4.
+    if (!context) return false;
 
     document.querySelectorAll(".ccf-inline-popover.open").forEach((popover) => {
       if (!toolbar.contains(popover)) {
