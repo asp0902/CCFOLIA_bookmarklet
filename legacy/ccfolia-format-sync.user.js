@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.89
+// @version      0.0.90
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.89 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.90 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3502,6 +3502,10 @@
       }
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
       .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; }
+      .ccf-style-preset-title-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 4px;
+      }
+      .ccf-style-preset-title-row .ccf-style-preset-remove { font-size: 16px; }
       .ccf-style-builder { display: flex; flex-direction: column; gap: 4px; }
       .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
       .ccf-style-builder-row .ccf-toggle {
@@ -4411,6 +4415,7 @@
           if (on) builderToggle.removeAttribute("data-active");
           else builderToggle.setAttribute("data-active", "1");
         }
+        updateStyleBuilderPreview(builderToggle.closest(".ccf-inline-popover"));
         return;
       }
 
@@ -5585,13 +5590,16 @@
     const presets = readStylePresets();
     const rows = presets.map((p, i) => `
       <div class="ccf-style-preset-row">
-        <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9">${escapeHtml(p.name)}</button>
+        <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9" style="${escapeHtml(stylePresetPreviewCss(p.style, p.align))}">${escapeHtml(p.name)}</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
       </div>
     `).join("");
     popover.innerHTML = `
-      <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B</div>
-      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798\uC5D0\uC11C \uC11C\uC2DD\uC744 \uAD6C\uC131\uD574 \uCD94\uAC00\uD558\uC138\uC694.</div>'}
+      <div class="ccf-style-preset-title-row">
+        <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B</div>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add" title="\uAD6C\uC131\uD55C \uC11C\uC2DD\uC744 \uD504\uB9AC\uC14B\uC73C\uB85C \uCD94\uAC00" aria-label="\uD504\uB9AC\uC14B \uCD94\uAC00">+</button>
+      </div>
+      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798\uC5D0\uC11C \uC11C\uC2DD\uC744 \uAD6C\uC131\uD574 + \uB85C \uCD94\uAC00\uD558\uC138\uC694.</div>'}
       <div class="ccf-style-builder" data-style-builder-host>
         <div class="ccf-style-builder-row">
           <button type="button" class="ccf-toggle" data-style-builder="bold" title="\uAD75\uAC8C"><b>B</b></button>
@@ -5603,19 +5611,25 @@
           <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
         </div>
         <div class="ccf-style-builder-row">
-          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="checkbox" data-style-builder-color-on>\uAE00\uC790<input type="color" data-style-builder-color value="#ffffff"></label>
-          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="checkbox" data-style-builder-bg-on>\uBC30\uACBD<input type="color" data-style-builder-bg value="#000000"></label>
+          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9">\uAE00\uC790<input type="color" data-style-builder-color value="#ffffff"></label>
+          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9">\uBC30\uACBD<input type="color" data-style-builder-bg value="#000000"></label>
           <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="\uD06C\uAE30" title="\uAE00\uC790 \uD06C\uAE30(px)">
         </div>
       </div>
       <div class="ccf-style-preset-add-row">
-        <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984" spellcheck="false">
-        <button type="button" class="ccf-btn primary" data-inline-style-action="add">\uCD94\uAC00</button>
+        <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984 (\uBBF8\uB9AC\uBCF4\uAE30)" spellcheck="false">
       </div>
       <div class="ccf-inline-popover-actions">
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
       </div>
     `;
+    // \uC0C9/\uD06C\uAE30 \uC785\uB825 \u2014 \uB9CC\uC9C0\uBA74 \uC801\uC6A9 \uB300\uC0C1\uC73C\uB85C \uD45C\uC2DC(data-touched) + \uC774\uB984 \uC785\uB825\uCE78 \uBBF8\uB9AC\uBCF4\uAE30 \uAC31\uC2E0 (#70)
+    popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size]").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        inp.setAttribute("data-touched", "1");
+        updateStyleBuilderPreview(popover);
+      });
+    });
     // 레이아웃에 끼지 않는 부유 팝업(fixed) — 스크롤바 생성 방지 (#70)
     popover.classList.add("ccf-inline-float-popover", "open");
     popover.setAttribute("aria-hidden", "false");
@@ -10175,25 +10189,51 @@
     }
   }
 
-  // 팝업 내 서식 빌더 상태 수집 (#70)
+  // 팝업 내 서식 빌더 상태 수집 (#70) — 색상은 picker를 만진(data-touched) 경우만 포함
   function collectStyleBuilderDraft(popover) {
     if (!(popover instanceof HTMLElement)) return { style: {}, align: "left" };
     const style = {};
     popover.querySelectorAll('[data-style-builder][data-active="1"]').forEach((b) => {
       style[b.getAttribute("data-style-builder")] = true;
     });
-    if (popover.querySelector("[data-style-builder-color-on]")?.checked) {
-      const v = popover.querySelector("[data-style-builder-color]")?.value;
-      if (v) style.color = v;
+    const colorInput = popover.querySelector("[data-style-builder-color]");
+    if (colorInput?.getAttribute("data-touched") === "1" && colorInput.value) {
+      style.color = colorInput.value;
     }
-    if (popover.querySelector("[data-style-builder-bg-on]")?.checked) {
-      const v = popover.querySelector("[data-style-builder-bg]")?.value;
-      if (v) style.backgroundColor = v;
+    const bgInput = popover.querySelector("[data-style-builder-bg]");
+    if (bgInput?.getAttribute("data-touched") === "1" && bgInput.value) {
+      style.backgroundColor = bgInput.value;
     }
     const size = parseInt(popover.querySelector("[data-style-builder-size]")?.value, 10);
     if (Number.isFinite(size) && size > 0) style.fontSize = `${size}px`;
     const align = popover.querySelector('[data-style-builder-align][data-active="1"]')?.getAttribute("data-style-builder-align") || "left";
     return { style: cleanupStyle(style), align };
+  }
+
+  // 프리셋/빌더 서식 → 미리보기용 inline CSS 문자열 (#70)
+  function stylePresetPreviewCss(style = {}, align = "left") {
+    const parts = [];
+    if (style.bold) parts.push("font-weight:700");
+    if (style.italic) parts.push("font-style:italic");
+    const deco = [style.underline && "underline", style.strike && "line-through"].filter(Boolean).join(" ");
+    if (deco) parts.push(`text-decoration:${deco}`);
+    if (style.color) parts.push(`color:${style.color}`);
+    if (style.backgroundColor) parts.push(`background-color:${style.backgroundColor}`);
+    const sizePx = parseInt(style.fontSize, 10);
+    if (Number.isFinite(sizePx) && sizePx > 0) parts.push(`font-size:${Math.min(sizePx, 20)}px`);
+    if (align && align !== "left") parts.push(`text-align:${align}`);
+    return parts.join(";");
+  }
+
+  // 이름 입력칸에 현재 빌더 서식 실시간 미리보기 (#70)
+  function updateStyleBuilderPreview(popover) {
+    if (!(popover instanceof HTMLElement)) return;
+    const input = popover.querySelector("[data-style-preset-name]");
+    if (!(input instanceof HTMLElement)) return;
+    const draft = collectStyleBuilderDraft(popover);
+    input.style.cssText = "";
+    const css = stylePresetPreviewCss(draft.style, draft.align);
+    if (css) input.style.cssText = css;
   }
 
   function addStylePresetFromBuilder(name, draft) {
