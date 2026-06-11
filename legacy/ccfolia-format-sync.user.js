@@ -3479,6 +3479,29 @@
         height: 0;
       }
 
+      /* 서식 프리셋 미니모달 (#70) */
+      .ccf-style-preset-row {
+        display: flex; align-items: center; gap: 4px; margin: 2px 0;
+      }
+      .ccf-style-preset-apply {
+        all: unset; box-sizing: border-box; cursor: pointer;
+        flex: 1; min-width: 0; padding: 5px 8px; border-radius: 6px;
+        background: rgba(255, 255, 255, 0.06); color: #fff;
+        font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .ccf-style-preset-apply:hover { background: rgba(255, 255, 255, 0.14); }
+      .ccf-style-preset-remove {
+        all: unset; box-sizing: border-box; cursor: pointer;
+        width: 22px; height: 22px; border-radius: 6px; flex: 0 0 22px;
+        display: inline-grid; place-items: center;
+        color: rgba(255, 255, 255, 0.6); font-size: 14px;
+      }
+      .ccf-style-preset-remove:hover { background: rgba(244, 67, 54, 0.25); color: #fff; }
+      .ccf-style-preset-add-row {
+        display: flex; align-items: center; gap: 4px; margin-top: 6px;
+      }
+      .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
+
       .ccf-inline-size-input {
         width: 44px;
         height: 30px;
@@ -4361,14 +4384,32 @@
         const state = inlinePopoverState;
         if (!state || state.toolbar !== toolbar || state.kind !== "style-clipboard") return;
         const action = styleAction.getAttribute("data-inline-style-action");
-        const applied = action === "save"
-          ? saveStyleClipboardFromContext(state.context)
-          : applyStyleClipboardToContext(state.context);
-        if (applied) {
-          closeInlinePopover(toolbar, { restoreFocus: false });
-          restoreRoomSelectionSoon(state.editor, state.selection);
-          showInlineToolbarSelectionHighlight(toolbar);
-          updateInlineToolbarVisuals(toolbar);
+        // 서식 프리셋 액션 (#70): add / apply / remove
+        if (action === "add") {
+          const nameInput = state.popover?.querySelector("[data-style-preset-name]");
+          if (addStylePresetFromContext(state.context, nameInput?.value || "")) {
+            openInlineStyleClipboardPopover(toolbar, { reuseContext: true }); // 목록 갱신
+          }
+          return;
+        }
+        if (action === "remove") {
+          const idx = Number(styleAction.getAttribute("data-preset-index"));
+          const preset = readStylePresets()[idx];
+          if (preset && removeStylePreset(preset.name)) {
+            openInlineStyleClipboardPopover(toolbar, { reuseContext: true }); // 목록 갱신
+          }
+          return;
+        }
+        if (action === "apply") {
+          const idx = Number(styleAction.getAttribute("data-preset-index"));
+          const preset = readStylePresets()[idx];
+          if (preset && applyStylePresetToContext(state.context, preset)) {
+            closeInlinePopover(toolbar, { restoreFocus: false });
+            restoreRoomSelectionSoon(state.editor, state.selection);
+            showInlineToolbarSelectionHighlight(toolbar);
+            updateInlineToolbarVisuals(toolbar);
+          }
+          return;
         }
         return;
       }
@@ -5472,8 +5513,11 @@
     return true;
   }
 
-  function openInlineStyleClipboardPopover(toolbar) {
-    const context = getInlineStyleClipboardContext(toolbar);
+  function openInlineStyleClipboardPopover(toolbar, options = {}) {
+    // \uBAA9\uB85D \uAC31\uC2E0 \uC7AC\uD638\uCD9C \uC2DC selection\uC774 \uD480\uB824 \uC788\uC744 \uC218 \uC788\uC74C \u2014 \uAE30\uC874 context \uC7AC\uC0AC\uC6A9
+    const context = options.reuseContext === true && inlinePopoverState?.kind === "style-clipboard"
+      ? inlinePopoverState.context
+      : getInlineStyleClipboardContext(toolbar);
     if (!context?.selection || context.selection.start === context.selection.end) {
       alert("\uC11C\uC2DD\uC744 \uC800\uC7A5\uD558\uAC70\uB098 \uBD88\uB7EC\uC62C \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
       return false;
@@ -5492,16 +5536,23 @@
     popover.classList.remove("ccf-inline-narrator-popover");
     popover.style.left = "";
     popover.style.top = "";
-    const hasSavedStyle = !!readStyleClipboard();
+    // \uC11C\uC2DD \uD504\uB9AC\uC14B \uBBF8\uB2C8\uBAA8\uB2EC (#70) \u2014 \uBAA9\uB85D(\uD074\uB9AD=\uC801\uC6A9, \u00D7=\uC0AD\uC81C) + \uD604\uC7AC \uC11C\uC2DD \uCD94\uAC00
+    const presets = readStylePresets();
+    const rows = presets.map((p, i) => `
+      <div class="ccf-style-preset-row">
+        <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9">${escapeHtml(p.name)}</button>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
+      </div>
+    `).join("");
     popover.innerHTML = `
-      <div class="ccf-inline-popover-title">\uC11C\uC2DD \uC800\uC7A5</div>
-      <div class="ccf-code-note">${hasSavedStyle
-        ? "\uC800\uC7A5\uB41C \uC11C\uC2DD\uC744 \uC120\uD0DD \uC601\uC5ED\uC5D0 \uBD88\uB7EC\uC62C \uC218 \uC788\uC2B5\uB2C8\uB2E4."
-        : "\uC120\uD0DD \uD14D\uC2A4\uD2B8\uC758 \uC11C\uC2DD\uC744 \uBA3C\uC800 \uC800\uC7A5\uD574 \uC8FC\uC138\uC694."}</div>
+      <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B</div>
+      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC11C\uC2DD \uC788\uB294 \uD14D\uC2A4\uD2B8\uB97C \uC120\uD0DD\uD558\uACE0 \uCD94\uAC00\uD558\uC138\uC694.</div>'}
+      <div class="ccf-style-preset-add-row">
+        <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984" spellcheck="false">
+        <button type="button" class="ccf-btn primary" data-inline-style-action="add">\uCD94\uAC00</button>
+      </div>
       <div class="ccf-inline-popover-actions">
-        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uCDE8\uC18C</button>
-        <button type="button" class="ccf-btn" data-inline-style-action="save">\uC800\uC7A5</button>
-        <button type="button" class="ccf-btn primary" data-inline-style-action="load"${hasSavedStyle ? "" : " disabled"}>\uBD88\uB7EC\uC624\uAE30</button>
+        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
       </div>
     `;
     popover.classList.add("open");
@@ -9999,6 +10050,104 @@
     } catch (error) {
       return null;
     }
+  }
+
+  // ===== 서식 프리셋 (#70) — 여러 서식을 이름으로 저장/삭제/적용 =====
+  const STYLE_PRESETS_STORAGE_KEY = "ccf-format-style-presets-v1";
+
+  function readStylePresets() {
+    let list = [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STYLE_PRESETS_STORAGE_KEY) || "[]");
+      if (Array.isArray(parsed)) {
+        list = parsed.filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
+      }
+    } catch (error) { /* 손상 데이터 무시 */ }
+    // 기존 단일 클립보드 → 프리셋 1개로 마이그레이션
+    if (!list.length) {
+      const legacy = readStyleClipboard();
+      if (legacy && Object.keys(legacy.style || {}).length) {
+        list = [{ name: "저장된 서식", style: legacy.style, align: legacy.align, savedAt: Date.now() }];
+        writeStylePresets(list);
+        try { localStorage.removeItem(STYLE_CLIPBOARD_STORAGE_KEY); } catch (_) {}
+      }
+    }
+    return list;
+  }
+
+  function writeStylePresets(list) {
+    try {
+      localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(list));
+      return true;
+    } catch (error) {
+      console.error("[ccf-format-sync] writeStylePresets failed", error);
+      alert("서식을 저장하지 못했습니다.");
+      return false;
+    }
+  }
+
+  function addStylePresetFromContext(context, name) {
+    if (!context?.selection || context.selection.start === context.selection.end) {
+      alert("저장할 서식의 텍스트를 먼저 선택해 주세요.");
+      return false;
+    }
+    const cleanName = String(name || "").trim();
+    if (!cleanName) {
+      alert("프리셋 이름을 입력해 주세요.");
+      return false;
+    }
+    let preset;
+    try {
+      preset = {
+        name: cleanName,
+        style: getStyleClipboardTextStyle(context),
+        align: getStyleClipboardAlign(context),
+        savedAt: Date.now()
+      };
+    } catch (error) {
+      console.error("[ccf-format-sync] addStylePresetFromContext failed", error);
+      alert("서식을 저장하지 못했습니다.");
+      return false;
+    }
+    const list = readStylePresets().filter((p) => p.name !== cleanName);
+    list.push(preset);
+    return writeStylePresets(list);
+  }
+
+  function removeStylePreset(name) {
+    const list = readStylePresets();
+    const next = list.filter((p) => p.name !== name);
+    if (next.length === list.length) return false;
+    return writeStylePresets(next);
+  }
+
+  function applyStylePresetToContext(context, preset) {
+    if (!preset) return false;
+    if (!context?.selection || context.selection.start === context.selection.end) {
+      alert("서식을 적용할 텍스트를 먼저 선택해 주세요.");
+      return false;
+    }
+    const clearedStyle = {
+      bold: null, italic: null, underline: null, strike: null,
+      rubyText: null, tooltipText: null, codeMode: null, blur: null,
+      color: null, backgroundColor: null, backgroundImage: null,
+      fontSize: null, display: null, padding: null, margin: null,
+      borderRadius: null, border: null, letterSpacing: null,
+      lineHeight: null, textAlign: null, textShadow: null, opacity: undefined
+    };
+    const applied = commitSelectionStyleContext(context, {
+      ...clearedStyle,
+      ...cleanupStyle(preset.style || {})
+    });
+    if (!applied) return false;
+    if (context.targetEditor === context.modalEditor) {
+      setAlignmentToggle(cleanupAlign(preset.align) || "left");
+      applyCurrentModalBlockStyle({ previewOnly: true });
+      restoreModalSelectionSoon();
+    } else {
+      applyInlineAlignment(context.editor, cleanupAlign(preset.align) || "left", context.selection);
+    }
+    return true;
   }
 
   function writeStyleClipboard(value) {
