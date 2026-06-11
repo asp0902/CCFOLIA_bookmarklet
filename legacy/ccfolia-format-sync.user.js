@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.98
+// @version      0.0.99
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.98 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.99 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1076,20 +1076,23 @@
     if (!(scrollTarget instanceof HTMLElement)) return;
 
     // 1) 동기 스냅 — 다음 렌더의 거리 측정이 stale한 scrollTop을 보지 않게 즉시 반영.
-    if (scrollTarget.isConnected) {
+    if (scrollTarget.isConnected
+        && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
       scrollTarget.scrollTop = scrollTarget.scrollHeight;
     }
 
     // 2) rAF 스냅 — 본문 DOM이 추가 reflow되며 높이가 더 늘어나는 케이스 대응.
     requestAnimationFrame(() => {
-      if (scrollTarget.isConnected) {
+      if (scrollTarget.isConnected
+          && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
         scrollTarget.scrollTop = scrollTarget.scrollHeight;
       }
     });
 
     // 3) 짧은 타임아웃 — React가 비동기로 후속 update를 끼우는 경우 마지막으로 한 번 더 보정.
     setTimeout(() => {
-      if (scrollTarget.isConnected) {
+      if (scrollTarget.isConnected
+          && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
         scrollTarget.scrollTop = scrollTarget.scrollHeight;
       }
     }, 50);
@@ -1097,7 +1100,8 @@
     // 4) 이미지가 늦게 로드되면 그때 또 한 번 스냅(이미지 디코드로 추가 높이 변화).
     const scrollToBottomDeferred = () => {
       requestAnimationFrame(() => {
-        if (scrollTarget.isConnected) {
+        if (scrollTarget.isConnected
+            && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
           scrollTarget.scrollTop = scrollTarget.scrollHeight;
         }
       });
@@ -5219,13 +5223,16 @@
       for (let el = probe.parentElement; el && el !== document.documentElement; el = el.parentElement) {
         const overflowY = getComputedStyle(el).overflowY || "";
         if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
-          el.scrollTop = el.scrollHeight;
+          // 이미 바닥이면 재설정하지 않음 — CCFolia smooth scroll과의 핑퐁(흔들림) 방지
+          if (el.scrollHeight - el.scrollTop - el.clientHeight > 1) {
+            el.scrollTop = el.scrollHeight;
+          }
           return;
         }
       }
     };
     requestAnimationFrame(snap);
-    [120, 400, 800].forEach((delay) => setTimeout(snap, delay));
+    setTimeout(snap, 400);
   }
 
   function updateInlineToolbarVisuals(toolbar) {

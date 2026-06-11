@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.23
+// @version      0.3.24
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.23"),
+    version: getUserscriptVersion("0.3.24"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5024,7 +5024,9 @@
       }
     }
     // 바닥 유지 (#62) — attr 적용 직후 동기 reflow 기준으로 스냅
-    if (wasNearBottom && chatScroller && chatScroller.isConnected) {
+    if (wasNearBottom && chatScroller && chatScroller.isConnected
+      && chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight > 1) {
+      // 이미 바닥이면 재설정하지 않음 — smooth scroll과의 핑퐁(흔들림) 방지
       chatScroller.scrollTop = chatScroller.scrollHeight;
     }
   }
