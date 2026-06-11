@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.20
+// @version      0.3.21
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.20"),
+    version: getUserscriptVersion("0.3.21"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4983,6 +4983,19 @@
       // 팝오버/메뉴/다이얼로그 내부 LI는 그룹핑 대상에서 제외.
       .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
     if (!messages.length) return;
+    // #62 — 그룹핑 attr 적용으로 메시지 여백이 재배치되면 전체 높이가 변해
+    // CCFolia가 이미 맞춰둔 바닥 스크롤이 모자라게 됨. 처리 전 바닥 근처였으면
+    // 처리 후 다시 바닥으로 스냅.
+    let chatScroller = null;
+    for (let el = messages[0].parentElement; el && el !== document.documentElement; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY || "";
+      if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+        chatScroller = el;
+        break;
+      }
+    }
+    const wasNearBottom = !!chatScroller &&
+      (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 80);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5016,6 +5029,10 @@
         setOrRemove(parent, LEADER_WRAP, isLeader);
         setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart);
       }
+    }
+    // 바닥 유지 (#62) — attr 적용 직후 동기 reflow 기준으로 스냅
+    if (wasNearBottom && chatScroller && chatScroller.isConnected) {
+      chatScroller.scrollTop = chatScroller.scrollHeight;
     }
   }
 
