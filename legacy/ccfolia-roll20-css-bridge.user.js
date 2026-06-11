@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.28
+// @version      0.3.29
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.28"),
+    version: getUserscriptVersion("0.3.29"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4906,10 +4906,16 @@
   let scanScheduled = 0;
   // 바닥 스냅 가드 상태 — 새 메시지 감지 + 최근 위로 스크롤 여부
   let prevLastMessageLi = null;
+  let prevLastMessageSignature = "";
   let prevMessageCount = -1;
+  let prevVisibleMessageCount = -1;
   let prevChatScroller = null;
+  let globalScrollIntentBound = false;
+  let lastUserScrollIntentAt = 0;
   // 사용자가 위로 스크롤해 과거를 읽는 중인지 — 바닥 복귀 시 자동 해제
   let userReadingHistory = false;
+  const USER_SCROLL_INTENT_MS = 1200;
+  const BOTTOM_FOLLOW_SNAP_DELAYS = [80, 240, 600, 1200];
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4966,6 +4972,53 @@
     return null;
   }
 
+  function getMessageSignature(li) {
+    if (!li) return "";
+    const author = extractAuthor(li) || "";
+    const text = (li.innerText || li.textContent || "").replace(/\s+/g, " ").trim();
+    const mediaCount = li.querySelectorAll("img, video, canvas, .ccf-render-root").length;
+    return `${author}\u0001${text}\u0001${mediaCount}`;
+  }
+
+  function getBottomGap(scroller) {
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+  }
+
+  function markUserScrollIntent(event) {
+    if (event && event.type === "keydown") {
+      const key = event.key;
+      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"].includes(key)) return;
+    }
+    lastUserScrollIntentAt = Date.now();
+  }
+
+  function bindScrollIntent(scroller) {
+    if (scroller.__ccfSnapIntentBound) return;
+    scroller.__ccfSnapIntentBound = true;
+    scroller.addEventListener("wheel", markUserScrollIntent, { passive: true });
+    scroller.addEventListener("touchstart", markUserScrollIntent, { passive: true });
+    scroller.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
+    if (!globalScrollIntentBound) {
+      globalScrollIntentBound = true;
+      document.addEventListener("keydown", markUserScrollIntent, true);
+    }
+  }
+
+  function snapScrollerToBottom(scroller) {
+    if (!scroller || !scroller.isConnected || userReadingHistory) return;
+    if (getBottomGap(scroller) > 1) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }
+
+  function followBottomForIncomingMessage(scroller) {
+    snapScrollerToBottom(scroller);
+    requestAnimationFrame(() => snapScrollerToBottom(scroller));
+    for (const delay of BOTTOM_FOLLOW_SNAP_DELAYS) {
+      setTimeout(() => snapScrollerToBottom(scroller), delay);
+    }
+  }
+
   function processList() {
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
@@ -4999,12 +5052,19 @@
     // 새 메시지가 실제로 추가됐을 때만 + 최근에 위로 스크롤한 직후가 아닐 때만 스냅.
     // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
     const lastLi = visibleMessages[visibleMessages.length - 1] || messages[messages.length - 1];
-    const hasNewMessage = lastLi !== prevLastMessageLi || messages.length !== prevMessageCount;
+    const lastMessageSignature = getMessageSignature(lastLi);
+    const hasNewMessage = lastLi !== prevLastMessageLi
+      || lastMessageSignature !== prevLastMessageSignature
+      || messages.length !== prevMessageCount
+      || visibleMessages.length !== prevVisibleMessageCount;
     prevLastMessageLi = lastLi;
+    prevLastMessageSignature = lastMessageSignature;
     prevMessageCount = messages.length;
+    prevVisibleMessageCount = visibleMessages.length;
     // 보이는 스크롤러가 바뀜 = 탭 전환 — 거리 무관 바닥 스냅 (#88)
     const scrollerChanged = !!chatScroller && chatScroller !== prevChatScroller;
     prevChatScroller = chatScroller || prevChatScroller;
+    if (chatScroller) bindScrollIntent(chatScroller);
     if (scrollerChanged) {
       userReadingHistory = false; // 탭 전환 — 최신 메시지 기대
       if (chatScroller && !chatScroller.__ccfSnapScrollBound) {
@@ -5012,8 +5072,9 @@
         let lastTop = chatScroller.scrollTop;
         chatScroller.addEventListener("scroll", () => {
           const top = chatScroller.scrollTop;
-          const gap = chatScroller.scrollHeight - top - chatScroller.clientHeight;
-          if (top < lastTop - 1) userReadingHistory = true; // 위로 이동 = 읽는 중
+          const gap = getBottomGap(chatScroller);
+          const hasRecentUserIntent = Date.now() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_MS;
+          if (top < lastTop - 1 && hasRecentUserIntent) userReadingHistory = true; // 위로 이동 = 읽는 중
           if (gap <= 16) userReadingHistory = false;       // 바닥 복귀 = 추적 재개
           lastTop = top;
         }, { passive: true });
@@ -5055,10 +5116,8 @@
       }
     }
     // 바닥 유지 (#62) — attr 적용 직후 동기 reflow 기준으로 스냅
-    if (wasNearBottom && chatScroller && chatScroller.isConnected
-      && chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight > 1) {
-      // 이미 바닥이면 재설정하지 않음 — smooth scroll과의 핑퐁(흔들림) 방지
-      chatScroller.scrollTop = chatScroller.scrollHeight;
+    if (wasNearBottom && chatScroller && chatScroller.isConnected) {
+      followBottomForIncomingMessage(chatScroller);
     }
   }
 
@@ -5080,7 +5139,7 @@
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.30 (reading-history aware bottom follow)");
+    console.info("[ccf-prose-mode] active v0.0.31 (manual-scroll guarded bottom follow)");
   }
 
   function teardown() {
@@ -5099,7 +5158,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.30",
+    version: "0.0.31",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
