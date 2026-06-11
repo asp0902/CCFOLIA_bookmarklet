@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.88
+// @version      0.0.89
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.88 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.89 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3501,6 +3501,25 @@
         display: flex; align-items: center; gap: 4px; margin-top: 6px;
       }
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
+      .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; }
+      .ccf-style-builder { display: flex; flex-direction: column; gap: 4px; }
+      .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+      .ccf-style-builder-row .ccf-toggle {
+        min-width: 28px; width: 28px; height: 28px; padding: 0;
+        border-radius: 0; font-size: 12px;
+      }
+      .ccf-style-builder-row .ccf-toggle[data-active="1"] {
+        background: rgba(33, 150, 243, 0.35); color: #fff;
+      }
+      .ccf-style-builder-color {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; color: rgba(255, 255, 255, 0.75); cursor: pointer;
+      }
+      .ccf-style-builder-color input[type="color"] {
+        width: 24px; height: 24px; padding: 0; border: 1px solid rgba(255,255,255,0.2);
+        background: transparent; cursor: pointer;
+      }
+      .ccf-style-builder-size { width: 52px; flex: 0 0 52px; min-height: 28px; }
 
       .ccf-inline-size-input {
         width: 44px;
@@ -4378,6 +4397,23 @@
         return;
       }
 
+      // 서식 빌더 토글 (#70) — B/I/U/S는 개별 토글, 정렬은 셋 중 하나
+      const builderToggle = target.closest("[data-style-builder], [data-style-builder-align]");
+      if (builderToggle && toolbar.contains(builderToggle)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (builderToggle.hasAttribute("data-style-builder-align")) {
+          const host = builderToggle.closest("[data-style-builder-host]");
+          host?.querySelectorAll("[data-style-builder-align]").forEach((b) => b.removeAttribute("data-active"));
+          builderToggle.setAttribute("data-active", "1");
+        } else {
+          const on = builderToggle.getAttribute("data-active") === "1";
+          if (on) builderToggle.removeAttribute("data-active");
+          else builderToggle.setAttribute("data-active", "1");
+        }
+        return;
+      }
+
       const styleAction = target.closest("[data-inline-style-action]");
       if (styleAction && toolbar.contains(styleAction)) {
         event.preventDefault();
@@ -4387,8 +4423,10 @@
         const action = styleAction.getAttribute("data-inline-style-action");
         // 서식 프리셋 액션 (#70): add / apply / remove
         if (action === "add") {
-          const nameInput = state.popover?.querySelector("[data-style-preset-name]");
-          if (addStylePresetFromContext(state.context, nameInput?.value || "")) {
+          const popoverEl = state.popover;
+          const nameInput = popoverEl?.querySelector("[data-style-preset-name]");
+          const draft = collectStyleBuilderDraft(popoverEl);
+          if (addStylePresetFromBuilder(nameInput?.value || "", draft)) {
             openInlineStyleClipboardPopover(toolbar, { reuseContext: true }); // 목록 갱신
           }
           return;
@@ -4614,6 +4652,13 @@
     }
 
     if (command === "style-clipboard") {
+      // 토글 — 이미 열려 있으면 닫기 (#70)
+      if (inlinePopoverState?.kind === "style-clipboard"
+        && inlinePopoverState.toolbar === toolbar
+        && inlinePopoverState.popover?.classList.contains("open")) {
+        closeInlinePopover(toolbar, { restoreFocus: false });
+        return;
+      }
       openInlineStyleClipboardPopover(toolbar);
       return;
     }
@@ -5546,7 +5591,23 @@
     `).join("");
     popover.innerHTML = `
       <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B</div>
-      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC11C\uC2DD \uC788\uB294 \uD14D\uC2A4\uD2B8\uB97C \uC120\uD0DD\uD558\uACE0 \uCD94\uAC00\uD558\uC138\uC694.</div>'}
+      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798\uC5D0\uC11C \uC11C\uC2DD\uC744 \uAD6C\uC131\uD574 \uCD94\uAC00\uD558\uC138\uC694.</div>'}
+      <div class="ccf-style-builder" data-style-builder-host>
+        <div class="ccf-style-builder-row">
+          <button type="button" class="ccf-toggle" data-style-builder="bold" title="\uAD75\uAC8C"><b>B</b></button>
+          <button type="button" class="ccf-toggle" data-style-builder="italic" title="\uAE30\uC6B8\uC784"><i>I</i></button>
+          <button type="button" class="ccf-toggle" data-style-builder="underline" title="\uBC11\uC904"><u>U</u></button>
+          <button type="button" class="ccf-toggle" data-style-builder="strike" title="\uCDE8\uC18C\uC120"><s>S</s></button>
+          <button type="button" class="ccf-toggle" data-style-builder-align="left" data-active="1" title="\uC67C\uCABD \uC815\uB82C">\u2BC7</button>
+          <button type="button" class="ccf-toggle" data-style-builder-align="center" title="\uAC00\uC6B4\uB370 \uC815\uB82C">\u2BC8\u2BC7</button>
+          <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
+        </div>
+        <div class="ccf-style-builder-row">
+          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="checkbox" data-style-builder-color-on>\uAE00\uC790<input type="color" data-style-builder-color value="#ffffff"></label>
+          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="checkbox" data-style-builder-bg-on>\uBC30\uACBD<input type="color" data-style-builder-bg value="#000000"></label>
+          <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="\uD06C\uAE30" title="\uAE00\uC790 \uD06C\uAE30(px)">
+        </div>
+      </div>
       <div class="ccf-style-preset-add-row">
         <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984" spellcheck="false">
         <button type="button" class="ccf-btn primary" data-inline-style-action="add">\uCD94\uAC00</button>
@@ -10112,6 +10173,42 @@
       alert("서식을 저장하지 못했습니다.");
       return false;
     }
+  }
+
+  // 팝업 내 서식 빌더 상태 수집 (#70)
+  function collectStyleBuilderDraft(popover) {
+    if (!(popover instanceof HTMLElement)) return { style: {}, align: "left" };
+    const style = {};
+    popover.querySelectorAll('[data-style-builder][data-active="1"]').forEach((b) => {
+      style[b.getAttribute("data-style-builder")] = true;
+    });
+    if (popover.querySelector("[data-style-builder-color-on]")?.checked) {
+      const v = popover.querySelector("[data-style-builder-color]")?.value;
+      if (v) style.color = v;
+    }
+    if (popover.querySelector("[data-style-builder-bg-on]")?.checked) {
+      const v = popover.querySelector("[data-style-builder-bg]")?.value;
+      if (v) style.backgroundColor = v;
+    }
+    const size = parseInt(popover.querySelector("[data-style-builder-size]")?.value, 10);
+    if (Number.isFinite(size) && size > 0) style.fontSize = `${size}px`;
+    const align = popover.querySelector('[data-style-builder-align][data-active="1"]')?.getAttribute("data-style-builder-align") || "left";
+    return { style: cleanupStyle(style), align };
+  }
+
+  function addStylePresetFromBuilder(name, draft) {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) {
+      alert("프리셋 이름을 입력해 주세요.");
+      return false;
+    }
+    if (!draft || (!Object.keys(draft.style || {}).length && (draft.align || "left") === "left")) {
+      alert("저장할 서식을 하나 이상 선택해 주세요.");
+      return false;
+    }
+    const list = readStylePresets().filter((p) => p.name !== cleanName);
+    list.push({ name: cleanName, style: draft.style, align: draft.align, savedAt: Date.now() });
+    return writeStylePresets(list);
   }
 
   function addStylePresetFromContext(context, name) {
