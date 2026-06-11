@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.25
+// @version      0.3.26
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.25"),
+    version: getUserscriptVersion("0.3.26"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4995,11 +4995,15 @@
     // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
     const lastLi = messages[messages.length - 1];
     const hasNewMessage = lastLi !== prevLastMessageLi || messages.length !== prevMessageCount;
+    // 탭 전환 등으로 리스트가 통째로 재렌더되면 (#88) 이전 마지막 LI가 DOM에서
+    // 분리됨 — 이때는 스크롤 거리와 무관하게 최신 메시지(바닥)로 이동.
+    const listReplaced = prevLastMessageLi !== null && !prevLastMessageLi.isConnected;
     prevLastMessageLi = lastLi;
     prevMessageCount = messages.length;
     const recentlyScrolledUp = Date.now() - lastUserScrollUpAt < 1500;
     const wasNearBottom = hasNewMessage && !recentlyScrolledUp && !!chatScroller &&
-      (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
+      (listReplaced ||
+        chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5064,7 +5068,7 @@
       if (event.deltaY < 0) lastUserScrollUpAt = Date.now();
     }, { passive: true, capture: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.27 (bottom snap only on new message)");
+    console.info("[ccf-prose-mode] active v0.0.28 (snap to bottom on list replace)");
   }
 
   function teardown() {
@@ -5083,7 +5087,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.27",
+    version: "0.0.28",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
