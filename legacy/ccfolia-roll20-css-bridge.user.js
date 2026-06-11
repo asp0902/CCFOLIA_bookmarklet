@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.15
+// @version      0.3.16
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.15"),
+    version: getUserscriptVersion("0.3.16"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1475,7 +1475,21 @@
         if (!(item instanceof HTMLElement)) return;
         menu.appendChild(item);
         // 항목 주입으로 메뉴 높이가 커져 MUI Popover가 계산해둔 위치 아래로
-        // 삐져나와 FAB을 가림 (#20/#26). resize를 쏴서 위치 재계산 유도.
+        // 삐져나와 FAB을 가림 (#20/#26).
+        // MUI의 resize 재계산은 ~166ms debounce라 깜빡임이 보임 — paint 전에
+        // 같은 프레임에서 viewport 하단을 넘은 만큼 top을 직접 보정한다.
+        try {
+          const paper = menu.closest(".MuiPaper-root");
+          if (paper instanceof HTMLElement) {
+            const rect = paper.getBoundingClientRect();
+            const overflow = rect.bottom - (window.innerHeight - 16);
+            const top = parseFloat(paper.style.top);
+            if (overflow > 0 && Number.isFinite(top)) {
+              paper.style.top = `${Math.max(8, top - overflow)}px`;
+            }
+          }
+        } catch (_) {}
+        // 안전망: MUI 자체 재계산도 한 번 유도 (동일 위치로 수렴).
         try { window.dispatchEvent(new Event("resize")); } catch (_) {}
       }
 
