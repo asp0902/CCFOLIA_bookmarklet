@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.21
+// @version      0.3.22
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.21"),
+    version: getUserscriptVersion("0.3.22"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1275,15 +1275,8 @@
 
   function hasVisibleChatMacroMenuForEditor(editor) {
     if (!(editor instanceof HTMLTextAreaElement) || editor.getAttribute("name") !== "text") return false;
-    const controls = [editor, editor.closest?.('[role="combobox"]')]
-      .filter((control) => control instanceof HTMLElement);
-    if (controls.some((control) => {
-      if (control.getAttribute("aria-expanded") === "true") return true;
-      const activeDescendant = control.getAttribute("aria-activedescendant");
-      return !!activeDescendant && !!document.getElementById(activeDescendant);
-    })) {
-      return true;
-    }
+    // aria-expanded/aria-activedescendant는 입력칸 포커스만으로 켜지는 경우가 있어 (#86)
+    // open 버튼이 사라지는 오탐을 만들었음 — 실제로 보이는 메뉴가 있을 때만 true.
     return getChatMacroMenuCandidates(editor).some((menu) => isVisibleChatMacroMenu(menu, editor));
   }
 
