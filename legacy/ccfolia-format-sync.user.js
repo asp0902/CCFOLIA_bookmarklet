@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.96
+// @version      0.0.97
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.96 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.97 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3501,6 +3501,13 @@
         display: flex; align-items: center; gap: 4px; margin-top: 6px;
       }
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
+      .ccf-style-preset-auto-dot {
+        all: unset; box-sizing: border-box; cursor: pointer;
+        width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        margin-right: 2px;
+      }
+      .ccf-style-preset-auto-dot[data-on="1"] { background: #ff0000; border-color: #ff0000; }
       .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; width: min(380px, calc(100vw - 24px)); }
       .ccf-style-preset-title-row {
         display: flex; align-items: center; justify-content: space-between; gap: 4px;
@@ -3533,7 +3540,7 @@
         position: absolute; inset: 0; width: 100%; height: 100%;
         opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0;
       }
-      .ccf-style-builder-size { width: auto; flex: 1 1 36px; min-width: 36px; max-width: 52px; min-height: 28px; padding: 0 4px; }
+      .ccf-style-builder-size { width: auto; flex: 1 1 36px; min-width: 36px; max-width: 52px; min-height: 28px; padding: 0 4px; text-align: center; }
 
       .ccf-inline-size-input {
         width: 44px;
@@ -4460,11 +4467,18 @@
           if (preset) loadStylePresetIntoBuilder(state.popover, preset);
           return;
         }
-        if (action === "auto-toggle") {
-          const next = !isPresetAutoEnabled();
-          setPresetAutoEnabled(next);
-          styleAction.setAttribute("aria-pressed", next ? "true" : "false");
-          styleAction.textContent = `자동 ${next ? "ON" : "OFF"}`;
+        if (action === "auto") {
+          // 프리셋별 자동 적용 토글 (#70) — ON=빨간 점, OFF=빈 점
+          const idx = Number(styleAction.getAttribute("data-preset-index"));
+          const list = readStylePresets();
+          const preset = list[idx];
+          if (!preset) return;
+          preset.auto = preset.auto === false;
+          if (writeStylePresets(list)) {
+            const on = preset.auto !== false;
+            styleAction.setAttribute("data-on", on ? "1" : "0");
+            styleAction.setAttribute("title", `자동 적용 ${on ? "ON" : "OFF"} — 클릭으로 전환`);
+          }
           return;
         }
         if (action === "apply") {
@@ -5613,6 +5627,7 @@
     const presets = readStylePresets();
     const rows = presets.map((p, i) => `
       <div class="ccf-style-preset-row">
+        <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${i}" data-on="${p.auto === false ? "0" : "1"}" title="자동 적용 ${p.auto === false ? "OFF" : "ON"} — 클릭으로 전환" aria-label="자동 적용 전환"></button>
         <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9" style="${escapeHtml(stylePresetPreviewCss(p.style, p.align))}">${escapeHtml(p.name)}</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${i}" title="\uD3B8\uC9D1 \u2014 \uC11C\uC2DD\uC744 \uC544\uB798 \uBE4C\uB354\uC5D0 \uBD88\uB7EC\uC634" aria-label="\uD3B8\uC9D1">\u270E</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
@@ -5642,7 +5657,6 @@
         <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984 (\uBBF8\uB9AC\uBCF4\uAE30)" spellcheck="false">
       </div>
       <div class="ccf-inline-popover-actions">
-        <button type="button" class="ccf-btn ccf-style-preset-auto" data-inline-style-action="auto-toggle" aria-pressed="${isPresetAutoEnabled() ? "true" : "false"}" title="메시지 전송 시 프리셋 이름과 같은 텍스트에 서식 자동 적용">자동 ${isPresetAutoEnabled() ? "ON" : "OFF"}</button>
         <button type="button" class="ccf-btn primary" data-inline-style-action="add">저장</button>
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
       </div>
@@ -10311,9 +10325,10 @@
   // 메시지 텍스트에서 프리셋 이름과 일치하는 구간에 프리셋 서식 run 생성 (#70)
   function buildPresetNameRuns(text) {
     if (typeof text !== "string" || !text) return [];
-    if (!isPresetAutoEnabled()) return [];
+
     const runs = [];
     for (const preset of readStylePresets()) {
+      if (preset.auto === false) continue; // 프리셋별 자동 적용 OFF (#70)
       const name = String(preset.name || "");
       if (!name) continue;
       const style = cleanupStyle(preset.style || {});
