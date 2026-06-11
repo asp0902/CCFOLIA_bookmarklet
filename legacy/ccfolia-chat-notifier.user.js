@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.84
+// @version      0.2.85
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -7473,10 +7473,11 @@
       button[data-ccf-youtube-bgm-registered="true"]::after {
         content: "";
         position: absolute;
-        right: -4px;
-        top: -4px;
-        width: 10px;
-        height: 10px;
+        /* 버튼 바깥(-4px)에 그리면 옆 탭의 뱃지처럼 보임 (#67) — 안쪽 우상단에 표시 */
+        right: 2px;
+        top: 2px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
         background: #ff0000;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
