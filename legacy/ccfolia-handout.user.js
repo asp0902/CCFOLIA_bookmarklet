@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.64
+// @version      0.1.65
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.64",
+    version: "0.1.65",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1289,6 +1289,7 @@
     (document.body || document.documentElement).appendChild(root);
     // capture: false 로 등록 — pointerdown 캡처와 충돌 회피
     shadow.addEventListener("click", onShadowClick);
+    shadow.addEventListener("dblclick", onShadowDblClick);
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
     shadow.addEventListener("pointerdown", onShadowPointerDown);
@@ -3695,6 +3696,63 @@
     updateUnmergeButtonVisibility();
   }
 
+  // alias chip 더블클릭 — 대표 승격 + 권한 키 마이그레이션 (#15/#31)
+  function onShadowDblClick(event) {
+    const chip = event.target.closest?.(".pl-alias-chip");
+    if (!chip) return;
+    event.preventDefault();
+    promotePlAliasToRepresentative(chip);
+  }
+
+  function promotePlAliasToRepresentative(chip) {
+    if (!(chip instanceof HTMLElement)) return;
+    const row = chip.closest(".pl-row");
+    const item = readPlRow(row);
+    const alias = chip.dataset.alias || chip.textContent.trim();
+    if (!row || !item || !alias) return;
+    if (alias === item.name) return;
+    if (!confirm(`"${alias}"을(를) 대표 이름으로 변경할까요?\n기존 대표 "${item.name}"은(는) 별칭으로 내려가고, 핸드아웃 권한도 새 대표 이름으로 이전됩니다.`)) return;
+    const oldName = item.name;
+    item.aliases = [...new Set([oldName, ...(item.aliases || []).filter((a) => a && a !== alias)])].filter(Boolean);
+    item.name = alias;
+    writePlRow(row, item);
+    migrateHandoutPermissionKey(oldName, alias);
+    toast(`대표가 "${alias}"(으)로 변경되었습니다. 저장 버튼으로 확정하세요.`);
+  }
+
+  // 모든 핸드아웃의 권한 키를 oldName → newName 으로 이전. 둘 다 있으면 OR 병합.
+  function migrateHandoutPermissionKey(oldName, newName) {
+    const oldKey = removeSpaces(oldName || "");
+    const newKey = removeSpaces(newName || "");
+    if (!oldKey || !newKey || oldKey === newKey) return;
+    let changed = 0;
+    for (const h of state.data.handouts) {
+      const perms = h.permissions;
+      if (!perms || typeof perms !== "object" || !perms[oldKey]) continue;
+      const oldPerm = perms[oldKey];
+      const existing = perms[newKey];
+      perms[newKey] = existing
+        ? {
+            view: !!(existing.view || oldPerm.view),
+            secret: !!(existing.secret || oldPerm.secret),
+            edit: !!(existing.edit || oldPerm.edit)
+          }
+        : { ...oldPerm };
+      delete perms[oldKey];
+      changed += 1;
+      // GM 소유 핸드아웃은 Firestore에도 반영
+      if (!h._remote) {
+        pushHandoutToFirestore(h).catch((error) => {
+          console.warn("[ccf-handout] permission migration push 실패:", error);
+        });
+      }
+    }
+    if (changed) {
+      saveAll(state.data).catch(() => {});
+      console.info("[ccf-handout] permission key migrated:", oldKey, "→", newKey, `(${changed}건)`);
+    }
+  }
+
   function updateUnmergeButtonVisibility() {
     const overlay = state.shadow?.querySelector(".pl-modal-overlay");
     if (!overlay) return;
@@ -4203,7 +4261,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.64 (suite registration)");
+    console.info("[ccf-handout] init — version 0.1.65 (alias promote to representative)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
