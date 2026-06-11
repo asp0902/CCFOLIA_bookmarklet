@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.95
+// @version      0.0.96
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.95 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.96 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -4460,6 +4460,13 @@
           if (preset) loadStylePresetIntoBuilder(state.popover, preset);
           return;
         }
+        if (action === "auto-toggle") {
+          const next = !isPresetAutoEnabled();
+          setPresetAutoEnabled(next);
+          styleAction.setAttribute("aria-pressed", next ? "true" : "false");
+          styleAction.textContent = `자동 ${next ? "ON" : "OFF"}`;
+          return;
+        }
         if (action === "apply") {
           const idx = Number(styleAction.getAttribute("data-preset-index"));
           const preset = readStylePresets()[idx];
@@ -5628,18 +5635,20 @@
           <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
           <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="color" data-style-builder-color value="#ffffff"></label>
           <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="color" data-style-builder-bg value="#000000"></label>
-          <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="\uD06C\uAE30" title="\uAE00\uC790 \uD06C\uAE30(px)">
+          <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="${(() => { try { return Math.round(parseFloat(getComputedStyle(context.editor).fontSize)) || 14; } catch (_) { return 14; } })()}" title="\uAE00\uC790 \uD06C\uAE30(px)">
         </div>
       </div>
       <div class="ccf-style-preset-add-row">
         <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984 (\uBBF8\uB9AC\uBCF4\uAE30)" spellcheck="false">
       </div>
       <div class="ccf-inline-popover-actions">
+        <button type="button" class="ccf-btn ccf-style-preset-auto" data-inline-style-action="auto-toggle" aria-pressed="${isPresetAutoEnabled() ? "true" : "false"}" title="메시지 전송 시 프리셋 이름과 같은 텍스트에 서식 자동 적용">자동 ${isPresetAutoEnabled() ? "ON" : "OFF"}</button>
         <button type="button" class="ccf-btn primary" data-inline-style-action="add">저장</button>
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
       </div>
     `;
     // \uC0C9/\uD06C\uAE30 \uC785\uB825 \u2014 \uB9CC\uC9C0\uBA74 \uC801\uC6A9 \uB300\uC0C1\uC73C\uB85C \uD45C\uC2DC(data-touched) + \uC774\uB984 \uC785\uB825\uCE78 \uBBF8\uB9AC\uBCF4\uAE30 \uAC31\uC2E0 (#70)
+    bindStylePresetDragSort(popover, toolbar); // 프리셋 행 드래그 정렬 (#70)
     popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size]").forEach((inp) => {
       // 색 칩 초기 표시
       if (inp.type === "color") {
@@ -10248,9 +10257,61 @@
     return parts.join(";");
   }
 
+  // 프리셋 자동 반영 ON/OFF (#70)
+  const STYLE_PRESETS_AUTO_KEY = "ccf-format-style-presets-auto-v1";
+
+  function isPresetAutoEnabled() {
+    try { return localStorage.getItem(STYLE_PRESETS_AUTO_KEY) !== "0"; }
+    catch (_) { return true; }
+  }
+
+  function setPresetAutoEnabled(on) {
+    try { localStorage.setItem(STYLE_PRESETS_AUTO_KEY, on ? "1" : "0"); } catch (_) {}
+  }
+
+  // 프리셋 행 드래그로 순서 변경 (#70)
+  function bindStylePresetDragSort(popover, toolbar) {
+    if (!(popover instanceof HTMLElement)) return;
+    let dragIndex = null;
+    popover.querySelectorAll(".ccf-style-preset-row").forEach((row, i) => {
+      row.setAttribute("draggable", "true");
+      row.setAttribute("data-row-index", String(i));
+    });
+    popover.addEventListener("dragstart", (event) => {
+      const row = event.target.closest?.(".ccf-style-preset-row");
+      if (!row) return;
+      dragIndex = Number(row.getAttribute("data-row-index"));
+      try { event.dataTransfer.effectAllowed = "move"; } catch (_) {}
+    });
+    popover.addEventListener("dragover", (event) => {
+      if (dragIndex === null) return;
+      if (!event.target.closest?.(".ccf-style-preset-row")) return;
+      event.preventDefault();
+    });
+    popover.addEventListener("drop", (event) => {
+      if (dragIndex === null) return;
+      const row = event.target.closest?.(".ccf-style-preset-row");
+      if (!row) { dragIndex = null; return; }
+      event.preventDefault();
+      const dropIndex = Number(row.getAttribute("data-row-index"));
+      if (Number.isFinite(dropIndex) && dropIndex !== dragIndex) {
+        const list = readStylePresets();
+        const [moved] = list.splice(dragIndex, 1);
+        if (moved) {
+          list.splice(dropIndex, 0, moved);
+          writeStylePresets(list);
+          openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+        }
+      }
+      dragIndex = null;
+    });
+    popover.addEventListener("dragend", () => { dragIndex = null; });
+  }
+
   // 메시지 텍스트에서 프리셋 이름과 일치하는 구간에 프리셋 서식 run 생성 (#70)
   function buildPresetNameRuns(text) {
     if (typeof text !== "string" || !text) return [];
+    if (!isPresetAutoEnabled()) return [];
     const runs = [];
     for (const preset of readStylePresets()) {
       const name = String(preset.name || "");
