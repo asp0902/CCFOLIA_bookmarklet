@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.26
+// @version      0.3.27
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.26"),
+    version: getUserscriptVersion("0.3.27"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4908,6 +4908,7 @@
   let prevLastMessageLi = null;
   let prevMessageCount = -1;
   let lastUserScrollUpAt = 0;
+  let prevChatScroller = null;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4984,7 +4985,10 @@
     // CCFolia가 이미 맞춰둔 바닥 스크롤이 모자라게 됨. 처리 전 바닥 근처였으면
     // 처리 후 다시 바닥으로 스냅.
     let chatScroller = null;
-    for (let el = messages[0].parentElement; el && el !== document.documentElement; el = el.parentElement) {
+    // 탭마다 별도 스크롤러 — 숨겨진 탭이 아니라 보이는 메시지 기준으로 탐색 (#88)
+    const visibleMessages = messages.filter((li) => li.offsetParent !== null);
+    const anchorMsg = visibleMessages[0] || messages[0];
+    for (let el = anchorMsg.parentElement; el && el !== document.documentElement; el = el.parentElement) {
       const overflowY = getComputedStyle(el).overflowY || "";
       if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
         chatScroller = el;
@@ -4993,16 +4997,19 @@
     }
     // 새 메시지가 실제로 추가됐을 때만 + 최근에 위로 스크롤한 직후가 아닐 때만 스냅.
     // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
-    const lastLi = messages[messages.length - 1];
+    const lastLi = visibleMessages[visibleMessages.length - 1] || messages[messages.length - 1];
     const hasNewMessage = lastLi !== prevLastMessageLi || messages.length !== prevMessageCount;
     // 탭 전환 등으로 리스트가 통째로 재렌더되면 (#88) 이전 마지막 LI가 DOM에서
     // 분리됨 — 이때는 스크롤 거리와 무관하게 최신 메시지(바닥)로 이동.
     const listReplaced = prevLastMessageLi !== null && !prevLastMessageLi.isConnected;
     prevLastMessageLi = lastLi;
     prevMessageCount = messages.length;
+    // 보이는 스크롤러가 바뀜 = 탭 전환 — 거리 무관 바닥 스냅 (#88)
+    const scrollerChanged = !!chatScroller && chatScroller !== prevChatScroller;
+    prevChatScroller = chatScroller || prevChatScroller;
     const recentlyScrolledUp = Date.now() - lastUserScrollUpAt < 1500;
     const wasNearBottom = hasNewMessage && !recentlyScrolledUp && !!chatScroller &&
-      (listReplaced ||
+      (scrollerChanged || listReplaced ||
         chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
@@ -5068,7 +5075,7 @@
       if (event.deltaY < 0) lastUserScrollUpAt = Date.now();
     }, { passive: true, capture: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.28 (snap to bottom on list replace)");
+    console.info("[ccf-prose-mode] active v0.0.29 (visible-tab scroller + tab switch snap)");
   }
 
   function teardown() {
@@ -5087,7 +5094,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.28",
+    version: "0.0.29",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
