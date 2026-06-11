@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.87
+// @version      0.0.88
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.87 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.88 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3552,7 +3552,8 @@
         display: flex;
       }
 
-      .ccf-inline-popover.ccf-inline-narrator-popover {
+      .ccf-inline-popover.ccf-inline-narrator-popover,
+      .ccf-inline-popover.ccf-inline-float-popover {
         position: fixed;
         inset: auto;
         width: min(320px, calc(100vw - 24px));
@@ -5532,7 +5533,7 @@
 
     const popover = toolbar.querySelector("[data-inline-popover]");
     if (!popover) return false;
-    popover.classList.remove("ccf-inline-narrator-popover");
+    popover.classList.remove("ccf-inline-narrator-popover", "ccf-inline-float-popover");
     popover.style.left = "";
     popover.style.top = "";
     // \uC11C\uC2DD \uD504\uB9AC\uC14B \uBBF8\uB2C8\uBAA8\uB2EC (#70) \u2014 \uBAA9\uB85D(\uD074\uB9AD=\uC801\uC6A9, \u00D7=\uC0AD\uC81C) + \uD604\uC7AC \uC11C\uC2DD \uCD94\uAC00
@@ -5554,7 +5555,8 @@
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
       </div>
     `;
-    popover.classList.add("open");
+    // 레이아웃에 끼지 않는 부유 팝업(fixed) — 스크롤바 생성 방지 (#70)
+    popover.classList.add("ccf-inline-float-popover", "open");
     popover.setAttribute("aria-hidden", "false");
     inlinePopoverState = {
       kind: "style-clipboard",
@@ -5564,8 +5566,35 @@
       editor: context.editor,
       selection: context.selection
     };
+    positionStylePresetPopover(toolbar, popover);
+    requestAnimationFrame(() => positionStylePresetPopover(toolbar, popover));
     showInlineToolbarSelectionHighlight(toolbar);
     return true;
+  }
+
+  // Sv 버튼 기준으로 fixed 팝업 위치 계산 — 아래 공간 부족하면 위로.
+  function positionStylePresetPopover(toolbar, popover) {
+    const anchor = toolbar?.querySelector?.('[data-inline-command="style-clipboard"]');
+    if (!(popover instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !popover.classList.contains("open")) {
+      return;
+    }
+    const MARGIN = 12;
+    const GAP = 6;
+    const anchorRect = anchor.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const width = popoverRect.width || Math.min(320, window.innerWidth - MARGIN * 2);
+    const height = popoverRect.height || 200;
+    const left = Math.min(
+      Math.max(MARGIN, window.innerWidth - width - MARGIN),
+      Math.max(MARGIN, anchorRect.right - width)
+    );
+    const belowTop = anchorRect.bottom + GAP;
+    const fitsBelow = belowTop + height <= window.innerHeight - MARGIN;
+    const top = fitsBelow
+      ? belowTop
+      : Math.max(MARGIN, anchorRect.top - GAP - height);
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
   }
 
   function openInlinePopover(toolbar, config) {
@@ -5580,7 +5609,7 @@
     const popover = toolbar.querySelector("[data-inline-popover]");
     if (!popover) return false;
 
-    popover.classList.remove("ccf-inline-narrator-popover");
+    popover.classList.remove("ccf-inline-narrator-popover", "ccf-inline-float-popover");
     popover.style.left = "";
     popover.style.top = "";
     popover.textContent = "";
@@ -5628,7 +5657,7 @@
     const state = inlinePopoverState?.toolbar === toolbar ? inlinePopoverState : null;
     const popover = toolbar?.querySelector?.("[data-inline-popover]");
     if (popover) {
-      popover.classList.remove("open", "ccf-inline-narrator-popover");
+      popover.classList.remove("open", "ccf-inline-narrator-popover", "ccf-inline-float-popover");
       popover.setAttribute("aria-hidden", "true");
       popover.textContent = "";
       popover.style.left = "";
