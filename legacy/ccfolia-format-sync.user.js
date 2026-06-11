@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.1
+// @version      0.1.2
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.1 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.2 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -70,7 +70,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.1"),
+    version: getUserscriptVersion("0.1.2"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1034,8 +1034,6 @@
       !!(envelope.presence || envelope["@p"] || envelope["@presence"]),
       renderText);
 
-    const bottomScrollTarget = captureBottomAnchoredMessageScroller(el);
-
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
       el.setAttribute(CCF_RAW_ATTR, text);
     }
@@ -1046,77 +1044,13 @@
 
     if (!runs.length && !alignRuns.length && !narration) {
       el.textContent = renderText;
-      preserveBottomScrollAfterRender(el, bottomScrollTarget);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
 
     renderStyledText(el, renderText, runs, alignRuns);
-    preserveBottomScrollAfterRender(el, bottomScrollTarget);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
-  }
-
-  function captureBottomAnchoredMessageScroller(el) {
-    let current = el?.parentElement || null;
-    while (current && current !== document.documentElement) {
-      const overflowY = getComputedStyle(current).overflowY || "";
-      if (/(?:auto|scroll|overlay)/i.test(overflowY)) {
-        const distanceFromBottom = current.scrollHeight - current.scrollTop - current.clientHeight;
-        // 일괄 렌더 동안에는 누적 높이 변화가 수백 px까지 가는 경우가 있어
-        // 72px 임계로는 초반에 사슬이 끊긴다. 400px까지는 "사용자가 하단 보고 있던 것"으로 간주.
-        return distanceFromBottom <= 400 ? current : null;
-      }
-      current = current.parentElement;
-    }
-    return null;
-  }
-
-  function preserveBottomScrollAfterRender(el, scrollTarget) {
-    if (!(scrollTarget instanceof HTMLElement)) return;
-
-    // 1) 동기 스냅 — 다음 렌더의 거리 측정이 stale한 scrollTop을 보지 않게 즉시 반영.
-    if (scrollTarget.isConnected
-        && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
-      scrollTarget.scrollTop = scrollTarget.scrollHeight;
-    }
-
-    // 2) rAF 스냅 — 본문 DOM이 추가 reflow되며 높이가 더 늘어나는 케이스 대응.
-    requestAnimationFrame(() => {
-      if (scrollTarget.isConnected
-          && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
-        scrollTarget.scrollTop = scrollTarget.scrollHeight;
-      }
-    });
-
-    // 3) 짧은 타임아웃 — React가 비동기로 후속 update를 끼우는 경우 마지막으로 한 번 더 보정.
-    setTimeout(() => {
-      if (scrollTarget.isConnected
-          && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
-        scrollTarget.scrollTop = scrollTarget.scrollHeight;
-      }
-    }, 50);
-
-    // 4) 이미지가 늦게 로드되면 그때 또 한 번 스냅(이미지 디코드로 추가 높이 변화).
-    const scrollToBottomDeferred = () => {
-      requestAnimationFrame(() => {
-        if (scrollTarget.isConnected
-            && scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight > 1) {
-          scrollTarget.scrollTop = scrollTarget.scrollHeight;
-        }
-      });
-    };
-    const images = el.querySelectorAll
-      ? [...el.querySelectorAll("img.ccf-image")]
-      : [];
-    images.forEach((image) => {
-      if (image.complete) {
-        scrollToBottomDeferred();
-        return;
-      }
-      image.addEventListener("load", scrollToBottomDeferred, { once: true });
-      image.addEventListener("error", scrollToBottomDeferred, { once: true });
-    });
   }
 
   function hideNarrationElements(item, messageEl) {
