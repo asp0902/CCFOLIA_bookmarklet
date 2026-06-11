@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.17
+// @version      0.3.18
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.17"),
+    version: getUserscriptVersion("0.3.18"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1476,28 +1476,37 @@
         menu.appendChild(item);
         // 항목 주입으로 메뉴 높이가 커져 MUI Popover가 계산해둔 위치 아래로
         // 삐져나와 FAB을 가림 (#20/#26).
-        // 주입 시점엔 MUI가 아직 top을 안 정했을 수 있음 — style 변경을 감시해
-        // top이 설정되는 즉시(paint 전) viewport 하단 초과분만큼 끌어올린다.
+        // top 설정과 항목 렌더가 단계적으로 일어나므로, 메뉴가 떠 있는 동안
+        // 크기/스타일 변화를 계속 추적하며 viewport 하단 초과분을 끌어올린다.
         try {
           const paper = menu.closest(".MuiPaper-root");
-          if (paper instanceof HTMLElement) {
+          if (paper instanceof HTMLElement && !paper.__ccr20FabMenuFixBound) {
+            paper.__ccr20FabMenuFixBound = true;
             const fixPosition = () => {
               const top = parseFloat(paper.style.top);
-              if (!Number.isFinite(top)) return false; // top 미설정 — 계속 감시
-              const rect = paper.getBoundingClientRect();
-              const overflow = rect.bottom - (window.innerHeight - 16);
-              if (overflow > 0) {
+              if (!Number.isFinite(top)) return;
+              const overflow = paper.getBoundingClientRect().bottom - (window.innerHeight - 16);
+              if (overflow > 1) {
                 paper.style.top = `${Math.max(8, top - overflow)}px`;
               }
-              return true;
             };
-            if (!fixPosition()) {
-              const positionObserver = new MutationObserver(() => {
-                if (fixPosition()) positionObserver.disconnect();
-              });
-              positionObserver.observe(paper, { attributes: true, attributeFilter: ["style"] });
-              window.setTimeout(() => positionObserver.disconnect(), 1000);
-            }
+            fixPosition();
+            const sizeObserver = new ResizeObserver(fixPosition);
+            sizeObserver.observe(paper);
+            const styleObserver = new MutationObserver(fixPosition);
+            styleObserver.observe(paper, { attributes: true, attributeFilter: ["style"] });
+            const cleanupTimer = window.setInterval(() => {
+              if (!paper.isConnected) {
+                sizeObserver.disconnect();
+                styleObserver.disconnect();
+                window.clearInterval(cleanupTimer);
+              }
+            }, 2000);
+            ccr20RegisterTeardown(() => {
+              sizeObserver.disconnect();
+              styleObserver.disconnect();
+              window.clearInterval(cleanupTimer);
+            });
           }
         } catch (_) {}
       }
