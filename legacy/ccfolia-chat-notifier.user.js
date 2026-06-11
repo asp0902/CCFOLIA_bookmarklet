@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.86
+// @version      0.2.87
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.86"),
+    version: getUserscriptVersion("0.2.87"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.86",
+      version: "0.2.87",
       href: location.href,
       title: document.title || ""
     });
@@ -3584,8 +3584,15 @@
       }
 
       // BGM 모달(업로드/라이브러리 다이얼로그)의 탭에는 뱃지를 붙이지 않음 (#67).
-      // 채팅 위 미니 탭에만 재생 중 표시.
-      if (button.closest(".MuiDialog-root")) {
+      // 모달은 hash class뿐이라 구조로 식별 불가 — 모달 탭 행에만 존재하는
+      // SE01/ETC/+ 형제 버튼으로 판별. 채팅 위 미니 탭에만 재생 중 표시.
+      const tabRow = button.parentElement;
+      const inBgmDialogTabRow = !!tabRow && [...tabRow.querySelectorAll("button")].some((sibling) => {
+        if (sibling === button) return false;
+        const label = normalizeSpace(sibling.textContent || "");
+        return /^(SE\d+|ETC|\+)$/i.test(label);
+      });
+      if (inBgmDialogTabRow) {
         button.removeAttribute("data-ccf-youtube-bgm-registered");
         return;
       }
