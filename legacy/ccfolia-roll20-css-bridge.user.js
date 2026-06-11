@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.19
+// @version      0.3.20
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.19"),
+    version: getUserscriptVersion("0.3.20"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1491,7 +1491,9 @@
                 .find((b) => b.querySelector('[data-testid="EditIcon"]'));
               const fabTop = fab ? fab.getBoundingClientRect().top : Infinity;
               const limit = Math.min(fabTop - 8, window.innerHeight - 16);
-              const overflow = paper.getBoundingClientRect().bottom - limit;
+              // getBoundingClientRect는 Grow transition(scale) 진행 중 작게 측정돼
+              // 보정이 부족해짐 — transform과 무관한 offsetHeight 기준으로 계산.
+              const overflow = (top + paper.offsetHeight) - limit;
               if (overflow > 1) {
                 paper.style.top = `${Math.max(8, top - overflow)}px`;
               }
