@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.33
+// @version      0.3.34
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.33"),
+    version: getUserscriptVersion("0.3.34"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4906,6 +4906,7 @@
   let scanScheduled = 0;
   let tabSnapFrame = 0;
   let tabSnapTimer = 0;
+  let forceBottomOnNextScan = false;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4962,7 +4963,7 @@
     return null;
   }
 
-  function processList() {
+  function processList(options = {}) {
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
     const LEADER = CONT_ATTR + "-leader";
@@ -4978,6 +4979,14 @@
       // 팝오버/메뉴/다이얼로그 내부 LI는 그룹핑 대상에서 제외.
       .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
     if (!messages.length) return;
+    const chatScroller = findVisibleChatScroller(messages);
+    const forceBottom = options.forceBottom === true || forceBottomOnNextScan === true;
+    forceBottomOnNextScan = false;
+    const bottomGap = chatScroller
+      ? Math.max(0, chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight)
+      : 0;
+    const preserveBottom = !!chatScroller && (forceBottom || bottomGap <= 48);
+    const preserveGap = forceBottom ? 0 : bottomGap;
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -4986,6 +4995,7 @@
         !!li.querySelector('.ccf-render-root[data-ccf-narration="1"]');
       return isNarration ? author + "\\u0000nr" : author;
     });
+    let changed = false;
     for (let i = 0; i < messages.length; i++) {
       const li = messages[i];
       const author = authors[i];
@@ -4998,28 +5008,42 @@
       // lone 메시지(양옆 다른 화자) 위아래 모두 명시적 boundary를 그려 대칭 유지.
       const isSpeakerStart = i > 0 && !!author && author !== prevAuthor;
       // 모든 채팅 메시지에 MSG 마커 → native border/separator 일괄 제거 타겟
-      setOrRemove(li, MSG, true);
-      setOrRemove(li, CONT_ATTR, isCont);
-      setOrRemove(li, LEADER, isLeader);
-      setOrRemove(li, LAST, isLast);
-      setOrRemove(li, SPEAKER_START, isSpeakerStart);
+      changed = setOrRemove(li, MSG, true) || changed;
+      changed = setOrRemove(li, CONT_ATTR, isCont) || changed;
+      changed = setOrRemove(li, LEADER, isLeader) || changed;
+      changed = setOrRemove(li, LAST, isLast) || changed;
+      changed = setOrRemove(li, SPEAKER_START, isSpeakerStart) || changed;
       const parent = li.parentElement;
       if (parent) {
-        setOrRemove(parent, MSG_WRAP, true);
-        setOrRemove(parent, WRAP, isCont);
-        setOrRemove(parent, WRAP_LAST, isLast);
-        setOrRemove(parent, LEADER_WRAP, isLeader);
-        setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart);
+        changed = setOrRemove(parent, MSG_WRAP, true) || changed;
+        changed = setOrRemove(parent, WRAP, isCont) || changed;
+        changed = setOrRemove(parent, WRAP_LAST, isLast) || changed;
+        changed = setOrRemove(parent, LEADER_WRAP, isLeader) || changed;
+        changed = setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart) || changed;
       }
+    }
+    if (preserveBottom && (changed || forceBottom) && chatScroller.isConnected) {
+      chatScroller.scrollTop = Math.max(0, chatScroller.scrollHeight - chatScroller.clientHeight - preserveGap);
     }
   }
 
   function setOrRemove(el, attr, on) {
-    if (on) { if (el.getAttribute(attr) !== "1") el.setAttribute(attr, "1"); }
-    else if (el.hasAttribute(attr)) el.removeAttribute(attr);
+    if (on) {
+      if (el.getAttribute(attr) !== "1") {
+        el.setAttribute(attr, "1");
+        return true;
+      }
+      return false;
+    }
+    if (el.hasAttribute(attr)) {
+      el.removeAttribute(attr);
+      return true;
+    }
+    return false;
   }
 
-  function scheduleScan() {
+  function scheduleScan(options = {}) {
+    if (options.forceBottom) forceBottomOnNextScan = true;
     if (scanScheduled) return;
     scanScheduled = requestAnimationFrame(() => {
       scanScheduled = 0;
@@ -5035,12 +5059,12 @@
     return !!selected?.closest?.('[role="tablist"], .MuiTabs-root');
   }
 
-  function findVisibleChatScroller() {
-    const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
+  function findVisibleChatScroller(messages = null) {
+    const visibleMessages = (messages || Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
-      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"))
+      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")))
       .filter((li) => li.offsetParent !== null);
-    const anchor = messages[messages.length - 1];
+    const anchor = visibleMessages[visibleMessages.length - 1];
     if (!anchor) return null;
     for (let el = anchor.parentElement; el && el !== document.documentElement; el = el.parentElement) {
       const overflowY = getComputedStyle(el).overflowY || "";
@@ -5054,10 +5078,7 @@
   function snapVisibleChatTabToBottom() {
     tabSnapFrame = 0;
     if (!active) return;
-    const scroller = findVisibleChatScroller();
-    if (scroller?.isConnected) {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
+    processList({ forceBottom: true });
   }
 
   function scheduleTabBottomSnap() {
@@ -5083,14 +5104,23 @@
     if (isChatTabLike(event.target)) scheduleTabBottomSnap();
   }
 
+  function isChatTabMutation(mutation) {
+    if (mutation.type === "attributes" && mutation.attributeName === "aria-selected") {
+      return isChatTabLike(mutation.target);
+    }
+    return false;
+  }
+
   function start() {
     injectStyle();
     document.addEventListener("click", handlePotentialChatTabActivation, true);
     document.addEventListener("keydown", handlePotentialChatTabKeydown, true);
-    observer = new MutationObserver(() => scheduleScan());
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
-    processList();
-    console.info("[ccf-prose-mode] active v0.0.35 (tab-only bottom snap)");
+    observer = new MutationObserver((mutations) => {
+      scheduleScan({ forceBottom: mutations.some(isChatTabMutation) });
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
+    processList({ forceBottom: true });
+    console.info("[ccf-prose-mode] active v0.0.36 (anchored tab bottom)");
   }
 
   function teardown() {
@@ -5119,7 +5149,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.35",
+    version: "0.0.36",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

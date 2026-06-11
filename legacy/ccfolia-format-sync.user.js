@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.2
+// @version      0.1.3
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.2 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.3 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -70,7 +70,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.2"),
+    version: getUserscriptVersion("0.1.3"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1034,6 +1034,8 @@
       !!(envelope.presence || envelope["@p"] || envelope["@presence"]),
       renderText);
 
+    const bottomScrollState = captureBottomAnchoredMessageScroller(el);
+
     if (!el.hasAttribute(CCF_RAW_ATTR)) {
       el.setAttribute(CCF_RAW_ATTR, text);
     }
@@ -1044,13 +1046,34 @@
 
     if (!runs.length && !alignRuns.length && !narration) {
       el.textContent = renderText;
+      preserveBottomScrollAfterRender(bottomScrollState);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
 
     renderStyledText(el, renderText, runs, alignRuns);
+    preserveBottomScrollAfterRender(bottomScrollState);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
+  }
+
+  function captureBottomAnchoredMessageScroller(el) {
+    let current = el?.parentElement || null;
+    while (current && current !== document.documentElement) {
+      const overflowY = getComputedStyle(current).overflowY || "";
+      if (/(?:auto|scroll|overlay)/i.test(overflowY)) {
+        const gap = current.scrollHeight - current.scrollTop - current.clientHeight;
+        return gap <= 48 ? { scroller: current, gap: Math.max(0, gap) } : null;
+      }
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function preserveBottomScrollAfterRender(state) {
+    const scroller = state?.scroller;
+    if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
+    scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight - state.gap);
   }
 
   function hideNarrationElements(item, messageEl) {
