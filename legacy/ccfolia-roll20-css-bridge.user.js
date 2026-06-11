@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.24
+// @version      0.3.25
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.24"),
+    version: getUserscriptVersion("0.3.25"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4904,6 +4904,10 @@
   let active = true;
   let observer = null;
   let scanScheduled = 0;
+  // 바닥 스냅 가드 상태 — 새 메시지 감지 + 최근 위로 스크롤 여부
+  let prevLastMessageLi = null;
+  let prevMessageCount = -1;
+  let lastUserScrollUpAt = 0;
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -4987,7 +4991,14 @@
         break;
       }
     }
-    const wasNearBottom = !!chatScroller &&
+    // 새 메시지가 실제로 추가됐을 때만 + 최근에 위로 스크롤한 직후가 아닐 때만 스냅.
+    // (아무 mutation에나 스냅하면 위로 휠을 올리는 중에도 바닥으로 끌려 내려감)
+    const lastLi = messages[messages.length - 1];
+    const hasNewMessage = lastLi !== prevLastMessageLi || messages.length !== prevMessageCount;
+    prevLastMessageLi = lastLi;
+    prevMessageCount = messages.length;
+    const recentlyScrolledUp = Date.now() - lastUserScrollUpAt < 1500;
+    const wasNearBottom = hasNewMessage && !recentlyScrolledUp && !!chatScroller &&
       (chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight <= 240);
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
@@ -5048,8 +5059,12 @@
     injectStyle();
     observer = new MutationObserver(() => scheduleScan());
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-ccf-narration"] });
+    // 위로 휠 = 과거 로그 읽기 의도 — 잠시 바닥 스냅 금지
+    window.addEventListener("wheel", (event) => {
+      if (event.deltaY < 0) lastUserScrollUpAt = Date.now();
+    }, { passive: true, capture: true });
     processList();
-    console.info("[ccf-prose-mode] active v0.0.26 (narration messages get own grouping key)");
+    console.info("[ccf-prose-mode] active v0.0.27 (bottom snap only on new message)");
   }
 
   function teardown() {
@@ -5068,7 +5083,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.26",
+    version: "0.0.27",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
