@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.85
+// @version      0.2.86
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3580,6 +3580,13 @@
     document.querySelectorAll("button").forEach((button) => {
       const slotKey = getCcfBgmSlotKeyFromButton(button);
       if (!slotKey) {
+        return;
+      }
+
+      // BGM 모달(업로드/라이브러리 다이얼로그)의 탭에는 뱃지를 붙이지 않음 (#67).
+      // 채팅 위 미니 탭에만 재생 중 표시.
+      if (button.closest(".MuiDialog-root")) {
+        button.removeAttribute("data-ccf-youtube-bgm-registered");
         return;
       }
 
