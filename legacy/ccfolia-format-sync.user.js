@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.97
+// @version      0.0.98
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.97 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.98 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -5205,6 +5205,27 @@
         resetEditorStateAfterSendIfEmpty(editor);
       }, delay);
     });
+
+    // 내가 보낸 메시지는 무조건 바닥으로 (#87) — 한 번 스크롤이 떨어지면
+    // "바닥 근처일 때만 따라가는" 보호 조건들 때문에 복귀하지 못하는 문제 해결.
+    snapChatScrollToBottomAfterSend();
+  }
+
+  // 채팅 스크롤러를 찾아 바닥으로 — 메시지 DOM 추가 타이밍 대비 다회 스냅 (#87)
+  function snapChatScrollToBottomAfterSend() {
+    const snap = () => {
+      const probe = document.querySelector("h6.MuiListItemText-primary");
+      if (!probe) return;
+      for (let el = probe.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+        const overflowY = getComputedStyle(el).overflowY || "";
+        if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+          el.scrollTop = el.scrollHeight;
+          return;
+        }
+      }
+    };
+    requestAnimationFrame(snap);
+    [120, 400, 800].forEach((delay) => setTimeout(snap, delay));
   }
 
   function updateInlineToolbarVisuals(toolbar) {
