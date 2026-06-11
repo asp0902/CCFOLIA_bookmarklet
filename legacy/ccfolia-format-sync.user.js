@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.93
+// @version      0.0.94
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.93 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.94 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3516,16 +3516,24 @@
         background: rgba(33, 150, 243, 0.35); color: #fff;
       }
       .ccf-style-builder-color {
-        display: inline-flex; align-items: center; justify-content: center;
-        padding: 3px 4px; cursor: pointer;
+        position: relative;
+        width: 28px; height: 28px; flex: 0 0 28px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #282828;
+        box-sizing: border-box; overflow: hidden; cursor: pointer;
+      }
+      .ccf-style-builder-color::before {
+        content: "";
+        position: absolute; inset: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: var(--ccf-chip-color, #ffffff);
+        pointer-events: none;
       }
       .ccf-style-builder-color input[type="color"] {
-        width: 22px; height: 22px; padding: 0; border: 0; border-radius: 0;
-        background: transparent; cursor: pointer;
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0;
       }
-      .ccf-style-builder-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-      .ccf-style-builder-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 0; }
-      .ccf-style-builder-size { width: 40px; flex: 0 0 40px; min-height: 28px; padding: 0 4px; }
+      .ccf-style-builder-size { width: 48px; flex: 0 0 48px; min-height: 28px; padding: 0 4px; }
 
       .ccf-inline-size-input {
         width: 44px;
@@ -5633,8 +5641,15 @@
     `;
     // \uC0C9/\uD06C\uAE30 \uC785\uB825 \u2014 \uB9CC\uC9C0\uBA74 \uC801\uC6A9 \uB300\uC0C1\uC73C\uB85C \uD45C\uC2DC(data-touched) + \uC774\uB984 \uC785\uB825\uCE78 \uBBF8\uB9AC\uBCF4\uAE30 \uAC31\uC2E0 (#70)
     popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size]").forEach((inp) => {
+      // 색 칩 초기 표시
+      if (inp.type === "color") {
+        inp.closest(".ccf-style-builder-color")?.style.setProperty("--ccf-chip-color", inp.value);
+      }
       inp.addEventListener("input", () => {
         inp.setAttribute("data-touched", "1");
+        if (inp.type === "color") {
+          inp.closest(".ccf-style-builder-color")?.style.setProperty("--ccf-chip-color", inp.value);
+        }
         updateStyleBuilderPreview(popover);
       });
     });
