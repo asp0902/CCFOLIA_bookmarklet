@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.0.94
+// @version      0.0.95
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.0.94 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.0.95 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -3533,7 +3533,7 @@
         position: absolute; inset: 0; width: 100%; height: 100%;
         opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0;
       }
-      .ccf-style-builder-size { width: 48px; flex: 0 0 48px; min-height: 28px; padding: 0 4px; }
+      .ccf-style-builder-size { width: auto; flex: 1 1 36px; min-width: 36px; max-width: 52px; min-height: 28px; padding: 0 4px; }
 
       .ccf-inline-size-input {
         width: 44px;
@@ -10248,6 +10248,24 @@
     return parts.join(";");
   }
 
+  // 메시지 텍스트에서 프리셋 이름과 일치하는 구간에 프리셋 서식 run 생성 (#70)
+  function buildPresetNameRuns(text) {
+    if (typeof text !== "string" || !text) return [];
+    const runs = [];
+    for (const preset of readStylePresets()) {
+      const name = String(preset.name || "");
+      if (!name) continue;
+      const style = cleanupStyle(preset.style || {});
+      if (!Object.keys(style).length) continue;
+      let idx = 0;
+      while ((idx = text.indexOf(name, idx)) !== -1) {
+        runs.push({ start: idx, end: idx + name.length, style: { ...style } });
+        idx += name.length;
+      }
+    }
+    return runs;
+  }
+
   // 프리셋을 빌더에 불러와 편집 — 같은 이름으로 + 누르면 덮어씀 (#70)
   function loadStylePresetIntoBuilder(popover, preset) {
     if (!(popover instanceof HTMLElement) || !preset) return;
@@ -12037,7 +12055,13 @@
     if (state.parentheticalGray) {
       state.runs = applyParentheticalGrayRuns(state.runs, rawText);
     }
-    const preparedRuns = prepareRunsForTransport(state.runs, rawText.length);
+    // 서식 프리셋 자동 적용 (#70) — 메시지 안에 프리셋 이름과 같은 텍스트가 있으면
+    // 그 구간에 프리셋 서식을 입혀 전송. 기존 수동 서식이 우선.
+    const presetNameRuns = buildPresetNameRuns(rawText);
+    const outgoingRuns = presetNameRuns.length
+      ? [...presetNameRuns, ...cloneRuns(state.runs, rawText.length)]
+      : state.runs;
+    const preparedRuns = prepareRunsForTransport(outgoingRuns, rawText.length);
     if (preparedRuns.failed) {
       alert("클립보드나 로컬 이미지를 저장하지 못해 전송을 중단했습니다. 이미지 링크를 사용하거나 이미지를 더 작게 만들어주세요.");
       return false;
