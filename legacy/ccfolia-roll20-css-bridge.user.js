@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.41
+// @version      0.3.42
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.41"),
+    version: getUserscriptVersion("0.3.42"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4922,6 +4922,9 @@
     const MSG = CONT_ATTR + "-msg";
     const MSG_WRAP = MSG + "-wrap";
     style.textContent = [
+      // 탭 전환 직후 단계 렌더로 스크롤바가 깜박이는 것 방지 — 잠시 숨김
+      `[data-ccr20-scrollbar-quiet="1"] { scrollbar-width: none !important; }`,
+      `[data-ccr20-scrollbar-quiet="1"]::-webkit-scrollbar { display: none !important; }`,
       // === 모든 채팅 메시지 li/wrapper의 native border/separator 일괄 제거 ===
       // (CCFOLIA가 박스 카드별로 가진 native border-top/bottom, ::before/::after, hr 등을
       //  싹 끔. 우리는 SPEAKER_START에만 1px line을 추가해서 line 중복을 막는다.)
@@ -4987,9 +4990,12 @@
     // 바닥 근처였다면 "현재 gap 유지"가 아니라 정확히 바닥(0)으로 복원.
     // gap을 유지하면 어중간하게 뜬 상태(11~27px)가 영구 보존돼 마지막 메시지가
     // 잘려 보였음 (진단 타임라인으로 확인).
-    // 탭 전환 등 forceBottom 시엔 고정 상태도 재설정.
+    // 탭 전환 등 forceBottom 시엔 고정 상태도 재설정 + 단계 렌더 동안 스크롤바 숨김.
     if (forceBottom) {
-      chatScrollers.forEach((scroller) => { scroller.__ccr20Pinned = true; });
+      chatScrollers.forEach((scroller) => {
+        scroller.__ccr20Pinned = true;
+        quietScrollbar(scroller);
+      });
     }
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
@@ -5103,6 +5109,17 @@
     scroller.style.scrollBehavior = prevBehavior;
   }
 
+  // 탭 전환 직후 단계 렌더 동안 스크롤바를 잠시 숨겨 깜박임을 가린다.
+  function quietScrollbar(scroller) {
+    if (!(scroller instanceof HTMLElement)) return;
+    scroller.setAttribute("data-ccr20-scrollbar-quiet", "1");
+    if (scroller.__ccr20QuietTimer) clearTimeout(scroller.__ccr20QuietTimer);
+    scroller.__ccr20QuietTimer = setTimeout(() => {
+      scroller.__ccr20QuietTimer = 0;
+      scroller.removeAttribute("data-ccr20-scrollbar-quiet");
+    }, 400);
+  }
+
   function bindBottomFinisher(scroller) {
     if (!(scroller instanceof HTMLElement) || scroller.__ccr20BottomFinisher) return;
     scroller.__ccr20BottomFinisher = true;
@@ -5189,7 +5206,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.43 (pinned guards external scrolls)");
+    console.info("[ccf-prose-mode] active v0.0.44 (quiet scrollbar on tab switch)");
   }
 
   function teardown() {
@@ -5218,7 +5235,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.43",
+    version: "0.0.44",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
