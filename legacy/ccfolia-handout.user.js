@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.67
+// @version      0.1.68
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.67",
+    version: "0.1.68",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -195,11 +195,11 @@
   async function loadAll() {
     const tk = toolkit();
     if (!tk?.storage?.getRoomData) {
-      return { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] };
+      return { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] , plDeleted: {} };
     }
     const record = await tk.storage.getRoomData(STORAGE_FEATURE, getCurrentRoomKey());
     const value = record?.value;
-    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [], folders: [] };
+    if (!value || typeof value !== "object") return { handouts: [], myCharacter: "", plList: [], folders: [] , plDeleted: {} };
     const handouts = Array.isArray(value.handouts) ? value.handouts.map(ensurePermissions) : [];
     ensureOrderField(handouts);
     return {
@@ -209,6 +209,7 @@
         ? [...new Set(value.myCharacterOptions.map((name) => String(name || "").trim()).filter(Boolean))]
         : [],
       plList: normalizePlList(value.plList),
+      plDeleted: (value.plDeleted && typeof value.plDeleted === "object") ? value.plDeleted : {},
       folders: normalizeFolders(value.folders)
     };
   }
@@ -2053,6 +2054,8 @@
       state.chatSeenAuthors.add(key);
       if (key === me) return;
       if (existing.has(key)) return;
+      // 사용자가 삭제한 이름은 자동 수집으로 부활시키지 않음
+      if (state.data.plDeleted && state.data.plDeleted[key]) return;
       const sameId = findPlEntryByInferredId(name);
       if (sameId) {
         sameId.aliases = [...new Set([...(sameId.aliases || []), name].filter(Boolean))];
@@ -3794,12 +3797,21 @@
       item.aliases = remaining;
       writePlRow(row, item);
       for (const aliasName of selectedNames) {
-        splitOff.push({ name: aliasName, id: item.id, role: "player", aliases: [] });
+        // 분리 행은 id를 비움 — 같은 id를 유지하면 저장 시 mergePlListById가
+        // 즉시 도로 병합해 "해제했는데 새로고침하면 다시 병합"이 됨.
+        // 이미지는 채팅 이력에서 찾아 채움 (없으면 발화 시 백필).
+        splitOff.push({
+          name: aliasName,
+          id: "",
+          role: "player",
+          aliases: [],
+          image: findChatAuthorImageByName(aliasName) || ""
+        });
       }
     }
     for (const newItem of splitOff) appendPlRow(host, newItem);
     updateUnmergeButtonVisibility();
-    if (splitOff.length) toast(`${splitOff.length}명 분리됨 (ID 동일 그룹 유지)`);
+    if (splitOff.length) toast(`${splitOff.length}명 분리됨`);
   }
 
   function findExistingPlAliases(name, id) {
@@ -3820,6 +3832,21 @@
       const item = readPlRow(row);
       if (item) items.push(item);
     });
+    // 삭제 기록 갱신 — 이전 목록에 있었는데 새 목록에 없는 이름은 plDeleted에
+    // 기록해 채팅 자동 수집이 도로 추가하지 않게 함. 재등장한 이름은 기록 해제.
+    const prevKeys = new Set((state.data.plList || [])
+      .flatMap((p) => [p.name, ...(p.aliases || [])])
+      .map(normalizePlNameKey).filter(Boolean));
+    const nextKeys = new Set(items
+      .flatMap((p) => [p.name, ...(p.aliases || [])])
+      .map(normalizePlNameKey).filter(Boolean));
+    if (!state.data.plDeleted || typeof state.data.plDeleted !== "object") state.data.plDeleted = {};
+    for (const key of prevKeys) {
+      if (!nextKeys.has(key)) state.data.plDeleted[key] = Date.now();
+    }
+    for (const key of nextKeys) {
+      delete state.data.plDeleted[key];
+    }
     state.data.plList = mergePlListById(items);
     await saveAll(state.data);
     closePlListDialog();
@@ -4279,7 +4306,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.67 (image match by representative name only)");
+    console.info("[ccf-handout] init — version 0.1.68 (pl delete tombstones + clean unmerge)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
