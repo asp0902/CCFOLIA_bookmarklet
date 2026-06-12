@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.8
+// @version      0.1.9
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.8 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.9 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -10235,7 +10235,7 @@
       style.backgroundColor = bgInput.value;
     }
     const size = parseInt(popover.querySelector("[data-style-builder-size]")?.value, 10);
-    if (Number.isFinite(size) && size > 0) style.fontSize = `${size}px`;
+    if (Number.isFinite(size) && size > 0) style.fontSize = size;
     const align = popover.querySelector('[data-style-builder-align][data-active="1"]')?.getAttribute("data-style-builder-align") || "left";
     return { style: cleanupStyle(style), align };
   }
@@ -12135,8 +12135,8 @@
           start: lineStart,
           end: lineStart + lines[i].length - markerLen,
           style: level === 1
-            ? { fontSize: `${sizes[level]}px`, bold: true }
-            : { fontSize: `${sizes[level]}px` }
+            ? { fontSize: sizes[level], bold: true }
+            : { fontSize: sizes[level] }
         },
         ...curRuns
       ];
