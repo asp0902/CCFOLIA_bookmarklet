@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.39
+// @version      0.3.40
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.39"),
+    version: getUserscriptVersion("0.3.40"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4987,22 +4987,10 @@
     // 바닥 근처였다면 "현재 gap 유지"가 아니라 정확히 바닥(0)으로 복원.
     // gap을 유지하면 어중간하게 뜬 상태(11~27px)가 영구 보존돼 마지막 메시지가
     // 잘려 보였음 (진단 타임라인으로 확인).
-    const scrollerStates = chatScrollers.map((scroller) => {
-      const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-      // 새 메시지가 이미 추가된 후에 측정하므로, 마지막 메시지 높이만큼은
-      // 허용해야 "메시지 추가 직전엔 바닥이었던" 경우를 놓치지 않는다.
-      let lastMessageHeight = 0;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (scroller.contains(messages[i])) {
-          lastMessageHeight = messages[i].offsetHeight || 0;
-          break;
-        }
-      }
-      return {
-        scroller,
-        nearBottom: forceBottom || gap <= 48 + lastMessageHeight
-      };
-    });
+    // 탭 전환 등 forceBottom 시엔 고정 상태도 재설정.
+    if (forceBottom) {
+      chatScrollers.forEach((scroller) => { scroller.__ccr20Pinned = true; });
+    }
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5038,13 +5026,11 @@
         changed = setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart) || changed;
       }
     }
-    for (const { scroller, nearBottom } of scrollerStates) {
-      if (!nearBottom || !(changed || forceBottom) || !scroller.isConnected) continue;
-      // scroll-behavior:smooth가 걸려 있으면 이동이 보이므로 일시적으로 auto 강제.
-      const prevBehavior = scroller.style.scrollBehavior;
-      scroller.style.scrollBehavior = "auto";
-      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      scroller.style.scrollBehavior = prevBehavior;
+    // 고정 상태인 스크롤러는 attr 적용 직후 바닥 유지 (RO 보정의 동기 선행판).
+    for (const scroller of chatScrollers) {
+      if (scroller.__ccr20Pinned && (changed || forceBottom)) {
+        snapScrollerToBottom(scroller);
+      }
     }
   }
 
@@ -5104,23 +5090,46 @@
     return [...scrollers];
   }
 
-  // CCFolia의 smooth scroll 애니메이션은 prose-mode 여백 압축 "전" 높이를 목표로
-  // 계산해 바닥보다 11~27px 모자란 지점에 안착하며 우리 즉시 보정을 덮어쓴다
-  // (진단 타임라인 확인). 애니메이션과 싸우지 않고, 스크롤이 완전히 멈춘 시점
-  // (scrollend)에 바닥 근처(≤48px)면 정확히 바닥으로 마무리한다.
+  // 바닥 고정(pinned) 방식 — 각 채팅 스크롤러는 기본적으로 바닥에 고정.
+  // 콘텐츠 높이가 어떤 이유로든 변하면(새 메시지/이미지 로드/여백 압축/CCFolia
+  // smooth 애니메이션 잔차) 즉시 바닥을 유지한다. 사용자가 위로 휠/터치/스크롤바
+  // 드래그하면 고정이 풀리고, 바닥(2px 이내)으로 돌아오면 다시 고정된다.
+  function snapScrollerToBottom(scroller) {
+    if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
+    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 1) return;
+    const prevBehavior = scroller.style.scrollBehavior;
+    scroller.style.scrollBehavior = "auto";
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+    scroller.style.scrollBehavior = prevBehavior;
+  }
+
   function bindBottomFinisher(scroller) {
     if (!(scroller instanceof HTMLElement) || scroller.__ccr20BottomFinisher) return;
     scroller.__ccr20BottomFinisher = true;
-    scroller.addEventListener("scrollend", () => {
-      if (!active) return;
-      const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-      if (gap > 1 && gap <= 48) {
-        const prevBehavior = scroller.style.scrollBehavior;
-        scroller.style.scrollBehavior = "auto";
-        scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
-        scroller.style.scrollBehavior = prevBehavior;
+    scroller.__ccr20Pinned = true;
+    scroller.addEventListener("wheel", (event) => {
+      if (event.deltaY < 0) scroller.__ccr20Pinned = false;
+    }, { passive: true });
+    scroller.addEventListener("touchmove", () => {
+      scroller.__ccr20Pinned = false;
+    }, { passive: true });
+    scroller.addEventListener("pointerdown", (event) => {
+      // 스크롤바 영역(콘텐츠 폭 바깥) 드래그 시작 — 사용자 의도 스크롤
+      if (event.offsetX > scroller.clientWidth) scroller.__ccr20Pinned = false;
+    }, { passive: true });
+    scroller.addEventListener("scroll", () => {
+      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 2) {
+        scroller.__ccr20Pinned = true;
       }
     }, { passive: true });
+    const content = scroller.firstElementChild || scroller;
+    const resizeObserver = new ResizeObserver(() => {
+      if (!active || !scroller.__ccr20Pinned) return;
+      snapScrollerToBottom(scroller);
+    });
+    resizeObserver.observe(content);
+    // 새 스크롤러 발견(패널 첫 렌더/탭 전환) — 즉시 바닥으로
+    snapScrollerToBottom(scroller);
   }
 
   function snapVisibleChatTabToBottom() {
@@ -5168,7 +5177,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.41 (last-message-height tolerance)");
+    console.info("[ccf-prose-mode] active v0.0.42 (pinned-bottom scrollers)");
   }
 
   function teardown() {
@@ -5197,7 +5206,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.41",
+    version: "0.0.42",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
