@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.75";
-  const BUILD_ID = "2026-06-12-loader-quiet-revert-150";
+  const VERSION = "0.2.76";
+  const BUILD_ID = "2026-06-12-loader-panel-summaries-151";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
@@ -41,7 +41,7 @@
     {
       id: "ccf-chat-notifier",
       title: "BGM / Alarm",
-      summary: "새 채팅 알림음, BGM 진행바, YouTube BGM 목록과 재생 UI",
+      summary: "새 채팅 알림음, BGM 진행바, YouTube 영상 추가",
       scripts: ["legacy/ccfolia-chat-notifier.user.js"],
       roomOnly: true,
       primaryAction: "sound"
@@ -49,25 +49,25 @@
     {
       id: "ccf-format-sync",
       title: "서식 편집 도구",
-      summary: "채팅 입력창 위 서식 편집 툴바, 렌더러, 루비/툴팁/블러 서식",
+      summary: "서식 편집 기능 툴바 생성",
       scripts: ["legacy/ccfolia-format-sync.user.js"]
     },
     {
       id: "ccf-roll20-css-bridge",
       title: "Roll20 CSS 변환",
-      summary: "Roll20 /desc CSS 매크로를 코코포리아 표시용 메시지로 변환",
+      summary: "Roll20 CSS 코코포리아에 반영",
       scripts: ["legacy/ccfolia-roll20-css-bridge.user.js"]
     },
     {
       id: "ccf-theme-switcher",
       title: "테마 커스텀",
-      summary: "코코포리아 색상 테마, 캐릭터 색상 팔레트, 테마 가져오기/내보내기",
+      summary: "코코포리아 색상 테마 변경",
       scripts: ["legacy/ccfolia-theme-switcher.user.js"]
     },
     {
       id: "ccf-log-package",
       title: "로그 패키지",
-      summary: "현재 룸 로그 캡처, 패키징, 카피바라 로그 편집기 연동",
+      summary: "로그 편집 및 HTML 생성",
       scripts: ["legacy/ccfolia-log-package.user.js"],
       roomOnly: true
     },
@@ -102,7 +102,7 @@
     {
       id: "ccf-handout",
       title: "핸드아웃",
-      summary: "Roll20 스타일 핸드아웃 — 제목/공개 본문/GM 전용 본문, 이미지, 캐릭터별 비밀 권한. 룸 상단 캐릭터 패널 옆 H 아이콘으로 열기. (1단계: 본인 화면 전용)",
+      summary: "핸드아웃 배포 기능",
       scripts: ["legacy/ccfolia-handout.user.js"],
       roomOnly: true
     }
