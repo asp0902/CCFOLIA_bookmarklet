@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.37
+// @version      0.3.38
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.37"),
+    version: getUserscriptVersion("0.3.38"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4979,17 +4979,19 @@
       // 팝오버/메뉴/다이얼로그 내부 LI는 그룹핑 대상에서 제외.
       .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
     if (!messages.length) return;
-    const chatScroller = findVisibleChatScroller(messages);
+    // 채팅 영역은 2개 이상일 수 있음 (메인 패널 + 룸 채팅 사이드패널) —
+    // 보이는 스크롤러 전부를 잡아 각각 바닥 보정한다.
+    const chatScrollers = findVisibleChatScrollers(messages);
     const forceBottom = options.forceBottom === true || forceBottomOnNextScan === true;
     forceBottomOnNextScan = false;
-    const bottomGap = chatScroller
-      ? Math.max(0, chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight)
-      : 0;
     // 바닥 근처였다면 "현재 gap 유지"가 아니라 정확히 바닥(0)으로 복원.
     // gap을 유지하면 어중간하게 뜬 상태(11~27px)가 영구 보존돼 마지막 메시지가
     // 잘려 보였음 (진단 타임라인으로 확인).
-    const preserveBottom = !!chatScroller && (forceBottom || bottomGap <= 48);
-    const preserveGap = 0;
+    const scrollerStates = chatScrollers.map((scroller) => ({
+      scroller,
+      nearBottom: forceBottom ||
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 48
+    }));
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5025,12 +5027,13 @@
         changed = setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart) || changed;
       }
     }
-    if (preserveBottom && (changed || forceBottom) && chatScroller.isConnected) {
+    for (const { scroller, nearBottom } of scrollerStates) {
+      if (!nearBottom || !(changed || forceBottom) || !scroller.isConnected) continue;
       // scroll-behavior:smooth가 걸려 있으면 이동이 보이므로 일시적으로 auto 강제.
-      const prevBehavior = chatScroller.style.scrollBehavior;
-      chatScroller.style.scrollBehavior = "auto";
-      chatScroller.scrollTop = Math.max(0, chatScroller.scrollHeight - chatScroller.clientHeight - preserveGap);
-      chatScroller.style.scrollBehavior = prevBehavior;
+      const prevBehavior = scroller.style.scrollBehavior;
+      scroller.style.scrollBehavior = "auto";
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      scroller.style.scrollBehavior = prevBehavior;
     }
   }
 
@@ -5066,21 +5069,28 @@
     return !!selected?.closest?.('[role="tablist"], .MuiTabs-root');
   }
 
-  function findVisibleChatScroller(messages = null) {
+  function findVisibleChatScrollers(messages = null) {
     const visibleMessages = (messages || Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
       .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")))
       .filter((li) => li.offsetParent !== null);
-    const anchor = visibleMessages[visibleMessages.length - 1];
-    if (!anchor) return null;
-    for (let el = anchor.parentElement; el && el !== document.documentElement; el = el.parentElement) {
-      const overflowY = getComputedStyle(el).overflowY || "";
-      if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
-        bindBottomFinisher(el);
-        return el;
+    // 같은 목록(UL)의 LI는 같은 스크롤러 — UL 단위로 1회만 조상 탐색.
+    const lists = new Set();
+    for (const li of visibleMessages) {
+      if (li.parentElement) lists.add(li.parentElement);
+    }
+    const scrollers = new Set();
+    for (const list of lists) {
+      for (let el = list; el && el !== document.documentElement; el = el.parentElement) {
+        const overflowY = getComputedStyle(el).overflowY || "";
+        if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+          scrollers.add(el);
+          break;
+        }
       }
     }
-    return null;
+    scrollers.forEach(bindBottomFinisher);
+    return [...scrollers];
   }
 
   // CCFolia의 smooth scroll 애니메이션은 prose-mode 여백 압축 "전" 높이를 목표로
@@ -5147,7 +5157,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.39 (scrollend bottom finisher)");
+    console.info("[ccf-prose-mode] active v0.0.40 (multi-scroller bottom)");
   }
 
   function teardown() {
@@ -5176,7 +5186,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.39",
+    version: "0.0.40",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
