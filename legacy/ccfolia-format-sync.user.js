@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.10
+// @version      0.1.11
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.10 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.11 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -70,7 +70,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.10"),
+    version: getUserscriptVersion("0.1.11"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3650,6 +3650,95 @@
       .ccf-narrator-item.active {
         background: rgba(100, 149, 255, 0.18);
         border-color: rgba(100, 149, 255, 0.55);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar {
+        border-color: var(--ccf-theme-panel-border, var(--ccf-theme-border, rgba(255, 255, 255, 0.12)));
+        background: var(--ccf-theme-paper, rgba(32, 32, 32, 0.94));
+        color: var(--ccf-theme-text, #fff);
+        box-shadow: 0 8px 24px var(--ccf-theme-shadow, rgba(0, 0, 0, 0.24));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-tool,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-size-input,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-builder-color,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-field,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-menu,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option {
+        border-color: var(--ccf-theme-border, rgba(255, 255, 255, 0.12));
+        background: var(--ccf-theme-input-bg, #282828);
+        color: var(--ccf-theme-text, #fff);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-tool:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-tool:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-step:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-step:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-display:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-display:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-preset-apply:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item:hover {
+        background: var(--ccf-theme-hover, #383838);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle.active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option.active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn.primary,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-builder-row .ccf-toggle[data-active="1"],
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item.active {
+        border-color: var(--ccf-theme-focus-ring, var(--ccf-theme-border, rgba(100, 149, 255, 0.55)));
+        background: var(--ccf-theme-control-active, #383838);
+        color: var(--ccf-theme-text, #fff);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-divider {
+        background: var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-value {
+        border-color: var(--ccf-theme-border, rgba(255, 255, 255, 0.12));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-tool.editing input[type="text"] {
+        background: var(--ccf-theme-input-bg, #1f1f24);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-size-input::placeholder,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-tool input[type="text"]::placeholder {
+        color: var(--ccf-theme-placeholder, rgba(255, 255, 255, 0.55));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-display[data-empty="1"],
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-note,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-empty,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item .ccf-narrator-tag {
+        color: var(--ccf-theme-muted-text, rgba(255, 255, 255, 0.6));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-size-input:focus-visible,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle:focus-visible,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-tool:focus-within {
+        outline-color: var(--ccf-theme-focus-ring, rgba(110, 134, 214, 0.95));
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-preset-apply {
+        background: var(--ccf-theme-surface-strong, rgba(255, 255, 255, 0.06));
+        color: var(--ccf-theme-text, #fff);
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-preset-remove,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item .ccf-narrator-check {
+        color: var(--ccf-theme-muted-text, rgba(255, 255, 255, 0.6));
       }
 
       .ccf-narrator-item .ccf-narrator-check {
