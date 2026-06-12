@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.66
+// @version      0.1.67
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.66",
+    version: "0.1.67",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2046,7 +2046,7 @@
       // 기존 항목 이미지 백필 (#74) — seen 여부와 무관하게 이미지 없으면 채움
       if (image) {
         const owner = (state.data.plList || []).find((p) =>
-          [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) === key));
+          normalizePlNameKey(p.name) === key);
         if (owner && !owner.image) { owner.image = image; imageUpdated += 1; }
       }
       if (state.chatSeenAuthors.has(key)) return;
@@ -2119,7 +2119,7 @@
       const key = normalizePlNameKey(name);
       if (!key) return;
       const owner = state.data.plList.find((p) =>
-        [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) === key));
+        normalizePlNameKey(p.name) === key);
       if (owner && !owner.image) { owner.image = image; updated += 1; }
     });
     if (updated) {
@@ -4279,7 +4279,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.66 (settings avatars + promote image sync)");
+    console.info("[ccf-handout] init — version 0.1.67 (image match by representative name only)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
