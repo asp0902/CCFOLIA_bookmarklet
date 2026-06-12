@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.35
+// @version      0.3.36
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.35"),
+    version: getUserscriptVersion("0.3.36"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5026,7 +5026,11 @@
       }
     }
     if (preserveBottom && (changed || forceBottom) && chatScroller.isConnected) {
+      // scroll-behavior:smooth가 걸려 있으면 이동이 보이므로 일시적으로 auto 강제.
+      const prevBehavior = chatScroller.style.scrollBehavior;
+      chatScroller.style.scrollBehavior = "auto";
       chatScroller.scrollTop = Math.max(0, chatScroller.scrollHeight - chatScroller.clientHeight - preserveGap);
+      chatScroller.style.scrollBehavior = prevBehavior;
     }
   }
 
@@ -5123,7 +5127,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.37 (exact bottom restore)");
+    console.info("[ccf-prose-mode] active v0.0.38 (instant bottom restore)");
   }
 
   function teardown() {
@@ -5152,7 +5156,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.37",
+    version: "0.0.38",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

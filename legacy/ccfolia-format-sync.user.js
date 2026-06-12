@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.3
+// @version      0.1.4
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.3 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.4 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1073,7 +1073,12 @@
   function preserveBottomScrollAfterRender(state) {
     const scroller = state?.scroller;
     if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
-    scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight - state.gap);
+    // 바닥 근처였으면 잔여 gap을 유지하지 않고 정확히 바닥으로 (잔여 gap 영구 보존 방지).
+    // scroll-behavior:smooth가 걸려 있으면 이동이 보이므로 일시적으로 auto 강제.
+    const prevBehavior = scroller.style.scrollBehavior;
+    scroller.style.scrollBehavior = "auto";
+    scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.style.scrollBehavior = prevBehavior;
   }
 
   function hideNarrationElements(item, messageEl) {
