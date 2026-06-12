@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.87";
-  const BUILD_ID = "2026-06-12-loader-light-message-divider-162";
+  const VERSION = "0.2.88";
+  const BUILD_ID = "2026-06-12-loader-preserve-speaker-divider-163";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },

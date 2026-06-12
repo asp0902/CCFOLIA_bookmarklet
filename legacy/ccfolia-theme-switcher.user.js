@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.14
+// @version      0.2.15
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -218,7 +218,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.14"),
+    version: getUserscriptVersion("0.2.15"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -657,7 +657,6 @@
         html[data-ccf-theme-active="1"] [aria-live="assertive"] .MuiListItem-root,
         html[data-ccf-theme-active="1"] .MuiDrawer-paper ul.MuiList-root > .MuiListItem-root {
           border-bottom-color: var(--ccf-theme-message-divider) !important;
-          box-shadow: inset 0 -1px 0 var(--ccf-theme-message-divider) !important;
         }
 
         html[data-ccf-theme-active="1"] .MuiDialog-paper > [class^="sc-"],
