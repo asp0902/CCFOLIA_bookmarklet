@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.11
+// @version      0.2.12
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -114,6 +114,9 @@
   const UNSUNG_DUET_TOGGLE_ID = "ccf-theme-switcher-unsung-duet-toggle";
   const UNSUNG_DUET_MSG_INJECTED_ATTR = "data-ccf-unsung-duet-msg-injected";
   const UNSUNG_DUET_IMG_CLASS = "ccf-unsung-duet-msg-img";
+  const CUTIN_VOLUME_BOUND_ATTR = "data-ccf-cutin-volume-bound";
+  const CUTIN_VOLUME_HELPER_CLASS = "ccf-cutin-volume-helper";
+  const CUTIN_VOLUME_HELPER_ID_PREFIX = "ccf-cutin-volume-helper-";
   // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
   const UNSUNG_DUET_URL_TO_ALT = Object.freeze({
     "https://i.imgur.com/FFUXgYg.png": "시프터 판정",
@@ -213,7 +216,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.7"),
+    version: getUserscriptVersion("0.2.12"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -352,6 +355,7 @@
   let activeCharacterColorEditSource = "";
   let characterColorPopoverState = { h: 0, s: 1, v: 1 };
   let characterColorPopoverInputMode = "hex";
+  let cutinVolumeHelperSeq = 0;
 
   // 모듈 로드 확정 로그. 이 로그조차 콘솔에 안 보이면 스크립트 자체가 GitHub
   // Pages 에서 fetch 되지 않았거나 로더가 다른 경로로 실행 중인 것.
@@ -632,6 +636,23 @@
           border: 0 !important;
           background: transparent !important;
           box-shadow: none !important;
+        }
+
+        input[${CUTIN_VOLUME_BOUND_ATTR}="1"] {
+          accent-color: var(--ccf-theme-control-active, currentColor);
+        }
+
+        .${CUTIN_VOLUME_HELPER_CLASS} {
+          margin: 4px 0 0 !important;
+          font-size: 12px !important;
+          line-height: 1.45 !important;
+          color: inherit !important;
+          opacity: 0.72;
+        }
+
+        html[data-ccf-theme-active="1"] .${CUTIN_VOLUME_HELPER_CLASS} {
+          color: var(--ccf-theme-muted-text) !important;
+          opacity: 1;
         }
 
         html[data-ccf-theme-active="1"] .MuiDivider-root {
@@ -2296,6 +2317,7 @@
     // 실행되지 않아 다이스 카드 인젝션이 침묵 실패하는 경로가 있었음.
     try { mountToggle(); } catch (e) { try { console.warn("[CCF Theme] mountToggle failed", e); } catch (_) {} }
     try { applyDicebotAttribute(); } catch (e) { try { console.warn("[CCF Theme] applyDicebotAttribute failed", e); } catch (_) {} }
+    try { bindCutinVolumeRatioInputs(); } catch (e) { try { console.warn("[CCF Theme] bindCutinVolumeRatioInputs failed", e); } catch (_) {} }
     try { bindUnsungDuetTriggerFields(); } catch (e) { try { console.warn("[CCF Theme] bindUnsungDuetTriggerFields failed", e); } catch (_) {} }
     try { injectUnsungDuetMessageImages(); } catch (e) { try { console.warn("[CCF Theme] injectUnsungDuetMessageImages failed", e); } catch (_) {} }
     try { injectCreeGrrrDiceFormatting(); } catch (e) { try { console.warn("[CCF Theme] injectCreeGrrrDiceFormatting failed", e); } catch (_) {} }
@@ -4461,6 +4483,131 @@
       el.value = value;
     }
     el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function bindCutinVolumeRatioInputs() {
+    document.querySelectorAll('input[name="volume"]').forEach((input) => {
+      if (!(input instanceof HTMLInputElement)) return;
+      if (!isCutinVolumeRatioInput(input)) return;
+      bindCutinVolumeRatioInput(input);
+    });
+  }
+
+  function isCutinVolumeRatioInput(input) {
+    if (!(input instanceof HTMLInputElement)) return false;
+    if (input.getAttribute(CUTIN_VOLUME_BOUND_ATTR) === "1") return true;
+    if ((input.name || "").trim() !== "volume") return false;
+    if (input.closest(".ccf-youtube-bgm-popover, #ccf-theme-switcher-panel")) return false;
+
+    const type = (input.type || "text").toLowerCase();
+    if (!["range", "number", "text"].includes(type)) return false;
+
+    const form = input.closest("form");
+    if (!(form instanceof HTMLElement)) return false;
+    const hasNativeAudioFields = !!form.querySelector('input[name="name"]')
+      && !!form.querySelector('button[type="submit"], input[type="submit"]');
+
+    const min = Number.parseFloat(input.min || "");
+    const max = Number.parseFloat(input.max || "");
+    const value = Number.parseFloat(input.value || "");
+    const isRatioRange = (Number.isFinite(max) && max <= 1)
+      || (Number.isFinite(value) && value >= 0 && value <= 1 && (!Number.isFinite(max) || max <= 1));
+
+    return hasNativeAudioFields && isRatioRange;
+  }
+
+  function bindCutinVolumeRatioInput(input) {
+    if (input.getAttribute(CUTIN_VOLUME_BOUND_ATTR) === "1") {
+      ensureCutinVolumeHelper(input);
+      updateCutinVolumeHelper(input);
+      return;
+    }
+
+    input.setAttribute(CUTIN_VOLUME_BOUND_ATTR, "1");
+    input.min = "0";
+    input.max = "1";
+    input.step = "0.01";
+    input.inputMode = "decimal";
+    input.title = "효과음 볼륨은 절대 음량이 아니라 현재 효과음 크기에 곱해지는 상대 배율입니다.";
+    input.setAttribute("aria-label", "효과음 상대 볼륨 배율");
+
+    // CCFOLIA stores this value as a 0..1 multiplier. Keep the raw ratio; do not convert to percent.
+    normalizeCutinVolumeInput(input, { dispatch: false });
+    ensureCutinVolumeHelper(input);
+    updateCutinVolumeHelper(input);
+
+    input.addEventListener("input", () => {
+      if ((input.type || "").toLowerCase() === "range") {
+        normalizeCutinVolumeInput(input, { dispatch: false });
+      } else {
+        updateCutinVolumeHelper(input);
+      }
+    }, ccfThemeWithSignal(true));
+
+    input.addEventListener("change", () => {
+      normalizeCutinVolumeInput(input, { dispatch: true });
+    }, ccfThemeWithSignal(true));
+
+    input.addEventListener("blur", () => {
+      normalizeCutinVolumeInput(input, { dispatch: true });
+    }, ccfThemeWithSignal(true));
+  }
+
+  function normalizeCutinVolumeInput(input, options = {}) {
+    if (!(input instanceof HTMLInputElement)) return "";
+    const normalized = normalizeCutinVolumeRatio(input.value);
+    if (input.value !== normalized) {
+      if (options.dispatch === true) {
+        setReactInputValue(input, normalized);
+      } else {
+        input.value = normalized;
+      }
+    }
+    updateCutinVolumeHelper(input, normalized);
+    return normalized;
+  }
+
+  function normalizeCutinVolumeRatio(value) {
+    const number = Number.parseFloat(String(value ?? "").replace(",", "."));
+    const safe = Number.isFinite(number) ? number : 1;
+    return (Math.round(clamp(safe, 0, 1) * 100) / 100).toFixed(2);
+  }
+
+  function ensureCutinVolumeHelper(input) {
+    if (!(input instanceof HTMLInputElement)) return null;
+    if (!input.id) {
+      cutinVolumeHelperSeq += 1;
+      input.id = `${CUTIN_VOLUME_HELPER_ID_PREFIX}input-${cutinVolumeHelperSeq}`;
+    }
+
+    const helperId = `${CUTIN_VOLUME_HELPER_ID_PREFIX}${input.id}`;
+    let helper = document.getElementById(helperId);
+    const anchor = input.closest(".MuiSlider-root, .MuiInputBase-root") || input;
+    const parent = anchor.parentElement || input.parentElement;
+    if (!helper) {
+      helper = document.createElement("p");
+      helper.id = helperId;
+      helper.className = CUTIN_VOLUME_HELPER_CLASS;
+      helper.dataset.ccfFor = input.id;
+      helper.setAttribute("aria-live", "polite");
+    }
+    if (parent && helper.parentElement !== parent) {
+      parent.insertBefore(helper, anchor.nextSibling);
+    }
+
+    const describedBy = new Set((input.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
+    describedBy.add(helperId);
+    input.setAttribute("aria-describedby", [...describedBy].join(" "));
+    return helper;
+  }
+
+  function updateCutinVolumeHelper(input, normalizedValue = null) {
+    if (!(input instanceof HTMLInputElement)) return;
+    const helper = ensureCutinVolumeHelper(input);
+    if (!(helper instanceof HTMLElement)) return;
+    const ratioText = normalizedValue || normalizeCutinVolumeRatio(input.value);
+    const percent = Math.round(Number(ratioText) * 100);
+    helper.textContent = `상대 배율 ${ratioText} (${percent}%). 0은 무음, 1은 원본 효과음 크기입니다.`;
   }
 
   function isUnsungDuetTextField(field) {
