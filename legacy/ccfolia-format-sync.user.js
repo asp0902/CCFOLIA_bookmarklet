@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.6
+// @version      0.1.7
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.6 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.7 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1613,6 +1613,10 @@
     if (value == null) return null;
     const trimmed = String(value).trim();
     if (!trimmed) return null;
+    // #/##/### 헤딩 크기 프리셋 (#99) — #이 가장 큼
+    if (trimmed === "#") return 24;
+    if (trimmed === "##") return 20;
+    if (trimmed === "###") return 17;
     const numeric = Math.round(Number(trimmed));
     if (!Number.isFinite(numeric)) return null;
     return clamp(numeric, FONT_SIZE_MIN, FONT_SIZE_MAX);
@@ -4755,7 +4759,13 @@
 
   function sanitizeInlineSizeInput(input) {
     if (!(input instanceof HTMLInputElement)) return "";
-    const sanitized = input.value.replace(/[^\d]/g, "").slice(0, 3);
+    // #/##/### 헤딩 프리셋 입력 허용 (#99)
+    if (/^#{1,3}$/.test(input.value.trim())) {
+      const heading = input.value.trim();
+      if (input.value !== heading) input.value = heading;
+      return heading;
+    }
+    const sanitized = input.value.replace(/[^\d#]/g, "").replace(/#(?=[\d])|(?<=[\d])#/g, "").slice(0, 3);
     if (input.value !== sanitized) {
       input.value = sanitized;
     }
@@ -12794,6 +12804,10 @@
     if (value == null) return null;
     const trimmed = String(value).trim();
     if (!trimmed) return null;
+    // #/##/### 헤딩 크기 프리셋 (#99) — #이 가장 큼
+    if (trimmed === "#") return 24;
+    if (trimmed === "##") return 20;
+    if (trimmed === "###") return 17;
     const numeric = Math.round(Number(trimmed));
     if (!Number.isFinite(numeric)) return null;
     return clamp(numeric, FONT_SIZE_MIN, FONT_SIZE_MAX);
