@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.7
+// @version      0.1.8
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.7 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.8 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -1613,10 +1613,6 @@
     if (value == null) return null;
     const trimmed = String(value).trim();
     if (!trimmed) return null;
-    // #/##/### 헤딩 크기 프리셋 (#99) — #이 가장 큼
-    if (trimmed === "#") return 24;
-    if (trimmed === "##") return 20;
-    if (trimmed === "###") return 17;
     const numeric = Math.round(Number(trimmed));
     if (!Number.isFinite(numeric)) return null;
     return clamp(numeric, FONT_SIZE_MIN, FONT_SIZE_MAX);
@@ -4555,6 +4551,11 @@
       captureInlineToolbarSelection(toolbar);
       target.dataset.editingSize = "1";
       delete target.dataset.sizePreviewApplied;
+      // 포커스 시 기존 숫자를 잠시 비워 새 값 입력이 바로 되게 (#99)
+      if (target instanceof HTMLInputElement && target.value) {
+        target.dataset.priorSize = target.value;
+        target.value = "";
+      }
       moveInlineSizeCursorToEnd(target);
       showInlineToolbarSelectionHighlight(toolbar);
     }, true);
@@ -4563,6 +4564,11 @@
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.matches?.("[data-inline-size]")) return;
       delete target.dataset.editingSize;
+      // 비운 채 그냥 나가면 이전 값 복원 (#99)
+      if (target instanceof HTMLInputElement && !target.value && target.dataset.priorSize) {
+        target.value = target.dataset.priorSize;
+      }
+      delete target.dataset.priorSize;
       sanitizeInlineSizeInput(target);
       if (target.dataset.sizePreviewApplied === "1") {
         applyInlineToolbarStyle(toolbar, {
@@ -4759,13 +4765,7 @@
 
   function sanitizeInlineSizeInput(input) {
     if (!(input instanceof HTMLInputElement)) return "";
-    // #/##/### 헤딩 프리셋 입력 허용 (#99)
-    if (/^#{1,3}$/.test(input.value.trim())) {
-      const heading = input.value.trim();
-      if (input.value !== heading) input.value = heading;
-      return heading;
-    }
-    const sanitized = input.value.replace(/[^\d#]/g, "").replace(/#(?=[\d])|(?<=[\d])#/g, "").slice(0, 3);
+    const sanitized = input.value.replace(/[^d]/g, "").slice(0, 3);
     if (input.value !== sanitized) {
       input.value = sanitized;
     }
@@ -12103,6 +12103,47 @@
     return pickBestEditor([...candidates], origin || composer) || null;
   }
 
+  // 헤딩 마크다운 (#99) — 줄 시작 "#/##/### " 마커를 제거하고 그 줄에
+  // 헤딩 크기를 적용한다. #=24px+굵게, ##=20px, ###=17px.
+  function applyHeadingMarkdown(text, runs) {
+    if (typeof text !== "string" || !/(?:^|\n)#{1,3} /.test(text)) {
+      return { text, runs };
+    }
+    const sizes = { 1: 24, 2: 20, 3: 17 };
+    const lines = text.split("\n");
+    let curText = text;
+    let curRuns = runs;
+    // 뒤 줄부터 마커를 제거해야 앞쪽 오프셋이 꼬이지 않는다.
+    // 헤딩 run은 제거 직후 curRuns에 합쳐서 이후(앞 줄) 제거 시 함께 시프트.
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const match = lines[i].match(/^(#{1,3}) /);
+      if (!match) continue;
+      const level = match[1].length;
+      const markerLen = level + 1;
+      let lineStart = 0;
+      for (let j = 0; j < i; j++) lineStart += lines[j].length + 1;
+      curRuns = rebaseRunsForTextReplacement(
+        curRuns,
+        { start: lineStart, end: lineStart + markerLen },
+        "",
+        curText.length,
+        curText.length - markerLen
+      );
+      curText = curText.slice(0, lineStart) + curText.slice(lineStart + markerLen);
+      curRuns = [
+        {
+          start: lineStart,
+          end: lineStart + lines[i].length - markerLen,
+          style: level === 1
+            ? { fontSize: `${sizes[level]}px`, bold: true }
+            : { fontSize: `${sizes[level]}px` }
+        },
+        ...curRuns
+      ];
+    }
+    return { text: curText, runs: curRuns };
+  }
+
   function preparePayloadForSend(editor, options = {}) {
     const isEditDialogEditor = editor instanceof HTMLTextAreaElement
       && editor.closest('[role="dialog"], .MuiDialog-paper')
@@ -12125,13 +12166,17 @@
     if (state.parentheticalGray) {
       state.runs = applyParentheticalGrayRuns(state.runs, rawText);
     }
+    // 헤딩 마크다운 (#99) — 줄 시작 #/##/### + 공백 → 마커 제거 + 그 줄 헤딩 크기
+    const heading = applyHeadingMarkdown(rawText, cloneRuns(state.runs, rawText.length));
+    const sendText = heading.text;
+    const baseRuns = heading.runs;
     // 서식 프리셋 자동 적용 (#70) — 메시지 안에 프리셋 이름과 같은 텍스트가 있으면
     // 그 구간에 프리셋 서식을 입혀 전송. 기존 수동 서식이 우선.
-    const presetNameRuns = buildPresetNameRuns(rawText);
+    const presetNameRuns = buildPresetNameRuns(sendText);
     const outgoingRuns = presetNameRuns.length
-      ? [...presetNameRuns, ...cloneRuns(state.runs, rawText.length)]
-      : state.runs;
-    const preparedRuns = prepareRunsForTransport(outgoingRuns, rawText.length);
+      ? [...presetNameRuns, ...baseRuns]
+      : baseRuns;
+    const preparedRuns = prepareRunsForTransport(outgoingRuns, sendText.length);
     if (preparedRuns.failed) {
       alert("클립보드나 로컬 이미지를 저장하지 못해 전송을 중단했습니다. 이미지 링크를 사용하거나 이미지를 더 작게 만들어주세요.");
       return false;
@@ -12139,7 +12184,7 @@
 
     const runs = preparedRuns.runs;
     const blockStyle = applyAutomaticNarration(state.blockStyle);
-    const alignRuns = getEffectiveAlignRuns(rawText, state.alignRuns, blockStyle);
+    const alignRuns = getEffectiveAlignRuns(sendText, state.alignRuns, blockStyle);
 
     // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
     const _narSpeaker = getCurrentSpeakerName();
@@ -12152,14 +12197,14 @@
       runs.length
     );
 
-    if (!runs.length && !alignRuns.length && !blockStyle.narration) return true;
+    if (!runs.length && !alignRuns.length && !blockStyle.narration && sendText === rawText) return true;
     const roll20Source = state.roll20Source;
-    state.text = rawText;
+    state.text = sendText;
     state.runs = runs;
 
     const envelope = {
       v: 1,
-      text: rawText,
+      text: sendText,
       formatRuns: runs,
       alignRuns,
       blockStyle
@@ -12168,19 +12213,19 @@
     const presenceApi = window.__CAPYBARA_TOOLKIT_PRESENCE__;
     if (presenceApi && typeof presenceApi.decorateEnvelope === "function") {
       try {
-        presenceApi.decorateEnvelope(envelope, rawText);
+        presenceApi.decorateEnvelope(envelope, sendText);
       } catch (error) {
         console.warn("[CCF] toolkit presence decoration failed", error);
       }
     }
 
     const encoded = encodeEnvelopeToInvisible(envelope);
-    const outgoing = rawText + encoded;
+    const outgoing = sendText + encoded;
     if (currentText === outgoing) return true;
 
     setEditorText(editor, outgoing);
     state.roll20Source = roll20Source;
-    schedulePendingSendRestore(editor, rawText, outgoing);
+    schedulePendingSendRestore(editor, sendText, outgoing);
     return true;
   }
 
@@ -12804,10 +12849,6 @@
     if (value == null) return null;
     const trimmed = String(value).trim();
     if (!trimmed) return null;
-    // #/##/### 헤딩 크기 프리셋 (#99) — #이 가장 큼
-    if (trimmed === "#") return 24;
-    if (trimmed === "##") return 20;
-    if (trimmed === "###") return 17;
     const numeric = Math.round(Number(trimmed));
     if (!Number.isFinite(numeric)) return null;
     return clamp(numeric, FONT_SIZE_MIN, FONT_SIZE_MAX);
