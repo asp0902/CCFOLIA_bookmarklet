@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.34
+// @version      0.3.35
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.34"),
+    version: getUserscriptVersion("0.3.35"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4985,8 +4985,11 @@
     const bottomGap = chatScroller
       ? Math.max(0, chatScroller.scrollHeight - chatScroller.scrollTop - chatScroller.clientHeight)
       : 0;
+    // 바닥 근처였다면 "현재 gap 유지"가 아니라 정확히 바닥(0)으로 복원.
+    // gap을 유지하면 어중간하게 뜬 상태(11~27px)가 영구 보존돼 마지막 메시지가
+    // 잘려 보였음 (진단 타임라인으로 확인).
     const preserveBottom = !!chatScroller && (forceBottom || bottomGap <= 48);
-    const preserveGap = forceBottom ? 0 : bottomGap;
+    const preserveGap = 0;
     const authors = messages.map((li) => {
       const author = extractAuthor(li);
       if (!author) return author;
@@ -5120,7 +5123,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.36 (anchored tab bottom)");
+    console.info("[ccf-prose-mode] active v0.0.37 (exact bottom restore)");
   }
 
   function teardown() {
@@ -5149,7 +5152,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.36",
+    version: "0.0.37",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
