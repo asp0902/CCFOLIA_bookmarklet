@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.9
+// @version      0.1.10
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.9 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.10 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -70,7 +70,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.3"),
+    version: getUserscriptVersion("0.1.10"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -630,7 +630,7 @@
         min-width: 40px;
         max-width: min(260px, calc(100vw - 32px));
         padding: 7px 10px;
-        border-radius: 8px;
+        border-radius: 0;
         background: rgba(18, 18, 18, 0.96);
         color: #ffffff;
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
@@ -713,7 +713,7 @@
         max-width: min(100%, 300px);
         height: auto;
         border: 0;
-        border-radius: 10px;
+        border-radius: 0;
         box-sizing: border-box;
         margin: 0 auto;
       }
@@ -2455,7 +2455,7 @@
         cursor: pointer;
         font: inherit;
         line-height: 1;
-        border-radius: 8px;
+        border-radius: 0;
         padding: 6px 8px;
       }
 
@@ -2808,7 +2808,7 @@
         border: 1px solid rgba(255, 255, 255, 0.12);
         background: #282828;
         color: #fff;
-        border-radius: 8px;
+        border-radius: 0;
         cursor: pointer;
         user-select: none;
         font-size: 13px;
@@ -2905,7 +2905,7 @@
         min-width: 40px;
         max-width: min(260px, calc(100vw - 32px));
         padding: 7px 10px;
-        border-radius: 8px;
+        border-radius: 0;
         background: rgba(18, 18, 18, 0.96);
         color: #ffffff;
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
@@ -2975,7 +2975,7 @@
         height: 36px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         background: #282828;
-        border-radius: 8px;
+        border-radius: 0;
         box-sizing: border-box;
         overflow: hidden;
         flex: 0 0 auto;
@@ -2992,7 +2992,7 @@
         content: "";
         position: absolute;
         inset: 6px;
-        border-radius: 6px;
+        border-radius: 0;
         border: 1px solid rgba(255, 255, 255, 0.18);
         background: var(--ccf-chip-color, #ffffff);
         pointer-events: none;
@@ -3108,7 +3108,7 @@
         padding: 6px;
         background: #1f1f24;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 10px;
+        border-radius: 0;
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
         z-index: 2147483002;
       }
@@ -3119,7 +3119,7 @@
 
       .ccf-size-option {
         border: 0;
-        border-radius: 8px;
+        border-radius: 0;
         padding: 6px 10px;
         background: #282828;
         color: #fff;
@@ -3147,7 +3147,7 @@
 
       .ccf-btn {
         border: 0;
-        border-radius: 10px;
+        border-radius: 0;
         padding: 9px 12px;
         background: #282828;
         color: #fff;
@@ -3229,7 +3229,7 @@
         max-width: min(100%, 300px);
         height: auto;
         border: 0;
-        border-radius: 10px;
+        border-radius: 0;
         box-sizing: border-box;
         margin: 0 auto;
       }
@@ -3339,7 +3339,7 @@
         justify-content: center;
         width: 32px;
         height: 32px;
-        border-radius: 50%;
+        border-radius: 0;
         border: none;
         cursor: pointer;
         background: transparent;
@@ -3364,7 +3364,7 @@
         right: -3px;
         min-width: 16px;
         height: 16px;
-        border-radius: 999px;
+        border-radius: 0;
         background: #5f7cff;
         color: white;
         font-size: 10px;
@@ -3392,7 +3392,7 @@
         margin: 0 0 6px;
         padding: 6px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 8px;
+        border-radius: 0;
         background: rgba(32, 32, 32, 0.94);
         color: #fff;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
@@ -3404,14 +3404,14 @@
         width: 30px;
         height: 30px;
         padding: 0;
-        border-radius: 6px;
+        border-radius: 0;
         font-size: 12px;
       }
 
       .ccf-inline-toolbar .ccf-inline-tool {
         width: 30px;
         height: 30px;
-        border-radius: 6px;
+        border-radius: 0;
       }
 
       .ccf-inline-toolbar .ccf-align-toggle {
@@ -3451,14 +3451,14 @@
       }
       .ccf-style-preset-apply {
         all: unset; box-sizing: border-box; cursor: pointer;
-        flex: 1; min-width: 0; padding: 5px 8px; border-radius: 6px;
+        flex: 1; min-width: 0; padding: 5px 8px; border-radius: 0;
         background: rgba(255, 255, 255, 0.06); color: #fff;
         font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .ccf-style-preset-apply:hover { background: rgba(255, 255, 255, 0.14); }
       .ccf-style-preset-remove {
         all: unset; box-sizing: border-box; cursor: pointer;
-        width: 22px; height: 22px; border-radius: 6px; flex: 0 0 22px;
+        width: 22px; height: 22px; border-radius: 0; flex: 0 0 22px;
         display: inline-grid; place-items: center;
         color: rgba(255, 255, 255, 0.6); font-size: 14px;
       }
@@ -3469,7 +3469,7 @@
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
       .ccf-style-preset-auto-dot {
         all: unset; box-sizing: border-box; cursor: pointer;
-        width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%;
+        width: 10px; height: 10px; flex: 0 0 10px; border-radius: 0;
         border: 1px solid rgba(255, 255, 255, 0.4);
         margin-right: 2px;
       }
@@ -3512,7 +3512,7 @@
         width: 44px;
         height: 30px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 0;
         background: #282828;
         color: #fff;
         padding: 0 4px;
@@ -3548,7 +3548,7 @@
         gap: 8px;
         padding: 10px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 8px;
+        border-radius: 0;
         background: #2b2b2b;
         color: #fff;
         box-shadow: 0 16px 32px rgba(0, 0, 0, 0.36);
@@ -3582,7 +3582,7 @@
         min-height: 34px;
         box-sizing: border-box;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 0;
         background: #1f1f1f;
         color: #fff;
         padding: 8px 9px;
@@ -3603,7 +3603,7 @@
       }
 
       .ccf-inline-popover-actions .ccf-btn {
-        border-radius: 6px;
+        border-radius: 0;
         padding: 7px 10px;
       }
 
@@ -3635,7 +3635,7 @@
         width: 100%;
         padding: 6px 8px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 0;
         background: #1f1f1f;
         color: rgba(255, 255, 255, 0.92);
         text-align: left;
@@ -3709,7 +3709,7 @@
 
       .ccf-inline-selection-layer .ccf-inline-selection-mark {
         background: rgba(100, 149, 255, 0.34);
-        border-radius: 3px;
+        border-radius: 0;
         -webkit-box-decoration-break: clone;
         box-decoration-break: clone;
       }
@@ -4072,7 +4072,7 @@
         "background-attachment": "scroll",
         color: EDIT_DIALOG_TEXT_COLOR,
         border: "none",
-        "border-radius": "4px",
+        "border-radius": "0",
         "box-shadow": "0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12)",
         "font-family": EDIT_DIALOG_FONT,
         "text-shadow": "none",
@@ -4154,7 +4154,7 @@
         "background-color": "rgba(255, 255, 255, 0.09)",
         "background-image": "none",
         border: "none",
-        "border-radius": "4px 4px 0 0",
+        "border-radius": "0",
         "box-shadow": "none",
         color: EDIT_DIALOG_TEXT_COLOR,
         "font-family": EDIT_DIALOG_FONT
@@ -4175,7 +4175,7 @@
         "text-transform": "uppercase",
         "text-shadow": "none",
         border: "none",
-        "border-radius": "4px"
+        "border-radius": "0"
       });
     });
 
