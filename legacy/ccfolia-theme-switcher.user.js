@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.12
+// @version      0.2.13
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -115,8 +115,10 @@
   const UNSUNG_DUET_MSG_INJECTED_ATTR = "data-ccf-unsung-duet-msg-injected";
   const UNSUNG_DUET_IMG_CLASS = "ccf-unsung-duet-msg-img";
   const CUTIN_VOLUME_BOUND_ATTR = "data-ccf-cutin-volume-bound";
-  const CUTIN_VOLUME_HELPER_CLASS = "ccf-cutin-volume-helper";
-  const CUTIN_VOLUME_HELPER_ID_PREFIX = "ccf-cutin-volume-helper-";
+  const CUTIN_VOLUME_LEGACY_HELPER_CLASS = "ccf-cutin-volume-helper";
+  const CUTIN_VOLUME_STORAGE_KEY = "ccf-theme-cutin-volume-absolute-v1";
+  const CUTIN_VOLUME_APPLY_WINDOW_MS = 10000;
+  const CUTIN_VOLUME_APPLY_DELAYS_MS = Object.freeze([0, 16, 80, 200, 500]);
   // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
   const UNSUNG_DUET_URL_TO_ALT = Object.freeze({
     "https://i.imgur.com/FFUXgYg.png": "시프터 판정",
@@ -216,7 +218,7 @@
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
-    version: getUserscriptVersion("0.2.12"),
+    version: getUserscriptVersion("0.2.13"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -355,7 +357,11 @@
   let activeCharacterColorEditSource = "";
   let characterColorPopoverState = { h: 0, s: 1, v: 1 };
   let characterColorPopoverInputMode = "hex";
-  let cutinVolumeHelperSeq = 0;
+  let cutinVolumeAbsolutePatchInstalled = false;
+  let cutinVolumeAbsoluteLastValue = null;
+  let cutinVolumeAbsoluteApplyUntil = 0;
+  const cutinVolumeAbsoluteBySource = new Map();
+  const cutinVolumeApplyingMedia = new WeakSet();
 
   // 모듈 로드 확정 로그. 이 로그조차 콘솔에 안 보이면 스크립트 자체가 GitHub
   // Pages 에서 fetch 되지 않았거나 로더가 다른 경로로 실행 중인 것.
@@ -640,19 +646,6 @@
 
         input[${CUTIN_VOLUME_BOUND_ATTR}="1"] {
           accent-color: var(--ccf-theme-control-active, currentColor);
-        }
-
-        .${CUTIN_VOLUME_HELPER_CLASS} {
-          margin: 4px 0 0 !important;
-          font-size: 12px !important;
-          line-height: 1.45 !important;
-          color: inherit !important;
-          opacity: 0.72;
-        }
-
-        html[data-ccf-theme-active="1"] .${CUTIN_VOLUME_HELPER_CLASS} {
-          color: var(--ccf-theme-muted-text) !important;
-          opacity: 1;
         }
 
         html[data-ccf-theme-active="1"] .MuiDivider-root {
@@ -2317,6 +2310,7 @@
     // 실행되지 않아 다이스 카드 인젝션이 침묵 실패하는 경로가 있었음.
     try { mountToggle(); } catch (e) { try { console.warn("[CCF Theme] mountToggle failed", e); } catch (_) {} }
     try { applyDicebotAttribute(); } catch (e) { try { console.warn("[CCF Theme] applyDicebotAttribute failed", e); } catch (_) {} }
+    try { installCutinVolumeAbsolutePatch(); } catch (e) { try { console.warn("[CCF Theme] installCutinVolumeAbsolutePatch failed", e); } catch (_) {} }
     try { bindCutinVolumeRatioInputs(); } catch (e) { try { console.warn("[CCF Theme] bindCutinVolumeRatioInputs failed", e); } catch (_) {} }
     try { bindUnsungDuetTriggerFields(); } catch (e) { try { console.warn("[CCF Theme] bindUnsungDuetTriggerFields failed", e); } catch (_) {} }
     try { injectUnsungDuetMessageImages(); } catch (e) { try { console.warn("[CCF Theme] injectUnsungDuetMessageImages failed", e); } catch (_) {} }
@@ -4486,6 +4480,8 @@
   }
 
   function bindCutinVolumeRatioInputs() {
+    document.querySelectorAll(`.${CUTIN_VOLUME_LEGACY_HELPER_CLASS}`).forEach((helper) => helper.remove());
+
     document.querySelectorAll('input[name="volume"]').forEach((input) => {
       if (!(input instanceof HTMLInputElement)) return;
       if (!isCutinVolumeRatioInput(input)) return;
@@ -4518,8 +4514,8 @@
 
   function bindCutinVolumeRatioInput(input) {
     if (input.getAttribute(CUTIN_VOLUME_BOUND_ATTR) === "1") {
-      ensureCutinVolumeHelper(input);
-      updateCutinVolumeHelper(input);
+      normalizeCutinVolumeInput(input, { dispatch: false });
+      rememberCutinVolumeAbsoluteInput(input);
       return;
     }
 
@@ -4528,29 +4524,36 @@
     input.max = "1";
     input.step = "0.01";
     input.inputMode = "decimal";
-    input.title = "효과음 볼륨은 절대 음량이 아니라 현재 효과음 크기에 곱해지는 상대 배율입니다.";
-    input.setAttribute("aria-label", "효과음 상대 볼륨 배율");
+    input.title = "0은 무음, 1은 시스템 볼륨상 최대치입니다.";
+    input.setAttribute("aria-label", "효과음 볼륨");
+    stripCutinVolumeHelperReference(input);
 
-    // CCFOLIA stores this value as a 0..1 multiplier. Keep the raw ratio; do not convert to percent.
     normalizeCutinVolumeInput(input, { dispatch: false });
-    ensureCutinVolumeHelper(input);
-    updateCutinVolumeHelper(input);
+    rememberCutinVolumeAbsoluteInput(input);
 
     input.addEventListener("input", () => {
-      if ((input.type || "").toLowerCase() === "range") {
-        normalizeCutinVolumeInput(input, { dispatch: false });
-      } else {
-        updateCutinVolumeHelper(input);
-      }
+      normalizeCutinVolumeInput(input, { dispatch: false });
+      rememberCutinVolumeAbsoluteInput(input);
     }, ccfThemeWithSignal(true));
 
     input.addEventListener("change", () => {
       normalizeCutinVolumeInput(input, { dispatch: true });
+      rememberCutinVolumeAbsoluteInput(input);
     }, ccfThemeWithSignal(true));
 
     input.addEventListener("blur", () => {
       normalizeCutinVolumeInput(input, { dispatch: true });
+      rememberCutinVolumeAbsoluteInput(input);
     }, ccfThemeWithSignal(true));
+
+    const form = input.closest("form");
+    if (form instanceof HTMLFormElement && form.dataset.ccfCutinVolumeSubmitBound !== "1") {
+      form.dataset.ccfCutinVolumeSubmitBound = "1";
+      form.addEventListener("submit", () => {
+        normalizeCutinVolumeInput(input, { dispatch: false });
+        rememberCutinVolumeAbsoluteInput(input);
+      }, ccfThemeWithSignal(true));
+    }
   }
 
   function normalizeCutinVolumeInput(input, options = {}) {
@@ -4563,7 +4566,7 @@
         input.value = normalized;
       }
     }
-    updateCutinVolumeHelper(input, normalized);
+    input.dataset.ccfCutinVolumeAbsolute = normalized;
     return normalized;
   }
 
@@ -4573,41 +4576,196 @@
     return (Math.round(clamp(safe, 0, 1) * 100) / 100).toFixed(2);
   }
 
-  function ensureCutinVolumeHelper(input) {
-    if (!(input instanceof HTMLInputElement)) return null;
-    if (!input.id) {
-      cutinVolumeHelperSeq += 1;
-      input.id = `${CUTIN_VOLUME_HELPER_ID_PREFIX}input-${cutinVolumeHelperSeq}`;
+  function stripCutinVolumeHelperReference(input) {
+    if (!(input instanceof HTMLInputElement)) return;
+    const describedBy = (input.getAttribute("aria-describedby") || "")
+      .split(/\s+/)
+      .filter((id) => id && !id.startsWith("ccf-cutin-volume-helper-"));
+    if (describedBy.length) {
+      input.setAttribute("aria-describedby", describedBy.join(" "));
+    } else {
+      input.removeAttribute("aria-describedby");
     }
-
-    const helperId = `${CUTIN_VOLUME_HELPER_ID_PREFIX}${input.id}`;
-    let helper = document.getElementById(helperId);
-    const anchor = input.closest(".MuiSlider-root, .MuiInputBase-root") || input;
-    const parent = anchor.parentElement || input.parentElement;
-    if (!helper) {
-      helper = document.createElement("p");
-      helper.id = helperId;
-      helper.className = CUTIN_VOLUME_HELPER_CLASS;
-      helper.dataset.ccfFor = input.id;
-      helper.setAttribute("aria-live", "polite");
-    }
-    if (parent && helper.parentElement !== parent) {
-      parent.insertBefore(helper, anchor.nextSibling);
-    }
-
-    const describedBy = new Set((input.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
-    describedBy.add(helperId);
-    input.setAttribute("aria-describedby", [...describedBy].join(" "));
-    return helper;
   }
 
-  function updateCutinVolumeHelper(input, normalizedValue = null) {
-    if (!(input instanceof HTMLInputElement)) return;
-    const helper = ensureCutinVolumeHelper(input);
-    if (!(helper instanceof HTMLElement)) return;
-    const ratioText = normalizedValue || normalizeCutinVolumeRatio(input.value);
-    const percent = Math.round(Number(ratioText) * 100);
-    helper.textContent = `상대 배율 ${ratioText} (${percent}%). 0은 무음, 1은 원본 효과음 크기입니다.`;
+  function rememberCutinVolumeAbsoluteInput(input) {
+    if (!(input instanceof HTMLInputElement)) return null;
+    const value = Number(normalizeCutinVolumeRatio(input.value));
+    if (!Number.isFinite(value)) return null;
+    cutinVolumeAbsoluteLastValue = clamp(value, 0, 1);
+    cutinVolumeAbsoluteApplyUntil = Date.now() + CUTIN_VOLUME_APPLY_WINDOW_MS;
+
+    for (const key of collectCutinVolumeSourceKeys(input)) {
+      cutinVolumeAbsoluteBySource.set(key, cutinVolumeAbsoluteLastValue);
+    }
+    persistCutinVolumeAbsoluteStore();
+    return cutinVolumeAbsoluteLastValue;
+  }
+
+  function collectCutinVolumeSourceKeys(input) {
+    const keys = new Set();
+    const form = input?.closest?.("form");
+    if (!(form instanceof HTMLElement)) return keys;
+
+    form.querySelectorAll("input, textarea").forEach((field) => {
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return;
+      if (field === input) return;
+      const name = (field.getAttribute("name") || "").toLowerCase();
+      const value = String(field.value || "").trim();
+      if (!value) return;
+      if (!isCutinVolumeSourceValue(value) && !/(url|src|source|file|path|sound|audio)/i.test(name)) return;
+      addCutinVolumeSourceKeys(keys, value);
+    });
+
+    return keys;
+  }
+
+  function isCutinVolumeSourceValue(value) {
+    return /^(?:https?:|blob:|data:|filesystem:|\/\/)/i.test(String(value || "").trim());
+  }
+
+  function addCutinVolumeSourceKeys(keys, value) {
+    const raw = String(value || "").trim();
+    if (!raw) return;
+    keys.add(raw);
+    try {
+      const url = new URL(raw, location.href);
+      keys.add(url.href);
+      url.hash = "";
+      keys.add(url.href);
+      url.search = "";
+      keys.add(url.href);
+      const fileName = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() || "");
+      if (fileName) keys.add(fileName);
+    } catch (error) {
+      const tail = raw.split(/[\\/]/).pop();
+      if (tail) keys.add(tail);
+    }
+  }
+
+  function persistCutinVolumeAbsoluteStore() {
+    try {
+      const sources = {};
+      cutinVolumeAbsoluteBySource.forEach((value, key) => {
+        if (typeof key === "string" && Number.isFinite(value)) sources[key] = clamp(value, 0, 1);
+      });
+      window.localStorage.setItem(CUTIN_VOLUME_STORAGE_KEY, JSON.stringify({
+        lastValue: Number.isFinite(cutinVolumeAbsoluteLastValue) ? cutinVolumeAbsoluteLastValue : null,
+        sources
+      }));
+    } catch (error) { /* ignore storage failures */ }
+  }
+
+  function restoreCutinVolumeAbsoluteStore() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(CUTIN_VOLUME_STORAGE_KEY) || "{}");
+      if (Number.isFinite(Number(parsed?.lastValue))) {
+        cutinVolumeAbsoluteLastValue = clamp(Number(parsed.lastValue), 0, 1);
+      }
+      if (parsed?.sources && typeof parsed.sources === "object") {
+        Object.entries(parsed.sources).forEach(([key, value]) => {
+          if (typeof key === "string" && Number.isFinite(Number(value))) {
+            cutinVolumeAbsoluteBySource.set(key, clamp(Number(value), 0, 1));
+          }
+        });
+      }
+    } catch (error) { /* ignore storage failures */ }
+  }
+
+  function installCutinVolumeAbsolutePatch() {
+    if (cutinVolumeAbsolutePatchInstalled) return;
+    cutinVolumeAbsolutePatchInstalled = true;
+    restoreCutinVolumeAbsoluteStore();
+
+    const handleMediaEvent = (event) => {
+      if (event?.target instanceof HTMLMediaElement) {
+        applyCutinVolumeAbsoluteToMedia(event.target);
+      }
+    };
+
+    document.addEventListener("play", handleMediaEvent, ccfThemeWithSignal(true));
+    document.addEventListener("playing", handleMediaEvent, ccfThemeWithSignal(true));
+    document.addEventListener("volumechange", handleMediaEvent, ccfThemeWithSignal(true));
+
+    const originalPlay = HTMLMediaElement.prototype.play;
+    if (typeof originalPlay === "function" && originalPlay.__ccfCutinVolumePatched !== true) {
+      const patchedPlay = function ccfCutinVolumePlay(...args) {
+        applyCutinVolumeAbsoluteToMedia(this, { allowDelayed: true });
+        const result = originalPlay.apply(this, args);
+        scheduleCutinVolumeAbsoluteReapply(this);
+        return result;
+      };
+      patchedPlay.__ccfCutinVolumePatched = true;
+      HTMLMediaElement.prototype.play = patchedPlay;
+      ccfThemeRegisterTeardown(() => {
+        try {
+          if (HTMLMediaElement.prototype.play === patchedPlay) {
+            HTMLMediaElement.prototype.play = originalPlay;
+          }
+        } catch (error) { /* ignore restore failures */ }
+      });
+    }
+  }
+
+  function scheduleCutinVolumeAbsoluteReapply(media) {
+    if (!(media instanceof HTMLMediaElement)) return;
+    for (const delay of CUTIN_VOLUME_APPLY_DELAYS_MS) {
+      window.setTimeout(() => applyCutinVolumeAbsoluteToMedia(media), delay);
+    }
+  }
+
+  function applyCutinVolumeAbsoluteToMedia(media, options = {}) {
+    if (!(media instanceof HTMLMediaElement) || cutinVolumeApplyingMedia.has(media)) return false;
+    const volume = resolveCutinVolumeAbsoluteForMedia(media, options);
+    if (!Number.isFinite(volume)) return false;
+
+    const nextVolume = clamp(volume, 0, 1);
+    if (Math.abs(Number(media.volume) - nextVolume) < 0.001) return true;
+
+    try {
+      cutinVolumeApplyingMedia.add(media);
+      media.volume = nextVolume;
+      return true;
+    } catch (error) {
+      return false;
+    } finally {
+      window.setTimeout(() => cutinVolumeApplyingMedia.delete(media), 0);
+    }
+  }
+
+  function resolveCutinVolumeAbsoluteForMedia(media, options = {}) {
+    const sourceMatch = getCutinVolumeAbsoluteFromMediaSource(media);
+    if (Number.isFinite(sourceMatch)) return sourceMatch;
+    if (!isCutinVolumeMediaCandidate(media)) return null;
+    if (
+      Date.now() <= cutinVolumeAbsoluteApplyUntil ||
+      isUnsungDuetCutinActive()
+    ) {
+      return Number.isFinite(cutinVolumeAbsoluteLastValue) ? cutinVolumeAbsoluteLastValue : null;
+    }
+    return null;
+  }
+
+  function getCutinVolumeAbsoluteFromMediaSource(media) {
+    const keys = new Set();
+    addCutinVolumeSourceKeys(keys, media.currentSrc || media.src || "");
+    media.querySelectorAll?.("source[src]").forEach((source) => {
+      addCutinVolumeSourceKeys(keys, source.getAttribute("src") || "");
+    });
+
+    for (const key of keys) {
+      if (cutinVolumeAbsoluteBySource.has(key)) return cutinVolumeAbsoluteBySource.get(key);
+    }
+    return null;
+  }
+
+  function isCutinVolumeMediaCandidate(media) {
+    if (!(media instanceof HTMLMediaElement)) return false;
+    if (media.closest?.(".ccf-youtube-bgm-popover, [data-ccf-bgm-panel], [data-ccf-youtube-bgm]")) return false;
+    if (media.loop) return false;
+    const duration = Number(media.duration);
+    if (Number.isFinite(duration) && duration > 30) return false;
+    return Date.now() <= cutinVolumeAbsoluteApplyUntil || isUnsungDuetCutinActive();
   }
 
   function isUnsungDuetTextField(field) {
