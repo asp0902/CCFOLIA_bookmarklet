@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.40
+// @version      0.3.41
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.40"),
+    version: getUserscriptVersion("0.3.41"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5107,19 +5107,31 @@
     if (!(scroller instanceof HTMLElement) || scroller.__ccr20BottomFinisher) return;
     scroller.__ccr20BottomFinisher = true;
     scroller.__ccr20Pinned = true;
+    let lastUserIntentAt = 0;
+    const markUserIntent = () => { lastUserIntentAt = Date.now(); };
     scroller.addEventListener("wheel", (event) => {
+      markUserIntent();
       if (event.deltaY < 0) scroller.__ccr20Pinned = false;
     }, { passive: true });
     scroller.addEventListener("touchmove", () => {
+      markUserIntent();
       scroller.__ccr20Pinned = false;
     }, { passive: true });
     scroller.addEventListener("pointerdown", (event) => {
+      markUserIntent();
       // 스크롤바 영역(콘텐츠 폭 바깥) 드래그 시작 — 사용자 의도 스크롤
       if (event.offsetX > scroller.clientWidth) scroller.__ccr20Pinned = false;
     }, { passive: true });
     scroller.addEventListener("scroll", () => {
-      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 2) {
+      const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      if (gap <= 2) {
         scroller.__ccr20Pinned = true;
+        return;
+      }
+      // 고정 상태인데 바닥을 벗어난 스크롤 — 사용자 입력 직후가 아니면
+      // (CCFolia의 초기 위치 복원/애니메이션 등) 즉시 바닥으로 되돌림.
+      if (scroller.__ccr20Pinned && Date.now() - lastUserIntentAt > 600) {
+        snapScrollerToBottom(scroller);
       }
     }, { passive: true });
     const content = scroller.firstElementChild || scroller;
@@ -5177,7 +5189,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.42 (pinned-bottom scrollers)");
+    console.info("[ccf-prose-mode] active v0.0.43 (pinned guards external scrolls)");
   }
 
   function teardown() {
@@ -5206,7 +5218,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.42",
+    version: "0.0.43",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
