@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.4
+// @version      0.1.5
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.4 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.5 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -5140,10 +5140,12 @@
     const state = ensureEditorState(editor);
     const preservedNarration = state.blockStyle?.narration === true;
     const preservedParentheticalGray = state.parentheticalGray === true;
+    // 서식 유지(keep) ON이면 lastStyle을 남겨 다음 입력에 이어 적용 (#98)
+    const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
     state.text = "";
     state.runs = [];
     state.alignRuns = [];
-    state.lastStyle = null;
+    if (!keepOn) state.lastStyle = null;
     state.blockStyle = preservedNarration ? { narration: true } : {};
     state.parentheticalGray = preservedParentheticalGray;
     state.roll20Source = null;
@@ -11949,14 +11951,24 @@
         const text = stripInvisibleEnvelope(getEditorText(editor));
         const prevText = typeof state.text === "string" ? normalizeEditorText(state.text) : text;
         const diff = getTextReplacementDiff(prevText, text);
+        // 서식 유지(keep) ON이면 새로 입력된 글자에 lastStyle을 이어 적용 (#98)
+        const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
 
         if (diff) {
+          const keepRuns = keepOn && state.lastStyle && diff.insertedText
+            ? [{
+                start: diff.start,
+                end: diff.start + diff.insertedText.length,
+                style: { ...state.lastStyle }
+              }]
+            : [];
           state.runs = rebaseRunsForTextReplacement(
             cloneRuns(state.runs, prevText.length),
             { start: diff.start, end: diff.end },
             diff.insertedText,
             prevText.length,
-            text.length
+            text.length,
+            keepRuns
           );
           state.alignRuns = rebaseAlignRunsForTextReplacement(
             cloneAlignRuns(state.alignRuns, getTextLineCount(prevText)),
@@ -11973,7 +11985,7 @@
         if (!text) {
           state.runs = [];
           state.alignRuns = [];
-          state.lastStyle = null;
+          if (!keepOn) state.lastStyle = null;
           state.blockStyle = {};
         } else {
           if (state.parentheticalGray) {
