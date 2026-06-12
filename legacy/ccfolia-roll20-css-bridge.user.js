@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.36
+// @version      0.3.37
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -79,7 +79,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.36"),
+    version: getUserscriptVersion("0.3.37"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5076,10 +5076,30 @@
     for (let el = anchor.parentElement; el && el !== document.documentElement; el = el.parentElement) {
       const overflowY = getComputedStyle(el).overflowY || "";
       if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+        bindBottomFinisher(el);
         return el;
       }
     }
     return null;
+  }
+
+  // CCFolia의 smooth scroll 애니메이션은 prose-mode 여백 압축 "전" 높이를 목표로
+  // 계산해 바닥보다 11~27px 모자란 지점에 안착하며 우리 즉시 보정을 덮어쓴다
+  // (진단 타임라인 확인). 애니메이션과 싸우지 않고, 스크롤이 완전히 멈춘 시점
+  // (scrollend)에 바닥 근처(≤48px)면 정확히 바닥으로 마무리한다.
+  function bindBottomFinisher(scroller) {
+    if (!(scroller instanceof HTMLElement) || scroller.__ccr20BottomFinisher) return;
+    scroller.__ccr20BottomFinisher = true;
+    scroller.addEventListener("scrollend", () => {
+      if (!active) return;
+      const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      if (gap > 1 && gap <= 48) {
+        const prevBehavior = scroller.style.scrollBehavior;
+        scroller.style.scrollBehavior = "auto";
+        scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+        scroller.style.scrollBehavior = prevBehavior;
+      }
+    }, { passive: true });
   }
 
   function snapVisibleChatTabToBottom() {
@@ -5127,7 +5147,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.38 (instant bottom restore)");
+    console.info("[ccf-prose-mode] active v0.0.39 (scrollend bottom finisher)");
   }
 
   function teardown() {
@@ -5156,7 +5176,7 @@
   }
 
   window.__CCF_PROSE_MODE_DEBUG__ = {
-    version: "0.0.38",
+    version: "0.0.39",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
