@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.65
+// @version      0.1.66
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.65",
+    version: "0.1.66",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -964,7 +964,7 @@
     }
     .settings-pl-row {
       display: grid;
-      grid-template-columns: 3px minmax(0, 1fr) auto;
+      grid-template-columns: 3px 24px minmax(0, 1fr) auto;
       gap: 8px; align-items: center;
       padding: 6px 8px;
       background: rgba(255,255,255,.03);
@@ -1150,6 +1150,7 @@
     }
     .pl-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .pl-avatar[data-empty="1"] { opacity: .35; }
+    .settings-pl-row .pl-avatar { width: 24px; height: 24px; flex: 0 0 24px; }
     .perm-grid .perm-name .pl-avatar {
       width: 22px; height: 22px; flex: 0 0 22px; margin-right: 6px;
     }
@@ -2902,9 +2903,11 @@
       const merged = aliases.length > 0 ? "1" : "0";
       const perms = aggregatePermissionsForPl(pl);
       const aliasHtml = aliases.map((a) => `<span class="settings-pl-alias" title="${escapeAttr(a)}">${escapeHtml(a)}</span>`).join("");
+      const image = typeof pl?.image === "string" ? pl.image : "";
       return `
         <div class="settings-pl-row" data-pl-role="${role}" data-pl-merged="${merged}">
           <span class="settings-pl-strip" aria-hidden="true"></span>
+          <span class="pl-avatar" data-empty="${image ? "0" : "1"}" aria-hidden="true">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : ""}</span>
           <div class="settings-pl-main">
             <div class="settings-pl-name-row">
               <span class="settings-pl-name" title="${escapeAttr(name)}">${escapeHtml(name)}</span>
@@ -3715,9 +3718,24 @@
     const oldName = item.name;
     item.aliases = [...new Set([oldName, ...(item.aliases || []).filter((a) => a && a !== alias)])].filter(Boolean);
     item.name = alias;
+    // 대표 이미지도 새 대표 캐릭터 것으로 교체 (#96) — 채팅 이력에서 검색,
+    // 못 찾으면 비워서 이후 발화/백필이 새 대표 기준으로 다시 채움.
+    item.image = findChatAuthorImageByName(alias) || "";
     writePlRow(row, item);
     migrateHandoutPermissionKey(oldName, alias);
     toast(`대표가 "${alias}"(으)로 변경되었습니다. 저장 버튼으로 확정하세요.`);
+  }
+
+  // 화면에 렌더된 채팅 이력에서 해당 이름의 아바타 이미지 검색 (#96)
+  function findChatAuthorImageByName(name) {
+    const key = normalizePlNameKey(name || "");
+    if (!key) return "";
+    const items = Array.from(document.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR))
+      .filter((item) => item instanceof HTMLElement && item.isConnected);
+    for (const entry of collectChatAuthorEntries(items)) {
+      if (normalizePlNameKey(entry.name) === key && entry.image) return entry.image;
+    }
+    return "";
   }
 
   // 모든 핸드아웃의 권한 키를 oldName → newName 으로 이전. 둘 다 있으면 OR 병합.
@@ -4261,7 +4279,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.65 (alias promote to representative)");
+    console.info("[ccf-handout] init — version 0.1.66 (settings avatars + promote image sync)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
