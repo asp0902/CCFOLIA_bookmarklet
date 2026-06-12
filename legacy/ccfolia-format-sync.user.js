@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.11
+// @version      0.1.12
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.11 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.12 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -51,6 +51,7 @@
   const HISTORY_RENDER_BOTTOM_THRESHOLD_PX = 160;
   const CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS = 1200;
   const CHAT_HISTORY_LOAD_PAUSE_MS = 6000;
+  const ENCODED_RENDER_RETRY_DELAYS = Object.freeze([120, 360, 900, 1800]);
 
   const INVIS_START = "\u2063\u2063\u2063";
   const INVIS_END = "\u2062\u2062\u2062";
@@ -70,7 +71,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.11"),
+    version: getUserscriptVersion("0.1.12"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -86,6 +87,7 @@
   const IFH_UPLOAD_CT_FALLBACK = "dadb61fc2990b7b1";
   const IFH_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   const IFH_SUPPORTED_IMAGE_EXT_RE = /\.(gif|png|bmp|jpe?g|webp|heic)$/i;
+  const pendingEncodedRenderRetries = new WeakMap();
 
   if (IS_IFH_HOST) {
     initIfhBridgePage();
@@ -968,20 +970,25 @@
 
   function isLikelyMessageTextElement(el) {
     if (!(el instanceof HTMLElement)) return false;
-    if (el.getAttribute(CCF_RENDERED_ATTR) === "1") return false;
     if (el.matches?.(MESSAGE_SCOPE_SELECTOR)) return false;
     if (el.closest('textarea, input, [contenteditable="true"], [role="textbox"]')) return false;
     if (el.closest("button, form")) return false;
     if (el.querySelector('button, form, textarea, input, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return false;
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
+    if (el.getAttribute(CCF_RENDERED_ATTR) === "1") {
+      el.removeAttribute(CCF_RENDERED_ATTR);
+    }
 
     if (el.children.length > 8) return false;
 
     const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
     const insideMessageSurface = !!el.closest?.(MESSAGE_SCOPE_SELECTOR);
     if (!knownTextElement && !insideMessageSurface) return false;
-    if (!isNearChatBottom(el)) return false;
+    if (!shouldRenderEncodedMessageNow(el)) {
+      scheduleEncodedMessageRenderRetry(el);
+      return false;
+    }
 
     const nestedEncodedElement = [...el.children].some((child) => {
       const childText = child.textContent || "";
@@ -992,12 +999,47 @@
     return true;
   }
 
-  function isNearChatBottom(el) {
+  function shouldRenderEncodedMessageNow(el) {
     const scroller = findChatScrollContainer(el);
     if (!scroller) return true;
-    if (Date.now() < chatRenderPausedUntil) return false;
+    const visible = isElementVisibleInScroller(el, scroller, 96);
+    if (Date.now() < chatRenderPausedUntil) {
+      return visible && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= HISTORY_RENDER_BOTTOM_THRESHOLD_PX;
+    }
+    if (visible) return true;
     if (Date.now() - lastChatScrollUpAt < CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS) return false;
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= HISTORY_RENDER_BOTTOM_THRESHOLD_PX;
+  }
+
+  function isElementVisibleInScroller(el, scroller, margin = 0) {
+    if (!(el instanceof HTMLElement) || !(scroller instanceof HTMLElement)) return false;
+    try {
+      const rect = el.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      return rect.bottom >= scrollerRect.top - margin && rect.top <= scrollerRect.bottom + margin;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function scheduleEncodedMessageRenderRetry(el) {
+    if (!(el instanceof HTMLElement) || !el.isConnected) return;
+    const current = pendingEncodedRenderRetries.get(el) || { attempt: 0, timer: 0 };
+    if (current.timer || current.attempt >= ENCODED_RENDER_RETRY_DELAYS.length) return;
+
+    const attempt = current.attempt;
+    const timer = window.setTimeout(() => {
+      pendingEncodedRenderRetries.set(el, { attempt: attempt + 1, timer: 0 });
+      if (el.isConnected && (el.textContent || "").includes(INVIS_START) && (el.textContent || "").includes(INVIS_END)) {
+        scanWithin(el);
+      }
+      const next = pendingEncodedRenderRetries.get(el);
+      if (next && !next.timer) {
+        pendingEncodedRenderRetries.delete(el);
+      }
+    }, ENCODED_RENDER_RETRY_DELAYS[attempt]);
+
+    pendingEncodedRenderRetries.set(el, { attempt, timer });
   }
 
   function findChatScrollContainer(el) {
@@ -1036,9 +1078,7 @@
 
     const bottomScrollState = captureBottomAnchoredMessageScroller(el);
 
-    if (!el.hasAttribute(CCF_RAW_ATTR)) {
-      el.setAttribute(CCF_RAW_ATTR, text);
-    }
+    el.setAttribute(CCF_RAW_ATTR, text);
 
     el.innerHTML = "";
     el.classList.add("ccf-render-root");
@@ -4055,8 +4095,12 @@
     }, ccfFsWithSignal());
 
     document.addEventListener("scroll", (event) => {
-      if (event.target instanceof HTMLElement && !isScrolledToBottom(event.target)) {
-        lastChatScrollUpAt = Date.now();
+      if (event.target instanceof HTMLElement) {
+        if (isScrolledToBottom(event.target)) {
+          scanWithin(event.target);
+        } else {
+          lastChatScrollUpAt = Date.now();
+        }
       }
       if (inlinePopoverState?.kind === "narrator") {
         positionInlineNarratorPopover(inlinePopoverState.toolbar);
