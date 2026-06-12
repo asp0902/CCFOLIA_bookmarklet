@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.87
+// @version      0.2.88
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.87"),
+    version: getUserscriptVersion("0.2.88"),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -477,7 +477,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.87",
+      version: "0.2.88",
       href: location.href,
       title: document.title || ""
     });
@@ -1672,6 +1672,10 @@
       const entry = library[persisted.entryKey];
       if (!entry?.videoId) return;
 
+      if (shouldSkipCcfYoutubeRestoreForNativeBgm(persisted.slotKey, "fast-path")) {
+        return;
+      }
+
       if (!ccfBgmSlotMap.has(persisted.entryKey)) {
         ccfBgmSlotMap.set(persisted.entryKey, entry);
       }
@@ -1737,6 +1741,52 @@
       registered
     });
     return registered;
+  }
+
+  function shouldSkipCcfYoutubeRestoreForNativeBgm(slotKey, source = "restore") {
+    const normalizedSlotKey = normalizeCcfBgmSlotKey(slotKey);
+    try {
+      scanExistingNativeBgmMedia();
+
+      const slotButton = findCcfBgmButtonBySlot(normalizedSlotKey);
+      const slotRoot = slotButton?.closest?.(".MuiListItem-root");
+      const slotHasNativeStop = !!slotRoot?.querySelector?.('[data-testid="StopIcon"]');
+      const playingNativeMedia = findPlayingCcfNativeBgmMediaForRestore();
+      const shouldSkipRestore = slotHasNativeStop || (!slotButton && !!playingNativeMedia);
+
+      if (!shouldSkipRestore) {
+        return false;
+      }
+
+      if (normalizedSlotKey) {
+        ccfBgmNativeLoadedSlots.add(normalizedSlotKey);
+      }
+      updateCcfBgmPersistedState("stopped");
+      startCcfBgmProgressLoop();
+      updateCcfBgmProgressBar();
+      markCcfYoutubeBgmSlotButtons();
+      debugLog("bgm-youtube-restore-skipped-native-active", {
+        slotKey: normalizedSlotKey,
+        source,
+        slotHasNativeStop,
+        hasPlayingNativeMedia: !!playingNativeMedia,
+        tag: playingNativeMedia?.tagName || "",
+        src: playingNativeMedia ? getNativeMediaSource(playingNativeMedia) : ""
+      });
+      return true;
+    } catch (error) {
+      debugLog("bgm-youtube-restore-native-check-failed", serializeError(error));
+      return false;
+    }
+  }
+
+  function findPlayingCcfNativeBgmMediaForRestore() {
+    return getCcfNativeMediaCandidates()
+      .filter((media) => media instanceof HTMLMediaElement
+        && isPotentialNativeBgmMedia(media)
+        && !media.paused
+        && !media.ended)
+      .sort((a, b) => getNativeMediaScore(b) - getNativeMediaScore(a))[0] || null;
   }
 
   function scheduleCcfBgmInitScans() {
@@ -3027,6 +3077,9 @@
     // 송신하면 재실행자의 옛 곡이 룸 전체 BGM을 덮어씀. applying 가드로 emit 차단;
     // 이후 폴링이 원격 nowPlaying 신호를 받으면 그쪽으로 자연 전환된다.
     if (persisted?.state === "playing") {
+      if (shouldSkipCcfYoutubeRestoreForNativeBgm(targetSlotKey, "prepare-player")) {
+        return;
+      }
       ccfBgmFirestorePlaybackApplying = true;
       try {
         playCcfYoutubeBgmSlot(targetSlotKey, hit[1], findCcfBgmButtonBySlot(targetSlotKey), 0, hit[0]);
