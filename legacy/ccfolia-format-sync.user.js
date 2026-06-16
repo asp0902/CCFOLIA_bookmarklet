@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.14
+// @version      0.1.15
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.14 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.15 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -4189,7 +4189,85 @@
   const EDIT_DIALOG_TEXT_COLOR = "rgba(255, 255, 255, 0.87)";
 
   function markEditDialogForThemeOverride(dialog) {
+    ensureEditDialogPseudoResetStyles();
+    if (!(dialog instanceof HTMLElement)) return;
+    dialog.setAttribute("data-ccf-edit-dialog", "1");
+    const paper = dialog.matches('.MuiDialog-paper')
+      ? dialog
+      : (dialog.closest('.MuiDialog-paper') || dialog.querySelector('.MuiDialog-paper'));
+    if (paper instanceof HTMLElement) {
+      paper.setAttribute("data-ccf-edit-dialog", "1");
+    }
     applyEditDialogResetInlineStyles(dialog);
+  }
+
+  function ensureEditDialogPseudoResetStyles() {
+    if (document.getElementById("ccf-edit-dialog-pseudo-reset")) return;
+    const style = document.createElement("style");
+    style.id = "ccf-edit-dialog-pseudo-reset";
+    style.setAttribute(SAFE_UI_ATTR, "1");
+    style.textContent = `
+      html [data-ccf-edit-dialog="1"] .MuiDialogActions-root,
+      html [data-ccf-edit-dialog="1"] .MuiDialogContent-root,
+      html [data-ccf-edit-dialog="1"] .MuiFilledInput-root,
+      html [data-ccf-edit-dialog="1"] .MuiInputBase-root,
+      html [data-ccf-edit-dialog="1"] .MuiFormControl-root,
+      html [data-ccf-edit-dialog="1"] form,
+      html [data-ccf-edit-dialog="1"][class*="MuiDialog-paper"] {
+        box-shadow: none !important;
+        outline: none !important;
+      }
+      html [data-ccf-edit-dialog="1"] .MuiDialogActions-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiDialogActions-root::after,
+      html [data-ccf-edit-dialog="1"] .MuiDialogContent-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiDialogContent-root::after,
+      html [data-ccf-edit-dialog="1"] form::before,
+      html [data-ccf-edit-dialog="1"] form::after,
+      html [data-ccf-edit-dialog="1"] .MuiFormControl-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiFormControl-root::after,
+      html [data-ccf-edit-dialog="1"] .MuiFilledInput-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiFilledInput-root::after,
+      html [data-ccf-edit-dialog="1"] .MuiInputBase-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiInputBase-root::after,
+      html [data-ccf-edit-dialog="1"] .MuiPaper-root::before,
+      html [data-ccf-edit-dialog="1"] .MuiPaper-root::after,
+      html [data-ccf-edit-dialog="1"][class*="MuiDialog-paper"]::before,
+      html [data-ccf-edit-dialog="1"][class*="MuiDialog-paper"]::after {
+        display: none !important;
+        content: none !important;
+        border: 0 !important;
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+      }
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] input,
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] button,
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] label,
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] span {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+        text-shadow: none !important;
+        letter-spacing: normal !important;
+      }
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-inline-size-input {
+        background-color: #282828 !important;
+        background-image: none !important;
+        color: #fff !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
+      }
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle {
+        background-color: transparent !important;
+        background-image: none !important;
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
+        color: #fff !important;
+        box-shadow: none !important;
+      }
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.active {
+        background-color: rgba(255, 255, 255, 0.12) !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function applyEditDialogResetInlineStyles(dialog) {
