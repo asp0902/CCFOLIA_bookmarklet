@@ -4247,7 +4247,10 @@
         "background-color": "transparent",
         "background-image": "none",
         padding: "8px",
-        color: EDIT_DIALOG_TEXT_COLOR
+        color: EDIT_DIALOG_TEXT_COLOR,
+        border: "none",
+        "border-top": "none",
+        "box-shadow": "none"
       });
     });
 
