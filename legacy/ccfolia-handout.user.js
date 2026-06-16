@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.70
+// @version      0.1.71
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.70",
+    version: "0.1.71",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2113,6 +2113,32 @@
     debouncedScanChat();
   }
 
+  // 화면에 렌더된 채팅 발화자 전체를 PL 목록에 추가 (바닥 근처 제한 없음).
+  // 복구 버튼 등 "보이는 발화자를 전부 잡고 싶을 때" 사용.
+  async function collectAllVisibleChatAuthors() {
+    if (!state.data || !Array.isArray(state.data.plList)) return 0;
+    const items = Array.from(document.querySelectorAll(CHAT_AUTHOR_ITEM_SELECTOR))
+      .filter((item) => item instanceof HTMLElement && item.isConnected && isLikelyChatAuthorItem(item));
+    const entries = collectChatAuthorEntries(items);
+    const me = normalizePlNameKey(state.data.myCharacter || "");
+    const existing = new Set((state.data.plList || []).flatMap((p) => [p.name, ...(p.aliases || [])].map(normalizePlNameKey)));
+    const added = [];
+    let imageUpdated = 0;
+    entries.forEach(({ name, image }) => {
+      const key = normalizePlNameKey(name);
+      if (!key || key === me) return;
+      const owner = (state.data.plList || []).find((p) => normalizePlNameKey(p.name) === key);
+      if (image && owner && !owner.image) { owner.image = image; imageUpdated += 1; }
+      if (existing.has(key)) return;
+      if (state.data.plDeleted && state.data.plDeleted[key]) return;
+      existing.add(key);
+      added.push({ name, id: "", role: "player", aliases: [], image: image || "" });
+    });
+    if (added.length) state.data.plList.push(...added);
+    if (added.length || imageUpdated) await saveAll(state.data).catch(() => {});
+    return added.length;
+  }
+
   // 채팅 이력 전체(DOM에 렌더된 범위)에서 PL 이미지 백필 (#74)
   // bottom 제한 없이 모든 보이는 메시지 스캔 — 새 PL 추가는 하지 않고 이미지만 채움.
   async function backfillPlImagesFromChatHistory() {
@@ -2404,10 +2430,11 @@
     }
     state.isOpen = true;
     render();
-    // 채팅 이력 PL 이미지 백필 — 채워지면 화면 갱신 (#74)
-    backfillPlImagesFromChatHistory().then((updated) => {
-      if (updated && state.isOpen) render();
-    }).catch(() => {});
+    // 화면 발화자 전체 수집(바닥 근처 제한 없음) + 이미지 백필 — 변동 시 화면 갱신
+    collectAllVisibleChatAuthors()
+      .then((added) => backfillPlImagesFromChatHistory().then((updated) => added || updated))
+      .then((changed) => { if (changed && state.isOpen) render(); })
+      .catch(() => {});
   }
 
   function closePanel() {
@@ -3550,6 +3577,9 @@
     // 복구는 명시적 사용자 의도 — 삭제 기록(tombstone)을 비워 자동 수집이 다시 잡게 함.
     state.data.plDeleted = {};
     state.chatSeenAuthors.clear();
+    // 화면에 렌더된 발화자 전체를 바닥 근처 제한 없이 수집 (이전엔 바닥 근처만
+    // 잡혀 위쪽 발화자가 누락됐음)
+    try { await collectAllVisibleChatAuthors(); } catch (error) { console.warn("[ccf-handout] full author scan failed", error); }
     try { scanCurrentBottomChatAuthors(); } catch (error) { console.warn("[ccf-handout] chat rescan failed", error); }
     await new Promise((resolve) => setTimeout(resolve, 120));
 
@@ -4324,7 +4354,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.70 (tombstone only explicit deletes + migration reset)");
+    console.info("[ccf-handout] init — version 0.1.71 (collect all visible chat authors, not just bottom)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
