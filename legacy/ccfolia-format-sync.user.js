@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.13
+// @version      0.1.12
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.13 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.12 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -71,7 +71,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.13"),
+    version: getUserscriptVersion("0.1.12"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -814,11 +814,6 @@
       }
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
-          // React 노드 재사용으로 렌더된 노드의 텍스트가 바뀐 경우 정리.
-          const target = mutation.target;
-          if (target instanceof Element && !target.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) {
-            cleanupReusedRenderRoots(target);
-          }
           for (const node of mutation.addedNodes) {
             if (node instanceof Element) {
               if (node.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
@@ -832,9 +827,6 @@
           const parent = mutation.target?.parentElement;
           if (parent) {
             if (parent.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
-            // 재사용 노드 정리 후 envelope 재렌더 스캔
-            const renderRoot = parent.closest(`.ccf-render-root[${CCF_RENDERED_ATTR}="1"]`);
-            if (renderRoot) cleanupReusedRenderRoots(renderRoot.parentElement || parent);
             scanWithin(parent);
           }
         }
@@ -868,36 +860,7 @@
   function scanAndRenderAll() {
     // 초기 전체 이력 렌더는 virtualized list scrollHeight를 크게 흔든다.
     // 현재 보이는 하단 메시지만 렌더하고, 과거 이력은 새로 추가될 때도 하단 근처일 때만 렌더한다.
-    cleanupReusedRenderRoots(document.body || document.documentElement);
     scanWithin(document.body || document.documentElement);
-  }
-
-  // React가 탭 전환/가상 리스트 재활용으로 우리가 렌더한 노드를 다른 메시지에
-  // 재사용하면, 이전 렌더 결과(ccf-render-root 클래스/마크/나레이션 레이아웃)가
-  // 새 텍스트에 남아 서식이 누수된다. 렌더 시 기록한 텍스트와 현재 텍스트가
-  // 다르면 렌더 잔재를 걷어내 native 상태로 되돌린다.
-  function cleanupReusedRenderRoots(root) {
-    const scope = root instanceof Element ? root : document;
-    const roots = scope.querySelectorAll
-      ? scope.querySelectorAll(`.ccf-render-root[${CCF_RENDERED_ATTR}="1"]`)
-      : [];
-    roots.forEach((el) => {
-      if (!(el instanceof HTMLElement)) return;
-      const expected = el.dataset.ccfRenderText;
-      if (expected == null) return;
-      const raw = el.textContent || "";
-      // envelope가 다시 들어온 노드는 재렌더 경로가 처리 — 건드리지 않음.
-      if (raw.includes(INVIS_START)) return;
-      if (normalizeEditorText(raw) === normalizeEditorText(expected)) return;
-      // 재사용 감지 — 렌더 흔적 제거.
-      el.classList.remove("ccf-render-root");
-      el.removeAttribute(CCF_RENDERED_ATTR);
-      el.removeAttribute(CCF_RAW_ATTR);
-      delete el.dataset.ccfRenderText;
-      el.style.removeProperty("text-align");
-      el.style.removeProperty("filter");
-      try { applyNarrationMessageLayout(el, false); } catch (_) {}
-    });
   }
 
   function collectChatScrollables() {
@@ -1124,7 +1087,6 @@
     if (!runs.length && !alignRuns.length && !narration) {
       el.textContent = renderText;
       preserveBottomScrollAfterRender(bottomScrollState);
-      el.dataset.ccfRenderText = renderText;
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
@@ -1132,7 +1094,6 @@
     renderStyledText(el, renderText, runs, alignRuns);
     preserveBottomScrollAfterRender(bottomScrollState);
 
-    el.dataset.ccfRenderText = renderText;
     el.setAttribute(CCF_RENDERED_ATTR, "1");
   }
 
