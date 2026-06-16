@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.19
+// @version      0.1.20
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.19 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.20 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -4278,7 +4278,7 @@
     const paperTarget = paper instanceof HTMLElement ? paper : (dialog instanceof HTMLElement ? dialog : null);
     if (paperTarget) {
       forceStyle(paperTarget, {
-        "background-color": "#1e1e1e",
+        "background-color": "rgba(33, 33, 33, 0.85)",
         "background-image": "none",
         "background-attachment": "scroll",
         color: EDIT_DIALOG_TEXT_COLOR,
@@ -4329,8 +4329,10 @@
         "background-image": "none",
         padding: "8px",
         color: EDIT_DIALOG_TEXT_COLOR,
-        border: "none",
-        "border-top": "none",
+        "border-left": "none",
+        "border-right": "none",
+        "border-bottom": "none",
+        "border-top": "1px solid #2196f3",
         "box-shadow": "none"
       });
     });
@@ -4382,7 +4384,7 @@
       if (!(btn instanceof HTMLElement)) return;
       if (btn.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
       forceStyle(btn, {
-        color: "#90caf9",
+        color: "#2196f3",
         "background-color": "transparent",
         "background-image": "none",
         "font-family": EDIT_DIALOG_FONT,
