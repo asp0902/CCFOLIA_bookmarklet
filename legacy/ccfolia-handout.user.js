@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.69
+// @version      0.1.70
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.69",
+    version: "0.1.70",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -209,7 +209,11 @@
         ? [...new Set(value.myCharacterOptions.map((name) => String(name || "").trim()).filter(Boolean))]
         : [],
       plList: normalizePlList(value.plList),
-      plDeleted: (value.plDeleted && typeof value.plDeleted === "object") ? value.plDeleted : {},
+      // plDeleted: 0.1.69의 차집합 추론이 오탐으로 대량 tombstone을 만들었으므로,
+      // 마이그레이션 플래그가 없으면 1회 초기화해 자동 수집을 정상 복구한다.
+      plDeleted: (value.plDeletedV2 && value.plDeleted && typeof value.plDeleted === "object")
+        ? value.plDeleted : {},
+      plDeletedV2: true,
       folders: normalizeFolders(value.folders)
     };
   }
@@ -3491,6 +3495,8 @@
   function openPlListDialog() {
     const overlay = state.shadow?.querySelector(".pl-modal-overlay");
     if (!overlay) return;
+    // 이번 편집 세션에서 X 버튼으로 명시 삭제한 이름만 추적 (저장 시 tombstone)
+    state.pendingPlDeletes = new Set();
     const host = overlay.querySelector("[data-pl-rows-host]");
     host.innerHTML = "";
     const list = buildPlListForDialog();
@@ -3585,6 +3591,14 @@
   function removePlRow(btn) {
     const row = btn.closest(".pl-row");
     if (!row) return;
+    // 명시 삭제한 행의 이름/별칭을 기록 — 저장 시 tombstone 대상 (자동 부활 방지)
+    const removed = readPlRow(row);
+    if (removed && state.pendingPlDeletes instanceof Set) {
+      [removed.name, ...(removed.aliases || [])].forEach((n) => {
+        const key = normalizePlNameKey(n);
+        if (key) state.pendingPlDeletes.add(key);
+      });
+    }
     const host = row.parentElement;
     row.remove();
     if (host && host.children.length === 0) appendPlRow(host, { name: "", id: "", role: "player" });
@@ -3834,21 +3848,23 @@
       const item = readPlRow(row);
       if (item) items.push(item);
     });
-    // 삭제 기록 갱신 — 이전 목록에 있었는데 새 목록에 없는 이름은 plDeleted에
-    // 기록해 채팅 자동 수집이 도로 추가하지 않게 함. 재등장한 이름은 기록 해제.
-    const prevKeys = new Set((state.data.plList || [])
-      .flatMap((p) => [p.name, ...(p.aliases || [])])
-      .map(normalizePlNameKey).filter(Boolean));
+    // 삭제 기록 갱신 — X 버튼으로 명시 삭제한 이름만 tombstone에 기록해
+    // 채팅 자동 수집이 도로 부활시키지 않게 함. 병합/언머지/일반 저장으로
+    // 사라진 이름은 대상이 아님 (차집합 추론은 오탐이 많아 폐기).
     const nextKeys = new Set(items
       .flatMap((p) => [p.name, ...(p.aliases || [])])
       .map(normalizePlNameKey).filter(Boolean));
     if (!state.data.plDeleted || typeof state.data.plDeleted !== "object") state.data.plDeleted = {};
-    for (const key of prevKeys) {
-      if (!nextKeys.has(key)) state.data.plDeleted[key] = Date.now();
+    if (state.pendingPlDeletes instanceof Set) {
+      for (const key of state.pendingPlDeletes) {
+        if (!nextKeys.has(key)) state.data.plDeleted[key] = Date.now();
+      }
     }
+    // 최종 목록에 있는 이름은 tombstone 해제 (재등장 허용)
     for (const key of nextKeys) {
       delete state.data.plDeleted[key];
     }
+    state.pendingPlDeletes = null;
     state.data.plList = mergePlListById(items);
     await saveAll(state.data);
     closePlListDialog();
@@ -4308,7 +4324,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.69 (recover clears tombstones)");
+    console.info("[ccf-handout] init — version 0.1.70 (tombstone only explicit deletes + migration reset)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
