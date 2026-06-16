@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.68
+// @version      0.1.69
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.68",
+    version: "0.1.69",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -3541,6 +3541,8 @@
   async function refreshPlListInDialog() {
     const host = state.shadow?.querySelector(".pl-modal-overlay [data-pl-rows-host]");
     if (!host) return;
+    // 복구는 명시적 사용자 의도 — 삭제 기록(tombstone)을 비워 자동 수집이 다시 잡게 함.
+    state.data.plDeleted = {};
     state.chatSeenAuthors.clear();
     try { scanCurrentBottomChatAuthors(); } catch (error) { console.warn("[ccf-handout] chat rescan failed", error); }
     await new Promise((resolve) => setTimeout(resolve, 120));
@@ -4306,7 +4308,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.68 (pl delete tombstones + clean unmerge)");
+    console.info("[ccf-handout] init — version 0.1.69 (recover clears tombstones)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();

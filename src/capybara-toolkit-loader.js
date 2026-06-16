@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.92";
-  const BUILD_ID = "2026-06-12-loader-pl-tombstone-unmerge-167";
+  const VERSION = "0.2.93";
+  const BUILD_ID = "2026-06-12-loader-recover-clear-tombstone-168";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
   const LEGACY_DEBUG_ENTRIES = Object.freeze([
     { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
