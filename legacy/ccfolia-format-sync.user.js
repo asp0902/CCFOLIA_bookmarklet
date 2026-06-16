@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.15
+// @version      0.1.16
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.15 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.16 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -4396,12 +4396,51 @@
     const toolbar = dialog.querySelector(`[${INLINE_TOOLBAR_ATTR}="1"]`);
     if (toolbar instanceof HTMLElement) {
       forceStyle(toolbar, {
-        "border-radius": "0",
-        margin: "0",
-        "border-left": "none",
-        "border-right": "none",
-        "border-top": "none",
-        "border-bottom": "1px solid rgba(255,255,255,0.12)"
+        position: "absolute",
+        bottom: "100%",
+        left: "0",
+        right: "0",
+        width: "100%",
+        "box-sizing": "border-box",
+        "border-radius": "8px 8px 0 0",
+        margin: "0 0 8px 0",
+        "border-left": "1px solid rgba(255,255,255,0.12)",
+        "border-right": "1px solid rgba(255,255,255,0.12)",
+        "border-top": "1px solid rgba(255,255,255,0.12)",
+        "border-bottom": "1px solid rgba(255,255,255,0.12)",
+        "background-color": "rgba(32, 32, 32, 0.94)",
+        "background-image": "none"
+      });
+      toolbar.querySelectorAll('.ccf-inline-size-input').forEach((sz) => {
+        if (!(sz instanceof HTMLElement)) return;
+        forceStyle(sz, {
+          "background-color": "#282828",
+          "background-image": "none",
+          color: "#fff",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          "border-radius": "6px",
+          "box-shadow": "none",
+          "font-family": 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          "text-shadow": "none",
+          padding: "0 4px"
+        });
+      });
+      toolbar.querySelectorAll('.ccf-toggle').forEach((btn) => {
+        if (!(btn instanceof HTMLElement)) return;
+        forceStyle(btn, {
+          "background-color": "transparent",
+          "background-image": "none",
+          color: "#fff",
+          "box-shadow": "none",
+          "text-shadow": "none"
+        });
+      });
+    }
+
+    if (paperTarget) {
+      forceStyle(paperTarget, {
+        position: "relative",
+        overflow: "visible"
       });
     }
   }
