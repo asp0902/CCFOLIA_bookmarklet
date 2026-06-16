@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.71
+// @version      0.1.72
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.71",
+    version: "0.1.72",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1657,7 +1657,10 @@
           resize: both;
         }
         .show-paper[data-collapsed="1"] {
+          /* 제목 툴바(헤더)만 남기고 본문/이미지/리사이즈 핸들 전부 접음 (#95) */
+          height: auto !important;
           max-height: none;
+          min-height: 0;
           width: ${POPUP_W_COLLAPSED}px;
           opacity: 0.5;
           resize: none;
@@ -1665,6 +1668,7 @@
         .show-paper[data-collapsed="1"]:hover { opacity: 1; }
         .show-paper[data-collapsed="1"] .show-body { display: none; }
         .show-paper[data-collapsed="1"] .show-head-btn { display: none; }
+        .show-paper[data-collapsed="1"] .show-head { cursor: pointer; }
         .show-head {
           background-color: #212121; padding: 0 8px 0 20px; min-height: 56px;
           display: flex; align-items: center; gap: 4px;
@@ -1739,6 +1743,16 @@
     head.addEventListener("dblclick", (e) => {
       if (e.target.closest("button")) return;
       const collapsed = paper.getAttribute("data-collapsed") === "1";
+      if (!collapsed) {
+        // 접기 전 리사이즈로 박힌 inline 크기를 기억해뒀다 펼칠 때 복원.
+        // (inline height가 남아 있으면 collapse가 헤더 높이로 줄지 않음 — #95)
+        paper.dataset.prevWidth = paper.style.width || "";
+        paper.dataset.prevHeight = paper.style.height || "";
+        paper.style.height = "";
+      } else {
+        paper.style.width = paper.dataset.prevWidth || paper.style.width;
+        paper.style.height = paper.dataset.prevHeight || "";
+      }
       paper.setAttribute("data-collapsed", collapsed ? "0" : "1");
     });
     // 드래그 — 헤더에서 시작
@@ -4354,7 +4368,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.71 (collect all visible chat authors, not just bottom)");
+    console.info("[ccf-handout] init — version 0.1.72 (collapse popup to title bar only)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
