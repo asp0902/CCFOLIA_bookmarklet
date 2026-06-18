@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.44
+// @version      0.3.45
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -81,7 +81,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.44"),
+    version: getUserscriptVersion("0.3.45"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -921,6 +921,24 @@
 
       [data-ccf-narration-hidden="1"] {
         display: none !important;
+      }
+
+      .MuiListItem-root[${CCF_NARRATION_ATTR}="1"],
+      li[${CCF_NARRATION_ATTR}="1"],
+      [role="listitem"][${CCF_NARRATION_ATTR}="1"],
+      [data-index][${CCF_NARRATION_ATTR}="1"] {
+        justify-content: center !important;
+      }
+
+      .MuiListItem-root[${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root,
+      li[${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root,
+      [role="listitem"][${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root,
+      [data-index][${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root {
+        width: 100% !important;
+        margin: 0 auto !important;
+        text-align: center !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
       }
 
       .ccf-render-root {
@@ -2348,6 +2366,7 @@
       const item = el.closest("li, [role='listitem'], .MuiListItem-root, [data-index]");
       if (item instanceof HTMLElement) {
         item.setAttribute(CCF_NARRATION_ATTR, "1");
+        forceNarrationSpacing(item);
         hideNarrationElements(item, el);
       }
     } else {
@@ -2355,9 +2374,43 @@
       const item = el.closest("li, [role='listitem'], .MuiListItem-root, [data-index]");
       if (item instanceof HTMLElement && !item.querySelector(`.${CCF_FORMAT_RENDER_ROOT_CLASS}[${CCF_NARRATION_ATTR}="1"]`)) {
         item.removeAttribute(CCF_NARRATION_ATTR);
+        clearNarrationSpacing(item);
         showNarrationElements(item);
       }
     }
+  }
+
+  function forceNarrationSpacing(item) {
+    if (!(item instanceof HTMLElement)) return;
+    item.dataset.ccfNarrationForceItem = "1";
+    item.style.setProperty("justify-content", "center", "important");
+
+    item.querySelectorAll(".MuiListItemText-root").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.dataset.ccfNarrationForceCenter = "1";
+      node.style.setProperty("width", "100%", "important");
+      node.style.setProperty("margin", "0 auto", "important");
+      node.style.setProperty("text-align", "center", "important");
+      node.style.setProperty("padding-left", "0", "important");
+      node.style.setProperty("padding-right", "0", "important");
+    });
+  }
+
+  function clearNarrationSpacing(item) {
+    if (!(item instanceof HTMLElement)) return;
+    if (item.dataset.ccfNarrationForceItem === "1") {
+      item.style.removeProperty("justify-content");
+      delete item.dataset.ccfNarrationForceItem;
+    }
+    item.querySelectorAll('[data-ccf-narration-force-center="1"]').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.style.removeProperty("width");
+      node.style.removeProperty("margin");
+      node.style.removeProperty("text-align");
+      node.style.removeProperty("padding-left");
+      node.style.removeProperty("padding-right");
+      delete node.dataset.ccfNarrationForceCenter;
+    });
   }
 
   function hideNarrationElements(item, messageEl) {
