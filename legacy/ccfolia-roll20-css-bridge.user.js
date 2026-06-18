@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.43
+// @version      0.3.44
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -31,6 +31,8 @@
 
   const CCF_RENDERED_ATTR = "data-ccr20-rendered";
   const CCF_RAW_ATTR = "data-ccr20-raw";
+  const CCF_FORMAT_RENDER_ROOT_CLASS = "ccf-render-root";
+  const CCF_NARRATION_ATTR = "data-ccf-narration";
   const SAFE_UI_ATTR = "data-ccr20-safe-ui";
   const OPEN_BTN_ATTR = "data-ccr20-open-btn";
   const OPEN_BTN_HOST_ATTR = "data-ccr20-open-host";
@@ -79,7 +81,7 @@
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
-    version: getUserscriptVersion("0.3.43"),
+    version: getUserscriptVersion("0.3.44"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -88,6 +90,13 @@
   const INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
   const INVIS_REVERSE = new Map(INVIS_MAP.map((ch, index) => [ch, index]));
   const CCR20_ENVELOPE_SOURCE = "ccr20-roll20-desc";
+  const NARRATOR_STORAGE_KEY_PREFIX = "ccf-format-narrators-v1:";
+  const CHARACTER_STATUS_TEXT_RE = /(?:\uD65C\uC131\uD654|\uBE44\uD65C\uC131\uD654)\s*\uC0C1\uD0DC|(?:active|inactive|enabled|disabled)\s*status/i;
+  const CHARACTER_SELECT_BUTTON_SELECTORS = [
+    'button[aria-label="\uCE90\uB9AD\uD130 \uC120\uD0DD"]',
+    'button[aria-label="Character selection"]',
+    'button[aria-label="Select character"]'
+  ];
   const CCR20_RENDERABLE_STYLE_KEYS = new Set([
     "bold",
     "italic",
@@ -908,6 +917,10 @@
         border: 0;
         border-radius: 10px;
         box-sizing: border-box;
+      }
+
+      [data-ccf-narration-hidden="1"] {
+        display: none !important;
       }
 
       .ccf-render-root {
@@ -2090,6 +2103,7 @@
 
     let envelopeText = rawText;
     let runs = normalizeRuns(state.runs, envelopeText.length);
+    const blockStyle = getCurrentRoll20BlockStyle();
     let alignRuns = getEffectiveAlignRuns(envelopeText, state.alignRuns);
     let isRoll20Macro = false;
 
@@ -2116,6 +2130,8 @@
       }
     }
 
+    alignRuns = getEffectiveAlignRuns(envelopeText, alignRuns, blockStyle);
+
     const diceResolution = resolveInlineDiceExpressions(envelopeText, runs);
     const outgoingText = diceResolution.changed ? diceResolution.text : envelopeText;
     const baseOutgoingRuns = diceResolution.changed
@@ -2125,13 +2141,14 @@
       ...baseOutgoingRuns,
       ...(diceResolution.diceRuns || [])
     ], outgoingText.length);
-    const needsEnvelope = outgoingRuns.length > 0 || alignRuns.length > 0;
+    const needsEnvelope = outgoingRuns.length > 0 || alignRuns.length > 0 || Object.keys(blockStyle).length > 0;
     const envelopePayload = {
       v: 1,
       source: CCR20_ENVELOPE_SOURCE,
       text: outgoingText,
       formatRuns: outgoingRuns,
-      alignRuns
+      alignRuns,
+      blockStyle
     };
     if (isRoll20Macro) {
       envelopePayload.roll20Macro = true;
@@ -2299,6 +2316,7 @@
     el.innerHTML = "";
     el.classList.add("ccr20-render-root");
     applyRoll20MacroBubbleClass(el, !!envelope?.roll20Macro);
+    applyNarrationRenderMarker(el, envelope?.blockStyle?.narration === true);
 
     if (!effectiveRuns.length && !alignRuns.length) {
       el.textContent = renderText;
@@ -2322,6 +2340,77 @@
     }
   }
 
+  function applyNarrationRenderMarker(el, narration) {
+    if (!(el instanceof HTMLElement)) return;
+    if (narration) {
+      el.classList.add(CCF_FORMAT_RENDER_ROOT_CLASS);
+      el.setAttribute(CCF_NARRATION_ATTR, "1");
+      const item = el.closest("li, [role='listitem'], .MuiListItem-root, [data-index]");
+      if (item instanceof HTMLElement) {
+        item.setAttribute(CCF_NARRATION_ATTR, "1");
+        hideNarrationElements(item, el);
+      }
+    } else {
+      el.removeAttribute(CCF_NARRATION_ATTR);
+      const item = el.closest("li, [role='listitem'], .MuiListItem-root, [data-index]");
+      if (item instanceof HTMLElement && !item.querySelector(`.${CCF_FORMAT_RENDER_ROOT_CLASS}[${CCF_NARRATION_ATTR}="1"]`)) {
+        item.removeAttribute(CCF_NARRATION_ATTR);
+        showNarrationElements(item);
+      }
+    }
+  }
+
+  function hideNarrationElements(item, messageEl) {
+    if (!(item instanceof HTMLElement) || !(messageEl instanceof HTMLElement)) return;
+
+    item.querySelectorAll('[data-ccf-narration-hidden="1"]').forEach((el) => {
+      el.removeAttribute("data-ccf-narration-hidden");
+    });
+
+    item.querySelectorAll(".MuiAvatar-root, .MuiListItemAvatar-root, img:not(.ccr20-image):not(.ccf-image)").forEach((node) => {
+      if (!(node instanceof HTMLElement) || messageEl.contains(node)) return;
+      let target = node;
+      let depth = 0;
+      while (
+        target.parentElement &&
+        target.parentElement !== item &&
+        target.parentElement.children.length === 1 &&
+        !target.parentElement.contains(messageEl) &&
+        depth < 3
+      ) {
+        target = target.parentElement;
+        depth += 1;
+      }
+      target.setAttribute("data-ccf-narration-hidden", "1");
+    });
+
+    let current = messageEl;
+    while (current && current !== item && current.parentElement) {
+      let sibling = current.parentElement.firstElementChild;
+      while (sibling && sibling !== current) {
+        const hasText =
+          sibling.matches?.(MESSAGE_TEXT_SELECTOR) ||
+          sibling.querySelector?.(MESSAGE_TEXT_SELECTOR);
+        const hasRenderRoot =
+          sibling.matches?.(".ccr20-render-root, .ccf-render-root") ||
+          sibling.querySelector?.(".ccr20-render-root, .ccf-render-root");
+        const text = (sibling.textContent || "").trim();
+        if (!hasText && !hasRenderRoot && text) {
+          sibling.setAttribute("data-ccf-narration-hidden", "1");
+        }
+        sibling = sibling.nextElementSibling;
+      }
+      current = current.parentElement;
+    }
+  }
+
+  function showNarrationElements(item) {
+    if (!(item instanceof HTMLElement)) return;
+    item.querySelectorAll('[data-ccf-narration-hidden="1"]').forEach((el) => {
+      el.removeAttribute("data-ccf-narration-hidden");
+    });
+  }
+
   function buildEnvelopeRenderState(visibleText, envelope) {
     if (!envelope || typeof envelope !== "object") return null;
 
@@ -2338,7 +2427,7 @@
       }
     }
 
-    const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns);
+    const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
     const effectiveRuns = runs.some((run) => run.style?.inlineRoll)
       ? runs
       : normalizeRuns([...runs, ...buildInlineRollRunsFromText(renderText)], renderText.length);
@@ -2493,6 +2582,7 @@
     root.innerHTML = "";
     root.classList.add("ccr20-render-root");
     applyRoll20MacroBubbleClass(root, !!envelope?.roll20Macro);
+    applyNarrationRenderMarker(root, envelope?.blockStyle?.narration === true);
 
     if (!effectiveRuns.length && !alignRuns.length) {
       root.textContent = renderText;
@@ -4331,8 +4421,12 @@
     }));
   }
 
-  function getEffectiveAlignRuns(text, alignRuns) {
-    return normalizeAlignRuns(alignRuns, getTextLineCount(text));
+  function getEffectiveAlignRuns(text, alignRuns, blockStyle = null) {
+    const lineCount = getTextLineCount(text);
+    if (blockStyle?.narration === true) {
+      return [{ start: 0, end: lineCount, align: "center" }];
+    }
+    return normalizeAlignRuns(alignRuns, lineCount);
   }
 
   function getLineAlign(alignRuns, lineIndex) {
@@ -4399,6 +4493,130 @@
       EDITOR_STATE.set(editor, state);
     }
     return state;
+  }
+
+  function getCurrentRoll20BlockStyle() {
+    return isCurrentSpeakerNarrator() ? { narration: true } : {};
+  }
+
+  function isCurrentSpeakerNarrator() {
+    const speaker = getCurrentSpeakerName();
+    return !!speaker && readNarratorNameSet().has(speaker);
+  }
+
+  function getCurrentRoomId() {
+    const match = location.pathname.match(/^\/rooms\/([^/?#]+)/i);
+    return match ? match[1] : "";
+  }
+
+  function readNarratorNameSet() {
+    const roomId = getCurrentRoomId();
+    if (!roomId) return new Set();
+    try {
+      const raw = JSON.parse(localStorage.getItem(`${NARRATOR_STORAGE_KEY_PREFIX}${roomId}`) || "[]");
+      if (!Array.isArray(raw)) return new Set();
+      return new Set(raw.map(normalizeRoll20NarratorName).filter(Boolean));
+    } catch (error) {
+      return new Set();
+    }
+  }
+
+  function normalizeRoll20NarratorName(value) {
+    return String(value || "")
+      .replace(CHARACTER_STATUS_TEXT_RE, "")
+      .replace(/\bNO\s+TEXT\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function findCharacterSelectButton() {
+    for (const selector of CHARACTER_SELECT_BUTTON_SELECTORS) {
+      const matches = document.querySelectorAll(selector);
+      for (const btn of matches) {
+        if (btn instanceof HTMLButtonElement && !btn.disabled && isVisible(btn)) return btn;
+      }
+    }
+
+    return [...document.querySelectorAll("button[aria-label], button[title]")]
+      .find((btn) => {
+        if (!(btn instanceof HTMLButtonElement) || btn.disabled || !isVisible(btn)) return false;
+        const label = normalizeRoll20NarratorName(btn.getAttribute("aria-label") || btn.getAttribute("title") || "");
+        return /(?:character.*(?:select|selection)|(?:select).*character|\uCE90\uB9AD\uD130.*\uC120\uD0DD)/i.test(label);
+      }) || null;
+  }
+
+  function getCurrentSpeakerName() {
+    const btn = findCharacterSelectButton();
+    if (btn) {
+      const inlineName = normalizeRoll20NarratorName(btn.textContent || "");
+      if (inlineName && !isCharacterSelectLabel(inlineName)) return inlineName;
+
+      const avatarName = normalizeRoll20NarratorName(btn.querySelector("img")?.getAttribute("alt") || "");
+      if (avatarName && !isCharacterSelectLabel(avatarName)) return avatarName;
+    }
+
+    const anchor = btn || activeComposer || activeEditor || lastFocusedEditor || getCurrentTargetEditor();
+    if (!(anchor instanceof HTMLElement)) return "";
+    const fields = findSpeakerNameFields(anchor, !!btn);
+    return fields.length ? fields[0].name : "";
+  }
+
+  function isCharacterSelectLabel(name) {
+    return /^(?:\uCE90\uB9AD\uD130\s*\uC120\uD0DD|character\s*(?:selection|select)|select\s*character)$/i.test(name);
+  }
+
+  function getSpeakerNameFieldValue(field) {
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+      return normalizeRoll20NarratorName(field.value);
+    }
+    return normalizeRoll20NarratorName(field.textContent || "");
+  }
+
+  function findSpeakerNameFields(anchor, allowUnhintedInput = false) {
+    const scopes = [];
+    const seenScopes = new Set();
+    const addScope = (scope) => {
+      if (!(scope instanceof HTMLElement) || seenScopes.has(scope)) return;
+      scopes.push(scope);
+      seenScopes.add(scope);
+    };
+
+    addScope(anchor);
+    let current = anchor.parentElement;
+    for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
+      addScope(current);
+      if (current.matches?.(".MuiDrawer-paper")) break;
+    }
+
+    const seenFields = new Set();
+    const candidates = [];
+    scopes.forEach((scope, depth) => {
+      scope.querySelectorAll('input[type="text"], input:not([type]), textarea, [role="textbox"], [contenteditable="true"]').forEach((field) => {
+        if (!(field instanceof HTMLElement) || seenFields.has(field) || !isVisible(field)) return;
+        if (field.closest(`[${SAFE_UI_ATTR}="1"], #${MODAL_ID}`)) return;
+        const name = getSpeakerNameFieldValue(field);
+        if (!name) return;
+
+        const hint = getEditorHintText(field);
+        const nameHinted = NAME_HINT_RE.test(hint);
+        const messageHinted = MESSAGE_HINT_RE.test(hint);
+        const multiline = field instanceof HTMLTextAreaElement || field.getAttribute("aria-multiline") === "true";
+        if (messageHinted && !nameHinted) return;
+        if (multiline && !nameHinted) return;
+        if (!nameHinted && !allowUnhintedInput) return;
+        seenFields.add(field);
+
+        let score = -depth * 18 - Math.min(distanceBetween(anchor, field), 400) / 3;
+        if (nameHinted) score += 220;
+        if (messageHinted) score -= 240;
+        if (field instanceof HTMLInputElement && field.type === "text") score += 45;
+        if (multiline) score -= 130;
+        candidates.push({ name, score });
+      });
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates;
   }
 
   function normalizeEditorCandidate(node) {
