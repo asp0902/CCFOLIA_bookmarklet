@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.72
+// @version      0.1.73
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.72",
+    version: "0.1.73",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -321,12 +321,74 @@
     if (!src) return "";
     const t = String(src).trim();
     const htmlTagRe = /^<(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i;
-    if (htmlTagRe.test(t)) return t;
+    if (htmlTagRe.test(t)) return renderHtmlHandoutBody(t);
     if (/^&lt;(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i.test(t)) {
       const decoded = decodeHtmlEntities(t);
-      if (htmlTagRe.test(decoded)) return decoded;
+      if (htmlTagRe.test(decoded)) return renderHtmlHandoutBody(decoded);
     }
     return renderMarkdown(src);
+  }
+
+  function renderHtmlHandoutBody(html) {
+    const template = document.createElement("template");
+    template.innerHTML = String(html || "");
+
+    template.content.querySelectorAll("a[href]").forEach((link) => {
+      if (!(link instanceof HTMLAnchorElement)) return;
+      const imageUrl = normalizeRenderableImageUrl(link.getAttribute("href") || "");
+      if (!imageUrl) return;
+
+      const img = document.createElement("img");
+      img.className = "cch-img";
+      img.src = imageUrl;
+      img.alt = normalizeImageAlt(link.textContent || "");
+      img.loading = "lazy";
+      link.replaceWith(img);
+    });
+
+    template.content.querySelectorAll("img[src]").forEach((img) => {
+      if (!(img instanceof HTMLImageElement)) return;
+      const imageUrl = normalizeRenderableImageUrl(img.getAttribute("src") || "");
+      if (imageUrl) {
+        img.src = imageUrl;
+        img.classList.add("cch-img");
+        img.loading = "lazy";
+      }
+    });
+
+    return template.innerHTML;
+  }
+
+  function normalizeRenderableImageUrl(url) {
+    const raw = decodeHtmlEntities(String(url || "").trim());
+    if (!raw) return "";
+    const drive = normalizeGoogleDriveImageUrl(raw);
+    if (drive) return drive;
+    if (/^https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp)(?:[?#][^\s<>"']*)?$/i.test(raw)) return raw;
+    return "";
+  }
+
+  function normalizeGoogleDriveImageUrl(url) {
+    if (!/^https?:\/\/(?:drive|docs)\.google\.com\//i.test(url)) return "";
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (error) {
+      return "";
+    }
+
+    let id = "";
+    const fileMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/i);
+    if (fileMatch) id = fileMatch[1] || "";
+    if (!id && parsed.pathname.match(/\/(?:uc|open|thumbnail)$/i)) {
+      id = parsed.searchParams.get("id") || "";
+    }
+    if (!id) return "";
+    return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+  }
+
+  function normalizeImageAlt(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200);
   }
 
   function renderMarkdown(src) {
@@ -345,10 +407,18 @@
 
     function inline(text) {
       let t = escapeHtml(text);
+      const wholeImageUrl = normalizeRenderableImageUrl(text);
+      if (wholeImageUrl) return `<img class="cch-img" src="${escapeAttr(wholeImageUrl)}" alt="" loading="lazy">`;
       // [image]url  (legacy 호환)
-      t = t.replace(/\[image\]\s*(https?:\/\/[^\s<>"']+)/gi, (_m, u) => `<img class="cch-img" src="${u}" alt="">`);
+      t = t.replace(/\[image\]\s*(https?:\/\/[^\s<>"']+)/gi, (_m, u) => {
+        const imageUrl = normalizeRenderableImageUrl(u);
+        return imageUrl ? `<img class="cch-img" src="${escapeAttr(imageUrl)}" alt="" loading="lazy">` : _m;
+      });
       // markdown image ![alt](url)
-      t = t.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (_m, alt, u) => `<img class="cch-img" src="${u}" alt="${alt}">`);
+      t = t.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (_m, alt, u) => {
+        const imageUrl = normalizeRenderableImageUrl(u);
+        return imageUrl ? `<img class="cch-img" src="${escapeAttr(imageUrl)}" alt="${escapeAttr(alt)}" loading="lazy">` : _m;
+      });
       // link [text](url)
       t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, txt, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${txt}</a>`);
       // bold
@@ -683,9 +753,10 @@
       border: 1px solid rgba(255,255,255,.12); border-radius: 4px; padding: 12px;
       background: rgba(0,0,0,.25); margin-top: 6px;
       max-height: 220px; overflow: auto; font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.92);
+      overflow-wrap: anywhere; word-break: break-word;
     }
     .preview img.cch-img { max-width: 100%; height: auto; display: block; margin: 6px 0; border-radius: 6px; }
-    .preview a { color: #82b1ff; }
+    .preview a { color: #82b1ff; overflow-wrap: anywhere; word-break: break-word; }
     .preview blockquote { border-left: 3px solid rgba(255,255,255,.18); margin: 6px 0; padding: 2px 12px; color: #b9b9c1; }
     .preview h1 { font-size: 18px; margin: 8px 0; color: #fff; }
     .preview h2 { font-size: 16px; margin: 7px 0; color: #fff; }
@@ -756,7 +827,10 @@
     }
     .handout-edit-header .action-icon:hover { background: rgba(255,255,255,.1); }
     .handout-edit-cols {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px;
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 28px;
+    }
+    .handout-edit-cols .col {
+      min-width: 0;
     }
     .handout-edit-cols .col label {
       display: block; font-size: 0.9375rem; font-weight: 500; color: #fff;
@@ -770,6 +844,10 @@
       font-size: 0.875rem; line-height: 1.45;
       transition: border-color 150ms cubic-bezier(0.4,0,0.2,1);
       cursor: text;
+      box-sizing: border-box;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .handout-edit-cols .col .rich-editor:hover { border-color: rgba(255,255,255,.35); }
     .handout-edit-cols .col .rich-editor:focus { outline: none; border-color: #fff; }
@@ -792,7 +870,7 @@
     .handout-edit-cols .col .rich-editor hr {
       border: 0; border-top: 1px solid rgba(255,255,255,.18); margin: 8px 0;
     }
-    .handout-edit-cols .col .rich-editor a { color: #82b1ff; }
+    .handout-edit-cols .col .rich-editor a { color: #82b1ff; overflow-wrap: anywhere; word-break: break-word; }
     .handout-edit-cols .col .rich-editor img { max-width: 100%; height: auto; }
     .handout-edit-cols .col .rich-editor ul { padding-left: 20px; }
     .handout-edit-cols .col .rich-editor:empty::before {
@@ -1692,11 +1770,11 @@
         .show-body > *:first-child { margin-top: 0 !important; }
         .show-body > *:last-child { margin-bottom: 0 !important; }
         .show-img { width: 100%; max-height: 280px; object-fit: cover; margin-bottom: 16px; background: rgba(0,0,0,.25); }
-        .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); }
+        .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); overflow-wrap: anywhere; word-break: break-word; }
         .rendered > *:first-child { margin-top: 0 !important; }
         .rendered > *:last-child { margin-bottom: 0 !important; }
         .rendered img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
-        .rendered a { color: #82b1ff; }
+        .rendered a { color: #82b1ff; overflow-wrap: anywhere; word-break: break-word; }
         .rendered blockquote { border-left: 3px solid rgba(255,255,255,.2); padding: 2px 12px; color: rgba(255,255,255,.8); }
         .rendered code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Consolas, monospace; font-size: 90%; }
         .rendered h1 { font-size: 1.25rem; color: #fff; margin: 10px 0; }
@@ -3407,8 +3485,9 @@
     if (/^https?:\/\/\S+$/i.test(text)) {
       event.preventDefault();
       editor.focus();
-      if (/\.(png|jpg|jpeg|gif|webp|svg|bmp)(\?|#|$)/i.test(text)) {
-        execEditor(editor, "insertImage", text);
+      const imageUrl = normalizeRenderableImageUrl(text);
+      if (imageUrl) {
+        execEditor(editor, "insertImage", imageUrl);
       } else {
         const sel = state.shadow?.getSelection?.() || window.getSelection();
         const hasSelection = !!(sel && String(sel).length > 0);
@@ -4368,7 +4447,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.72 (collapse popup to title bar only)");
+    console.info("[ccf-handout] init — version 0.1.73 (drive image links and editor wrapping)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
