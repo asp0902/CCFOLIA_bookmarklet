@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.74
+// @version      0.1.75
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.74",
+    version: "0.1.75",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -664,6 +664,31 @@
     }
     header .header-btn:hover { background: rgba(255,255,255,.08); }
     header .header-btn.edge-end { margin-right: -3px; }
+    .add-choice-overlay {
+      position: absolute; inset: 0; z-index: 5;
+      display: none; align-items: flex-start; justify-content: flex-end;
+      padding: 54px 16px 0; background: rgba(0,0,0,.18);
+    }
+    .add-choice-overlay[data-add-open="1"] { display: flex; }
+    .add-choice-modal {
+      width: min(220px, calc(100% - 32px));
+      border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
+      background: rgba(33,33,33,.98);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      padding: 6px;
+    }
+    .add-choice-title {
+      padding: 6px 8px 8px; font-size: 0.75rem; font-weight: 700;
+      color: rgba(255,255,255,.65);
+    }
+    .add-choice-btn {
+      all: unset; box-sizing: border-box; cursor: pointer;
+      width: 100%; min-height: 38px; border-radius: 3px;
+      padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+      color: rgba(255,255,255,.92); font-size: 0.875rem; font-weight: 600;
+    }
+    .add-choice-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .add-choice-icon { width: 20px; display: inline-grid; place-items: center; color: rgba(255,255,255,.72); }
     .tabs {
       display: flex; gap: 0; padding: 0; background-color: #212121;
       border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto;
@@ -1348,6 +1373,23 @@
             <span class="footer-meta"></span>
             <span class="footer-actions" data-footer-actions="1"></span>
           </footer>
+          <div class="add-choice-overlay" data-add-open="0" data-action="add-choice-close">
+            <div class="add-choice-modal" role="dialog" aria-label="추가할 항목 선택">
+              <div class="add-choice-title">추가</div>
+              <button class="add-choice-btn" data-action="add-handout-choice" type="button">
+                <span class="add-choice-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 16H6V5h12v14z"/><path d="M8 8h8v2H8zm0 4h8v2H8z"/></svg>
+                </span>
+                <span>핸드아웃 추가</span>
+              </button>
+              <button class="add-choice-btn" data-action="add-folder-choice" type="button">
+                <span class="add-choice-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4l2 2h8c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2l.01-12C2.01 4.9 2.9 4 4 4h6z"/></svg>
+                </span>
+                <span>폴더 추가</span>
+              </button>
+            </div>
+          </div>
           <div class="pl-modal-overlay" data-pl-modal-open="0">
             <div class="pl-modal" role="dialog" aria-label="플레이어 목록 설정">
               <div class="pl-modal-head">
@@ -2535,6 +2577,7 @@
   function closePanel() {
     state.isOpen = false;
     state.editingId = null;
+    closeAddChoiceDialog();
     render();
   }
 
@@ -2545,6 +2588,41 @@
   function setTab(tab) {
     state.activeTab = tab;
     // 탭 이동만으로 editingId 비우지 않음 — 저장/취소 누를 때만 초기화 → 편집 탭 유지
+    render();
+  }
+
+  function setAddChoiceOpen(open) {
+    const overlay = state.shadow?.querySelector(".add-choice-overlay");
+    if (overlay) overlay.setAttribute("data-add-open", open ? "1" : "0");
+  }
+
+  function toggleAddChoiceDialog() {
+    if (!isAdminMode()) return;
+    const overlay = state.shadow?.querySelector(".add-choice-overlay");
+    const isOpen = overlay?.getAttribute("data-add-open") === "1";
+    setAddChoiceOpen(!isOpen);
+  }
+
+  function closeAddChoiceDialog() {
+    setAddChoiceOpen(false);
+  }
+
+  function startNewHandout() {
+    if (!isAdminMode()) return;
+    closeAddChoiceDialog();
+    state.editingId = "new";
+    state.formPermissionsForId = null;
+    setTab("edit");
+  }
+
+  function createFolderFromPrompt() {
+    if (!isAdminMode()) return;
+    closeAddChoiceDialog();
+    const name = (prompt("폴더 이름") || "").trim();
+    if (!name) return;
+    if (!Array.isArray(state.data.folders)) state.data.folders = [];
+    state.data.folders.push({ id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, collapsed: false });
+    saveAll(state.data).catch(() => {});
     render();
   }
 
@@ -2625,14 +2703,8 @@
         </label>
       </div>
     ` : "";
-    // 새 폴더 버튼 (#56) — GM 전용
-    const folderBar = adminMode ? `
-      <div class="folder-bar">
-        <button class="btn small secondary" data-action="folder-new">+ 새 폴더</button>
-      </div>
-    ` : "";
     if (!state.data.handouts.length && !(state.data.folders || []).length) {
-      return folderBar + previewToggle;
+      return previewToggle;
     }
     // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
     const sortedHandouts = [...state.data.handouts].sort(compareByOrder);
@@ -2696,7 +2768,6 @@
     }).join("");
     const rootCards = sortedHandouts.filter((h) => !inFolder(h)).map(renderCard).join("");
     return `
-      ${folderBar}
       <div class="list">${folderSections}${rootCards}</div>
       ${previewToggle}
     `;
@@ -3203,6 +3274,11 @@
       handleFormatToolbarCommand(cmd, editor);
       return;
     }
+    const addChoiceOverlay = event.target.closest('.add-choice-overlay[data-action="add-choice-close"]');
+    if (addChoiceOverlay && event.target === addChoiceOverlay) {
+      closeAddChoiceDialog();
+      return;
+    }
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
@@ -3211,7 +3287,16 @@
     if (action === "close") { closePanel(); return; }
     if (action === "new-handout") {
       if (!isAdminMode()) return;
-      state.editingId = "new"; state.formPermissionsForId = null; setTab("edit"); return;
+      toggleAddChoiceDialog();
+      return;
+    }
+    if (action === "add-handout-choice") {
+      startNewHandout();
+      return;
+    }
+    if (action === "add-folder-choice") {
+      createFolderFromPrompt();
+      return;
     }
     if (action === "edit-handout") {
       const h = findHandout(id);
@@ -3227,13 +3312,7 @@
     }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "folder-new") {
-      if (!isAdminMode()) return;
-      const name = (prompt("폴더 이름") || "").trim();
-      if (!name) return;
-      if (!Array.isArray(state.data.folders)) state.data.folders = [];
-      state.data.folders.push({ id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, collapsed: false });
-      saveAll(state.data).catch(() => {});
-      render();
+      createFolderFromPrompt();
       return;
     }
     if (action === "folder-toggle") {
@@ -4396,6 +4475,8 @@
       // 2. PL 목록 관리 모달
       const plOverlay = state.shadow?.querySelector('.pl-modal-overlay[data-pl-modal-open="1"]');
       if (plOverlay) { closePlListDialog(); return true; }
+      const addChoiceOverlay = state.shadow?.querySelector('.add-choice-overlay[data-add-open="1"]');
+      if (addChoiceOverlay) { closeAddChoiceDialog(); return true; }
       // 3. 핸드아웃 상세 view (패널 내부)
       if (state.isOpen && state.shadow?.querySelector('.body [data-action="close-detail"]')) {
         closeDetail();
@@ -4450,7 +4531,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.74 (drive thumbnail links and hidden URL alt)");
+    console.info("[ccf-handout] init — version 0.1.75 (add choice modal)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
