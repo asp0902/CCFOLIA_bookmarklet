@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.20
+// @version      0.1.21
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.20 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.21 @", new Date().toISOString());
 
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
@@ -71,7 +71,7 @@
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
-    version: getUserscriptVersion("0.1.14"),
+    version: getUserscriptVersion("0.1.21"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -12420,12 +12420,36 @@
     const rawText = stripInvisibleEnvelope(currentText).replace(/[ \t ]+$/, "");
     if (!rawText) return true;
 
+    const decodedCurrent = extractEnvelope(currentText);
     const state = ensureEditorState(editor);
+    const blockStyle = applyAutomaticNarration(state.blockStyle);
+    let payloadText = rawText;
+    if (!state.runs.length && blockStyle.narration === true) {
+      const decodedEnvelope = decodedCurrent?.envelope || null;
+      const decodedText = typeof decodedEnvelope?.text === "string" ? decodedEnvelope.text : "";
+      const decodedRuns = normalizeRuns(decodedEnvelope?.formatRuns, decodedText.length);
+      const decodedAlignRuns = cloneAlignRuns(decodedEnvelope?.alignRuns, getTextLineCount(decodedText));
+      if (decodedText === rawText && (decodedRuns.length || decodedAlignRuns.length)) {
+        payloadText = decodedText;
+        state.runs = decodedRuns;
+        state.alignRuns = decodedAlignRuns;
+        state.text = payloadText;
+      } else {
+        const parsedRoll20 = parseRoll20MacroToDraft(rawText);
+        if (parsedRoll20) {
+          payloadText = parsedRoll20.text || "";
+          state.runs = cloneRuns(parsedRoll20.runs, payloadText.length);
+          state.alignRuns = cloneAlignRuns(parsedRoll20.alignRuns, getTextLineCount(payloadText));
+          state.text = payloadText;
+          state.roll20Source = rawText;
+        }
+      }
+    }
     if (state.parentheticalGray) {
-      state.runs = applyParentheticalGrayRuns(state.runs, rawText);
+      state.runs = applyParentheticalGrayRuns(state.runs, payloadText);
     }
     // 헤딩 마크다운 (#99) — 줄 시작 #/##/### + 공백 → 마커 제거 + 그 줄 헤딩 크기
-    const heading = applyHeadingMarkdown(rawText, cloneRuns(state.runs, rawText.length));
+    const heading = applyHeadingMarkdown(payloadText, cloneRuns(state.runs, payloadText.length));
     const sendText = heading.text;
     const baseRuns = heading.runs;
     // 서식 프리셋 자동 적용 (#70) — 메시지 안에 프리셋 이름과 같은 텍스트가 있으면
@@ -12441,7 +12465,6 @@
     }
 
     const runs = preparedRuns.runs;
-    const blockStyle = applyAutomaticNarration(state.blockStyle);
     const alignRuns = getEffectiveAlignRuns(sendText, state.alignRuns, blockStyle);
 
     // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
