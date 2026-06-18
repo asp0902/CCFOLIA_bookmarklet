@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.73
+// @version      0.1.74
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -57,7 +57,7 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.73",
+    version: "0.1.74",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -351,6 +351,7 @@
       const imageUrl = normalizeRenderableImageUrl(img.getAttribute("src") || "");
       if (imageUrl) {
         img.src = imageUrl;
+        img.alt = normalizeImageAlt(img.getAttribute("alt") || "");
         img.classList.add("cch-img");
         img.loading = "lazy";
       }
@@ -384,11 +385,13 @@
       id = parsed.searchParams.get("id") || "";
     }
     if (!id) return "";
-    return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w1600`;
   }
 
   function normalizeImageAlt(value) {
-    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200);
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (/^https?:\/\/\S+$/i.test(text)) return "";
+    return text.slice(0, 200);
   }
 
   function renderMarkdown(src) {
@@ -417,7 +420,7 @@
       // markdown image ![alt](url)
       t = t.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (_m, alt, u) => {
         const imageUrl = normalizeRenderableImageUrl(u);
-        return imageUrl ? `<img class="cch-img" src="${escapeAttr(imageUrl)}" alt="${escapeAttr(alt)}" loading="lazy">` : _m;
+        return imageUrl ? `<img class="cch-img" src="${escapeAttr(imageUrl)}" alt="${escapeAttr(normalizeImageAlt(alt))}" loading="lazy">` : _m;
       });
       // link [text](url)
       t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, txt, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${txt}</a>`);
@@ -4447,7 +4450,7 @@
 
   // ===== 초기화 =====
   function init() {
-    console.info("[ccf-handout] init — version 0.1.73 (drive image links and editor wrapping)");
+    console.info("[ccf-handout] init — version 0.1.74 (drive thumbnail links and hidden URL alt)");
     bindRouteEvents();
     bindGlobalKeys();
     startMountObserver();
