@@ -15,12 +15,31 @@
 (() => {
   "use strict";
 
-try { window.__CCF_STANDING_PICKER_DEBUG__?.disable?.(); } catch (error) { /* previous instance cleanup failed */ }
+const CCFSP_SCRIPT_INFO = Object.freeze({
+  id: "ccfolia-standing-picker",
+  name: "CCFOLIA Standing Picker",
+  version: "0.1.7",
+  namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
+});
 
-let ccfspActive = true;
-const ccfspDisposers = [];
-const ccfspAbort = new AbortController();
-const ccfspSignal = ccfspAbort.signal;
+const ccfspLifecycle = createLegacyLifecycle(CCFSP_SCRIPT_INFO, {
+  debugKey: "__CCF_STANDING_PICKER_DEBUG__",
+  onTeardown() {
+    clearNativeCharacterPickerNavigation();
+    closePopup();
+    document.getElementById('ccfolia-standing-popup')?.remove();
+    document.getElementById('ccfolia-standing-preview')?.remove();
+    document.getElementById('ccfolia-standing-toast')?.remove();
+    document.querySelectorAll('[data-capybara-toolkit-style*="standing-picker"]').forEach(el => el.remove());
+    document.body?.classList.remove('ccsp-scanning');
+    document.querySelectorAll('.ccsp-preserve').forEach(el => el.classList.remove('ccsp-preserve'));
+    document.querySelectorAll('.ccsp-ghost').forEach(el => el.classList.remove('ccsp-ghost'));
+  }
+});
+const ccfspSignal = ccfspLifecycle.signal;
+const ccfspRegisterTeardown = (fn) => ccfspLifecycle.registerTeardown(fn);
+const ccfspWithSignal = (options) => ccfspLifecycle.withSignal(options);
+const ccfspTeardown = () => ccfspLifecycle.disable();
 const CCFSP_STYLE_ID = 'ccfolia-standing-picker-userscript-style';
 const CCFSP_STYLE = "/* [DADA] */\n#ccfolia-standing-popup{\n  position: fixed;\n  width: 320px;\n  max-height: 320px;\n  background: rgba(20,20,20,0.92);\n  color: #fff;\n  border: 1px solid rgba(255,255,255,0.12);\n  border-radius: 12px;\n  overflow: hidden;\n  z-index: 2147483647;\n  box-shadow: 0 12px 40px rgba(0,0,0,0.45);\n  backdrop-filter: blur(6px);\n}\n#ccfolia-standing-popup .ccsp-list{\n  max-height: 280px;\n  overflow: auto;\n  padding: 6px;\n}\n#ccfolia-standing-popup .ccsp-item{\n  display: grid;\n  grid-template-columns: 36px 1fr;\n  gap: 10px;\n  align-items: center;\n  padding: 7px 8px;\n  border-radius: 10px;\n  cursor: pointer;\n}\n#ccfolia-standing-popup .ccsp-item:hover{ background: rgba(255,255,255,0.08); }\n#ccfolia-standing-popup .ccsp-item.is-selected{\n  background: rgba(255,255,255,0.16);\n  outline: 1px solid rgba(255,255,255,0.18);\n}\n#ccfolia-standing-popup .ccsp-thumb{\n  width: 36px; height: 36px;\n  border-radius: 10px;\n  object-fit: cover;\n  background: rgba(255,255,255,0.06);\n}\n#ccfolia-standing-popup .ccsp-label{\n  font-size: 13px;\n  line-height: 1.15;\n  word-break: break-word;\n}\n#ccfolia-standing-preview{\n  position: fixed;\n  width: 240px; height: 240px;\n  border-radius: 14px;\n  overflow: hidden;\n  z-index: 2147483647;\n  border: 1px solid rgba(255,255,255,0.12);\n  box-shadow: 0 10px 30px rgba(0,0,0,0.45);\n  background: rgba(0,0,0,0.4);\n  pointer-events: none;\n}\n#ccfolia-standing-preview img{ width:100%; height:100%; object-fit:cover; }\n\n/* [DADA] 깜빡임 방지용 강제 숨김 */\n.ccsp-ghost {\n  opacity: 0 !important;\n  pointer-events: none !important;\n  visibility: hidden !important;\n  position: fixed !important;\n  left: -10000vw !important;\n  top: -10000vh !important;\n  z-index: -1 !important;\n}\n\nbody.ccsp-scanning div.MuiDialog-root:not(.ccsp-preserve),\nbody.ccsp-scanning div.MuiPaper-root:not(.ccsp-preserve),\nbody.ccsp-scanning div[role=\"presentation\"]:not(.ccsp-preserve) {\n  opacity: 0 !important;\n  pointer-events: none !important;\n  visibility: hidden !important;\n  transition: none !important;\n}\n\n.ccsp-hidden-dialog {\n  visibility: hidden !important;\n  pointer-events: none !important;\n}\n";
 
@@ -39,106 +58,115 @@ function ccfspInjectStyle() {
   ccfspRegisterTeardown(() => style.remove());
 }
 
-function ccfspRegisterTeardown(fn) {
-  if (typeof fn === "function") ccfspDisposers.push(fn);
-}
+function createLegacyLifecycle(scriptInfo, options) {
+  const debugKey = options.debugKey;
+  const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
 
-// ----- Suite Manager 등록 (#37) -----------------------------------------------
-const CCFSP_SCRIPT_INFO = Object.freeze({
-  id: "ccfolia-standing-picker",
-  name: "CCFOLIA Standing Picker",
-  version: "0.1.7",
-  namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
-});
+  try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
 
-function ccfspRegisterWithSuite() {
-  try {
-    const REGISTRY_KEY = "ccf-suite-registry-v1";
-    let registry;
+  let active = true;
+  const disposers = [];
+  const abort = new AbortController();
+  const signal = abort.signal;
+
+  function registerTeardown(fn) {
+    if (typeof fn === "function") disposers.push(fn);
+  }
+
+  function withSignal(options) {
+    if (options == null) return { signal };
+    if (typeof options === "boolean") return { capture: options, signal };
+    if (typeof options === "object") {
+      if (options.signal && options.signal !== signal) return options;
+      return { ...options, signal };
+    }
+    return { signal };
+  }
+
+  function registerWithSuite() {
     try {
-      const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
-      registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
-    } catch (error) {
-      registry = { scripts: {} };
+      const registryKey = "ccf-suite-registry-v1";
+      let registry;
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+      } catch (error) {
+        registry = { scripts: {} };
+      }
+      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+        ? registry.scripts[scriptInfo.id]
+        : {};
+      const now = new Date().toISOString();
+      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+        ? window.__CCF_SUITE_MANAGER_SESSION_ID
+        : "";
+      registry.scripts[scriptInfo.id] = {
+        ...previous,
+        ...scriptInfo,
+        installedAt: previous.installedAt || now,
+        lastSeenAt: now,
+        lastSeenUrl: location.href,
+        lastSeenSessionId: sessionId
+      };
+      window.localStorage.setItem(registryKey, JSON.stringify(registry));
+      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+    } catch (error) { /* suite 등록 실패 무시 */ }
+  }
+
+  function disable() {
+    if (!active) return false;
+    active = false;
+    try { abort.abort(); } catch (error) { /* abort failed */ }
+    while (disposers.length) {
+      const disposer = disposers.pop();
+      try { disposer(); } catch (error) { /* disposer failed */ }
     }
-    const previous = registry.scripts[CCFSP_SCRIPT_INFO.id] && typeof registry.scripts[CCFSP_SCRIPT_INFO.id] === "object"
-      ? registry.scripts[CCFSP_SCRIPT_INFO.id]
-      : {};
-    const now = new Date().toISOString();
-    const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-      ? window.__CCF_SUITE_MANAGER_SESSION_ID
-      : "";
-    registry.scripts[CCFSP_SCRIPT_INFO.id] = {
-      ...previous,
-      ...CCFSP_SCRIPT_INFO,
-      installedAt: previous.installedAt || now,
-      lastSeenAt: now,
-      lastSeenUrl: location.href,
-      lastSeenSessionId: sessionId
+    try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+    try {
+      if (window[debugKey] && window[debugKey].__owner === signal) {
+        delete window[debugKey];
+      }
+    } catch (error) { /* debug api cleanup failed */ }
+    return true;
+  }
+
+  function installDebugApi(extra = {}) {
+    window[debugKey] = {
+      __owner: signal,
+      isActive() { return active; },
+      disable,
+      ...extra
     };
-    window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
-    window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCFSP_SCRIPT_INFO.id] }));
-  } catch (error) { /* suite 등록 실패 무시 */ }
-}
-
-ccfspRegisterWithSuite();
-window.addEventListener("ccf-suite:request-register", (event) => {
-  const targetId = event?.detail?.targetId;
-  if (targetId && targetId !== CCFSP_SCRIPT_INFO.id) return;
-  ccfspRegisterWithSuite();
-}, { signal: ccfspSignal });
-
-function ccfspWithSignal(options) {
-  if (options == null) return { signal: ccfspSignal };
-  if (typeof options === "boolean") return { capture: options, signal: ccfspSignal };
-  if (typeof options === "object") {
-    if (options.signal && options.signal !== ccfspSignal) return options;
-    return { ...options, signal: ccfspSignal };
   }
-  return { signal: ccfspSignal };
-}
 
-function ccfspTeardown() {
-  if (!ccfspActive) return false;
-  ccfspActive = false;
-  try { ccfspAbort.abort(); } catch (error) { /* abort failed */ }
-  while (ccfspDisposers.length) {
-    const disposer = ccfspDisposers.pop();
-    try { disposer(); } catch (error) { /* disposer failed */ }
-  }
-  try {
-    clearNativeCharacterPickerNavigation();
-    closePopup();
-    document.getElementById('ccfolia-standing-popup')?.remove();
-    document.getElementById('ccfolia-standing-preview')?.remove();
-    document.getElementById('ccfolia-standing-toast')?.remove();
-    document.querySelectorAll('[data-capybara-toolkit-style*="standing-picker"]').forEach(el => el.remove());
-    document.body?.classList.remove('ccsp-scanning');
-    document.querySelectorAll('.ccsp-preserve').forEach(el => el.classList.remove('ccsp-preserve'));
-    document.querySelectorAll('.ccsp-ghost').forEach(el => el.classList.remove('ccsp-ghost'));
-  } catch (error) { /* dom sweep failed */ }
-  try {
-    if (window.__CCF_STANDING_PICKER_DEBUG__ && window.__CCF_STANDING_PICKER_DEBUG__.__owner === ccfspSignal) {
-      delete window.__CCF_STANDING_PICKER_DEBUG__;
-    }
-  } catch (error) { /* debug api cleanup failed */ }
-  return true;
+  registerWithSuite();
+  window.addEventListener("ccf-suite:request-register", (event) => {
+    const targetId = event?.detail?.targetId;
+    if (targetId && targetId !== scriptInfo.id) return;
+    registerWithSuite();
+  }, withSignal());
+
+  return {
+    signal,
+    registerTeardown,
+    withSignal,
+    isActive() { return active; },
+    disable,
+    installDebugApi
+  };
 }
 
 ccfspInjectStyle();
 
-window.__CCF_STANDING_PICKER_DEBUG__ = {
-  __owner: ccfspSignal,
-  isActive() { return ccfspActive; },
+ccfspLifecycle.installDebugApi({
   findCharacterSelectButton() { return findCharacterSelectButton(); },
   clickCharacterSelectButton() {
     const btn = findCharacterSelectButton();
     if (!btn) return false;
     clickCharacterSelectButton(btn);
     return true;
-  },
-  disable() { return ccfspTeardown(); }
-};
+  }
+});
 
 const state = {
   popupEl: null,
@@ -484,7 +512,7 @@ async function getStandings() {
   document.body.classList.add('ccsp-scanning');
 
   const domObserver = new MutationObserver((mutations) => {
-    if (!ccfspActive) return;
+    if (!ccfspLifecycle.isActive()) return;
     mutations.forEach(mutation => {
       mutation.addedNodes.forEach(node => {
         if (node.nodeType === 1 && node.parentNode === document.body) {
@@ -967,7 +995,7 @@ function runCharacterShortcut(event) {
 }
 
   async function handleKeydown(event) {
-    if (!ccfspActive) return;
+    if (!ccfspLifecycle.isActive()) return;
     if (isRightShiftEvent(event)) {
       state.rightShiftDown = true;
       return;
@@ -1001,7 +1029,7 @@ function runCharacterShortcut(event) {
   try {
     await delayTimer(0);
     const { standings } = await getStandings();
-    if (!ccfspActive) return;
+    if (!ccfspLifecycle.isActive()) return;
     if (standings?.length) {
       showPopup(standings);
     }
@@ -1011,7 +1039,7 @@ function runCharacterShortcut(event) {
 }
 
   function handleKeyup(event) {
-    if (!ccfspActive) return;
+    if (!ccfspLifecycle.isActive()) return;
     if (isRightShiftEvent(event)) {
       state.rightShiftDown = false;
       return;
@@ -1057,7 +1085,7 @@ function initEvents() {
 
 (function runWatcherLoop() {
   const handle = setInterval(() => {
-    if (!ccfspActive) return;
+    if (!ccfspLifecycle.isActive()) return;
     setCurrentChar();
     if (!state.currentCharacterName) {
       state.currentCharacterName = guessCharName() || null;

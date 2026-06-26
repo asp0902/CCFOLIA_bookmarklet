@@ -16,14 +16,6 @@
     { key: "__CCF_PALETTE_FILTER_DEBUG__" },
     { key: "__CCF_HANDOUT_DEBUG__", toolkitScriptPrefix: "ccf-handout:" }
   ]);
-  const EXISTING = window[GLOBAL_KEY];
-  if (EXISTING && typeof EXISTING.closePanel === "function") {
-    if (EXISTING.buildId === BUILD_ID) {
-      EXISTING.closePanel();
-      return;
-    }
-    resetExistingToolkit(EXISTING);
-  }
 
   const DB_NAME = "capybara-toolkit";
   const DB_VERSION = 1;
@@ -108,16 +100,32 @@
     }
   ]);
 
+  if (typeof window.__CAPYBARA_TOOLKIT_TEST_HOOK__ === "object" && window.__CAPYBARA_TOOLKIT_TEST_HOOK__) {
+    window.__CAPYBARA_TOOLKIT_TEST_HOOK__.createFeatureRuntime = createFeatureRuntime;
+    window.__CAPYBARA_TOOLKIT_TEST_HOOK__.FEATURE_CATALOG = FEATURE_CATALOG;
+    window.__CAPYBARA_TOOLKIT_TEST_HOOK__.constants = {
+      STORE_FEATURES,
+      STORE_BUNDLES,
+      LEGACY_REQUEST_EVENT
+    };
+    return;
+  }
+
+  const EXISTING = window[GLOBAL_KEY];
+  if (EXISTING && typeof EXISTING.closePanel === "function") {
+    if (EXISTING.buildId === BUILD_ID) {
+      EXISTING.closePanel();
+      return;
+    }
+    resetExistingToolkit(EXISTING);
+  }
+
   const state = {
     baseUrl: resolveBaseUrl(),
     dbPromise: null,
-    loaded: new Set(),
-    loading: new Map(),
-    cacheMessages: new Map(),
     root: null,
     shadow: null,
     isOpen: false,
-    status: "준비됨",
     launcherDrag: null,
     suppressNextToggle: false,
     customOrder: [],
@@ -128,6 +136,12 @@
     rootObserver: null,
     rootObserverHost: null
   };
+
+  const featureRuntime = createFeatureRuntime({
+    catalog: FEATURE_CATALOG,
+    getOrderedFeatures,
+    env: createBrowserFeatureRuntimeEnv()
+  });
 
   if (typeof window.__CCF_SUITE_MANAGER_SESSION_ID !== "string") {
     window.__CCF_SUITE_MANAGER_SESSION_ID = SESSION_ID;
@@ -142,8 +156,8 @@
     openPanel,
     closePanel,
     togglePanel,
-    loadFeature,
-    refreshCache,
+    loadFeature: (featureOrId) => featureRuntime.load(featureOrId),
+    refreshCache: () => featureRuntime.refreshCache(),
     storage: {
       getSetting,
       setSetting,
@@ -318,24 +332,7 @@
   }
 
   async function restoreFeatureStates() {
-    if (!isCcfoliaHost()) return;
-
-    const records = await Promise.all(FEATURE_CATALOG.map((f) => getFeatureRecord(f.id).catch(() => null)));
-    for (let i = 0; i < FEATURE_CATALOG.length; i++) {
-      const feature = FEATURE_CATALOG[i];
-      const record = records[i];
-      const disabledByPage = feature.roomOnly && !isRoomPage();
-      // 항상 동작해야 하는 기능은 IndexedDB 기록 유무와 무관하게 자동 로드.
-      if (feature.alwaysOn) {
-        if (!disabledByPage) loadFeature(feature).catch(reportError);
-        continue;
-      }
-      if (record && record.enabled) {
-        if (!disabledByPage) {
-          loadFeature(feature).catch(reportError);
-        }
-      }
-    }
+    await featureRuntime.restoreEnabled();
   }
 
   async function getSetting(key, fallback = null) {
@@ -351,23 +348,6 @@
     });
   }
 
-  async function getFeatureRecord(featureId) {
-    return idbGet(STORE_FEATURES, `feature:${featureId}`);
-  }
-
-  async function setFeatureRecord(featureId, patch) {
-    const previous = await getFeatureRecord(featureId);
-    const next = {
-      key: `feature:${featureId}`,
-      id: featureId,
-      enabled: true,
-      ...previous,
-      ...patch,
-      updatedAt: new Date().toISOString()
-    };
-    await idbPut(STORE_FEATURES, next);
-    return next;
-  }
 
   async function getRoomData(featureId, roomKey = getCurrentRoomKey()) {
     return idbGet(STORE_ROOM_DATA, `room:${featureId}:${roomKey}`);
@@ -809,32 +789,25 @@
     panel.dataset.open = state.isOpen ? "1" : "0";
     sub.textContent = `v${VERSION} · ${isCcfoliaHost() ? "ccfolia" : "다른 사이트"} · ${state.baseUrl.href}`;
 
-    const records = await Promise.all(FEATURE_CATALOG.map((feature) => getFeatureRecord(feature.id).catch(() => null)));
-    const recordMap = new Map(records.filter(Boolean).map((record) => [record.id, record]));
     const notice = isCcfoliaHost()
       ? ""
       : `<div class="notice">코코포리아 탭에서 실행해야 레거시 기능을 주입할 수 있습니다. 지금은 패널과 저장소만 확인할 수 있어요.</div>`;
+    const panelItems = await featureRuntime.listPanelItems();
 
-    body.innerHTML = notice + getOrderedFeatures().map((feature) => {
-      const record = recordMap.get(feature.id);
-      const loaded = state.loaded.has(feature.id);
-      const disabledByPage = feature.roomOnly && !isRoomPage();
-      const disabled = state.loading.has(feature.id) || (!loaded && (!isCcfoliaHost() || disabledByPage));
-      const buttonText = state.loading.has(feature.id) ? "..." : (loaded ? "ON" : "OFF");
-
+    body.innerHTML = notice + panelItems.map((item) => {
       // Pointer Event 방식을 위해 HTML5의 draggable="true"는 제거되었습니다.
       return `
-        <article class="feature" data-feature="${escapeAttr(feature.id)}" data-loaded="${loaded ? "1" : "0"}" data-experimental="${feature.experimental ? "1" : "0"}">
+        <article class="feature" data-feature="${escapeAttr(item.id)}" data-loaded="${item.loaded ? "1" : "0"}" data-experimental="${item.experimental ? "1" : "0"}">
           <div class="row">
             <div>
-              <div class="name">${escapeHtml(feature.title)}</div>
-              <div class="summary">${escapeHtml(feature.summary)}</div>
+              <div class="name">${escapeHtml(item.title)}</div>
+              <div class="summary">${escapeHtml(item.summary)}</div>
             </div>
             <div class="actions">
-              <button class="btn toggle" type="button" data-action="feature-toggle" data-feature="${escapeAttr(feature.id)}" data-on="${loaded ? "1" : "0"}" aria-pressed="${loaded ? "true" : "false"}" ${disabled ? "disabled" : ""}>${buttonText}</button>
+              <button class="btn toggle" type="button" data-action="feature-toggle" data-feature="${escapeAttr(item.id)}" data-on="${item.loaded ? "1" : "0"}" aria-pressed="${item.loaded ? "true" : "false"}" ${item.disabled ? "disabled" : ""}>${item.buttonText}</button>
             </div>
           </div>
-          ${disabledByPage ? `<div class="summary">이 기능은 코코포리아 룸 안에서 켜는 편이 안전합니다.</div>` : ""}
+          ${item.notice ? `<div class="summary">${escapeHtml(item.notice)}</div>` : ""}
         </article>
       `;
     }).join("");
@@ -987,19 +960,16 @@
       return;
     }
     if (action === "feature-toggle") {
-      const feature = FEATURE_CATALOG.find((item) => item.id === button.dataset.feature);
-      if (feature) {
-        toggleFeature(feature.id).catch(reportError);
-      }
+      featureRuntime.toggle(button.dataset.feature).catch(reportError);
       return;
     }
     if (action === "cache") {
-      refreshCache().then(() => showFooterToast("저장되었습니다")).catch(reportError);
+      featureRuntime.refreshCache().then(() => showFooterToast("저장되었습니다")).catch(reportError);
       return;
     }
     if (action === "backup") {
       backupKnownLocalStorage().then((count) => {
-        state.status = `localStorage 저장값 ${count}개를 IndexedDB에 백업했습니다.`;
+        featureRuntime.setStatus(`localStorage 저장값 ${count}개를 IndexedDB에 백업했습니다.`);
         renderPanel().catch(reportError);
         showFooterToast("저장되었습니다");
       }).catch(reportError);
@@ -1007,234 +977,353 @@
     }
   }
 
-  async function toggleFeature(featureOrId) {
-    const feature = typeof featureOrId === "string"
-      ? FEATURE_CATALOG.find((item) => item.id === featureOrId)
-      : featureOrId;
-    if (!feature) throw new Error("Unknown feature");
-    if (state.loaded.has(feature.id)) {
-      await disableFeature(feature);
-      return;
-    }
-    await loadFeature(feature);
-  }
-
-  function callLegacyDisable(globalKey) {
-    const debugApi = window[globalKey];
-    if (debugApi && typeof debugApi.disable === "function") {
-      try {
-        return !!debugApi.disable();
-      } catch (error) {
-        console.error(`[Capybara Toolkit] ${globalKey}.disable() threw`, error);
+  function createBrowserFeatureRuntimeEnv() {
+    return {
+      isCcfoliaHost,
+      isRoomPage,
+      urlFor,
+      storeGet: idbGet,
+      storePut: idbPut,
+      renderPanel: () => renderPanel().catch(() => {}),
+      reportError,
+      primeChatNotifierSound,
+      nowIso: () => new Date().toISOString(),
+      nowMs: () => Date.now(),
+      fetchText: async (url) => {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Cache failed: ${response.status} ${response.statusText}`);
+        }
+        return response.text();
+      },
+      callLegacyDisable: (globalKey) => {
+        const debugApi = window[globalKey];
+        if (debugApi && typeof debugApi.disable === "function") {
+          try {
+            return !!debugApi.disable();
+          } catch (error) {
+            console.error(`[Capybara Toolkit] ${globalKey}.disable() threw`, error);
+            return false;
+          }
+        }
         return false;
-      }
-    }
-    return false;
-  }
-
-  const LEGACY_TEARDOWN_HOOKS = Object.freeze({
-    "ccf-chat-notifier": () => callLegacyDisable("__CCF_CHAT_NOTIFIER_DEBUG__"),
-    "ccf-format-sync": () => callLegacyDisable("__CCF_FORMAT_SYNC_DEBUG__"),
-    "ccf-toolkit-presence": () => callLegacyDisable("__CAPYBARA_TOOLKIT_PRESENCE__"),
-    "ccf-roll20-css-bridge": () => callLegacyDisable("__CCF_ROLL20_BRIDGE_DEBUG__"),
-    "ccf-theme-switcher": () => callLegacyDisable("__CCF_THEME_SWITCHER_DEBUG__"),
-    "ccf-log-package": () => callLegacyDisable("__CCF_LOG_PACKAGE_DEBUG__"),
-    "ccfolia-standing-picker": () => callLegacyDisable("__CCF_STANDING_PICKER_DEBUG__"),
-    "ccf-suite-manager": () => callLegacyDisable("__CCF_SUITE_DEBUG__"),
-    "ccf-handout": () => callLegacyDisable("__CCF_HANDOUT_DEBUG__")
-  });
-
-  async function disableFeature(feature) {
-    setLegacyScriptEnabled(feature.legacyStateId || feature.id, false);
-
-    let teardownRan = false;
-    const teardownHook = LEGACY_TEARDOWN_HOOKS[feature.id];
-    if (typeof teardownHook === "function") {
-      try {
-        teardownRan = !!teardownHook();
-      } catch (error) {
-        reportError(error);
-      }
-    }
-
-    if (teardownRan) {
-      for (const scriptPath of feature.scripts || []) {
-        const marker = `${feature.id}:${scriptPath}`;
+      },
+      setLegacyScriptEnabled: (scriptId, enabled) => {
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(LEGACY_STATE_KEY) || "{}");
+          const next = parsed && typeof parsed === "object" ? parsed : {};
+          next[scriptId] = enabled !== false;
+          window.localStorage.setItem(LEGACY_STATE_KEY, JSON.stringify(next));
+        } catch (error) {
+          // The compatibility key is intentionally tiny; failing here should not block execution.
+        }
+      },
+      dispatchLegacyRequest: (targetId) => {
+        window.dispatchEvent(new CustomEvent(LEGACY_REQUEST_EVENT, {
+          detail: { targetId }
+        }));
+      },
+      hasStyleMarker: (path) => !!document.querySelector(`link[data-capybara-toolkit-style="${cssEscape(path)}"]`),
+      addStyle: (path, url) => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = url;
+        link.dataset.capybaraToolkitStyle = path;
+        (document.head || document.documentElement).appendChild(link);
+      },
+      removeStyle: (path) => {
+        document.querySelector(`link[data-capybara-toolkit-style="${cssEscape(path)}"]`)?.remove();
+      },
+      hasScriptMarker: (marker) => !!document.querySelector(`script[data-capybara-toolkit-script="${cssEscape(marker)}"]`),
+      addScript: (url, marker) => new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.async = false;
+        script.dataset.capybaraToolkitScript = marker;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Script blocked or unavailable: ${url}`));
+        (document.head || document.documentElement).appendChild(script);
+      }),
+      removeScript: (marker) => {
         document.querySelector(`script[data-capybara-toolkit-script="${cssEscape(marker)}"]`)?.remove();
+      },
+      runSource: (source, sourceUrl) => {
+        const fn = new Function(`${source}\n//# sourceURL=${sourceUrl}`);
+        fn.call(window);
       }
-      for (const stylePath of feature.styles || []) {
-        document.querySelector(`link[data-capybara-toolkit-style="${cssEscape(stylePath)}"]`)?.remove();
-      }
-    }
-
-    state.loaded.delete(feature.id);
-    await setFeatureRecord(feature.id, {
-      enabled: false,
-      disabledAt: new Date().toISOString(),
-      unloadRequiresReload: !teardownRan
-    });
-    state.status = teardownRan
-      ? `${feature.title} OFF. 레거시 동작이 즉시 정지되었습니다.`
-      : `${feature.title} OFF. 이미 주입된 레거시 동작은 새로고침 후 완전히 멈춥니다.`;
-    await renderPanel();
-  }
-
-  async function loadFeature(featureOrId) {
-    const feature = typeof featureOrId === "string"
-      ? FEATURE_CATALOG.find((item) => item.id === featureOrId)
-      : featureOrId;
-    if (!feature) throw new Error("Unknown feature");
-    if (state.loaded.has(feature.id)) {
-      state.status = `${feature.title}은 이미 실행 중입니다.`;
-      await renderPanel();
-      return;
-    }
-    if (state.loading.has(feature.id)) return state.loading.get(feature.id);
-
-    const job = (async () => {
-      state.status = `${feature.title} 실행 준비 중...`;
-      await renderPanel();
-      setLegacyScriptEnabled(feature.legacyStateId || feature.id, true);
-
-      for (const cssPath of feature.styles || []) {
-        await cacheBundle(feature.id, "style", cssPath).catch((error) => rememberCacheMessage(cssPath, error));
-        injectStyle(cssPath);
-      }
-
-      for (const scriptPath of feature.scripts || []) {
-        await cacheBundle(feature.id, "script", scriptPath).catch((error) => rememberCacheMessage(scriptPath, error));
-        await injectScript(feature.id, scriptPath);
-      }
-
-      state.loaded.add(feature.id);
-      await setFeatureRecord(feature.id, {
-        enabled: true,
-        loadedAt: new Date().toISOString(),
-        source: "bookmarklet-loader"
-      });
-      state.status = `${feature.title} 실행 완료`;
-      window.dispatchEvent(new CustomEvent(LEGACY_REQUEST_EVENT, {
-        detail: { targetId: feature.legacyStateId || feature.id }
-      }));
-      if (feature.primaryAction === "sound") {
-        const primed = await primeChatNotifierSound().catch(() => false);
-        state.status = primed
-          ? `${feature.title} 실행 완료. 알림음이 활성화되었습니다.`
-          : `${feature.title} 실행 완료. 알림음 활성화에 실패했습니다. 브라우저 자동재생 정책을 확인하세요.`;
-      }
-      await renderPanel();
-    })().finally(() => {
-      state.loading.delete(feature.id);
-      renderPanel().catch(() => {});
-    });
-
-    state.loading.set(feature.id, job);
-    return job;
-  }
-
-  function setLegacyScriptEnabled(scriptId, enabled) {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(LEGACY_STATE_KEY) || "{}");
-      const next = parsed && typeof parsed === "object" ? parsed : {};
-      next[scriptId] = enabled !== false;
-      window.localStorage.setItem(LEGACY_STATE_KEY, JSON.stringify(next));
-    } catch (error) {
-      // The compatibility key is intentionally tiny; failing here should not block execution.
-    }
-  }
-
-  async function cacheBundle(featureId, kind, path) {
-    const url = urlFor(path);
-    // CDN(GitHub Pages 등) 캐시 우회를 위해 cache buster 부여
-    const response = await fetch(withCacheBuster(url), { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Cache failed: ${response.status} ${response.statusText}`);
-    }
-    const source = await response.text();
-    const record = {
-      key: `bundle:${kind}:${path}`,
-      featureId,
-      kind,
-      path,
-      url,
-      source,
-      bytes: source.length,
-      cachedAt: new Date().toISOString(),
-      toolkitVersion: VERSION
     };
-    await idbPut(STORE_BUNDLES, record);
-    await setFeatureRecord(featureId, { cachedAt: record.cachedAt });
-    return record;
   }
 
-  async function refreshCache() {
-    state.status = "기능 번들을 IndexedDB에 캐시하는 중...";
-    await renderPanel();
-    let count = 0;
-    for (const feature of FEATURE_CATALOG) {
-      for (const cssPath of feature.styles || []) {
-        await cacheBundle(feature.id, "style", cssPath);
-        count += 1;
-      }
-      for (const scriptPath of feature.scripts || []) {
-        await cacheBundle(feature.id, "script", scriptPath);
-        count += 1;
-      }
-    }
-    state.status = `번들 ${count}개 캐시 완료`;
-    await renderPanel();
-  }
+  function createFeatureRuntime(options) {
+    const {
+      catalog,
+      getOrderedFeatures,
+      env
+    } = options;
+    const loaded = new Set();
+    const loading = new Map();
+    const cacheMessages = new Map();
+    let status = "준비됨";
 
-  function injectStyle(path) {
-    if (document.querySelector(`link[data-capybara-toolkit-style="${cssEscape(path)}"]`)) return;
-    const url = withCacheBuster(urlFor(path));
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = url;
-    link.dataset.capybaraToolkitStyle = path;
-    (document.head || document.documentElement).appendChild(link);
-  }
-
-  async function injectScript(featureId, path) {
-    const marker = `${featureId}:${path}`;
-    if (document.querySelector(`script[data-capybara-toolkit-script="${cssEscape(marker)}"]`)) return;
-
-    const baseUrl = urlFor(path);
-    const url = withCacheBuster(baseUrl);
-    try {
-      await injectScriptTag(url, marker);
-      return;
-    } catch (scriptError) {
-      const cached = await idbGet(STORE_BUNDLES, `bundle:script:${path}`);
-      if (!cached?.source) throw scriptError;
-      try {
-        runSource(cached.source, baseUrl);
-      } catch (evalError) {
-        throw new Error(`스크립트 주입 실패: ${scriptError.message || scriptError}; 캐시 실행 실패: ${evalError.message || evalError}`);
-      }
-    }
-  }
-
-  function withCacheBuster(url) {
-    const separator = url.includes("?") ? "&" : "?";
-    return `${url}${separator}t=${Date.now()}`;
-  }
-
-  function injectScriptTag(url, marker) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = url;
-      script.async = false;
-      script.dataset.capybaraToolkitScript = marker;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`Script blocked or unavailable: ${url}`));
-      (document.head || document.documentElement).appendChild(script);
+    const catalogById = new Map(catalog.map((feature) => [feature.id, feature]));
+    const legacyTeardownHooks = Object.freeze({
+      "ccf-chat-notifier": () => env.callLegacyDisable("__CCF_CHAT_NOTIFIER_DEBUG__"),
+      "ccf-format-sync": () => env.callLegacyDisable("__CCF_FORMAT_SYNC_DEBUG__"),
+      "ccf-toolkit-presence": () => env.callLegacyDisable("__CAPYBARA_TOOLKIT_PRESENCE__"),
+      "ccf-roll20-css-bridge": () => env.callLegacyDisable("__CCF_ROLL20_BRIDGE_DEBUG__"),
+      "ccf-theme-switcher": () => env.callLegacyDisable("__CCF_THEME_SWITCHER_DEBUG__"),
+      "ccf-log-package": () => env.callLegacyDisable("__CCF_LOG_PACKAGE_DEBUG__"),
+      "ccfolia-standing-picker": () => env.callLegacyDisable("__CCF_STANDING_PICKER_DEBUG__"),
+      "ccf-suite-manager": () => env.callLegacyDisable("__CCF_SUITE_DEBUG__"),
+      "ccf-handout": () => env.callLegacyDisable("__CCF_HANDOUT_DEBUG__")
     });
-  }
 
-  function runSource(source, sourceUrl) {
-    const fn = new Function(`${source}\n//# sourceURL=${sourceUrl}`);
-    fn.call(window);
+    return {
+      listPanelItems,
+      restoreEnabled,
+      toggle,
+      load,
+      disable,
+      refreshCache,
+      getStatus: () => status,
+      setStatus
+    };
+
+    function setStatus(nextStatus) {
+      status = nextStatus;
+    }
+
+    function resolveFeature(featureOrId) {
+      const feature = typeof featureOrId === "string"
+        ? catalogById.get(featureOrId)
+        : featureOrId;
+      if (!feature) throw new Error("Unknown feature");
+      return feature;
+    }
+
+    async function listPanelItems() {
+      return getOrderedFeatures().map((feature) => {
+        const isLoaded = loaded.has(feature.id);
+        const isLoading = loading.has(feature.id);
+        const disabledByPage = feature.roomOnly && !env.isRoomPage();
+        return {
+          id: feature.id,
+          title: feature.title,
+          summary: feature.summary,
+          experimental: !!feature.experimental,
+          loaded: isLoaded,
+          loading: isLoading,
+          disabled: isLoading || (!isLoaded && (!env.isCcfoliaHost() || disabledByPage)),
+          buttonText: isLoading ? "..." : (isLoaded ? "ON" : "OFF"),
+          notice: disabledByPage ? "이 기능은 코코포리아 룸 안에서 켜는 편이 안전합니다." : ""
+        };
+      });
+    }
+
+    async function restoreEnabled() {
+      if (!env.isCcfoliaHost()) return;
+
+      const records = await Promise.all(catalog.map((feature) => getFeatureRecord(feature.id).catch(() => null)));
+      for (let i = 0; i < catalog.length; i++) {
+        const feature = catalog[i];
+        const record = records[i];
+        const disabledByPage = feature.roomOnly && !env.isRoomPage();
+        // 항상 동작해야 하는 기능은 IndexedDB 기록 유무와 무관하게 자동 로드.
+        if (feature.alwaysOn) {
+          if (!disabledByPage) load(feature).catch(env.reportError);
+          continue;
+        }
+        if (record && record.enabled) {
+          if (!disabledByPage) {
+            load(feature).catch(env.reportError);
+          }
+        }
+      }
+    }
+
+    async function toggle(featureOrId) {
+      const feature = resolveFeature(featureOrId);
+      if (loaded.has(feature.id)) {
+        await disable(feature);
+        return;
+      }
+      await load(feature);
+    }
+
+    async function load(featureOrId) {
+      const feature = resolveFeature(featureOrId);
+      if (loaded.has(feature.id)) {
+        status = `${feature.title}은 이미 실행 중입니다.`;
+        await env.renderPanel();
+        return;
+      }
+      if (loading.has(feature.id)) return loading.get(feature.id);
+
+      const job = (async () => {
+        status = `${feature.title} 실행 준비 중...`;
+        await env.renderPanel();
+        env.setLegacyScriptEnabled(feature.legacyStateId || feature.id, true);
+
+        for (const cssPath of feature.styles || []) {
+          await cacheBundle(feature.id, "style", cssPath).catch((error) => rememberCacheMessage(cssPath, error));
+          injectStyle(cssPath);
+        }
+
+        for (const scriptPath of feature.scripts || []) {
+          await cacheBundle(feature.id, "script", scriptPath).catch((error) => rememberCacheMessage(scriptPath, error));
+          await injectScript(feature.id, scriptPath);
+        }
+
+        loaded.add(feature.id);
+        await setFeatureRecord(feature.id, {
+          enabled: true,
+          loadedAt: env.nowIso(),
+          source: "bookmarklet-loader"
+        });
+        status = `${feature.title} 실행 완료`;
+        env.dispatchLegacyRequest(feature.legacyStateId || feature.id);
+        if (feature.primaryAction === "sound") {
+          const primed = await env.primeChatNotifierSound().catch(() => false);
+          status = primed
+            ? `${feature.title} 실행 완료. 알림음이 활성화되었습니다.`
+            : `${feature.title} 실행 완료. 알림음 활성화에 실패했습니다. 브라우저 자동재생 정책을 확인하세요.`;
+        }
+        await env.renderPanel();
+      })().finally(() => {
+        loading.delete(feature.id);
+        env.renderPanel();
+      });
+
+      loading.set(feature.id, job);
+      return job;
+    }
+
+    async function disable(featureOrId) {
+      const feature = resolveFeature(featureOrId);
+      env.setLegacyScriptEnabled(feature.legacyStateId || feature.id, false);
+
+      let teardownRan = false;
+      const teardownHook = legacyTeardownHooks[feature.id];
+      if (typeof teardownHook === "function") {
+        try {
+          teardownRan = !!teardownHook();
+        } catch (error) {
+          env.reportError(error);
+        }
+      }
+
+      if (teardownRan) {
+        for (const scriptPath of feature.scripts || []) {
+          const marker = `${feature.id}:${scriptPath}`;
+          env.removeScript(marker);
+        }
+        for (const stylePath of feature.styles || []) {
+          env.removeStyle(stylePath);
+        }
+      }
+
+      loaded.delete(feature.id);
+      await setFeatureRecord(feature.id, {
+        enabled: false,
+        disabledAt: env.nowIso(),
+        unloadRequiresReload: !teardownRan
+      });
+      status = teardownRan
+        ? `${feature.title} OFF. 레거시 동작이 즉시 정지되었습니다.`
+        : `${feature.title} OFF. 이미 주입된 레거시 동작은 새로고침 후 완전히 멈춥니다.`;
+      await env.renderPanel();
+    }
+
+    async function refreshCache() {
+      status = "기능 번들을 IndexedDB에 캐시하는 중...";
+      await env.renderPanel();
+      let count = 0;
+      for (const feature of catalog) {
+        for (const cssPath of feature.styles || []) {
+          await cacheBundle(feature.id, "style", cssPath);
+          count += 1;
+        }
+        for (const scriptPath of feature.scripts || []) {
+          await cacheBundle(feature.id, "script", scriptPath);
+          count += 1;
+        }
+      }
+      status = `번들 ${count}개 캐시 완료`;
+      await env.renderPanel();
+    }
+
+    async function getFeatureRecord(featureId) {
+      return env.storeGet(STORE_FEATURES, `feature:${featureId}`);
+    }
+
+    async function setFeatureRecord(featureId, patch) {
+      const previous = await getFeatureRecord(featureId);
+      const next = {
+        key: `feature:${featureId}`,
+        id: featureId,
+        enabled: true,
+        ...previous,
+        ...patch,
+        updatedAt: env.nowIso()
+      };
+      await env.storePut(STORE_FEATURES, next);
+      return next;
+    }
+
+    async function cacheBundle(featureId, kind, path) {
+      const url = env.urlFor(path);
+      // CDN(GitHub Pages 등) 캐시 우회를 위해 cache buster 부여
+      const source = await env.fetchText(withCacheBuster(url));
+      const record = {
+        key: `bundle:${kind}:${path}`,
+        featureId,
+        kind,
+        path,
+        url,
+        source,
+        bytes: source.length,
+        cachedAt: env.nowIso(),
+        toolkitVersion: VERSION
+      };
+      await env.storePut(STORE_BUNDLES, record);
+      await setFeatureRecord(featureId, { cachedAt: record.cachedAt });
+      return record;
+    }
+
+    function injectStyle(path) {
+      if (env.hasStyleMarker(path)) return;
+      env.addStyle(path, withCacheBuster(env.urlFor(path)));
+    }
+
+    async function injectScript(featureId, path) {
+      const marker = `${featureId}:${path}`;
+      if (env.hasScriptMarker(marker)) return;
+
+      const baseUrl = env.urlFor(path);
+      const url = withCacheBuster(baseUrl);
+      try {
+        await env.addScript(url, marker);
+        return;
+      } catch (scriptError) {
+        const cached = await env.storeGet(STORE_BUNDLES, `bundle:script:${path}`);
+        if (!cached?.source) throw scriptError;
+        try {
+          env.runSource(cached.source, baseUrl);
+        } catch (evalError) {
+          throw new Error(`스크립트 주입 실패: ${scriptError.message || scriptError}; 캐시 실행 실패: ${evalError.message || evalError}`);
+        }
+      }
+    }
+
+    function withCacheBuster(url) {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}t=${env.nowMs()}`;
+    }
+
+
+    function rememberCacheMessage(path, error) {
+      cacheMessages.set(path, error?.message || String(error));
+    }
   }
 
   async function primeChatNotifierSound() {
@@ -1247,10 +1336,6 @@
       return false;
     }
     return !!(await debugApi.primeSound());
-  }
-
-  function rememberCacheMessage(path, error) {
-    state.cacheMessages.set(path, error?.message || String(error));
   }
 
   async function backupKnownLocalStorage() {
@@ -1290,7 +1375,7 @@
 
   function reportError(error) {
     console.error("[Capybara Toolkit]", error);
-    state.status = error?.message || String(error);
+    featureRuntime.setStatus(error?.message || String(error));
     renderPanel().catch(() => {});
   }
 

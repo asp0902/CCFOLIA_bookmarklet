@@ -44,16 +44,6 @@
   const CHAT_AUTHOR_CANDIDATE_LIMIT = 12;
   const CHAT_AUTHOR_BOTTOM_THRESHOLD_PX = 80;
 
-  let active = true;
-  const disposers = [];
-  const abort = new AbortController();
-  const signal = abort.signal;
-
-  function registerTeardown(fn) {
-    if (typeof fn === "function") disposers.push(fn);
-  }
-
-  // ----- Suite Manager 등록 (#37) ---------------------------------------------
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
@@ -61,66 +51,117 @@
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
-  function ccfHoRegisterWithSuite() {
-    try {
-      const REGISTRY_KEY = "ccf-suite-registry-v1";
-      let registry;
-      try {
-        const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
-        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
-      } catch (error) {
-        registry = { scripts: {} };
-      }
-      const previous = registry.scripts[CCF_HO_SCRIPT_INFO.id] && typeof registry.scripts[CCF_HO_SCRIPT_INFO.id] === "object"
-        ? registry.scripts[CCF_HO_SCRIPT_INFO.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-      registry.scripts[CCF_HO_SCRIPT_INFO.id] = {
-        ...previous,
-        ...CCF_HO_SCRIPT_INFO,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-      window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCF_HO_SCRIPT_INFO.id] }));
-    } catch (error) { /* suite 등록 실패 무시 */ }
-  }
-
-  ccfHoRegisterWithSuite();
-  window.addEventListener("ccf-suite:request-register", (event) => {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_HO_SCRIPT_INFO.id) return;
-    ccfHoRegisterWithSuite();
-  }, { signal });
-
-  function teardown() {
-    if (!active) return false;
-    active = false;
-    try { abort.abort(); } catch (error) { /* abort failed */ }
-    while (disposers.length) {
-      try { disposers.pop()(); } catch (error) { /* disposer failed */ }
-    }
-    try {
+  const lifecycle = createLegacyLifecycle(CCF_HO_SCRIPT_INFO, {
+    debugKey: "__CCF_HANDOUT_DEBUG__",
+    onTeardown() {
       document.getElementById(ROOT_ID)?.remove();
       document.getElementById(STYLE_ID)?.remove();
       document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove());
-    } catch (error) { /* sweep failed */ }
-    try {
-      if (window.__CCF_HANDOUT_DEBUG__ && window.__CCF_HANDOUT_DEBUG__.__owner === signal) {
-        delete window.__CCF_HANDOUT_DEBUG__;
+    }
+  });
+  const signal = lifecycle.signal;
+  const isActive = () => lifecycle.isActive();
+  const registerTeardown = (fn) => lifecycle.registerTeardown(fn);
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
       }
-    } catch (error) { /* debug cleanup failed */ }
-    return true;
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
   }
 
-  window.__CCF_HANDOUT_DEBUG__ = {
-    __owner: signal,
-    isActive() { return active; },
+  lifecycle.installDebugApi({
     open() { openPanel(); },
     close() { closePanel(); },
     locateAnchor() { return diagnoseAnchors(); },
@@ -178,9 +219,8 @@
       console.info("[ccf-handout] room GM cleared");
       return true;
     },
-    setRoomGm(name) { return pushGmToFirestore(String(name || "").trim()); },
-    disable() { return teardown(); }
-  };
+    setRoomGm(name) { return pushGmToFirestore(String(name || "").trim()); }
+  });
 
   // ===== storage (capybara toolkit roomData) =====
   function toolkit() {
@@ -2015,9 +2055,9 @@
     let skipValue = null;
     try { skipValue = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
     console.info("[ccf-handout] maybeShowGreeting", {
-      active, room, skipped, skipKey: GREETING_SKIP_DAY_KEY, skipValue, alreadyMounted
+      active: isActive(), room, skipped, skipKey: GREETING_SKIP_DAY_KEY, skipValue, alreadyMounted
     });
-    if (!active) return;
+    if (!isActive()) return;
     if (room === "global") return;            // 룸 밖에서는 안 띄움
     if (skipped) return;                      // 오늘 다시 보지 않기 체크된 상태
     if (alreadyMounted) return;
@@ -2116,7 +2156,7 @@
 
   // ===== 채팅 발신자 감시 (plList 자동 추가) =====
   function startChatWatcher() {
-    if (state.chatWatcher || !active) return;
+    if (state.chatWatcher || !isActive()) return;
     const target = document.body || document.documentElement;
     if (!target) return;
     state.chatWatcher = new MutationObserver((mutations) => {
@@ -2163,7 +2203,7 @@
   }
 
   async function scanChatForAuthors() {
-    if (!active) return;
+    if (!isActive()) return;
     // 인사 팝업 안 끝났으면 대기 (사용자 동의 후 시작)
     const room = getCurrentRoomKey();
     resetChatSeenAuthorsForRoom(room);
@@ -3190,7 +3230,7 @@
 
   // myCharacter 자동 감지 — input[name="name"] 의 visible 값 (코코포리아 채팅 발화 캐릭터)
   async function autoDetectMyCharacter({ force = false } = {}) {
-    if (!active) return null;
+    if (!isActive()) return null;
     if (remoteGmInfo?.gmCharacter) return null; // 룸 GM 동기화 중 — 자동 감지 금지 (#84)
     if (!force && state.data.myCharacter) return null;
     const inputs = Array.from(document.querySelectorAll('input[name="name"]'));
@@ -3210,7 +3250,7 @@
 
   // input[name="name"] 변경 감시 — myCharacter 비어있을 때만 자동 채움
   function watchMyCharacterInput() {
-    if (!active) return;
+    if (!isActive()) return;
     if (watchMyCharacterInput._bound) return;
     watchMyCharacterInput._bound = true;
     document.addEventListener("change", (e) => {
@@ -4321,7 +4361,7 @@
   }
 
   function mountIcon() {
-    if (!active) return;
+    if (!isActive()) return;
     const existing = document.querySelector(`[${ICON_MARKER}]`);
     if (existing && existing.isConnected) return;
 
@@ -4399,7 +4439,7 @@
   function startMountObserver() {
     if (state.mountObserver) return;
     const obs = new MutationObserver(() => {
-      if (!active) return;
+      if (!isActive()) return;
       mountIcon();
       // 룸 변경 감지
       const room = getCurrentRoomKey();

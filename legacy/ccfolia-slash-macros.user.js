@@ -15,30 +15,8 @@
 (() => {
   "use strict";
 
-  try { window.__CCF_SLASH_MACROS_DEBUG__?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
-
   // ----- lifecycle / signal ---------------------------------------------------
 
-  let ccfSmActive = true;
-  const ccfSmDisposers = [];
-  const ccfSmAbort = new AbortController();
-  const ccfSmSignal = ccfSmAbort.signal;
-
-  function ccfSmRegisterTeardown(fn) {
-    if (typeof fn === "function") ccfSmDisposers.push(fn);
-  }
-
-  function ccfSmWithSignal(options) {
-    if (options == null) return { signal: ccfSmSignal };
-    if (typeof options === "boolean") return { capture: options, signal: ccfSmSignal };
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== ccfSmSignal) return options;
-      return { ...options, signal: ccfSmSignal };
-    }
-    return { signal: ccfSmSignal };
-  }
-
-  // ----- Suite Manager 등록 (#37) ---------------------------------------------
   const CCF_SM_SCRIPT_INFO = Object.freeze({
     id: "ccf-slash-macros",
     name: "CCFOLIA Slash Macros",
@@ -46,72 +24,131 @@
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-slash-macros"
   });
 
-  function ccfSmRegisterWithSuite() {
-    try {
-      const REGISTRY_KEY = "ccf-suite-registry-v1";
-      let registry;
-      try {
-        const parsed = JSON.parse(window.localStorage.getItem(REGISTRY_KEY) || "{}");
-        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
-      } catch (error) {
-        registry = { scripts: {} };
-      }
-      const previous = registry.scripts[CCF_SM_SCRIPT_INFO.id] && typeof registry.scripts[CCF_SM_SCRIPT_INFO.id] === "object"
-        ? registry.scripts[CCF_SM_SCRIPT_INFO.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-      registry.scripts[CCF_SM_SCRIPT_INFO.id] = {
-        ...previous,
-        ...CCF_SM_SCRIPT_INFO,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-      window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[CCF_SM_SCRIPT_INFO.id] }));
-    } catch (error) { /* suite 등록 실패 무시 */ }
-  }
-
-  ccfSmRegisterWithSuite();
-  window.addEventListener("ccf-suite:request-register", (event) => {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_SM_SCRIPT_INFO.id) return;
-    ccfSmRegisterWithSuite();
-  }, ccfSmWithSignal());
-
-  function ccfSmTeardown() {
-    if (!ccfSmActive) return false;
-    ccfSmActive = false;
-    try { ccfSmAbort.abort(); } catch (error) { /* abort failed */ }
-    while (ccfSmDisposers.length) {
-      const disposer = ccfSmDisposers.pop();
-      try { disposer(); } catch (error) { /* disposer failed */ }
-    }
-    try {
+  const ccfSmLifecycle = createLegacyLifecycle(CCF_SM_SCRIPT_INFO, {
+    debugKey: "__CCF_SLASH_MACROS_DEBUG__",
+    onTeardown() {
       document.getElementById(STYLE_ID)?.remove();
       document.getElementById(POPUP_ID)?.remove();
       document.getElementById(MODAL_ID)?.remove();
       document.querySelectorAll(`[${TOOLBAR_BTN_ATTR}]`).forEach((el) => el.remove());
-    } catch (error) { /* dom sweep failed */ }
-    try {
-      if (window.__CCF_SLASH_MACROS_DEBUG__ && window.__CCF_SLASH_MACROS_DEBUG__.__owner === ccfSmSignal) {
-        delete window.__CCF_SLASH_MACROS_DEBUG__;
-      }
-    } catch (error) { /* debug api cleanup failed */ }
-    return true;
+    }
+  });
+  const ccfSmSignal = ccfSmLifecycle.signal;
+
+  function ccfSmRegisterTeardown(fn) {
+    ccfSmLifecycle.registerTeardown(fn);
   }
 
-  window.__CCF_SLASH_MACROS_DEBUG__ = {
-    __owner: ccfSmSignal,
-    isActive() { return ccfSmActive; },
-    disable() { return ccfSmTeardown(); },
+  function ccfSmWithSignal(options) {
+    return ccfSmLifecycle.withSignal(options);
+  }
+
+  function ccfSmTeardown() {
+    return ccfSmLifecycle.disable();
+  }
+
+  ccfSmLifecycle.installDebugApi({
     listMacros() { return readMacros(); },
     addMacro(name, body) { saveMacro(name, body); return readMacros(); }
-  };
+  });
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
+      }
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
+  }
 
   // ----- constants ------------------------------------------------------------
 
@@ -431,7 +468,7 @@
     if (popup.boundEditor === event.target) {
       // 클릭으로 항목 선택 시 mousedown에서 preventDefault 했으므로 즉시 숨겨도 안전
       setTimeout(() => {
-        if (!ccfSmActive) return;
+        if (!ccfSmLifecycle.isActive()) return;
         if (document.activeElement === popup.boundEditor) return;
         hidePopup();
       }, 80);
