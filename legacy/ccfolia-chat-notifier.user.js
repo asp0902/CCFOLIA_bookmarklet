@@ -210,142 +210,202 @@
     /^\s*＜(\d+)＞/
   ];
 
-  let chatNotifierActive = true;
   let ccfChatNotifierDebugApi = null;
-  const teardownDisposers = [];
-  const teardownAbortController = new AbortController();
-  const teardownSignal = teardownAbortController.signal;
 
-  function registerTeardown(disposer) {
-    if (typeof disposer === "function") {
-      teardownDisposers.push(disposer);
-    }
-  }
-
-  function withTeardownSignal(options) {
-    if (options == null) {
-      return { signal: teardownSignal };
-    }
-    if (typeof options === "boolean") {
-      return { capture: options, signal: teardownSignal };
-    }
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== teardownSignal) {
-        return options;
-      }
-      return { ...options, signal: teardownSignal };
-    }
-    return { signal: teardownSignal };
-  }
-
-  function runChatNotifierTeardown() {
-    if (!chatNotifierActive) return false;
-    chatNotifierActive = false;
-    try {
-      teardownAbortController.abort();
-    } catch (error) {
-      debugLog("teardown-abort-failed", serializeError(error));
-    }
-    while (teardownDisposers.length) {
-      const disposer = teardownDisposers.pop();
+  const chatNotifierLifecycle = createLegacyLifecycle(CCF_CHAT_NOTIFIER_SCRIPT_INFO, {
+    debugKey: "__CCF_CHAT_NOTIFIER_DEBUG__",
+    onTeardown() {
       try {
-        disposer();
-      } catch (error) {
-        debugLog("teardown-disposer-failed", serializeError(error));
-      }
-    }
-    try {
-      if (typeof ccfBgmProgressTimer === "number" && ccfBgmProgressTimer) {
-        window.clearTimeout(ccfBgmProgressTimer);
-        ccfBgmProgressTimer = 0;
-      }
-      if (typeof titleChangeTimer === "number" && titleChangeTimer) {
-        window.clearTimeout(titleChangeTimer);
-        titleChangeTimer = 0;
-      }
-      if (typeof focusSyncTimer === "number" && focusSyncTimer) {
-        window.clearTimeout(focusSyncTimer);
-        focusSyncTimer = 0;
-      }
-      if (typeof ccfBgmDomEnhanceTimer === "number" && ccfBgmDomEnhanceTimer) {
-        window.clearTimeout(ccfBgmDomEnhanceTimer);
-        ccfBgmDomEnhanceTimer = 0;
-      }
-    } catch (error) {
-      debugLog("teardown-timer-clear-failed", serializeError(error));
-    }
-    try {
-      document.getElementById("ccf-bgm-enhancer-style")?.remove();
-      document.getElementById("ccf-youtube-bgm-player")?.remove();
-      document.querySelectorAll([
-        ".ccf-bgm-progress-root",
-        ".ccf-bgm-progress-break",
-        ".ccf-bgm-native-tooltip",
-        ".ccf-youtube-bgm-player-dock",
-        ".ccf-youtube-bgm-popover",
-        ".ccf-youtube-bgm-preview-host",
-        ".ccf-youtube-bgm-drag-clone",
-        ".ccf-youtube-bgm-list",
-        ".ccf-youtube-bgm-row-wrap",
-        '[data-ccf-youtube-bgm-registered]',
-        '[data-ccf-bgm-share]'
-      ].join(", ")).forEach((el) => {
-        if (el.matches?.('[data-ccf-youtube-bgm-registered], [data-ccf-bgm-share]')) {
-          el.removeAttribute("data-ccf-youtube-bgm-registered");
-          el.removeAttribute("data-ccf-bgm-share");
-          return;
+        if (typeof ccfBgmProgressTimer === "number" && ccfBgmProgressTimer) {
+          window.clearTimeout(ccfBgmProgressTimer);
+          ccfBgmProgressTimer = 0;
         }
-        el.remove();
-      });
-      document.querySelectorAll([
-        '[data-ccf-bgm-drawer-size-lock]',
-        '[data-ccf-bgm-panel]',
-        '[data-ccf-bgm-button-row]',
-        '[data-ccf-bgm-progress-host]',
-        '[data-ccf-bgm-progress-flow]',
-        '[data-ccf-bgm-dialog-root]',
-        '[data-ccf-bgm-dialog-paper]',
-        '[data-ccf-bgm-slot-key]'
-      ].join(", ")).forEach((el) => {
-        el.removeAttribute("data-ccf-bgm-drawer-size-lock");
-        el.removeAttribute("data-ccf-bgm-panel");
-        el.removeAttribute("data-ccf-bgm-button-row");
-        el.removeAttribute("data-ccf-bgm-progress-host");
-        el.removeAttribute("data-ccf-bgm-progress-flow");
-        el.removeAttribute("data-ccf-bgm-dialog-root");
-        el.removeAttribute("data-ccf-bgm-dialog-paper");
-        el.removeAttribute("data-ccf-bgm-slot-key");
-      });
-      ccfBgmPlayerDock?.remove?.();
-      ccfBgmPlayerDock = null;
-      ccfBgmPlayerHost = null;
-      try { ccfBgmPlayer?.destroy?.(); } catch (error) { /* youtube player teardown */ }
-      ccfBgmPlayer = null;
-      ccfBgmPlayerReady = false;
-    } catch (error) {
-      debugLog("teardown-dom-sweep-failed", serializeError(error));
-    }
-    try {
-      if (notificationAudio) {
-        notificationAudio.pause?.();
-        notificationAudio.src = "";
-        notificationAudio = null;
+        if (typeof titleChangeTimer === "number" && titleChangeTimer) {
+          window.clearTimeout(titleChangeTimer);
+          titleChangeTimer = 0;
+        }
+        if (typeof focusSyncTimer === "number" && focusSyncTimer) {
+          window.clearTimeout(focusSyncTimer);
+          focusSyncTimer = 0;
+        }
+        if (typeof ccfBgmDomEnhanceTimer === "number" && ccfBgmDomEnhanceTimer) {
+          window.clearTimeout(ccfBgmDomEnhanceTimer);
+          ccfBgmDomEnhanceTimer = 0;
+        }
+      } catch (error) {
+        debugLog("teardown-timer-clear-failed", serializeError(error));
       }
-    } catch (error) {
-      debugLog("teardown-audio-cleanup-failed", serializeError(error));
-    }
-    try {
-      if (window.__CCF_CHAT_NOTIFIER_DEBUG__ === ccfChatNotifierDebugApi) {
-        delete window.__CCF_CHAT_NOTIFIER_DEBUG__;
+      try {
+        document.getElementById("ccf-bgm-enhancer-style")?.remove();
+        document.getElementById("ccf-youtube-bgm-player")?.remove();
+        document.querySelectorAll([
+          ".ccf-bgm-progress-root",
+          ".ccf-bgm-progress-break",
+          ".ccf-bgm-native-tooltip",
+          ".ccf-youtube-bgm-player-dock",
+          ".ccf-youtube-bgm-popover",
+          ".ccf-youtube-bgm-preview-host",
+          ".ccf-youtube-bgm-drag-clone",
+          ".ccf-youtube-bgm-list",
+          ".ccf-youtube-bgm-row-wrap",
+          '[data-ccf-youtube-bgm-registered]',
+          '[data-ccf-bgm-share]'
+        ].join(", ")).forEach((el) => {
+          if (el.matches?.('[data-ccf-youtube-bgm-registered], [data-ccf-bgm-share]')) {
+            el.removeAttribute("data-ccf-youtube-bgm-registered");
+            el.removeAttribute("data-ccf-bgm-share");
+            return;
+          }
+          el.remove();
+        });
+        document.querySelectorAll([
+          '[data-ccf-bgm-drawer-size-lock]',
+          '[data-ccf-bgm-panel]',
+          '[data-ccf-bgm-button-row]',
+          '[data-ccf-bgm-progress-host]',
+          '[data-ccf-bgm-progress-flow]',
+          '[data-ccf-bgm-dialog-root]',
+          '[data-ccf-bgm-dialog-paper]',
+          '[data-ccf-bgm-slot-key]'
+        ].join(", ")).forEach((el) => {
+          el.removeAttribute("data-ccf-bgm-drawer-size-lock");
+          el.removeAttribute("data-ccf-bgm-panel");
+          el.removeAttribute("data-ccf-bgm-button-row");
+          el.removeAttribute("data-ccf-bgm-progress-host");
+          el.removeAttribute("data-ccf-bgm-progress-flow");
+          el.removeAttribute("data-ccf-bgm-dialog-root");
+          el.removeAttribute("data-ccf-bgm-dialog-paper");
+          el.removeAttribute("data-ccf-bgm-slot-key");
+        });
+        ccfBgmPlayerDock?.remove?.();
+        ccfBgmPlayerDock = null;
+        ccfBgmPlayerHost = null;
+        try { ccfBgmPlayer?.destroy?.(); } catch (error) { /* youtube player teardown */ }
+        ccfBgmPlayer = null;
+        ccfBgmPlayerReady = false;
+      } catch (error) {
+        debugLog("teardown-dom-sweep-failed", serializeError(error));
       }
-    } catch (error) {
-      debugLog("teardown-debug-api-cleanup-failed", serializeError(error));
+      try {
+        if (notificationAudio) {
+          notificationAudio.pause?.();
+          notificationAudio.src = "";
+          notificationAudio = null;
+        }
+      } catch (error) {
+        debugLog("teardown-audio-cleanup-failed", serializeError(error));
+      }
+      try {
+        if (window.__CCF_CHAT_NOTIFIER_DEBUG__ === ccfChatNotifierDebugApi) {
+          delete window.__CCF_CHAT_NOTIFIER_DEBUG__;
+        }
+      } catch (error) {
+        debugLog("teardown-debug-api-cleanup-failed", serializeError(error));
+      }
     }
-    return true;
+  });
+  const registerTeardown = (disposer) => chatNotifierLifecycle.registerTeardown(disposer);
+  const withTeardownSignal = (options) => chatNotifierLifecycle.withSignal(options);
+  const runChatNotifierTeardown = () => chatNotifierLifecycle.disable();
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
+      }
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
   }
 
-  registerWithCcfSuite(CCF_CHAT_NOTIFIER_SCRIPT_INFO);
-  window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, withTeardownSignal());
   if (!isCcfSuiteScriptEnabled(CCF_CHAT_NOTIFIER_SCRIPT_INFO.id)) {
     return;
   }
@@ -1458,7 +1518,7 @@
   function exposeDebugApi() {
     ccfChatNotifierDebugApi = {
       isActive() {
-        return chatNotifierActive;
+        return chatNotifierLifecycle.isActive();
       },
       disable() {
         return runChatNotifierTeardown();
@@ -1796,7 +1856,7 @@
     const delays = [300, 1000, 2500, 5000];
     delays.forEach((ms) => {
       window.setTimeout(() => {
-        if (!chatNotifierActive) return;
+        if (!chatNotifierLifecycle.isActive()) return;
         // 이미 한 번 등록된 미디어는 handleCcfNativeMediaActivity 내부에서 set 추가만
         // 일어나므로 중복 호출이 부작용을 일으키지 않는다.
         scanExistingNativeBgmMedia();
@@ -1824,11 +1884,11 @@
     const patchedMediaPlay = function patchedCcfBgmMediaPlay() {
       const media = this;
       const playResult = originalPlay.apply(media, arguments);
-      if (!chatNotifierActive) {
+      if (!chatNotifierLifecycle.isActive()) {
         return playResult;
       }
       const remember = () => {
-        if (!chatNotifierActive) return;
+        if (!chatNotifierLifecycle.isActive()) return;
         handleCcfNativeMediaActivity(media, "play", "play-hook");
       };
 
@@ -1874,7 +1934,7 @@
     window.__ccfBgmWebAudioProgressHooked = true;
 
     const patchedWebAudioStart = function patchedCcfBgmWebAudioStart(when = 0, offset = 0, duration) {
-      if (!chatNotifierActive) {
+      if (!chatNotifierLifecycle.isActive()) {
         return originalStart.apply(this, arguments);
       }
       let trackingState = null;
@@ -1916,7 +1976,7 @@
     };
 
     const patchedWebAudioStop = function patchedCcfBgmWebAudioStop() {
-      if (!chatNotifierActive) {
+      if (!chatNotifierLifecycle.isActive()) {
         return originalStop.apply(this, arguments);
       }
       try {
@@ -1963,7 +2023,7 @@
     // autoplay로 재생돼 .play()를 거치지 않아도 'play'/'playing' 이벤트는 발생한다.
     ["play", "playing"].forEach((type) => {
       media.addEventListener(type, () => {
-        if (!chatNotifierActive) {
+        if (!chatNotifierLifecycle.isActive()) {
           return;
         }
         handleCcfNativeMediaActivity(media, "play", "media-created");
@@ -5506,16 +5566,16 @@
     if (ccfBgmProgressTimer) {
       return;
     }
-    if (!chatNotifierActive) {
+    if (!chatNotifierLifecycle.isActive()) {
       return;
     }
 
     const tick = () => {
       ccfBgmProgressTimer = 0;
-      if (!chatNotifierActive) return;
+      if (!chatNotifierLifecycle.isActive()) return;
       syncCcfActiveBgmState();
       updateCcfBgmProgressBar();
-      if (!chatNotifierActive) return;
+      if (!chatNotifierLifecycle.isActive()) return;
       ccfBgmProgressTimer = window.setTimeout(tick, BGM_PROGRESS_UPDATE_MS);
     };
 
@@ -6516,7 +6576,7 @@
       debugLog("bgm-share-send-suppressed-reentrant", { op });
       return;
     }
-    if (!chatNotifierActive) {
+    if (!chatNotifierLifecycle.isActive()) {
       debugLog("bgm-share-send-suppressed-inactive", { op });
       return;
     }
@@ -9004,7 +9064,7 @@
   }
 
   async function ccfBgmFirestorePollOnce() {
-    if (!BGM_FIRESTORE_SHARE_ENABLED || !chatNotifierActive) return;
+    if (!BGM_FIRESTORE_SHARE_ENABLED || !chatNotifierLifecycle.isActive()) return;
 
     // 재생 신호 동기화: 단일 nowPlaying 문서를 GET해서 변경 감지하면 자동 재생/정지.
     if (BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) {
@@ -9195,7 +9255,7 @@
   }
 
   async function ccfBgmFirestorePollPlayback() {
-    if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierActive) return;
+    if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierLifecycle.isActive()) return;
     const data = await ccfBgmFirestoreReadPlayback();
     if (!data) return;
 
@@ -9273,7 +9333,7 @@
   function ccfBgmFirestoreEmitPlayback(payload) {
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) return;
     if (ccfBgmFirestorePlaybackApplying) return;
-    if (!chatNotifierActive) return;
+    if (!chatNotifierLifecycle.isActive()) return;
     ccfBgmFirestoreWritePlayback(payload).catch((error) => {
       debugLog("bgm-firestore-playback-emit-failed", serializeError(error));
     });
@@ -9285,13 +9345,13 @@
     ccfBgmFirestoreState.active = true;
     debugLog("bgm-firestore-poll-start", { intervalMs: BGM_FIRESTORE_POLL_INTERVAL_MS });
     const tick = async () => {
-      if (!ccfBgmFirestoreState.active || !chatNotifierActive) return;
+      if (!ccfBgmFirestoreState.active || !chatNotifierLifecycle.isActive()) return;
       try {
         await ccfBgmFirestorePollOnce();
       } catch (error) {
         debugLog("bgm-firestore-poll-error", serializeError(error));
       }
-      if (!ccfBgmFirestoreState.active || !chatNotifierActive) return;
+      if (!ccfBgmFirestoreState.active || !chatNotifierLifecycle.isActive()) return;
       ccfBgmFirestoreState.pollTimer = window.setTimeout(tick, BGM_FIRESTORE_POLL_INTERVAL_MS);
     };
     // 첫 폴링은 약간 지연시켜 토큰이 안정적으로 IndexedDB에 적재된 뒤 실행.
