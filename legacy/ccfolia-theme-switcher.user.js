@@ -222,38 +222,13 @@
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
-  let ccfThemeActive = true;
-  const ccfThemeDisposers = [];
-  const ccfThemeAbort = new AbortController();
-  const ccfThemeSignal = ccfThemeAbort.signal;
-
-  function ccfThemeRegisterTeardown(fn) {
-    if (typeof fn === "function") ccfThemeDisposers.push(fn);
-  }
-
-  function ccfThemeWithSignal(options) {
-    if (options == null) return { signal: ccfThemeSignal };
-    if (typeof options === "boolean") return { capture: options, signal: ccfThemeSignal };
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== ccfThemeSignal) return options;
-      return { ...options, signal: ccfThemeSignal };
-    }
-    return { signal: ccfThemeSignal };
-  }
-
-  function ccfThemeTeardown() {
-    if (!ccfThemeActive) return false;
-    ccfThemeActive = false;
-    try { ccfThemeAbort.abort(); } catch (error) { /* abort failed */ }
-    if (toggleLayoutFrame) {
-      try { window.cancelAnimationFrame(toggleLayoutFrame); } catch (error) { /* raf cleanup failed */ }
-      toggleLayoutFrame = 0;
-    }
-    while (ccfThemeDisposers.length) {
-      const disposer = ccfThemeDisposers.pop();
-      try { disposer(); } catch (error) { /* disposer failed */ }
-    }
-    try {
+  const ccfThemeLifecycle = createLegacyLifecycle(CCF_THEME_SWITCHER_SCRIPT_INFO, {
+    debugKey: "__CCF_THEME_SWITCHER_DEBUG__",
+    onTeardown() {
+      if (toggleLayoutFrame) {
+        try { window.cancelAnimationFrame(toggleLayoutFrame); } catch (error) { /* raf cleanup failed */ }
+        toggleLayoutFrame = 0;
+      }
       document.querySelectorAll([
         `#${STYLE_ID}`,
         `#${VARS_STYLE_ID}`,
@@ -309,24 +284,113 @@
         el.removeAttribute(CREE_GRRR_MESSAGE_ROW_ATTR);
         el.removeAttribute(CREE_GRRR_ORIGINAL_ATTR);
       });
-    } catch (error) { /* dom sweep failed */ }
-    try {
-      if (window.__CCF_THEME_SWITCHER_DEBUG__ && window.__CCF_THEME_SWITCHER_DEBUG__.__owner === ccfThemeSignal) {
-        delete window.__CCF_THEME_SWITCHER_DEBUG__;
+    }
+  });
+  const ccfThemeSignal = ccfThemeLifecycle.signal;
+  const ccfThemeRegisterTeardown = (fn) => ccfThemeLifecycle.registerTeardown(fn);
+  const ccfThemeWithSignal = (options) => ccfThemeLifecycle.withSignal(options);
+  const ccfThemeTeardown = () => ccfThemeLifecycle.disable();
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
       }
-    } catch (error) { /* debug api cleanup failed */ }
-    return true;
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
   }
 
-  window.__CCF_THEME_SWITCHER_DEBUG__ = {
-    __owner: ccfThemeSignal,
-    isActive() { return ccfThemeActive; },
-    disable() { return ccfThemeTeardown(); }
-  };
+  ccfThemeLifecycle.installDebugApi();
 
-  // Self-register with the suite manager so installation and version status can be tracked centrally.
-  registerWithCcfSuite(CCF_THEME_SWITCHER_SCRIPT_INFO);
-  window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, ccfThemeWithSignal());
   if (!isCcfSuiteScriptEnabled(CCF_THEME_SWITCHER_SCRIPT_INFO.id)) {
     return;
   }
@@ -374,12 +438,6 @@
 
   start();
 
-  function handleCcfSuiteRegisterRequest(event) {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_THEME_SWITCHER_SCRIPT_INFO.id) return;
-    registerWithCcfSuite(CCF_THEME_SWITCHER_SCRIPT_INFO);
-  }
-
   function getUserscriptVersion(fallbackVersion) {
     try {
       const runtimeVersion = typeof GM_info !== "undefined" && typeof GM_info?.script?.version === "string"
@@ -388,48 +446,6 @@
       return runtimeVersion || fallbackVersion;
     } catch (error) {
       return fallbackVersion;
-    }
-  }
-
-  function registerWithCcfSuite(scriptInfo) {
-    try {
-      const registry = readCcfSuiteRegistry();
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-
-      window.localStorage.setItem(CCF_SUITE_REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(
-        new CustomEvent(CCF_SUITE_REGISTER_EVENT, {
-          detail: registry.scripts[scriptInfo.id]
-        })
-      );
-    } catch (error) {
-      // Ignore suite registration failures.
-    }
-  }
-
-  function readCcfSuiteRegistry() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_REGISTRY_KEY) || "{}");
-      return parsed && typeof parsed.scripts === "object"
-        ? { scripts: parsed.scripts }
-        : { scripts: {} };
-    } catch (error) {
-      return { scripts: {} };
     }
   }
 
@@ -446,7 +462,7 @@
     let tryInitErrorLogged = false;
     const tryInit = () => {
       try {
-        if (!ccfThemeActive) return false;
+        if (!ccfThemeLifecycle.isActive()) return false;
         if (!document.documentElement) return false;
 
         if (document.documentElement.getAttribute(ROOT_READY_ATTR) !== "1") {
@@ -494,7 +510,7 @@
     window.addEventListener("load", onReady, ccfThemeWithSignal(true));
 
     const timer = window.setInterval(() => {
-      if (!ccfThemeActive) { window.clearInterval(timer); return; }
+      if (!ccfThemeLifecycle.isActive()) { window.clearInterval(timer); return; }
       if (tryInit()) {
         window.clearInterval(timer);
       }
@@ -2278,7 +2294,7 @@
   }
 
   function ensureUi() {
-    if (!ccfThemeActive) return;
+    if (!ccfThemeLifecycle.isActive()) return;
     if (!document.body) return;
 
     if (!document.getElementById(TOGGLE_ID)) {
@@ -2306,7 +2322,7 @@
       `;
       document.body.appendChild(toggle);
       toggle.addEventListener("click", () => {
-        if (!ccfThemeActive) return;
+        if (!ccfThemeLifecycle.isActive()) return;
         togglePanel();
       }, ccfThemeWithSignal());
     }
@@ -2627,7 +2643,7 @@
     input.setAttribute(CHARACTER_COLOR_INPUT_BOUND_ATTR, "1");
 
     const refresh = () => {
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       pendingCharacterColorSelections.delete(container);
       exitCharacterColorDeleteMode(container);
       syncCharacterColorModeUi(container, input);
@@ -2650,14 +2666,14 @@
     container.setAttribute(CHARACTER_COLOR_CONTAINER_BOUND_ATTR, "1");
 
     const refreshFromContainer = (event) => {
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       const clickedColor = resolveNativeCharacterColorFromTarget(event?.target, container);
       if (clickedColor) {
         pendingCharacterColorSelections.set(container, clickedColor);
       }
 
       const runRefresh = () => {
-        if (!ccfThemeActive) return;
+        if (!ccfThemeLifecycle.isActive()) return;
         const actions = container.querySelector(`.${CHARACTER_COLOR_ACTIONS_CLASS}`);
         const palette = container.querySelector(`.${CHARACTER_COLOR_WRAPPER_CLASS}`);
         const storedColors = readStoredCharacterColors();
@@ -3941,7 +3957,7 @@
     if (!(document.body instanceof HTMLBodyElement) || bodyObserver) return;
 
     bodyObserver = new MutationObserver(() => {
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       scheduleEnsureUi();
       markNativeDialogs();
     });
@@ -3983,7 +3999,7 @@
 
     ensureUiFrame = window.requestAnimationFrame(() => {
       ensureUiFrame = 0;
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       if (ensureUiInProgress) return;
 
       ensureUiInProgress = true;
@@ -4184,7 +4200,7 @@
 
     themeFieldPreviewFrame = window.requestAnimationFrame(() => {
       themeFieldPreviewFrame = 0;
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       const preview = pendingThemeFieldPreview;
       pendingThemeFieldPreview = null;
       if (!preview) return;
@@ -4329,7 +4345,7 @@
       }
       queuePanelPositionUpdate();
       window.setTimeout(() => {
-        if (!ccfThemeActive) return;
+        if (!ccfThemeLifecycle.isActive()) return;
         if (isPanelOpen()) {
           queuePanelPositionUpdate();
         }
@@ -5739,7 +5755,7 @@
 
     defaultModeRefreshFrame = window.requestAnimationFrame(() => {
       defaultModeRefreshFrame = 0;
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       if (settings.mode !== MODE_DEFAULT) return;
 
       const liveTheme = ensureDefaultThemeSnapshot(true);
@@ -5753,7 +5769,7 @@
     if (panelLayoutFrame) return;
     panelLayoutFrame = window.requestAnimationFrame(() => {
       panelLayoutFrame = 0;
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       updatePanelPosition();
     });
   }
@@ -5762,7 +5778,7 @@
     if (toggleLayoutFrame) return;
     toggleLayoutFrame = window.requestAnimationFrame(() => {
       toggleLayoutFrame = 0;
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       updateTogglePosition();
     });
   }
@@ -5886,7 +5902,7 @@
     dialog.setAttribute("aria-hidden", "false");
 
     window.setTimeout(() => {
-      if (!ccfThemeActive) return;
+      if (!ccfThemeLifecycle.isActive()) return;
       if (!isSaveThemeDialogOpen()) return;
       input.focus({ preventScroll: true });
       input.select();
@@ -6805,7 +6821,7 @@
 
     if (message) {
       statusTimer = window.setTimeout(() => {
-        if (!ccfThemeActive) return;
+        if (!ccfThemeLifecycle.isActive()) return;
         if (!(status instanceof HTMLElement)) return;
         status.textContent = "";
         status.dataset.state = "";
