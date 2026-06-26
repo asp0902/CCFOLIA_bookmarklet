@@ -15,19 +15,7 @@
 (() => {
   "use strict";
 
-  const SCRIPT_READY_KEY = "__ccr20Roll20BridgeReady__";
-  if (window[SCRIPT_READY_KEY]) {
-    const existingDebugApi = window.__CCF_ROLL20_BRIDGE_DEBUG__;
-    let existingBridgeActive = false;
-    try {
-      existingBridgeActive = !!existingDebugApi?.isActive?.();
-    } catch (error) {
-      existingBridgeActive = true;
-    }
-    if (existingBridgeActive) return;
-    try { delete window[SCRIPT_READY_KEY]; } catch (error) { window[SCRIPT_READY_KEY] = false; }
-  }
-  window[SCRIPT_READY_KEY] = true;
+  // 이전 인스턴스 정리는 createLegacyLifecycle 팩토리가 window[debugKey].disable() 로 처리.
 
   const CCF_RENDERED_ATTR = "data-ccr20-rendered";
   const CCF_RAW_ATTR = "data-ccr20-raw";
@@ -256,42 +244,17 @@
   let openButtonLayoutFrame = 0;
   let hideChatPromptPanel = false;
 
-  let ccr20Active = true;
-  const ccr20Disposers = [];
-  const ccr20Abort = new AbortController();
-  const ccr20Signal = ccr20Abort.signal;
-
-  function ccr20RegisterTeardown(fn) {
-    if (typeof fn === "function") ccr20Disposers.push(fn);
-  }
-
-  function ccr20WithSignal(options) {
-    if (options == null) return { signal: ccr20Signal };
-    if (typeof options === "boolean") return { capture: options, signal: ccr20Signal };
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== ccr20Signal) return options;
-      return { ...options, signal: ccr20Signal };
-    }
-    return { signal: ccr20Signal };
-  }
-
-  function ccr20Teardown() {
-    if (!ccr20Active) return false;
-    ccr20Active = false;
-    if (ensureUiFrame) {
-      try { window.cancelAnimationFrame(ensureUiFrame); } catch (error) { /* raf cleanup failed */ }
-      ensureUiFrame = 0;
-    }
-    if (openButtonLayoutFrame) {
-      try { window.cancelAnimationFrame(openButtonLayoutFrame); } catch (error) { /* raf cleanup failed */ }
-      openButtonLayoutFrame = 0;
-    }
-    try { ccr20Abort.abort(); } catch (error) { /* abort failed */ }
-    while (ccr20Disposers.length) {
-      const disposer = ccr20Disposers.pop();
-      try { disposer(); } catch (error) { /* disposer failed */ }
-    }
-    try {
+  const ccr20Lifecycle = createLegacyLifecycle(CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO, {
+    debugKey: "__CCF_ROLL20_BRIDGE_DEBUG__",
+    onTeardown() {
+      if (ensureUiFrame) {
+        try { window.cancelAnimationFrame(ensureUiFrame); } catch (error) { /* raf cleanup failed */ }
+        ensureUiFrame = 0;
+      }
+      if (openButtonLayoutFrame) {
+        try { window.cancelAnimationFrame(openButtonLayoutFrame); } catch (error) { /* raf cleanup failed */ }
+        openButtonLayoutFrame = 0;
+      }
       document.querySelectorAll([
         `#${STYLE_ID}`,
         `#${BACKDROP_ID}`,
@@ -321,24 +284,113 @@
         el.removeAttribute(BOUND_INPUT_ATTR);
       });
       if (document.body) delete document.body.dataset.ccr20Ready;
-    } catch (error) { /* dom sweep failed */ }
-    try {
-      if (window.__CCF_ROLL20_BRIDGE_DEBUG__ && window.__CCF_ROLL20_BRIDGE_DEBUG__.__owner === ccr20Signal) {
-        delete window.__CCF_ROLL20_BRIDGE_DEBUG__;
+    }
+  });
+  const ccr20Signal = ccr20Lifecycle.signal;
+  const ccr20RegisterTeardown = (fn) => ccr20Lifecycle.registerTeardown(fn);
+  const ccr20WithSignal = (options) => ccr20Lifecycle.withSignal(options);
+  const ccr20Teardown = () => ccr20Lifecycle.disable();
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
       }
-    } catch (error) { /* debug api cleanup failed */ }
-    try { delete window[SCRIPT_READY_KEY]; } catch (error) { window[SCRIPT_READY_KEY] = false; }
-    return true;
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
   }
 
-  window.__CCF_ROLL20_BRIDGE_DEBUG__ = {
-    __owner: ccr20Signal,
-    isActive() { return ccr20Active; },
-    disable() { return ccr20Teardown(); }
-  };
+  ccr20Lifecycle.installDebugApi();
 
-  registerWithCcfSuite(CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO);
-  window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, ccr20WithSignal());
   if (!isCcfSuiteScriptEnabled(CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO.id)) {
     return;
   }
@@ -368,7 +420,7 @@
     window.addEventListener("load", onReady, ccr20WithSignal(true));
 
     const timer = window.setInterval(() => {
-      if (!ccr20Active) { window.clearInterval(timer); return; }
+      if (!ccr20Lifecycle.isActive()) { window.clearInterval(timer); return; }
       if (tryInit()) {
         window.clearInterval(timer);
       }
@@ -381,7 +433,7 @@
   }
 
   function init() {
-    if (!ccr20Active) return;
+    if (!ccr20Lifecycle.isActive()) return;
     hideChatPromptPanel = loadChatPromptPanelPreference();
     injectStyles();
     applyChatPromptPanelHiddenState();
@@ -396,12 +448,6 @@
     console.info(`[CCR20] Roll20 CSS bridge loaded (v${CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO.version})`);
   }
 
-  function handleCcfSuiteRegisterRequest(event) {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO.id) return;
-    registerWithCcfSuite(CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO);
-  }
-
   function getUserscriptVersion(fallbackVersion) {
     try {
       const runtimeVersion = typeof GM_info !== "undefined" && typeof GM_info?.script?.version === "string"
@@ -410,48 +456,6 @@
       return runtimeVersion || fallbackVersion;
     } catch (error) {
       return fallbackVersion;
-    }
-  }
-
-  function registerWithCcfSuite(scriptInfo) {
-    try {
-      const registry = readCcfSuiteRegistry();
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-
-      window.localStorage.setItem(CCF_SUITE_REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(
-        new CustomEvent(CCF_SUITE_REGISTER_EVENT, {
-          detail: registry.scripts[scriptInfo.id]
-        })
-      );
-    } catch (error) {
-      // Ignore suite registration failures.
-    }
-  }
-
-  function readCcfSuiteRegistry() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_REGISTRY_KEY) || "{}");
-      return parsed && typeof parsed.scripts === "object"
-        ? { scripts: parsed.scripts }
-        : { scripts: {} };
-    } catch (error) {
-      return { scripts: {} };
     }
   }
 
@@ -1231,7 +1235,7 @@
   }
 
   function ensureUi() {
-    if (!ccr20Active) return;
+    if (!ccr20Lifecycle.isActive()) return;
     if (window.location.pathname === '/home') {
       const floating = document.getElementById(FLOATING_ID);
       if (floating) floating.hidden = true;
@@ -1364,7 +1368,7 @@
     if (ensureUiFrame) return;
     ensureUiFrame = window.requestAnimationFrame(() => {
       ensureUiFrame = 0;
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       ensureUi();
     });
   }
@@ -1373,7 +1377,7 @@
     if (openButtonLayoutFrame) return;
     openButtonLayoutFrame = window.requestAnimationFrame(() => {
       openButtonLayoutFrame = 0;
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       syncOpenButtonPositions();
     });
   }
@@ -1426,14 +1430,14 @@
     }
 
     item.addEventListener("click", (event) => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       event.preventDefault();
       event.stopPropagation();
       setChatPromptPanelHidden(!hideChatPromptPanel);
     }, ccr20WithSignal());
 
     item.addEventListener("keydown", (event) => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       event.stopPropagation();
@@ -1739,7 +1743,7 @@
     btn.innerHTML = createRoll20LogoMarkup();
     btn.style.backgroundImage = "none";
     btn.addEventListener("click", (event) => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       event.preventDefault();
       event.stopPropagation();
       onClick(btn);
@@ -1769,7 +1773,7 @@
       btn.style.backgroundImage = "none";
       btn.hidden = true;
       btn.addEventListener("click", () => {
-        if (!ccr20Active) return;
+        if (!ccr20Lifecycle.isActive()) return;
         const target = getCurrentTargetEditor();
         if (target) {
           openEditorForNode(target);
@@ -1807,24 +1811,24 @@
 
     modal.querySelector(`#${CLOSE_ID}`)?.addEventListener("click", closeModal, ccr20WithSignal());
     modal.querySelector(`#${CONVERT_ID}`)?.addEventListener("click", () => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       convertRoll20Draft({ silent: false });
     }, ccr20WithSignal());
     modal.querySelector(`#${APPLY_ID}`)?.addEventListener("click", () => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       applyModalConversion();
     }, ccr20WithSignal());
 
     const source = getModalSourceEditor();
     source?.addEventListener("input", () => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       modalDraftRoll20Text = getEditorText(source);
       if (modalDraftRoll20ConvertedSource !== modalDraftRoll20Text) {
         invalidateRoll20ConversionPreview();
       }
     }, ccr20WithSignal());
     source?.addEventListener("keydown", (event) => {
-      if (!ccr20Active) return;
+      if (!ccr20Lifecycle.isActive()) return;
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         convertRoll20Draft({ silent: false });
@@ -1875,7 +1879,7 @@
   }
 
   function openEditorForNode(node) {
-    if (!ccr20Active) return false;
+    if (!ccr20Lifecycle.isActive()) return false;
     const origin = node instanceof Element ? node : null;
     const composer = findClosestComposerBar(origin);
     const editor = findEditorFromComposer(composer) || findEditorFromNode(node) || getCurrentTargetEditor();
@@ -1892,7 +1896,7 @@
   }
 
   function openModal() {
-    if (!ccr20Active) return;
+    if (!ccr20Lifecycle.isActive()) return;
     const backdrop = document.getElementById(BACKDROP_ID);
     const modal = ensureModal();
     if (!backdrop || !modal) return;
@@ -2040,7 +2044,7 @@
       if (btn.getAttribute(BOUND_SEND_ATTR) === "1") return;
       btn.setAttribute(BOUND_SEND_ATTR, "1");
       btn.addEventListener("click", (event) => {
-        if (!ccr20Active) return;
+        if (!ccr20Lifecycle.isActive()) return;
         const composer = findClosestComposerBar(btn);
         const editor = findEditorFromComposer(composer) || findEditorFromNode(btn);
         if (editor && preparePayloadForSend(editor) === false) {
@@ -2060,7 +2064,7 @@
 
       normalized.setAttribute(BOUND_ENTER_ATTR, "1");
       normalized.addEventListener("keydown", (event) => {
-        if (!ccr20Active) return;
+        if (!ccr20Lifecycle.isActive()) return;
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
@@ -2083,7 +2087,7 @@
 
       normalized.setAttribute(BOUND_INPUT_ATTR, "1");
       normalized.addEventListener("input", () => {
-        if (!ccr20Active) return;
+        if (!ccr20Lifecycle.isActive()) return;
         if (suppressEditorSyncDepth > 0) return;
 
         const state = EDITOR_STATE.get(normalized);
@@ -2195,7 +2199,7 @@
 
     checkpoints.forEach((delay, index) => {
       setTimeout(() => {
-        if (!ccr20Active) return;
+        if (!ccr20Lifecycle.isActive()) return;
         if (PENDING_SEND_RESTORE.get(editor) !== token) return;
 
         const current = getEditorText(editor);
