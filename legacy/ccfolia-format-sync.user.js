@@ -98,146 +98,77 @@
     return;
   }
 
-  const ccfFsLifecycle = createLegacyLifecycle(CCF_FORMAT_SYNC_SCRIPT_INFO, {
-    debugKey: "__CCF_FORMAT_SYNC_DEBUG__",
-    onTeardown() {
-      try {
-        document.querySelectorAll([
-          '[data-ccf-fs-injected="1"]',
-          'style[data-ccf-fs-style]',
-          '[data-ccf-inline-toolbar="1"]',
-          '.ccf-open-btn[data-ccf-open-btn="1"]',
-          '#ccf-render-style',
-          '#ccf-format-modal',
-          '#ccf-format-backdrop',
-          '#ccf-format-style',
-          '#ccf-format-style-fix',
-          '.ccf-editor-preview-layer[data-ccf-safe-markup="1"]'
-        ].join(", ")).forEach(el => el.remove());
-      } catch (error) { /* dom sweep failed */ }
-      try {
-        if (document.body?.dataset?.ccfUserscriptReady === "1") {
-          delete document.body.dataset.ccfUserscriptReady;
-        }
-      } catch (error) { /* ready marker cleanup failed */ }
-      try {
-        if (window.__CCF_FORMAT_SYNC_RUNTIME__ && window.__CCF_FORMAT_SYNC_RUNTIME__.__owner === ccfFsSignal) {
-          delete window.__CCF_FORMAT_SYNC_RUNTIME__;
-        }
-      } catch (error) { /* runtime cleanup failed */ }
-    }
-  });
-  const ccfFsSignal = ccfFsLifecycle.signal;
-  const ccfFsRegisterTeardown = (fn) => ccfFsLifecycle.registerTeardown(fn);
-  const ccfFsWithSignal = (options) => ccfFsLifecycle.withSignal(options);
-  const ccfFsTeardown = () => ccfFsLifecycle.disable();
+  let ccfFsActive = true;
+  const ccfFsDisposers = [];
+  const ccfFsAbort = new AbortController();
+  const ccfFsSignal = ccfFsAbort.signal;
 
-  function createLegacyLifecycle(scriptInfo, options) {
-    const debugKey = options.debugKey;
-    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
-
-    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
-
-    let active = true;
-    const disposers = [];
-    const abort = new AbortController();
-    const signal = abort.signal;
-
-    function registerTeardown(fn) {
-      if (typeof fn === "function") disposers.push(fn);
-    }
-
-    function withSignal(options) {
-      if (options == null) return { signal };
-      if (typeof options === "boolean") return { capture: options, signal };
-      if (typeof options === "object") {
-        if (options.signal && options.signal !== signal) return options;
-        return { ...options, signal };
-      }
-      return { signal };
-    }
-
-    function registerWithSuite() {
-      try {
-        const registryKey = "ccf-suite-registry-v1";
-        let registry;
-        try {
-          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
-          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
-        } catch (error) {
-          registry = { scripts: {} };
-        }
-        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-          ? registry.scripts[scriptInfo.id]
-          : {};
-        const now = new Date().toISOString();
-        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-          ? window.__CCF_SUITE_MANAGER_SESSION_ID
-          : "";
-        registry.scripts[scriptInfo.id] = {
-          ...previous,
-          ...scriptInfo,
-          installedAt: previous.installedAt || now,
-          lastSeenAt: now,
-          lastSeenUrl: location.href,
-          lastSeenSessionId: sessionId
-        };
-        window.localStorage.setItem(registryKey, JSON.stringify(registry));
-        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
-      } catch (error) { /* suite 등록 실패 무시 */ }
-    }
-
-    function disable() {
-      if (!active) return false;
-      active = false;
-      try { abort.abort(); } catch (error) { /* abort failed */ }
-      while (disposers.length) {
-        const disposer = disposers.pop();
-        try { disposer(); } catch (error) { /* disposer failed */ }
-      }
-      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
-      try {
-        if (window[debugKey] && window[debugKey].__owner === signal) {
-          delete window[debugKey];
-        }
-      } catch (error) { /* debug api cleanup failed */ }
-      return true;
-    }
-
-    function installDebugApi(extra = {}) {
-      window[debugKey] = {
-        __owner: signal,
-        isActive() { return active; },
-        disable,
-        ...extra
-      };
-    }
-
-    registerWithSuite();
-    window.addEventListener("ccf-suite:request-register", (event) => {
-      const targetId = event?.detail?.targetId;
-      if (targetId && targetId !== scriptInfo.id) return;
-      registerWithSuite();
-    }, withSignal());
-
-    return {
-      signal,
-      registerTeardown,
-      withSignal,
-      isActive() { return active; },
-      disable,
-      installDebugApi
-    };
+  function ccfFsRegisterTeardown(fn) {
+    if (typeof fn === "function") ccfFsDisposers.push(fn);
   }
 
-  ccfFsLifecycle.installDebugApi();
+  function ccfFsWithSignal(options) {
+    if (options == null) return { signal: ccfFsSignal };
+    if (typeof options === "boolean") return { capture: options, signal: ccfFsSignal };
+    if (typeof options === "object") {
+      if (options.signal && options.signal !== ccfFsSignal) return options;
+      return { ...options, signal: ccfFsSignal };
+    }
+    return { signal: ccfFsSignal };
+  }
+
+  function ccfFsTeardown() {
+    if (!ccfFsActive) return false;
+    ccfFsActive = false;
+    try { ccfFsAbort.abort(); } catch (error) { /* abort failed */ }
+    while (ccfFsDisposers.length) {
+      const disposer = ccfFsDisposers.pop();
+      try { disposer(); } catch (error) { /* disposer failed */ }
+    }
+    try {
+      document.querySelectorAll([
+        '[data-ccf-fs-injected="1"]',
+        'style[data-ccf-fs-style]',
+        '[data-ccf-inline-toolbar="1"]',
+        '.ccf-open-btn[data-ccf-open-btn="1"]',
+        '#ccf-render-style',
+        '#ccf-format-modal',
+        '#ccf-format-backdrop',
+        '#ccf-format-style',
+        '#ccf-format-style-fix',
+        '.ccf-editor-preview-layer[data-ccf-safe-markup="1"]'
+      ].join(", ")).forEach(el => el.remove());
+    } catch (error) { /* dom sweep failed */ }
+    try {
+      if (document.body?.dataset?.ccfUserscriptReady === "1") {
+        delete document.body.dataset.ccfUserscriptReady;
+      }
+    } catch (error) { /* ready marker cleanup failed */ }
+    try {
+      if (window.__CCF_FORMAT_SYNC_DEBUG__ && window.__CCF_FORMAT_SYNC_DEBUG__.__owner === ccfFsSignal) {
+        delete window.__CCF_FORMAT_SYNC_DEBUG__;
+      }
+    } catch (error) { /* debug api cleanup failed */ }
+    try {
+      if (window.__CCF_FORMAT_SYNC_RUNTIME__ && window.__CCF_FORMAT_SYNC_RUNTIME__.__owner === ccfFsSignal) {
+        delete window.__CCF_FORMAT_SYNC_RUNTIME__;
+      }
+    } catch (error) { /* runtime cleanup failed */ }
+    return true;
+  }
 
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
     withSignal: ccfFsWithSignal,
     registerTeardown: ccfFsRegisterTeardown,
-    isActive() { return ccfFsLifecycle.isActive(); },
+    isActive() { return ccfFsActive; },
     teardown: ccfFsTeardown
+  };
+
+  window.__CCF_FORMAT_SYNC_DEBUG__ = {
+    __owner: ccfFsSignal,
+    isActive() { return ccfFsActive; },
+    disable() { return ccfFsTeardown(); }
   };
 
   // [v0.0.42] 나레이션 가디언 WeakMap — initRenderer()가 즉시 기존 메시지를 스캔하면서
@@ -245,6 +176,9 @@
   // 호출할 수 있으므로 반드시 initRenderer() 호출 전에 선언/초기화되어야 한다(TDZ 방지).
   const NARRATION_GUARDIANS = new WeakMap();
 
+  // Self-register with the suite manager so installation and version status can be tracked centrally.
+  registerWithCcfSuite(CCF_FORMAT_SYNC_SCRIPT_INFO);
+  window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, ccfFsWithSignal());
   const _ccfEnabled = isCcfSuiteScriptEnabled(CCF_FORMAT_SYNC_SCRIPT_INFO.id);
   console.info("[CCF NAR] suite-script-enabled gate: %o, scriptId=%o", _ccfEnabled, CCF_FORMAT_SYNC_SCRIPT_INFO.id);
   if (!_ccfEnabled) {
