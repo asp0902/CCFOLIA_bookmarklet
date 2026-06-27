@@ -133,36 +133,12 @@
     records: []
   };
 
-  let ccfLpActive = true;
   let characterListDragState = null;
   let characterListSuppressClickUntil = 0;
-  const ccfLpDisposers = [];
-  const ccfLpAbort = new AbortController();
-  const ccfLpSignal = ccfLpAbort.signal;
 
-  function ccfLpRegisterTeardown(fn) {
-    if (typeof fn === "function") ccfLpDisposers.push(fn);
-  }
-
-  function ccfLpWithSignal(options) {
-    if (options == null) return { signal: ccfLpSignal };
-    if (typeof options === "boolean") return { capture: options, signal: ccfLpSignal };
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== ccfLpSignal) return options;
-      return { ...options, signal: ccfLpSignal };
-    }
-    return { signal: ccfLpSignal };
-  }
-
-  function ccfLpTeardown() {
-    if (!ccfLpActive) return false;
-    ccfLpActive = false;
-    try { ccfLpAbort.abort(); } catch (error) { /* abort failed */ }
-    while (ccfLpDisposers.length) {
-      const disposer = ccfLpDisposers.pop();
-      try { disposer(); } catch (error) { /* disposer failed */ }
-    }
-    try {
+  const ccfLpLifecycle = createLegacyLifecycle(CCF_LOG_PACKAGE_SCRIPT_INFO, {
+    debugKey: "__CCF_LOG_PACKAGE_DEBUG__",
+    onTeardown() {
       buttonState.scheduled = false;
       document.querySelectorAll([
         `#${STYLE_ID}`,
@@ -172,23 +148,113 @@
         '[data-ccf-lp-injected="1"]',
         'style[data-ccf-lp-style]'
       ].join(", ")).forEach(el => el.remove());
-    } catch (error) { /* dom sweep failed */ }
-    try {
-      if (window.__CCF_LOG_PACKAGE_DEBUG__ && window.__CCF_LOG_PACKAGE_DEBUG__.__owner === ccfLpSignal) {
-        delete window.__CCF_LOG_PACKAGE_DEBUG__;
+    }
+  });
+  const ccfLpSignal = ccfLpLifecycle.signal;
+  const ccfLpRegisterTeardown = (fn) => ccfLpLifecycle.registerTeardown(fn);
+  const ccfLpWithSignal = (options) => ccfLpLifecycle.withSignal(options);
+  const ccfLpTeardown = () => ccfLpLifecycle.disable();
+
+  function createLegacyLifecycle(scriptInfo, options) {
+    const debugKey = options.debugKey;
+    const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+
+    try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
+
+    let active = true;
+    const disposers = [];
+    const abort = new AbortController();
+    const signal = abort.signal;
+
+    function registerTeardown(fn) {
+      if (typeof fn === "function") disposers.push(fn);
+    }
+
+    function withSignal(options) {
+      if (options == null) return { signal };
+      if (typeof options === "boolean") return { capture: options, signal };
+      if (typeof options === "object") {
+        if (options.signal && options.signal !== signal) return options;
+        return { ...options, signal };
       }
-    } catch (error) { /* debug api cleanup failed */ }
-    return true;
+      return { signal };
+    }
+
+    function registerWithSuite() {
+      try {
+        const registryKey = "ccf-suite-registry-v1";
+        let registry;
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
+          registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
+        } catch (error) {
+          registry = { scripts: {} };
+        }
+        const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
+          ? registry.scripts[scriptInfo.id]
+          : {};
+        const now = new Date().toISOString();
+        const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
+          ? window.__CCF_SUITE_MANAGER_SESSION_ID
+          : "";
+        registry.scripts[scriptInfo.id] = {
+          ...previous,
+          ...scriptInfo,
+          installedAt: previous.installedAt || now,
+          lastSeenAt: now,
+          lastSeenUrl: location.href,
+          lastSeenSessionId: sessionId
+        };
+        window.localStorage.setItem(registryKey, JSON.stringify(registry));
+        window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
+      } catch (error) { /* suite 등록 실패 무시 */ }
+    }
+
+    function disable() {
+      if (!active) return false;
+      active = false;
+      try { abort.abort(); } catch (error) { /* abort failed */ }
+      while (disposers.length) {
+        const disposer = disposers.pop();
+        try { disposer(); } catch (error) { /* disposer failed */ }
+      }
+      try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
+      try {
+        if (window[debugKey] && window[debugKey].__owner === signal) {
+          delete window[debugKey];
+        }
+      } catch (error) { /* debug api cleanup failed */ }
+      return true;
+    }
+
+    function installDebugApi(extra = {}) {
+      window[debugKey] = {
+        __owner: signal,
+        isActive() { return active; },
+        disable,
+        ...extra
+      };
+    }
+
+    registerWithSuite();
+    window.addEventListener("ccf-suite:request-register", (event) => {
+      const targetId = event?.detail?.targetId;
+      if (targetId && targetId !== scriptInfo.id) return;
+      registerWithSuite();
+    }, withSignal());
+
+    return {
+      signal,
+      registerTeardown,
+      withSignal,
+      isActive() { return active; },
+      disable,
+      installDebugApi
+    };
   }
 
-  window.__CCF_LOG_PACKAGE_DEBUG__ = {
-    __owner: ccfLpSignal,
-    isActive() { return ccfLpActive; },
-    disable() { return ccfLpTeardown(); }
-  };
+  ccfLpLifecycle.installDebugApi();
 
-  registerWithCcfSuite(CCF_LOG_PACKAGE_SCRIPT_INFO);
-  window.addEventListener(CCF_SUITE_REQUEST_EVENT, handleCcfSuiteRegisterRequest, ccfLpWithSignal());
   if (!isCcfSuiteScriptEnabled(CCF_LOG_PACKAGE_SCRIPT_INFO.id)) {
     return;
   }
@@ -290,9 +356,9 @@
 
     const patchedFetch = function patchedFetch(...args) {
       const result = originalFetch(...args);
-      if (!ccfLpActive) return result;
+      if (!ccfLpLifecycle.isActive()) return result;
       return result.then((response) => {
-        if (ccfLpActive) {
+        if (ccfLpLifecycle.isActive()) {
           tryCaptureResponsePayload(response, {
             source: "fetch",
             requestUrl: extractRequestUrl(args[0])
@@ -319,7 +385,7 @@
     const originalSend = proto.send;
 
     const openPatched = function openPatched(method, url, ...rest) {
-      if (ccfLpActive) {
+      if (ccfLpLifecycle.isActive()) {
         this.__ccfLogPackageRuntimeMeta = {
           method: String(method || ""),
           url: typeof url === "string" ? url : String(url || "")
@@ -329,10 +395,10 @@
     };
 
     const sendPatched = function sendPatched(...args) {
-      if (ccfLpActive && !this.__ccfLogPackageRuntimeObserved) {
+      if (ccfLpLifecycle.isActive() && !this.__ccfLogPackageRuntimeObserved) {
         this.__ccfLogPackageRuntimeObserved = true;
         this.addEventListener("load", () => {
-          if (ccfLpActive) tryCaptureXhrPayload(this);
+          if (ccfLpLifecycle.isActive()) tryCaptureXhrPayload(this);
         });
       }
       return originalSend.apply(this, args);
@@ -356,7 +422,7 @@
 
     function RuntimeWebSocket(...args) {
       const socket = new NativeWebSocket(...args);
-      if (ccfLpActive) attachRuntimeWebSocketCapture(socket, args[0]);
+      if (ccfLpLifecycle.isActive()) attachRuntimeWebSocketCapture(socket, args[0]);
       return socket;
     }
 
@@ -1512,7 +1578,7 @@
 
   function observeDom() {
     const observer = new MutationObserver(() => {
-      if (!ccfLpActive) return;
+      if (!ccfLpLifecycle.isActive()) return;
       scheduleEnsureButtons();
     });
 
@@ -1532,7 +1598,7 @@
     buttonState.scheduled = true;
     requestAnimationFrame(() => {
       buttonState.scheduled = false;
-      if (!ccfLpActive) return;
+      if (!ccfLpLifecycle.isActive()) return;
       ensureExportButtons();
       ensureCustomDeleteButtons(); // ← 새로 추가된 부분
       ensureCharacterListSortables();
@@ -1607,14 +1673,14 @@
         }
 
         customDeleteBtn.addEventListener("click", async (event) => {
-          if (!ccfLpActive) return;
+          if (!ccfLpLifecycle.isActive()) return;
           event.preventDefault();
           event.stopPropagation();
 
           await dismissTransientMenusAndOverlays();
-          if (!ccfLpActive) return;
+          if (!ccfLpLifecycle.isActive()) return;
           await new Promise((resolve) => setTimeout(resolve, 120));
-          if (!ccfLpActive) return;
+          if (!ccfLpLifecycle.isActive()) return;
 
           await handleDeleteCurrentTabLogs();
         }, ccfLpWithSignal());
@@ -2431,7 +2497,7 @@
     syncExportButtonState(button);
 
     button.addEventListener("click", (event) => {
-      if (!ccfLpActive) return;
+      if (!ccfLpLifecycle.isActive()) return;
       event.preventDefault();
       event.stopPropagation();
       void handleCapybaraLogLaunch(button);
