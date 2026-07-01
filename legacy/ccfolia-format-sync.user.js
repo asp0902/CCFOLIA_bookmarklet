@@ -12422,8 +12422,9 @@
       && editor.closest('[role="dialog"], .MuiDialog-paper')
       && editor.getAttribute("name") === "text";
     if (!isEditDialogEditor) {
-      editor = normalizeEditorCandidate(editor);
-      if (!editor) return true;
+      const normalized = normalizeEditorCandidate(editor);
+      if (!normalized) { console.warn("[CCF NAR][probe] bail@normalizeEditorCandidate; editor=%o", editor); return true; }
+      editor = normalized;
     }
 
     if (isModalOpen() && activeEditor && editor === activeEditor) {
@@ -12433,7 +12434,7 @@
     const currentText = getEditorText(editor);
     // 끝 공백 제거 — trailing space가 가운데 정렬 중심을 왼쪽으로 밀어 보이게 함
     const rawText = stripInvisibleEnvelope(currentText).replace(/[ \t ]+$/, "");
-    if (!rawText) return true;
+    if (!rawText) { console.warn("[CCF NAR][probe] bail@rawText empty; currentText=%o", currentText); return true; }
 
     const decodedCurrent = extractEnvelope(currentText);
     const state = ensureEditorState(editor);
