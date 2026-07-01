@@ -235,8 +235,9 @@
     registerTeardown: ccfFsRegisterTeardown,
     isActive() { return ccfFsLifecycle.isActive(); },
     teardown: ccfFsTeardown,
-    // 두 번째 IIFE 의 preparePayloadForSend 등이 봉투 디코딩에 사용 (cross-IIFE bridge).
-    extractEnvelope
+    // 두 번째 IIFE 의 preparePayloadForSend / scroll 핸들러가 사용 (cross-IIFE bridge).
+    extractEnvelope,
+    isScrolledToBottom
   };
 
   // [v0.0.42] 나레이션 가디언 WeakMap — initRenderer()가 즉시 기존 메시지를 스캔하면서
@@ -2203,6 +2204,7 @@
   // 첫 IIFE 의 extractEnvelope 를 cross-IIFE bridge 로 가져온다. 누락 시
   // preparePayloadForSend 가 봉투 디코딩에서 ReferenceError → 서식/이미지 미인코딩.
   const extractEnvelope = CCF_FS_RUNTIME?.extractEnvelope || (() => null);
+  const isScrolledToBottom = CCF_FS_RUNTIME?.isScrolledToBottom || (() => false);
 
   // 첫 IIFE 의 applySoftBlur 를 cross-IIFE bridge 로 가져온다.
   // 두 번째 IIFE 의 applyInlineStyle/appendStyledFragment 가 직접 호출하므로
