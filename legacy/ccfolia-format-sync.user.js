@@ -4116,7 +4116,10 @@
     }, ccfFsWithSignal());
 
     document.addEventListener("scroll", (event) => {
-      if (event.target instanceof HTMLElement) {
+      // isScrolledToBottom / scanWithin / lastChatScrollUpAt 은 첫 IIFE 스코프라
+      // 이 IIFE 에서는 접근 불가 (cross-IIFE, 미브리지). 브리지 전까지 스캔 블록은
+      // 비활성 — typeof 가드로 감싸 ReferenceError 콘솔 오염 방지.
+      if (event.target instanceof HTMLElement && typeof isScrolledToBottom === "function") {
         if (isScrolledToBottom(event.target)) {
           scanWithin(event.target);
         } else {

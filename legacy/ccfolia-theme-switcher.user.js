@@ -5015,26 +5015,6 @@
 
   function injectCreeGrrrDiceFormatting() {
     creeGrrrInjectState.callCount++;
-    // 첫 호출 + 매 100회마다 진단 로그를 강제 출력. 함수 도달 자체를 확실히
-    // 확인할 수 있게 함. (mutation 폭주로 너무 잦은 호출 방지 위해 100 단위)
-    if (!creeGrrrInjectState.firstCallLogged || creeGrrrInjectState.callCount % 100 === 0) {
-      try {
-        const enabled = isSheetThemeEnabled();
-        const themeId = getSelectedSheetThemeId();
-        console.warn(
-          `[CREE-GRRR!] inject reached #${creeGrrrInjectState.callCount}`,
-          {
-            sheetThemeEnabled: enabled,
-            selectedSheetTheme: themeId,
-            gatePass: enabled && themeId === "cree-grrr",
-            documentHasBody: !!document.body
-          }
-        );
-      } catch (e) {
-        try { console.warn("[CREE-GRRR!] inject: first call (error reading state)", e); } catch (_) {}
-      }
-      creeGrrrInjectState.firstCallLogged = true;
-    }
 
     const enabled = isSheetThemeEnabled();
     const themeId = getSelectedSheetThemeId();
