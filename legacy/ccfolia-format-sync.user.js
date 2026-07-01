@@ -234,7 +234,9 @@
     withSignal: ccfFsWithSignal,
     registerTeardown: ccfFsRegisterTeardown,
     isActive() { return ccfFsLifecycle.isActive(); },
-    teardown: ccfFsTeardown
+    teardown: ccfFsTeardown,
+    // 두 번째 IIFE 의 preparePayloadForSend 등이 봉투 디코딩에 사용 (cross-IIFE bridge).
+    extractEnvelope
   };
 
   // [v0.0.42] 나레이션 가디언 WeakMap — initRenderer()가 즉시 기존 메시지를 스캔하면서
@@ -2197,6 +2199,10 @@
   });
   const ccfFsRegisterTeardown = CCF_FS_RUNTIME?.registerTeardown || (() => {});
   const ccfFsIsActive = () => CCF_FS_RUNTIME?.isActive?.() !== false;
+
+  // 첫 IIFE 의 extractEnvelope 를 cross-IIFE bridge 로 가져온다. 누락 시
+  // preparePayloadForSend 가 봉투 디코딩에서 ReferenceError → 서식/이미지 미인코딩.
+  const extractEnvelope = CCF_FS_RUNTIME?.extractEnvelope || (() => null);
 
   // 첫 IIFE 의 applySoftBlur 를 cross-IIFE bridge 로 가져온다.
   // 두 번째 IIFE 의 applyInlineStyle/appendStyledFragment 가 직접 호출하므로
@@ -12418,14 +12424,12 @@
   }
 
   function preparePayloadForSend(editor, options = {}) {
-    console.warn("[CCF NAR][probe] ENTER pps");
     const isEditDialogEditor = editor instanceof HTMLTextAreaElement
       && editor.closest('[role="dialog"], .MuiDialog-paper')
       && editor.getAttribute("name") === "text";
     if (!isEditDialogEditor) {
-      const normalized = normalizeEditorCandidate(editor);
-      if (!normalized) { console.warn("[CCF NAR][probe] bail@normalizeEditorCandidate; editor=%o", editor); return true; }
-      editor = normalized;
+      editor = normalizeEditorCandidate(editor);
+      if (!editor) return true;
     }
 
     if (isModalOpen() && activeEditor && editor === activeEditor) {
@@ -12435,7 +12439,7 @@
     const currentText = getEditorText(editor);
     // 끝 공백 제거 — trailing space가 가운데 정렬 중심을 왼쪽으로 밀어 보이게 함
     const rawText = stripInvisibleEnvelope(currentText).replace(/[ \t ]+$/, "");
-    if (!rawText) { console.warn("[CCF NAR][probe] bail@rawText empty; currentText=%o", currentText); return true; }
+    if (!rawText) return true;
 
     const decodedCurrent = extractEnvelope(currentText);
     const state = ensureEditorState(editor);
@@ -12484,7 +12488,6 @@
     const runs = preparedRuns.runs;
     const alignRuns = getEffectiveAlignRuns(sendText, state.alignRuns, blockStyle);
 
-    console.warn("[CCF NAR][probe] reached narration-diag; runs=%o alignRuns=%o", runs.length, alignRuns.length);
     // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
     const _narSpeaker = getCurrentSpeakerName();
     const _narSet = readNarratorNameSet();
