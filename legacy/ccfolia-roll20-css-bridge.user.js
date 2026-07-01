@@ -1937,6 +1937,82 @@
     renderStyledText(preview, text, runs, alignRuns);
   }
 
+  // Roll20 원문(textarea)을 파싱해 draft(text/runs/alignRuns)로 변환하고 미리보기+상태를
+  // 갱신한다. 변환 버튼 / Ctrl+Enter 에서 호출. 성공 시 draft 를 반환, 실패/빈값이면 null.
+  function convertRoll20Draft({ silent = false } = {}) {
+    const source = getModalSourceEditor();
+    if (!source) return null;
+    const rawSource = getEditorText(source);
+    modalDraftRoll20Text = rawSource;
+
+    if (!rawSource.trim()) {
+      modalDraftText = "";
+      modalDraftRuns = [];
+      modalDraftAlignRuns = [];
+      modalDraftRoll20ConvertedSource = "";
+      setPreviewEmpty(MODAL_TEXT.previewEmpty);
+      if (!silent) setModalStatus(MODAL_TEXT.emptySource, "error");
+      return null;
+    }
+
+    const parsed = parseRoll20MacroToDraft(rawSource);
+    if (!parsed) {
+      modalDraftText = "";
+      modalDraftRuns = [];
+      modalDraftAlignRuns = [];
+      modalDraftRoll20ConvertedSource = "";
+      setPreviewEmpty(MODAL_TEXT.parseFailPreview);
+      if (!silent) setModalStatus(MODAL_TEXT.parseFailStatus, "error");
+      return null;
+    }
+
+    modalDraftText = parsed.text;
+    modalDraftRuns = cloneRuns(parsed.runs, parsed.text.length);
+    modalDraftAlignRuns = cloneAlignRuns(parsed.alignRuns, getTextLineCount(parsed.text));
+    modalDraftRoll20ConvertedSource = rawSource;
+
+    renderPreviewFromDraft();
+    if (!silent) setModalStatus(getConvertedSuccessMessage(parsed), "success");
+    return {
+      text: modalDraftText,
+      runs: modalDraftRuns,
+      alignRuns: modalDraftAlignRuns,
+      descCount: parsed.descCount,
+      segmentCount: parsed.segmentCount
+    };
+  }
+
+  // 적용(Apply) 직전, 현재 원문이 아직 변환 안 됐으면 변환한다. 이미 변환된 상태면
+  // 기존 draft 를 그대로 반환. 변환 결과가 없으면 null.
+  function ensureRoll20DraftConverted({ silent = false, forceRender = false } = {}) {
+    const source = getModalSourceEditor();
+    const rawSource = source ? getEditorText(source) : modalDraftRoll20Text;
+
+    const alreadyConverted = modalDraftRoll20ConvertedSource === rawSource
+      && !!rawSource.trim()
+      && (modalDraftText.length > 0 || modalDraftRuns.length > 0 || modalDraftAlignRuns.length > 0);
+    if (alreadyConverted) {
+      if (forceRender) renderPreviewFromDraft();
+      return {
+        text: modalDraftText,
+        runs: modalDraftRuns,
+        alignRuns: modalDraftAlignRuns
+      };
+    }
+    return convertRoll20Draft({ silent });
+  }
+
+  // 원문이 바뀌어 이전 변환 결과가 더 이상 유효하지 않을 때 호출. 미리보기를 비우고
+  // 변환됨 표시를 해제해 재변환을 유도한다.
+  function invalidateRoll20ConversionPreview() {
+    modalDraftRoll20ConvertedSource = "";
+    modalDraftText = "";
+    modalDraftRuns = [];
+    modalDraftAlignRuns = [];
+    setPreviewEmpty(MODAL_TEXT.previewEmpty);
+    setModalStatus(MODAL_TEXT.dirty, "idle");
+  }
+
 
 
 
