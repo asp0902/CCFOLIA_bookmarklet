@@ -4,18 +4,6 @@
   const VERSION = "0.2.98";
   const BUILD_ID = "2026-06-16-loader-render-cleanup-reverted-173";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
-  const LEGACY_DEBUG_ENTRIES = Object.freeze([
-    { key: "__CCF_CHAT_NOTIFIER_DEBUG__" },
-    { key: "__CCF_FORMAT_SYNC_DEBUG__" },
-    { key: "__CAPYBARA_TOOLKIT_PRESENCE__", toolkitScriptPrefix: "ccf-toolkit-presence:" },
-    { key: "__CCF_ROLL20_BRIDGE_DEBUG__" },
-    { key: "__CCF_THEME_SWITCHER_DEBUG__" },
-    { key: "__CCF_LOG_PACKAGE_DEBUG__" },
-    { key: "__CCF_STANDING_PICKER_DEBUG__", toolkitScriptPrefix: "ccfolia-standing-picker:" },
-    { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" },
-    { key: "__CCF_PALETTE_FILTER_DEBUG__" },
-    { key: "__CCF_HANDOUT_DEBUG__", toolkitScriptPrefix: "ccf-handout:" }
-  ]);
 
   const DB_NAME = "capybara-toolkit";
   const DB_VERSION = 1;
@@ -32,6 +20,7 @@
   const FEATURE_CATALOG = Object.freeze([
     {
       id: "ccf-chat-notifier",
+      debugKey: "__CCF_CHAT_NOTIFIER_DEBUG__",
       title: "BGM / Alarm",
       summary: "새 채팅 알림음, BGM 진행바, YouTube 영상 추가",
       scripts: ["legacy/ccfolia-chat-notifier.user.js"],
@@ -40,24 +29,28 @@
     },
     {
       id: "ccf-format-sync",
+      debugKey: "__CCF_FORMAT_SYNC_DEBUG__",
       title: "서식 편집 도구",
       summary: "서식 편집 기능 툴바 생성",
       scripts: ["legacy/ccfolia-format-sync.user.js"]
     },
     {
       id: "ccf-roll20-css-bridge",
+      debugKey: "__CCF_ROLL20_BRIDGE_DEBUG__",
       title: "Roll20 CSS 변환",
       summary: "Roll20 CSS 코코포리아에 반영",
       scripts: ["legacy/ccfolia-roll20-css-bridge.user.js"]
     },
     {
       id: "ccf-theme-switcher",
+      debugKey: "__CCF_THEME_SWITCHER_DEBUG__",
       title: "테마 커스텀",
       summary: "코코포리아 색상 테마 변경",
       scripts: ["legacy/ccfolia-theme-switcher.user.js"]
     },
     {
       id: "ccf-log-package",
+      debugKey: "__CCF_LOG_PACKAGE_DEBUG__",
       title: "로그 패키지",
       summary: "로그 편집 및 HTML 생성",
       scripts: ["legacy/ccfolia-log-package.user.js"],
@@ -84,6 +77,8 @@
     },
     {
       id: "ccf-toolkit-presence",
+      debugKey: "__CAPYBARA_TOOLKIT_PRESENCE__",
+      scriptPrefix: "ccf-toolkit-presence:",
       title: "툴킷 사용자 패널",
       summary: "같은 룸의 카피바라 툴킷 사용자 목록 송수신 (자동 실행)",
       scripts: ["legacy/ccfolia-toolkit-presence.user.js"],
@@ -93,11 +88,30 @@
     },
     {
       id: "ccf-handout",
+      debugKey: "__CCF_HANDOUT_DEBUG__",
+      scriptPrefix: "ccf-handout:",
       title: "핸드아웃",
       summary: "핸드아웃 배포 기능",
       scripts: ["legacy/ccfolia-handout.user.js"],
       roomOnly: true
     }
+  ]);
+
+  // 카탈로그 밖(Suite 관리 스크립트 등) — 재주입 정리에서만 필요한 디버그 전역.
+  const EXTRA_LEGACY_DEBUG_ENTRIES = Object.freeze([
+    { key: "__CCF_STANDING_PICKER_DEBUG__", toolkitScriptPrefix: "ccfolia-standing-picker:" },
+    { key: "__CCF_SUITE_DEBUG__", toolkitScriptPrefix: "ccf-suite-manager:" },
+    { key: "__CCF_PALETTE_FILTER_DEBUG__" }
+  ]);
+
+  // FEATURE_CATALOG.debugKey 단일 소스에서 파생 — 손 동기화 제거.
+  const LEGACY_DEBUG_ENTRIES = Object.freeze([
+    ...FEATURE_CATALOG
+      .filter((feature) => feature.debugKey)
+      .map((feature) => (feature.scriptPrefix
+        ? { key: feature.debugKey, toolkitScriptPrefix: feature.scriptPrefix }
+        : { key: feature.debugKey })),
+    ...EXTRA_LEGACY_DEBUG_ENTRIES
   ]);
 
   if (typeof window.__CAPYBARA_TOOLKIT_TEST_HOOK__ === "object" && window.__CAPYBARA_TOOLKIT_TEST_HOOK__) {
@@ -1066,17 +1080,11 @@
     let status = "준비됨";
 
     const catalogById = new Map(catalog.map((feature) => [feature.id, feature]));
-    const legacyTeardownHooks = Object.freeze({
-      "ccf-chat-notifier": () => env.callLegacyDisable("__CCF_CHAT_NOTIFIER_DEBUG__"),
-      "ccf-format-sync": () => env.callLegacyDisable("__CCF_FORMAT_SYNC_DEBUG__"),
-      "ccf-toolkit-presence": () => env.callLegacyDisable("__CAPYBARA_TOOLKIT_PRESENCE__"),
-      "ccf-roll20-css-bridge": () => env.callLegacyDisable("__CCF_ROLL20_BRIDGE_DEBUG__"),
-      "ccf-theme-switcher": () => env.callLegacyDisable("__CCF_THEME_SWITCHER_DEBUG__"),
-      "ccf-log-package": () => env.callLegacyDisable("__CCF_LOG_PACKAGE_DEBUG__"),
-      "ccfolia-standing-picker": () => env.callLegacyDisable("__CCF_STANDING_PICKER_DEBUG__"),
-      "ccf-suite-manager": () => env.callLegacyDisable("__CCF_SUITE_DEBUG__"),
-      "ccf-handout": () => env.callLegacyDisable("__CCF_HANDOUT_DEBUG__")
-    });
+    const legacyTeardownHooks = Object.freeze(Object.fromEntries(
+      catalog
+        .filter((feature) => feature.debugKey)
+        .map((feature) => [feature.id, () => env.callLegacyDisable(feature.debugKey)])
+    ));
 
     return {
       listPanelItems,
