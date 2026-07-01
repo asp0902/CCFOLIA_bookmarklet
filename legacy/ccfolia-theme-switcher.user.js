@@ -211,10 +211,7 @@
       inputBg: "#ffffff"
     })
   });
-  const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
-  const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
-  const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_THEME_SWITCHER_SCRIPT_INFO = Object.freeze({
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",

@@ -93,10 +93,7 @@
   // 팝업이 비좁아짐. BGM에서 실제로 쓰이는 "외부 파일 / 파일 URL / external file / file URL"
   // 같은 구체 문구로만 매칭하도록 좁힌다. (url, youtube, 유튜브는 단독 키워드로도 충분히 특이함)
   const BGM_INPUT_HINT_RE = /\burl\b|youtube|유튜브|external\s*file|file\s*url|외부\s*파일|파일\s*url/i;
-  const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
-  const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
-  const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -543,12 +540,6 @@
     });
   }
 
-  function handleCcfSuiteRegisterRequest(event) {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_CHAT_NOTIFIER_SCRIPT_INFO.id) return;
-    registerWithCcfSuite(CCF_CHAT_NOTIFIER_SCRIPT_INFO);
-  }
-
   function getUserscriptVersion(fallbackVersion) {
     try {
       const runtimeVersion = typeof GM_info !== "undefined" && typeof GM_info?.script?.version === "string"
@@ -557,48 +548,6 @@
       return runtimeVersion || fallbackVersion;
     } catch (error) {
       return fallbackVersion;
-    }
-  }
-
-  function registerWithCcfSuite(scriptInfo) {
-    try {
-      const registry = readCcfSuiteRegistry();
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-
-      window.localStorage.setItem(CCF_SUITE_REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(
-        new CustomEvent(CCF_SUITE_REGISTER_EVENT, {
-          detail: registry.scripts[scriptInfo.id]
-        })
-      );
-    } catch (error) {
-      // Ignore suite registration failures.
-    }
-  }
-
-  function readCcfSuiteRegistry() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_REGISTRY_KEY) || "{}");
-      return parsed && typeof parsed.scripts === "object"
-        ? { scripts: parsed.scripts }
-        : { scripts: {} };
-    } catch (error) {
-      return { scripts: {} };
     }
   }
 

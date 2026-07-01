@@ -62,10 +62,7 @@
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
   const MESSAGE_HINT_RE = /message|chat|comment|send|input|textbox|\uBA54\uC2DC\uC9C0|\uCC44\uD305|\uC785\uB825|\uBC1C\uC5B8/i;
   const NAME_HINT_RE = /name|character|display.?name|chara|nickname|profile|\uC774\uB984|\uCE90\uB9AD\uD130|\uB2C9\uB124\uC784/i;
-  const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
-  const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
-  const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",

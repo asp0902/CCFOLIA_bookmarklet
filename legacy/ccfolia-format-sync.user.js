@@ -64,10 +64,7 @@
   const FIRESTORE_IMAGE_TOKEN_PREFIX = "ccf-fs-image://";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
   const STYLE_CLIPBOARD_STORAGE_KEY = "ccf-format-style-clipboard-v1";
-  const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
-  const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
-  const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_FORMAT_SYNC_SCRIPT_INFO = Object.freeze({
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
@@ -258,12 +255,6 @@
     console.info("[CCF NAR] initRenderer completed");
   } catch (error) {
     console.error("[CCF NAR] initRenderer threw, continuing to next IIFE", error);
-  }
-
-  function handleCcfSuiteRegisterRequest(event) {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_FORMAT_SYNC_SCRIPT_INFO.id) return;
-    registerWithCcfSuite(CCF_FORMAT_SYNC_SCRIPT_INFO);
   }
 
   function getUserscriptVersion(fallbackVersion) {
@@ -514,48 +505,6 @@
       throw createIfhUploadError("iFH 업로드 후 이미지 주소를 찾지 못했습니다.", "missing-image-url");
     }
     return imageUrl;
-  }
-
-  function registerWithCcfSuite(scriptInfo) {
-    try {
-      const registry = readCcfSuiteRegistry();
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-
-      window.localStorage.setItem(CCF_SUITE_REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(
-        new CustomEvent(CCF_SUITE_REGISTER_EVENT, {
-          detail: registry.scripts[scriptInfo.id]
-        })
-      );
-    } catch (error) {
-      // Ignore suite registration failures.
-    }
-  }
-
-  function readCcfSuiteRegistry() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_REGISTRY_KEY) || "{}");
-      return parsed && typeof parsed.scripts === "object"
-        ? { scripts: parsed.scripts }
-        : { scripts: {} };
-    } catch (error) {
-      return { scripts: {} };
-    }
   }
 
   function isCcfSuiteScriptEnabled(scriptId) {

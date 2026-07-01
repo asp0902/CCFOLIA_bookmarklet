@@ -92,10 +92,7 @@
   const FONT_SIZE_MIN = 1;
   const FONT_SIZE_MAX = 200;
   const DEFAULT_BLUR_VALUE = "4px";
-  const CCF_SUITE_REGISTRY_KEY = "ccf-suite-registry-v1";
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
-  const CCF_SUITE_REGISTER_EVENT = "ccf-suite:register";
-  const CCF_SUITE_REQUEST_EVENT = "ccf-suite:request-register";
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
@@ -260,12 +257,6 @@
   }
   init();
 
-  function handleCcfSuiteRegisterRequest(event) {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== CCF_LOG_PACKAGE_SCRIPT_INFO.id) return;
-    registerWithCcfSuite(CCF_LOG_PACKAGE_SCRIPT_INFO);
-  }
-
   function getUserscriptVersion(fallbackVersion) {
     try {
       const runtimeVersion = typeof GM_info !== "undefined" && typeof GM_info?.script?.version === "string"
@@ -274,48 +265,6 @@
       return runtimeVersion || fallbackVersion;
     } catch (error) {
       return fallbackVersion;
-    }
-  }
-
-  function registerWithCcfSuite(scriptInfo) {
-    try {
-      const registry = readCcfSuiteRegistry();
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-
-      window.localStorage.setItem(CCF_SUITE_REGISTRY_KEY, JSON.stringify(registry));
-      window.dispatchEvent(
-        new CustomEvent(CCF_SUITE_REGISTER_EVENT, {
-          detail: registry.scripts[scriptInfo.id]
-        })
-      );
-    } catch (error) {
-      // Ignore suite registration failures.
-    }
-  }
-
-  function readCcfSuiteRegistry() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_REGISTRY_KEY) || "{}");
-      return parsed && typeof parsed.scripts === "object"
-        ? { scripts: parsed.scripts }
-        : { scripts: {} };
-    } catch (error) {
-      return { scripts: {} };
     }
   }
 
