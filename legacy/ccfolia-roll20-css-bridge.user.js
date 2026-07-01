@@ -1813,7 +1813,8 @@
     }, ccr20WithSignal());
     modal.querySelector(`#${APPLY_ID}`)?.addEventListener("click", () => {
       if (!ccr20Lifecycle.isActive()) return;
-      applyModalConversion();
+      // 적용 성공 시 모달 자동 닫기 (실패면 열어둔 채 에러 표시).
+      if (applyModalConversion()) closeModal();
     }, ccr20WithSignal());
 
     const source = getModalSourceEditor();
