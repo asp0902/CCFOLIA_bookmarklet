@@ -12418,6 +12418,7 @@
   }
 
   function preparePayloadForSend(editor, options = {}) {
+    console.warn("[CCF NAR][probe] ENTER pps");
     const isEditDialogEditor = editor instanceof HTMLTextAreaElement
       && editor.closest('[role="dialog"], .MuiDialog-paper')
       && editor.getAttribute("name") === "text";
@@ -12483,6 +12484,7 @@
     const runs = preparedRuns.runs;
     const alignRuns = getEffectiveAlignRuns(sendText, state.alignRuns, blockStyle);
 
+    console.warn("[CCF NAR][probe] reached narration-diag; runs=%o alignRuns=%o", runs.length, alignRuns.length);
     // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
     const _narSpeaker = getCurrentSpeakerName();
     const _narSet = readNarratorNameSet();
