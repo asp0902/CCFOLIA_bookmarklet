@@ -573,6 +573,22 @@
         word-break: break-word;
       }
 
+      /* React 소유 원본 text node(invisible envelope 포함)는 지우지 않고 0 크기로 접어 감춘다.
+         실제 표시는 .ccf-render-overlay가 원본 폰트/색을 복원해 담당 — 탭 전환 시 React가
+         원본 text node를 위치 기반으로 재사용해도 detached node 업데이트가 되지 않도록 함. */
+      .ccf-render-root.ccf-has-overlay {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        color: transparent !important;
+      }
+
+      .ccf-render-root.ccf-has-overlay > .ccf-render-overlay {
+        display: inline;
+        font-size: var(--ccf-orig-font-size, 1rem);
+        line-height: var(--ccf-orig-line-height, normal);
+        color: var(--ccf-orig-color, inherit);
+      }
+
       .ccf-render-root .ccf-frag {
         white-space: pre-wrap;
       }
@@ -993,10 +1009,10 @@
     if (el.querySelector('button, form, textarea, input, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return false;
     const text = el.textContent || "";
     if (!text.includes(INVIS_START) || !text.includes(INVIS_END)) return false;
-    if (el.getAttribute(CCF_RENDERED_ATTR) === "1") {
-      el.removeAttribute(CCF_RENDERED_ATTR);
-    }
 
+    // 오버레이 방식에서는 원본 raw text(envelope 포함)가 지워지지 않고 계속 남아있으므로
+    // 여기서 CCF_RENDERED_ATTR을 무조건 지우면 안 된다 — tryRenderEncodedMessage의
+    // "raw text 불변 시 재작업 스킵" 게이트가 무력화되어 매 스캔마다 재렌더가 발생함.
     if (el.children.length > 8) return false;
 
     const knownTextElement = el.matches?.(MESSAGE_TEXT_SELECTOR);
@@ -1080,6 +1096,13 @@
     if (!envelope || typeof envelope !== "object") return;
     if (typeof envelope.text !== "string") return;
 
+    // 원본 raw text(envelope 포함)가 지난 렌더와 동일하면 재작업 불필요.
+    // 오버레이 방식에서는 원본 text node를 지우지 않으므로 매 스캔마다 INVIS 마커가
+    // 계속 감지되는데, 이 게이트가 없으면 mutation → scanWithin → 재렌더 → mutation... 무한 루프.
+    if (el.getAttribute(CCF_RENDERED_ATTR) === "1" && el.getAttribute(CCF_RAW_ATTR) === text) {
+      return;
+    }
+
     const renderText = envelope.text || visibleText || "";
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
@@ -1097,21 +1120,50 @@
 
     el.setAttribute(CCF_RAW_ATTR, text);
 
-    el.innerHTML = "";
-    el.classList.add("ccf-render-root");
+    const overlay = ensureRenderOverlay(el);
     applyNarrationMessageLayout(el, narration);
 
     if (!runs.length && !alignRuns.length && !narration) {
-      el.textContent = renderText;
+      overlay.textContent = renderText;
       preserveBottomScrollAfterRender(bottomScrollState);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
 
-    renderStyledText(el, renderText, runs, alignRuns);
+    renderStyledText(overlay, renderText, runs, alignRuns);
     preserveBottomScrollAfterRender(bottomScrollState);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
+  }
+
+  // React가 소유한 원본 <p>의 text node(invisible envelope 포함)는 그대로 두고
+  // 시각적으로만 접어 감춘 뒤, format-sync가 온전히 소유하는 형제 오버레이에 렌더한다.
+  // 탭 전환 시 React가 원본 text node를 위치 기반으로 재사용해 값을 갱신해도
+  // (detached node가 아니라 여전히 라이브 DOM에 붙어있는 노드이므로) 정상적으로
+  // characterData mutation이 발생하고, 기존 전역 MutationObserver가 이를 감지해
+  // 재스캔(scanWithin) → 재렌더로 이어진다.
+  function ensureRenderOverlay(el) {
+    el.classList.add("ccf-render-root");
+
+    // 가상화 리스트가 이 DOM 노드를 다른 메시지에 재사용하면 el 자체의 타이포그래피
+    // 클래스(body1/body2 등)가 바뀔 수 있어, 매 실제 렌더마다 el의 "본래" 폰트/색을
+    // 다시 읽어 CSS 변수에 반영한다. ccf-has-overlay가 이미 붙어있으면 el 자신의
+    // font-size가 0으로 눌려있으므로, 측정 직전 잠깐 떼어냈다 다시 붙인다.
+    const hadOverlayClass = el.classList.contains("ccf-has-overlay");
+    if (hadOverlayClass) el.classList.remove("ccf-has-overlay");
+    const computed = getComputedStyle(el);
+    el.style.setProperty("--ccf-orig-font-size", computed.fontSize);
+    el.style.setProperty("--ccf-orig-line-height", computed.lineHeight);
+    el.style.setProperty("--ccf-orig-color", computed.color);
+    el.classList.add("ccf-has-overlay");
+
+    const existing = el.querySelector(":scope > .ccf-render-overlay");
+    if (existing) return existing;
+
+    const overlay = document.createElement("span");
+    overlay.className = "ccf-render-overlay";
+    el.appendChild(overlay);
+    return overlay;
   }
 
   function captureBottomAnchoredMessageScroller(el) {
