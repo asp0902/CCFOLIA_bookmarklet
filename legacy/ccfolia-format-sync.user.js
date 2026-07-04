@@ -573,20 +573,16 @@
         word-break: break-word;
       }
 
-      /* React 소유 원본 text node(invisible envelope 포함)는 지우지 않고 0 크기로 접어 감춘다.
-         실제 표시는 .ccf-render-overlay가 원본 폰트/색을 복원해 담당 — 탭 전환 시 React가
-         원본 text node를 위치 기반으로 재사용해도 detached node 업데이트가 되지 않도록 함. */
-      .ccf-render-root.ccf-has-overlay {
-        font-size: 0 !important;
-        line-height: 0 !important;
-        color: transparent !important;
+      /* React 소유 원본 text node(invisible envelope 포함)는 지우지 않고
+         .ccf-original-hidden 래퍼(display:none)로 감싸 완전히 레이아웃에서 빼낸다.
+         실제 표시는 .ccf-render-overlay가 담당 — 탭 전환 시 React가 원본 text node를
+         위치 기반으로 재사용해도 detached node 업데이트가 되지 않도록 함. */
+      .ccf-render-root > .ccf-original-hidden {
+        display: none;
       }
 
-      .ccf-render-root.ccf-has-overlay > .ccf-render-overlay {
+      .ccf-render-root > .ccf-render-overlay {
         display: inline;
-        font-size: var(--ccf-orig-font-size, 1rem);
-        line-height: var(--ccf-orig-line-height, normal);
-        color: var(--ccf-orig-color, inherit);
       }
 
       .ccf-render-root .ccf-frag {
@@ -860,7 +856,9 @@
           const parent = mutation.target?.parentElement;
           if (parent) {
             if (parent.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
-            scanWithin(parent);
+            // 오버레이 렌더 이후엔 원본 text node가 .ccf-original-hidden 래퍼 안에 있으므로,
+            // characterData가 갱신되면 래퍼가 아니라 그 바깥의 .ccf-render-root(el)부터 다시 스캔한다.
+            scanWithin(parent.closest?.(".ccf-render-root") || parent);
           }
         }
       }
@@ -1003,6 +1001,9 @@
 
   function isLikelyMessageTextElement(el) {
     if (!(el instanceof HTMLElement)) return false;
+    // format-sync가 렌더용으로 만든 내부 요소(감춘 원본 래퍼/오버레이) 자체는
+    // 별도 메시지 요소가 아니다 — el의 raw text를 그대로 들고 있어 오탐하기 쉽다.
+    if (el.classList.contains("ccf-original-hidden") || el.classList.contains("ccf-render-overlay")) return false;
     if (el.matches?.(MESSAGE_SCOPE_SELECTOR)) return false;
     if (el.closest('textarea, input, [contenteditable="true"], [role="textbox"]')) return false;
     if (el.closest("button, form")) return false;
@@ -1023,7 +1024,11 @@
       return false;
     }
 
+    // .ccf-original-hidden은 우리가 감춰둔 el 자신의 원본(=el의 raw text), 진짜 "중첩된"
+    // 인코딩 요소가 아니므로 제외 — 안 그러면 렌더 후 el이 영원히 이 함수에서 걸러져
+    // 재스캔/재렌더(탭 전환 포함)가 다시는 못 일어난다.
     const nestedEncodedElement = [...el.children].some((child) => {
+      if (child.classList.contains("ccf-original-hidden") || child.classList.contains("ccf-render-overlay")) return false;
       const childText = child.textContent || "";
       return childText.includes(INVIS_START) && childText.includes(INVIS_END);
     });
@@ -1145,20 +1150,20 @@
   function ensureRenderOverlay(el) {
     el.classList.add("ccf-render-root");
 
-    // 가상화 리스트가 이 DOM 노드를 다른 메시지에 재사용하면 el 자체의 타이포그래피
-    // 클래스(body1/body2 등)가 바뀔 수 있어, 매 실제 렌더마다 el의 "본래" 폰트/색을
-    // 다시 읽어 CSS 변수에 반영한다. ccf-has-overlay가 이미 붙어있으면 el 자신의
-    // font-size가 0으로 눌려있으므로, 측정 직전 잠깐 떼어냈다 다시 붙인다.
-    const hadOverlayClass = el.classList.contains("ccf-has-overlay");
-    if (hadOverlayClass) el.classList.remove("ccf-has-overlay");
-    const computed = getComputedStyle(el);
-    el.style.setProperty("--ccf-orig-font-size", computed.fontSize);
-    el.style.setProperty("--ccf-orig-line-height", computed.lineHeight);
-    el.style.setProperty("--ccf-orig-color", computed.color);
-    el.classList.add("ccf-has-overlay");
-
     const existing = el.querySelector(":scope > .ccf-render-overlay");
     if (existing) return existing;
+
+    // el의 기존 자식(React 소유 원본 text node, invisible envelope 포함)을 지우지 않고
+    // display:none 래퍼로 옮겨 완전히 레이아웃에서 빼낸다. 같은 Text node 객체를 그대로
+    // 재부모화(reparent)할 뿐이라 React가 들고 있는 참조는 여전히 유효 — 이후 값이
+    // 갱신돼도(예: 탭 전환 시 가상화 리스트 재사용) 정상적으로 characterData mutation이
+    // 발생해 기존 전역 MutationObserver가 감지한다.
+    const hidden = document.createElement("span");
+    hidden.className = "ccf-original-hidden";
+    while (el.firstChild) {
+      hidden.appendChild(el.firstChild);
+    }
+    el.appendChild(hidden);
 
     const overlay = document.createElement("span");
     overlay.className = "ccf-render-overlay";
