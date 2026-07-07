@@ -1108,6 +1108,13 @@
       return;
     }
 
+    // 가상화 리스트가 이 노드를 다른 메시지로 재사용해 raw text가 바뀐 재렌더인지,
+    // 아니면 진짜 처음 렌더인지 구분. 재렌더에서까지 스크롤을 바닥으로 강제하면
+    // 탭 전환/스크롤 중 recycle이 몰아칠 때 리스트 자체의 recycle 판단(scrollTop 기준)과
+    // 충돌해 일부 행이 갱신되다 만 상태로 멈추는 원인이 된다 — 새 메시지가 처음
+    // 나타날 때만 바닥 고정하고, 재렌더는 스크롤에 손대지 않는다.
+    const isFirstRender = el.getAttribute(CCF_RENDERED_ATTR) !== "1";
+
     const renderText = envelope.text || visibleText || "";
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
@@ -1121,7 +1128,7 @@
       !!(envelope.presence || envelope["@p"] || envelope["@presence"]),
       renderText);
 
-    const bottomScrollState = captureBottomAnchoredMessageScroller(el);
+    const bottomScrollState = isFirstRender ? captureBottomAnchoredMessageScroller(el) : null;
 
     el.setAttribute(CCF_RAW_ATTR, text);
 
@@ -1130,13 +1137,13 @@
 
     if (!runs.length && !alignRuns.length && !narration) {
       overlay.textContent = renderText;
-      preserveBottomScrollAfterRender(bottomScrollState);
+      if (isFirstRender) preserveBottomScrollAfterRender(bottomScrollState);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
       return;
     }
 
     renderStyledText(overlay, renderText, runs, alignRuns);
-    preserveBottomScrollAfterRender(bottomScrollState);
+    if (isFirstRender) preserveBottomScrollAfterRender(bottomScrollState);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
   }
