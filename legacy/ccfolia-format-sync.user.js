@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.21
+// @version      0.1.22
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.21 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.22 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -876,7 +876,9 @@
     const mo = new MutationObserver((mutations) => {
       if (shouldPauseChatRenderForHistoryLoad(mutations)) {
         chatRenderPausedUntil = Math.max(chatRenderPausedUntil, Date.now() + CHAT_HISTORY_LOAD_PAUSE_MS);
-        return;
+        // return하지 않는다 — 배치를 통째로 버리면 최신(바닥) 메시지 렌더도 다음 mutation까지
+        // 밀려서 일반 레이아웃 → 나레이션 전환 과정이 그대로 보인다(FOUC). 과거 이력 항목은
+        // shouldRenderEncodedMessageNow의 per-element 게이트가 계속 막아준다.
       }
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
@@ -1088,6 +1090,13 @@
   }
 
   function shouldRenderEncodedMessageNow(el) {
+    // 리스트의 마지막(최신) 메시지는 스크롤 위치/일시정지 게이트와 무관하게 즉시 렌더 —
+    // 지연되면 새 메시지가 일반 레이아웃으로 한 번 그려졌다가 나레이션으로 바뀌는
+    // 전환 과정이 사용자에게 보인다(FOUC).
+    const newestItem = el.closest?.(MESSAGE_ITEM_SELECTOR);
+    const newestWrap = newestItem?.closest?.("[data-index]") || newestItem;
+    if (newestWrap?.parentElement && !newestWrap.nextElementSibling) return true;
+
     const scroller = findChatScrollContainer(el);
     if (!scroller) return true;
     const visible = isElementVisibleInScroller(el, scroller, 96);
