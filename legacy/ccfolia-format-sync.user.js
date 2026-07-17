@@ -17,6 +17,32 @@
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
   console.info("[CCF NAR] format-sync IIFE entry v0.1.21 @", new Date().toISOString());
 
+  // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
+  // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
+  // NotFoundError로 앱 전체가 크래시한다(탭 전환 시 가상화 리스트 재사용 경로).
+  // 노드의 실제 부모로 위임하는 전역 가드로 흡수한다. 한 번만 설치.
+  (function installDomReparentGuards() {
+    if (window.__CCF_DOM_REPARENT_GUARDS__) return;
+    window.__CCF_DOM_REPARENT_GUARDS__ = true;
+    const origRemoveChild = Node.prototype.removeChild;
+    Node.prototype.removeChild = function (child) {
+      if (child && child.parentNode !== this) {
+        console.warn("[CCF FORMAT SYNC] removeChild guard: reparented node, delegating", child);
+        if (child.parentNode) return origRemoveChild.call(child.parentNode, child);
+        return child;
+      }
+      return origRemoveChild.call(this, child);
+    };
+    const origInsertBefore = Node.prototype.insertBefore;
+    Node.prototype.insertBefore = function (newNode, refNode) {
+      if (refNode && refNode.parentNode !== this) {
+        console.warn("[CCF FORMAT SYNC] insertBefore guard: reference node moved, appending", refNode);
+        return this.appendChild(newNode);
+      }
+      return origInsertBefore.call(this, newNode, refNode);
+    };
+  })();
+
   // IIFE 상단 hoist: initRenderer() → scanAndRenderAll → ... → applySoftBlur →
   // ensureBlurRevealHandler 흐름이 IIFE 실행 초기에 일어남. var 로 함수 스코프 hoist
   // 해서 TDZ 위반 방지.
@@ -858,6 +884,19 @@
             if (node instanceof Element) {
               if (node.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
               scanWithin(node);
+            } else if (node.nodeType === Node.TEXT_NODE) {
+              // removeChild/insertBefore 가드 위임 후 React가 새 text node를
+              // render-root에 직접 꽂을 수 있음 — 원문이 노출되지 않게 래퍼로 회수 후 재스캔.
+              const parent = mutation.target instanceof Element ? mutation.target : node.parentElement;
+              if (!parent || parent.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
+              const root = parent.closest?.(".ccf-render-root");
+              if (!root) continue;
+              const hidden = root.querySelector(":scope > .ccf-original-hidden");
+              const overlay = root.querySelector(":scope > .ccf-render-overlay");
+              if (hidden && overlay && node.parentNode === root) {
+                hidden.appendChild(node);
+              }
+              scanWithin(root);
             }
           }
           continue;
@@ -1169,7 +1208,17 @@
     el.classList.add("ccf-render-root");
 
     const existing = el.querySelector(":scope > .ccf-render-overlay");
-    if (existing) return existing;
+    if (existing) {
+      // 가드 위임 경로로 React가 새 자식을 el에 직접 넣었을 수 있음 — 래퍼로 회수해
+      // 원문(invisible envelope 포함)이 오버레이와 이중 표시되는 것을 막는다.
+      const hidden = el.querySelector(":scope > .ccf-original-hidden");
+      if (hidden) {
+        for (const child of [...el.childNodes]) {
+          if (child !== hidden && child !== existing) hidden.appendChild(child);
+        }
+      }
+      return existing;
+    }
 
     // el의 기존 자식(React 소유 원본 text node, invisible envelope 포함)을 지우지 않고
     // display:none 래퍼로 옮겨 완전히 레이아웃에서 빼낸다. 같은 Text node 객체를 그대로
