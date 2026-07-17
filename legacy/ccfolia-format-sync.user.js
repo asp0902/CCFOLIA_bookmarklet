@@ -798,8 +798,17 @@
       [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
       [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root {
         width: 100% !important;
-        margin: 8px auto !important;
         text-align: center !important;
+      }
+
+      /* 나레이션 상하여백 — 시작(비연속) 메시지에만 위 8px.
+         연속(data-ccf-prose-cont) 나레이션은 prose-cont의 margin:0 규칙이 적용되어
+         일반 같은 화자 연속발화와 동일한 간격(6px)을 유지한다. */
+      .MuiListItem-root:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      li:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      [role="listitem"]:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
+      [data-index]:not([data-ccf-prose-cont="1"]):not(:has([data-ccf-prose-cont="1"])):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root {
+        margin: 8px auto 0 !important;
       }
 
       /* 본문 텍스트 자체 — 가운데 + 이탤릭 */
@@ -818,8 +827,10 @@
       }
       [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiListItemText-root {
         width: 100% !important;
-        margin: 8px auto !important;
         text-align: center !important;
+      }
+      [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root):not([data-ccf-prose-cont="1"]) .MuiListItemText-root {
+        margin: 8px auto 0 !important;
       }
 
       /* 미리보기 패널 등 */
@@ -1370,7 +1381,9 @@
       if (!(node instanceof HTMLElement)) return;
       node.dataset.ccfNarrationForceCenter = "1";
       node.style.setProperty("width", "100%", "important");
-      node.style.setProperty("margin", "8px auto", "important");
+      // 상하여백은 CSS 규칙이 CONT(연속발화) 여부에 따라 결정 — 인라인 margin은
+      // prose-cont의 margin:0을 덮어써 연속 나레이션 간격을 벌리므로 걸지 않는다.
+      node.style.removeProperty("margin");
       node.style.setProperty("text-align", "center", "important");
       node.style.setProperty("padding-left", "0", "important");
       node.style.setProperty("padding-right", "0", "important");

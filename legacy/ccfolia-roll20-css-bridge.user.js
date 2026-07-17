@@ -936,10 +936,18 @@
       [role="listitem"][${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root,
       [data-index][${CCF_NARRATION_ATTR}="1"] .MuiListItemText-root {
         width: 100% !important;
-        margin: 8px auto !important;
         text-align: center !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
+      }
+
+      /* 나레이션 상하여백 — 시작(비연속)에만 위 8px. 연속(CONT) 나레이션은
+         prose-cont margin:0으로 일반 연속발화와 같은 간격 유지. */
+      .MuiListItem-root[${CCF_NARRATION_ATTR}="1"]:not([data-ccf-prose-cont="1"]) .MuiListItemText-root,
+      li[${CCF_NARRATION_ATTR}="1"]:not([data-ccf-prose-cont="1"]) .MuiListItemText-root,
+      [role="listitem"][${CCF_NARRATION_ATTR}="1"]:not([data-ccf-prose-cont="1"]) .MuiListItemText-root,
+      [data-index][${CCF_NARRATION_ATTR}="1"]:not([data-ccf-prose-cont="1"]) .MuiListItemText-root {
+        margin: 8px auto 0 !important;
       }
 
       .ccf-render-root {
@@ -2467,7 +2475,8 @@
       if (!(node instanceof HTMLElement)) return;
       node.dataset.ccfNarrationForceCenter = "1";
       node.style.setProperty("width", "100%", "important");
-      node.style.setProperty("margin", "8px auto", "important");
+      // 상하여백은 CSS가 CONT 여부로 결정 — 인라인 margin은 연속 나레이션 간격을 벌림
+      node.style.removeProperty("margin");
       node.style.setProperty("text-align", "center", "important");
       node.style.setProperty("padding-left", "0", "important");
       node.style.setProperty("padding-right", "0", "important");
