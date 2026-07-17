@@ -798,7 +798,7 @@
       [role="listitem"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
       [data-index]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root {
         width: 100% !important;
-        margin: 0 auto !important;
+        margin: 8px auto !important;
         text-align: center !important;
       }
 
@@ -818,7 +818,7 @@
       }
       [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root) .MuiListItemText-root {
         width: 100% !important;
-        margin: 0 auto !important;
+        margin: 8px auto !important;
         text-align: center !important;
       }
 
@@ -1370,7 +1370,7 @@
       if (!(node instanceof HTMLElement)) return;
       node.dataset.ccfNarrationForceCenter = "1";
       node.style.setProperty("width", "100%", "important");
-      node.style.setProperty("margin", "0 auto", "important");
+      node.style.setProperty("margin", "8px auto", "important");
       node.style.setProperty("text-align", "center", "important");
       node.style.setProperty("padding-left", "0", "important");
       node.style.setProperty("padding-right", "0", "important");
