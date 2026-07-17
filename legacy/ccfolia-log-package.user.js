@@ -2545,7 +2545,7 @@
 
     setButtonsBusy(true);
     try {
-      const payload = await collectLogPayload(originButton);
+      const payload = await collectLogPayload(originButton, { includeDerivedHtml: false });
       const record = {
         version: 1,
         roomId,
@@ -2679,7 +2679,11 @@
     };
   }
 
-  async function collectLogPayload(originButton = null) {
+  async function collectLogPayload(originButton = null, options = null) {
+    // includeDerivedHtml=false: 편집기 핸드오프 경로에서는 zip 내보내기용 대형 산출물
+    // (logJson/indexHtml/tistoryContentHtml — 이미지 base64 인라인)을 만들지 않는다.
+    // 이미지 많은 룸에서 이 문자열들이 룸 탭 Out of Memory 크래시를 일으킨다.
+    const includeDerivedHtml = options?.includeDerivedHtml !== false;
     const exportedAt = new Date();
     let roomTitle = getRoomTitle("");
     const roomAddress = getRoomAddressLabel();
@@ -2813,6 +2817,18 @@
     for (const entry of entries) {
       entry.packageHtml = rewriteEntryHtmlForPackage(entry.bodyHtml, assetMap);
     }
+
+    if (!includeDerivedHtml) {
+      return {
+        roomTitle,
+        roomAddress,
+        exportedAt,
+        entries,
+        assets,
+        tabs
+      };
+    }
+
     const currentThemeDefinition = getPackageThemeDefinition();
     const themeOptionModel = getPackageThemeOptionModel(currentThemeDefinition.mode);
     const themeDefinition = themeOptionModel.definitions[themeOptionModel.selectedMode] || currentThemeDefinition;
