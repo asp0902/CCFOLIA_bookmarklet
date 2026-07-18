@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.26
+// @version      0.1.27
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.26 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.27 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -12662,6 +12662,12 @@
     }
     // 헤딩 마크다운 (#99) — 줄 시작 #/##/### + 공백 → 마커 제거 + 그 줄 헤딩 크기
     const heading = applyHeadingMarkdown(payloadText, cloneRuns(state.runs, payloadText.length));
+    console.info("[CCF HEAD] payloadText=%o, headingMatched=%o, inRuns=%o, outRuns=%o",
+      payloadText,
+      /(?:^|\n)#{1,3} /.test(payloadText),
+      JSON.stringify(state.runs.map((r) => ({ s: r.start, e: r.end, st: Object.keys(r.style || {}) }))),
+      JSON.stringify(heading.runs.map((r) => ({ s: r.start, e: r.end, st: Object.keys(r.style || {}) })))
+    );
     const sendText = heading.text;
     const baseRuns = heading.runs;
     // 서식 프리셋 자동 적용 (#70) — 메시지 안에 프리셋 이름과 같은 텍스트가 있으면
