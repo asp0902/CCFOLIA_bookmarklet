@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.48
+// @version      0.3.49
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3350,8 +3350,12 @@
         return;
       }
 
+      // #/##/### 헤딩은 format-sync의 헤딩 마크다운(#99)이 소유한다. format-sync가
+      // 로드돼 있으면 여기서 마커를 떼면 안 된다 — 먼저 실행되는 이 파서가 "## "를
+      // 제거해버리면 format-sync가 볼 땐 마커가 없어 fontSize를 못 붙이고, 두 기능이
+      // 서로 취소돼 헤딩이 전혀 적용되지 않는다. format-sync 미로드 시에만 자체 처리.
       const headerMatch = line.match(/^(#{1,3})\s+(.+)$/);
-      if (headerMatch) {
+      if (headerMatch && !isFormatSyncLoaded()) {
         const entry = buildDiscordMarkdownLine(headerMatch[2] || "", {
           lineStyle: createDiscordHeaderStyle(headerMatch[1].length)
         });
@@ -4670,6 +4674,17 @@
 
   function getCurrentRoll20BlockStyle() {
     return isCurrentSpeakerNarrator() ? { narration: true } : {};
+  }
+
+  // format-sync가 로드되어 활성 상태인지. 헤딩 마크다운(#99) 등 format-sync가
+  // 소유한 기능은 이 경우 roll20이 건드리지 않고 양보한다.
+  function isFormatSyncLoaded() {
+    try {
+      const rt = window.__CCF_FORMAT_SYNC_RUNTIME__;
+      return !!rt && (typeof rt.isActive !== "function" || rt.isActive() !== false);
+    } catch (_) {
+      return false;
+    }
   }
 
   function isCurrentSpeakerNarrator() {
