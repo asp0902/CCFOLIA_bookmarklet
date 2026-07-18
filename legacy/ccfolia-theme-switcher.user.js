@@ -1,9 +1,9 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
 // @version      0.2.16
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
-// @description:ko CCFOLIA???뚮쭏 ?꾪솚 ?⑤꼸, ?ъ슜??吏???됱긽 ?뚮쭏, ?뚮쭏 媛?몄삤湲??대낫?닿린 湲곕뒫??異붽??⑸땲??
+// @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -22,68 +22,68 @@
   const DICEBOT_ATTR = "data-ccf-dicebot";
   const DICEBOT_TOPBAR_SELECTOR = "span.MuiTypography-caption";
   const DICEBOT_MAP = Object.freeze({
-    "?몄꽦 ???: "unsung-duet",
-    // CCFOLIA ?쒓뎅??UI?먯꽌??"?ы댋猷⑥쓽 遺由?7?? ?쇰줈 ?쒓린??
-    // ?곷Ц ?쒓린??媛숈씠 ?깅줉 (?ㅺ뎅??UI / BCDice ?먮Ц ?쒓린 ???.
-    "?ы댋猷⑥쓽 遺由?7??: "cree-grrr",
+    "언성 듀엣": "unsung-duet",
+    // CCFOLIA 한국어 UI에서는 "크툴루의 부름 7판" 으로 표기됨.
+    // 영문 표기도 같이 등록 (다국어 UI / BCDice 원문 표기 대응).
+    "크툴루의 부름 7판": "cree-grrr",
     "Call of Cthulhu 7th Edition": "cree-grrr"
   });
 
-  // ?ъ슜?먭? "?뚮쭏 而ㅼ뒪?" 移대뱶???쒕∼?ㅼ슫?먯꽌 ?좏깮 媛?ν븳 而ㅼ뒪? ?쒗듃 ?뚮쭏 紐⑸줉.
-  // 媛??뚮쭏??CCFOLIA???뱀젙 ?ㅼ씠?ㅻ큸 ?대쫫怨?留ㅽ븨?섎ŉ, ?ㅼ씠?ㅻ큸???쇱튂 + ?대떦 ?뚮쭏媛
-  // ON ?곹깭???뚮쭔 ?곸슜?쒕떎. (CSS??buildDicebotStyleSheet?먯꽌 dicebot id濡??ㅼ퐫?꾨맖)
-  // "none" ? ?대뼡 ?ㅼ씠?ㅻ큸怨쇰룄 留ㅼ묶?섏? ?딅뒗 sentinel ???좏깮 ???대뼡 而ㅼ뒪? ?쒗듃??
-  // ?곸슜?섏? ?딆쓬 (= ?ъ씠??湲곕낯 ?곹깭濡??섎룎由?
+  // 사용자가 "테마 커스텀" 카드의 드롭다운에서 선택 가능한 커스텀 시트 테마 목록.
+  // 각 테마는 CCFOLIA의 특정 다이스봇 이름과 매핑되며, 다이스봇이 일치 + 해당 테마가
+  // ON 상태일 때만 적용된다. (CSS는 buildDicebotStyleSheet에서 dicebot id로 스코프됨)
+  // "none" 은 어떤 다이스봇과도 매칭되지 않는 sentinel — 선택 시 어떤 커스텀 시트도
+  // 적용되지 않음 (= 사이트 기본 상태로 되돌림)
   const SHEET_THEME_NONE_ID = "none";
   const SHEET_THEMES = Object.freeze([
     Object.freeze({
       id: SHEET_THEME_NONE_ID,
-      name: "湲곕낯",
-      description: "而ㅼ뒪? ?쒗듃瑜??곸슜?섏? ?딆뒿?덈떎."
+      name: "기본",
+      description: "커스텀 시트를 적용하지 않습니다."
     }),
     Object.freeze({
       id: "unsung-duet",
-      name: "?몄꽦 ???,
-      description: "?몄꽦 ???猷몄슜 / ?앹뾽 ?붿옄?맞룻듃由ш굅 ?대?吏쨌BGM 蹂댄샇 ?쇨큵 ?곸슜"
+      name: "언성 듀엣",
+      description: "언성 듀엣 룸용 / 팝업 디자인·트리거 이미지·BGM 보호 일괄 적용"
     }),
     Object.freeze({
       id: "cree-grrr",
       name: "CREE-GRRR!",
-      description: "CREE-GRRR! ?쒗듃??/ ?앹뾽쨌梨꾪똿 ?ㅼ씠??寃곌낵(?먰삎/源껊컻 ?대?吏) ?붿옄??
+      description: "CREE-GRRR! 시트용 / 팝업·채팅 다이스 결과(원형/깃발 이미지) 디자인"
     })
   ]);
-  // ?좉퇋 ?쒖꽦???ъ슜?먯쓽 而ㅼ뒪? ?쒗듃 ?뚮쭏 湲곕낯 ?좏깮媛? ?ъ슜?먭? ?쒕∼?ㅼ슫?먯꽌 紐낆떆?곸쑝濡?
-  // ?ㅻⅨ ?뚮쭏瑜?怨⑤씪 ??ν븳 寃쎌슦 (selectedSheetTheme媛 SHEET_THEMES.id 以??섎굹? ?쇱튂) ??
-  // normalizeSettings 媛 洹?媛믪쓣 洹몃?濡?蹂댁〈?쒕떎.
+  // 신규 활성화 사용자의 커스텀 시트 테마 기본 선택값. 사용자가 드롭다운에서 명시적으로
+  // 다른 테마를 골라 저장한 경우 (selectedSheetTheme가 SHEET_THEMES.id 중 하나와 일치) 는
+  // normalizeSettings 가 그 값을 그대로 보존한다.
   const DEFAULT_SHEET_THEME_ID = SHEET_THEME_NONE_ID;
   const SHEET_THEME_SELECT_PANEL_ID = "ccf-theme-switcher-sheet-theme-select-panel";
 
-  // CREE-GRRR! 梨꾪똿 ?ㅼ씠??寃곌낵 ?몄젥??留덉빱 / ?대옒??
+  // CREE-GRRR! 채팅 다이스 결과 인젝션 마커 / 클래스
   const CREE_GRRR_FORMATTED_ATTR = "data-ccf-cree-grrr-formatted";
   const CREE_GRRR_MESSAGE_ROW_ATTR = "data-ccf-cree-grrr-message-row";
   const CREE_GRRR_ROLLRESULT_CLASS = "ccf-cree-grrr-rollresult";
   const CREE_GRRR_STATUS_CLASS = "ccf-cree-grrr-result-status";
-  // ?ㅼ씠??移대뱶 ??Roll20 sheet-rolltemplate-coc ? ?숈씪??移대뱶 ?덉씠?꾩썐 (CC<= ?먯젙??
+  // 다이스 카드 — Roll20 sheet-rolltemplate-coc 와 동일한 카드 레이아웃 (CC<= 판정용)
   const CREE_GRRR_CARD_CLASS = "ccf-cree-grrr-dicecard";
-  // ?쇰컲 ?ㅼ씠??移대뱶 ??CC<= 媛 ?꾨땶 ?쇰컲 援대┝(1D10+5, ?곕?吏 援대┝ ?? ??而댄뙥??移대뱶
+  // 일반 다이스 카드 — CC<= 가 아닌 일반 굴림(1D10+5, 데미지 굴림 등) 용 컴팩트 카드
   const CREE_GRRR_SIMPLE_CARD_CLASS = "ccf-cree-grrr-simpledicecard";
   const CREE_GRRR_ORIGINAL_ATTR = "data-ccf-cree-grrr-original";
-  // ?몄떇???먯젙 寃곌낵 ?곹깭 ?ㅼ썙????CCFOLIA(CoC 7??BCDice) 媛 ?ㅼ젣濡?異쒕젰?섎뒗 ?띿뒪??
-  // CREE-GRRR! ?쒗듃(Roll20)???ㅻⅨ 紐낆묶???곕?濡?留ㅼ묶???ㅼ쓬 mapCcfStatusToCreeGrrr 濡?
-  // Roll20 紐낆묶(?ㅽ럹???щ━?곗뺄/洹밸떒???깃났/...) ?쇰줈 移섑솚??諭껋????쒖떆?쒕떎.
+  // 인식할 판정 결과 상태 키워드 — CCFOLIA(CoC 7판 BCDice) 가 실제로 출력하는 텍스트.
+  // CREE-GRRR! 시트(Roll20)는 다른 명칭을 쓰므로 매칭한 다음 mapCcfStatusToCreeGrrr 로
+  // Roll20 명칭(스페셜/크리티컬/극단적 성공/...) 으로 치환해 뱃지에 표시한다.
   const CREE_GRRR_STATUS_TOKENS = Object.freeze([
-    "??ㅽ뙣",
-    "?ㅽ뙣",
-    "蹂댄넻 ?깃났",
-    "?대젮???깃났",
-    "??⑦븳 ?깃났",
-    "??깃났"
+    "대실패",
+    "실패",
+    "보통 성공",
+    "어려운 성공",
+    "대단한 성공",
+    "대성공"
   ]);
-  // ?ㅼ씠?ㅻ큸 異쒕젰???붿궡??援щ텇????BCDice ????U+2192), 竊?U+FF1E), ?쇰컲 > 紐⑤몢 ?ъ슜.
-  // (=??"1D100<=50" 媛숈? ?섏떇 ?덉뿉?쒕룄 ?깆옣??d100 寃곌낵濡??ㅼ씤?섎?濡??쒖쇅)
+  // 다이스봇 출력의 화살표/구분자 — BCDice 는 →(U+2192), ＞(U+FF1E), 일반 > 모두 사용.
+  // (=는 "1D100<=50" 같은 수식 안에서도 등장해 d100 결과로 오인되므로 제외)
   const CREE_GRRR_ARROW_CLASS = "[\\u2192\\uFF1E>]";
-  // ?⑦꽩: (1) "??73" 寃곌낵 ?レ옄, (2) "??蹂댄넻 ?깃났" ?먮뒗 (3) "(蹂댄넻 ?깃났)" ?곹깭 ?ㅼ썙??
-  // ?ㅼ썙?쒕뒗 湲몄씠 ?대┝李⑥닚?쇰줈 ?뺣젹??"蹂댄넻 ?깃났" ??"?깃났" 蹂대떎 癒쇱? 留ㅼ묶?섎룄濡???
+  // 패턴: (1) "→ 73" 결과 숫자, (2) "→ 보통 성공" 또는 (3) "(보통 성공)" 상태 키워드
+  // 키워드는 길이 내림차순으로 정렬해 "보통 성공" 이 "성공" 보다 먼저 매칭되도록 함
   const CREE_GRRR_STATUS_ALT = [...CREE_GRRR_STATUS_TOKENS]
     .sort((a, b) => b.length - a.length)
     .map((w) => w.replace(/\s+/g, "\\s*"))
@@ -95,19 +95,19 @@
     "g"
   );
 
-  // ?몄꽦 ??? 梨꾪똿 ?몃━嫄??띿뒪????Roll20 ?쒗듃??rolltemplate ?대?吏.
-  // CCFOLIA??raw URL???먮룞 ?꾨쿋?쒗븯吏 ?딆쑝誘濡?留덊겕?ㅼ슫 留곹겕 ?뺥깭濡?諛쒖넚.
-  // ?숈떆???대씪?댁뼵??痢≪뿉??DOM ?몄젥?섏쑝濡?<img>濡?移섑솚???쒓컖?곸쑝濡?蹂댁씠寃???
+  // 언성 듀엣: 채팅 트리거 텍스트 → Roll20 시트의 rolltemplate 이미지.
+  // CCFOLIA는 raw URL을 자동 임베드하지 않으므로 마크다운 링크 형태로 발송.
+  // 동시에 클라이언트 측에서 DOM 인젝션으로 <img>로 치환해 시각적으로 보이게 함.
   const UNSUNG_DUET_URLS = Object.freeze({
-    "?먯떆?꾪꽣 ?먯젙??: "https://i.imgur.com/FFUXgYg.png",
-    "?먮컮?몃뜑 ?먯젙??: "https://i.imgur.com/Jt8hw3i.png",
-    "?먰봽?섍렇癒쇳듃 ?④낵??: "https://i.imgur.com/dcMRZ62.png",
-    "?먯씠怨꾪솕??: "https://i.imgur.com/cfVWYGn.png"
+    "【시프터 판정】": "https://i.imgur.com/FFUXgYg.png",
+    "【바인더 판정】": "https://i.imgur.com/Jt8hw3i.png",
+    "【프래그먼트 효과】": "https://i.imgur.com/dcMRZ62.png",
+    "【이계화】": "https://i.imgur.com/cfVWYGn.png"
   });
-  // ?몃━嫄???諛쒖넚 硫붿떆吏???ㅼ뼱媛??띿뒪??([?대?吏](URL) ?뺥깭)
+  // 트리거 → 발송 메시지에 들어갈 텍스트 ([이미지](URL) 형태)
   const UNSUNG_DUET_TRIGGER_MAP = Object.freeze(
     Object.fromEntries(
-      Object.entries(UNSUNG_DUET_URLS).map(([k, url]) => [k, `[?대?吏](${url})`])
+      Object.entries(UNSUNG_DUET_URLS).map(([k, url]) => [k, `[이미지](${url})`])
     )
   );
   const UNSUNG_DUET_FIELD_BOUND_ATTR = "data-ccf-unsung-duet-bound";
@@ -119,16 +119,16 @@
   const CUTIN_VOLUME_STORAGE_KEY = "ccf-theme-cutin-volume-absolute-v1";
   const CUTIN_VOLUME_APPLY_WINDOW_MS = 10000;
   const CUTIN_VOLUME_APPLY_DELAYS_MS = Object.freeze([0, 16, 80, 200, 500]);
-  // 而룹씤 ?뚮━ 利앺룺 (media.volume ?곹븳 1???섎뒗 遺?ㅽ듃, WebAudio GainNode)
+  // 컷인 소리 증폭 (media.volume 상한 1을 넘는 부스트, WebAudio GainNode)
   const CUTIN_BOOST_HELPER_CLASS = "ccf-cutin-boost-helper";
   const CUTIN_BOOST_STORAGE_KEY = "ccf-theme-cutin-boost-v1";
   const CUTIN_BOOST_MAX = 4;
-  // ?뚮젮吏?URL ??alt ?띿뒪??留ㅽ븨 (??갑???몄떇??
+  // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
   const UNSUNG_DUET_URL_TO_ALT = Object.freeze({
-    "https://i.imgur.com/FFUXgYg.png": "?쒗봽???먯젙",
-    "https://i.imgur.com/Jt8hw3i.png": "諛붿씤???먯젙",
-    "https://i.imgur.com/dcMRZ62.png": "?꾨옒洹몃㉫???④낵",
-    "https://i.imgur.com/cfVWYGn.png": "?닿퀎??
+    "https://i.imgur.com/FFUXgYg.png": "시프터 판정",
+    "https://i.imgur.com/Jt8hw3i.png": "바인더 판정",
+    "https://i.imgur.com/dcMRZ62.png": "프래그먼트 효과",
+    "https://i.imgur.com/cfVWYGn.png": "이계화"
   });
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
@@ -179,12 +179,12 @@
   const DEFAULT_THEME_VERSION = 6;
 
   const FIELD_DEFS = Object.freeze([
-    { key: "bg", label: "諛곌꼍" },
-    { key: "appbar", label: "?곹븯??諛? },
-    { key: "paper", label: "?⑤꼸" },
-    { key: "border", label: "?뚮몢由? },
-    { key: "text", label: "?띿뒪?? },
-    { key: "inputBg", label: "?낅젰李? }
+    { key: "bg", label: "배경" },
+    { key: "appbar", label: "상하단 바" },
+    { key: "paper", label: "패널" },
+    { key: "border", label: "테두리" },
+    { key: "text", label: "텍스트" },
+    { key: "inputBg", label: "입력창" }
   ]);
 
   const DEFAULT_CUSTOM_THEME = Object.freeze({
@@ -344,7 +344,7 @@
         };
         window.localStorage.setItem(registryKey, JSON.stringify(registry));
         window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
-      } catch (error) { /* suite ?깅줉 ?ㅽ뙣 臾댁떆 */ }
+      } catch (error) { /* suite 등록 실패 무시 */ }
     }
 
     function disable() {
@@ -432,8 +432,8 @@
   const cutinBoostGraphs = new WeakMap();
   let cutinBoostAudioCtx = null;
 
-  // 紐⑤뱢 濡쒕뱶 ?뺤젙 濡쒓렇. ??濡쒓렇議곗감 肄섏넄????蹂댁씠硫??ㅽ겕由쏀듃 ?먯껜媛 GitHub
-  // Pages ?먯꽌 fetch ?섏? ?딆븯嫄곕굹 濡쒕뜑媛 ?ㅻⅨ 寃쎈줈濡??ㅽ뻾 以묒씤 寃?
+  // 모듈 로드 확정 로그. 이 로그조차 콘솔에 안 보이면 스크립트 자체가 GitHub
+  // Pages 에서 fetch 되지 않았거나 로더가 다른 경로로 실행 중인 것.
   try {
     console.warn(
       "[CREE-GRRR!] theme-switcher module loaded",
@@ -481,16 +481,16 @@
         ensureUi();
         ensureDefaultThemeSnapshot();
       } catch (err) {
-        // tryInit ?ㅽ뙣媛 start() ???꾩냽 setup(setInterval, DOMContentLoaded ??
-        // ?깅줉??留됱븘 ensureUi 媛 ?곸쁺 ?ъ떆?꾨릺吏 ?딅뒗 移⑤У ?ㅽ뙣瑜?諛⑹?.
-        // 泥??ㅽ뙣留?濡쒓퉭(?댄썑 ?몄텧? 媛숈? ?먮윭濡?肄섏넄 ??＜ 諛⑹?).
+        // tryInit 실패가 start() 의 후속 setup(setInterval, DOMContentLoaded 등)
+        // 등록을 막아 ensureUi 가 영영 재시도되지 않는 침묵 실패를 방지.
+        // 첫 실패만 로깅(이후 호출은 같은 에러로 콘솔 폭주 방지).
         if (!tryInitErrorLogged) {
           tryInitErrorLogged = true;
-          try { console.warn("[CCF Theme] tryInit threw ??recovering", err); } catch (_) {}
+          try { console.warn("[CCF Theme] tryInit threw — recovering", err); } catch (_) {}
         }
         return false;
       }
-      // 蹂몃Ц ????try 釉붾줉 ?덉뿉??泥섎━??寃???異붽? ?숈옉? try 諛뽰뿉 ?먭린 ?꾪빐 遺꾨━
+      // 본문 — 위 try 블록 안에서 처리한 것 외 추가 동작은 try 밖에 두기 위해 분리
 
       if (document.body.getAttribute(UI_READY_ATTR) !== "1") {
         document.body.setAttribute(UI_READY_ATTR, "1");
@@ -844,9 +844,9 @@
           background: transparent !important;
         }
 
-        /* #24 ??罹먮┃???대?吏 蹂寃?Unsplash ??native MUI Dialog ??input ?
-           native ?붿옄???좎?. ?꾩쓽 input/select/placeholder/border 猷곕뱾??紐⑤몢
-           Dialog scope ?덉뿉??revert 濡??섎룎由곕떎. */
+        /* #24 — 캐릭터 이미지 변경/Unsplash 등 native MUI Dialog 안 input 은
+           native 디자인 유지. 위의 input/select/placeholder/border 룰들을 모두
+           Dialog scope 안에서 revert 로 되돌린다. */
         html[data-ccf-theme-active="1"] .MuiDialog-root .MuiInputBase-root,
         html[data-ccf-theme-active="1"] .MuiDialog-root .MuiOutlinedInput-root,
         html[data-ccf-theme-active="1"] .MuiDialog-root .MuiFilledInput-root,
@@ -1049,13 +1049,13 @@
           height: 38px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
-          /* ?곗륫 ?⑤뵫 30px = ?먮툕濡?10px) + ?곗륫 ?щ갚(12px) + ?띿뒪?몄? ?먮툕濡??ъ씠(8px) */
+          /* 우측 패딩 30px = 쉐브론(10px) + 우측 여백(12px) + 텍스트와 쉐브론 사이(8px) */
           padding: 0 30px 0 12px;
           box-sizing: border-box;
           background-color: var(--ccf-theme-input-bg, rgba(21, 20, 20, 0.88));
-          /* ?ㅼ씠?곕툕 ?먮툕濡좎씠 ??긽 ?곗륫 ?앹뿉 遺숈뼱 ?꾩튂 議곗젅??遺덇??ν븯誘濡?
-             appearance:none + 而ㅼ뒪? SVG ?먮툕濡좎쑝濡?援먯껜?섍퀬 background-position
-             ?쇰줈 ?먮툕濡좎쓣 ?곗륫?먯꽌 12px ?쇱뼱 ?볥뒗?? */
+          /* 네이티브 쉐브론이 항상 우측 끝에 붙어 위치 조절이 불가능하므로,
+             appearance:none + 커스텀 SVG 쉐브론으로 교체하고 background-position
+             으로 쉐브론을 우측에서 12px 떼어 놓는다. */
           background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23f4f0eb' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
           background-repeat: no-repeat;
           background-position: right 12px center;
@@ -1588,9 +1588,9 @@
       document.documentElement.appendChild(varsStyle);
     }
 
-    // ?ㅼ씠?ㅻ큸 ?ㅽ??쇱떆?몃뒗 留??몄텧留덈떎 理쒖떊 textContent 濡?媛뺤젣 媛깆떊.
-    // ?ㅽ겕由쏀듃 踰꾩쟾???щ졇????湲곗〈 <style> 媛 洹몃?濡??⑥븘 ??CSS(怨쇨굅 ?몃씪??諭껋? ??
-    // 媛 ?붾㈃???댁븘 ?덈뒗 臾몄젣瑜?諛⑹?.
+    // 다이스봇 스타일시트는 매 호출마다 최신 textContent 로 강제 갱신.
+    // 스크립트 버전을 올렸을 때 기존 <style> 가 그대로 남아 옛 CSS(과거 인라인 뱃지 등)
+    // 가 화면에 살아 있는 문제를 방지.
     let dicebotStyle = document.getElementById(DICEBOT_STYLE_ID);
     if (!(dicebotStyle instanceof HTMLStyleElement)) {
       dicebotStyle = document.createElement("style");
@@ -1604,34 +1604,34 @@
   }
 
   function buildDicebotStyleSheet() {
-    // Roll20 "?몄꽦 ??? 而ㅼ뒪??쒗듃 ?붾젅??
-    // (Roll20 ?먮낯: bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff)
+    // Roll20 "언성 듀엣" 커스텀시트 팔레트
+    // (Roll20 원본: bg #1c3245 / border #004d67 / muted #8895A1 / accent #fff)
     const UD = {
-      // 諛섑닾紐? CCFOLIA ?ㅼ씠?곕툕 ?ㅽ겕 諛곌꼍??鍮꾩퀜 蹂댁씠?꾨줉 ?뚰뙆 ??땄
+      // 반투명: CCFOLIA 네이티브 다크 배경이 비쳐 보이도록 알파 낮춤
       bgGlass: "rgba(28, 50, 69, 0.55)",
       bgGlassInner: "rgba(28, 50, 69, 0.32)",
       bgSolid: "#1c3245",
-      // ?띿뒪???낅젰移몄? 泥?줉 ???좎?
+      // 텍스트 입력칸은 청록 톤 유지
       bgChip: "rgba(0, 77, 103, 0.28)",
       inputBorder: "#004d67",
       inputBorderSoft: "rgba(0, 77, 103, 0.55)",
-      // ?띿뒪???낅젰移몄쓣 ?쒖쇅???섎㉧吏 ?곸뿭(?ㅻ뜑/蹂대뜑/??됲듃/?ㅽ겕濡ㅻ컮 ???
-      // ?몄꽦 ???諛곌꼍怨??숈씪??釉붾옓 ?ㅼ쑝濡??듭씪
+      // 텍스트 입력칸을 제외한 나머지 영역(헤더/보더/셀렉트/스크롤바 등)은
+      // 언성 듀엣 배경과 동일한 블랙 톤으로 통일
       accent: "#000000",
       accentSoft: "rgba(0, 0, 0, 0.55)",
       accentHover: "rgba(0, 0, 0, 0.45)",
       muted: "#8895A1",
       text: "#ffffff",
       shadow: "rgba(0, 0, 0, 0.45)",
-      // Roll20 ?쒗듃???ㅻ뜑 ?쇰윭?ㅽ듃(?몄꽦 ???猷???댄? 洹몃젮???덈뒗 .sheet-outer 諛곌꼍)
+      // Roll20 시트의 헤더 일러스트(언성 듀엣 룰 타이틀 그려져 있는 .sheet-outer 배경)
       sheetBg: "url(https://i.imgur.com/htxGxau.png)"
     };
 
     return `
-      /* === [?몄꽦 ??? 罹먮┃???몄쭛 ?앹뾽 ============================= */
-      /* Dialog paper ?먯껜: 諛섑닾紐?+ 釉붾옓 蹂대뜑(=inset shadow).
-         ?멸낸?좎? inset box-shadow留뚯쑝濡??쒗쁽 ???덉씠?꾩썐 ?곹뼢 ?놁쓬.
-         min-width: MUI 'sm' 湲곕낯媛?600px)??紐낆떆??CCFOLIA ?ㅼ씠?곕툕 ?덈퉬 蹂댁옣. */
+      /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
+      /* Dialog paper 자체: 반투명 + 블랙 보더(=inset shadow).
+         외곽선은 inset box-shadow만으로 표현 — 레이아웃 영향 없음.
+         min-width: MUI 'sm' 기본값(600px)을 명시해 CCFOLIA 네이티브 너비 보장. */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
@@ -1645,9 +1645,9 @@
           0 18px 40px ${UD.shadow} !important;
       }
 
-      /* DialogActions(??젣/蹂듭젣/留듭뿉??吏묒뼱?ｊ린):
-         - ??踰꾪듉??媛濡???쓣 洹좊벑 遺꾨같?섎룄濡?flex:1 1 0
-         - ?띿뒪?몃뒗 ?대뼡 ?덈퉬?먯꽌????以??좎? */
+      /* DialogActions(삭제/복제/맵에서 집어넣기):
+         - 세 버튼이 가로 폭을 균등 분배하도록 flex:1 1 0
+         - 텍스트는 어떤 너비에서도 한 줄 유지 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
         flex: 1 1 0 !important;
@@ -1655,8 +1655,8 @@
         white-space: nowrap !important;
       }
 
-      /* 罹먮┃???몄쭛 ?ㅻ뜑 (MuiAppBar) ??釉붾옓 ??
-         border-bottom ???inset box-shadow濡?媛吏?蹂대뜑 ???덉씠?꾩썐 ?곹뼢 ?놁쓬 */
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 톤.
+         border-bottom 대신 inset box-shadow로 가짜 보더 — 레이아웃 영향 없음 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root,
       html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] .MuiAppBar-root {
         background: ${UD.accentSoft} !important;
@@ -1677,8 +1677,8 @@
         background: ${UD.accentHover} !important;
       }
 
-      /* DialogContent: Roll20 ?쒗듃???ㅻ뜑 ?쇰윭?ㅽ듃瑜?源붿븘 猷???댄???蹂댁씠寃???
-         諛곌꼍 ?대?吏 + 諛섑닾紐?泥?줉 ???ㅻ쾭?덉씠媛 寃뱀퀜 蹂댁씠?꾨줉 ???덉씠???ъ슜. */
+      /* DialogContent: Roll20 시트의 헤더 일러스트를 깔아 룰 타이틀이 보이게 함.
+         배경 이미지 + 반투명 청록 톤 오버레이가 겹쳐 보이도록 두 레이어 사용. */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root {
         background-image:
           linear-gradient(${UD.bgGlassInner}, ${UD.bgGlassInner}),
@@ -1689,7 +1689,7 @@
         background-color: transparent !important;
       }
 
-      /* ?대? Paper/移대뱶/?꾩퐫?붿뼵 ??MuiAppBar?????ㅻ뜑 洹쒖튃??泥섎━?섎?濡??쒖쇅 */
+      /* 내부 Paper/카드/아코디언 — MuiAppBar는 위 헤더 규칙이 처리하므로 제외 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root:not(.MuiAppBar-root),
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiCard-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAccordion-root {
@@ -1702,8 +1702,8 @@
         border-color: ${UD.accentSoft} !important;
       }
 
-      /* ?띿뒪??????DialogActions(??젣/蹂듭젣 ???≪뀡 踰꾪듉)??CCFOLIA ?ㅼ씠?곕툕
-         ?됱쓣 ?좎??섍린 ?꾪빐 DialogContent ?ㅼ퐫?꾨줈 ?쒖젙 */
+      /* 텍스트 톤 — DialogActions(삭제/복제 등 액션 버튼)는 CCFOLIA 네이티브
+         색을 유지하기 위해 DialogContent 스코프로 한정 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiInputLabel-root,
@@ -1735,7 +1735,7 @@
         border-radius: 0 !important;
       }
 
-      /* ?낅젰移?蹂대뜑??泥?줉 ?좎? (Roll20 ?쒗듃 ?? */
+      /* 입력칸 보더는 청록 유지 (Roll20 시트 톤) */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root fieldset {
         border-color: ${UD.inputBorder} !important;
@@ -1747,7 +1747,7 @@
         box-shadow: 0 0 0 2px rgba(136, 149, 161, 0.25) !important;
       }
 
-      /* ??由ъ뒪???좏깮 ??釉붾옓 ?≪꽱??*/
+      /* 탭/리스트 선택 — 블랙 액센트 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root.Mui-selected,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root.Mui-selected,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-selected > .MuiListItemButton-root {
@@ -1759,7 +1759,7 @@
         background: ${UD.text} !important;
       }
 
-      /* ?몃쾭 ??釉붾옓 ??*/
+      /* 호버 — 블랙 톤 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root:hover,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root:hover,
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemButton-root:hover,
@@ -1767,7 +1767,7 @@
         background: ${UD.accentHover} !important;
       }
 
-      /* 罹먮┃???쒗듃 ?앹뾽 ?ㅽ겕濡ㅻ컮 ??釉붾옓 ?≪꽱??*/
+      /* 캐릭터 시트 팝업 스크롤바 — 블랙 액센트 */
       html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-track {
         background: ${UD.bgSolid};
       }
@@ -1777,8 +1777,8 @@
         border-radius: 999px;
       }
 
-      /* === [?몄꽦 ??? ?ㅼ씠??濡?梨꾪똿 硫붿떆吏 ======================== */
-      /* 梨꾪똿 濡쒓렇 ?곸뿭??硫붿떆吏 ?꾩씠??(li) ??移대뱶 ???곸슜 */
+      /* === [언성 듀엣] 다이스 롤 채팅 메시지 ======================== */
+      /* 채팅 로그 영역의 메시지 아이템 (li) 에 카드 톤 적용 */
       html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li {
@@ -1796,8 +1796,8 @@
         color: ${UD.muted} !important;
       }
 
-      /* ?ㅼ씠??寃곌낵(?? "1D6 ??4") 媛뺤“: ?붿궡???レ옄媛 ?ㅼ뼱媛???⑦꽩??
-         媛吏?硫붿떆吏??援듭? ?띿뒪?몃뒗 ?곗깋?쇰줈 ?꾩? */
+      /* 다이스 결과(예: "1D6 → 4") 강조: 화살표/숫자가 들어가는 패턴을
+         가진 메시지의 굵은 텍스트는 흰색으로 띄움 */
       html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li strong,
       html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li b,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li strong,
@@ -1806,7 +1806,7 @@
         font-weight: bold;
       }
 
-      /* 罹먮┃???대쫫(?됰꽕?? ?쇰꺼 ??*/
+      /* 캐릭터 이름(닉네임) 라벨 톤 */
       html[${DICEBOT_ATTR}="unsung-duet"] [role="log"] li .MuiTypography-caption,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="polite"] li .MuiTypography-caption,
       html[${DICEBOT_ATTR}="unsung-duet"] [aria-live="assertive"] li .MuiTypography-caption {
@@ -1814,7 +1814,7 @@
         font-weight: bold;
       }
 
-      /* ?몃━嫄??띿뒪?멸? 移섑솚??<img> ??梨꾪똿 硫붿떆吏?먯꽌 媛?대뜲 ?뺣젹 */
+      /* 트리거 텍스트가 치환된 <img> — 채팅 메시지에서 가운데 정렬 */
       .${UNSUNG_DUET_IMG_CLASS} {
         display: block;
         max-width: 100%;
@@ -1828,12 +1828,12 @@
   }
 
   function buildCreeGrrrStyleSheet() {
-    // CREE-GRRR! 而ㅼ뒪? ?쒗듃 ?붾젅??(Roll20 ?먮낯 ?쒗듃?먯꽌 異붿텧)
-    // - 踰좎씠?? ?대몢????+ sheet-wrap ?ㅻ뜑 ?대?吏(https://i.imgur.com/MUGe6Qi.png)
-    // - ?≪꽱?? #1ff2f2 (?쒖븞)
-    // - 蹂몃Ц ?띿뒪?? #FFF / 蹂댁“ #d1d1d1 / dim #c2c2c2
-    // - ?낅젰移? rgba(0,0,0,0.5) + ?곗깋 蹂대뜑, ?쇱슫??4~7px
-    // - ?고듃: DungGeunMo + Galmuri (Roll20 ?쒗듃? ?숈씪 ?멸?)
+    // CREE-GRRR! 커스텀 시트 팔레트 (Roll20 원본 시트에서 추출)
+    // - 베이스: 어두운 톤 + sheet-wrap 헤더 이미지(https://i.imgur.com/MUGe6Qi.png)
+    // - 액센트: #1ff2f2 (시안)
+    // - 본문 텍스트: #FFF / 보조 #d1d1d1 / dim #c2c2c2
+    // - 입력칸: rgba(0,0,0,0.5) + 흰색 보더, 라운드 4~7px
+    // - 폰트: DungGeunMo + Galmuri (Roll20 시트와 동일 외관)
     const CG = {
       bgGlass: "rgba(7, 12, 25, 0.72)",
       bgGlassInner: "rgba(7, 12, 25, 0.45)",
@@ -1850,22 +1850,22 @@
       shadow: "rgba(0, 0, 0, 0.55)",
       sheetBg: "url(https://i.imgur.com/MUGe6Qi.png)",
       diceBoxBg: "url(https://i.imgur.com/hj7QazV.png)",
-      // Roll20 ?쒗듃??'DungGeunMo' ?쎌? ?고듃? 'Galmuri'. ?먮낯 ?쒗듃? ?숈씪???고듃
-      // ?⑤?由щ? import ??CCFOLIA 痢≪뿉???곸슜?쒕떎. (?쒓? 湲由ы봽 吏??+ ?숈씪 ?명삎)
+      // Roll20 시트의 'DungGeunMo' 픽셀 폰트와 'Galmuri'. 원본 시트와 동일한 폰트
+      // 패밀리를 import 해 CCFOLIA 측에도 적용한다. (한글 글리프 지원 + 동일 외형)
       fontImport:
         "@font-face{font-family:'DungGeunMo';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff') format('woff');font-weight:normal;font-style:normal;}" +
         "@import url('https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css');"
     };
 
     return `
-      /* === [CREE-GRRR!] ?고듃 ?꾪룷??(Roll20 ?쒗듃 ?멸?怨??숈씪?섍쾶) ====== */
+      /* === [CREE-GRRR!] 폰트 임포트 (Roll20 시트 외관과 동일하게) ====== */
       ${CG.fontImport}
 
-      /* === [CREE-GRRR!] 罹먮┃???몄쭛 ?앹뾽 ============================ */
-      /* paper: ???섎떒 ?쒖븞 ?쇱씤留? border-radius 0 ?쇰줈 紐⑥꽌由??쇱슫???쒓굅.
-         BGM ?몄쭛 誘몃땲紐⑤떖? ?ㅼ씠?곕툕 ?ш린/?멸????좎??섍린 ?꾪빐 ?쒖쇅?쒕떎.
-         data-ccf-native-dialog="1" 留덉빱媛 ?덈뒗 紐⑤떖(?? ?대?吏 ?쇱씠釉뚮윭由?
-         Unsplash) ??native ?좎?瑜??꾪빐 ?쒖쇅?쒕떎 (#24, JS observer 媛 留덊궧). */
+      /* === [CREE-GRRR!] 캐릭터 편집 팝업 ============================ */
+      /* paper: 상/하단 시안 라인만, border-radius 0 으로 모서리 라운드 제거.
+         BGM 편집 미니모달은 네이티브 크기/외관을 유지하기 위해 제외한다.
+         data-ccf-native-dialog="1" 마커가 있는 모달(예: 이미지 라이브러리/
+         Unsplash) 도 native 유지를 위해 제외한다 (#24, JS observer 가 마킹). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]),
       html[${DICEBOT_ATTR}="cree-grrr"] div[role="dialog"]:not([data-ccf-native-dialog="1"]) > .MuiPaper-root:not(.MuiPopover-paper):not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]),
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiPaper-root.MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) {
@@ -1882,7 +1882,7 @@
           0 18px 40px ${CG.shadow} !important;
       }
 
-      /* DialogActions??罹먮┃???몄쭛 ?앹뾽?먮쭔 ?쒖븞 ?ㅽ??쇱쓣 ?곸슜?쒕떎. */
+      /* DialogActions는 캐릭터 편집 팝업에만 시안 스타일을 적용한다. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
         position: relative !important;
         border-radius: 0 !important;
@@ -1899,7 +1899,7 @@
         z-index: 1 !important;
       }
 
-      /* 罹먮┃???몄쭛 ?앹뾽??DialogActions留?媛뺤젣 flex 洹좊벑 遺꾨같?쒕떎. */
+      /* 캐릭터 편집 팝업의 DialogActions만 강제 flex 균등 분배한다. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogActions-root.MuiDialogActions-spacing {
         display: flex !important;
         flex-direction: row !important;
@@ -1930,8 +1930,8 @@
         letter-spacing: 0 !important;
       }
 
-      /* 罹먮┃???몄쭛 ?ㅻ뜑 (MuiAppBar) ??釉붾옓 踰좎씠?? 醫????쒖븞 ?쒓굅(泥댄겕 吏??,
-         ???섎떒留??쒖븞 ?쇱씤 ?좎?(?곷떒=?ㅼ씠?쇰줈洹?理쒖긽?? ?섎떒=AppBar?봀ontent 援щ텇??. */
+      /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 베이스. 좌/우 시안 제거(체크 지점),
+         상/하단만 시안 라인 유지(상단=다이얼로그 최상단, 하단=AppBar↔Content 구분선). */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAppBar-root {
         background: ${CG.bgSolid} !important;
         background-image: none !important;
@@ -1953,9 +1953,9 @@
         background: ${CG.accentHover} !important;
       }
 
-      /* DialogContent: ?쒗듃 ?ㅻ뜑 ?쇰윭?ㅽ듃 + ?대몢???ㅻ쾭?덉씠.
-         醫????쒖븞 inset ?쒓굅(泥댄겕 吏?? ???ㅼ씠?쇰줈洹몃뒗 ???섎떒 媛濡??쇱씤怨?
-         AppBar?봀ontent / Content?볾ctions 援щ텇?좊쭔 媛뽯뒗 誘몃땲硫 援ъ꽦. */
+      /* DialogContent: 시트 헤더 일러스트 + 어두운 오버레이.
+         좌/우 시안 inset 제거(체크 지점) — 다이얼로그는 상/하단 가로 라인과
+         AppBar↔Content / Content↔Actions 구분선만 갖는 미니멀 구성. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root {
         background-image:
           linear-gradient(${CG.bgGlassInner}, ${CG.bgGlassInner}),
@@ -1966,7 +1966,7 @@
         background-color: transparent !important;
       }
 
-      /* ?대? Paper/移대뱶/?꾩퐫?붿뼵 */
+      /* 내부 Paper/카드/아코디언 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiPaper-root:not(.MuiAppBar-root),
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiCard-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiAccordion-root {
@@ -1979,9 +1979,9 @@
         border-color: ${CG.accentSoft} !important;
       }
 
-      /* ?꾨뱶 ?쇰꺼(?뚰빆紐? ???대쫫/?대땲?뷀떚釉??좏겙 ?ъ씠利?李멸퀬 URL ??罹먮┃???몄쭛
-         ?앹뾽??紐⑤뱺 input/select ?쇰꺼 ?띿뒪?? ?됱긽? CYAN(#1DE2E2),
-         ?고듃???낅젰李쎄낵 ?숈씪??DungGeunMo ?쎌? ?고듃. */
+      /* 필드 라벨(소항목) — 이름/이니셔티브/토큰 사이즈/참고 URL 등 캐릭터 편집
+         팝업의 모든 input/select 라벨 텍스트. 색상은 CYAN(#1DE2E2),
+         폰트는 입력창과 동일한 DungGeunMo 픽셀 폰트. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiInputLabel-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiFormLabel-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiFormControlLabel-label {
@@ -1989,7 +1989,7 @@
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
-      /* 洹???蹂몃Ц ?띿뒪???????곗깋 (DialogContent ?ㅼ퐫?꾨줈 ?쒖젙, DialogActions ?ㅼ씠?곕툕 ?좎?) */
+      /* 그 외 본문 텍스트 톤 — 흰색 (DialogContent 스코프로 한정, DialogActions 네이티브 유지) */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTab-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiButton-root,
@@ -2006,8 +2006,8 @@
         color: ${CG.dim} !important;
       }
 
-      /* ?낅젰移???寃? 踰좎씠??+ ?곗깋 ?띿뒪???ъ슜?먭? ?낅젰?섎뒗 ?ㅼ젣 媛믪? ?붿씠??.
-         ?쇰꺼(?뚰빆紐?? 蹂꾨룄 洹쒖튃?쇰줈 CYAN(#1DE2E2). ?고듃??DungGeunMo ?쎌? ?고듃. */
+      /* 입력칸 — 검은 베이스 + 흰색 텍스트(사용자가 입력하는 실제 값은 화이트).
+         라벨(소항목)은 별도 규칙으로 CYAN(#1DE2E2). 폰트는 DungGeunMo 픽셀 폰트. */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiInputBase-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiOutlinedInput-root,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiFilledInput-root,
@@ -2034,7 +2034,7 @@
         box-shadow: 0 0 0 2px rgba(31, 242, 242, 0.22) !important;
       }
 
-      /* ??由ъ뒪???좏깮 ???쒖븞 ?≪꽱??*/
+      /* 탭/리스트 선택 — 시안 액센트 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiTab-root.Mui-selected,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiListItemButton-root.Mui-selected,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .Mui-selected > .MuiListItemButton-root {
@@ -2046,7 +2046,7 @@
         background: ${CG.accent} !important;
       }
 
-      /* ?몃쾭 ???쒖븞 ??*/
+      /* 호버 — 시안 톤 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiButtonBase-root:hover,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiTab-root:hover,
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) .MuiDialogContent-root .MuiListItemButton-root:hover,
@@ -2054,7 +2054,7 @@
         background: ${CG.accentHover} !important;
       }
 
-      /* 罹먮┃???쒗듃 ?앹뾽 ?ㅽ겕濡ㅻ컮 ???쒖븞 ?≪꽱??*/
+      /* 캐릭터 시트 팝업 스크롤바 — 시안 액센트 */
       html[${DICEBOT_ATTR}="cree-grrr"] .MuiDialog-paper:not([data-ccf-bgm-dialog-paper="1"]):not([data-ccf-native-dialog="1"]) ::-webkit-scrollbar-track {
         background: ${CG.bgSolid};
       }
@@ -2064,9 +2064,9 @@
         border-radius: 999px;
       }
 
-      /* === [CREE-GRRR!] ?ㅼ씠??濡?梨꾪똿 硫붿떆吏 ======================= */
-      /* Roll20 ?쒗듃??.sheet-rolltemplate-coc 諛뺤뒪 ?붿옄?몄쓣 CCFOLIA 梨꾪똿
-         硫붿떆吏(li)??李⑥슜 ??寃? 移대뱶 + ?쒖븞 蹂대뜑 + DungGeunMo ?고듃 */
+      /* === [CREE-GRRR!] 다이스 롤 채팅 메시지 ======================= */
+      /* Roll20 시트의 .sheet-rolltemplate-coc 박스 디자인을 CCFOLIA 채팅
+         메시지(li)에 차용 — 검은 카드 + 시안 보더 + DungGeunMo 폰트 */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"],
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"],
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] {
@@ -2079,7 +2079,7 @@
         font-family: 'DungGeunMo', 'Galmuri', sans-serif !important;
       }
 
-      /* 蹂몃Ц ?띿뒪?????대몢???ㅼ뿉??媛?낆꽦 ?꾪빐 #d1d1d1 */
+      /* 본문 텍스트 — 어두운 톤에서 가독성 위해 #d1d1d1 */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] p.MuiTypography-body2 {
@@ -2087,16 +2087,16 @@
         font-family: inherit !important;
       }
 
-      /* ?ㅼ씠??寃곌낵 媛뺤“ (援듭? ?띿뒪?????쒖븞) */
+      /* 다이스 결과 강조 (굵은 텍스트 → 시안) */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong,
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] b,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] strong {
         color: ${CG.accent} !important;
-        font-weight: normal !important; /* ?쎌? ?고듃??援듦쾶 泥섎━ 遺덊븘??*/
+        font-weight: normal !important; /* 픽셀 폰트라 굵게 처리 불필요 */
       }
 
-      /* ?몃씪??濡?寃곌낵 ???쒖븞 媛뺤“ */
+      /* 인라인 롤 결과 — 시안 강조 */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .inlinerollresult {
@@ -2107,30 +2107,30 @@
         font-weight: normal !important;
       }
 
-      /* 罹먮┃???대쫫(?됰꽕?? ???쒖븞 ?≪꽱??*/
+      /* 캐릭터 이름(닉네임) — 시안 액센트 */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="polite"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption,
       html[${DICEBOT_ATTR}="cree-grrr"] [aria-live="assertive"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] .MuiTypography-caption {
         color: ${CG.accent} !important;
       }
 
-      /* 梨꾪똿 ?낅젰李??곸뿭?먮룄 ?고듃 ???듭씪 (?좏깮 ?ы빆) */
+      /* 채팅 입력창 영역에도 폰트 톤 통일 (선택 사항) */
       html[${DICEBOT_ATTR}="cree-grrr"] [role="log"] li[${CREE_GRRR_MESSAGE_ROW_ATTR}="1"] a {
         color: ${CG.accent} !important;
       }
 
-      /* ?덇굅??v0.1.x ?몃씪??諭껋? 臾대젰????釉뚮씪?곗?????CSS媛 罹먯떆?섏뼱 ?댁븘 ?덉뼱??
-         ?쒓컖 ?④낵媛 ???섏삤寃?媛뺤젣 unset. JS 痢?cleanupLegacyCreeGrrrSpans ? ?댁쨷 ?덉쟾留? */
+      /* 레거시 v0.1.x 인라인 뱃지 무력화 — 브라우저에 옛 CSS가 캐시되어 살아 있어도
+         시각 효과가 안 나오게 강제 unset. JS 측 cleanupLegacyCreeGrrrSpans 와 이중 안전망. */
       .${CREE_GRRR_ROLLRESULT_CLASS},
       .${CREE_GRRR_STATUS_CLASS} {
         all: unset !important;
         display: inline !important;
       }
 
-      /* 移대뱶瑜?癒멸툑? host ?붿냼 ??媛뺤젣 display:block ?쇰줈 ?몃씪??而⑦뀓?ㅽ듃???대━???뚰뵾.
-         諛곌꼍/?⑤뵫/留덉쭊 紐⑤몢 ?댁젣??移대뱶媛 ?먭린 ?덉씠?꾩썐 洹몃?濡?蹂댁씠寃???
-         React-safe: host ???먮낯 ?띿뒪???섎━癒쇳듃 children ? DOM ???⑥븘 ?덈릺 ?붾㈃?먯꽌留??④?.
-         (font-size: 0 ?쇰줈 ?띿뒪???몃뱶 ?쒓컖???쒓굅 + ?섎━癒쇳듃 child ??display:none) */
+      /* 카드를 머금은 host 요소 — 강제 display:block 으로 인라인 컨텍스트의 클리핑 회피.
+         배경/패딩/마진 모두 해제해 카드가 자기 레이아웃 그대로 보이게 함.
+         React-safe: host 의 원본 텍스트/엘리먼트 children 은 DOM 에 남아 있되 화면에서만 숨김.
+         (font-size: 0 으로 텍스트 노드 시각적 제거 + 엘리먼트 child 는 display:none) */
       [${CREE_GRRR_FORMATTED_ATTR}="1"] {
         display: block !important;
         background: transparent !important;
@@ -2151,11 +2151,11 @@
         line-height: normal !important;
       }
 
-      /* === [CREE-GRRR!] ?ㅼ씠???먯젙 寃곌낵 移대뱶 ========================
-         Roll20 ?쒗듃??sheet-rolltemplate-coc (243횞370px) ? ?숈씪??移대뱶 ?덉씠?꾩썐.
-         ?ㅽ궗紐?/ 3媛쒖쓽 ?묒? ???먯젙湲곗?쨌/2쨌/5) / ??以묒븰 ???먯젙媛? / ?먯젙?④퀎 ?띿뒪??
-         JS 痢≪뿉??dicebot==='cree-grrr' + ?먯젙 ?띿뒪??CC<=N ?먮뒗 (1D100<=N)) 留ㅼ묶
-         ?쒖뿉留?移대뱶瑜?鍮뚮뱶??硫붿떆吏 蹂몃Ц???泥? */
+      /* === [CREE-GRRR!] 다이스 판정 결과 카드 ========================
+         Roll20 시트의 sheet-rolltemplate-coc (243×370px) 와 동일한 카드 레이아웃.
+         스킬명 / 3개의 작은 원(판정기준·/2·/5) / 큰 중앙 원(판정값) / 판정단계 텍스트
+         JS 측에서 dicebot==='cree-grrr' + 판정 텍스트(CC<=N 또는 (1D100<=N)) 매칭
+         시에만 카드를 빌드해 메시지 본문을 대체. */
       .${CREE_GRRR_CARD_CLASS} {
         position: relative;
         display: block;
@@ -2172,7 +2172,7 @@
         text-align: center;
         box-sizing: border-box;
       }
-      /* ?ㅽ궗紐?諭껋? ??醫뚯륫 ?곷떒 */
+      /* 스킬명 뱃지 — 좌측 상단 */
       .${CREE_GRRR_CARD_CLASS}__skill {
         position: absolute;
         top: 28px;
@@ -2186,7 +2186,7 @@
         white-space: nowrap;
         text-overflow: ellipsis;
       }
-      /* 3媛쒖쓽 ?묒? ?먯젙 ??(?먯젙湲곗? / 湲곗?/2 / 湲곗?/5) */
+      /* 3개의 작은 판정 원 (판정기준 / 기준/2 / 기준/5) */
       .${CREE_GRRR_CARD_CLASS}__targets {
         position: absolute;
         top: 88px;
@@ -2214,7 +2214,7 @@
         color: ${CG.accent};
         font-family: inherit;
       }
-      /* ??以묒븰 ?????먯젙媛?(?ㅼ젣 d100 援대┝) */
+      /* 큰 중앙 원 — 판정값 (실제 d100 굴림) */
       .${CREE_GRRR_CARD_CLASS}__result {
         position: absolute;
         top: 150px;
@@ -2238,7 +2238,7 @@
         color: ${CG.accent};
         font-family: inherit;
       }
-      /* ?먯젙?④퀎 ?띿뒪????移대뱶 ?섎떒 */
+      /* 판정단계 텍스트 — 카드 하단 */
       .${CREE_GRRR_CARD_CLASS}__status {
         position: absolute;
         bottom: 50px;
@@ -2254,13 +2254,13 @@
         color: ${CG.accent};
       }
 
-      /* === [CREE-GRRR!] ?쇰컲 ?ㅼ씠??移대뱶 (CC<= 媛 ?꾨땶 ?쇰컲 援대┝?? =======
-         ?먮낯 ?쒗듃??.sheet-rolltemplate-coc-dice-roll ?ъ뼇 1:1 ?댁떇.
-         - 移대뱶 ?꾨젅?? 293mfNY.png (?쒖븞 蹂대뜑 + ?대몢??諛곌꼍???대?吏???ы븿)
-         - ?ъ씠利? 243 횞 86 怨좎젙
-         - 醫뚯륫: 65횞65 寃곌낵 ??QxyXISE.png), font 30px, ?쒖븞??
-         - ?곗륫: caption ?띿뒪??139px, font 16px, ?곗깋 (#fff)
-         - 蹂꾨룄 border / border-radius ?놁쓬 (?꾨젅??PNG 媛 泥섎━) */
+      /* === [CREE-GRRR!] 일반 다이스 카드 (CC<= 가 아닌 일반 굴림용) =======
+         원본 시트의 .sheet-rolltemplate-coc-dice-roll 사양 1:1 이식.
+         - 카드 프레임: 293mfNY.png (시안 보더 + 어두운 배경이 이미지에 포함)
+         - 사이즈: 243 × 86 고정
+         - 좌측: 65×65 결과 원(QxyXISE.png), font 30px, 시안색
+         - 우측: caption 텍스트 139px, font 16px, 흰색 (#fff)
+         - 별도 border / border-radius 없음 (프레임 PNG 가 처리) */
       .${CREE_GRRR_SIMPLE_CARD_CLASS} {
         display: flex;
         justify-content: space-between;
@@ -2306,8 +2306,8 @@
       const toggle = document.createElement("button");
       toggle.id = TOGGLE_ID;
       toggle.type = "button";
-      toggle.title = "?뚮쭏 ?⑤꼸 ?닿린";
-      toggle.setAttribute("aria-label", "?뚮쭏 ?⑤꼸 ?닿린");
+      toggle.title = "테마 패널 열기";
+      toggle.setAttribute("aria-label", "테마 패널 열기");
       toggle.setAttribute("aria-haspopup", "dialog");
       toggle.setAttribute("aria-expanded", "false");
       toggle.innerHTML = `
@@ -2332,10 +2332,10 @@
       }, ccfThemeWithSignal());
     }
 
-    // 媛??④퀎瑜?媛쒕퀎 try-catch 濡?媛먯떥?????④퀎???ㅽ뙣媛 ?ㅻ뵲瑜대뒗 ?몄텧
-    // (?뱁엳 injectCreeGrrrDiceFormatting) ??留됱? ?딅룄濡??쒕떎.
-    // ?댁쟾??ensureUi ?덉쓽 ?대뼡 ?몄텧????踰?throw ?섎㈃ 洹??댄썑 ?몄텧???곸쁺
-    // ?ㅽ뻾?섏? ?딆븘 ?ㅼ씠??移대뱶 ?몄젥?섏씠 移⑤У ?ㅽ뙣?섎뒗 寃쎈줈媛 ?덉뿀??
+    // 각 단계를 개별 try-catch 로 감싸서 한 단계의 실패가 뒤따르는 호출
+    // (특히 injectCreeGrrrDiceFormatting) 을 막지 않도록 한다.
+    // 이전엔 ensureUi 안의 어떤 호출이 한 번 throw 하면 그 이후 호출이 영영
+    // 실행되지 않아 다이스 카드 인젝션이 침묵 실패하는 경로가 있었음.
     try { mountToggle(); } catch (e) { try { console.warn("[CCF Theme] mountToggle failed", e); } catch (_) {} }
     try { applyDicebotAttribute(); } catch (e) { try { console.warn("[CCF Theme] applyDicebotAttribute failed", e); } catch (_) {} }
     try { installCutinVolumeAbsolutePatch(); } catch (e) { try { console.warn("[CCF Theme] installCutinVolumeAbsolutePatch failed", e); } catch (_) {} }
@@ -2353,16 +2353,16 @@
           <div class="ccf-theme-head">
             <div class="ccf-theme-title">
               <strong>CCF Theme</strong>
-              <span>硫붿씤 ?щ㎎ ?ㅽ겕由쏀듃? 遺꾨━???낅┰ ?뚮쭏?낅땲??</span>
+              <span>메인 포맷 스크립트와 분리된 독립 테마입니다.</span>
             </div>
-            <button type="button" class="ccf-theme-close" data-action="close" aria-label="?뚮쭏 ?⑤꼸 ?リ린">횞</button>
+            <button type="button" class="ccf-theme-close" data-action="close" aria-label="테마 패널 닫기">×</button>
           </div>
           <label class="ccf-theme-row">
-            <span>?뚮쭏 紐⑤뱶</span>
-            <select id="${MODE_SELECT_ID}" class="ccf-theme-select" aria-label="?뚮쭏 紐⑤뱶">
-              <option value="${MODE_DEFAULT}">湲곕낯媛?/option>
-              <option value="${MODE_LIGHT}">?쇱씠??/option>
-              <option value="${MODE_CUSTOM}">而ㅼ뒪?</option>
+            <span>테마 모드</span>
+            <select id="${MODE_SELECT_ID}" class="ccf-theme-select" aria-label="테마 모드">
+              <option value="${MODE_DEFAULT}">기본값</option>
+              <option value="${MODE_LIGHT}">라이트</option>
+              <option value="${MODE_CUSTOM}">커스텀</option>
             </select>
           </label>
           <div class="ccf-theme-grid">
@@ -2374,7 +2374,7 @@
                   class="ccf-theme-color"
                   type="color"
                   data-key="${escapeHtml(field.key)}"
-                  aria-label="${escapeHtml(field.label)} ?됱긽"
+                  aria-label="${escapeHtml(field.label)} 색상"
                   value="#000000"
                 >
                   <input
@@ -2393,17 +2393,17 @@
             `).join("")}
           </div>
           <div class="ccf-theme-actions">
-            <button type="button" class="ccf-theme-btn" data-action="save-theme">?꾩옱 ?됱긽 ???/button>
-            <button type="button" class="ccf-theme-btn" data-action="reset">湲곕낯 ?뚮쭏濡?蹂듭썝</button>
+            <button type="button" class="ccf-theme-btn" data-action="save-theme">현재 색상 저장</button>
+            <button type="button" class="ccf-theme-btn" data-action="reset">기본 테마로 복원</button>
           </div>
           <div class="ccf-theme-actions">
-            <button type="button" class="ccf-theme-btn" data-action="import-theme">媛?몄삤湲?/button>
-            <button type="button" class="ccf-theme-btn" data-action="export-theme">?대낫?닿린</button>
-            <button type="button" class="ccf-theme-btn" data-action="delete-theme">?뚮쭏 ??젣</button>
+            <button type="button" class="ccf-theme-btn" data-action="import-theme">가져오기</button>
+            <button type="button" class="ccf-theme-btn" data-action="export-theme">내보내기</button>
+            <button type="button" class="ccf-theme-btn" data-action="delete-theme">테마 삭제</button>
           </div>
           <label class="ccf-theme-row">
-            <span>而ㅼ뒪? ?쒗듃 ?뚮쭏</span>
-            <select id="${SHEET_THEME_SELECT_PANEL_ID}" class="ccf-theme-select" aria-label="而ㅼ뒪? ?쒗듃 ?뚮쭏 ?좏깮">
+            <span>커스텀 시트 테마</span>
+            <select id="${SHEET_THEME_SELECT_PANEL_ID}" class="ccf-theme-select" aria-label="커스텀 시트 테마 선택">
               ${SHEET_THEMES.map((theme) => `
                 <option value="${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>
               `).join("")}
@@ -2416,25 +2416,25 @@
               id="${UNSUNG_DUET_TOGGLE_ID}"
               data-action="toggle-unsung-duet"
               aria-pressed="true"
-            >?좏깮 ?뚮쭏: ON</button>
+            >선택 테마: ON</button>
           </div>
           <input id="${IMPORT_INPUT_ID}" type="file" accept=".json,application/json" hidden>
         </div>
         <div id="${SAVE_DIALOG_ID}" aria-hidden="true">
           <div class="ccf-theme-save-card" role="dialog" aria-modal="true" aria-labelledby="${SAVE_DIALOG_ID}-title">
-            <p id="${SAVE_DIALOG_ID}-title" class="ccf-theme-save-title">?뚮쭏 ?대쫫 ???/p>
-            <p class="ccf-theme-save-note">媛숈? ?대쫫?쇰줈 ??ν븯硫?湲곗〈 ?뚮쭏瑜???뼱?곷땲??</p>
+            <p id="${SAVE_DIALOG_ID}-title" class="ccf-theme-save-title">테마 이름 저장</p>
+            <p class="ccf-theme-save-note">같은 이름으로 저장하면 기존 테마를 덮어씁니다.</p>
             <input
               id="${THEME_NAME_INPUT_ID}"
               class="ccf-theme-select"
               type="text"
               maxlength="24"
-              placeholder="?? ???쇱씠???뚮쭏"
-              aria-label="??ν븷 ?뚮쭏 ?대쫫"
+              placeholder="예: 내 라이트 테마"
+              aria-label="저장할 테마 이름"
             >
             <div class="ccf-theme-save-actions">
-              <button type="button" class="ccf-theme-btn" data-action="cancel-save-theme">痍⑥냼</button>
-              <button type="button" class="ccf-theme-btn" data-action="confirm-save-theme">???/button>
+              <button type="button" class="ccf-theme-btn" data-action="cancel-save-theme">취소</button>
+              <button type="button" class="ccf-theme-btn" data-action="confirm-save-theme">저장</button>
             </div>
           </div>
         </div>
@@ -2488,15 +2488,15 @@
           persistSettings();
           syncUnsungDuetToggle();
           applyDicebotAttribute();
-          // ?좉? OFF ???대? ?몄젥?몃맂 ?대?吏/留덊궧??利됱떆 ?뺣━???먮낯 ?띿뒪?몃줈 蹂듭썝
-          // ?좉? ON ?????뚮쭏???몄젥?섏쓣 湲곗〈 硫붿떆吏?먮룄 利됱떆 ?곸슜
+          // 토글 OFF → 이미 인젝트된 이미지/마킹을 즉시 정리해 원본 텍스트로 복원
+          // 토글 ON → 새 테마의 인젝션을 기존 메시지에도 즉시 적용
           if (!nextEnabled) revertUnsungDuetDomState();
           else reapplySheetThemeInjections();
           const themeName = SHEET_THEMES.find((t) => t.id === getSelectedSheetThemeId())?.name || "";
           setStatus(
             nextEnabled
-              ? `${themeName} ?뚮쭏瑜??쒖꽦?뷀뻽?듬땲??`
-              : `${themeName} ?뚮쭏瑜?鍮꾪솢?깊솕?덉뒿?덈떎.`,
+              ? `${themeName} 테마를 활성화했습니다.`
+              : `${themeName} 테마를 비활성화했습니다.`,
             "success"
           );
           return;
@@ -2513,7 +2513,7 @@
           persistSettings();
           applyTheme(settings);
           setStatus(
-            isCustomMode ? "而ㅼ뒪? ?됱긽??湲곕낯媛믪쑝濡?蹂듭썝?덉뒿?덈떎." : "湲곕낯 ?뚮쭏濡?蹂듭썝?덉뒿?덈떎.",
+            isCustomMode ? "커스텀 색상을 기본값으로 복원했습니다." : "기본 테마로 복원했습니다.",
             "success"
           );
         }
@@ -2534,7 +2534,7 @@
           handleColorCodeTyping(target);
           return;
         }
-        setStatus("而ㅼ뒪? ?됱긽??諛섏쁺?덉뒿?덈떎.", "success");
+        setStatus("커스텀 색상을 반영했습니다.", "success");
       });
 
       panel.addEventListener("change", (event) => {
@@ -2577,7 +2577,7 @@
         persistSettings();
         applyTheme(settings);
         setStatus(
-          nextMode === MODE_DEFAULT ? "?ъ씠??湲곕낯 ?됱쑝濡??뚯븘媛묐땲??" : "?뚮쭏瑜?蹂寃쏀뻽?듬땲??",
+          nextMode === MODE_DEFAULT ? "사이트 기본 색으로 돌아갑니다." : "테마를 변경했습니다.",
           "success"
         );
       });
@@ -2590,13 +2590,13 @@
         settings = { ...settings, selectedSheetTheme: value };
         persistSettings();
         applyDicebotAttribute();
-        // ?ㅻⅨ ?뚮쭏濡??꾪솚 ???댁쟾 ?뚮쭏???몄젥???붿쟻(?대?吏 移섑솚 ?? 利됱떆 ?뺣━
+        // 다른 테마로 전환 — 이전 테마의 인젝션 흔적(이미지 치환 등) 즉시 정리
         revertUnsungDuetDomState();
-        // ???뚮쭏 ?몄젥?섏쓣 利됱떆 ?ъ떎??
+        // 새 테마 인젝션을 즉시 재실행
         reapplySheetThemeInjections();
         syncUnsungDuetToggle();
         const themeName = SHEET_THEMES.find((t) => t.id === value)?.name || value;
-        setStatus(`而ㅼ뒪? ?쒗듃 ?뚮쭏: ${themeName}`, "success");
+        setStatus(`커스텀 시트 테마: ${themeName}`, "success");
       });
 
       panel.querySelector(`#${THEME_NAME_INPUT_ID}`)?.addEventListener("input", (event) => {
@@ -3974,29 +3974,29 @@
     ccfThemeRegisterTeardown(() => { bodyObserver?.disconnect(); bodyObserver = null; });
   }
 
-  // #24 ???대?吏 ?쇱씠釉뚮윭由?ROOM/ALL/Unsplash) ?ㅼ씠?쇰줈洹몃? native ?좎? ??곸쑝濡?留덊궧.
-  // input[name="query"] ??Unsplash ??뿉?쒕쭔 議댁옱 ???덉젙?곸씠吏 ?딆쓬.
-  // ????ㅻ뜑 ButtonGroup ??ROOM/ALL/Unsplash ?띿뒪??踰꾪듉???덈뒗吏濡??앸퀎 (??臾닿?).
+  // #24 — 이미지 라이브러리(ROOM/ALL/Unsplash) 다이얼로그를 native 유지 대상으로 마킹.
+  // input[name="query"] 는 Unsplash 탭에서만 존재 → 안정적이지 않음.
+  // 대신 헤더 ButtonGroup 에 ROOM/ALL/Unsplash 텍스트 버튼이 있는지로 식별 (탭 무관).
   function markNativeDialogs() {
     try {
       const dialogs = document.querySelectorAll('.MuiDialog-root, div[role="dialog"]');
       dialogs.forEach((dlg) => {
         if (!(dlg instanceof HTMLElement)) return;
-        if (dlg.getAttribute('data-ccf-native-dialog') === '1') return; // ?대? 留덊궧??
+        if (dlg.getAttribute('data-ccf-native-dialog') === '1') return; // 이미 마킹됨
         const buttons = dlg.querySelectorAll('header .MuiButtonGroup-root button, .MuiAppBar-root .MuiButtonGroup-root button');
         let isImageLib = false;
         for (const btn of buttons) {
           const txt = (btn.textContent || '').trim();
           if (txt === 'Unsplash' || txt === 'ROOM' || txt === 'ALL') { isImageLib = true; break; }
         }
-        // fallback: input[name="query"] 媛 ?덉쑝硫?(Unsplash ???쒖꽦 ?곹깭) ???몄젙
+        // fallback: input[name="query"] 가 있으면 (Unsplash 탭 활성 상태) 도 인정
         if (!isImageLib && dlg.querySelector('input[name="query"]')) isImageLib = true;
         if (!isImageLib) return;
         dlg.setAttribute('data-ccf-native-dialog', '1');
         const paper = dlg.querySelector('.MuiDialog-paper, .MuiPaper-root');
         if (paper instanceof HTMLElement) paper.setAttribute('data-ccf-native-dialog', '1');
       });
-    } catch (_) { /* observer ??踰??ㅽ뙣??臾댁떆 */ }
+    } catch (_) { /* observer 한 번 실패는 무시 */ }
   }
 
   function scheduleEnsureUi() {
@@ -4165,13 +4165,13 @@
     if (!(modeSelect instanceof HTMLSelectElement)) return;
 
     const options = [
-      { value: MODE_DEFAULT, label: "湲곕낯媛? },
-      { value: MODE_LIGHT, label: "?쇱씠?? },
+      { value: MODE_DEFAULT, label: "기본값" },
+      { value: MODE_LIGHT, label: "라이트" },
       ...settings.savedThemes.map((theme) => ({
         value: makeSavedMode(theme.id),
         label: theme.name
       })),
-      { value: MODE_CUSTOM, label: "而ㅼ뒪?" }
+      { value: MODE_CUSTOM, label: "커스텀" }
     ];
 
     modeSelect.innerHTML = options
@@ -4278,7 +4278,7 @@
     }
 
     if (showStatus) {
-      setStatus("而ㅼ뒪? ?됱긽??諛섏쁺?덉뒿?덈떎.", "success");
+      setStatus("커스텀 색상을 반영했습니다.", "success");
     }
 
     return true;
@@ -4310,7 +4310,7 @@
     }
 
     if (normalizeSpace(rawValue)) {
-      setStatus("吏?먰븯吏 ?딅뒗 ?됱긽 肄붾뱶?낅땲??", "error");
+      setStatus("지원하지 않는 색상 코드입니다.", "error");
     }
 
     const themeForInputs = getUiThemePreview();
@@ -4387,8 +4387,8 @@
   }
 
   function findCharacterToolbar() {
-    const characterButton = document.querySelector('button[aria-label="罹먮┃???좏깮"]');
-    const helpButton = document.querySelector('button[aria-label="梨꾪똿 而ㅻ㎤?쒖뿉 ???]');
+    const characterButton = document.querySelector('button[aria-label="캐릭터 선택"]');
+    const helpButton = document.querySelector('button[aria-label="채팅 커맨드에 대해"]');
     if (!(characterButton instanceof HTMLElement) || !(helpButton instanceof HTMLElement)) {
       return null;
     }
@@ -4397,8 +4397,8 @@
     while (current && current !== document.body) {
       if (
         current.contains(helpButton) &&
-        current.querySelector('button[aria-label="罹먮┃???좏깮"]') &&
-        current.querySelector('button[aria-label="梨꾪똿 而ㅻ㎤?쒖뿉 ???]')
+        current.querySelector('button[aria-label="캐릭터 선택"]') &&
+        current.querySelector('button[aria-label="채팅 커맨드에 대해"]')
       ) {
         return current;
       }
@@ -4411,7 +4411,7 @@
   function findDiceToolbar() {
     const d4Button = document.querySelector('button[aria-label="D4"]');
     const sendButton = [...document.querySelectorAll('button[type="submit"]')].find((button) =>
-      button instanceof HTMLElement && /?꾩넚/.test(normalizeSpace(button.textContent || ""))
+      button instanceof HTMLElement && /전송/.test(normalizeSpace(button.textContent || ""))
     );
     if (!(d4Button instanceof HTMLElement) || !(sendButton instanceof HTMLElement)) {
       return null;
@@ -4433,8 +4433,8 @@
   }
 
   function detectDicebotName() {
-    // ?묐컮??`<span class="MuiTypography-caption">??/span>` ?ㅼ쓣 ?묒뼱
-    // DICEBOT_MAP ???ㅼ? ?쇱튂?섎뒗 ?띿뒪?멸? ?덉쑝硫??대떦 ?앸퀎?먮? ?뚮젮以??
+    // 탑바의 `<span class="MuiTypography-caption">…</span>` 들을 훑어
+    // DICEBOT_MAP 의 키와 일치하는 텍스트가 있으면 해당 식별자를 돌려준다.
     const spans = document.querySelectorAll(DICEBOT_TOPBAR_SELECTOR);
     for (const span of spans) {
       if (!(span instanceof HTMLElement)) continue;
@@ -4453,16 +4453,16 @@
   }
 
   function isSheetThemeEnabled() {
-    // ?덇굅????unsungDuetEnabled瑜??쒗듃 ?뚮쭏 ?꾩껜 ON/OFF 留덉뒪???ㅼ쐞移섎줈 ?ъ궗??
+    // 레거시 키 unsungDuetEnabled를 시트 테마 전체 ON/OFF 마스터 스위치로 재사용
     return settings?.unsungDuetEnabled !== false;
   }
 
   function applyDicebotAttribute() {
     const root = document.documentElement;
     if (!root) return;
-    // ?ъ슜?먭? ?쒕∼?ㅼ슫?먯꽌 紐낆떆?곸쑝濡??좏깮 + ON ?덉쑝硫?洹??뚮쭏瑜?臾댁“嫄??곸슜.
-    // (CCFOLIA ?ㅼ씠?ㅻ큸 ?쒖떆紐낆씠 ?섍꼍留덈떎 誘몃쵖?섍쾶 ?щ씪 媛먯?媛 ?ㅽ뙣?섎뒗 耳?댁뒪瑜??뚰뵾.
-    //  detectDicebotName() ??寃곌낵?????댁긽 寃뚯씠?몃줈 ?ъ슜?섏? ?딅뒗??)
+    // 사용자가 드롭다운에서 명시적으로 선택 + ON 했으면 그 테마를 무조건 적용.
+    // (CCFOLIA 다이스봇 표시명이 환경마다 미묘하게 달라 감지가 실패하는 케이스를 회피.
+    //  detectDicebotName() 의 결과는 더 이상 게이트로 사용하지 않는다.)
     let id = "";
     if (isSheetThemeEnabled()) {
       const selected = getSelectedSheetThemeId();
@@ -4478,7 +4478,7 @@
     }
   }
 
-  // === ?몄꽦 ??? 梨꾪똿 ?몃━嫄??띿뒪?????대?吏 URL ?먮룞 移섑솚 ============
+  // === 언성 듀엣: 채팅 트리거 텍스트 → 이미지 URL 자동 치환 ============
   function getCurrentDicebotId() {
     return document.documentElement?.getAttribute(DICEBOT_ATTR) || "";
   }
@@ -4554,8 +4554,8 @@
     input.max = "1";
     input.step = "0.01";
     input.inputMode = "decimal";
-    input.title = "0? 臾댁쓬, 1? ?쒖뒪??蹂쇰ⅷ??理쒕?移섏엯?덈떎.";
-    input.setAttribute("aria-label", "?④낵??蹂쇰ⅷ");
+    input.title = "0은 무음, 1은 시스템 볼륨상 최대치입니다.";
+    input.setAttribute("aria-label", "효과음 볼륨");
     stripCutinVolumeHelperReference(input);
 
     normalizeCutinVolumeInput(input, { dispatch: false });
@@ -4588,10 +4588,10 @@
     ensureCutinBoostHelper(input);
   }
 
-  // ===== 而룹씤 ?뚮━ 利앺룺 (횞1~횞4) =====
-  // media.volume? 1???곹븳?대씪 "蹂쇰ⅷ 理쒕??몃뜲???묒쓬"???닿껐?????녿떎.
-  // WebAudio GainNode濡?利앺룺?섎릺, cross-origin ?뚯썝? crossOrigin="anonymous"濡?
-  // ?щ줈?쒗빐 CORS ?덉슜???뺤씤???ㅼ뿉留?洹몃옒?꾨? 留뚮뱺??(誘명뿀????臾댁쓬???섎?濡?.
+  // ===== 컷인 소리 증폭 (×1~×4) =====
+  // media.volume은 1이 상한이라 "볼륨 최대인데도 작음"을 해결할 수 없다.
+  // WebAudio GainNode로 증폭하되, cross-origin 음원은 crossOrigin="anonymous"로
+  // 재로드해 CORS 허용을 확인한 뒤에만 그래프를 만든다 (미허용 시 무음이 되므로).
 
   function clampCutinBoost(value) {
     const number = Number.parseFloat(String(value ?? "").replace(",", "."));
@@ -4612,7 +4612,7 @@
       helper.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;opacity:.92;";
 
       const caption = document.createElement("span");
-      caption.textContent = "?뚮━ 利앺룺";
+      caption.textContent = "소리 증폭";
 
       boostInput = document.createElement("input");
       boostInput.type = "number";
@@ -4621,11 +4621,11 @@
       boostInput.step = "0.1";
       boostInput.inputMode = "decimal";
       boostInput.style.cssText = "width:64px;padding:2px 6px;box-sizing:border-box;";
-      boostInput.title = "1蹂대떎 ?ш쾶 ?섎㈃ ?ъ깮 ???뚮━瑜?利앺룺?⑸땲??(理쒕? 4諛?. 蹂쇰ⅷ 理쒕?(1.0)濡쒕룄 ?묒? ?뚯썝??";
-      boostInput.setAttribute("aria-label", "而룹씤 ?뚮━ 利앺룺 諛곗쑉");
+      boostInput.title = "1보다 크게 하면 재생 시 소리를 증폭합니다 (최대 4배). 볼륨 최대(1.0)로도 작은 음원용.";
+      boostInput.setAttribute("aria-label", "컷인 소리 증폭 배율");
 
       const unit = document.createElement("span");
-      unit.textContent = "諛?;
+      unit.textContent = "배";
 
       helper.append(caption, boostInput, unit);
       volumeInput.insertAdjacentElement("afterend", helper);
@@ -4730,8 +4730,8 @@
     media.dataset.ccfCutinBoostTarget = String(target);
     if (media.dataset.ccfCutinBoostPending === "1") return;
 
-    // CORS ?덉슜 ?뺤씤 ?꾩뿉 MediaElementSource瑜?留뚮뱾硫? 誘명뿀???뚯썝? ?섎룎由????놁씠
-    // 臾댁쓬???쒕떎. crossOrigin ?щ줈?쒓? ?깃났(canplay)???ㅼ뿉留?洹몃옒??援ъ꽦.
+    // CORS 허용 확인 전에 MediaElementSource를 만들면, 미허용 음원은 되돌릴 수 없이
+    // 무음이 된다. crossOrigin 재로드가 성공(canplay)한 뒤에만 그래프 구성.
     if (media.crossOrigin === "anonymous" && media.readyState >= 2) {
       buildCutinBoostGraph(media);
       return;
@@ -4746,7 +4746,7 @@
     const onError = () => {
       cleanup();
       media.dataset.ccfCutinBoostCors = "fail";
-      console.warn("[CCF Theme] 而룹씤 利앺룺: CORS 誘명뿀???뚯썝 ??利앺룺 ?놁씠 ?ъ깮?⑸땲??", media.currentSrc || media.src || "");
+      console.warn("[CCF Theme] 컷인 증폭: CORS 미허용 음원 — 증폭 없이 재생합니다.", media.currentSrc || media.src || "");
       try {
         media.crossOrigin = null;
         media.load();
@@ -4781,7 +4781,7 @@
       gainNode.connect(ctx.destination);
       cutinBoostGraphs.set(media, { gain: gainNode });
     } catch (error) {
-      console.warn("[CCF Theme] 而룹씤 利앺룺 洹몃옒??援ъ꽦 ?ㅽ뙣", error);
+      console.warn("[CCF Theme] 컷인 증폭 그래프 구성 실패", error);
     }
   }
 
@@ -4924,7 +4924,7 @@
         try {
           const boost = resolveCutinBoostForMedia(this);
           if (boost > 1.01 || cutinBoostGraphs.has(this)) prepareCutinBoostForMedia(this, boost);
-        } catch (error) { /* boost ?ㅽ뙣媛 ?ъ깮??留됱? ?딅룄濡?*/ }
+        } catch (error) { /* boost 실패가 재생을 막지 않도록 */ }
         const result = originalPlay.apply(this, args);
         scheduleCutinVolumeAbsoluteReapply(this);
         return result;
@@ -5050,7 +5050,7 @@
 
     field.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
-      // Shift+Enter??以꾨컮轅? IME 議고빀 以?Enter???쒓? ?뺤젙????????諛쒖넚???꾨떂
+      // Shift+Enter는 줄바꿈, IME 조합 중 Enter는 한글 확정용 — 둘 다 발송이 아님
       if (event.shiftKey || event.isComposing || event.keyCode === 229) return;
       if (hasActiveChatMacroSelection(field)) return;
       if (unsungDuetEnterReentry) return;
@@ -5060,8 +5060,8 @@
       const replaced = replaceUnsungDuetTriggers(original);
       if (replaced === original) return;
 
-      // ?몃━嫄?諛쒓껄 ????Enter??留됯퀬, value 移섑솚 ??React state媛 媛깆떊???쒓컙??
-      // 以 ????Enter ???대깽?몃? ?щ컻?≫빐??CCFOLIA 梨꾪똿 ?꾩넚 ?몃뱾?щ? 源⑥?
+      // 트리거 발견 — 원 Enter는 막고, value 치환 후 React state가 갱신될 시간을
+      // 준 뒤 새 Enter 키 이벤트를 재발송해서 CCFOLIA 채팅 전송 핸들러를 깨움
       event.preventDefault();
       event.stopPropagation();
 
@@ -5085,15 +5085,15 @@
           });
           field.dispatchEvent(replay);
 
-          // ?쇰? 鍮뚮뱶??form submit?쇰줈 諛쒖넚?섎?濡?form fallback???쒕룄
+          // 일부 빌드는 form submit으로 발송하므로 form fallback도 시도
           const form = field.closest("form");
           if (form && typeof form.requestSubmit === "function") {
-            try { form.requestSubmit(); } catch (error) { /* requestSubmit ?ㅽ뙣 臾댁떆 */ }
+            try { form.requestSubmit(); } catch (error) { /* requestSubmit 실패 무시 */ }
           }
 
-          // 蹂몄씤??諛쒖넚???몃━嫄?硫붿떆吏 ??怨?而룹씤???ъ깮??
-          // ?ㅼ쓬 N珥덇컙 YouTube iframe?쇰줈 媛??pauseVideo 紐낅졊??李⑤떒??
-          // BGM???쇱떆?뺤??섏? ?딅룄濡??쒖떆.
+          // 본인이 발송한 트리거 메시지 → 곧 컷인이 재생됨.
+          // 다음 N초간 YouTube iframe으로 가는 pauseVideo 명령을 차단해
+          // BGM이 일시정지되지 않도록 표시.
           markUnsungDuetCutinActive();
         } finally {
           window.setTimeout(() => { unsungDuetEnterReentry = false; }, 120);
@@ -5108,7 +5108,7 @@
     const themeName = SHEET_THEMES.find((t) => t.id === selectedId)?.name || "";
     const button = document.getElementById(UNSUNG_DUET_TOGGLE_ID);
     if (button instanceof HTMLButtonElement) {
-      button.textContent = enabled ? `${themeName} ?뚮쭏: ON` : `${themeName} ?뚮쭏: OFF`;
+      button.textContent = enabled ? `${themeName} 테마: ON` : `${themeName} 테마: OFF`;
       button.setAttribute("aria-pressed", enabled ? "true" : "false");
     }
     const panelSelect = document.getElementById(SHEET_THEME_SELECT_PANEL_ID);
@@ -5117,16 +5117,16 @@
     }
   }
 
-  // ?좉? OFF ?????대? 梨꾪똿???몄젥?몃맂 <img>? 留덊궧??li ?띿꽦??泥?냼??
-  // CCFOLIA ?먮낯 硫붿떆吏媛 ?ㅼ떆 ?띿뒪??洹몃?濡?蹂댁씠?꾨줉 蹂듭썝.
+  // 토글 OFF 시 — 이미 채팅에 인젝트된 <img>와 마킹된 li 속성을 청소해
+  // CCFOLIA 원본 메시지가 다시 텍스트 그대로 보이도록 복원.
   function revertUnsungDuetDomState() {
     document.querySelectorAll(`.${UNSUNG_DUET_IMG_CLASS}`).forEach((img) => {
       const url = img.getAttribute("src") || "";
       const alt = UNSUNG_DUET_URL_TO_ALT[url] || "";
       const parent = img.parentNode;
       if (!parent) return;
-      // 媛?ν븯硫??먮낯 [?대?吏](URL) ?띿뒪?몃줈 蹂듭썝
-      const restored = document.createTextNode(`[?대?吏](${url})`);
+      // 가능하면 원본 [이미지](URL) 텍스트로 복원
+      const restored = document.createTextNode(`[이미지](${url})`);
       parent.replaceChild(restored, img);
     });
     document.querySelectorAll(`[${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"]`).forEach((el) => {
@@ -5135,40 +5135,40 @@
     revertCreeGrrrDomState();
   }
 
-  // ?뚮쭏 ?꾪솚/?좉? ON 吏곹썑 ?몄텧 ???듭?踰꾨? 湲곕떎由ъ? ?딄퀬 湲곗〈 硫붿떆吏?먮룄 利됱떆
-  // ???뚮쭏???몄젥?섏쓣 ?곸슜. (?듭?踰꾨뒗 ??mutation ?먮쭔 諛섏쓳?섎?濡?湲곗〈 硫붿떆吏媛
-  // ?꾨씫?섎뒗 臾몄젣瑜??뚰뵾.)
+  // 테마 전환/토글 ON 직후 호출 — 옵저버를 기다리지 않고 기존 메시지에도 즉시
+  // 새 테마의 인젝션을 적용. (옵저버는 새 mutation 에만 반응하므로 기존 메시지가
+  // 누락되는 문제를 회피.)
   function reapplySheetThemeInjections() {
     try {
       bindUnsungDuetTriggerFields();
       injectUnsungDuetMessageImages();
       injectCreeGrrrDiceFormatting();
-    } catch (error) { /* ?몄젥???ㅽ뙣??臾댁떆 ???ㅼ쓬 mutation ?먯꽌 ?ъ떆??*/ }
+    } catch (error) { /* 인젝션 실패는 무시 — 다음 mutation 에서 재시도 */ }
   }
 
-  // React-safe 移대뱶 遺李? host(p.MuiTypography-*)???먮낯 children ? ?먮?吏 ?딄퀬
-  // 移대뱶留?留덉?留됱뿉 append. CCFOLIA React 媛 host ??firstChild(?띿뒪???몃뱶)瑜?
-  // 洹몃?濡?李얠쓣 ???덉뼱??reconciliation ??源⑥?吏 ?딆쓬. ?먮낯 ?띿뒪?몃뒗 CSS 濡??④?.
+  // React-safe 카드 부착: host(p.MuiTypography-*)의 원본 children 은 손대지 않고
+  // 카드만 마지막에 append. CCFOLIA React 가 host 의 firstChild(텍스트 노드)를
+  // 그대로 찾을 수 있어야 reconciliation 이 깨지지 않음. 원본 텍스트는 CSS 로 숨김.
   function attachCreeGrrrCard(host, card, text) {
     if (!(host instanceof HTMLElement) || !(card instanceof HTMLElement)) return;
     host.setAttribute(CREE_GRRR_ORIGINAL_ATTR, text);
     host.setAttribute(CREE_GRRR_FORMATTED_ATTR, "1");
     host.closest("li")?.setAttribute(CREE_GRRR_MESSAGE_ROW_ATTR, "1");
-    // 媛숈? host ???대? ?ㅻⅨ 移대뱶媛 遺숈뼱 ?덉쑝硫??쒓굅 (?ъ떎???鍮?
+    // 같은 host 에 이미 다른 카드가 붙어 있으면 제거 (재실행 대비)
     host.querySelectorAll(`:scope > .${CREE_GRRR_CARD_CLASS}, :scope > .${CREE_GRRR_SIMPLE_CARD_CLASS}`)
       .forEach((existing) => existing.remove());
     host.appendChild(card);
   }
 
-  // CREE-GRRR! 移대뱶 ?몄젥??蹂듭썝 ??移대뱶瑜??쒓굅?섍퀬 host ??留덊궧留??쒓굅.
-  // ?먮낯 ?띿뒪?몃뒗 洹몃?濡??먮?濡?textContent 蹂듭썝??遺덊븘?? (洹멸쾶 React-safe.)
+  // CREE-GRRR! 카드 인젝션 복원 — 카드를 제거하고 host 의 마킹만 제거.
+  // 원본 텍스트는 그대로 두므로 textContent 복원이 불필요. (그게 React-safe.)
   function revertCreeGrrrDomState() {
     document.querySelectorAll(`[${CREE_GRRR_FORMATTED_ATTR}="1"]`).forEach((el) => {
       if (!(el instanceof HTMLElement)) return;
-      // ?대? 移대뱶留??쒓굅 ??host ???먮낯 ?띿뒪???섎━癒쇳듃 children ? 洹몃?濡?蹂댁〈
+      // 내부 카드만 제거 — host 의 원본 텍스트/엘리먼트 children 은 그대로 보존
       el.querySelectorAll(`:scope > .${CREE_GRRR_CARD_CLASS}, :scope > .${CREE_GRRR_SIMPLE_CARD_CLASS}`)
         .forEach((card) => card.remove());
-      // ?뱀떆 display:none ?쇰줈 ?④꺼?⑤뜕 耳?댁뒪 ?명솚 蹂듭썝
+      // 혹시 display:none 으로 숨겨놨던 케이스 호환 복원
       if (el.style && el.style.display === "none") {
         el.style.display = "";
       }
@@ -5178,13 +5178,13 @@
     document.querySelectorAll(`[${CREE_GRRR_MESSAGE_ROW_ATTR}]`).forEach((row) => {
       row.removeAttribute(CREE_GRRR_MESSAGE_ROW_ATTR);
     });
-    // ?뱀떆 ?대뵖媛 ?⑥븘 ?덈뒗 移대뱶 ?몃뱶 ?뺣━ (諛⑹뼱?? ???ㅽ궗 移대뱶 + ?쇰컲 移대뱶 ????
+    // 혹시 어딘가 남아 있는 카드 노드 정리 (방어적) — 스킬 카드 + 일반 카드 둘 다
     document.querySelectorAll(`.${CREE_GRRR_CARD_CLASS}, .${CREE_GRRR_SIMPLE_CARD_CLASS}`).forEach((card) => card.remove());
     cleanupLegacyCreeGrrrSpans();
   }
 
-  // ?댁쟾 踰꾩쟾(v0.1.x) ??留뚮뱺 ?몃씪??諭껋? span ?붿〈臾쇱쓣 ?띿뒪?몃줈 蹂듭썝.
-  // CSS 罹먯떆 / ??DOM ?곹깭濡??명빐 梨꾪똿쨌?뚮┝ ?앹뾽???댁븘 ?덈뒗 寃쎌슦瑜?泥?냼.
+  // 이전 버전(v0.1.x) 이 만든 인라인 뱃지 span 잔존물을 텍스트로 복원.
+  // CSS 캐시 / 옛 DOM 상태로 인해 채팅·알림 팝업에 살아 있는 경우를 청소.
   function cleanupLegacyCreeGrrrSpans() {
     const selector = `.${CREE_GRRR_ROLLRESULT_CLASS}, .${CREE_GRRR_STATUS_CLASS}`;
     document.querySelectorAll(selector).forEach((span) => {
@@ -5195,13 +5195,13 @@
     });
   }
 
-  // CREE-GRRR!: 梨꾪똿 ?ㅼ씠???먯젙 寃곌낵瑜?Roll20 ?쒗듃 移대뱶濡??泥?
-  // ?대옒???섏〈?깆쓣 ?꾩쟾???쒓굅?섍퀬 ?띿뒪???몃뱶 ?먯껜瑜??ㅼ틪 ???대뼡 CCFOLIA 鍮뚮뱶??
-  // ?ㅼ씠???⑦꽩???덈뒗 ?띿뒪?몃㈃ 臾댁“嫄?罹≪쿂. ?띿뒪???몃뱶??遺紐??붿냼媛 host 媛 ?섏뼱
-  // 洹??덉뿉??移대뱶濡?援먯껜.
+  // CREE-GRRR!: 채팅 다이스 판정 결과를 Roll20 시트 카드로 대체.
+  // 클래스 의존성을 완전히 제거하고 텍스트 노드 자체를 스캔 → 어떤 CCFOLIA 빌드든
+  // 다이스 패턴이 있는 텍스트면 무조건 캡처. 텍스트 노드의 부모 요소가 host 가 되어
+  // 그 안에서 카드로 교체.
   //
-  // parser 媛 ?꾧꺽?댁꽌(target + ?붿궡??+ 援대┝媛? ?곕?吏/?쇰컲 援대┝? ?듦낵 紐삵븿.
-  // 吏꾩쭨 ?ㅻ쾭?덉씠 UI(?ㅼ씠?쇰줈洹?硫붾돱/?댄똻) ??蹂꾨룄 ?쒖쇅.
+  // parser 가 엄격해서(target + 화살표 + 굴림값) 데미지/일반 굴림은 통과 못함.
+  // 진짜 오버레이 UI(다이얼로그/메뉴/툴팁) 는 별도 제외.
   const CREE_GRRR_SKIP_ANCESTOR_SELECTOR = [
     `[role="dialog"]`,
     `[role="menu"]`,
@@ -5212,18 +5212,18 @@
     `.MuiPopover-paper`,
     `.MuiSnackbar-root`
   ].join(", ");
-  // ?띿뒪???몃뱶 ?ъ쟾 ?꾪꽣 ???ㅼ씠??紐낅졊+?붿궡??寃곌낵媛 紐⑤몢 ?덈뒗 ?띿뒪?몃쭔 ?듦낵.
-  // ?몃━嫄?醫낅쪟:
-  //   (1) CC<=N / CCB<=N / CCS<=N        ???ㅽ궗 ?먯젙 移대뱶 (243횞370)
-  //   (2) (1D100<=N)                      ???ㅽ궗 ?먯젙 移대뱶 (CC ?놁씠 d100 留??덈뒗 耳?댁뒪)
-  //   (3) \d*[dD]\d+ (?쇰컲 ?ㅼ씠???쒓린)   ???쇰컲 ?ㅼ씠??移대뱶 (媛꾨떒?????섏떇)
+  // 텍스트 노드 사전 필터 — 다이스 명령+화살표 결과가 모두 있는 텍스트만 통과.
+  // 트리거 종류:
+  //   (1) CC<=N / CCB<=N / CCS<=N        — 스킬 판정 카드 (243×370)
+  //   (2) (1D100<=N)                      — 스킬 판정 카드 (CC 없이 d100 만 있는 케이스)
+  //   (3) \d*[dD]\d+ (일반 다이스 표기)   — 일반 다이스 카드 (간단한 원+수식)
   const CREE_GRRR_TEXT_FAST_PATTERN =
-    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d|\d*[dD]\d+).*[?믭폔>]\s*\d/is;
+    /(CC[BS]?<=\d|\(\s*1D100\s*<=\s*\d|\d*[dD]\d+).*[→＞>]\s*\d/is;
 
-  // ?붾쾭洹몄슜 ?곹깭 ??泥??몄텧 ????踰덈쭔 吏꾨떒 濡쒓렇瑜??꾩썙 ?⑥닔 ?꾨떖 ?щ??
-  // ?뚮쭏 寃뚯씠???곹깭瑜?肄섏넄濡??뺤씤?????덇쾶 ?쒕떎. 留?mutation 留덈떎 濡쒓렇媛
-  // ?볦씠吏 ?딅룄濡??쇳쉶?? console.warn ?ъ슜 (Chrome DevTools ??湲곕낯 ?꾪꽣
-  // ?먯꽌???덉쟾?섍쾶 ?쒖떆?섎ŉ, info 蹂대떎 ?쒓컖?곸쑝濡??먮뱶?ъ쭊??.
+  // 디버그용 상태 — 첫 호출 시 한 번만 진단 로그를 띄워 함수 도달 여부와
+  // 테마 게이트 상태를 콘솔로 확인할 수 있게 한다. 매 mutation 마다 로그가
+  // 쌓이지 않도록 일회성. console.warn 사용 (Chrome DevTools 의 기본 필터
+  // 에서도 안전하게 표시되며, info 보다 시각적으로 두드러진다).
   const creeGrrrInjectState = {
     firstCallLogged: false,
     lastSampleLogged: 0,
@@ -5241,10 +5241,10 @@
     cleanupLegacyCreeGrrrSpans();
     if (!document.body) return;
 
-    // 梨꾪똿 硫붿떆吏 蹂몃Ц ?꾨낫 ??CCFOLIA 鍮뚮뱶蹂꾨줈 ??됲꽣媛 ?ㅼ뼇?댁꽌 ?볤쾶 ?〓뒗??
-    // (1) MuiTypography body1/body2 ??p/div/span 紐⑤몢 ?꾨낫
-    // (2) ?대? 泥섎━???몃뱶???쒖쇅
-    // (3) ?ㅽ궢 議곗긽(?ㅼ씠?쇰줈洹?硫붾돱/?댄똻) ?덉뿉 ?덉쑝硫??섏쨷??closest 濡?嫄곕Ⅸ??
+    // 채팅 메시지 본문 후보 — CCFOLIA 빌드별로 셀렉터가 다양해서 넓게 잡는다.
+    // (1) MuiTypography body1/body2 의 p/div/span 모두 후보
+    // (2) 이미 처리된 노드는 제외
+    // (3) 스킵 조상(다이얼로그/메뉴/툴팁) 안에 있으면 나중에 closest 로 거른다
     const candidates = document.querySelectorAll([
       `p.MuiTypography-body2:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
       `p.MuiTypography-body1:not([${CREE_GRRR_FORMATTED_ATTR}="1"])`,
@@ -5273,20 +5273,20 @@
       scanned++;
 
       if (!CREE_GRRR_TEXT_FAST_PATTERN.test(text)) {
-        // ?ㅼ씠???⑦꽩???녿뒗 ?쇰컲 梨꾪똿 ??移댁슫?몃쭔 (?뺤긽)
+        // 다이스 패턴이 없는 일반 채팅 — 카운트만 (정상)
         fastPatternMissed++;
         return;
       }
 
       if (!sampleText) sampleText = text.slice(0, 120);
 
-      // (a) CC<= ?ㅽ궗 ?먯젙 移대뱶 ?곗꽑 ?쒕룄. 留ㅼ묶?섎㈃ ??移대뱶(243횞370) ?앹꽦.
+      // (a) CC<= 스킬 판정 카드 우선 시도. 매칭되면 큰 카드(243×370) 생성.
       const parsed = parseCreeGrrrDiceRoll(text);
       if (parsed) {
         transformed++;
         if (!parsed.skill) {
           try {
-            console.warn("[CREE-GRRR!] skill name empty ??raw text follows:", text);
+            console.warn("[CREE-GRRR!] skill name empty — raw text follows:", text);
           } catch (_) { /* ignore */ }
         }
         const card = buildCreeGrrrDiceCard(parsed);
@@ -5294,7 +5294,7 @@
         return;
       }
 
-      // (b) CC<= 媛 ?꾨땶 ?쇰컲 ?ㅼ씠??援대┝(1D10+5, ?곕?吏 ??? 而댄뙥??移대뱶 ?쒕룄.
+      // (b) CC<= 가 아닌 일반 다이스 굴림(1D10+5, 데미지 등)은 컴팩트 카드 시도.
       const simple = parseCreeGrrrSimpleDiceRoll(text);
       if (simple) {
         transformed++;
@@ -5303,12 +5303,12 @@
         return;
       }
 
-      // ?대뒓 履쎈룄 留ㅼ묶 ????
+      // 어느 쪽도 매칭 안 됨
       parserMissed++;
     });
 
-    // ?ㅼ씠???⑦꽩? 蹂댁??붾뜲 ?뚯떛???ㅽ뙣?덇굅?? 蹂?섏씠 ?쇱뼱?ъ쓣 ?뚮쭔 濡쒓렇.
-    // (?쇰컲 梨꾪똿留??ㅼ뼱???fastPatternMissed 留??붾쑊 ?볦씠??寃쎌슦??議곗슜??臾댁떆.)
+    // 다이스 패턴은 보였는데 파싱이 실패했거나, 변환이 일어났을 때만 로그.
+    // (일반 채팅만 들어와서 fastPatternMissed 만 잔뜩 쌓이는 경우는 조용히 무시.)
     if (transformed > 0 || parserMissed > 0) {
       const now = Date.now();
       if (now - creeGrrrInjectState.lastSampleLogged > 250) {
@@ -5324,14 +5324,14 @@
     }
   }
 
-  // CoC 7???먯젙 硫붿떆吏 ?뚯떛.
-  //   ?낅젰 ?? "CC<=60 嫄닿컯 (1D100<=60) 蹂대꼫?? ?⑤꼸??二쇱궗??0] 竊?43 竊?43 竊?蹂댄넻 ?깃났"
-  //   諛섑솚: { skill, target, halfTarget, fifthTarget, rollValue, status, statusKind }
-  //   留ㅼ묶 ?ㅽ뙣 ??null (移대뱶 誘몄깮?? 硫붿떆吏 ?먮낯 ?좎?).
+  // CoC 7판 판정 메시지 파싱.
+  //   입력 예: "CC<=60 건강 (1D100<=60) 보너스, 패널티 주사위[0] ＞ 43 ＞ 43 ＞ 보통 성공"
+  //   반환: { skill, target, halfTarget, fifthTarget, rollValue, status, statusKind }
+  //   매칭 실패 시 null (카드 미생성, 메시지 원본 유지).
   function parseCreeGrrrDiceRoll(text) {
     if (!text || typeof text !== "string") return null;
 
-    // ?먯젙湲곗? (target): CC<=N ?곗꽑, ?놁쑝硫?(1D100<=N) ?먯꽌 異붿텧
+    // 판정기준 (target): CC<=N 우선, 없으면 (1D100<=N) 에서 추출
     let target = null;
     const ccMatch = text.match(/CC[BS]?<=(\d+)/i);
     const d100Match = text.match(/\(\s*1D100\s*<=\s*(\d+)\s*\)/i);
@@ -5339,12 +5339,12 @@
     if (targetSource) target = parseInt(targetSource[1], 10);
     if (target === null || !Number.isFinite(target) || target < 1) return null;
 
-    // ?ㅽ궗紐???"CC<=N <skill> (1D100<=N)" ?뺤떇??BCDice ?쒖? 異쒕젰.
-    // ?ㅽ궗紐낆뿉 愿꾪샇媛 ?ы븿?????덉쓬 (?? "援먯쑁(吏??", "?щ━???멸컙)") ?대?濡?
-    // ?댁쟾??[^()]+? ??遺?곹빀. `.+?` 濡?紐⑤뱺 臾몄옄 ?덉슜?섎릺 醫낅즺 留덉빱瑜?
-    // `\(\s*1D100\s*<=` 濡??≪븘 ?꾩냽 留ㅼ묶??源⑥?吏 ?딄쾶 ?쒕떎.
-    // ?먰븳 CCFOLIA 媛 硫붿떆吏???쎌엯?섎뒗 zero-width 臾몄옄(U+200B~U+200F, U+2060,
-    // U+FEFF, U+2028~U+202F)??紐⑤몢 ?쒓굅.
+    // 스킬명 — "CC<=N <skill> (1D100<=N)" 형식이 BCDice 표준 출력.
+    // 스킬명에 괄호가 포함될 수 있음 (예: "교육(지식)", "심리학(인간)") 이므로
+    // 이전의 [^()]+? 는 부적합. `.+?` 로 모든 문자 허용하되 종료 마커를
+    // `\(\s*1D100\s*<=` 로 잡아 후속 매칭이 깨지지 않게 한다.
+    // 또한 CCFOLIA 가 메시지에 삽입하는 zero-width 문자(U+200B~U+200F, U+2060,
+    // U+FEFF, U+2028~U+202F)는 모두 제거.
     let skill = "";
     const skillBetween = text.match(/CC[BS]?<=\d+\s+(.+?)\s*\(\s*1D100\s*<=/i);
     if (skillBetween) {
@@ -5353,26 +5353,26 @@
         .trim();
     }
     if (!skill) {
-      // (2) prefix 耳?댁뒪: 以??쒖옉遺??CC<=N 吏곸쟾源뚯????띿뒪??以?留덉?留??⑥뼱援?
-      //     ?? "吏꾩쿇: 踰뺣쪧 CC<=5 (1D100<=5) ..." ??"踰뺣쪧"
-      //     梨꾪똿 ?됰꽕??肄쒕줎 ?깆? 留덉?留?':' ?댄썑 遺遺꾨쭔 ?ъ슜.
+      // (2) prefix 케이스: 줄 시작부터 CC<=N 직전까지의 텍스트 중 마지막 단어구.
+      //     예: "진천: 법률 CC<=5 (1D100<=5) ..." → "법률"
+      //     채팅 닉네임/콜론 등은 마지막 ':' 이후 부분만 사용.
       const prefixMatch = text.match(/^([^\n]*?)\s*CC[BS]?<=/i);
       if (prefixMatch) {
         let prefix = prefixMatch[1]
           .replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "");
-        const lastColon = Math.max(prefix.lastIndexOf(":"), prefix.lastIndexOf("竊?));
+        const lastColon = Math.max(prefix.lastIndexOf(":"), prefix.lastIndexOf("："));
         if (lastColon >= 0) prefix = prefix.slice(lastColon + 1);
-        prefix = prefix.trim().replace(/^["????\[]+|["????\]]+$/g, "").trim();
-        // ?됰꽕??媛숈? ?덈Т 湲?prefix ???ㅽ궗紐낆쑝濡???爾먮룄 ??(20???댄븯留?
+        prefix = prefix.trim().replace(/^["“'‘<\[]+|["”'’>\]]+$/g, "").trim();
+        // 닉네임 같은 너무 긴 prefix 는 스킬명으로 안 쳐도 됨 (20자 이하만)
         if (prefix && prefix.length <= 20 && !/^\d+$/.test(prefix)) {
           skill = prefix;
         }
       }
     }
-    // (3) trailing ?꾨왂? "蹂대꼫?? ?⑤꼸??二쇱궗?? 媛숈? BCDice ?뺥삎 ?띿뒪?몃?
-    //     ?ㅼ씤?앺븷 ?꾪뿕??而ㅼ꽌 ?쒓굅. ??(1)(2) 媛 ?ㅽ뙣?섎㈃ ?ㅽ궗紐?鍮꾩?.
+    // (3) trailing 전략은 "보너스, 패널티 주사위" 같은 BCDice 정형 텍스트를
+    //     오인식할 위험이 커서 제거. 위 (1)(2) 가 실패하면 스킬명 비움.
 
-    // 援대┝媛?(rollValue): 紐⑤뱺 "竊?>/??N" 以?留덉?留??レ옄 (蹂대꼫???섎꼸???곸슜 ??理쒖쥌媛?
+    // 굴림값 (rollValue): 모든 "＞/>/→ N" 중 마지막 숫자 (보너스/페널티 적용 후 최종값)
     const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
     const rolls = [];
     let am;
@@ -5383,7 +5383,7 @@
     if (rolls.length === 0) return null;
     const rollValue = rolls[rolls.length - 1];
 
-    // ?먯젙?④퀎: 硫붿떆吏 ?앹そ??留덉?留??곹깭 ?ㅼ썙??
+    // 판정단계: 메시지 끝쪽의 마지막 상태 키워드
     const statusRe = new RegExp(
       CREE_GRRR_ARROW_CLASS + "\\s*(" + CREE_GRRR_STATUS_ALT + ")",
       "g"
@@ -5406,14 +5406,14 @@
     };
   }
 
-  // ?쒖떆???먯젙?④퀎媛 ?깃났瑜섏씤吏 ?ㅽ뙣瑜섏씤吏 遺꾨쪟 (?띿뒪???됱긽??.
+  // 표시할 판정단계가 성공류인지 실패류인지 분류 (텍스트 색상용).
   function classifyCreeGrrrStatus(status) {
     if (!status) return "neutral";
-    if (/(?ㅽ뙣|?뚮툝)/.test(status)) return "fail";
+    if (/(실패|펌블)/.test(status)) return "fail";
     return "success";
   }
 
-  // 移대뱶 DOM ?앹꽦 ???ㅽ궗紐끒?媛??묒? ?먃룻겙 以묒븰 ?먃룹긽???띿뒪??
+  // 카드 DOM 생성 — 스킬명·3개 작은 원·큰 중앙 원·상태 텍스트.
   function buildCreeGrrrDiceCard(parsed) {
     const card = document.createElement("div");
     card.className = CREE_GRRR_CARD_CLASS;
@@ -5451,22 +5451,22 @@
     return card;
   }
 
-  // ?쇰컲 ?ㅼ씠??援대┝ ?뚯떛 (CC<= 媛 ?꾨땶 紐⑤뱺 ?ㅼ씠??寃곌낵).
-  //   ?낅젰 ?? "(1D10+33+1D5) 竊?5[1D10]+33+3[1D5] 竊?41"
-  //           "1D100 竊?84"
-  //           "(2D6) 竊?5+3 竊?8"
-  //   諛섑솚: { formula: "1D10+33+1D5", result: 41 } ?먮뒗 null
-  //   CC<= ?먮뒗 (1D100<=N) ???ы븿???띿뒪?몃뒗 ?ㅽ궗 ?먯젙 移대뱶 履쎌쑝濡??묐낫.
+  // 일반 다이스 굴림 파싱 (CC<= 가 아닌 모든 다이스 결과).
+  //   입력 예: "(1D10+33+1D5) ＞ 5[1D10]+33+3[1D5] ＞ 41"
+  //           "1D100 ＞ 84"
+  //           "(2D6) ＞ 5+3 ＞ 8"
+  //   반환: { formula: "1D10+33+1D5", result: 41 } 또는 null
+  //   CC<= 또는 (1D100<=N) 이 포함된 텍스트는 스킬 판정 카드 쪽으로 양보.
   function parseCreeGrrrSimpleDiceRoll(text) {
     if (!text || typeof text !== "string") return null;
-    // CC<= ?ㅽ궗 ?먯젙/d100 ?먯젙? ?ㅽ궗 移대뱶 履쎌뿉??泥섎━?섎?濡??ш린???묐낫
+    // CC<= 스킬 판정/d100 판정은 스킬 카드 쪽에서 처리하므로 여기선 양보
     if (/CC[BS]?<=\d/i.test(text)) return null;
     if (/\(\s*1D100\s*<=\s*\d/i.test(text)) return null;
 
-    // ?ㅼ씠???섏떇 留ㅼ묶 ??NdM ?뺥깭(+/-/* 濡??곌껐??異붽? ???ы븿).
-    // ?쒕룄 ?곗꽑?쒖쐞:
-    //   1. "(formula)" 泥섎읆 愿꾪샇濡??섎윭?몄씤 BCDice 紐낅졊遺 ?곗꽑
-    //   2. ?놁쑝硫?泥??깆옣?섎뒗 NdM ?좏겙遺???섏떇 ?앷퉴吏
+    // 다이스 수식 매칭 — NdM 형태(+/-/* 로 연결된 추가 항 포함).
+    // 시도 우선순위:
+    //   1. "(formula)" 처럼 괄호로 둘러싸인 BCDice 명령부 우선
+    //   2. 없으면 첫 등장하는 NdM 토큰부터 수식 끝까지
     const cleaned = text.replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "");
 
     let formula = "";
@@ -5479,7 +5479,7 @@
     }
     if (!formula) return null;
 
-    // 理쒖쥌 寃곌낵 ??留덉?留??붿궡?????レ옄
+    // 최종 결과 — 마지막 화살표 뒤 숫자
     const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
     const rolls = [];
     let m;
@@ -5492,7 +5492,7 @@
     return { formula, result };
   }
 
-  // ?쇰컲 ?ㅼ씠??移대뱶 DOM ??醫뚯륫 ?먰삎 寃곌낵媛?+ ?곗륫 ?섏떇 ?쇰꺼.
+  // 일반 다이스 카드 DOM — 좌측 원형 결과값 + 우측 수식 라벨.
   function buildCreeGrrrSimpleDiceCard(parsed) {
     const card = document.createElement("div");
     card.className = CREE_GRRR_SIMPLE_CARD_CLASS;
@@ -5510,32 +5510,32 @@
     return card;
   }
 
-  // CCFOLIA ?먯젙 ?띿뒪????CREE-GRRR! ?쒗듃(Roll20) ?쒖떆 紐낆묶 留ㅽ븨.
-  //   ??ㅽ뙣          ????ㅽ뙣        (?? d100 寃곌낵媛 100 ?대㈃ "?뚮툝")
-  //   ?ㅽ뙣            ???ㅽ뙣         (?? d100 寃곌낵媛 96~99 ?대㈃ "移섎챸???ㅽ뙣")
-  //   蹂댄넻 ?깃났       ???깃났
-  //   ?대젮???깃났     ???대젮???깃났
-  //   ??⑦븳 ?깃났     ??洹밸떒???깃났
-  //   ??깃났          ???ㅽ럹??      (?? d100 寃곌낵媛 1 ?대㈃ "?щ━?곗뺄")
+  // CCFOLIA 판정 텍스트 → CREE-GRRR! 시트(Roll20) 표시 명칭 매핑.
+  //   대실패          → 대실패        (단, d100 결과가 100 이면 "펌블")
+  //   실패            → 실패         (단, d100 결과가 96~99 이면 "치명적 실패")
+  //   보통 성공       → 성공
+  //   어려운 성공     → 어려운 성공
+  //   대단한 성공     → 극단적 성공
+  //   대성공          → 스페셜       (단, d100 결과가 1 이면 "크리티컬")
   function mapCcfStatusToCreeGrrr(ccfTerm, rollValue) {
     if (typeof ccfTerm !== "string") return ccfTerm;
     const normalized = ccfTerm.replace(/\s+/g, "");
     switch (normalized) {
-      case "??ㅽ뙣":      return rollValue === 100 ? "?뚮툝" : "??ㅽ뙣";
-      case "?ㅽ뙣":
+      case "대실패":      return rollValue === 100 ? "펌블" : "대실패";
+      case "실패":
         return (rollValue !== null && rollValue >= 96 && rollValue <= 99)
-          ? "移섎챸???ㅽ뙣"
-          : "?ㅽ뙣";
-      case "蹂댄넻?깃났":    return "?깃났";
-      case "?대젮?댁꽦怨?:  return "?대젮???깃났";
-      case "??⑦븳?깃났":  return "洹밸떒???깃났";
-      case "??깃났":      return rollValue === 1 ? "?щ━?곗뺄" : "?ㅽ럹??;
+          ? "치명적 실패"
+          : "실패";
+      case "보통성공":    return "성공";
+      case "어려운성공":  return "어려운 성공";
+      case "대단한성공":  return "극단적 성공";
+      case "대성공":      return rollValue === 1 ? "크리티컬" : "스페셜";
       default:            return ccfTerm;
     }
   }
 
   function bindUnsungDuetTriggerFields() {
-    // dicebot??unsung-duet???뚮쭔 ?좉퇋 ?꾨뱶 諛붿씤?????ㅻⅨ ?ㅼ씠?ㅻ큸?????ъ씠???댄럺???놁쓬
+    // dicebot이 unsung-duet일 때만 신규 필드 바인딩 — 다른 다이스봇일 땐 사이드 이펙트 없음
     if (getCurrentDicebotId() !== "unsung-duet") return;
     const selector = [
       `textarea:not([${UNSUNG_DUET_FIELD_BOUND_ATTR}="1"])`,
@@ -5548,19 +5548,19 @@
     });
   }
 
-  // 梨꾪똿 濡쒓렇 硫붿떆吏?먯꽌 ?뚮젮吏?imgur URL??<img>濡??몃씪??移섑솚.
-  // CCFOLIA媛 硫붿떆吏 ?띿뒪????URL???먮룞 ?꾨쿋?쒗븯吏 ?딄린 ?뚮Ц???대씪?댁뼵??
-  // 履쎌뿉??DOM??吏곸젒 ?대?吏 ?붿냼瑜??쇱썙 ?ｌ뼱 ?쒓컖?곸쑝濡?蹂댁씠寃??쒕떎.
+  // 채팅 로그 메시지에서 알려진 imgur URL을 <img>로 인라인 치환.
+  // CCFOLIA가 메시지 텍스트 내 URL을 자동 임베드하지 않기 때문에 클라이언트
+  // 쪽에서 DOM에 직접 이미지 요소를 끼워 넣어 시각적으로 보이게 한다.
   //
-  // ?몄떇?섎뒗 ?⑦꽩 (紐⑤몢 泥섎━):
-  //   1) [?대?吏](https://i.imgur.com/XXXX.png) - 留덊겕?ㅼ슫 留곹겕 ?띿뒪??
-  //   2) <a href="https://i.imgur.com/XXXX.png">??/a> - ?뚮뜑??留곹겕 ?붿냼
-  //   3) https://i.imgur.com/XXXX.png - raw URL ?띿뒪??
+  // 인식하는 패턴 (모두 처리):
+  //   1) [이미지](https://i.imgur.com/XXXX.png) - 마크다운 링크 텍스트
+  //   2) <a href="https://i.imgur.com/XXXX.png">…</a> - 렌더된 링크 요소
+  //   3) https://i.imgur.com/XXXX.png - raw URL 텍스트
   function injectUnsungDuetMessageImages() {
     if (getCurrentDicebotId() !== "unsung-duet") return;
 
-    // 梨꾪똿 硫붿떆吏媛 ?ㅼ뼱 ?덉쓣 ???덈뒗 媛?ν븳 紐⑤뱺 而⑦뀒?대꼫??li瑜??ㅼ틪
-    // (CCFOLIA??梨꾪똿 ?곸뿭? 鍮뚮뱶/踰꾩쟾???곕씪 ?ㅼ뼇????됲꽣瑜?媛吏????덉쓬)
+    // 채팅 메시지가 들어 있을 수 있는 가능한 모든 컨테이너의 li를 스캔
+    // (CCFOLIA의 채팅 영역은 빌드/버전에 따라 다양한 셀렉터를 가질 수 있음)
     const messages = document.querySelectorAll(
       `li:not([${UNSUNG_DUET_MSG_INJECTED_ATTR}="1"])`
     );
@@ -5569,7 +5569,7 @@
     messages.forEach((message) => {
       if (!(message instanceof HTMLElement)) return;
 
-      // 鍮좊Ⅸ ?ъ쟾 ?꾪꽣: 硫붿떆吏 ?띿뒪?몄뿉 ?뚮젮吏?URL ?쇰? ?먮뒗 [?대?吏](媛 ?ы븿?섏뼱 ?덈뒗吏
+      // 빠른 사전 필터: 메시지 텍스트에 알려진 URL 일부 또는 [이미지](가 포함되어 있는지
       const text = message.textContent || "";
       if (!hasUnsungDuetSignal(text) && !hasUnsungDuetAnchor(message)) return;
 
@@ -5586,7 +5586,7 @@
 
   function hasUnsungDuetSignal(text) {
     if (!text) return false;
-    if (text.indexOf("[?대?吏](") >= 0) return true;
+    if (text.indexOf("[이미지](") >= 0) return true;
     for (const url of Object.values(UNSUNG_DUET_URLS)) {
       if (text.indexOf(url) >= 0) return true;
     }
@@ -5631,12 +5631,12 @@
     return img;
   }
 
-  // === YouTube pauseVideo 紐낅졊 媛濡쒖콈湲?==================================
-  // ?댁쟾 ?묎렐(?ㅼ쨷 playVideo ?몄텧)? BGM怨??숈떆 ?ъ깮? ?깃났?덉?留?而룹씤 醫낅즺 ??
-  // CCFOLIA ?대? BGM 而⑦듃濡ㅻ윭 ?곹깭媛 desync ?섎뒗 遺?묒슜???덉뿀??BGM01 ?고듃??
-  // 蹂寃? 鍮④컯 諭껋? ?щ씪吏? ?ъ깮諛?誘몃났洹). 洹몃옒???묎렐??諛붽퓭?? CCFOLIA媛
-  // ?좎큹??YouTube iframe??pauseVideo 紐낅졊??蹂대궡吏 紐삵븯寃?媛濡쒖콌??
-  // ?대젃寃??섎㈃ CCFOLIA 而⑦듃濡ㅻ윭??BGM??怨꾩냽 ?ъ깮 以묒씠?쇨퀬 ?몄떇?섎?濡?desync ?놁쓬.
+  // === YouTube pauseVideo 명령 가로채기 ==================================
+  // 이전 접근(다중 playVideo 호출)은 BGM과 동시 재생은 성공했지만 컷인 종료 후
+  // CCFOLIA 내부 BGM 컨트롤러 상태가 desync 되는 부작용이 있었음(BGM01 폰트색
+  // 변경, 빨강 뱃지 사라짐, 재생바 미복귀). 그래서 접근을 바꿔서: CCFOLIA가
+  // 애초에 YouTube iframe에 pauseVideo 명령을 보내지 못하게 가로챈다.
+  // 이렇게 하면 CCFOLIA 컨트롤러는 BGM이 계속 재생 중이라고 인식하므로 desync 없음.
   function findYouTubeIframes() {
     return document.querySelectorAll([
       'iframe[src*="youtube.com/embed"]',
@@ -5655,8 +5655,8 @@
     return false;
   }
 
-  // 而룹씤 ?쒖꽦 ?덈룄?????몃━嫄?硫붿떆吏媛 諛쒖깮/媛먯???吏곹썑 N珥덇컙留?pauseVideo 李⑤떒.
-  // ?됱냼(而룹씤???녿뒗 ?쇰컲 ?곹솴)?먮뒗 ?ъ슜?먭? BGM???섎룞 ?쇱떆?뺤??섎㈃ ?뺤긽 ?묐룞.
+  // 컷인 활성 윈도우 — 트리거 메시지가 발생/감지된 직후 N초간만 pauseVideo 차단.
+  // 평소(컷인이 없는 일반 상황)에는 사용자가 BGM을 수동 일시정지하면 정상 작동.
   let unsungDuetCutinActiveUntil = 0;
   const UNSUNG_DUET_CUTIN_WINDOW_MS = 7000;
 
@@ -5676,8 +5676,8 @@
     const originalPostMessage = Window.prototype.postMessage;
     Window.prototype.postMessage = function (message, ...rest) {
       try {
-        // ?ㅼ씠?ㅻ큸???몄꽦 ??ｌ씠怨? 而룹씤 ?쒖꽦 ?덈룄???덉씠硫?
-        // ?源껋씠 YouTube iframe contentWindow???뚮쭔 pauseVideo 李⑤떒
+        // 다이스봇이 언성 듀엣이고, 컷인 활성 윈도우 안이며,
+        // 타깃이 YouTube iframe contentWindow일 때만 pauseVideo 차단
         if (
           this !== window &&
           getCurrentDicebotId() === "unsung-duet" &&
@@ -5687,25 +5687,25 @@
         ) {
           const parsed = JSON.parse(message);
           if (parsed && parsed.event === "command" && parsed.func === "pauseVideo") {
-            return; // pauseVideo 李⑤떒
+            return; // pauseVideo 차단
           }
         }
-      } catch (error) { /* JSON ?뚯떛 ?ㅽ뙣 ?????뺤긽 ?먮쫫?쇰줈 ?듦낵 */ }
+      } catch (error) { /* JSON 파싱 실패 등 — 정상 흐름으로 통과 */ }
       return originalPostMessage.apply(this, [message, ...rest]);
     };
 
     ccfThemeRegisterTeardown(() => {
       try { Window.prototype.postMessage = originalPostMessage; }
-      catch (error) { /* prototype 蹂듭썝 ?ㅽ뙣 臾댁떆 */ }
+      catch (error) { /* prototype 복원 실패 무시 */ }
       window.__ccfUnsungDuetPauseInterceptorInstalled = false;
     });
   }
 
-  // 梨꾪똿 硫붿떆吏 ?띿뒪?몄뿉??留ㅼ묶???⑦꽩 ?????뺥깭 紐⑤몢 泥섎━:
-  //   洹몃９1: [?대?吏](URL) ?덉쓽 URL
-  //   洹몃９2: raw URL
-  //   洹몃９3: ?먥╉??몃━嫄??띿뒪??(CCFOLIA ?ㅼ씠?ㅻ큸???먮Ц??洹몃?濡?echo back????
-  const UNSUNG_DUET_TEXT_PATTERN = /\[?대?吏\]\((https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)\)|(https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)|(???:?쒗봽???먯젙|諛붿씤???먯젙|?꾨옒洹몃㉫???④낵|?닿퀎????/g;
+  // 채팅 메시지 텍스트에서 매칭할 패턴 — 세 형태 모두 처리:
+  //   그룹1: [이미지](URL) 안의 URL
+  //   그룹2: raw URL
+  //   그룹3: 【…】 트리거 텍스트 (CCFOLIA 다이스봇이 원문을 그대로 echo back할 때)
+  const UNSUNG_DUET_TEXT_PATTERN = /\[이미지\]\((https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)\)|(https:\/\/i\.imgur\.com\/[A-Za-z0-9]+\.png)|(【(?:시프터 판정|바인더 판정|프래그먼트 효과|이계화)】)/g;
 
   function replaceTextNodesWithImages(root) {
     if (!(root instanceof HTMLElement)) return false;
@@ -5717,13 +5717,13 @@
         if (parent instanceof HTMLElement) {
           const tag = parent.tagName;
           if (tag === "SCRIPT" || tag === "STYLE" || tag === "IMG" || tag === "A") {
-            // <a> ?덉쓽 ?띿뒪?몃뒗 蹂꾨룄 replaceAnchorsWithImages 濡?泥섎━
+            // <a> 안의 텍스트는 별도 replaceAnchorsWithImages 로 처리
             return NodeFilter.FILTER_REJECT;
           }
         }
-        // ?뚮젮吏?URL / [?대?吏]( / ?먥╉??몃━嫄??띿뒪??以??섎굹?쇰룄 ?덈뒗吏 ?ъ쟾 ?꾪꽣
+        // 알려진 URL / [이미지]( / 【…】 트리거 텍스트 중 하나라도 있는지 사전 필터
         const t = node.textContent;
-        if (t.indexOf("[?대?吏](") >= 0) return NodeFilter.FILTER_ACCEPT;
+        if (t.indexOf("[이미지](") >= 0) return NodeFilter.FILTER_ACCEPT;
         for (const url of Object.keys(UNSUNG_DUET_URL_TO_ALT)) {
           if (t.indexOf(url) >= 0) return NodeFilter.FILTER_ACCEPT;
         }
@@ -5751,12 +5751,12 @@
       let foundAny = false;
       let match;
       while ((match = UNSUNG_DUET_TEXT_PATTERN.exec(text)) !== null) {
-        // URL 留ㅼ묶 (洹몃９1쨌2) ?먮뒗 ?몃━嫄??띿뒪??留ㅼ묶 (洹몃９3) ???대뒓 履쎌씠??URL濡??뺢퇋??
+        // URL 매칭 (그룹1·2) 또는 트리거 텍스트 매칭 (그룹3) — 어느 쪽이든 URL로 정규화
         let url = match[1] || match[2];
         let alt = url ? UNSUNG_DUET_URL_TO_ALT[url] : "";
         if (!url && match[3]) {
           url = UNSUNG_DUET_URLS[match[3]] || "";
-          alt = match[3].replace(/[?먦?/g, "");
+          alt = match[3].replace(/[【】]/g, "");
         }
         if (!url) continue;
         foundAny = true;
@@ -6129,7 +6129,7 @@
       const parsed = JSON.parse(rawText);
       const imported = extractImportedThemePayload(parsed, file.name);
       if (!imported) {
-        window.alert("媛?몄삱 ???덈뒗 ?뚮쭏 ?뚯씪???꾨떃?덈떎.");
+        window.alert("가져올 수 있는 테마 파일이 아닙니다.");
         return false;
       }
 
@@ -6137,7 +6137,7 @@
       return true;
     } catch (error) {
       console.warn("[CCF Theme] failed to import theme", error);
-      window.alert("?뚮쭏 ?뚯씪???쎌? 紐삵뻽?듬땲??");
+      window.alert("테마 파일을 읽지 못했습니다.");
       return false;
     }
   }
@@ -6151,11 +6151,11 @@
   function deleteCurrentSavedTheme() {
     const savedTheme = getSavedThemeByMode(settings);
     if (!savedTheme) {
-      window.alert("??젣??????뚮쭏瑜?癒쇱? ?좏깮??二쇱꽭??");
+      window.alert("삭제할 저장 테마를 먼저 선택해 주세요.");
       return false;
     }
 
-    if (!window.confirm(`"${savedTheme.name}" ?뚮쭏瑜???젣?좉퉴??`)) {
+    if (!window.confirm(`"${savedTheme.name}" 테마를 삭제할까요?`)) {
       return false;
     }
 
@@ -6177,7 +6177,7 @@
     const rawName = input instanceof HTMLInputElement ? input.value : themeNameDraft;
     const name = normalizeThemeName(rawName, "");
     if (!name) {
-      setStatus("?뚮쭏 ?대쫫???낅젰??二쇱꽭??", "error");
+      setStatus("테마 이름을 입력해 주세요.", "error");
       input?.focus({ preventScroll: true });
       input?.select();
       return;
@@ -6187,7 +6187,7 @@
     const nextTheme = upsertSavedTheme({ name, theme });
 
     closeSaveThemeDialog();
-    setStatus(nextTheme?.existing ? "湲곗〈 ?뚮쭏瑜???뼱?쇱뒿?덈떎." : "???뚮쭏瑜???ν뻽?듬땲??", "success");
+    setStatus(nextTheme?.existing ? "기존 테마를 덮어썼습니다." : "새 테마를 저장했습니다.", "success");
   }
 
   function upsertSavedTheme(payload) {
@@ -6234,7 +6234,7 @@
     }
 
     return {
-      name: normalizeThemeName(value.name || stripFileExtension(fileName), "媛?몄삩 ?뚮쭏"),
+      name: normalizeThemeName(value.name || stripFileExtension(fileName), "가져온 테마"),
       theme: normalizeTheme(sourceTheme)
     };
   }
@@ -6264,11 +6264,11 @@
 
     switch (mode) {
       case MODE_LIGHT:
-        return "?쇱씠??;
+        return "라이트";
       case MODE_CUSTOM:
-        return "而ㅼ뒪?";
+        return "커스텀";
       default:
-        return "湲곕낯媛?;
+        return "기본값";
     }
   }
 
@@ -6377,7 +6377,7 @@
       findDiceToolbar() ||
       document.querySelector(
         [
-          'button[aria-label="罹먮┃???좏깮"]',
+          'button[aria-label="캐릭터 선택"]',
           'button[aria-label="D4"]',
           'a[href*="docs.bcdice.org"]'
         ].join(", ")
@@ -6482,7 +6482,7 @@
       return true;
     } catch (error) {
       console.warn("[CCF Theme] failed to save settings", error);
-      setStatus("?ㅼ젙????ν븯吏 紐삵뻽?듬땲??", "error");
+      setStatus("설정을 저장하지 못했습니다.", "error");
       return false;
     }
   }
@@ -6512,9 +6512,9 @@
       defaultThemeVersion: 0,
       customTheme: { ...DEFAULT_CUSTOM_THEME },
       savedThemes: [],
-      // ?쒗듃 ?뚮쭏 留덉뒪??ON/OFF (?덇굅???명솚 ?꾪빐 unsungDuetEnabled ???좎?)
+      // 시트 테마 마스터 ON/OFF (레거시 호환 위해 unsungDuetEnabled 키 유지)
       unsungDuetEnabled: true,
-      // ?쒕∼?ㅼ슫?쇰줈 ?좏깮??而ㅼ뒪? ?쒗듃 ?뚮쭏 id (SHEET_THEMES.id 以??섎굹)
+      // 드롭다운으로 선택된 커스텀 시트 테마 id (SHEET_THEMES.id 중 하나)
       selectedSheetTheme: DEFAULT_SHEET_THEME_ID
     };
   }
@@ -6611,7 +6611,7 @@
     return `theme-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function normalizeThemeName(value, fallback = "???뚮쭏") {
+  function normalizeThemeName(value, fallback = "내 테마") {
     const normalized = normalizeSpace(value).slice(0, 24);
     return normalized || fallback;
   }
