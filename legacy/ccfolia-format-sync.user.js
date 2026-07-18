@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.22
+// @version      0.1.23
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.22 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.23 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -12582,6 +12582,16 @@
     const decodedCurrent = extractEnvelope(currentText);
     const state = ensureEditorState(editor);
     const blockStyle = applyAutomaticNarration(state.blockStyle);
+
+    // /desc 매크로는 roll20-css-bridge가 온전한 파서(판정 트리거 @이름, %NEWLINE% 등)로
+    // 변환하고, 같은 나레이터 명단(ccf-format-narrators-v1)으로 나레이션 blockStyle까지
+    // 직접 넣는다. format-sync가 먼저 소비하면 이후 bridge 재인코딩에서 알약 runs가
+    // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
+    if (window.__CCF_ROLL20_BRIDGE_DEBUG__ && ROLL20_DESC_RE.test(rawText)) return true;
+    // bridge가 이미 /desc를 인코딩한 결과물 — 재래핑하면 source/roll20Macro(트리거)
+    // 정보가 유실되므로 그대로 둔다. (일반 나레이션 프로즈는 해당 없음)
+    if (decodedCurrent?.envelope?.source === "ccr20-roll20-desc" && decodedCurrent.envelope.roll20Macro === true) return true;
+
     let payloadText = rawText;
     if (!state.runs.length && blockStyle.narration === true) {
       const decodedEnvelope = decodedCurrent?.envelope || null;
