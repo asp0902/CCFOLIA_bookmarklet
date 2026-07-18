@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.46
+// @version      0.3.47
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2203,6 +2203,12 @@
     // 빈 runs로 덮여 유실된다. runs가 비어있는 외부 envelope(평문 나레이션 등)는 기존대로
     // 이 스크립트가 나레이션 blockStyle을 채워 재인코딩한다.
     const foreign = extractEnvelope(currentValue);
+    console.info("[CCR20] prepareSend: rawHead=%o, foreignSrc=%o, foreignRuns=%o, foreignTextMatch=%o",
+      rawText.slice(0, 48),
+      foreign?.envelope?.source ?? (foreign?.envelope ? "(none)" : null),
+      Array.isArray(foreign?.envelope?.formatRuns) ? foreign.envelope.formatRuns.length : null,
+      foreign?.envelope ? foreign.envelope.text === rawText : null
+    );
     if (
       foreign?.envelope &&
       foreign.envelope.source !== CCR20_ENVELOPE_SOURCE &&
@@ -2211,6 +2217,7 @@
       Array.isArray(foreign.envelope.formatRuns) &&
       foreign.envelope.formatRuns.length > 0
     ) {
+      console.info("[CCR20] prepareSend: skip — foreign runs preserved");
       return true;
     }
 
@@ -2280,6 +2287,8 @@
 
     if (getEditorText(editor) === outgoing) return true;
 
+    console.info("[CCR20] prepareSend: rewrite editor — needsEnvelope=%o, outRuns=%o, narration=%o",
+      needsEnvelope, outgoingRuns.length, blockStyle?.narration === true);
     withSuppressedEditorSync(() => {
       setEditorText(editor, outgoing);
     });

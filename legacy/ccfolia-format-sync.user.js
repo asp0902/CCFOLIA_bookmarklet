@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.24
+// @version      0.1.25
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.24 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.25 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -12674,12 +12674,15 @@
     // [CCF NAR] 송신 진단 - narration 결정에 영향을 주는 모든 값
     const _narSpeaker = getCurrentSpeakerName();
     const _narSet = readNarratorNameSet();
-    console.info("[CCF NAR] preparePayloadForSend: speaker=%o, narratorList=[%s], stateNarration=%o, autoNarration=%o, runs=%o",
+    console.info("[CCF NAR] preparePayloadForSend: speaker=%o, narratorList=[%s], stateNarration=%o, autoNarration=%o, runs=%o, rawHead=%o, decodedSrc=%o, decodedRuns=%o",
       _narSpeaker,
       [..._narSet].join(", "),
       state.blockStyle?.narration === true,
       blockStyle.narration === true,
-      runs.length
+      runs.length,
+      rawText.slice(0, 48),
+      decodedCurrent?.envelope?.source ?? null,
+      Array.isArray(decodedCurrent?.envelope?.formatRuns) ? decodedCurrent.envelope.formatRuns.length : null
     );
 
     if (!runs.length && !alignRuns.length && !blockStyle.narration && sendText === rawText) return true;
@@ -12710,6 +12713,8 @@
 
     setEditorText(editor, outgoing);
     state.roll20Source = roll20Source;
+    console.info("[CCF NAR] send-encode: envelopeLen=%o, editorNowHasEnvelope=%o",
+      encoded.length, getEditorText(editor).includes(INVIS_START));
     schedulePendingSendRestore(editor, sendText, outgoing);
     return true;
   }
