@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.45
+// @version      0.3.46
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2187,13 +2187,30 @@
   }
 
   function preparePayloadForSend(editor) {
-    const rawText = stripInvisibleEnvelope(getEditorText(editor));
+    const currentValue = getEditorText(editor);
+    const rawText = stripInvisibleEnvelope(currentValue);
     if (!rawText) {
       const state = ensureEditorState(editor);
       state.text = "";
       state.runs = [];
       state.alignRuns = [];
       state.roll20Source = "";
+      return true;
+    }
+
+    // 다른 카피바라 스크립트(format-sync 등)가 이미 formatRuns를 담아 인코딩한 메시지는
+    // 재인코딩하지 않는다. 여기서 다시 감싸면 그쪽 runs(예: 나레이션 + /desc 알약 스타일)가
+    // 빈 runs로 덮여 유실된다. runs가 비어있는 외부 envelope(평문 나레이션 등)는 기존대로
+    // 이 스크립트가 나레이션 blockStyle을 채워 재인코딩한다.
+    const foreign = extractEnvelope(currentValue);
+    if (
+      foreign?.envelope &&
+      foreign.envelope.source !== CCR20_ENVELOPE_SOURCE &&
+      typeof foreign.envelope.text === "string" &&
+      foreign.envelope.text === rawText &&
+      Array.isArray(foreign.envelope.formatRuns) &&
+      foreign.envelope.formatRuns.length > 0
+    ) {
       return true;
     }
 
