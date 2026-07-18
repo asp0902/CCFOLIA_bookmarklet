@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.47
+// @version      0.3.48
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2247,6 +2247,13 @@
         alignRuns = getEffectiveAlignRuns(envelopeText, state.alignRuns);
         isRoll20Macro = !!parsed.isRoll20Macro;
       }
+    }
+
+    // 같은 키 입력에서 이 함수가 두 번 이상 불리면 두 번째 호출은 state.runs가 이미
+    // 차 있어 파서를 건너뛰고, roll20Macro 표식이 envelope에서 빠진다 → format-sync의
+    // "건드리지 말기" 가드가 무력화됨. 변환 원문이 남아있으면 매크로 출신으로 유지.
+    if (!isRoll20Macro && state.roll20Source) {
+      isRoll20Macro = true;
     }
 
     if (!runs.length && !alignRuns.length) {
