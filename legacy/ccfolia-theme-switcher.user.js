@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.16
+// @version      0.2.17
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -119,10 +119,6 @@
   const CUTIN_VOLUME_STORAGE_KEY = "ccf-theme-cutin-volume-absolute-v1";
   const CUTIN_VOLUME_APPLY_WINDOW_MS = 10000;
   const CUTIN_VOLUME_APPLY_DELAYS_MS = Object.freeze([0, 16, 80, 200, 500]);
-  // 컷인 소리 증폭 (media.volume 상한 1을 넘는 부스트, WebAudio GainNode)
-  const CUTIN_BOOST_HELPER_CLASS = "ccf-cutin-boost-helper";
-  const CUTIN_BOOST_STORAGE_KEY = "ccf-theme-cutin-boost-v1";
-  const CUTIN_BOOST_MAX = 4;
   // 알려진 URL → alt 텍스트 매핑 (역방향 인식용)
   const UNSUNG_DUET_URL_TO_ALT = Object.freeze({
     "https://i.imgur.com/FFUXgYg.png": "시프터 판정",
@@ -427,10 +423,6 @@
   let cutinVolumeAbsoluteApplyUntil = 0;
   const cutinVolumeAbsoluteBySource = new Map();
   const cutinVolumeApplyingMedia = new WeakSet();
-  let cutinBoostLastValue = 1;
-  const cutinBoostBySource = new Map();
-  const cutinBoostGraphs = new WeakMap();
-  let cutinBoostAudioCtx = null;
 
   // 모듈 로드 확정 로그. 이 로그조차 콘솔에 안 보이면 스크립트 자체가 GitHub
   // Pages 에서 fetch 되지 않았거나 로더가 다른 경로로 실행 중인 것.
@@ -4545,7 +4537,6 @@
     if (input.getAttribute(CUTIN_VOLUME_BOUND_ATTR) === "1") {
       normalizeCutinVolumeInput(input, { dispatch: false });
       rememberCutinVolumeAbsoluteInput(input);
-      ensureCutinBoostHelper(input);
       return;
     }
 
@@ -4583,205 +4574,6 @@
         normalizeCutinVolumeInput(input, { dispatch: false });
         rememberCutinVolumeAbsoluteInput(input);
       }, ccfThemeWithSignal(true));
-    }
-
-    ensureCutinBoostHelper(input);
-  }
-
-  // ===== 컷인 소리 증폭 (×1~×4) =====
-  // media.volume은 1이 상한이라 "볼륨 최대인데도 작음"을 해결할 수 없다.
-  // WebAudio GainNode로 증폭하되, cross-origin 음원은 crossOrigin="anonymous"로
-  // 재로드해 CORS 허용을 확인한 뒤에만 그래프를 만든다 (미허용 시 무음이 되므로).
-
-  function clampCutinBoost(value) {
-    const number = Number.parseFloat(String(value ?? "").replace(",", "."));
-    if (!Number.isFinite(number)) return 1;
-    return Math.round(clamp(number, 1, CUTIN_BOOST_MAX) * 10) / 10;
-  }
-
-  function ensureCutinBoostHelper(volumeInput) {
-    const form = volumeInput?.closest?.("form");
-    if (!(form instanceof HTMLElement)) return;
-
-    let helper = form.querySelector(`.${CUTIN_BOOST_HELPER_CLASS}`);
-    let boostInput = helper?.querySelector?.("input") || null;
-
-    if (!helper) {
-      helper = document.createElement("label");
-      helper.className = CUTIN_BOOST_HELPER_CLASS;
-      helper.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;opacity:.92;";
-
-      const caption = document.createElement("span");
-      caption.textContent = "소리 증폭";
-
-      boostInput = document.createElement("input");
-      boostInput.type = "number";
-      boostInput.min = "1";
-      boostInput.max = String(CUTIN_BOOST_MAX);
-      boostInput.step = "0.1";
-      boostInput.inputMode = "decimal";
-      boostInput.style.cssText = "width:64px;padding:2px 6px;box-sizing:border-box;";
-      boostInput.title = "1보다 크게 하면 재생 시 소리를 증폭합니다 (최대 4배). 볼륨 최대(1.0)로도 작은 음원용.";
-      boostInput.setAttribute("aria-label", "컷인 소리 증폭 배율");
-
-      const unit = document.createElement("span");
-      unit.textContent = "배";
-
-      helper.append(caption, boostInput, unit);
-      volumeInput.insertAdjacentElement("afterend", helper);
-
-      const onBoostCommit = () => {
-        const value = clampCutinBoost(boostInput.value);
-        boostInput.value = String(value);
-        rememberCutinBoostForForm(volumeInput, value);
-      };
-      boostInput.addEventListener("change", onBoostCommit, ccfThemeWithSignal(true));
-      boostInput.addEventListener("blur", onBoostCommit, ccfThemeWithSignal(true));
-    }
-
-    if (boostInput && document.activeElement !== boostInput) {
-      boostInput.value = String(lookupCutinBoostForKeys(collectCutinVolumeSourceKeys(volumeInput)));
-    }
-  }
-
-  function lookupCutinBoostForKeys(keys) {
-    for (const key of keys || []) {
-      if (cutinBoostBySource.has(key)) return clampCutinBoost(cutinBoostBySource.get(key));
-    }
-    return clampCutinBoost(cutinBoostLastValue);
-  }
-
-  function rememberCutinBoostForForm(volumeInput, value) {
-    const boost = clampCutinBoost(value);
-    cutinBoostLastValue = boost;
-    cutinVolumeAbsoluteApplyUntil = Date.now() + CUTIN_VOLUME_APPLY_WINDOW_MS;
-    for (const key of collectCutinVolumeSourceKeys(volumeInput)) {
-      cutinBoostBySource.set(key, boost);
-    }
-    persistCutinBoostStore();
-  }
-
-  function persistCutinBoostStore() {
-    try {
-      const sources = {};
-      cutinBoostBySource.forEach((value, key) => {
-        if (typeof key === "string" && Number.isFinite(value)) sources[key] = clampCutinBoost(value);
-      });
-      window.localStorage.setItem(CUTIN_BOOST_STORAGE_KEY, JSON.stringify({
-        lastValue: clampCutinBoost(cutinBoostLastValue),
-        sources
-      }));
-    } catch (error) { /* ignore storage failures */ }
-  }
-
-  function restoreCutinBoostStore() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CUTIN_BOOST_STORAGE_KEY) || "{}");
-      if (Number.isFinite(Number(parsed?.lastValue))) {
-        cutinBoostLastValue = clampCutinBoost(parsed.lastValue);
-      }
-      if (parsed?.sources && typeof parsed.sources === "object") {
-        Object.entries(parsed.sources).forEach(([key, value]) => {
-          if (typeof key === "string" && Number.isFinite(Number(value))) {
-            cutinBoostBySource.set(key, clampCutinBoost(value));
-          }
-        });
-      }
-    } catch (error) { /* ignore storage failures */ }
-  }
-
-  function resolveCutinBoostForMedia(media) {
-    if (!(media instanceof HTMLMediaElement)) return 1;
-    const keys = new Set();
-    addCutinVolumeSourceKeys(keys, media.currentSrc || media.src || "");
-    media.querySelectorAll?.("source[src]").forEach((source) => {
-      addCutinVolumeSourceKeys(keys, source.getAttribute("src") || "");
-    });
-    for (const key of keys) {
-      if (cutinBoostBySource.has(key)) return clampCutinBoost(cutinBoostBySource.get(key));
-    }
-    if (!isCutinVolumeMediaCandidate(media)) return 1;
-    return clampCutinBoost(cutinBoostLastValue);
-  }
-
-  function getCutinBoostAudioContext() {
-    if (!cutinBoostAudioCtx) {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return null;
-      try { cutinBoostAudioCtx = new Ctx(); } catch (error) { return null; }
-    }
-    if (cutinBoostAudioCtx.state === "suspended") {
-      cutinBoostAudioCtx.resume().catch(() => {});
-    }
-    return cutinBoostAudioCtx;
-  }
-
-  function prepareCutinBoostForMedia(media, boost) {
-    if (!(media instanceof HTMLMediaElement)) return;
-    const target = clampCutinBoost(boost);
-    const graph = cutinBoostGraphs.get(media);
-    if (graph) {
-      graph.gain.gain.value = target;
-      getCutinBoostAudioContext();
-      return;
-    }
-    if (target <= 1.01) return;
-    if (media.dataset.ccfCutinBoostCors === "fail") return;
-    media.dataset.ccfCutinBoostTarget = String(target);
-    if (media.dataset.ccfCutinBoostPending === "1") return;
-
-    // CORS 허용 확인 전에 MediaElementSource를 만들면, 미허용 음원은 되돌릴 수 없이
-    // 무음이 된다. crossOrigin 재로드가 성공(canplay)한 뒤에만 그래프 구성.
-    if (media.crossOrigin === "anonymous" && media.readyState >= 2) {
-      buildCutinBoostGraph(media);
-      return;
-    }
-
-    media.dataset.ccfCutinBoostPending = "1";
-    const cleanup = () => {
-      media.removeEventListener("error", onError);
-      media.removeEventListener("canplay", onReady);
-      delete media.dataset.ccfCutinBoostPending;
-    };
-    const onError = () => {
-      cleanup();
-      media.dataset.ccfCutinBoostCors = "fail";
-      console.warn("[CCF Theme] 컷인 증폭: CORS 미허용 음원 — 증폭 없이 재생합니다.", media.currentSrc || media.src || "");
-      try {
-        media.crossOrigin = null;
-        media.load();
-        media.play().catch(() => {});
-      } catch (_) { /* ignore */ }
-    };
-    const onReady = () => {
-      cleanup();
-      buildCutinBoostGraph(media);
-    };
-    media.addEventListener("error", onError, { once: true });
-    media.addEventListener("canplay", onReady, { once: true });
-    try {
-      if (media.crossOrigin !== "anonymous") {
-        media.crossOrigin = "anonymous";
-        media.load();
-      }
-      media.play().catch(() => {});
-    } catch (error) {
-      onError();
-    }
-  }
-
-  function buildCutinBoostGraph(media) {
-    const ctx = getCutinBoostAudioContext();
-    if (!ctx) return;
-    try {
-      const sourceNode = ctx.createMediaElementSource(media);
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = clampCutinBoost(media.dataset.ccfCutinBoostTarget);
-      sourceNode.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      cutinBoostGraphs.set(media, { gain: gainNode });
-    } catch (error) {
-      console.warn("[CCF Theme] 컷인 증폭 그래프 구성 실패", error);
     }
   }
 
@@ -4905,7 +4697,6 @@
     if (cutinVolumeAbsolutePatchInstalled) return;
     cutinVolumeAbsolutePatchInstalled = true;
     restoreCutinVolumeAbsoluteStore();
-    restoreCutinBoostStore();
 
     const handleMediaEvent = (event) => {
       if (event?.target instanceof HTMLMediaElement) {
@@ -4921,10 +4712,6 @@
     if (typeof originalPlay === "function" && originalPlay.__ccfCutinVolumePatched !== true) {
       const patchedPlay = function ccfCutinVolumePlay(...args) {
         applyCutinVolumeAbsoluteToMedia(this, { allowDelayed: true });
-        try {
-          const boost = resolveCutinBoostForMedia(this);
-          if (boost > 1.01 || cutinBoostGraphs.has(this)) prepareCutinBoostForMedia(this, boost);
-        } catch (error) { /* boost 실패가 재생을 막지 않도록 */ }
         const result = originalPlay.apply(this, args);
         scheduleCutinVolumeAbsoluteReapply(this);
         return result;
@@ -4950,10 +4737,6 @@
 
   function applyCutinVolumeAbsoluteToMedia(media, options = {}) {
     if (!(media instanceof HTMLMediaElement) || cutinVolumeApplyingMedia.has(media)) return false;
-    const boostGraph = cutinBoostGraphs.get(media);
-    if (boostGraph) {
-      try { boostGraph.gain.gain.value = resolveCutinBoostForMedia(media); } catch (_) { /* ignore */ }
-    }
     const volume = resolveCutinVolumeAbsoluteForMedia(media, options);
     if (!Number.isFinite(volume)) return false;
 
