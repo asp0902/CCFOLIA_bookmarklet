@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.23
+// @version      0.1.24
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.23 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.24 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -11675,7 +11675,34 @@
       const start = text.length;
       text += label;
 
-      const style = parseRoll20InlineStyle(match[2] || "");
+      // linear-gradient()/url() 등 style 내부 괄호에서 regex의 ')' 종료가 먼저 걸려
+      // 스타일이 잘리는 것을 보정한다 (잘리면 background-image가 통째로 유실되어
+      // /desc 알약이 글자만 남음). 여는 괄호가 남으면 소비된 ')'를 style로 되돌리고,
+      // 계속 부족하면 다음 ')'까지 흡수한 뒤 실제 종결('" )')을 소비한다.
+      let styleText = match[2] || "";
+      if (countParenChar(styleText, "(") > countParenChar(styleText, ")")) {
+        let matchEnd = linkRe.lastIndex;
+        styleText += ")";
+        while (countParenChar(styleText, "(") > countParenChar(styleText, ")")) {
+          const nextClose = rawLine.slice(matchEnd).match(/^([^)]*)\)/);
+          if (!nextClose) break;
+          styleText += nextClose[1] + ")";
+          matchEnd += nextClose[0].length;
+        }
+        const closer = rawLine.slice(matchEnd).match(/^\s*"?\s*\)/);
+        if (closer) {
+          matchEnd += closer[0].length;
+        } else {
+          const quoteClose = rawLine.slice(matchEnd).match(/^([^"]*)"\s*\)/);
+          if (quoteClose) {
+            styleText += quoteClose[1];
+            matchEnd += quoteClose[0].length;
+          }
+        }
+        linkRe.lastIndex = matchEnd;
+      }
+
+      const style = parseRoll20InlineStyle(styleText);
       if (start !== text.length && Object.keys(style).length > 0) {
         runs.push({
           start,
@@ -11756,6 +11783,14 @@
     } catch (error) {
       return false;
     }
+  }
+
+  function countParenChar(text, ch) {
+    let count = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === ch) count += 1;
+    }
+    return count;
   }
 
   function parseRoll20InlineStyle(styleText) {
