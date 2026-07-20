@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.52
+// @version      0.3.53
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2231,6 +2231,22 @@
       return true;
     }
 
+    // 같은 전송에서 이 함수가 두 번 불릴 때(Enter 핸들러 → 전송버튼 클릭), 첫 호출이
+    // 이미 [[..]]를 굴려 ccr20 봉투(인라인 롤 박스)를 만들어 뒀다. 두 번째 호출은
+    // 보이는 텍스트("3")만 보고 "굴릴 것 없음 → needsEnvelope=false"로 판단해 봉투를
+    // 통째로 벗겨 평범한 텍스트로 덮어쓴다 → 박스 유실. 이미 인라인 롤이 든 우리 봉투는
+    // 그대로 둔다. (일반 ccr20 봉투도 텍스트 일치 시 재인코딩 불필요하므로 보존)
+    if (
+      foreign?.envelope &&
+      foreign.envelope.source === CCR20_ENVELOPE_SOURCE &&
+      typeof foreign.envelope.text === "string" &&
+      foreign.envelope.text === rawText &&
+      Array.isArray(foreign.envelope.formatRuns) &&
+      foreign.envelope.formatRuns.some((run) => run?.style?.inlineRoll)
+    ) {
+      return true;
+    }
+
     const state = ensureEditorState(editor);
     if (state.text !== rawText) {
       state.text = rawText;
@@ -2278,9 +2294,6 @@
     alignRuns = getEffectiveAlignRuns(envelopeText, alignRuns, blockStyle);
 
     const diceResolution = resolveInlineDiceExpressions(envelopeText, runs);
-    console.info("[CCR20 DICE] prepareSend: rawHead=%o, hasBracket=%o, envHead=%o, diceChanged=%o, diceRuns=%o",
-      rawText.slice(0, 24), rawText.includes("[["), envelopeText.slice(0, 24),
-      diceResolution.changed, (diceResolution.diceRuns || []).length);
     const outgoingText = diceResolution.changed ? diceResolution.text : envelopeText;
     const baseOutgoingRuns = diceResolution.changed
       ? remapRunsForTextReplacements(runs, diceResolution.replacements, outgoingText.length)
