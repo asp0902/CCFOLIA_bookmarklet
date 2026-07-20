@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.51
+// @version      0.3.52
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2278,6 +2278,9 @@
     alignRuns = getEffectiveAlignRuns(envelopeText, alignRuns, blockStyle);
 
     const diceResolution = resolveInlineDiceExpressions(envelopeText, runs);
+    console.info("[CCR20 DICE] prepareSend: rawHead=%o, hasBracket=%o, envHead=%o, diceChanged=%o, diceRuns=%o",
+      rawText.slice(0, 24), rawText.includes("[["), envelopeText.slice(0, 24),
+      diceResolution.changed, (diceResolution.diceRuns || []).length);
     const outgoingText = diceResolution.changed ? diceResolution.text : envelopeText;
     const baseOutgoingRuns = diceResolution.changed
       ? remapRunsForTextReplacements(runs, diceResolution.replacements, outgoingText.length)
