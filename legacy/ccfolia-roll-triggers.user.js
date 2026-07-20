@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll Triggers by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers
-// @version      0.1.1
+// @version      0.1.2
 // @description  Click rendered /desc judgement macros in chat to auto-roll the matching palette command.
 // @description:ko 채팅에 렌더된 판정 매크로(/desc 알약 버튼)를 클릭하면 채팅 팔레트를 자동으로 골라 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -354,11 +354,20 @@
     }
   }
 
-  // downshift 팔레트가 나타나면 skill 텍스트를 포함하는 옵션을 반환.
-  // timeoutMs 안에 못 찾으면 null.
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // downshift 팔레트가 나타나면 skill 에 맞는 옵션을 반환. timeoutMs 안에 못 찾으면 null.
+  // 단순 부분일치(includes)만 쓰면 "운"이 "자동차 운전"에 걸리는 오매칭이 난다.
+  // 우선순위: ① 완전일치 → ② {스킬}/《스킬》 참조 → ③ "스킬 판정" 형태 → ④ 부분일치(최후).
+  // "행운 판정"엔 `운 판정`(③)이 있지만 "자동차 운전"엔 `운 전`이라 ③에 안 걸린다.
   function waitForPaletteOption(skill, timeoutMs) {
     return new Promise((resolve) => {
       const lower = skill.toLowerCase();
+      const esc = escapeRegExp(lower);
+      const refRe = new RegExp("[{《\\[]\\s*" + esc + "\\s*[}》\\]]");
+      const judgmentRe = new RegExp(esc + "\\s*(?:판정|判定)");
       const startedAt = Date.now();
       const tick = () => {
         if (!ccfRtLifecycle.isActive()) { resolve(null); return; }
@@ -366,6 +375,8 @@
           '[role="option"], [role="listbox"] li, [id^="downshift-"][id$="-item"], [id^="downshift-"][id*="item-"]'
         );
         let bestExact = null;
+        let bestRef = null;
+        let bestJudgment = null;
         let bestContains = null;
         for (const opt of options) {
           if (!(opt instanceof HTMLElement)) continue;
@@ -373,9 +384,11 @@
           const text = (opt.textContent || "").trim();
           const lc = text.toLowerCase();
           if (lc === lower) { bestExact = opt; break; }
+          if (!bestRef && refRe.test(lc)) bestRef = opt;
+          if (!bestJudgment && judgmentRe.test(lc)) bestJudgment = opt;
           if (!bestContains && lc.includes(lower)) bestContains = opt;
         }
-        const picked = bestExact || bestContains;
+        const picked = bestExact || bestRef || bestJudgment || bestContains;
         if (picked) { resolve(picked); return; }
         if (Date.now() - startedAt > timeoutMs) { resolve(null); return; }
         requestAnimationFrame(tick);
