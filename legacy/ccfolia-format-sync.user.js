@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.31
+// @version      0.1.32
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.31 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.32 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -3991,11 +3991,14 @@
       .ccf-inline-selection-layer {
         position: fixed;
         pointer-events: none;
-        overflow: hidden;
+        /* 큰 글자 하이라이트가 잘리지 않도록 세로는 넘치게. 미리보기 오버레이와 동일. */
+        overflow-x: hidden;
+        overflow-y: visible;
         box-sizing: border-box;
         white-space: pre-wrap;
         word-break: break-word;
         overflow-wrap: anywhere;
+        line-height: 1.35;
         color: transparent !important;
         -webkit-text-fill-color: transparent;
         z-index: 2147483001;
@@ -5304,22 +5307,58 @@
     return entry;
   }
 
-  function renderInlineSelectionHighlightContent(content, text, selection) {
+  // 선택 구간을 fontSize run 경계로 쪼갠다 — 각 조각을 실제 크기로 렌더해야
+  // 파란 하이라이트 블록이 큰 글자를 그대로 덮는다(미리보기 오버레이와 정렬).
+  function splitSelectionByFontSize(selection, runs) {
+    const list = Array.isArray(runs) ? runs : [];
+    const points = new Set([selection.start, selection.end]);
+    for (const run of list) {
+      if (run.start > selection.start && run.start < selection.end) points.add(run.start);
+      if (run.end > selection.start && run.end < selection.end) points.add(run.end);
+    }
+    const sorted = [...points].sort((a, b) => a - b);
+    const segments = [];
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const start = sorted[i];
+      const end = sorted[i + 1];
+      if (start === end) continue;
+      let fontSize = null;
+      for (const run of list) {
+        if (run.start <= start && run.end >= end && run.style && run.style.fontSize != null) {
+          fontSize = run.style.fontSize;
+        }
+      }
+      segments.push({ start, end, fontSize });
+    }
+    return segments;
+  }
+
+  function renderInlineSelectionHighlightContent(content, text, selection, runs = []) {
     content.textContent = "";
     if (!selection || selection.start === selection.end) return;
 
     const before = text.slice(0, selection.start);
-    const selected = text.slice(selection.start, selection.end);
     const after = text.slice(selection.end);
 
     if (before) {
       content.appendChild(document.createTextNode(before));
     }
 
-    const mark = document.createElement("span");
-    mark.className = "ccf-inline-selection-mark";
-    mark.textContent = selected || " ";
-    content.appendChild(mark);
+    const segments = splitSelectionByFontSize(selection, runs);
+    if (!segments.length) {
+      const mark = document.createElement("span");
+      mark.className = "ccf-inline-selection-mark";
+      mark.textContent = text.slice(selection.start, selection.end) || " ";
+      content.appendChild(mark);
+    } else {
+      for (const seg of segments) {
+        const mark = document.createElement("span");
+        mark.className = "ccf-inline-selection-mark";
+        mark.textContent = text.slice(seg.start, seg.end) || " ";
+        if (seg.fontSize) mark.style.fontSize = `${seg.fontSize}px`;
+        content.appendChild(mark);
+      }
+    }
 
     if (after) {
       content.appendChild(document.createTextNode(after));
@@ -5342,7 +5381,7 @@
 
     const computed = getComputedStyle(editor);
     layoutInlineSelectionHighlight(editor, entry, computed);
-    renderInlineSelectionHighlightContent(entry.content, text, selection);
+    renderInlineSelectionHighlightContent(entry.content, text, selection, ensureEditorState(editor).runs);
     syncEditorVisualPreviewScroll(editor, entry);
     entry.overlay.style.display = "block";
     return true;
@@ -5362,7 +5401,8 @@
     overlay.style.paddingLeft = computed.paddingLeft;
     overlay.style.borderRadius = computed.borderRadius;
     overlay.style.font = computed.font;
-    overlay.style.lineHeight = computed.lineHeight;
+    // 미리보기 오버레이의 .ccf-line과 동일한 줄높이 — 큰 마크가 정렬되고 잘리지 않게.
+    overlay.style.lineHeight = "1.35";
     overlay.style.letterSpacing = computed.letterSpacing;
     overlay.style.textAlign = computed.textAlign;
     overlay.style.textIndent = computed.textIndent;
