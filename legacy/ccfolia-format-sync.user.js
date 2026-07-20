@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.30
+// @version      0.1.31
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.30 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.31 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -3971,12 +3971,21 @@
       .ccf-editor-preview-layer {
         position: absolute;
         pointer-events: none;
-        overflow: hidden;
+        /* 큰 글자 미리보기 시 윗부분이 잘리지 않도록 세로는 넘치게 둔다.
+           가로는 입력칸 밖으로 새지 않게 숨김 유지. */
+        overflow-x: hidden;
+        overflow-y: visible;
         box-sizing: border-box;
         white-space: pre-wrap;
         word-break: break-word;
         overflow-wrap: anywhere;
         z-index: 1;
+      }
+
+      /* 각 줄은 자기 안의 가장 큰 글자에 맞춰 높이를 잡아 큰 글씨가 잘리지 않게 한다.
+         (오버레이 전체에 걸린 고정 px line-height를 줄 단위로 재정의) */
+      .ccf-editor-preview-content .ccf-line {
+        line-height: 1.35;
       }
 
       .ccf-inline-selection-layer {
@@ -12219,19 +12228,7 @@
     // 나레이션 스타일은 전송 후 채팅 로그 렌더에서만 적용.
     const blockStyle = { ...applyAutomaticNarration(state.blockStyle) };
     delete blockStyle.narration;
-    // 입력칸 미리보기에는 fontSize 미적용 — textarea는 글자 크기가 하나뿐이라
-    // 큰 글씨를 투명 textarea 위 오버레이에 그리면 윗부분이 잘리고, 커서/기존 글자와
-    // 위치가 어긋나 겹쳐 보인다. 실제 크기는 전송 후 채팅 렌더에서만 적용.
-    const previewRuns = applyNarrationPreviewRuns(state.runs, text, blockStyle);
-    const runs = normalizeRuns(
-      previewRuns.map((run) => {
-        if (run?.style?.fontSize == null) return run;
-        const nextStyle = { ...run.style };
-        delete nextStyle.fontSize;
-        return { ...run, style: nextStyle };
-      }),
-      text.length
-    );
+    const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
 
