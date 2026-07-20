@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.50
+// @version      0.3.51
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -834,10 +834,10 @@
         min-width: 0 !important;
         margin: 0 0.08em !important;
         padding: 0.08em 0.5em !important;
-        border: 1px solid #111111 !important;
+        border: 1px solid #d32f2f !important;
         border-radius: 0 !important;
         background: #ffffff !important;
-        color: #111111 !important;
+        color: #000000 !important;
         font-size: 0.92em !important;
         font-weight: 700 !important;
         line-height: 1.35 !important;
@@ -846,6 +846,23 @@
         box-shadow: none !important;
         cursor: help !important;
         position: relative !important;
+      }
+
+      /* 코코포리아 네이티브 인라인 롤([[..]] 결과, 기본 노란 박스)도 동일하게 —
+         흰 배경 + 빨간 테두리 + 검은 글자. patchForeignRenderedInlineRolls는
+         "XdY=Z" 텍스트만 교체하므로 결과만 담긴 네이티브 span은 여기서 직접 덮는다. */
+      [role="log"] .inlinerollresult:not(.ccr20-inline-roll),
+      [aria-live="polite"] .inlinerollresult:not(.ccr20-inline-roll),
+      [aria-live="assertive"] .inlinerollresult:not(.ccr20-inline-roll),
+      ul.MuiList-root .inlinerollresult:not(.ccr20-inline-roll) {
+        background: #ffffff !important;
+        border: 1px solid #d32f2f !important;
+        border-radius: 0 !important;
+        padding: 0.08em 0.5em !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
       }
 
       .ccr20-render-root .ccr20-inline-roll:hover,
