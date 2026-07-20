@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.33
+// @version      0.1.34
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.33 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.34 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -4018,7 +4018,7 @@
 
       .ccf-editor-preview-source {
         color: transparent !important;
-        -webkit-text-fill-color: transparent;
+        -webkit-text-fill-color: transparent !important;
         caret-color: var(--ccf-editor-caret-color, currentColor) !important;
       }
 
@@ -12256,12 +12256,15 @@
     return entry;
   }
 
-  // 연결이 끊긴(=React가 교체한) 입력칸에 붙어있던 미리보기/하이라이트 오버레이를 제거한다.
-  // 안 하면 전송할 때마다 오버레이가 쌓여 큰 글자 미리보기가 겹쳐 보인다.
-  function sweepOrphanedEditorOverlays() {
+  // 교체돼 더 이상 쓰이지 않는 입력칸에 붙어있던 미리보기/하이라이트 오버레이를 제거한다.
+  // CCFolia는 전송 시 옛 textarea를 DOM에서 지우지 않고 숨겨만 두므로(연결은 유지),
+  // "연결 끊김"만으로는 청소되지 않는다 → "연결 끊김 또는 화면에 안 보임"을 기준으로 제거.
+  // (activeOverlay = 지금 동기화 중인 오버레이는 아직 display 처리 전이라도 보존)
+  function sweepOrphanedEditorOverlays(activeOverlay = null) {
     document.querySelectorAll(".ccf-editor-preview-layer, .ccf-inline-selection-layer").forEach((overlay) => {
+      if (overlay === activeOverlay) return;
       const ed = overlay.__ccfEditor;
-      if (!ed || !ed.isConnected) {
+      if (!ed || !ed.isConnected || !isVisible(ed)) {
         overlay.remove();
       }
     });
@@ -12269,14 +12272,18 @@
 
   function syncEditorVisualPreview(editor) {
     if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
-    sweepOrphanedEditorOverlays();
     if (!normalizeEditorCandidate(editor)) {
+      sweepOrphanedEditorOverlays();
       clearEditorVisualPreview(editor);
       return;
     }
 
     const entry = ensureEditorVisualPreview(editor);
-    if (!entry) return;
+    if (!entry) {
+      sweepOrphanedEditorOverlays();
+      return;
+    }
+    sweepOrphanedEditorOverlays(entry.overlay);
 
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
