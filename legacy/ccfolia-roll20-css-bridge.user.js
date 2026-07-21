@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.54
+// @version      0.3.55
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.54"),
+    version: getUserscriptVersion("0.3.55"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5383,13 +5383,20 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  // 마크업 정렬로 들어오는 ASCII 공백/줄바꿈만 걷어낸다.
+  // JS 의 trim() 은 전각 공백(U+3000)까지 지우기 때문에 그대로 쓰면
+  // "캐릭터명" 과 "캐릭터명　" 이 같은 이름이 돼 서로 다른 캐릭터가 한 화자로 묶인다.
+  const ASCII_EDGE_SPACE_RE = /^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g;
+
   function extractAuthor(li) {
     const h6 = li.querySelector("h6.MuiListItemText-primary");
     if (!h6) return null;
     for (const node of h6.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
-        return node.nodeValue.trim();
-      }
+      if (node.nodeType !== Node.TEXT_NODE) continue;
+      const raw = node.nodeValue || "";
+      // 공백만 있는 노드는 이름이 아니다(여기선 전각 공백도 공백으로 본다).
+      if (!raw.trim()) continue;
+      return raw.replace(ASCII_EDGE_SPACE_RE, "");
     }
     return null;
   }
