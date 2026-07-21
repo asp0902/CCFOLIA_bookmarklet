@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.79
+// @version      0.1.80
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1705,10 +1705,23 @@
   async function deleteHandoutFromFirestore(id) {
     const fb = await initFirebase();
     if (!fb) throw new Error("Firebase not ready");
-    const { doc, deleteDoc } = fb.modules.fs;
+    const { doc, deleteDoc, setDoc } = fb.modules.fs;
     const roomKey = getCurrentRoomKey();
     if (roomKey === "global") throw new Error("not in a room");
-    await deleteDoc(doc(fb.db, "rooms", roomKey, "handouts", id));
+    const ref = doc(fb.db, "rooms", roomKey, "handouts", id);
+    try {
+      await deleteDoc(ref);
+    } catch (error) {
+      if (error?.code !== "permission-denied") throw error;
+      // 익명 로그인 uid 는 브라우저 데이터가 지워지면 새로 발급된다. 그러면 예전 uid 로
+      // 만든 내 핸드아웃이 보안 규칙의 delete 조건(resource.data.ownerUid == uid)에 걸려
+      // 영영 못 지워지고, 다른 참가자에게는 계속 보이는 "유령 핸드아웃"이 된다.
+      // 규칙의 update 는 "새로 쓰는 데이터의 ownerUid == 내 uid" 만 보므로,
+      // 소유권을 현재 uid 로 갱신한 뒤 삭제하면 통과한다.
+      console.info("[ccf-handout] delete 권한 없음 — 소유권 갱신 후 재시도:", id);
+      await setDoc(ref, { ownerUid: fb.uid }, { merge: true });
+      await deleteDoc(ref);
+    }
     console.info("[ccf-handout] Firestore delete OK:", id);
   }
 
