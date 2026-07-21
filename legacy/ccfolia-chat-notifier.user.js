@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.93
+// @version      0.2.94
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -453,7 +453,19 @@
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmStopping = false; // 정지 중 발생한 ENDED 를 loop 재생과 구분
+  // 로컬에서 곡을 고른 직후, 그 전에 출발했던 폴링 응답(= 낡은 원격 신호)이 도착해
+  // 다른 곡으로 갈아치우는 경쟁 상태를 막는다 (#A를 골랐는데 B가 재생되는 문제).
+  let ccfBgmLocalIntentSeq = 0;      // 로컬 재생/정지 조작마다 증가
+  let ccfBgmLocalIntentGuardUntil = 0; // 이 시각까지는 원격 신호 적용 보류
+  const BGM_LOCAL_INTENT_GUARD_MS = 2500; // 내 신호가 Firestore 에 반영될 때까지의 여유
   const CCF_BGM_ACTIVE_KEY = "ccf-chat-notifier:youtube-bgm:active";
+
+  // 사용자가 직접 재생/정지한 순간을 표시. 폴링은 이 표시를 보고 낡은 응답을 버린다.
+  function markCcfBgmLocalPlaybackIntent() {
+    ccfBgmLocalIntentSeq += 1;
+    ccfBgmLocalIntentGuardUntil = Date.now() + BGM_LOCAL_INTENT_GUARD_MS;
+    return ccfBgmLocalIntentSeq;
+  }
 
   function persistCcfBgmActiveSlot(slotKey, entryKey, videoId, state = "playing") {
     try {
@@ -3186,6 +3198,13 @@
     persistCcfBgmActiveSlot(normalizedSlotKey, resolvedEntryKey, entry?.videoId);
     markCcfYoutubeBgmSlotButtons();
 
+    // 사용자가 직접 고른 재생이면 "로컬 의도" 를 표시해, 이 클릭 이전에 출발한
+    // 폴링 응답이 뒤늦게 도착해 다른 곡으로 바꿔치기하는 것을 막는다.
+    if (!silentMode) {
+      markCcfBgmLocalPlaybackIntent();
+    }
+    const intentSeqAtStart = ccfBgmLocalIntentSeq;
+
     if (!silentMode && typeof ccfBgmFirestoreEmitPlayback === "function") {
       ccfBgmFirestoreEmitPlayback({
         entryKey: resolvedEntryKey,
@@ -3203,6 +3222,11 @@
     if (!ensureYoutubePlayerHost()) {
       if (retryCount < 50) {
         window.setTimeout(() => {
+          // 재시도 대기 중 사용자가 다른 곡을 골랐으면 이 재생은 폐기 (덮어쓰기 방지).
+          if (ccfBgmLocalIntentSeq !== intentSeqAtStart) {
+            debugLog("bgm-youtube-play-superseded", { slotKey: normalizedSlotKey, stage: "retry" });
+            return;
+          }
           playCcfYoutubeBgmSlot(normalizedSlotKey, entry, button, retryCount + 1, resolvedEntryKey, silentMode);
         }, 100);
       } else {
@@ -3257,6 +3281,11 @@
     loadYoutubeIframeApi().then(() => {
       if (!window.YT || !window.YT.Player) {
         debugLog("bgm-youtube-api-missing");
+        return;
+      }
+      // API 로딩을 기다리는 사이 사용자가 다른 곡을 골랐으면 이 재생은 폐기.
+      if (ccfBgmLocalIntentSeq !== intentSeqAtStart) {
+        debugLog("bgm-youtube-play-superseded", { slotKey: normalizedSlotKey, stage: "api-load" });
         return;
       }
 
@@ -3346,6 +3375,10 @@
     // - remote-stop / remote-switch: 원격 신호 적용 중 → 전파 안 함
     const MANUAL_STOP_REASONS = new Set(["manual", "stop-button", "youtube-bgm-remove"]);
     const shouldEmit = MANUAL_STOP_REASONS.has(reason);
+    // 사용자가 직접 정지한 것도 "로컬 의도" — 직전에 출발한 폴링 응답이 재생을 되살리지 못하게 한다.
+    if (shouldEmit) {
+      markCcfBgmLocalPlaybackIntent();
+    }
 
     if (!ccfBgmPlayer || typeof ccfBgmPlayer.stopVideo !== "function") {
       ccfBgmActiveSlotKey = "";
@@ -9212,8 +9245,22 @@
 
   async function ccfBgmFirestorePollPlayback() {
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierLifecycle.isActive()) return;
+    // 읽기를 시작한 시점의 로컬 의도를 기억해둔다.
+    const intentSeqAtRead = ccfBgmLocalIntentSeq;
     const data = await ccfBgmFirestoreReadPlayback();
     if (!data) return;
+
+    // 이 응답이 오는 사이 사용자가 직접 곡을 고르거나 정지했다면, 지금 읽은 문서는
+    // 그 조작 "이전" 상태다. 적용하면 방금 고른 곡이 옛 곡으로 바뀐다 → 버린다.
+    // 시그니처는 일부러 갱신하지 않는다(내 신호가 반영된 다음 폴링에서 정리됨).
+    if (ccfBgmLocalIntentSeq !== intentSeqAtRead || Date.now() < ccfBgmLocalIntentGuardUntil) {
+      debugLog("bgm-firestore-playback-skip-local-intent", {
+        entryKey: data.entryKey,
+        state: data.state,
+        superseded: ccfBgmLocalIntentSeq !== intentSeqAtRead
+      });
+      return;
+    }
 
     // 자기가 쓴 신호는 무시 (에코).
     if (data.sender === BGM_SHARE_SENDER_ID) {
@@ -9292,6 +9339,10 @@
     if (!chatNotifierLifecycle.isActive()) return;
     ccfBgmFirestoreWritePlayback(payload).catch((error) => {
       debugLog("bgm-firestore-playback-emit-failed", serializeError(error));
+    }).finally(() => {
+      // 쓰기가 느렸을 수 있으니, 반영 직후 잠깐 더 원격 적용을 보류한다
+      // (내 신호가 문서에 보이기 전에 폴링이 옛 문서를 읽어 되돌리는 것 방지).
+      ccfBgmLocalIntentGuardUntil = Math.max(ccfBgmLocalIntentGuardUntil, Date.now() + 800);
     });
   }
 
