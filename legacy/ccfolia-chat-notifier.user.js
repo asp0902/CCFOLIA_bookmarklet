@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.91
+// @version      0.2.92
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3533,8 +3533,17 @@
         host: YOUTUBE_EMBED_HOST,
         videoId,
         playerVars: {
-          autoplay: 1, controls: 0, disablekb: 1, fs: 0,
-          modestbranding: 1, playsinline: 1, rel: 0
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          // 본 플레이어와 동일하게 origin 을 지정해야 IFrame API 의 postMessage 가
+          // 전달된다. 빠지면 "target origin does not match" 로 setVolume/playVideo 가
+          // 전부 무시되어 페이드가 걸리지 않는다.
+          origin: location.origin
         },
         events: {
           onReady(event) {
