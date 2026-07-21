@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.94
+// @version      0.2.95
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.2.94";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.95";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4761,6 +4761,11 @@
     const removeButton = popover.querySelector(".ccf-youtube-bgm-remove");
     let liveVolumeReinforceTimer = 0;
     let sliderPointerId = null;
+    // 드래그 시작 시점의 슬라이더 위치/크기를 고정해서 쓴다.
+    // 매 pointermove 마다 getBoundingClientRect() 를 다시 읽으면, 볼륨 숫자 라벨의
+    // 폭 변화("1" ↔ "0.85")로 슬라이더 폭이 밀린 값을 읽어 같은 커서 위치가 다른 볼륨으로
+    // 계산된다 → 값이 진동하며 숫자가 점멸한다.
+    let sliderDragRect = null;
 
     // 음원명 입력란 상호작용 보장: 포커스/타이핑을 가로채는 핸들러로부터 보호한다.
     if (nameInput instanceof HTMLInputElement) {
@@ -4827,7 +4832,7 @@
         return;
       }
 
-      const rect = sliderElement.getBoundingClientRect();
+      const rect = sliderDragRect || sliderElement.getBoundingClientRect();
       if (!rect.width) {
         return;
       }
@@ -4848,10 +4853,11 @@
       if (sliderElement instanceof HTMLElement && sliderPointerId != null) {
         try { sliderElement.releasePointerCapture?.(sliderPointerId); } catch (_) {}
       }
-      sliderPointerId = null;
       if (event.type === "pointerup") {
         updateVolumeFromPointer(event, true);
       }
+      sliderPointerId = null;
+      sliderDragRect = null;
     };
 
     const handleSliderPointerMove = (event) => {
@@ -4889,6 +4895,7 @@
       event.preventDefault();
       event.stopPropagation();
       sliderPointerId = event.pointerId;
+      sliderDragRect = sliderElement.getBoundingClientRect();
       try { sliderElement.setPointerCapture?.(event.pointerId); } catch (_) {}
       updateVolumeFromPointer(event, true);
       window.addEventListener("pointermove", handleSliderPointerMove, true);
@@ -8061,7 +8068,10 @@
       }
 
       .ccf-youtube-bgm-volume-value {
-        flex: 0 0 auto !important;
+        /* "1" ↔ "0.85" 로 글자 수가 바뀌어도 폭이 변하지 않게 고정.
+           폭이 변하면 옆의 슬라이더가 밀려 드래그 중 값이 진동한다. */
+        flex: 0 0 34px !important;
+        width: 34px !important;
         margin: 0 !important;
         padding: 0 2px !important;
         color: rgb(255, 255, 255) !important;
