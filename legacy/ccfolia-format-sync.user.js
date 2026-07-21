@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.34
+// @version      0.1.35
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,7 +15,7 @@
   "use strict";
 
   // [CCF NAR] 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.34 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.35 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -12192,7 +12192,8 @@
   function bindEditorVisualPreview() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
     editors.forEach((candidate) => {
-      const editor = normalizeEditorCandidate(candidate);
+      const editor = normalizeEditorCandidate(candidate)
+        || (isMessageEditDialogEditor(candidate) ? candidate : null);
       if (!editor) {
         clearEditorVisualPreview(candidate);
         return;
@@ -12272,7 +12273,7 @@
 
   function syncEditorVisualPreview(editor) {
     if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return;
-    if (!normalizeEditorCandidate(editor)) {
+    if (!normalizeEditorCandidate(editor) && !isMessageEditDialogEditor(editor)) {
       sweepOrphanedEditorOverlays();
       clearEditorVisualPreview(editor);
       return;
@@ -12581,6 +12582,17 @@
 
   function isCharacterNameInput(node) {
     return node instanceof HTMLInputElement && node.matches(CHARACTER_NAME_INPUT_SELECTOR);
+  }
+
+  // 메시지 편집 모달의 본문 입력칸.
+  // normalizeEditorCandidate 는 다이얼로그 안 textarea 를 전부 제외한다(캐릭터 편집 팝업 등).
+  // 그 결과 메시지 편집 모달에서는 서식이 실제로 적용·저장되는데도 편집 중 미리보기가
+  // 보이지 않았다. 미리보기 경로에서만 이 입력칸을 예외로 허용한다.
+  // (Enter-to-send 등 다른 경로는 제외 상태를 유지 — 모달에서 새 메시지가 전송되면 안 됨)
+  function isMessageEditDialogEditor(node) {
+    return node instanceof HTMLTextAreaElement
+      && node.getAttribute("name") === "text"
+      && !!node.closest?.('[data-ccf-edit-dialog="1"]');
   }
 
   function getCurrentTargetEditor() {
