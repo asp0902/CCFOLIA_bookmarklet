@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.78
+// @version      0.1.79
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -4336,9 +4336,14 @@
     state.editingId = null;
     toast("삭제됨");
     setTab("list");
-    // Firestore에서도 삭제
+    // Firestore에서도 삭제 — 실패를 조용히 넘기면 상대방에게는 계속 남아
+    // (유령 핸드아웃) 권한 차단 등으로 혼란이 생기므로 반드시 알린다.
     deleteHandoutFromFirestore(id).catch((error) => {
       console.warn("[ccf-handout] Firestore delete 실패:", error);
+      const code = error?.code === "permission-denied"
+        ? "권한 없음 — 다른 참가자에게는 계속 보일 수 있습니다"
+        : "콘솔 확인";
+      toast(`원격 삭제 실패 (${code})`);
     });
   }
 
