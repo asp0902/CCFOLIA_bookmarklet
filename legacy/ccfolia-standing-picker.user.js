@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.7
+// @version      0.1.8
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -18,7 +18,7 @@
 const CCFSP_SCRIPT_INFO = Object.freeze({
   id: "ccfolia-standing-picker",
   name: "CCFOLIA Standing Picker",
-  version: "0.1.7",
+  version: "0.1.8",
   namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
 });
 
@@ -844,9 +844,17 @@ function getNativeCharacterOptionItems(list) {
   });
 }
 
+function isNativeChatLogNode(el) {
+  if (!el || el.nodeType !== 1) return false;
+  return el.getAttribute?.('role') === 'log' || !!el.closest?.('[role="log"]');
+}
+
 function findNativeCharacterPickerOptions() {
   const lists = Array.from(document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]'))
     .filter(isVisibleNativeCharacterNode)
+    // 채팅 로그도 ul.MuiList-root 라서 후보에 잡힌다. 아바타가 붙은 메시지가 있으면
+    // 항목으로 인식돼 캐릭터 선택창 대신 채팅 로그가 선택될 수 있다 → 제외.
+    .filter((list) => !isNativeChatLogNode(list))
     .map((list) => ({ list, items: getNativeCharacterOptionItems(list) }))
     .filter((candidate) => candidate.items.length);
   lists.sort((a, b) => b.items.length - a.items.length);
@@ -929,12 +937,18 @@ function activateNativeCharacterPickerOption(item) {
 }
 
 function handleNativeCharacterPickerKey(event) {
-  if (!state.nativeCharacterPickerUntil) return false;
   if (event.key === 'Escape') {
-    clearNativeCharacterPickerNavigation();
+    if (state.nativeCharacterPickerUntil) clearNativeCharacterPickerNavigation();
     return false;
   }
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return false;
+  // 열림 기록(nativeCharacterPickerUntil)이 없어도 — 다른 경로로 열렸거나 기록이
+  // 지워졌더라도 — 실제로 캐릭터 선택창이 떠 있으면 키보드 조작을 허용한다.
+  // (기록에만 의존하면 기록이 유실됐을 때 화살표가 통째로 먹통이 된다)
+  if (!state.nativeCharacterPickerUntil) {
+    if (!findNativeCharacterPickerOptions()) return false;
+    state.nativeCharacterPickerUntil = Date.now() + 12000;
+  }
   const items = refreshNativeCharacterPickerNavigation();
   if (!items.length) return false;
   consumeShortcutEvent(event);
