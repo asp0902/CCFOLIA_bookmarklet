@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
-// @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.9
+// @namespace    https://gre0asyfork.org/users/Capybara_korea/ccf-standing-picker
+// @version      0.1.11
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,31 +15,12 @@
 (() => {
   "use strict";
 
-const CCFSP_SCRIPT_INFO = Object.freeze({
-  id: "ccfolia-standing-picker",
-  name: "CCFOLIA Standing Picker",
-  version: "0.1.9",
-  namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
-});
+try { window.__CCF_STANDING_PICKER_DEBUG__?.disable?.(); } catch (error) { /* previous instance cleanup failed */ }
 
-const ccfspLifecycle = createLegacyLifecycle(CCFSP_SCRIPT_INFO, {
-  debugKey: "__CCF_STANDING_PICKER_DEBUG__",
-  onTeardown() {
-    clearNativeCharacterPickerNavigation();
-    closePopup();
-    document.getElementById('ccfolia-standing-popup')?.remove();
-    document.getElementById('ccfolia-standing-preview')?.remove();
-    document.getElementById('ccfolia-standing-toast')?.remove();
-    document.querySelectorAll('[data-capybara-toolkit-style*="standing-picker"]').forEach(el => el.remove());
-    document.body?.classList.remove('ccsp-scanning');
-    document.querySelectorAll('.ccsp-preserve').forEach(el => el.classList.remove('ccsp-preserve'));
-    document.querySelectorAll('.ccsp-ghost').forEach(el => el.classList.remove('ccsp-ghost'));
-  }
-});
-const ccfspSignal = ccfspLifecycle.signal;
-const ccfspRegisterTeardown = (fn) => ccfspLifecycle.registerTeardown(fn);
-const ccfspWithSignal = (options) => ccfspLifecycle.withSignal(options);
-const ccfspTeardown = () => ccfspLifecycle.disable();
+let ccfspActive = true;
+const ccfspDisposers = [];
+const ccfspAbort = new AbortController();
+const ccfspSignal = ccfspAbort.signal;
 const CCFSP_STYLE_ID = 'ccfolia-standing-picker-userscript-style';
 const CCFSP_STYLE = "/* [DADA] */\n#ccfolia-standing-popup{\n  position: fixed;\n  width: 320px;\n  max-height: 320px;\n  background: rgba(20,20,20,0.92);\n  color: #fff;\n  border: 1px solid rgba(255,255,255,0.12);\n  border-radius: 12px;\n  overflow: hidden;\n  z-index: 2147483647;\n  box-shadow: 0 12px 40px rgba(0,0,0,0.45);\n  backdrop-filter: blur(6px);\n}\n#ccfolia-standing-popup .ccsp-list{\n  max-height: 280px;\n  overflow: auto;\n  padding: 6px;\n}\n#ccfolia-standing-popup .ccsp-item{\n  display: grid;\n  grid-template-columns: 36px 1fr;\n  gap: 10px;\n  align-items: center;\n  padding: 7px 8px;\n  border-radius: 10px;\n  cursor: pointer;\n}\n#ccfolia-standing-popup .ccsp-item:hover{ background: rgba(255,255,255,0.08); }\n#ccfolia-standing-popup .ccsp-item.is-selected{\n  background: rgba(255,255,255,0.16);\n  outline: 1px solid rgba(255,255,255,0.18);\n}\n#ccfolia-standing-popup .ccsp-thumb{\n  width: 36px; height: 36px;\n  border-radius: 10px;\n  object-fit: cover;\n  background: rgba(255,255,255,0.06);\n}\n#ccfolia-standing-popup .ccsp-label{\n  font-size: 13px;\n  line-height: 1.15;\n  word-break: break-word;\n}\n#ccfolia-standing-preview{\n  position: fixed;\n  width: 240px; height: 240px;\n  border-radius: 14px;\n  overflow: hidden;\n  z-index: 2147483647;\n  border: 1px solid rgba(255,255,255,0.12);\n  box-shadow: 0 10px 30px rgba(0,0,0,0.45);\n  background: rgba(0,0,0,0.4);\n  pointer-events: none;\n}\n#ccfolia-standing-preview img{ width:100%; height:100%; object-fit:cover; }\n\n/* [DADA] 깜빡임 방지용 강제 숨김 */\n.ccsp-ghost {\n  opacity: 0 !important;\n  pointer-events: none !important;\n  visibility: hidden !important;\n  position: fixed !important;\n  left: -10000vw !important;\n  top: -10000vh !important;\n  z-index: -1 !important;\n}\n\nbody.ccsp-scanning div.MuiDialog-root:not(.ccsp-preserve),\nbody.ccsp-scanning div.MuiPaper-root:not(.ccsp-preserve),\nbody.ccsp-scanning div[role=\"presentation\"]:not(.ccsp-preserve) {\n  opacity: 0 !important;\n  pointer-events: none !important;\n  visibility: hidden !important;\n  transition: none !important;\n}\n\n.ccsp-hidden-dialog {\n  visibility: hidden !important;\n  pointer-events: none !important;\n}\n";
 
@@ -48,140 +29,74 @@ function ccfspInjectStyle() {
   const style = document.createElement('style');
   style.id = CCFSP_STYLE_ID;
   style.dataset.capybaraToolkitStyle = 'standing-picker userscript';
-  style.textContent = `${CCFSP_STYLE}
-[data-ccfsp-character-nav-active="1"] {
-  background: rgba(233, 30, 99, 0.18) !important;
-  outline: 1px solid rgba(233, 30, 99, 0.92) !important;
-  outline-offset: -1px !important;
-}`;
+  style.textContent = CCFSP_STYLE;
   (document.head || document.documentElement).appendChild(style);
   ccfspRegisterTeardown(() => style.remove());
 }
 
-function createLegacyLifecycle(scriptInfo, options) {
-  const debugKey = options.debugKey;
-  const onTeardown = typeof options.onTeardown === "function" ? options.onTeardown : null;
+function ccfspRegisterTeardown(fn) {
+  if (typeof fn === "function") ccfspDisposers.push(fn);
+}
 
-  try { window[debugKey]?.disable?.(); } catch (error) { /* prior instance cleanup failed */ }
-
-  let active = true;
-  const disposers = [];
-  const abort = new AbortController();
-  const signal = abort.signal;
-
-  function registerTeardown(fn) {
-    if (typeof fn === "function") disposers.push(fn);
+function ccfspWithSignal(options) {
+  if (options == null) return { signal: ccfspSignal };
+  if (typeof options === "boolean") return { capture: options, signal: ccfspSignal };
+  if (typeof options === "object") {
+    if (options.signal && options.signal !== ccfspSignal) return options;
+    return { ...options, signal: ccfspSignal };
   }
+  return { signal: ccfspSignal };
+}
 
-  function withSignal(options) {
-    if (options == null) return { signal };
-    if (typeof options === "boolean") return { capture: options, signal };
-    if (typeof options === "object") {
-      if (options.signal && options.signal !== signal) return options;
-      return { ...options, signal };
+function ccfspTeardown() {
+  if (!ccfspActive) return false;
+  ccfspActive = false;
+  try { ccfspAbort.abort(); } catch (error) { /* abort failed */ }
+  while (ccfspDisposers.length) {
+    const disposer = ccfspDisposers.pop();
+    try { disposer(); } catch (error) { /* disposer failed */ }
+  }
+  try {
+    closePopup();
+    document.getElementById('ccfolia-standing-popup')?.remove();
+    document.getElementById('ccfolia-standing-preview')?.remove();
+    document.getElementById('ccfolia-standing-toast')?.remove();
+    document.querySelectorAll('[data-capybara-toolkit-style*="standing-picker"]').forEach(el => el.remove());
+    document.body?.classList.remove('ccsp-scanning');
+    document.querySelectorAll('.ccsp-preserve').forEach(el => el.classList.remove('ccsp-preserve'));
+    document.querySelectorAll('.ccsp-ghost').forEach(el => el.classList.remove('ccsp-ghost'));
+  } catch (error) { /* dom sweep failed */ }
+  try {
+    if (window.__CCF_STANDING_PICKER_DEBUG__ && window.__CCF_STANDING_PICKER_DEBUG__.__owner === ccfspSignal) {
+      delete window.__CCF_STANDING_PICKER_DEBUG__;
     }
-    return { signal };
-  }
-
-  function registerWithSuite() {
-    try {
-      const registryKey = "ccf-suite-registry-v1";
-      let registry;
-      try {
-        const parsed = JSON.parse(window.localStorage.getItem(registryKey) || "{}");
-        registry = parsed && typeof parsed.scripts === "object" ? { scripts: parsed.scripts } : { scripts: {} };
-      } catch (error) {
-        registry = { scripts: {} };
-      }
-      const previous = registry.scripts[scriptInfo.id] && typeof registry.scripts[scriptInfo.id] === "object"
-        ? registry.scripts[scriptInfo.id]
-        : {};
-      const now = new Date().toISOString();
-      const sessionId = typeof window.__CCF_SUITE_MANAGER_SESSION_ID === "string"
-        ? window.__CCF_SUITE_MANAGER_SESSION_ID
-        : "";
-      registry.scripts[scriptInfo.id] = {
-        ...previous,
-        ...scriptInfo,
-        installedAt: previous.installedAt || now,
-        lastSeenAt: now,
-        lastSeenUrl: location.href,
-        lastSeenSessionId: sessionId
-      };
-      window.localStorage.setItem(registryKey, JSON.stringify(registry));
-      window.dispatchEvent(new CustomEvent("ccf-suite:register", { detail: registry.scripts[scriptInfo.id] }));
-    } catch (error) { /* suite 등록 실패 무시 */ }
-  }
-
-  function disable() {
-    if (!active) return false;
-    active = false;
-    try { abort.abort(); } catch (error) { /* abort failed */ }
-    while (disposers.length) {
-      const disposer = disposers.pop();
-      try { disposer(); } catch (error) { /* disposer failed */ }
-    }
-    try { onTeardown?.(); } catch (error) { /* dom sweep failed */ }
-    try {
-      if (window[debugKey] && window[debugKey].__owner === signal) {
-        delete window[debugKey];
-      }
-    } catch (error) { /* debug api cleanup failed */ }
-    return true;
-  }
-
-  function installDebugApi(extra = {}) {
-    window[debugKey] = {
-      __owner: signal,
-      isActive() { return active; },
-      disable,
-      ...extra
-    };
-  }
-
-  registerWithSuite();
-  window.addEventListener("ccf-suite:request-register", (event) => {
-    const targetId = event?.detail?.targetId;
-    if (targetId && targetId !== scriptInfo.id) return;
-    registerWithSuite();
-  }, withSignal());
-
-  return {
-    signal,
-    registerTeardown,
-    withSignal,
-    isActive() { return active; },
-    disable,
-    installDebugApi
-  };
+  } catch (error) { /* debug api cleanup failed */ }
+  return true;
 }
 
 ccfspInjectStyle();
 
-ccfspLifecycle.installDebugApi({
+window.__CCF_STANDING_PICKER_DEBUG__ = {
+  __owner: ccfspSignal,
+  isActive() { return ccfspActive; },
   findCharacterSelectButton() { return findCharacterSelectButton(); },
   clickCharacterSelectButton() {
     const btn = findCharacterSelectButton();
     if (!btn) return false;
     clickCharacterSelectButton(btn);
     return true;
-  }
-});
+  },
+  disable() { return ccfspTeardown(); }
+};
 
 const state = {
   popupEl: null,
   previewEl: null,
   selectedIndex: 0,
   currentInputEl: null,
-    currentCharacterName: null,
-    lastSeenName: null,
-    lastCharacterShortcutAt: 0,
-    rightShiftDown: false,
-    nativeCharacterPickerRoot: null,
-  nativeCharacterPickerItems: [],
-  nativeCharacterPickerIndex: -1,
-  nativeCharacterPickerUntil: 0,
-  nativeCharacterPickerToken: 0,
+  currentCharacterName: null,
+  lastSeenName: null,
+  lastCharacterShortcutAt: 0,
   isFetching: false,
   items: [],
   standingsCacheByCharName: new Map()
@@ -314,7 +229,7 @@ function isChatInput(el) {
     el.getAttribute?.('placeholder') || '',
     el.getAttribute?.('title') || ''
   ].join(' ');
-  if (/message|chat|comment|send|input|textbox|\uBA54\uC2DC\uC9C0|\uCC44\uD305|\uC785\uB825|\uBC1C\uC5B8/i.test(text)) return true;
+  if (/message|chat|comment|send|input|textbox|메시지|채팅|입력|발언/i.test(text)) return true;
   if (el.closest?.('.MuiDrawer-paper')) return true;
   const form = el.closest?.('form');
   return !!form?.querySelector?.('button[type="submit"]');
@@ -416,7 +331,7 @@ async function showHiddenPanel() {
   if (panel) {
     return { panel, restoreVisibility: () => {}, openedByUs: false };
   }
-  
+
   const re = /(내\s*캐릭터|캐릭터\s*목록|My\s*characters|My\s*character|Character\s*list|自分のキャラクター|キャラクター一覧|マイキャラクター|我的角色)/i;
   const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
     .map(el => ({ el, s: (el.getAttribute('aria-label')||'') + ' ' + (el.getAttribute('title')||'') + ' ' + removeSpaces(el.textContent) }))
@@ -441,20 +356,20 @@ async function showHiddenPanel() {
 function getStandingData(dialogRoot) {
   const inputs = Array.from(dialogRoot.querySelectorAll('input[name^="faces."][name$=".label"]'));
   const items = [];
-  
+
   for (const inp of inputs) {
     const label = removeSpaces(inp.value || '');
     if (!label) continue;
-    
+
     let img = '';
     let container = inp.parentElement;
     for (let i = 0; i < 5; i++) {
         if (!container || container === dialogRoot) break;
-        
-        const imgEl = container.querySelector('img.MuiAvatar-img') || 
-                      container.querySelector('button img') || 
+
+        const imgEl = container.querySelector('img.MuiAvatar-img') ||
+                      container.querySelector('button img') ||
                       container.querySelector('img');
-                      
+
         if (imgEl) {
             const src = imgEl.getAttribute('src');
             // svg, xml이 아닌 이미지 선택 (단순 아이콘 제외)
@@ -463,7 +378,7 @@ function getStandingData(dialogRoot) {
                 break;
             }
         }
-        
+
         const style = window.getComputedStyle(container);
         const bg = style.backgroundImage;
         if (bg && bg !== 'none' && bg.startsWith('url(')) {
@@ -476,7 +391,7 @@ function getStandingData(dialogRoot) {
 
     items.push({ label, img });
   }
-  
+
   const seen = new Set();
   return items.filter(it => (seen.has(it.label) ? false : (seen.add(it.label), true)));
 }
@@ -512,7 +427,7 @@ async function getStandings() {
   document.body.classList.add('ccsp-scanning');
 
   const domObserver = new MutationObserver((mutations) => {
-    if (!ccfspLifecycle.isActive()) return;
+    if (!ccfspActive) return;
     mutations.forEach(mutation => {
       mutation.addedNodes.forEach(node => {
         if (node.nodeType === 1 && node.parentNode === document.body) {
@@ -531,18 +446,18 @@ async function getStandings() {
     let panelOpenedByUs = false;
     let dialogOpenedByUs = false;
     let myPanel = null;
-    
+
     if (!dialogRoot) {
       dialogOpenedByUs = true;
       const res = await showHiddenPanel();
       if (!res.panel) return { name, standings: [] };
-      
+
       myPanel = res.panel;
       panelOpenedByUs = res.openedByUs;
 
       const spans = Array.from(myPanel.querySelectorAll('span.MuiListItemText-primary'));
       const targetSpan = spans.find(s => removeSpaces(s.textContent) === removeSpaces(name));
-      
+
       if (!targetSpan) {
         if (panelOpenedByUs) closePanel(myPanel);
         showToast(getText('not_in_list', { name }));
@@ -551,7 +466,7 @@ async function getStandings() {
 
       const rowBtn = targetSpan.closest('div[role="button"]') || targetSpan.closest('li')?.querySelector('div[role="button"]');
       rowBtn.click();
-      
+
       dialogRoot = await isloadPopupData(() => getDialog());
     }
 
@@ -586,11 +501,11 @@ async function getStandings() {
     domObserver.disconnect();
     await delayTimer(30);
     document.body.classList.remove('ccsp-scanning');
-    
+
     document.querySelectorAll('.ccsp-ghost, .ccsp-preserve').forEach(el => {
       el.classList.remove('ccsp-ghost', 'ccsp-preserve');
     });
-    
+
     if (state.currentInputEl && document.activeElement !== state.currentInputEl) {
       state.currentInputEl.focus();
     }
@@ -618,7 +533,7 @@ function setPopupPosition(el) {
   const rect = el.getBoundingClientRect();
   state.popupEl.style.left = `${Math.max(8, rect.left)}px`;
   state.popupEl.style.top = `${Math.max(8, rect.top - state.popupEl.offsetHeight - 8)}px`;
-  
+
   const pr = state.popupEl.getBoundingClientRect();
   if (pr.top < 0) state.popupEl.style.top = `${Math.min(window.innerHeight - pr.height - 8, rect.bottom + 8)}px`;
   setPreviewPosition();
@@ -645,10 +560,10 @@ function showPreview(item) {
 function setHighlight(idx, doScroll) {
   if (!state.popupEl || !state.items.length) return;
   state.selectedIndex = Math.max(0, Math.min(state.items.length - 1, idx));
-  
+
   const rows = Array.from(state.popupEl.querySelectorAll('.ccsp-item'));
   rows.forEach((row, i) => row.classList.toggle('is-selected', i === state.selectedIndex));
-  
+
   if (doScroll) rows[state.selectedIndex]?.scrollIntoView({ block: 'nearest' });
   showPreview(state.items[state.selectedIndex]);
 }
@@ -747,11 +662,11 @@ function getButtonSearchText(btn) {
 
 function queryCharacterSelectButton() {
   const selectors = [
-    'button[aria-label="\uCE90\uB9AD\uD130 \uC120\uD0DD"]',
+    'button[aria-label="캐릭터 선택"]',
     'button[aria-label="Character selection"]',
     'button[aria-label="Select character"]',
-    'button[aria-label="\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC\u9078\u629E"]',
-    'button[aria-label="\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC \u9078\u629E"]'
+    'button[aria-label="キャラクター選択"]',
+    'button[aria-label="キャラクター 選択"]'
   ];
   const matches = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
   return matches.find(isVisibleButton) || matches.find((btn) => btn?.tagName === 'BUTTON' && !btn.disabled) || null;
@@ -761,10 +676,10 @@ function findCharacterSelectButton() {
   const direct = queryCharacterSelectButton();
   if (direct) return direct;
 
-  const exactLabelRe = /^(?:\uCE90\uB9AD\uD130\s*\uC120\uD0DD|character\s*selection|select\s*character|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC\s*\u9078\u629E|\u89D2\u8272\s*(?:\u9009\u62E9|\u9078\u64C7))$/i;
-  const selectRe = /(?:\uC120\uD0DD|select|selection|\u9078\u629E|\u9078\u64C7|\u9009\u62E9)/i;
-  const characterRe = /(?:\uCE90\uB9AD\uD130|character|chara|\u30AD\u30E3\u30E9\u30AF\u30BF\u30FC|\u89D2\u8272)/i;
-  const listRe = /(?:\uBAA9\uB85D|\uB9AC\uC2A4\uD2B8|list|\u4E00\u89A7|\u4E00\u89C8|\u5217\u8868)/i;
+  const exactLabelRe = /^(?:캐릭터\s*선택|character\s*selection|select\s*character|キャラクター\s*選択|角色\s*(?:选择|選擇))$/i;
+  const selectRe = /(?:선택|select|selection|選択|選擇|选择)/i;
+  const characterRe = /(?:캐릭터|character|chara|キャラクター|角色)/i;
+  const listRe = /(?:목록|리스트|list|一覧|一览|列表)/i;
   const characterIconRe = /(?:Face|Person|AccountCircle|PermIdentity|Badge|Groups?)Icon/i;
   const buttons = Array.from(document.querySelectorAll('button')).filter(isVisibleButton);
 
@@ -791,21 +706,15 @@ function findCharacterSelectButton() {
   return null;
 }
 
-  function isRightShiftEvent(event) {
-    return event.code === 'ShiftRight' || (event.key === 'Shift' && event.location === 2);
-  }
-
-  function isBackquoteShortcut(event) {
-    // state.rightShiftDown 은 keydown 에서만 세우고 keyup 에서 내리는 수동 추적이라,
-    // 창 전환 등으로 keyup 을 한 번 놓치면 true 로 고착되어 백틱 단축키가 영구히 막힌다.
-    // 이벤트가 직접 알려주는 실제 수식키 상태만 신뢰한다.
-    const shiftHeld = event.shiftKey ||
-      (typeof event.getModifierState === 'function' && event.getModifierState('Shift'));
-    if (event.ctrlKey || event.metaKey || event.altKey || shiftHeld) return false;
-    return event.code === 'Backquote' ||
-      event.key === '`' ||
-      event.key === '\u20A9' ||
-    event.key === '\uFF40' ||
+function isBackquoteShortcut(event) {
+  // Shift+` 는 ~ 입력이므로 단축키로 가로채지 않는다.
+  // 수식키는 이벤트가 직접 알려주는 값만 신뢰 (수동 추적은 keyup 을 놓치면 고착됨).
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (event.shiftKey || event.getModifierState?.('Shift')) return false;
+  return event.code === 'Backquote' ||
+    event.key === '`' ||
+    event.key === '₩' ||
+    event.key === '｀' ||
     event.keyCode === 192 ||
     event.which === 192;
 }
@@ -820,159 +729,6 @@ function clickCharacterSelectButton(btn) {
     } catch {}
   }
   try { btn.click(); } catch {}
-}
-
-function isVisibleNativeCharacterNode(node) {
-  if (!(node instanceof HTMLElement) || node.closest('#ccfolia-standing-popup')) return false;
-  const rect = node.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
-  const style = getComputedStyle(node);
-  return style.display !== 'none' && style.visibility !== 'hidden';
-}
-
-function getNativeCharacterOptionItems(list) {
-  if (!(list instanceof HTMLElement)) return [];
-  return Array.from(list.children).filter((item) => {
-    if (!(item instanceof HTMLElement) || !isVisibleNativeCharacterNode(item)) return false;
-    if (item.querySelector('.MuiListItemSecondaryAction-root')) return false;
-    const text = removeSpaces(
-      item.querySelector('.MuiListItemText-primary')?.textContent ||
-      item.getAttribute('aria-label') ||
-      item.textContent ||
-      ''
-    );
-    if (!text) return false;
-    return !!item.querySelector('img, .MuiAvatar-root') ||
-      item.matches('[role="option"], [role="menuitem"]');
-  });
-}
-
-function isNativeChatLogNode(el) {
-  if (!el || el.nodeType !== 1) return false;
-  return el.getAttribute?.('role') === 'log' || !!el.closest?.('[role="log"]');
-}
-
-function findNativeCharacterPickerOptions() {
-  const lists = Array.from(document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]'))
-    .filter(isVisibleNativeCharacterNode)
-    // 채팅 로그도 ul.MuiList-root 라서 후보에 잡힌다. 아바타가 붙은 메시지가 있으면
-    // 항목으로 인식돼 캐릭터 선택창 대신 채팅 로그가 선택될 수 있다 → 제외.
-    .filter((list) => !isNativeChatLogNode(list))
-    .map((list) => ({ list, items: getNativeCharacterOptionItems(list) }))
-    .filter((candidate) => candidate.items.length);
-  lists.sort((a, b) => b.items.length - a.items.length);
-  return lists[0] || null;
-}
-
-function clearNativeCharacterPickerNavigation() {
-  state.nativeCharacterPickerItems.forEach((item) => {
-    item.removeAttribute('data-ccfsp-character-nav-active');
-  });
-  state.nativeCharacterPickerRoot = null;
-  state.nativeCharacterPickerItems = [];
-  state.nativeCharacterPickerIndex = -1;
-  state.nativeCharacterPickerUntil = 0;
-}
-
-function refreshNativeCharacterPickerNavigation() {
-  if (!state.nativeCharacterPickerUntil || Date.now() > state.nativeCharacterPickerUntil) {
-    clearNativeCharacterPickerNavigation();
-    return [];
-  }
-  const candidate = findNativeCharacterPickerOptions();
-  if (!candidate) return [];
-  state.nativeCharacterPickerRoot = candidate.list;
-  state.nativeCharacterPickerItems = candidate.items;
-  if (state.nativeCharacterPickerIndex >= candidate.items.length) {
-    state.nativeCharacterPickerIndex = -1;
-  }
-  return candidate.items;
-}
-
-function setNativeCharacterPickerHighlight(index, scrollIntoView) {
-  const items = state.nativeCharacterPickerItems;
-  if (!items.length) return;
-  items.forEach((item) => item.removeAttribute('data-ccfsp-character-nav-active'));
-  state.nativeCharacterPickerIndex = Math.max(0, Math.min(items.length - 1, index));
-  const item = items[state.nativeCharacterPickerIndex];
-  item.setAttribute('data-ccfsp-character-nav-active', '1');
-  const focusTarget = item.matches('button, [role="option"], [role="menuitem"]')
-    ? item
-    : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
-  try { focusTarget.focus({ preventScroll: true }); } catch {}
-  if (scrollIntoView) {
-    try { item.scrollIntoView({ block: 'nearest' }); } catch {}
-  }
-}
-
-function beginNativeCharacterPickerNavigation() {
-  clearNativeCharacterPickerNavigation();
-  state.nativeCharacterPickerUntil = Date.now() + 12000;
-  const token = ++state.nativeCharacterPickerToken;
-  [0, 40, 120, 240].forEach((delay) => {
-    setTimeout(() => {
-      if (token !== state.nativeCharacterPickerToken) return;
-      refreshNativeCharacterPickerNavigation();
-    }, delay);
-  });
-}
-
-function activateNativeCharacterPickerOption(item) {
-  const target = item.matches('button, [role="option"], [role="menuitem"]')
-    ? item
-    : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
-  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
-    try {
-      const EventCtor = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
-      target.dispatchEvent(new EventCtor(type, {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        pointerId: 1,
-        pointerType: 'mouse',
-        button: 0,
-        buttons: type.endsWith('down') ? 1 : 0
-      }));
-    } catch {}
-  }
-  try { target.click(); } catch {}
-  clearNativeCharacterPickerNavigation();
-}
-
-function handleNativeCharacterPickerKey(event) {
-  if (event.key === 'Escape') {
-    if (state.nativeCharacterPickerUntil) clearNativeCharacterPickerNavigation();
-    return false;
-  }
-  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return false;
-  // 열림 기록(nativeCharacterPickerUntil)이 없어도 — 다른 경로로 열렸거나 기록이
-  // 지워졌더라도 — 실제로 캐릭터 선택창이 떠 있으면 키보드 조작을 허용한다.
-  // (기록에만 의존하면 기록이 유실됐을 때 화살표가 통째로 먹통이 된다)
-  if (!state.nativeCharacterPickerUntil) {
-    if (!findNativeCharacterPickerOptions()) return false;
-    state.nativeCharacterPickerUntil = Date.now() + 12000;
-  }
-  const items = refreshNativeCharacterPickerNavigation();
-  if (!items.length) return false;
-  consumeShortcutEvent(event);
-  if (event.key === 'ArrowDown') {
-    setNativeCharacterPickerHighlight(
-      state.nativeCharacterPickerIndex < 0 ? 0 : state.nativeCharacterPickerIndex + 1,
-      true
-    );
-    return true;
-  }
-  if (event.key === 'ArrowUp') {
-    setNativeCharacterPickerHighlight(
-      state.nativeCharacterPickerIndex < 0 ? items.length - 1 : state.nativeCharacterPickerIndex - 1,
-      true
-    );
-    return true;
-  }
-  const index = state.nativeCharacterPickerIndex < 0 ? 0 : state.nativeCharacterPickerIndex;
-  setNativeCharacterPickerHighlight(index, false);
-  activateNativeCharacterPickerOption(items[index]);
-  return true;
 }
 
 function isEditableElement(el) {
@@ -1006,29 +762,24 @@ function runCharacterShortcut(event) {
   if (btn) {
     state.lastCharacterShortcutAt = now;
     clickCharacterSelectButton(btn);
-    beginNativeCharacterPickerNavigation();
   }
   return true;
 }
 
-  async function handleKeydown(event) {
-    if (!ccfspLifecycle.isActive()) return;
-    if (isRightShiftEvent(event)) {
-      state.rightShiftDown = true;
-      return;
-    }
-    if (runCharacterShortcut(event)) return;
-  if (event.isComposing) return;
+async function handleKeydown(event) {
+  if (!ccfspActive) return;
+  if (runCharacterShortcut(event)) return;
   if (handleNativeCharacterPickerKey(event)) return;
+  if (event.isComposing) return;
 
   if (state.popupEl) {
     if (event.key === 'Escape') { closePopup(); return; }
     if (event.key === 'ArrowDown') { event.preventDefault(); setHighlight(state.selectedIndex + 1, true); return; }
     if (event.key === 'ArrowUp') { event.preventDefault(); setHighlight(state.selectedIndex - 1, true); return; }
     if (event.key === 'Enter') {
-      if (state.items[state.selectedIndex]) { 
-        event.preventDefault(); 
-        insertLabel(state.items[state.selectedIndex]); 
+      if (state.items[state.selectedIndex]) {
+        event.preventDefault();
+        insertLabel(state.items[state.selectedIndex]);
       }
       return;
     }
@@ -1046,7 +797,7 @@ function runCharacterShortcut(event) {
   try {
     await delayTimer(0);
     const { standings } = await getStandings();
-    if (!ccfspLifecycle.isActive()) return;
+    if (!ccfspActive) return;
     if (standings?.length) {
       showPopup(standings);
     }
@@ -1055,20 +806,10 @@ function runCharacterShortcut(event) {
   }
 }
 
-  function handleKeyup(event) {
-    if (!ccfspLifecycle.isActive()) return;
-    if (isRightShiftEvent(event)) {
-      state.rightShiftDown = false;
-      return;
-    }
-    if (isBackquoteShortcut(event) && (state.nativeCharacterPickerUntil || canUseCharacterShortcutFrom(document.activeElement))) {
-      consumeShortcutEvent(event);
-    }
-  }
-
-  function clearPhysicalShortcutModifiers() {
-    state.rightShiftDown = false;
-  }
+function handleKeyup(event) {
+  if (!ccfspActive) return;
+  runCharacterShortcut(event);
+}
 
 function handleInput(event) {
   if (!state.popupEl) return;
@@ -1091,18 +832,17 @@ function initEvents() {
   document.addEventListener('input', handleInput, ccfspWithSignal(true));
   document.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
   document.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
-    document.addEventListener('click', handleClick, ccfspWithSignal(true));
-    window.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
-    window.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
-    window.addEventListener('blur', clearPhysicalShortcutModifiers, ccfspWithSignal());
-    window.addEventListener('resize', handleResize, ccfspWithSignal());
+  document.addEventListener('click', handleClick, ccfspWithSignal(true));
+  window.addEventListener('keydown', handleKeydown, ccfspWithSignal(true));
+  window.addEventListener('keyup', handleKeyup, ccfspWithSignal(true));
+  window.addEventListener('resize', handleResize, ccfspWithSignal());
   window.addEventListener('scroll', handleResize, ccfspWithSignal(true));
 }
 
 
 (function runWatcherLoop() {
   const handle = setInterval(() => {
-    if (!ccfspLifecycle.isActive()) return;
+    if (!ccfspActive) return;
     setCurrentChar();
     if (!state.currentCharacterName) {
       state.currentCharacterName = guessCharName() || null;
@@ -1110,6 +850,94 @@ function initEvents() {
   }, 250);
   ccfspRegisterTeardown(() => clearInterval(handle));
 })();
+
+
+
+/* ===== 네이티브 캐릭터 선택창 키보드 조작 ===== */
+const nativePick = { items: [], index: -1 };
+const ccfspVisible = (el) => {
+  if (!el || el.nodeType !== 1) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+};
+const ccfspIsChatLog = (el) =>
+  !!el && (el.getAttribute?.('role') === 'log' || !!el.closest?.('[role="log"]'));
+function ccfspPickerItems(list) {
+  return Array.from(list.children).filter((item) => {
+    if (!ccfspVisible(item)) return false;
+    if (item.querySelector('.MuiListItemSecondaryAction-root')) return false;
+    const t = removeSpaces(
+      item.querySelector('.MuiListItemText-primary')?.textContent ||
+      item.getAttribute('aria-label') || item.textContent || '');
+    if (!t) return false;
+    return !!item.querySelector('img, .MuiAvatar-root') ||
+      item.matches('[role="option"], [role="menuitem"]');
+  });
+}
+function ccfspFindPicker() {
+  const lists = Array.from(document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]'))
+    .filter(ccfspVisible)
+    .filter((l) => !ccfspIsChatLog(l))
+    .map((list) => ({ list, items: ccfspPickerItems(list) }))
+    .filter((c) => c.items.length);
+  lists.sort((a, b) => b.items.length - a.items.length);
+  return lists[0] || null;
+}
+function ccfspClearPick() {
+  nativePick.items.forEach((i) => i.removeAttribute('data-ccfsp-nav'));
+  nativePick.items = []; nativePick.index = -1;
+}
+function ccfspHighlight(idx) {
+  const items = nativePick.items;
+  if (!items.length) return;
+  items.forEach((i) => i.removeAttribute('data-ccfsp-nav'));
+  const max = items.length - 1;
+  nativePick.index = idx < 0 ? max : (idx > max ? 0 : idx);
+  const item = items[nativePick.index];
+  item.setAttribute('data-ccfsp-nav', '1');
+  const f = item.matches('button, [role="option"], [role="menuitem"]')
+    ? item : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
+  try { f.focus({ preventScroll: true }); } catch {}
+  try { item.scrollIntoView({ block: 'nearest' }); } catch {}
+}
+function ccfspActivate(item) {
+  if (!item) return;
+  const t = item.matches('button, [role="option"], [role="menuitem"]')
+    ? item : item.querySelector('button, [role="button"], [role="option"], [role="menuitem"]') || item;
+  for (const type of ['pointerdown','mousedown','pointerup','mouseup','click']) {
+    try {
+      const C = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+      t.dispatchEvent(new C(type, { bubbles: true, cancelable: true, view: window,
+        pointerId: 1, pointerType: 'mouse', button: 0, buttons: type.endsWith('down') ? 1 : 0 }));
+    } catch {}
+  }
+  try { t.click(); } catch {}
+  ccfspClearPick();
+}
+function handleNativeCharacterPickerKey(event) {
+  if (state.popupEl) return false;
+  if (event.key === 'Escape') { ccfspClearPick(); return false; }
+  if (!['ArrowDown','ArrowUp','Enter'].includes(event.key)) return false;
+  const found = ccfspFindPicker();
+  if (!found) { ccfspClearPick(); return false; }
+  nativePick.items = found.items;
+  if (nativePick.index >= found.items.length) nativePick.index = -1;
+  event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+  if (event.key === 'ArrowDown') { ccfspHighlight(nativePick.index < 0 ? 0 : nativePick.index + 1); return true; }
+  if (event.key === 'ArrowUp')   { ccfspHighlight(nativePick.index < 0 ? found.items.length - 1 : nativePick.index - 1); return true; }
+  ccfspActivate(found.items[nativePick.index < 0 ? 0 : nativePick.index]);
+  return true;
+}
+(function () {
+  const s = document.createElement('style');
+  s.dataset.capybaraToolkitStyle = 'standing-picker nav';
+  s.textContent = '[data-ccfsp-nav="1"]{background:rgba(233,30,99,.18)!important;' +
+    'outline:1px solid rgba(233,30,99,.92)!important;outline-offset:-1px!important;}';
+  (document.head || document.documentElement).appendChild(s);
+  ccfspRegisterTeardown(() => s.remove());
+})();
+
+
 
 initEvents();
 
