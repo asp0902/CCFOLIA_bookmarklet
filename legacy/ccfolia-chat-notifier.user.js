@@ -94,10 +94,14 @@
   // 같은 구체 문구로만 매칭하도록 좁힌다. (url, youtube, 유튜브는 단독 키워드로도 충분히 특이함)
   const BGM_INPUT_HINT_RE = /\burl\b|youtube|유튜브|external\s*file|file\s*url|외부\s*파일|파일\s*url/i;
   const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
+  // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
+  // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
+  // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.94";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
-    version: getUserscriptVersion("0.2.88"),
+    version: getUserscriptVersion(CCF_CHAT_NOTIFIER_VERSION),
     namespace: "https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea"
   });
   const MAX_KNOWN_MESSAGE_KEYS = 160;
@@ -547,7 +551,7 @@
     observeChatMessages();
     scheduleCcfBgmEnhancerInit();
     debugLog("init", {
-      version: "0.2.88",
+      version: CCF_CHAT_NOTIFIER_VERSION,
       href: location.href,
       title: document.title || ""
     });

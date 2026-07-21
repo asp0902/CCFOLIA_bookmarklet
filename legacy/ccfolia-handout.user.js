@@ -47,7 +47,8 @@
   const CCF_HO_SCRIPT_INFO = Object.freeze({
     id: "ccf-handout",
     name: "CCFOLIA Handout",
-    version: "0.1.76",
+    // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
+    version: "0.1.81",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 

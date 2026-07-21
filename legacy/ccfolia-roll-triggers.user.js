@@ -20,7 +20,8 @@
   const CCF_RT_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll-triggers",
     name: "CCFOLIA Roll Triggers",
-    version: "0.1.1",
+    // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
+    version: "0.1.2",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers"
   });
 
