@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.80
+// @version      0.1.81
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -3923,11 +3923,21 @@
     await saveAll(state.data);
     toast("설정 저장됨");
     render();
-    // 룸 전체에 GM 캐릭터 공유 (#84) — 실패해도 로컬 저장은 유지
+    // 룸 전체에 GM 캐릭터 공유 (#84) — 실패해도 로컬 저장은 유지.
+    // 단, 플레이어도 권한 매칭을 위해 "내 캐릭터"를 반드시 설정해야 하는데,
+    // 그때마다 GM 을 덮어쓰면 나중에 설정한 사람이 룸 GM 이 되어버린다
+    // (모두가 관리자 UI를 보게 되는 문제). 이미 등록된 GM 이 있고 내가 그 GM 이
+    // 아니면 GM 기록은 건드리지 않는다.
     if (me) {
-      pushGmToFirestore(me).catch((error) => {
-        console.warn("[ccf-handout] GM push 실패:", error);
-      });
+      const gmUid = remoteGmInfo?.gmUid || "";
+      const iAmGm = !!gmUid && !!fbState?.uid && gmUid === fbState.uid;
+      if (!gmUid || iAmGm) {
+        pushGmToFirestore(me).catch((error) => {
+          console.warn("[ccf-handout] GM push 실패:", error);
+        });
+      } else {
+        console.info("[ccf-handout] GM 기록 유지 — 나는 GM 이 아님 (내 캐릭터만 저장):", me);
+      }
     }
   }
 
