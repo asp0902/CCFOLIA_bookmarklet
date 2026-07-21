@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.77
+// @version      0.1.78
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -365,6 +365,14 @@
     if (/^&lt;(p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b/i.test(t)) {
       const decoded = decodeHtmlEntities(t);
       if (htmlTagRe.test(decoded)) return renderHtmlHandoutBody(decoded);
+    }
+    // 텍스트로 시작하지만 중간에 태그/엔티티가 있으면 WYSIWYG(contenteditable) 편집 결과다.
+    // 마크다운으로 넘기면 <img>가 통째로 escape 되어 이미지가 사라지고 &nbsp; 가 글자로 노출된다.
+    if (
+      /<\/?(?:p|div|h[1-6]|ul|ol|li|blockquote|br|hr|img|span|b|i|u|s|strong|em|code|pre|a|font)\b[^>]*>/i.test(t)
+      || /&(?:nbsp|amp|lt|gt|quot|#\d+);/i.test(t)
+    ) {
+      return renderHtmlHandoutBody(t);
     }
     return renderMarkdown(src);
   }
@@ -1502,49 +1510,139 @@
   // push 가 통째로 실패한다("description is longer than 1048487 bytes") → 로컬에만
   // 남고 상대방은 이미지를 못 본다. 그래서 이미지는 Storage 에 올리고 URL 만 저장한다.
 
-  function dataUrlToBlob(dataUrl) {
-    const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/i);
-    if (!match) return null;
-    try {
-      const mime = match[1];
-      const binary = atob(match[2]);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      return new Blob([bytes], { type: mime });
-    } catch (error) {
-      return null;
+  // Firebase Storage 는 버킷 CORS 설정이 없으면 ccfolia.com 출처에서 업로드가 막힌다
+  // (preflight 실패). 그래서 format-sync 와 동일하게 **Firestore 에 청크로 나눠 저장**한다.
+  // 문서당 1MB 제한은 120KB 청크로 회피하고, 본문에는 토큰만 넣는다.
+  const HANDOUT_IMAGE_TOKEN_PREFIX = "ccf-ho-image://";
+  const HANDOUT_IMAGE_CHUNK_SIZE = 120 * 1024;
+  const HANDOUT_IMAGE_MAX_DATA_URL_CHARS = 6 * 1024 * 1024;
+  const handoutImageUrlCache = new Map();
+
+  function splitStringIntoChunks(value, chunkSize) {
+    const chunks = [];
+    const text = String(value || "");
+    for (let index = 0; index < text.length; index += chunkSize) {
+      chunks.push(text.slice(index, index + chunkSize));
     }
+    return chunks;
   }
 
-  function guessImageExtension(mimeType) {
-    const map = {
-      "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
-      "image/webp": "webp", "image/bmp": "bmp", "image/svg+xml": "svg"
-    };
-    return map[String(mimeType || "").toLowerCase()] || "png";
+  function isHandoutImageToken(value) {
+    return typeof value === "string" && value.startsWith(HANDOUT_IMAGE_TOKEN_PREFIX);
   }
 
-  // Blob/File 을 Storage 에 올리고 다운로드 URL 반환.
-  async function uploadImageBlobToStorage(blob) {
-    if (!(blob instanceof Blob)) throw new Error("이미지 데이터가 올바르지 않습니다.");
+  function parseHandoutImageToken(token) {
+    if (!isHandoutImageToken(token)) return null;
+    const body = token.slice(HANDOUT_IMAGE_TOKEN_PREFIX.length);
+    const slash = body.indexOf("/");
+    if (slash <= 0) return null;
+    try {
+      return {
+        roomId: decodeURIComponent(body.slice(0, slash)),
+        imageId: decodeURIComponent(body.slice(slash + 1))
+      };
+    } catch (_) { return null; }
+  }
+
+  // data URL 을 Firestore 청크로 저장하고 토큰 반환.
+  async function uploadImageDataUrlToFirestore(dataUrl) {
+    const roomKey = getCurrentRoomKey();
+    if (!roomKey || roomKey === "global") throw new Error("룸 안에서만 이미지를 올릴 수 있습니다.");
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(String(dataUrl || ""))) {
+      throw new Error("이미지 형식을 인식하지 못했습니다.");
+    }
+    if (dataUrl.length > HANDOUT_IMAGE_MAX_DATA_URL_CHARS) {
+      throw new Error(`이미지가 너무 큽니다 (약 ${Math.floor(HANDOUT_IMAGE_MAX_DATA_URL_CHARS / 1024 / 1024)}MB 이하만 가능).`);
+    }
+
     const fb = await initFirebase();
     if (!fb) throw new Error("Firebase not ready");
-    const { ref, uploadBytes, getDownloadURL } = fb.modules.st;
-    const roomKey = getCurrentRoomKey();
-    const ext = guessImageExtension(blob.type);
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-    const path = `rooms/${roomKey}/handout-images/${fb.uid}/${name}`;
-    const fileRef = ref(fb.storage, path);
-    await uploadBytes(fileRef, blob, { contentType: blob.type || "image/png" });
-    const url = await getDownloadURL(fileRef);
-    console.info("[ccf-handout] 이미지 업로드 OK:", path);
-    return url;
+    const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+    const imageId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const chunks = splitStringIntoChunks(dataUrl, HANDOUT_IMAGE_CHUNK_SIZE);
+    const metaRef = doc(fb.db, "rooms", roomKey, "images", imageId);
+    const meta = {
+      id: imageId,
+      roomId: roomKey,
+      ownerUid: fb.uid,
+      chunkCount: chunks.length,
+      dataUrlLength: dataUrl.length,
+      createdAt: serverTimestamp()
+    };
+
+    await setDoc(metaRef, { ...meta, status: "uploading" });
+    for (let index = 0; index < chunks.length; index += 1) {
+      await setDoc(
+        doc(fb.db, "rooms", roomKey, "images", imageId, "chunks", String(index).padStart(4, "0")),
+        { index, data: chunks[index] }
+      );
+    }
+    await setDoc(metaRef, { status: "ready" }, { merge: true });
+
+    const token = `${HANDOUT_IMAGE_TOKEN_PREFIX}${encodeURIComponent(roomKey)}/${encodeURIComponent(imageId)}`;
+    handoutImageUrlCache.set(token, dataUrl);
+    console.info("[ccf-handout] 이미지 업로드 OK:", imageId, `${chunks.length} chunks`);
+    return token;
+  }
+
+  async function uploadImageBlobToStorage(blob) {
+    if (!(blob instanceof Blob)) throw new Error("이미지 데이터가 올바르지 않습니다.");
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+      reader.readAsDataURL(blob);
+    });
+    return uploadImageDataUrlToFirestore(dataUrl);
   }
 
   async function uploadDataUrlToStorage(dataUrl) {
-    const blob = dataUrlToBlob(dataUrl);
-    if (!blob) throw new Error("이미지 형식을 인식하지 못했습니다.");
-    return uploadImageBlobToStorage(blob);
+    return uploadImageDataUrlToFirestore(dataUrl);
+  }
+
+  // 토큰 → 실제 data URL 복원 (청크 재조립). 실패 시 "".
+  async function resolveHandoutImageToken(token) {
+    if (handoutImageUrlCache.has(token)) return handoutImageUrlCache.get(token);
+    const parsed = parseHandoutImageToken(token);
+    if (!parsed) return "";
+    try {
+      const fb = await initFirebase();
+      const { doc, getDoc, collection, getDocs } = fb.modules.fs;
+      const metaSnap = await getDoc(doc(fb.db, "rooms", parsed.roomId, "images", parsed.imageId));
+      if (!metaSnap.exists()) return "";
+      const chunkSnap = await getDocs(
+        collection(fb.db, "rooms", parsed.roomId, "images", parsed.imageId, "chunks")
+      );
+      const parts = [];
+      chunkSnap.forEach((d) => {
+        const v = d.data() || {};
+        parts[Number(v.index) || 0] = String(v.data || "");
+      });
+      const dataUrl = parts.join("");
+      if (!dataUrl) return "";
+      handoutImageUrlCache.set(token, dataUrl);
+      return dataUrl;
+    } catch (error) {
+      console.warn("[ccf-handout] 이미지 복원 실패:", error);
+      return "";
+    }
+  }
+
+  // 렌더된 DOM 안의 토큰 이미지를 실제 이미지로 교체.
+  function resolveHandoutImagesIn(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll(`img[src^="${HANDOUT_IMAGE_TOKEN_PREFIX}"]`).forEach((img) => {
+      const token = img.getAttribute("src") || "";
+      if (img.dataset.ccfHoResolving === "1") return;
+      img.dataset.ccfHoResolving = "1";
+      // 깨진 이미지 아이콘이 뜨지 않도록 잠시 비워둔다.
+      img.removeAttribute("src");
+      resolveHandoutImageToken(token).then((url) => {
+        if (url) img.setAttribute("src", url);
+        else img.setAttribute("alt", "이미지를 불러오지 못했습니다");
+        delete img.dataset.ccfHoResolving;
+      });
+    });
   }
 
   // HTML 안의 <img src="data:image/..."> 를 모두 Storage URL 로 교체.
@@ -2052,6 +2150,8 @@
       }
     });
     (document.body || document.documentElement).appendChild(host);
+    // 보여주기 팝업 본문의 Firestore 이미지 토큰도 실제 이미지로 교체.
+    resolveHandoutImagesIn(sh);
     registerTeardown(() => host.remove());
   }
 
@@ -2072,24 +2172,22 @@
     fbInitPromise = (async () => {
       try {
         console.info("[ccf-handout] Firebase: loading SDK...");
-        const [appMod, authMod, fsMod, stMod] = await Promise.all([
+        const [appMod, authMod, fsMod] = await Promise.all([
           import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
           import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
-          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`),
-          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-storage.js`)
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
         ]);
         // 같은 페이지서 여러 번 init 충돌 방지 — 이름 지정
         const existing = appMod.getApps?.().find((a) => a.name === FIREBASE_APP_NAME);
         const app = existing || appMod.initializeApp(FIREBASE_CONFIG, FIREBASE_APP_NAME);
         const auth = authMod.getAuth(app);
         const db = fsMod.getFirestore(app);
-        const storage = stMod.getStorage(app);
         const cred = await authMod.signInAnonymously(auth);
         fbState = {
-          app, auth, db, storage,
+          app, auth, db,
           user: cred.user,
           uid: cred.user.uid,
-          modules: { app: appMod, auth: authMod, fs: fsMod, st: stMod }
+          modules: { app: appMod, auth: authMod, fs: fsMod }
         };
         console.info("[ccf-handout] Firebase OK uid:", cred.user.uid);
         return fbState;
@@ -2808,6 +2906,8 @@
     else if (state.activeTab === "edit") inner = renderEdit();
     else inner = renderSettings();
     body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${inner}</div>`;
+    // 본문에 들어간 Firestore 이미지 토큰을 실제 이미지로 교체 (비동기).
+    resolveHandoutImagesIn(body);
   }
 
   function renderList() {
