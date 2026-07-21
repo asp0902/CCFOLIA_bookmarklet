@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.97
+// @version      0.2.98
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.2.97";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.98";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -457,6 +457,9 @@
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmStopping = false; // 정지 중 발생한 ENDED 를 loop 재생과 구분
+  // 편집 팝업에서 볼륨을 조절하는 동안은 그 값이 주인. 주기 동기화가 저장된 값으로
+  // 되돌려쓰지 못하게 하는 짧은 유예 시각.
+  let ccfBgmLiveVolumeEditUntil = 0;
   // 로컬에서 곡을 고른 직후, 그 전에 출발했던 폴링 응답(= 낡은 원격 신호)이 도착해
   // 다른 곡으로 갈아치우는 경쟁 상태를 막는다 (#A를 골랐는데 B가 재생되는 문제).
   let ccfBgmLocalIntentSeq = 0;      // 로컬 재생/정지 조작마다 증가
@@ -3435,6 +3438,11 @@
       || findCcfReadyYoutubeEntryForSlot(ccfBgmActiveSlotKey)?.[1];
     const state = readCcfYoutubeBgmPlaybackState(ccfBgmActiveSlotKey, activeEntry, button);
     ccfBgmActiveLoop = state.loop;
+    // 편집 팝업에서 방금 볼륨을 조절했다면 그 값이 주인이다. 여기서 저장된 옛 볼륨을
+    // 덮어쓰면 슬라이더를 움직여도 소리가 그대로인 것처럼 보인다.
+    if (Date.now() < ccfBgmLiveVolumeEditUntil) {
+      return;
+    }
     applyCcfBgmPlayerVolume(state);
   }
 
@@ -3450,6 +3458,10 @@
         }
         // 미리듣기로 본 재생을 일시정지한 동안에는 재생을 강제하지 않는다.
         if (ccfBgmPreviewActive) {
+          return;
+        }
+        // 편집 중 라이브 볼륨이 주인인 동안에는 예약된 재적용이 옛 값을 덮어쓰지 않게 한다.
+        if (reason !== "edit-live" && Date.now() < ccfBgmLiveVolumeEditUntil) {
           return;
         }
 
@@ -4714,7 +4726,7 @@
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
       `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${initialVolume}%;"></span>`,
       `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
-      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="5" value="${initialVolume}">`,
+      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="1" value="${initialVolume}">`,
       '    </span>',
       `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${initialVolumeLabel}</p>`,
       `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
@@ -4794,8 +4806,9 @@
     }
 
     const updateSliderVisuals = (volume) => {
-      // 0.05 단위(0~100 내부에서는 5단위)로 스냅한다.
-      const value = Math.round(clampCcfBgmVolume(volume, initialVolume) / 5) * 5;
+      // 0.01 단위(0~100 내부에서는 1단위). 예전엔 5단위였는데, 슬라이더 폭이 132px 이라
+      // 한 칸이 6px 이 넘어 커서를 따라오지 않고 뚝뚝 끊겨 보였다.
+      const value = clampCcfBgmVolume(volume, initialVolume);
       // 포인터는 초당 수십 번 움직이지만 스냅된 값은 그대로인 경우가 대부분이다.
       // 같은 값이면 DOM 을 다시 쓰지 않는다 (불필요한 레이아웃/페인트 제거).
       if (value === lastRenderedVolume) {
@@ -4832,11 +4845,48 @@
 
       const loop = loopButton ? loopButton.dataset.loop === "1" : ccfBgmActiveLoop;
       ccfBgmActiveLoop = loop;
-      const state = { volume, loop };
+      // 저장된 값을 반영할 때(readCcfYoutubeBgmPlaybackState)는 전체 볼륨을 곱하는데
+      // 여기서만 곱하지 않으면, 편집 중 볼륨과 저장 후 볼륨의 기준이 달라진다.
+      const globalVolume = readCcfBgmGlobalVolume(findCcfBgmButtonBySlot(ccfBgmActiveSlotKey));
+      const effective = Math.max(0, Math.min(100, Math.round(volume * globalVolume / 100)));
+      const state = { volume: effective, loop };
+      // 이 순간부터 잠깐은 편집 중인 값이 주인이다. 주기적 동기화가 저장된 옛 볼륨으로
+      // 되돌려써서 "볼륨이 안 변하는" 현상을 만들지 못하게 막는다.
+      ccfBgmLiveVolumeEditUntil = Date.now() + 1500;
       applyCcfBgmPlayerVolume(state);
       if (reinforce && volume > 0) {
         reinforceCcfYoutubeBgmAudio(state, "edit-live");
       }
+    };
+
+    // 눈금이 1단위가 되면서 드래그 한 번에 값이 수십 번 바뀔 수 있다. 화면은 매번 갱신하되,
+    // 유튜브 iframe 으로 나가는 볼륨 명령은 60ms 단위로 묶어 보낸다(마지막 값 보장).
+    let livePlaybackTimer = 0;
+    let pendingLiveVolume = null;
+    const queueLivePlaybackSettings = (volume, reinforce = false) => {
+      if (reinforce) {
+        if (livePlaybackTimer) {
+          window.clearTimeout(livePlaybackTimer);
+          livePlaybackTimer = 0;
+        }
+        pendingLiveVolume = null;
+        applyLivePlaybackSettings(volume, true);
+        return;
+      }
+
+      pendingLiveVolume = volume;
+      if (livePlaybackTimer) {
+        return;
+      }
+      livePlaybackTimer = window.setTimeout(() => {
+        livePlaybackTimer = 0;
+        if (pendingLiveVolume == null) {
+          return;
+        }
+        const next = pendingLiveVolume;
+        pendingLiveVolume = null;
+        applyLivePlaybackSettings(next);
+      }, 60);
     };
 
     const updateVolumeFromPointer = (event, reinforce = false) => {
@@ -4855,7 +4905,7 @@
       // 유튜브 iframe 으로 setVolume/unMute 를 4번씩 보내(초당 수백 건) 드래그가 끊겼다.
       if (reinforce || applied !== lastAppliedVolume) {
         lastAppliedVolume = applied;
-        applyLivePlaybackSettings(applied, reinforce);
+        queueLivePlaybackSettings(applied, reinforce);
       }
       if (sliderDragTrace.length < 60) {
         sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${applied}`);
