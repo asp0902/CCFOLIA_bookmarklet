@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.95
+// @version      0.2.96
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.2.95";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.96";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4766,6 +4766,9 @@
     // 폭 변화("1" ↔ "0.85")로 슬라이더 폭이 밀린 값을 읽어 같은 커서 위치가 다른 볼륨으로
     // 계산된다 → 값이 진동하며 숫자가 점멸한다.
     let sliderDragRect = null;
+    // 드래그 한 번의 계산 결과를 모아 pointerup 때 한 줄로 남긴다.
+    // 값이 튀면 여기서 커서 위치 대비 볼륨이 되돌아가는 구간이 그대로 보인다.
+    let sliderDragTrace = [];
 
     // 음원명 입력란 상호작용 보장: 포커스/타이핑을 가로채는 핸들러로부터 보호한다.
     if (nameInput instanceof HTMLInputElement) {
@@ -4838,8 +4841,11 @@
       }
 
       const nextVolume = clampCcfBgmVolume((event.clientX - rect.left) / rect.width * 100, initialVolume);
-      updateSliderVisuals(nextVolume);
+      const applied = updateSliderVisuals(nextVolume);
       applyLivePlaybackSettings(nextVolume, reinforce);
+      if (sliderDragTrace.length < 60) {
+        sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${applied}`);
+      }
     };
 
     const stopSliderPointerTracking = (event) => {
@@ -4856,8 +4862,14 @@
       if (event.type === "pointerup") {
         updateVolumeFromPointer(event, true);
       }
+      debugLog("bgm-volume-drag", {
+        rectWidth: sliderDragRect ? Math.round(sliderDragRect.width) : null,
+        steps: sliderDragTrace.length,
+        trace: sliderDragTrace.join(" ")
+      });
       sliderPointerId = null;
       sliderDragRect = null;
+      sliderDragTrace = [];
     };
 
     const handleSliderPointerMove = (event) => {
@@ -4871,6 +4883,11 @@
     };
 
     const handleVolumeInput = () => {
+      // 드래그 중에는 포인터 계산만이 값의 주인이다. 이때 들어오는 input 이벤트는
+      // 브라우저 기본 처리가 만든 다른 좌표계의 값이므로 무시한다(값 튐 방지).
+      if (sliderPointerId != null) {
+        return;
+      }
       const volume = updateSliderVisuals(Number(volumeInput?.value));
       applyLivePlaybackSettings(volume);
       if (liveVolumeReinforceTimer) {
@@ -8048,6 +8065,11 @@
         position: absolute !important;
         inset: 0 !important;
         z-index: 2 !important;
+        /* 투명하게 덮여 있는 진짜 range 입력. 포인터까지 받으면 브라우저 기본 드래그가
+           함께 동작하는데, 기본 드래그는 thumb 폭(18px)을 뺀 좌표계로 값을 계산하므로
+           우리 선형 계산과 한 스텝 정도 어긋난 값을 번갈아 써넣는다 → 숫자가 튄다.
+           포인터는 아래 슬라이더가 전담하고, 이 입력은 키보드 조작용으로만 남긴다. */
+        pointer-events: none !important;
         width: 100% !important;
         height: 100% !important;
         margin: 0 !important;
