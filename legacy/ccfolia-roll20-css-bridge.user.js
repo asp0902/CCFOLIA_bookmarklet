@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.53
+// @version      0.3.54
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -834,7 +834,7 @@
         min-width: 0 !important;
         margin: 0 0.08em !important;
         padding: 0.08em 0.5em !important;
-        border: 1px solid #d32f2f !important;
+        border: 3px solid #d32f2f !important;
         border-radius: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
@@ -856,7 +856,7 @@
       [aria-live="assertive"] .inlinerollresult:not(.ccr20-inline-roll),
       ul.MuiList-root .inlinerollresult:not(.ccr20-inline-roll) {
         background: #ffffff !important;
-        border: 1px solid #d32f2f !important;
+        border: 3px solid #d32f2f !important;
         border-radius: 0 !important;
         padding: 0.08em 0.5em !important;
         color: #000000 !important;
