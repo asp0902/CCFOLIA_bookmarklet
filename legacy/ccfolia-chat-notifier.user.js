@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.0
+// @version      0.3.1
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.0";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.1";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4764,9 +4764,6 @@
     // 폭 변화("1" ↔ "0.85")로 슬라이더 폭이 밀린 값을 읽어 같은 커서 위치가 다른 볼륨으로
     // 계산된다 → 값이 진동하며 숫자가 점멸한다.
     let sliderDragRect = null;
-    // 드래그 한 번의 계산 결과를 모아 pointerup 때 한 줄로 남긴다.
-    // 값이 튀면 여기서 커서 위치 대비 볼륨이 되돌아가는 구간이 그대로 보인다.
-    let sliderDragTrace = [];
     // 마지막으로 화면/플레이어에 반영한 값. 같은 값의 중복 작업을 걸러낸다.
     let lastRenderedVolume = null;
     let lastAppliedVolume = null;
@@ -4794,12 +4791,13 @@
       });
     }
 
-    // 코코포리아 기본 동작과 동일하게, 드래그하는 동안에는 막대·손잡이만 커서를 따라가고
-    // 숫자는 바뀌지 않는다. 손을 떼는 순간(settle) 0.05 단위로 스냅해 숫자·저장값을 확정한다.
+    // 코코포리아 기본 동작과 동일하게, 드래그하는 동안에는 막대·손잡이만 움직이고
+    // 숫자는 바뀌지 않는다. 손을 떼는 순간(settle) 숫자·저장값을 확정한다.
+    // 손잡이도 0.05 단위로 끊어 움직인다 — 연속으로 움직이면 지금 몇 칸인지 알 수 없다.
     const updateSliderVisuals = (volume, settle = false) => {
       const raw = clampCcfBgmVolume(volume, initialVolume);
       const snapped = Math.round(raw / 5) * 5;
-      const trackPct = settle ? snapped : raw;
+      const trackPct = snapped;
       // 같은 화면 상태면 DOM 을 다시 쓰지 않는다 (불필요한 레이아웃/페인트 제거).
       const renderKey = `${trackPct}:${settle ? snapped : "-"}`;
       if (renderKey === lastRenderedVolume) {
@@ -4871,9 +4869,6 @@
             updateSliderVisuals(next);
           });
         }
-        if (sliderDragTrace.length < 60) {
-          sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${Math.round(nextVolume / 5) * 5}`);
-        }
         return;
       }
 
@@ -4887,9 +4882,6 @@
       if (applied !== lastAppliedVolume) {
         lastAppliedVolume = applied;
         applyLivePlaybackSettings(applied);
-      }
-      if (sliderDragTrace.length < 60) {
-        sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${applied}`);
       }
     };
 
@@ -4912,14 +4904,8 @@
       if (event.type === "pointerup") {
         updateVolumeFromPointer(event, true);
       }
-      debugLog("bgm-volume-drag", {
-        rectWidth: sliderDragRect ? Math.round(sliderDragRect.width) : null,
-        steps: sliderDragTrace.length,
-        trace: sliderDragTrace.join(" ")
-      });
       sliderPointerId = null;
       sliderDragRect = null;
-      sliderDragTrace = [];
     };
 
     const handleSliderPointerMove = (event) => {
