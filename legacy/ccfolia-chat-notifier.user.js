@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.98
+// @version      0.2.99
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.2.98";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.99";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -460,6 +460,9 @@
   // 편집 팝업에서 볼륨을 조절하는 동안은 그 값이 주인. 주기 동기화가 저장된 값으로
   // 되돌려쓰지 못하게 하는 짧은 유예 시각.
   let ccfBgmLiveVolumeEditUntil = 0;
+  // 아직 저장하지 않은 편집 중 볼륨. 팝업이 열려 있는 동안 저장값 대신 이 값을 쓴다.
+  // (시간 유예만 두면 그 시간이 지난 뒤 저장값으로 되돌아가 "볼륨이 원래대로" 돌아간다)
+  let ccfBgmLiveVolumeOverride = null; // { entryKey, volume }
   // 로컬에서 곡을 고른 직후, 그 전에 출발했던 폴링 응답(= 낡은 원격 신호)이 도착해
   // 다른 곡으로 갈아치우는 경쟁 상태를 막는다 (#A를 골랐는데 B가 재생되는 문제).
   let ccfBgmLocalIntentSeq = 0;      // 로컬 재생/정지 조작마다 증가
@@ -3063,7 +3066,16 @@
       || ccfBgmSlotMap.get(ccfBgmActiveEntryKey)
       || findCcfReadyYoutubeEntryForSlot(slotKey)?.[1];
 
-    if (storedEntry && Number.isFinite(Number(storedEntry.volume))) {
+    // 편집 팝업에서 조절 중인(아직 저장 안 한) 볼륨이 있으면 저장값보다 우선한다.
+    const liveOverride = ccfBgmLiveVolumeOverride
+      && ccfBgmLiveVolumeOverride.entryKey === (ccfBgmActiveEntryKey || "")
+      ? Number(ccfBgmLiveVolumeOverride.volume)
+      : null;
+
+    if (Number.isFinite(liveOverride)) {
+      const globalVolume = readCcfBgmGlobalVolume(button || findCcfBgmButtonBySlot(slotKey));
+      state.volume = Math.max(0, Math.min(100, Math.round(liveOverride * globalVolume / 100)));
+    } else if (storedEntry && Number.isFinite(Number(storedEntry.volume))) {
       const entryVolume = getCcfYoutubeBgmEditVolume(storedEntry, slotKey);
       const globalVolume = readCcfBgmGlobalVolume(button || findCcfBgmButtonBySlot(slotKey));
       state.volume = Math.max(0, Math.min(100, Math.round(entryVolume * globalVolume / 100)));
@@ -4726,7 +4738,7 @@
       '      <span class="MuiSlider-rail css-b04pc9"></span>',
       `      <span class="MuiSlider-track css-5wk36y" style="left: 0%; width: ${initialVolume}%;"></span>`,
       `      <span data-index="0" class="MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary MuiSlider-thumb MuiSlider-thumbSizeSmall MuiSlider-thumbColorPrimary css-yxa6ry" style="left: ${initialVolume}%;"></span>`,
-      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="1" value="${initialVolume}">`,
+      `      <input class="ccf-youtube-bgm-range" data-index="0" aria-label="볼륨" aria-valuenow="${initialVolume}" aria-orientation="horizontal" aria-valuemax="100" aria-valuemin="0" name="volume" type="range" min="0" max="100" step="5" value="${initialVolume}">`,
       '    </span>',
       `    <p class="MuiTypography-root MuiTypography-body1 css-9l3uo3 ccf-youtube-bgm-volume-value">${initialVolumeLabel}</p>`,
       `    <button class="MuiButtonBase-root MuiIconButton-root MuiIconButton-colorPrimary MuiIconButton-sizeSmall css-11qx9u ccf-youtube-bgm-loop" tabindex="0" type="button" data-loop="${loop ? "1" : "0"}" aria-label="반복재생" aria-pressed="${loop ? "true" : "false"}" title="반복재생">`,
@@ -4781,9 +4793,12 @@
     // 드래그 한 번의 계산 결과를 모아 pointerup 때 한 줄로 남긴다.
     // 값이 튀면 여기서 커서 위치 대비 볼륨이 되돌아가는 구간이 그대로 보인다.
     let sliderDragTrace = [];
-    // 마지막으로 화면/플레이어에 반영한 스냅 값. 같은 값의 중복 작업을 걸러낸다.
+    // 마지막으로 화면/플레이어에 반영한 값. 같은 값의 중복 작업을 걸러낸다.
     let lastRenderedVolume = null;
     let lastAppliedVolume = null;
+    // 포인터 이동을 화면 갱신 주기에 맞춰 한 번만 그리기 위한 대기 값.
+    let pendingPointerVolume = null;
+    let sliderRenderFrame = 0;
 
     // 음원명 입력란 상호작용 보장: 포커스/타이핑을 가로채는 핸들러로부터 보호한다.
     if (nameInput instanceof HTMLInputElement) {
@@ -4805,17 +4820,20 @@
       });
     }
 
-    const updateSliderVisuals = (volume) => {
-      // 0.01 단위(0~100 내부에서는 1단위). 예전엔 5단위였는데, 슬라이더 폭이 132px 이라
-      // 한 칸이 6px 이 넘어 커서를 따라오지 않고 뚝뚝 끊겨 보였다.
-      const value = clampCcfBgmVolume(volume, initialVolume);
-      // 포인터는 초당 수십 번 움직이지만 스냅된 값은 그대로인 경우가 대부분이다.
-      // 같은 값이면 DOM 을 다시 쓰지 않는다 (불필요한 레이아웃/페인트 제거).
-      if (value === lastRenderedVolume) {
-        return value;
+    // 숫자는 0.05 단위로 표시/저장하되(사용자 요청), 막대와 손잡이는 커서 위치를 그대로
+    // 따라간다. 폭 132px 슬라이더에서 0.05 는 한 칸이 6.3px 라, 손잡이까지 스냅시키면
+    // 커서를 못 따라오고 뚝뚝 끊겨 보인다. 손을 떼면(settle) 손잡이도 숫자 위치로 맞춘다.
+    const updateSliderVisuals = (volume, settle = false) => {
+      const raw = clampCcfBgmVolume(volume, initialVolume);
+      const snapped = Math.round(raw / 5) * 5;
+      const trackPct = settle ? snapped : raw;
+      // 같은 화면 상태면 DOM 을 다시 쓰지 않는다 (불필요한 레이아웃/페인트 제거).
+      const renderKey = `${trackPct}:${snapped}`;
+      if (renderKey === lastRenderedVolume) {
+        return snapped;
       }
-      lastRenderedVolume = value;
-      const pct = `${value}%`;
+      lastRenderedVolume = renderKey;
+      const pct = `${trackPct}%`;
       if (sliderTrack instanceof HTMLElement) {
         sliderTrack.style.width = pct;
       }
@@ -4823,13 +4841,13 @@
         sliderThumb.style.left = pct;
       }
       if (volumeValueLabel instanceof HTMLElement) {
-        volumeValueLabel.textContent = String(value / 100);
+        volumeValueLabel.textContent = String(snapped / 100);
       }
       if (volumeInput instanceof HTMLInputElement) {
-        volumeInput.value = String(value);
-        volumeInput.setAttribute("aria-valuenow", String(value));
+        volumeInput.value = String(snapped);
+        volumeInput.setAttribute("aria-valuenow", String(snapped));
       }
-      return value;
+      return snapped;
     };
 
     const applyLivePlaybackSettings = (volume, reinforce = false) => {
@@ -4853,6 +4871,8 @@
       // 이 순간부터 잠깐은 편집 중인 값이 주인이다. 주기적 동기화가 저장된 옛 볼륨으로
       // 되돌려써서 "볼륨이 안 변하는" 현상을 만들지 못하게 막는다.
       ccfBgmLiveVolumeEditUntil = Date.now() + 1500;
+      // 팝업이 닫힐 때까지 이 값이 저장값을 대신한다 (유예 시간이 끝나도 되돌아가지 않게).
+      ccfBgmLiveVolumeOverride = { entryKey, volume };
       applyCcfBgmPlayerVolume(state);
       if (reinforce && volume > 0) {
         reinforceCcfYoutubeBgmAudio(state, "edit-live");
@@ -4900,7 +4920,38 @@
       }
 
       const nextVolume = clampCcfBgmVolume((event.clientX - rect.left) / rect.width * 100, initialVolume);
-      const applied = updateSliderVisuals(nextVolume);
+      // 마우스는 화면 갱신보다 훨씬 자주 신호를 보낸다(고주사율 마우스는 초당 수백 번).
+      // 매 신호마다 DOM 을 고치면 프레임을 놓쳐 손잡이가 커서에 끌려오듯 보인다.
+      // 화면 갱신 한 프레임당 한 번만 그리고, 마지막 위치를 보장한다.
+      if (!reinforce) {
+        pendingPointerVolume = nextVolume;
+        if (!sliderRenderFrame) {
+          sliderRenderFrame = window.requestAnimationFrame(() => {
+            sliderRenderFrame = 0;
+            if (pendingPointerVolume == null) {
+              return;
+            }
+            const next = pendingPointerVolume;
+            pendingPointerVolume = null;
+            const value = updateSliderVisuals(next);
+            if (value !== lastAppliedVolume) {
+              lastAppliedVolume = value;
+              queueLivePlaybackSettings(value);
+            }
+          });
+        }
+        if (sliderDragTrace.length < 60) {
+          sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${Math.round(nextVolume / 5) * 5}`);
+        }
+        return;
+      }
+
+      pendingPointerVolume = null;
+      if (sliderRenderFrame) {
+        window.cancelAnimationFrame(sliderRenderFrame);
+        sliderRenderFrame = 0;
+      }
+      const applied = updateSliderVisuals(nextVolume, true);
       // 값이 그대로면 플레이어에 다시 보내지 않는다. 예전에는 포인터가 움직일 때마다
       // 유튜브 iframe 으로 setVolume/unMute 를 4번씩 보내(초당 수백 건) 드래그가 끊겼다.
       if (reinforce || applied !== lastAppliedVolume) {
@@ -4920,6 +4971,11 @@
       window.removeEventListener("pointermove", handleSliderPointerMove, true);
       window.removeEventListener("pointerup", stopSliderPointerTracking, true);
       window.removeEventListener("pointercancel", stopSliderPointerTracking, true);
+      if (sliderRenderFrame) {
+        window.cancelAnimationFrame(sliderRenderFrame);
+        sliderRenderFrame = 0;
+      }
+      pendingPointerVolume = null;
       if (sliderElement instanceof HTMLElement && sliderPointerId != null) {
         try { sliderElement.releasePointerCapture?.(sliderPointerId); } catch (_) {}
       }
@@ -5130,6 +5186,11 @@
       ccfBgmEditPopover.remove();
       ccfBgmEditPopover = null;
     }
+
+    // 편집 중이던 임시 볼륨을 해제한다. 저장했다면 entry 에 이미 반영돼 있고,
+    // 취소했다면 다음 동기화에서 저장값으로 돌아가는 것이 맞다.
+    ccfBgmLiveVolumeOverride = null;
+    ccfBgmLiveVolumeEditUntil = 0;
   }
 
   // --- 미리듣기: 본 재생과 별개인 로컬 전용 플레이어 ---
