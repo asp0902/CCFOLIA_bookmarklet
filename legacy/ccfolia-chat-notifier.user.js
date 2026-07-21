@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.89
+// @version      0.2.90
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3478,6 +3478,7 @@
   let ccfBgmFadePlayer = null;
 
   function cancelCcfBgmCrossfade() {
+    if (ccfBgmFadePlayer) console.info("[CCF BGM XF] cancel (fade player destroyed)");
     ccfBgmCrossfadeToken += 1;
     if (ccfBgmFadePlayer) {
       try { ccfBgmFadePlayer.destroy?.(); } catch (_) { /* teardown */ }
@@ -3488,18 +3489,26 @@
 
   // 크로스페이드를 시작했으면 true (호출측은 즉시 전환 경로를 건너뛴다).
   function crossfadeCcfYoutubeBgm(videoId, state, resolvedEntryKey) {
+    let rawState = null;
+    try { rawState = ccfBgmPlayer?.getPlayerState?.(); } catch (_) { rawState = "err"; }
+    const target = Math.max(0, Math.min(100, Number(state?.volume) || 0));
+    console.info("[CCF BGM XF] try: videoId=%o, curVideoId=%o, hasPlayer=%o, ready=%o, ytApi=%o, volume=%o, playerState=%o",
+      videoId, ccfBgmPlayerVideoId, !!ccfBgmPlayer, ccfBgmPlayerReady, !!window.YT?.Player, target, rawState);
+
     if (!videoId || !ccfBgmPlayer || !ccfBgmPlayerReady) return false;
     if (!window.YT?.Player) return false;
     if (ccfBgmPlayerVideoId === videoId) return false;
-
-    const target = Math.max(0, Math.min(100, Number(state?.volume) || 0));
     if (target <= 0) return false; // 무음이면 페이드가 의미 없다
 
     let playing = false;
     try {
       playing = ccfBgmPlayer.getPlayerState?.() === window.YT.PlayerState?.PLAYING;
     } catch (_) { playing = false; }
-    if (!playing) return false; // 재생 중이 아니면 일반(즉시) 경로
+    if (!playing) {
+      console.info("[CCF BGM XF] skip: not playing (state=%o, PLAYING=%o)", rawState, window.YT?.PlayerState?.PLAYING);
+      return false; // 재생 중이 아니면 일반(즉시) 경로
+    }
+    console.info("[CCF BGM XF] start");
 
     cancelCcfBgmCrossfade();
     const token = ++ccfBgmCrossfadeToken;
@@ -3522,6 +3531,7 @@
         },
         events: {
           onReady(event) {
+            console.info("[CCF BGM XF] fade player ready (token=%o, current=%o)", token, ccfBgmCrossfadeToken);
             if (token !== ccfBgmCrossfadeToken) {
               try { event.target.destroy?.(); } catch (_) { /* stale */ }
               return;
