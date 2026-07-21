@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.76
+// @version      0.1.77
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -1497,6 +1497,84 @@
   let fbState = null;       // { app, auth, db, user, uid, modules }
   let fbInitPromise = null;
 
+  // ===== 이미지 업로드 (Firebase Storage) =====
+  // 본문에 이미지를 base64 data URL 로 박으면 Firestore 문서 1MB 제한을 넘겨
+  // push 가 통째로 실패한다("description is longer than 1048487 bytes") → 로컬에만
+  // 남고 상대방은 이미지를 못 본다. 그래서 이미지는 Storage 에 올리고 URL 만 저장한다.
+
+  function dataUrlToBlob(dataUrl) {
+    const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/i);
+    if (!match) return null;
+    try {
+      const mime = match[1];
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function guessImageExtension(mimeType) {
+    const map = {
+      "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
+      "image/webp": "webp", "image/bmp": "bmp", "image/svg+xml": "svg"
+    };
+    return map[String(mimeType || "").toLowerCase()] || "png";
+  }
+
+  // Blob/File 을 Storage 에 올리고 다운로드 URL 반환.
+  async function uploadImageBlobToStorage(blob) {
+    if (!(blob instanceof Blob)) throw new Error("이미지 데이터가 올바르지 않습니다.");
+    const fb = await initFirebase();
+    if (!fb) throw new Error("Firebase not ready");
+    const { ref, uploadBytes, getDownloadURL } = fb.modules.st;
+    const roomKey = getCurrentRoomKey();
+    const ext = guessImageExtension(blob.type);
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+    const path = `rooms/${roomKey}/handout-images/${fb.uid}/${name}`;
+    const fileRef = ref(fb.storage, path);
+    await uploadBytes(fileRef, blob, { contentType: blob.type || "image/png" });
+    const url = await getDownloadURL(fileRef);
+    console.info("[ccf-handout] 이미지 업로드 OK:", path);
+    return url;
+  }
+
+  async function uploadDataUrlToStorage(dataUrl) {
+    const blob = dataUrlToBlob(dataUrl);
+    if (!blob) throw new Error("이미지 형식을 인식하지 못했습니다.");
+    return uploadImageBlobToStorage(blob);
+  }
+
+  // HTML 안의 <img src="data:image/..."> 를 모두 Storage URL 로 교체.
+  // 하나라도 실패하면 그 이미지는 data URL 로 남고 실패 개수를 돌려준다.
+  async function replaceInlineDataImages(html) {
+    const source = typeof html === "string" ? html : "";
+    if (!source || !/data:image\//i.test(source)) return { html: source, failed: 0, uploaded: 0 };
+
+    const parsed = new DOMParser().parseFromString(`<div id="ccf-root">${source}</div>`, "text/html");
+    const root = parsed.getElementById("ccf-root");
+    if (!root) return { html: source, failed: 0, uploaded: 0 };
+
+    const images = [...root.querySelectorAll('img[src^="data:image/"]')];
+    if (!images.length) return { html: source, failed: 0, uploaded: 0 };
+
+    let failed = 0;
+    let uploaded = 0;
+    for (const img of images) {
+      try {
+        const url = await uploadDataUrlToStorage(img.getAttribute("src") || "");
+        if (url) { img.setAttribute("src", url); uploaded += 1; }
+        else failed += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn("[ccf-handout] 이미지 업로드 실패:", error);
+      }
+    }
+    return { html: root.innerHTML, failed, uploaded };
+  }
+
   // Firestore 핸드아웃 push (GM → 룸 컬렉션)
   async function pushHandoutToFirestore(handout) {
     const fb = await initFirebase();
@@ -1994,22 +2072,24 @@
     fbInitPromise = (async () => {
       try {
         console.info("[ccf-handout] Firebase: loading SDK...");
-        const [appMod, authMod, fsMod] = await Promise.all([
+        const [appMod, authMod, fsMod, stMod] = await Promise.all([
           import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
           import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
-          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`),
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-storage.js`)
         ]);
         // 같은 페이지서 여러 번 init 충돌 방지 — 이름 지정
         const existing = appMod.getApps?.().find((a) => a.name === FIREBASE_APP_NAME);
         const app = existing || appMod.initializeApp(FIREBASE_CONFIG, FIREBASE_APP_NAME);
         const auth = authMod.getAuth(app);
         const db = fsMod.getFirestore(app);
+        const storage = stMod.getStorage(app);
         const cred = await authMod.signInAnonymously(auth);
         fbState = {
-          app, auth, db,
+          app, auth, db, storage,
           user: cred.user,
           uid: cred.user.uid,
-          modules: { app: appMod, auth: authMod, fs: fsMod }
+          modules: { app: appMod, auth: authMod, fs: fsMod, st: stMod }
         };
         console.info("[ccf-handout] Firebase OK uid:", cred.user.uid);
         return fbState;
@@ -3593,12 +3673,22 @@
         const file = item.getAsFile();
         if (!file) continue;
         event.preventDefault();
-        const reader = new FileReader();
-        reader.onload = () => {
+        // Storage 에 올려 URL 로 삽입 — data URL 로 넣으면 Firestore 1MB 제한에 걸려
+        // 전송이 통째로 실패한다. 업로드 실패 시에만 data URL 로 폴백(로컬 전용).
+        toast("이미지 업로드 중...");
+        uploadImageBlobToStorage(file).then((url) => {
           editor.focus();
-          execEditor(editor, "insertImage", String(reader.result || ""));
-        };
-        reader.readAsDataURL(file);
+          execEditor(editor, "insertImage", url);
+        }).catch((error) => {
+          console.warn("[ccf-handout] 붙여넣기 이미지 업로드 실패:", error);
+          toast("이미지 업로드 실패 — 임시로 나만 보이게 삽입됩니다");
+          const reader = new FileReader();
+          reader.onload = () => {
+            editor.focus();
+            execEditor(editor, "insertImage", String(reader.result || ""));
+          };
+          reader.readAsDataURL(file);
+        });
         return;
       }
     }
@@ -3649,8 +3739,29 @@
     const title = getFieldValue("title").trim();
     if (!title) { toast("제목을 입력해주세요."); return; }
     const image = getFieldValue("image").trim();
-    const description = getFieldValue("description");
-    const gmNotes = getFieldValue("gmNotes");
+    let description = getFieldValue("description");
+    let gmNotes = getFieldValue("gmNotes");
+
+    // 본문/비밀메모에 박힌 base64 이미지는 Storage 로 올리고 URL 로 바꾼다.
+    // (안 하면 Firestore 1MB 초과로 push 전체가 실패해 상대방이 핸드아웃을 못 받는다)
+    if (/data:image\//i.test(description) || /data:image\//i.test(gmNotes)) {
+      toast("이미지 업로드 중...");
+      let failedTotal = 0;
+      try {
+        const d = await replaceInlineDataImages(description);
+        description = d.html;
+        failedTotal += d.failed;
+        const g = await replaceInlineDataImages(gmNotes);
+        gmNotes = g.html;
+        failedTotal += g.failed;
+      } catch (error) {
+        console.warn("[ccf-handout] 인라인 이미지 변환 실패:", error);
+        failedTotal += 1;
+      }
+      if (failedTotal > 0) {
+        toast(`이미지 ${failedTotal}건 업로드 실패 — 그 이미지는 나만 보입니다`);
+      }
+    }
     // 권한 — formPermissions 에서 비어있는(모두 false) 항목은 정리
     const permissions = {};
     for (const [k, v] of Object.entries(state.formPermissions || {})) {
