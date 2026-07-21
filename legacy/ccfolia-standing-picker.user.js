@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.8
+// @version      0.1.9
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -18,7 +18,7 @@
 const CCFSP_SCRIPT_INFO = Object.freeze({
   id: "ccfolia-standing-picker",
   name: "CCFOLIA Standing Picker",
-  version: "0.1.8",
+  version: "0.1.9",
   namespace: "https://greasyfork.org/users/Capybara_korea/ccfolia-standing-picker"
 });
 
@@ -796,7 +796,10 @@ function findCharacterSelectButton() {
   }
 
   function isBackquoteShortcut(event) {
-    const shiftHeld = event.shiftKey || state.rightShiftDown ||
+    // state.rightShiftDown 은 keydown 에서만 세우고 keyup 에서 내리는 수동 추적이라,
+    // 창 전환 등으로 keyup 을 한 번 놓치면 true 로 고착되어 백틱 단축키가 영구히 막힌다.
+    // 이벤트가 직접 알려주는 실제 수식키 상태만 신뢰한다.
+    const shiftHeld = event.shiftKey ||
       (typeof event.getModifierState === 'function' && event.getModifierState('Shift'));
     if (event.ctrlKey || event.metaKey || event.altKey || shiftHeld) return false;
     return event.code === 'Backquote' ||
