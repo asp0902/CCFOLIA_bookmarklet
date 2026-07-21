@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.90
+// @version      0.2.91
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -453,6 +453,7 @@
   let ccfBgmPlayerReady = false;
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
+  let ccfBgmStopping = false; // 정지 중 발생한 ENDED 를 loop 재생과 구분
   const CCF_BGM_ACTIVE_KEY = "ccf-chat-notifier:youtube-bgm:active";
 
   function persistCcfBgmActiveSlot(slotKey, entryKey, videoId, state = "playing") {
@@ -3311,7 +3312,8 @@
 
   function handleCcfBgmPlayerStateChange(event) {
     if (event?.data === window.YT?.PlayerState?.ENDED) {
-      if (ccfBgmActiveLoop) {
+      // 사용자가 정지시켜 발생한 ENDED 면 loop 로 되살리지 않는다 (무한 반복 방지).
+      if (ccfBgmActiveLoop && !ccfBgmStopping) {
         event.target.seekTo(0, true);
         event.target.playVideo();
       } else {
@@ -3340,6 +3342,11 @@
   function stopCcfYoutubeBgm(reason = "manual") {
     // 크로스페이드 도중 정지하면 보조 플레이어가 남아 계속 소리가 난다 — 먼저 정리.
     cancelCcfBgmCrossfade();
+    // stopVideo() 는 ENDED 상태를 발생시키는데, 반복재생(loop)이 켜져 있으면
+    // onStateChange 가 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
+    // → 정지 → ENDED → 재생 → … 앞부분 0~1초 무한 반복. 정지 중임을 표시해 구분한다.
+    ccfBgmStopping = true;
+    window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
     // 사용자가 의도적으로 정지/제거한 경우만 신호를 보낸다. 자동 전환(다른 BGM 시작 등)과
     // 원격 적용은 송신 안 함(원격은 applying 가드로 이중 안전).
     // - manual / stop-button / youtube-bgm-remove: 사용자 의도 → 전파 ✅
