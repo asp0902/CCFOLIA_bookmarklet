@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.96
+// @version      0.2.97
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.2.96";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.2.97";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4769,6 +4769,9 @@
     // 드래그 한 번의 계산 결과를 모아 pointerup 때 한 줄로 남긴다.
     // 값이 튀면 여기서 커서 위치 대비 볼륨이 되돌아가는 구간이 그대로 보인다.
     let sliderDragTrace = [];
+    // 마지막으로 화면/플레이어에 반영한 스냅 값. 같은 값의 중복 작업을 걸러낸다.
+    let lastRenderedVolume = null;
+    let lastAppliedVolume = null;
 
     // 음원명 입력란 상호작용 보장: 포커스/타이핑을 가로채는 핸들러로부터 보호한다.
     if (nameInput instanceof HTMLInputElement) {
@@ -4793,6 +4796,12 @@
     const updateSliderVisuals = (volume) => {
       // 0.05 단위(0~100 내부에서는 5단위)로 스냅한다.
       const value = Math.round(clampCcfBgmVolume(volume, initialVolume) / 5) * 5;
+      // 포인터는 초당 수십 번 움직이지만 스냅된 값은 그대로인 경우가 대부분이다.
+      // 같은 값이면 DOM 을 다시 쓰지 않는다 (불필요한 레이아웃/페인트 제거).
+      if (value === lastRenderedVolume) {
+        return value;
+      }
+      lastRenderedVolume = value;
       const pct = `${value}%`;
       if (sliderTrack instanceof HTMLElement) {
         sliderTrack.style.width = pct;
@@ -4842,7 +4851,12 @@
 
       const nextVolume = clampCcfBgmVolume((event.clientX - rect.left) / rect.width * 100, initialVolume);
       const applied = updateSliderVisuals(nextVolume);
-      applyLivePlaybackSettings(nextVolume, reinforce);
+      // 값이 그대로면 플레이어에 다시 보내지 않는다. 예전에는 포인터가 움직일 때마다
+      // 유튜브 iframe 으로 setVolume/unMute 를 4번씩 보내(초당 수백 건) 드래그가 끊겼다.
+      if (reinforce || applied !== lastAppliedVolume) {
+        lastAppliedVolume = applied;
+        applyLivePlaybackSettings(applied, reinforce);
+      }
       if (sliderDragTrace.length < 60) {
         sliderDragTrace.push(`${Math.round(event.clientX - rect.left)}px:${applied}`);
       }
@@ -4889,6 +4903,7 @@
         return;
       }
       const volume = updateSliderVisuals(Number(volumeInput?.value));
+      lastAppliedVolume = volume;
       applyLivePlaybackSettings(volume);
       if (liveVolumeReinforceTimer) {
         window.clearTimeout(liveVolumeReinforceTimer);
