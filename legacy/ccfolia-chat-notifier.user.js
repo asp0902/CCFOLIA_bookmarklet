@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.2.92
+// @version      0.2.93
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -277,7 +277,6 @@
         ccfBgmPlayerDock?.remove?.();
         ccfBgmPlayerDock = null;
         ccfBgmPlayerHost = null;
-        try { cancelCcfBgmCrossfade(); } catch (error) { /* crossfade teardown */ }
         try { ccfBgmPlayer?.destroy?.(); } catch (error) { /* youtube player teardown */ }
         ccfBgmPlayer = null;
         ccfBgmPlayerReady = false;
@@ -3229,11 +3228,6 @@
       }
 
       try {
-        // 유튜브 → 유튜브 전환이면 즉시 교체 대신 크로스페이드로 넘긴다.
-        if (ccfBgmPlayerVideoId !== videoId
-            && crossfadeCcfYoutubeBgm(videoId, state, resolvedEntryKey)) {
-          return true;
-        }
         if (ccfBgmPlayerVideoId !== videoId && typeof ccfBgmPlayer.loadVideoById === "function") {
           ccfBgmPlayer.loadVideoById(videoId);
           ccfBgmPlayerVideoId = videoId;
@@ -3312,7 +3306,7 @@
 
   function handleCcfBgmPlayerStateChange(event) {
     if (event?.data === window.YT?.PlayerState?.ENDED) {
-      // 사용자가 정지시켜 발생한 ENDED 면 loop 로 되살리지 않는다 (무한 반복 방지).
+      // 사용자가 정지시켜 발생한 ENDED 면 loop 로 되살리지 않는다 (앞부분 무한 반복 방지).
       if (ccfBgmActiveLoop && !ccfBgmStopping) {
         event.target.seekTo(0, true);
         event.target.playVideo();
@@ -3340,11 +3334,9 @@
   }
 
   function stopCcfYoutubeBgm(reason = "manual") {
-    // 크로스페이드 도중 정지하면 보조 플레이어가 남아 계속 소리가 난다 — 먼저 정리.
-    cancelCcfBgmCrossfade();
-    // stopVideo() 는 ENDED 상태를 발생시키는데, 반복재생(loop)이 켜져 있으면
-    // onStateChange 가 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
-    // → 정지 → ENDED → 재생 → … 앞부분 0~1초 무한 반복. 정지 중임을 표시해 구분한다.
+    // stopVideo() 는 ENDED 를 발생시키는데, 반복재생(loop) ON 이면 onStateChange 가
+    // 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
+    // → 정지 → ENDED → 재생 → … 앞 0~1초 무한 반복. 정지 중임을 표시해 구분한다.
     ccfBgmStopping = true;
     window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
     // 사용자가 의도적으로 정지/제거한 경우만 신호를 보낸다. 자동 전환(다른 BGM 시작 등)과
@@ -3470,140 +3462,6 @@
     } catch (error) {
       debugLog("bgm-youtube-volume-failed", serializeError(error));
     }
-  }
-
-  // ===== YouTube BGM 크로스페이드 =====
-  // CCFOLIA 의 BGMクロスフェード(Beta) 는 자기 오디오 플레이어에만 적용된다.
-  // 유튜브 BGM 은 이 스크립트가 자체 플레이어 1개로 재생하고, 곡 전환 시
-  // loadVideoById 로 즉시 갈아끼우기 때문에 두 곡이 겹치는 구간이 없어 페이드가 불가능했다.
-  // → 새 곡을 보조 플레이어에서 볼륨 0 으로 시작해 서로 반대 방향으로 볼륨을 옮기고,
-  //   끝나면 보조 플레이어를 본 플레이어로 승격시킨다(재생 위치를 건드리지 않아 끊김 없음).
-  const CCF_BGM_CROSSFADE_MS = 1500;
-  const CCF_BGM_CROSSFADE_STEP_MS = 50;
-  const CCF_BGM_FADE_HOST_ID = "ccf-youtube-bgm-player-fade";
-  let ccfBgmCrossfadeToken = 0;
-  let ccfBgmFadePlayer = null;
-
-  function cancelCcfBgmCrossfade() {
-    if (ccfBgmFadePlayer) console.info("[CCF BGM XF] cancel (fade player destroyed)");
-    ccfBgmCrossfadeToken += 1;
-    if (ccfBgmFadePlayer) {
-      try { ccfBgmFadePlayer.destroy?.(); } catch (_) { /* teardown */ }
-      ccfBgmFadePlayer = null;
-    }
-    try { document.getElementById(CCF_BGM_FADE_HOST_ID)?.remove(); } catch (_) { /* ignore */ }
-  }
-
-  // 크로스페이드를 시작했으면 true (호출측은 즉시 전환 경로를 건너뛴다).
-  function crossfadeCcfYoutubeBgm(videoId, state, resolvedEntryKey) {
-    let rawState = null;
-    try { rawState = ccfBgmPlayer?.getPlayerState?.(); } catch (_) { rawState = "err"; }
-    const target = Math.max(0, Math.min(100, Number(state?.volume) || 0));
-    console.info("[CCF BGM XF] try: videoId=%o, curVideoId=%o, hasPlayer=%o, ready=%o, ytApi=%o, volume=%o, playerState=%o",
-      videoId, ccfBgmPlayerVideoId, !!ccfBgmPlayer, ccfBgmPlayerReady, !!window.YT?.Player, target, rawState);
-
-    if (!videoId || !ccfBgmPlayer || !ccfBgmPlayerReady) return false;
-    if (!window.YT?.Player) return false;
-    if (ccfBgmPlayerVideoId === videoId) return false;
-    if (target <= 0) return false; // 무음이면 페이드가 의미 없다
-
-    let playing = false;
-    try {
-      playing = ccfBgmPlayer.getPlayerState?.() === window.YT.PlayerState?.PLAYING;
-    } catch (_) { playing = false; }
-    if (!playing) {
-      console.info("[CCF BGM XF] skip: not playing (state=%o, PLAYING=%o)", rawState, window.YT?.PlayerState?.PLAYING);
-      return false; // 재생 중이 아니면 일반(즉시) 경로
-    }
-    console.info("[CCF BGM XF] start");
-
-    cancelCcfBgmCrossfade();
-    const token = ++ccfBgmCrossfadeToken;
-    const oldPlayer = ccfBgmPlayer;
-
-    const host = document.createElement("div");
-    host.id = CCF_BGM_FADE_HOST_ID;
-    host.style.cssText = "position:fixed;left:-10000px;top:0;width:1px;height:1px;";
-    document.body.appendChild(host);
-
-    try {
-      ccfBgmFadePlayer = new window.YT.Player(host, {
-        width: String(YOUTUBE_PLAYER_MIN_SIZE),
-        height: String(YOUTUBE_PLAYER_MIN_SIZE),
-        host: YOUTUBE_EMBED_HOST,
-        videoId,
-        playerVars: {
-          autoplay: 1,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          modestbranding: 1,
-          playsinline: 1,
-          rel: 0,
-          // 본 플레이어와 동일하게 origin 을 지정해야 IFrame API 의 postMessage 가
-          // 전달된다. 빠지면 "target origin does not match" 로 setVolume/playVideo 가
-          // 전부 무시되어 페이드가 걸리지 않는다.
-          origin: location.origin
-        },
-        events: {
-          onReady(event) {
-            console.info("[CCF BGM XF] fade player ready (token=%o, current=%o)", token, ccfBgmCrossfadeToken);
-            if (token !== ccfBgmCrossfadeToken) {
-              try { event.target.destroy?.(); } catch (_) { /* stale */ }
-              return;
-            }
-            try {
-              event.target.setVolume?.(0);
-              event.target.unMute?.();
-              event.target.playVideo?.();
-            } catch (_) { /* ignore */ }
-            rampCcfBgmCrossfade(token, oldPlayer, event.target, target, videoId, state, resolvedEntryKey);
-          }
-        }
-      });
-    } catch (error) {
-      debugLog("bgm-crossfade-create-failed", serializeError(error));
-      cancelCcfBgmCrossfade();
-      return false;
-    }
-    return true;
-  }
-
-  function rampCcfBgmCrossfade(token, oldPlayer, newPlayer, target, videoId, state, resolvedEntryKey) {
-    const startedAt = Date.now();
-    const tick = () => {
-      if (token !== ccfBgmCrossfadeToken) return;
-      const t = Math.min(1, (Date.now() - startedAt) / CCF_BGM_CROSSFADE_MS);
-      try { oldPlayer.setVolume?.(Math.round(target * (1 - t))); } catch (_) { /* ignore */ }
-      try { newPlayer.setVolume?.(Math.round(target * t)); } catch (_) { /* ignore */ }
-      if (t < 1) {
-        window.setTimeout(tick, CCF_BGM_CROSSFADE_STEP_MS);
-        return;
-      }
-      finishCcfBgmCrossfade(token, oldPlayer, newPlayer, videoId, state, resolvedEntryKey);
-    };
-    tick();
-  }
-
-  function finishCcfBgmCrossfade(token, oldPlayer, newPlayer, videoId, state, resolvedEntryKey) {
-    if (token !== ccfBgmCrossfadeToken) return;
-    // 먼저 옛 플레이어를 없애야 iframe id 가 겹치지 않는다.
-    try { oldPlayer.stopVideo?.(); } catch (_) { /* ignore */ }
-    try { oldPlayer.destroy?.(); } catch (_) { /* ignore */ }
-
-    ccfBgmFadePlayer = null;
-    ccfBgmPlayer = newPlayer;
-    ccfBgmPlayerVideoId = videoId;
-    ccfBgmPlayerReady = true;
-
-    // 보조 호스트의 iframe 을 정식 도크로 승격 (id/속성 정리도 여기서 처리됨)
-    mountCcfYoutubeBgmPlayerFrame(newPlayer);
-    try { document.getElementById(CCF_BGM_FADE_HOST_ID)?.remove(); } catch (_) { /* ignore */ }
-
-    applyCcfBgmPlayerVolume(state);
-    adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
-    startCcfBgmProgressLoop();
-    debugLog("bgm-crossfade-done", { videoId });
   }
 
   function readCcfBgmStateFromButton(button) {
