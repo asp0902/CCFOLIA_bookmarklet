@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.36
+// @version      0.1.37
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.36 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.37 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.36"),
+    version: getUserscriptVersion("0.1.37"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9768,11 +9768,15 @@
   }
 
   function normalizeMyCharacterName(value) {
+    // 전각 공백(U+3000)은 이름의 일부다 — "캐릭터명" 과 "캐릭터명　" 은 다른 캐릭터.
+    // JS 의 \s 와 trim() 은 U+3000 까지 지우므로, 그대로 쓰면 두 캐릭터가 같은 이름이 돼
+    // 중복 제거에서 하나가 사라진다(나레이션 화자 목록에 한 명만 뜨던 원인).
+    // 마크업 정렬로 들어오는 ASCII 공백만 정리한다.
     return String(value || "")
       .replace(CHARACTER_STATUS_TEXT_RE, "")
       .replace(/\bNO\s+TEXT\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim();
+      .replace(/[ \t\n\r\f\v]+/g, " ")
+      .replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
   }
 
   function uniqueCharacterNames(names) {
@@ -10058,10 +10062,13 @@
     const seen = new Set();
     for (const item of items) {
       if (!(item instanceof HTMLElement)) continue;
+      // 전각 공백은 이름의 일부이므로 남긴다 (normalizeMyCharacterName 과 같은 규칙).
       const raw = (item.querySelector(".MuiListItemText-primary")?.textContent
         || item.getAttribute("aria-label")
         || item.textContent
-        || "").replace(/\s+/g, " ").trim();
+        || "")
+        .replace(/[ \t\n\r\f\v]+/g, " ")
+        .replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
       if (!raw || seen.has(raw)) continue;
       seen.add(raw);
       names.push(raw);

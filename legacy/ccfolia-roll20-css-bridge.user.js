@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.57
+// @version      0.3.58
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.57"),
+    version: getUserscriptVersion("0.3.58"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4735,11 +4735,13 @@
   }
 
   function normalizeRoll20NarratorName(value) {
+    // 전각 공백(U+3000)은 이름의 일부다 — format-sync 의 normalizeMyCharacterName 과
+    // 같은 규칙을 써야 나레이터 명단(저장)과 현재 화자(감지)가 서로 맞는다.
     return String(value || "")
       .replace(CHARACTER_STATUS_TEXT_RE, "")
       .replace(/\bNO\s+TEXT\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim();
+      .replace(/[ \t\n\r\f\v]+/g, " ")
+      .replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
   }
 
   function findCharacterSelectButton() {
@@ -5659,7 +5661,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.57",
+    version: "0.3.58",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
