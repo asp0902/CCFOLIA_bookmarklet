@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.38
+// @version      0.1.39
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.38 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.39 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.38"),
+    version: getUserscriptVersion("0.1.39"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9767,6 +9767,19 @@
     }
   }
 
+  // 코코포리아(BCDice)는 메시지 텍스트 전체를 파싱해 판정을 굴린다. 우리가 뒤에 붙이는
+  // 보이지 않는 서식 봉투가 섞이면 명령으로 인식되지 않아 결과가 아예 안 나온다.
+  // (예: choice[비상 식량,음료수] → 결과 없음. 북마클릿 없는 탭에서는 정상 동작)
+  // Roll20 인라인 롤 [[..]]은 브리지가 자체 계산해 표시하는 것이므로 판정 명령에서 제외한다.
+  function looksLikeCcfDiceCommand(text) {
+    const raw = String(text || "");
+    if (!raw) return false;
+    const body = raw.replace(/\[\[[^\]]*\]\]/g, "");
+    return /(?:^|[\s(（\[])S?(?:choice|CHOICE)\s*\[/.test(body)
+      || /(?:^|[\s(（<>=+\-*/])S?\d*[dD]\d+/.test(body)
+      || /(?:^|\s)S?CCB?\s*<=/i.test(body);
+  }
+
   function normalizeMyCharacterName(value) {
     // 전각 공백(U+3000)은 이름의 일부다 — "캐릭터명" 과 "캐릭터명　" 은 다른 캐릭터.
     // JS 의 \s 와 trim() 은 U+3000 까지 지우므로, 그대로 쓰면 두 캐릭터가 같은 이름이 돼
@@ -12719,6 +12732,8 @@
     // 변환하고, 같은 나레이터 명단(ccf-format-narrators-v1)으로 나레이션 blockStyle까지
     // 직접 넣는다. format-sync가 먼저 소비하면 이후 bridge 재인코딩에서 알약 runs가
     // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
+    // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
+    if (looksLikeCcfDiceCommand(rawText)) return true;
     if (window.__CCF_ROLL20_BRIDGE_DEBUG__ && ROLL20_DESC_RE.test(rawText)) return true;
     // bridge가 이미 /desc를 인코딩한 결과물 — 재래핑하면 source/roll20Macro(트리거)
     // 정보가 유실되므로 그대로 둔다. roll20Macro 표식이 (재호출 등으로) 빠졌더라도
