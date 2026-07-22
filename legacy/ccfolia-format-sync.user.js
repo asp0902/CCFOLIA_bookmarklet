@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.37
+// @version      0.1.38
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.37 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.38 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.37"),
+    version: getUserscriptVersion("0.1.38"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10194,25 +10194,36 @@
   }
 
   async function scrapeCharacterNames(forcePanelScan = false) {
+    // "내 캐릭터" 목록만 보면 룸의 다른 캐릭터를 나레이터로 지정할 수 없다.
+    // 실제로 화자가 될 수 있는 건 캐릭터 선택 목록이므로, 두 출처를 합쳐서 준다.
+    // (내 캐릭터를 앞에 두어 기존 정렬/우선순위는 유지)
+    const mine = await scrapeMyCharacterNames(forcePanelScan);
+    let selectable = [];
+    try {
+      selectable = await scrapeCharacterSelectionNames();
+    } catch (error) {
+      console.warn("[ccf-format-sync] character selection scrape failed", error);
+    }
+    const merged = uniqueCharacterNames([...mine, ...selectable]);
+    return sortNamesByMyCharacterOrder(merged.length ? merged : mine);
+  }
+
+  async function scrapeMyCharacterNames(forcePanelScan = false) {
     const visibleNames = readMyCharacterPanelNames();
     if (visibleNames.length) {
-      return sortNamesByMyCharacterOrder(cacheMyCharacterNames(visibleNames));
+      return cacheMyCharacterNames(visibleNames);
     }
     const cachedNames = readCachedMyCharacterNames();
     const storedOrder = readStoredMyCharacterOrderNames();
     if (!forcePanelScan && (cachedNames.length || storedOrder.length)) {
-      return sortNamesByMyCharacterOrder([...cachedNames, ...storedOrder]);
+      return [...cachedNames, ...storedOrder];
     }
 
     const panelNames = await scrapeNamesFromMyCharacterPanel();
     if (panelNames.length) {
-      return sortNamesByMyCharacterOrder(cacheMyCharacterNames(panelNames));
+      return cacheMyCharacterNames(panelNames);
     }
-    if (cachedNames.length || storedOrder.length) {
-      return sortNamesByMyCharacterOrder([...cachedNames, ...storedOrder]);
-    }
-
-    return sortNamesByMyCharacterOrder(await scrapeCharacterSelectionNames());
+    return [...cachedNames, ...storedOrder];
   }
 
   function applyInlineNarration(editor, active) {
