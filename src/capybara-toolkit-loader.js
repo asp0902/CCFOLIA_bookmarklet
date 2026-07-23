@@ -87,6 +87,14 @@
       hiddenFromPanel: true
     },
     {
+      id: "ccf-chat-panel",
+      debugKey: "__CCF_SECOND_CHAT_PANEL__",
+      title: "채팅 패널 추가",
+      summary: "룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송",
+      scripts: ["legacy/ccfolia-chat-panel.user.js"],
+      roomOnly: true
+    },
+    {
       id: "ccf-handout",
       debugKey: "__CCF_HANDOUT_DEBUG__",
       scriptPrefix: "ccf-handout:",
