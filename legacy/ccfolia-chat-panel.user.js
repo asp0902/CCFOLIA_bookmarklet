@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.18
+// @version      0.1.19
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.18";
+  const VERSION = "0.1.19";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -130,11 +130,12 @@
   }
 
   function listChannels() {
+    // 코코포리아 탭 막대가 정답이다(빈 탭 포함, 순서까지 동일).
+    const native = readNativeTabs().map((t) => t.channel);
     const slice = getRoomMessagesSlice();
     const groups = slice?.idsGroupBy || {};
-    // 저장소의 키 순서는 메시지가 들어온 순서라 뒤죽박죽이다(잡담·메인·정보).
-    // 코코포리아 탭 순서(메인·정보·잡담)를 먼저 두고, 나머지 사용자 탭을 뒤에 붙인다.
-    const base = ["main", "info", "other"];
+    const base = native.length ? native : ["main", "info", "other"];
+    // 탭 막대를 못 읽었을 때를 대비해, 메시지가 있는데 빠진 채널은 뒤에 붙인다.
     const rest = Object.keys(groups).filter((key) => !base.includes(key)).sort();
     return [...base, ...rest];
   }
@@ -193,6 +194,7 @@
      ⚠ 패널 껍데기는 복제하지 않는다. 예전에 서랍째 복제했다가 우리 패널이
         코코포리아용 선택자에 자기도 걸려 두 번이나 겹쳤다. */
   let ccfScpRowTemplate = null;
+  let ccfScpListClass = "";
 
   function captureNativeRowTemplate() {
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => {
@@ -227,6 +229,15 @@
       strip(el);
       el.classList.remove("ccf-render-root");
     });
+    // 줄을 담고 있던 목록의 클래스도 함께 기억한다(구분선이 여기서 나온다).
+    const parent = source.parentElement;
+    if (parent instanceof HTMLElement && typeof parent.className === "string") {
+      const cls = parent.className.split(/\s+/)
+        .filter((c) => c && !c.startsWith("ccf-") && !c.startsWith("ccr20-"))
+        .join(" ");
+      if (cls) ccfScpListClass = cls;
+    }
+
     ccfScpRowTemplate = template;
     return ccfScpRowTemplate;
   }
@@ -279,18 +290,47 @@
     return row;
   }
 
-  // 사용자 지정 탭은 채널 키가 내부 ID(VgKD1sXol 같은)라 그대로 쓰면 읽을 수 없다.
-  // 코코포리아 탭 막대에서 같은 자리의 이름을 빌려온다.
-  function channelLabel(channel, index) {
+  /* ---------------- 탭 목록 ----------------
+     저장소(idsGroupBy)에는 "메시지가 한 번이라도 오간 채널"만 있다. 비밀 탭처럼
+     아직 빈 탭은 거기 없어서, 그것만 보면 탭이 3개로 줄어든다. 그래서 코코포리아
+     탭 막대를 읽되, 글자만 보지 않고 React 가 각 탭에 붙여 둔 값(채널 키)을 꺼낸다
+     — 자리 순서로 맞추면 탭 개수가 다를 때 엉뚱한 이름이 붙는다. */
+
+  function readReactProp(el, key) {
+    for (const k of Object.keys(el)) {
+      if (k.startsWith("__reactProps")) {
+        const v = el[k]?.[key];
+        if (v != null) return v;
+      }
+      if (k.startsWith("__reactFiber")) {
+        const v = el[k]?.memoizedProps?.[key];
+        if (v != null) return v;
+      }
+    }
+    return undefined;
+  }
+
+  function readNativeTabs() {
+    const lists = [...document.querySelectorAll('[role="tablist"]')]
+      .filter((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+    for (const list of lists) {
+      const out = [];
+      for (const tab of list.querySelectorAll('[role="tab"]')) {
+        const value = readReactProp(tab, "value");
+        if (typeof value !== "string" || !value) continue;
+        const label = normalizeSpace(tab.textContent || "");
+        out.push({ channel: value, label: label || CHANNEL_LABELS[value] || value });
+      }
+      // 기본 3탭만 나오는 목록은 다른 탭 막대일 수 있으니, 가장 많이 담긴 것을 쓴다.
+      if (out.length >= 3) return out;
+    }
+    return [];
+  }
+
+  function channelLabel(channel) {
+    const found = readNativeTabs().find((t) => t.channel === channel);
+    if (found) return found.label;
     if (CHANNEL_LABELS[channel]) return CHANNEL_LABELS[channel];
-    const nativeTabs = document.querySelector(`[role="tablist"]:not(#${PANEL_ID} [role="tablist"])`);
-    const labels = nativeTabs
-      ? [...nativeTabs.querySelectorAll('[role="tab"]')]
-        .map((el) => normalizeSpace(el.textContent || ""))
-        .filter(Boolean)
-      : [];
-    const label = index >= 0 ? labels[index] : "";
-    if (label) return label;
     // 그래도 못 찾으면 ID 를 짧게 줄여 보여준다(칸을 잡아먹지 않게).
     return channel.length > 6 ? `${channel.slice(0, 6)}…` : channel;
   }
@@ -306,7 +346,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "ccf-scp-tab" + (channel === currentChannel ? " is-active" : "");
-      btn.textContent = channelLabel(channel, channels.indexOf(channel));
+      btn.textContent = channelLabel(channel);
       btn.title = channel;
       btn.addEventListener("click", () => {
         currentChannel = channel;
@@ -404,6 +444,19 @@
       bodyWrap.appendChild(body);
       row.appendChild(bodyWrap);
       frag.appendChild(row);
+    }
+    // 메시지 사이 구분선은 줄이 아니라 목록 쪽 CSS 에서 나온다. 네이티브 목록의
+    // 클래스를 그대로 쓴 래퍼 안에 줄을 넣어야 그 규칙이 우리 줄에도 걸린다.
+    // (우리 스크롤 컨테이너에 직접 붙이면 목록 CSS 의 overflow 가 스크롤을 깬다.)
+    if (ccfScpListClass) {
+      const inner = document.createElement("ul");
+      inner.className = ccfScpListClass;
+      inner.setAttribute(SAFE_ATTR, "1");
+      inner.style.padding = "0";
+      inner.style.margin = "0";
+      inner.appendChild(frag);
+      listEl.appendChild(inner);
+      return;
     }
     listEl.appendChild(frag);
 
@@ -749,6 +802,7 @@
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
     ccfScpRowTemplate = null;
+    ccfScpListClass = "";
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
@@ -1121,6 +1175,47 @@
           글자색: cs?.color,
           글꼴: cs?.fontFamily?.slice(0, 60),
           내패널: panelEl ? { left: panelEl.style.left, 폭: panelEl.style.width } : null
+        };
+      },
+      // "화면을 밀어내기" 전 확인용: 코코포리아가 네이티브 패널 자리를 어떻게 비워
+      // 두는지(어느 요소가 그만큼 좁아져 있는지) 찾는다. 그 방식을 그대로 늘려야
+      // 상단바·BGM 이 함께 왼쪽으로 따라온다 — 추측해서 밀면 예전처럼 겹친다.
+      pushDiag() {
+        const native = findNativeChatPanel();
+        if (!native) return "no panel";
+        const edge = native.getBoundingClientRect().left;
+        const round = (n) => Math.round(n);
+        const out = [];
+        const walk = (el, depth) => {
+          if (!(el instanceof HTMLElement) || depth > 7 || out.length > 24) return;
+          const r = el.getBoundingClientRect();
+          // 화면 끝이 아니라 패널 왼쪽에서 끝나는 = 자리를 비워 준 요소.
+          if (r.width > 200 && Math.abs(r.right - edge) <= 14 && window.innerWidth - edge > 40) {
+            const cs = getComputedStyle(el);
+            out.push({
+              깊이: depth,
+              요소: `${el.tagName}.${String(el.className).slice(0, 60)}`,
+              폭: round(r.width),
+              오른쪽: round(r.right),
+              position: cs.position,
+              width: cs.width,
+              marginRight: cs.marginRight,
+              paddingRight: cs.paddingRight,
+              transform: cs.transform === "none" ? "none" : cs.transform.slice(0, 40)
+            });
+          }
+          for (const child of el.children) walk(child, depth + 1);
+        };
+        walk(document.getElementById("root") || document.body, 0);
+        const bgm = document.querySelector("[data-ccf-bgm-controls], .ccf-bgm-controls, #ccf-bgm-controls");
+        const bgmRect = bgm?.getBoundingClientRect();
+        return {
+          패널왼쪽: round(edge),
+          창너비: window.innerWidth,
+          자리비운요소: out,
+          BGM: bgm
+            ? { 요소: `${bgm.tagName}.${String(bgm.className).slice(0, 50)}`, left: round(bgmRect.left), right: round(bgmRect.right), position: getComputedStyle(bgm).position }
+            : "BGM 컨트롤 못 찾음"
         };
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
