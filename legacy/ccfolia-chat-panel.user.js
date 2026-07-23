@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.9
+// @version      0.1.10
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.9";
+  const VERSION = "0.1.10";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -492,7 +492,8 @@
       .ccf-scp-row.is-cont { padding-top: 0; }
       .ccf-scp-avatar { width: 40px; height: 40px; }
       .ccf-scp-row.is-cont .ccf-scp-avatar { height: 0; }
-      .ccf-scp-avatar img { width: 40px; height: 40px; border-radius: 4px;
+      /* 네이티브 아바타는 원형이다 — 모서리만 살짝 둥근 형태면 잘린 사진처럼 보인다. */
+      .ccf-scp-avatar img { width: 40px; height: 40px; border-radius: 50%;
         object-fit: cover; display: block; }
       .ccf-scp-body { min-width: 0; width: 100%; }
       .ccf-scp-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
@@ -813,6 +814,8 @@
     const topBar = measureTopBarOffset(native);
     const top = Math.max(Math.round(base.top), topBar);
     const bottom = Math.round(base.top + base.height);
+    // 화면 밖으로 1px 이라도 새면 가로 스크롤이 생긴다.
+    const maxWidth = Math.max(120, window.innerWidth - Math.round(left));
 
     Object.assign(panelEl.style, {
       top: `${top}px`,
@@ -820,7 +823,7 @@
       bottom: "",
       right: "",
       left: `${Math.round(left)}px`,
-      width: `${Math.round(width)}px`
+      width: `${Math.min(Math.round(width), maxWidth)}px`
     });
   }
 
