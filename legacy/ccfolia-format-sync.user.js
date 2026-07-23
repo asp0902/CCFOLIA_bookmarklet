@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.41
+// @version      0.1.42
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.41 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.42 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.41"),
+    version: getUserscriptVersion("0.1.42"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2485,6 +2485,9 @@
     'button[aria-label="キャラクター 選択"]'
   ];
   let narratorScrapeHideStyle = null;
+  // 캐릭터 선택 드롭다운에서 읽은 이름들. 읽을 때 네이티브 드롭다운을 열었다 닫아야 해서
+  // 매번 하면 화면이 번쩍이므로 캐시한다 ("새로고침" 누를 때만 갱신).
+  let ccfCachedSelectableNames = [];
   let lastObservedSpeakerName = "";
   let characterSpeakerObserverStarted = false;
   let pendingSpeakerCheckTimer = 0;
@@ -10122,10 +10125,13 @@
       const style = document.createElement("style");
       style.id = "ccf-narrator-scrape-hide";
       style.setAttribute(SAFE_UI_ATTR, "1");
+      // 캐릭터 선택 드롭다운이 잠깐 번쩍이는 것만 가린다.
+      // 예전엔 [role="presentation"] 까지 잡았는데, 채팅 서랍(MuiDrawer-root)도
+      // presentation 이라 서식 툴바·나레이션 팝오버까지 통째로 투명해졌다
+      // ("나레이션 창이 안 열림"의 원인). 우리 UI 를 품은 컨테이너는 제외한다.
       style.textContent = `
-        body > .MuiPopover-root,
-        body > [role="presentation"]:has([role="listbox"]),
-        body > [role="presentation"]:has([role="menu"]) {
+        body > .MuiPopover-root:not(:has(.ccf-inline-toolbar)),
+        body > .MuiMenu-root:not(:has(.ccf-inline-toolbar)) {
           opacity: 0 !important;
           pointer-events: none !important;
         }
@@ -10219,11 +10225,20 @@
     // 실제로 화자가 될 수 있는 건 캐릭터 선택 목록이므로, 두 출처를 합쳐서 준다.
     // (내 캐릭터를 앞에 두어 기존 정렬/우선순위는 유지)
     const mine = await scrapeMyCharacterNames(forcePanelScan);
-    let selectable = [];
-    try {
-      selectable = await scrapeCharacterSelectionNames();
-    } catch (error) {
-      console.warn("[ccf-format-sync] character selection scrape failed", error);
+    // 캐릭터 선택 목록은 네이티브 드롭다운을 실제로 열었다 닫아야 읽을 수 있다.
+    // 팝오버를 열 때마다 그러면 화면이 번쩍이고 팝오버가 닫히기도 한다.
+    // → 한 번 읽어두고 재사용하며, "새로고침"(forcePanelScan) 일 때만 다시 읽는다.
+    let selectable = ccfCachedSelectableNames;
+    if (forcePanelScan || !selectable.length) {
+      try {
+        const scraped = await scrapeCharacterSelectionNames();
+        if (scraped.length) {
+          selectable = scraped;
+          ccfCachedSelectableNames = scraped;
+        }
+      } catch (error) {
+        console.warn("[ccf-format-sync] character selection scrape failed", error);
+      }
     }
     const merged = uniqueCharacterNames([...mine, ...selectable]);
     return sortNamesByMyCharacterOrder(merged.length ? merged : mine);
