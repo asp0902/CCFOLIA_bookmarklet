@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://gre0asyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.14
+// @version      0.1.15
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -89,7 +89,7 @@ window.__CCF_STANDING_PICKER_DEBUG__ = {
   disable() { return ccfspTeardown(); },
   // 선택 후 입력칸 포커스가 안 될 때 원인 확인용.
   focusDiag() {
-    const input = getChatInput();
+    const input = ccfspFindChatEditable();
     const before = document.activeElement;
     ccfspFocusChatInput();
     return {
@@ -951,13 +951,30 @@ function ccfspActivate(item) {
 // 캐릭터를 고른 뒤 바로 타이핑할 수 있도록 입력칸으로 커서를 옮긴다.
 // 코코포리아가 선택 직후 포커스를 자기 쪽으로 되돌리므로 한 번만 시도하면 놓친다
 // → 몇 시점에 나눠 시도하고, 이미 입력칸에 있으면 건드리지 않는다.
+// 포커스를 옮길 "진짜 입력 요소"만 찾는다.
+// getChatInput()/isChatInput() 은 채팅 서랍 안이면 버튼까지 참으로 보는 느슨한 판정이라
+// (@ 트리거 감지용) 포커스 대상으로 쓰면 방금 누른 버튼이 잡힌다 — 실제로 그랬다.
+function ccfspFindChatEditable() {
+  const usable = (el) => {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.closest?.('[role="dialog"], .MuiDialog-root, .MuiPopover-root, #ccfolia-standing-popup')) return false;
+    if (el.disabled || el.readOnly) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const primary = Array.from(document.querySelectorAll('textarea[name="text"]')).find(usable);
+  if (primary) return primary;
+  return Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]'))
+    .find(usable) || null;
+}
+
 function ccfspFocusChatInput() {
   // 선택창이 남아 있는지로 건너뛰지 않는다 — 다른 목록(내 캐릭터 목록 등)이 잡히면
   // 매번 걸려서 포커스가 영영 안 옮겨졌다. 선택은 이미 끝난 뒤라 그냥 옮기면 된다.
   [0, 50, 120, 250, 450, 700, 1000].forEach((delay) => {
     setTimeout(() => {
       if (!ccfspActive) return;
-      const input = getChatInput();
+      const input = ccfspFindChatEditable();
       if (!input || document.activeElement === input) return;
       try {
         input.focus({ preventScroll: true });
