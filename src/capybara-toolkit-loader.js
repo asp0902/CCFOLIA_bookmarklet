@@ -92,7 +92,12 @@
       title: "채팅 패널 추가",
       summary: "룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송",
       scripts: ["legacy/ccfolia-chat-panel.user.js"],
-      roomOnly: true
+      roomOnly: true,
+      // 스크립트가 하는 일은 채팅 환경설정 메뉴에 항목 하나를 넣는 것뿐이고,
+      // 실제 켜고 끄기는 그 메뉴 항목이 담당한다. 카드로 한 번 더 켜게 하면
+      // 메뉴에 항목이 안 보이는 이유를 알기 어렵다 → 룸 진입 시 자동 로드.
+      alwaysOn: true,
+      hiddenFromPanel: true
     },
     {
       id: "ccf-handout",
