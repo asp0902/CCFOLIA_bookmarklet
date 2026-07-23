@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.15
+// @version      0.3.16
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.15";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.16";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1511,8 +1511,17 @@
       // 유튜브 BGM 크로스페이드 — 아직 검증 전이라 기본 꺼짐. setCrossfade(true) 로 켠다.
       setCrossfade(on) {
         ccfBgmCrossfadeEnabled = on !== false;
-        if (!ccfBgmCrossfadeEnabled) cancelCcfBgmCrossfade();
-        return { 크로스페이드: ccfBgmCrossfadeEnabled, 지속시간ms: CCF_BGM_XFADE_MS };
+        if (!ccfBgmCrossfadeEnabled) {
+          cancelCcfBgmCrossfade();
+        } else {
+          // 준비에 시간이 걸리므로 켜는 즉시 만들어 둔다(첫 전환부터 페이드되도록).
+          ensureCcfBgmSecondPlayer();
+        }
+        return {
+          크로스페이드: ccfBgmCrossfadeEnabled,
+          지속시간ms: CCF_BGM_XFADE_MS,
+          안내: ccfBgmCrossfadeEnabled ? "두 번째 플레이어 준비 중 — 몇 초 뒤부터 적용됩니다" : ""
+        };
       },
       crossfadeDiag() {
         const read = (p) => {
@@ -1530,6 +1539,8 @@
           활성: read(ccfBgmPlayer),
           대기: read(getCcfBgmStandbyPlayer()),
           두번째생성됨: !!ccfBgmPlayerB,
+          // 준비 전이면 크로스페이드가 건너뛰어지고 즉시 전환된다.
+          대기준비됨: typeof getCcfBgmStandbyPlayer()?.loadVideoById === "function",
           iframe수: document.querySelectorAll('iframe[src*="youtube"]').length
         };
       },
@@ -3514,8 +3525,15 @@
     try { current = ccfBgmPlayer.getPlayerState?.(); } catch (error) { return false; }
     if (current !== 1) return false;               // 지금 재생 중일 때만 의미가 있다
 
-    const incoming = ensureCcfBgmSecondPlayer() && getCcfBgmStandbyPlayer();
-    if (!incoming) return false;
+    ensureCcfBgmSecondPlayer();
+    const incoming = getCcfBgmStandbyPlayer();
+    // YT.Player 는 만든 직후엔 명령을 받지 못한다(준비되면 그때 메서드가 생긴다).
+    // 준비 전이면 크로스페이드를 포기하고 즉시 전환에 맡긴다 — 안 그러면 전환 자체가 안 된다.
+    if (!incoming || typeof incoming.loadVideoById !== "function"
+      || typeof incoming.setVolume !== "function") {
+      debugLog("bgm-xfade-standby-not-ready", { hasStandby: !!incoming });
+      return false;
+    }
 
     cancelCcfBgmCrossfade();
     const outgoing = ccfBgmPlayer;
