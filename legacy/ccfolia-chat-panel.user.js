@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.13
+// @version      0.1.14
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -24,7 +24,7 @@
   //   roll20-css-bridge(그룹핑)와 chat-notifier(알림)에 #ccf-second-chat-panel 예외를 넣어 뒀다.
   //   새로 메시지를 훑는 코드를 추가할 때도 같은 예외가 필요하다.
 
-  const VERSION = "0.1.13";
+  const VERSION = "0.1.14";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -524,6 +524,18 @@
         transform: none !important;
         z-index: 1200;
       }
+      /* 목록을 비우고 우리 줄만 넣기 때문에 네이티브의 구분선 요소가 사라진다 → 직접 그린다. */
+      #${PANEL_ID}.ccf-scp-clone .MuiListItem-root {
+        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.22));
+      }
+      /* 탭 선택 표시가 두 겹으로 보이지 않게, 복제본의 원래 표시는 끄고 우리가 그린다. */
+      #${PANEL_ID}.ccf-scp-clone .MuiTabs-indicator { display: none !important; }
+      #${PANEL_ID}.ccf-scp-clone [data-ccf-scp-channel] {
+        border-bottom: 2px solid transparent !important;
+      }
+      #${PANEL_ID}.ccf-scp-clone [data-ccf-scp-channel][aria-selected="true"] {
+        border-bottom-color: #f44336 !important;
+      }
       .ccf-scp-clone-close {
         position: absolute; top: 6px; right: 8px; z-index: 5;
         width: 28px; height: 28px; line-height: 1;
@@ -642,6 +654,10 @@
         el.style.pointerEvents = "";
         el.style.opacity = "";
         el.dataset.ccfScpChannel = channel;
+        // 복제 시점의 선택 상태(빨간 밑줄 등)가 남아 있으면 우리 표시와 겹쳐 보인다.
+        el.classList.remove("Mui-selected", "Mui-focusVisible");
+        el.removeAttribute("aria-selected");
+        el.style.borderBottom = "";
         el.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -819,6 +835,7 @@
     window.removeEventListener("resize", safeLayout);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
+    applyPagePush(0);
     rowTemplate = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
@@ -1019,6 +1036,36 @@
     }
   }
 
+  // 겹쳐 띄우는 대신 화면을 실제로 좁힌다("밀어내기").
+  // 앱 루트의 폭을 줄이고, 화면에 고정된 서랍(룸 채팅 등)은 right 를 밀어 준다.
+  // → BGM 조작줄·상단바 등 무엇도 가리지 않는다. 닫으면 원래대로 돌아온다.
+  function applyPagePush(px) {
+    const id = "ccf-scp-push-style";
+    let style = document.getElementById(id);
+    if (!px) {
+      style?.remove();
+      return;
+    }
+    if (!style) {
+      style = document.createElement("style");
+      style.id = id;
+      style.setAttribute(SAFE_ATTR, "1");
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = `
+      #root {
+        width: calc(100% - ${px}px) !important;
+        max-width: calc(100% - ${px}px) !important;
+        overflow: hidden !important;
+      }
+      body > .MuiDrawer-root .MuiDrawer-paper,
+      body > .MuiModal-root .MuiDrawer-paper,
+      body > [role="presentation"] .MuiDrawer-paper {
+        right: ${px}px !important;
+      }
+    `;
+  }
+
   // 화면 오른쪽 위에는 룸 상단바 아이콘들이 떠 있다. 우리 패널이 오른쪽 끝을 차지하면
   // 그 아이콘들을 덮어 누를 수 없게 된다 → 상단바 아래에서 시작하도록 여백을 잰다.
   // 네이티브 채팅 패널 안의 버튼은 제외한다(그건 패널 헤더라 기준이 아니다).
@@ -1075,41 +1122,21 @@
       return;
     }
 
-    const MIN_WIDTH = 220;
-    // 밀기 전 기준 위치 (transform 은 rect 에 반영되므로 먼저 해제하고 잰다).
+    // 예전 방식(네이티브를 transform 으로 밀기)은 쓰지 않는다 — 밀린 패널이 다른 UI 를 덮었다.
     applyNativeShift(native, 0);
     const base = native.getBoundingClientRect();
     const width = Math.max(260, Math.min(base.width || 340, 460));
-    const gapRight = window.innerWidth - base.right;
 
-    let left;
-    if (gapRight >= MIN_WIDTH) {
-      // 오른쪽에 이미 자리가 있으면 밀 필요 없이 그 옆에.
-      left = base.right;
-    } else if (panelSide === "right" && base.left >= width) {
-      // 오른쪽 끝에 붙어 있으면 네이티브를 왼쪽으로 밀고 그 자리를 쓴다.
-      applyNativeShift(native, width);
-      left = base.right - width;
-    } else if (base.left >= MIN_WIDTH) {
-      left = base.left - Math.min(width, base.left);
-    } else {
-      left = Math.max(0, window.innerWidth - width);
-    }
-
-    // 상단바 아이콘을 덮지 않도록 그 아래에서 시작한다(가릴 게 없으면 그대로).
-    const topBar = measureTopBarOffset(native);
-    const top = Math.max(Math.round(base.top), topBar);
-    const bottom = Math.round(base.top + base.height);
-    // 화면 밖으로 1px 이라도 새면 가로 스크롤이 생긴다.
-    const maxWidth = Math.max(120, window.innerWidth - Math.round(left));
+    // 화면을 실제로 좁히고, 우리는 그렇게 생긴 오른쪽 자리에 들어간다.
+    applyPagePush(width);
 
     Object.assign(panelEl.style, {
-      top: `${top}px`,
-      height: `${Math.max(120, bottom - top)}px`,
+      top: "0px",
+      height: `${window.innerHeight}px`,
       bottom: "",
-      right: "",
-      left: `${Math.round(left)}px`,
-      width: `${Math.min(Math.round(width), maxWidth)}px`
+      right: "0px",
+      left: "",
+      width: `${Math.round(width)}px`
     });
   }
 
