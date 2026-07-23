@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.18
+// @version      0.2.19
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -216,7 +216,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.18"),
+    version: getUserscriptVersion("0.2.19"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5259,20 +5259,32 @@
     const cleaned = text.replace(/[\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, "");
 
     let formula = "";
+    let afterFormula = 0;
     const parenForm = cleaned.match(/\(\s*(\d*[dD]\d+(?:\s*[+\-*\/]\s*(?:\d+|\d*[dD]\d+))*)\s*\)/);
     if (parenForm) {
       formula = parenForm[1].replace(/\s+/g, "");
+      afterFormula = parenForm.index + parenForm[0].length;
     } else {
       const bareForm = cleaned.match(/(\d*[dD]\d+(?:\s*[+\-*\/]\s*(?:\d+|\d*[dD]\d+))*)/);
-      if (bareForm) formula = bareForm[1].replace(/\s+/g, "");
+      if (bareForm) {
+        formula = bareForm[1].replace(/\s+/g, "");
+        afterFormula = bareForm.index + bareForm[0].length;
+      }
     }
     if (!formula) return null;
 
-    // 최종 결과 — 마지막 화살표 뒤 숫자
+    // 결과는 "이 수식에 딸린 구간" 안에서만 찾는다.
+    // 한 요소에 굴림 두 개가 이어져 들어오면(예: 4D6 결과 뒤에 1D100 결과),
+    // 수식은 앞의 것을 쓰면서 결과만 뒤의 것을 가져와 엉뚱한 값이 표시됐다.
+    // (실제 사례: "(4D6) ＞ 9[3,1,4,1] ＞ 9(1D100) ＞ 94" → 4D6 인데 94 표시)
+    const rest = cleaned.slice(afterFormula);
+    const nextFormulaAt = rest.search(/\(\s*\d*[dD]\d+|\d+[dD]\d+/);
+    const segment = nextFormulaAt >= 0 ? rest.slice(0, nextFormulaAt) : rest;
+
     const arrowRe = new RegExp(CREE_GRRR_ARROW_CLASS + "\\s*(\\d+)(?!\\d)", "g");
     const rolls = [];
     let m;
-    while ((m = arrowRe.exec(cleaned)) !== null) {
+    while ((m = arrowRe.exec(segment)) !== null) {
       rolls.push(parseInt(m[1], 10));
     }
     if (rolls.length === 0) return null;
