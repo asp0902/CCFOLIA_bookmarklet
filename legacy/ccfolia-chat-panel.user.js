@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.8
+// @version      0.1.9
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.8";
+  const VERSION = "0.1.9";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -475,11 +475,18 @@
       /* 나레이션은 서식 스크립트가 전체 폭 가운데 정렬로 그린다. 아이콘·이름 칸을 그대로
          두면 본문이 좁은 칸으로 밀려 한 글자씩 세로로 찌그러진다(네이티브도 나레이션엔
          아이콘·이름을 안 띄운다) → 한 칸으로 펴고 아이콘·이름줄을 숨긴다. */
-      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) {
+      /* 나레이션 표시는 렌더 루트에 붙기도 하고 줄(li) 자체에 붙기도 한다 — 둘 다 처리. */
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]),
+      .ccf-scp-row[data-ccf-narration="1"],
+      .ccf-scp-row:has([data-ccf-narration="1"]) {
         grid-template-columns: minmax(0, 1fr);
       }
       .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) .ccf-scp-avatar,
-      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) .ccf-scp-head {
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) .ccf-scp-head,
+      .ccf-scp-row[data-ccf-narration="1"] .ccf-scp-avatar,
+      .ccf-scp-row[data-ccf-narration="1"] .ccf-scp-head,
+      .ccf-scp-row:has([data-ccf-narration="1"]) .ccf-scp-avatar,
+      .ccf-scp-row:has([data-ccf-narration="1"]) .ccf-scp-head {
         display: none;
       }
       .ccf-scp-row.is-cont { padding-top: 0; }
@@ -725,6 +732,26 @@
     }
   }
 
+  // 화면 오른쪽 위에는 룸 상단바 아이콘들이 떠 있다. 우리 패널이 오른쪽 끝을 차지하면
+  // 그 아이콘들을 덮어 누를 수 없게 된다 → 상단바 아래에서 시작하도록 여백을 잰다.
+  // 네이티브 채팅 패널 안의 버튼은 제외한다(그건 패널 헤더라 기준이 아니다).
+  function measureTopBarOffset(native) {
+    let bottom = 0;
+    const nodes = document.querySelectorAll('button, [role="button"], [role="toolbar"]');
+    for (const el of nodes) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (el.closest(`#${PANEL_ID}`)) continue;
+      if (native instanceof HTMLElement && native.contains(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      if (rect.top > 72) continue;                              // 상단 영역만
+      if (rect.right < window.innerWidth - 240) continue;        // 오른쪽 끝 근처만
+      bottom = Math.max(bottom, rect.bottom);
+    }
+    // 너무 크게 잡히면(전체 화면 요소 등) 무시한다.
+    return bottom > 0 && bottom <= 96 ? Math.round(bottom + 4) : 0;
+  }
+
   // 룸 채팅 패널은 화면 오른쪽 끝에 붙어 있어(right = 창 너비) 그 오른쪽에는 공간이 없다.
   // 우리 패널을 오른쪽에 두려면 네이티브를 우리 폭만큼 왼쪽으로 밀어야 한다.
   // transform 만 건드리므로 레이아웃 계산에는 영향이 없고, 닫을 때 원래대로 되돌린다.
@@ -782,9 +809,14 @@
       left = Math.max(0, window.innerWidth - width);
     }
 
+    // 상단바 아이콘을 덮지 않도록 그 아래에서 시작한다(가릴 게 없으면 그대로).
+    const topBar = measureTopBarOffset(native);
+    const top = Math.max(Math.round(base.top), topBar);
+    const bottom = Math.round(base.top + base.height);
+
     Object.assign(panelEl.style, {
-      top: `${Math.round(base.top)}px`,
-      height: `${Math.round(base.height)}px`,
+      top: `${top}px`,
+      height: `${Math.max(120, bottom - top)}px`,
       bottom: "",
       right: "",
       left: `${Math.round(left)}px`,
