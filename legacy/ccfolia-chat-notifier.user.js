@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.2
+// @version      0.3.3
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.2";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.3";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3353,6 +3353,14 @@
 
   function handleCcfBgmPlayerStateChange(event) {
     if (event?.data === window.YT?.PlayerState?.ENDED) {
+      // 재생 중인 유튜브 곡이 없으면 무엇도 되살리지 않는다.
+      // ccfBgmActiveLoop 는 마지막에 재생한 곡의 설정이 그대로 남아 true 인 채였고,
+      // 대기(cue) 상태 플레이어에서 온 ENDED 로도 seekTo+playVideo 가 돌아
+      // "BGM 미재생/파일 BGM 재생 중인데 마지막 유튜브 곡이 갑자기 시작"되었다.
+      // (이 경로는 로그를 남기지 않아 원인 추적이 어려웠다 — 컷인 재생 시 재현)
+      if (!ccfBgmActiveSlotKey) {
+        return;
+      }
       // 사용자가 정지시켜 발생한 ENDED 면 loop 로 되살리지 않는다 (앞부분 무한 반복 방지).
       if (ccfBgmActiveLoop && !ccfBgmStopping) {
         event.target.seekTo(0, true);
@@ -3422,6 +3430,8 @@
 
     ccfBgmActiveSlotKey = "";
     ccfBgmActiveEntryKey = "";
+    // 반복재생 설정도 함께 내린다. 남겨두면 대기 중인 플레이어의 ENDED 로 곡이 되살아난다.
+    ccfBgmActiveLoop = false;
     ccfBgmPlayerVisible = false;
     updateCcfBgmPersistedState("stopped");
     syncCcfYoutubeBgmPlayerDockVisibility();
