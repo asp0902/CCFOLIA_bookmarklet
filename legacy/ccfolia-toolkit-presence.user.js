@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.1
+// @version      0.0.2
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -495,6 +495,20 @@
     abort.signal.addEventListener("abort", () => observer.disconnect(), { once: true });
   }
 
+  // 판정 명령은 원문 그대로 나가야 코코포리아(BCDice)가 굴린다.
+  // 이 스크립트는 항상 켜져 있어, format-sync / roll20-bridge 가 양보해도
+  // 여기서 봉투를 붙이면 결국 명령이 인식되지 않는다. (choice[a,b] 미판정 원인)
+  // 규칙은 두 스크립트와 동일 — 메시지가 명령으로 "시작"할 때만.
+  function looksLikeCcfDiceCommand(text) {
+    const raw = String(text || "");
+    if (!raw) return false;
+    const body = raw.replace(/\[\[[^\]]*\]\]/g, "").trim();
+    if (!body) return false;
+    return /^S?(?:choice|CHOICE)\s*\[/.test(body)
+      || /^S?\d*[dD]\d+\b/.test(body)
+      || /^S?CCB?\s*<=/i.test(body);
+  }
+
   function preparePresenceForSend(editor) {
     // 네이티브 MUI 다이얼로그(캐릭터 이미지 라이브러리 / Unsplash 검색 등) 안의 입력은
     // 채팅 입력창이 아니므로 presence 페이로드를 주입하지 않는다.
@@ -503,6 +517,7 @@
     const currentText = getEditorText(editor);
     const visibleText = stripInvisibleEnvelope(currentText);
     if (!visibleText.trim()) return true;
+    if (looksLikeCcfDiceCommand(visibleText)) return true;
 
     const nextText = decorateOutgoingText(currentText);
     if (nextText === currentText) return true;
