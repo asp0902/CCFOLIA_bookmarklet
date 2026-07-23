@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.3
+// @version      0.1.4
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.3";
+  const VERSION = "0.1.4";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -48,6 +48,8 @@
   let pinnedToBottom = true;
   let sending = false;
   let layoutTimer = 0;
+  // "right" = 네이티브를 왼쪽으로 밀고 우리가 오른쪽. "left" = 네이티브 왼쪽 옆(밀지 않음).
+  let panelSide = "right";
 
   /* ---------------- Redux store ---------------- */
 
@@ -380,7 +382,9 @@
 
   function savePrefs() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ channel: currentChannel, open: !!panelEl }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        channel: currentChannel, open: !!panelEl, side: panelSide
+      }));
     } catch (error) { /* 저장 실패는 무시 */ }
   }
 
@@ -432,9 +436,12 @@
       .ccf-scp-row { padding: 2px 0 6px; }
       .ccf-scp-row.is-cont { padding-top: 0; }
       .ccf-scp-head { display: flex; align-items: baseline; gap: 6px; }
-      .ccf-scp-name { font-weight: 700; font-size: 12px; }
+      .ccf-scp-name { font-weight: var(--scp-name-weight, 700); font-size: var(--scp-name-size, 12px);
+        color: var(--scp-name-color, inherit); }
       .ccf-scp-time { font-size: 10px; opacity: .5; }
-      .ccf-scp-text { white-space: pre-wrap; word-break: break-word; }
+      .ccf-scp-text { white-space: pre-wrap; word-break: break-word;
+        font-size: var(--scp-text-size, inherit); line-height: var(--scp-text-line, 1.5);
+        color: var(--scp-text-color, inherit); }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
       .ccf-scp-compose { flex: 0 0 auto; padding: 8px 10px;
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
@@ -539,6 +546,7 @@
     unsubscribeStore();
     window.removeEventListener("resize", layoutPanel);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
+    clearNativeShift();
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
@@ -637,6 +645,44 @@
     const line = cs.borderLeftColor && cs.borderLeftWidth !== "0px" ? cs.borderLeftColor : "";
     set("--scp-line", line || "rgba(128,128,128,.32)");
     set("--scp-shadow", cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "");
+
+    // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
+    const nameEl = document.querySelector(`h6.MuiListItemText-primary`);
+    if (nameEl && !nameEl.closest(`#${PANEL_ID}`)) {
+      const ns = getComputedStyle(nameEl);
+      set("--scp-name-size", ns.fontSize);
+      set("--scp-name-weight", ns.fontWeight);
+      set("--scp-name-color", ns.color);
+    }
+    const textEl = document.querySelector(`p.MuiListItemText-secondary`);
+    if (textEl && !textEl.closest(`#${PANEL_ID}`)) {
+      const ts = getComputedStyle(textEl);
+      set("--scp-text-size", ts.fontSize);
+      set("--scp-text-line", ts.lineHeight);
+      set("--scp-text-color", ts.color);
+    }
+  }
+
+  // 룸 채팅 패널은 화면 오른쪽 끝에 붙어 있어(right = 창 너비) 그 오른쪽에는 공간이 없다.
+  // 우리 패널을 오른쪽에 두려면 네이티브를 우리 폭만큼 왼쪽으로 밀어야 한다.
+  // transform 만 건드리므로 레이아웃 계산에는 영향이 없고, 닫을 때 원래대로 되돌린다.
+  function applyNativeShift(native, px) {
+    if (!(native instanceof HTMLElement)) return;
+    if (native.dataset.ccfScpShift === String(px)) return;
+    if (native.dataset.ccfScpPrevTransform === undefined) {
+      native.dataset.ccfScpPrevTransform = native.style.transform || "";
+    }
+    native.style.transform = px ? `translateX(${-px}px)` : (native.dataset.ccfScpPrevTransform || "");
+    native.dataset.ccfScpShift = String(px);
+  }
+
+  function clearNativeShift() {
+    document.querySelectorAll("[data-ccf-scp-shift]").forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      el.style.transform = el.dataset.ccfScpPrevTransform || "";
+      delete el.dataset.ccfScpShift;
+      delete el.dataset.ccfScpPrevTransform;
+    });
   }
 
   // 위에 겹치지 않고 네이티브 패널 옆에 나란히 붙인다.
@@ -653,24 +699,24 @@
       return;
     }
 
-    const rect = native.getBoundingClientRect();
-    const preferred = Math.max(260, Math.min(rect.width || 340, 460));
-    const gapRight = window.innerWidth - rect.right;
-    const gapLeft = rect.left;
     const MIN_WIDTH = 220;
+    // 밀기 전 기준 위치 (transform 은 rect 에 반영되므로 먼저 해제하고 잰다).
+    applyNativeShift(native, 0);
+    const base = native.getBoundingClientRect();
+    const width = Math.max(260, Math.min(base.width || 340, 460));
+    const gapRight = window.innerWidth - base.right;
 
-    // 오른쪽을 우선한다(사용자 선호). 폭이 조금 부족해도 오른쪽 여백에 맞춰 좁혀서 넣고,
-    // 오른쪽이 정말 좁을 때만 왼쪽으로 보낸다.
     let left;
-    let width;
     if (gapRight >= MIN_WIDTH) {
-      width = Math.min(preferred, gapRight);
-      left = rect.right;
-    } else if (gapLeft >= MIN_WIDTH) {
-      width = Math.min(preferred, gapLeft);
-      left = rect.left - width;
+      // 오른쪽에 이미 자리가 있으면 밀 필요 없이 그 옆에.
+      left = base.right;
+    } else if (panelSide === "right" && base.left >= width) {
+      // 오른쪽 끝에 붙어 있으면 네이티브를 왼쪽으로 밀고 그 자리를 쓴다.
+      applyNativeShift(native, width);
+      left = base.right - width;
+    } else if (base.left >= MIN_WIDTH) {
+      left = base.left - Math.min(width, base.left);
     } else {
-      width = preferred;
       left = Math.max(0, window.innerWidth - width);
     }
 
@@ -766,6 +812,7 @@
   function init() {
     const prefs = readPrefs();
     if (prefs.channel) currentChannel = prefs.channel;
+    if (prefs.side === "left" || prefs.side === "right") panelSide = prefs.side;
     if (prefs.open) openPanel();
 
     // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
@@ -782,6 +829,15 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
+      // 네이티브를 미는 게 불편하면 "left" 로 바꾸면 밀지 않고 왼쪽 옆에 붙는다.
+      setSide(side) {
+        if (side !== "left" && side !== "right") return panelSide;
+        panelSide = side;
+        clearNativeShift();
+        layoutPanel();
+        savePrefs();
+        return panelSide;
+      },
       // 위치/디자인이 안 맞을 때: 어떤 요소를 네이티브 패널로 잡았는지 확인용.
       layoutDiag() {
         const native = findNativeChatPanel();
