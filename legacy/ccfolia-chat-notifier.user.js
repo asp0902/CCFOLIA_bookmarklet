@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.7
+// @version      0.3.8
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.7";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.8";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4741,13 +4741,30 @@
       ...root.querySelectorAll(".MuiList-root")
     ];
 
-    return lists.find((list) => list instanceof HTMLElement && isCcfBgmNativeMusicList(list))
-      || lists.find((list) => {
-        return list instanceof HTMLElement
-          && !list.querySelector("input, textarea")
-          && !!list.querySelector(".MuiListItem-root .MuiListItemButton-root");
-      })
-      || null;
+    const byMusicIcon = lists.find((list) => list instanceof HTMLElement && isCcfBgmNativeMusicList(list));
+    if (byMusicIcon) return byMusicIcon;
+
+    const byAnyItem = lists.find((list) => {
+      return list instanceof HTMLElement
+        && !list.querySelector("input, textarea")
+        && !!list.querySelector(".MuiListItem-root .MuiListItemButton-root");
+    });
+    if (byAnyItem) return byAnyItem;
+
+    // 등록된 음원이 하나도 없으면 위 두 판정이 모두 실패한다(항목이 없으니까).
+    // 그래서 유튜브 음원을 처음 추가할 때 넣을 자리를 못 찾아 목록에 안 보였고,
+    // 일반 음원을 하나 넣은 뒤에야 나타났다. → 빈 목록도 후보로 받아들인다.
+    const emptyCandidates = lists.filter((list) => {
+      if (!(list instanceof HTMLElement)) return false;
+      if (list.querySelector("input, textarea")) return false;
+      if (list.getAttribute("role") === "tablist" || list.closest('[role="tablist"]')) return false;
+      return true;
+    });
+    if (!emptyCandidates.length) return null;
+    // 다이얼로그 안에 목록이 여러 개면 가장 넓은 영역을 음원 목록으로 본다.
+    return emptyCandidates.reduce((best, list) => {
+      return (list.clientHeight || 0) > (best.clientHeight || 0) ? list : best;
+    }, emptyCandidates[0]);
   }
 
   function isCcfBgmNativeMusicList(list) {
