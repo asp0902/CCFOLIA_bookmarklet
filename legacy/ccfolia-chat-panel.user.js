@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.7
+// @version      0.1.8
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.7";
+  const VERSION = "0.1.8";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -467,15 +467,27 @@
       .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px;
         margin: 0; list-style: none; }
       .ccf-scp-text { margin: 0; }
-      /* 네이티브 메시지 줄: 아이콘 열 + 본문 열 */
-      .ccf-scp-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px;
-        padding: 6px 0 2px; align-items: start; }
+      /* 네이티브 메시지 줄: 아이콘 열 + 본문 열.
+         minmax(0,1fr) 이어야 긴 낱말이 있어도 본문 칸이 밀려나지 않는다. */
+      .ccf-scp-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px;
+        padding: 6px 0 2px; align-items: start; width: 100%; box-sizing: border-box; }
+
+      /* 나레이션은 서식 스크립트가 전체 폭 가운데 정렬로 그린다. 아이콘·이름 칸을 그대로
+         두면 본문이 좁은 칸으로 밀려 한 글자씩 세로로 찌그러진다(네이티브도 나레이션엔
+         아이콘·이름을 안 띄운다) → 한 칸으로 펴고 아이콘·이름줄을 숨긴다. */
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) .ccf-scp-avatar,
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-narration="1"]) .ccf-scp-head {
+        display: none;
+      }
       .ccf-scp-row.is-cont { padding-top: 0; }
       .ccf-scp-avatar { width: 40px; height: 40px; }
       .ccf-scp-row.is-cont .ccf-scp-avatar { height: 0; }
       .ccf-scp-avatar img { width: 40px; height: 40px; border-radius: 4px;
         object-fit: cover; display: block; }
-      .ccf-scp-body { min-width: 0; }
+      .ccf-scp-body { min-width: 0; width: 100%; }
       .ccf-scp-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
       .ccf-scp-name { font-weight: var(--scp-name-weight, 700); font-size: var(--scp-name-size, 12px);
         color: var(--scp-name-color, inherit); }
