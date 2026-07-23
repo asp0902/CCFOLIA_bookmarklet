@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://gre0asyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.11
+// @version      0.1.12
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -762,6 +762,8 @@ function runCharacterShortcut(event) {
   if (btn) {
     state.lastCharacterShortcutAt = now;
     clickCharacterSelectButton(btn);
+    // 이 순간부터만 방향키를 가져간다 (매크로 자동완성 등과 충돌 방지).
+    nativePick.armed = true;
   }
   return true;
 }
@@ -854,7 +856,10 @@ function initEvents() {
 
 
 /* ===== 네이티브 캐릭터 선택창 키보드 조작 ===== */
-const nativePick = { items: [], index: -1 };
+// armed: ` 로 캐릭터 선택창을 연 경우에만 방향키를 가져간다.
+// 이 표시가 없으면 채팅 매크로 자동완성처럼 코코포리아가 직접 방향키로 다루는 목록까지
+// 가로채서, 매크로를 키보드로 고를 수 없게 된다.
+const nativePick = { items: [], index: -1, armed: false };
 const ccfspVisible = (el) => {
   if (!el || el.nodeType !== 1) return false;
   const r = el.getBoundingClientRect();
@@ -874,10 +879,24 @@ function ccfspPickerItems(list) {
       item.matches('[role="option"], [role="menuitem"]');
   });
 }
+// 채팅 입력창의 매크로 자동완성(downshift) 목록은 코코포리아가 방향키로 직접 다룬다.
+// 캐릭터 선택창으로 오인해 가로채면 매크로를 키보드로 고를 수 없게 되므로 후보에서 제외.
+function ccfspIsAutocompleteList(el) {
+  if (!el) return false;
+  if (/^downshift/i.test(el.id || '')) return true;
+  if (el.closest?.('[role="combobox"]')) return true;
+  if (!el.id || typeof CSS === 'undefined' || !CSS.escape) return false;
+  const id = CSS.escape(el.id);
+  const owner = document.querySelector(`[aria-controls="${id}"], [aria-owns="${id}"]`);
+  if (!owner) return false;
+  return owner.tagName === 'TEXTAREA' || owner.tagName === 'INPUT' ||
+    owner.getAttribute('role') === 'combobox';
+}
 function ccfspFindPicker() {
   const lists = Array.from(document.querySelectorAll('ul.MuiList-root, [role="listbox"], [role="menu"]'))
     .filter(ccfspVisible)
     .filter((l) => !ccfspIsChatLog(l))
+    .filter((l) => !ccfspIsAutocompleteList(l))
     .map((list) => ({ list, items: ccfspPickerItems(list) }))
     .filter((c) => c.items.length);
   lists.sort((a, b) => b.items.length - a.items.length);
@@ -885,7 +904,7 @@ function ccfspFindPicker() {
 }
 function ccfspClearPick() {
   nativePick.items.forEach((i) => i.removeAttribute('data-ccfsp-nav'));
-  nativePick.items = []; nativePick.index = -1;
+  nativePick.items = []; nativePick.index = -1; nativePick.armed = false;
 }
 function ccfspHighlight(idx) {
   const items = nativePick.items;
@@ -917,6 +936,9 @@ function ccfspActivate(item) {
 function handleNativeCharacterPickerKey(event) {
   if (state.popupEl) return false;
   if (event.key === 'Escape') { ccfspClearPick(); return false; }
+  // ` 로 캐릭터 선택창을 연 상태가 아니면 방향키/Enter 에 손대지 않는다.
+  // (채팅 매크로 자동완성은 코코포리아가 직접 방향키로 다룬다)
+  if (!nativePick.armed) return false;
   if (!['ArrowDown','ArrowUp','Enter'].includes(event.key)) return false;
   const found = ccfspFindPicker();
   if (!found) { ccfspClearPick(); return false; }
