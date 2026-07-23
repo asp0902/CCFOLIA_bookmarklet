@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.4
+// @version      0.1.5
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.4";
+  const VERSION = "0.1.5";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -532,19 +532,21 @@
     panelEl = panel;
 
     lastSignature = "";
-    layoutPanel();
+    // 배치가 실패해도 메시지는 보여야 한다 — 예전에 layoutPanel 의 예외가
+    // 뒤따르는 renderTabs/renderList 까지 통째로 막아 빈 패널이 떴다.
+    safeLayout();
     renderTabs();
     renderList();
     subscribeStore();
     // 네이티브 패널이 열리고 닫히거나 창 크기가 바뀌면 위치를 다시 맞춘다.
-    window.addEventListener("resize", layoutPanel);
-    layoutTimer = window.setInterval(layoutPanel, 500);
+    window.addEventListener("resize", safeLayout);
+    layoutTimer = window.setInterval(safeLayout, 500);
     savePrefs();
   }
 
   function closePanel() {
     unsubscribeStore();
-    window.removeEventListener("resize", layoutPanel);
+    window.removeEventListener("resize", safeLayout);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
     panelEl?.remove();
@@ -721,13 +723,26 @@
     }
 
     Object.assign(panelEl.style, {
-      top: `${Math.round(rect.top)}px`,
-      height: `${Math.round(rect.height)}px`,
+      top: `${Math.round(base.top)}px`,
+      height: `${Math.round(base.height)}px`,
       bottom: "",
       right: "",
       left: `${Math.round(left)}px`,
       width: `${Math.round(width)}px`
     });
+  }
+
+  // 배치 오류가 메시지 렌더까지 막지 않도록 격리한다.
+  let layoutErrorLogged = false;
+  function safeLayout() {
+    try {
+      layoutPanel();
+    } catch (error) {
+      if (!layoutErrorLogged) {
+        layoutErrorLogged = true;
+        console.error("[ccf-chat-panel] layout failed", error);
+      }
+    }
   }
 
   /* ---------------- 메뉴 항목 ---------------- */
@@ -829,6 +844,27 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
+      // 메시지를 못 읽을 때: 저장소가 실제로 어떤 모양인지 확인용.
+      storeDiag() {
+        const slice = getRoomMessagesSlice();
+        if (!slice) return { 슬라이스: null, 저장소: !!findStore() };
+        const groups = slice.idsGroupBy || {};
+        const entities = slice.entities || {};
+        const ids = Object.keys(entities);
+        const sampleId = ids[0];
+        const sample = sampleId ? entities[sampleId] : null;
+        return {
+          엔티티수: ids.length,
+          그룹: Object.fromEntries(Object.entries(groups)
+            .map(([k, v]) => [k, Array.isArray(v) ? v.length : typeof v])),
+          슬라이스키: Object.keys(slice),
+          샘플필드: sample ? Object.keys(sample) : null,
+          샘플: sample ? {
+            channel: sample.channel, name: sample.name,
+            text: String(sample.text || "").slice(0, 20), removed: sample.removed
+          } : null
+        };
+      },
       // 네이티브를 미는 게 불편하면 "left" 로 바꾸면 밀지 않고 왼쪽 옆에 붙는다.
       setSide(side) {
         if (side !== "left" && side !== "right") return panelSide;
