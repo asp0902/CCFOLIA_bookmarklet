@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.14
+// @version      0.1.15
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -24,7 +24,7 @@
   //   roll20-css-bridge(그룹핑)와 chat-notifier(알림)에 #ccf-second-chat-panel 예외를 넣어 뒀다.
   //   새로 메시지를 훑는 코드를 추가할 때도 같은 예외가 필요하다.
 
-  const VERSION = "0.1.14";
+  const VERSION = "0.1.15";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -523,6 +523,19 @@
         margin: 0 !important;
         transform: none !important;
         z-index: 1200;
+      }
+      /* 복제본 안의 패널은 원본에서 화면에 고정돼 있었다. 그대로 두면 우리 배치를 무시하고
+         네이티브와 같은 자리에 그려진다 → 우리 틀 안을 채우도록 되돌린다. */
+      #${PANEL_ID}.ccf-scp-clone .MuiDrawer-paper,
+      #${PANEL_ID}.ccf-scp-clone > .MuiPaper-root {
+        position: relative !important;
+        inset: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        transform: none !important;
+        box-shadow: none !important;
       }
       /* 목록을 비우고 우리 줄만 넣기 때문에 네이티브의 구분선 요소가 사라진다 → 직접 그린다. */
       #${PANEL_ID}.ccf-scp-clone .MuiListItem-root {
@@ -1058,9 +1071,11 @@
         max-width: calc(100% - ${px}px) !important;
         overflow: hidden !important;
       }
-      body > .MuiDrawer-root .MuiDrawer-paper,
-      body > .MuiModal-root .MuiDrawer-paper,
-      body > [role="presentation"] .MuiDrawer-paper {
+      /* ⚠ 우리 패널은 룸 채팅을 복제한 것이라 같은 클래스를 갖는다.
+         제외하지 않으면 자기 자신도 밀려 네이티브와 같은 자리에 겹친다. */
+      body > .MuiDrawer-root:not(#${PANEL_ID}) .MuiDrawer-paper,
+      body > .MuiModal-root:not(#${PANEL_ID}) .MuiDrawer-paper,
+      body > [role="presentation"]:not(#${PANEL_ID}) .MuiDrawer-paper {
         right: ${px}px !important;
       }
     `;
