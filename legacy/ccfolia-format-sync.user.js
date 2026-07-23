@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.42
+// @version      0.1.43
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.42 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.43 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.42"),
+    version: getUserscriptVersion("0.1.43"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2488,6 +2488,7 @@
   // 캐릭터 선택 드롭다운에서 읽은 이름들. 읽을 때 네이티브 드롭다운을 열었다 닫아야 해서
   // 매번 하면 화면이 번쩍이므로 캐시한다 ("새로고침" 누를 때만 갱신).
   let ccfCachedSelectableNames = [];
+  let ccfSelectableWarmStarted = false;
   let lastObservedSpeakerName = "";
   let characterSpeakerObserverStarted = false;
   let pendingSpeakerCheckTimer = 0;
@@ -4737,7 +4738,26 @@
     INLINE_TOOLBAR_EDITORS.set(toolbar, editor);
   }
 
+  // 캐릭터 선택 목록은 네이티브 드롭다운을 실제로 열었다 닫아야 읽을 수 있는데,
+  // 그 합성 클릭이 열려 있던 나레이션 팝오버를 닫아버린다(= 창이 안 열리는 것처럼 보임).
+  // 그래서 팝오버가 열리기 한참 전, 툴바가 만들어진 뒤 조용히 한 번만 읽어둔다.
+  function warmSelectableNamesOnce() {
+    if (ccfSelectableWarmStarted) return;
+    ccfSelectableWarmStarted = true;
+    window.setTimeout(() => {
+      if (!getCurrentRoomId()) return;
+      scrapeCharacterSelectionNames()
+        .then((names) => {
+          if (Array.isArray(names) && names.length) {
+            ccfCachedSelectableNames = uniqueCharacterNames([...ccfCachedSelectableNames, ...names]);
+          }
+        })
+        .catch(() => { /* 실패하면 팝오버 열 때 다시 시도한다 */ });
+    }, 2500);
+  }
+
   function createInlineToolbar() {
+    warmSelectableNamesOnce();
     const toolbar = document.createElement("div");
     toolbar.className = "ccf-inline-toolbar";
     toolbar.setAttribute(INLINE_TOOLBAR_ATTR, "1");
@@ -9750,7 +9770,12 @@
     try {
       const raw = JSON.parse(localStorage.getItem(key) || "[]");
       if (!Array.isArray(raw)) return new Set();
-      return new Set(raw.map(normalizeMyCharacterName).filter(Boolean));
+      return new Set(raw
+        .map(normalizeMyCharacterName)
+        .filter(Boolean)
+        // 채팅 메시지 제목("주사위 - 先週 月曜日 22:11")이 캐릭터로 잘못 저장된 적이 있다.
+        // (채팅 로그를 캐릭터 선택창으로 오인하던 버그의 잔재) 지워서 목록을 정리한다.
+        .filter((name) => !/\s-\s.*\d{1,2}:\d{2}\s*$/.test(name)));
     } catch (error) {
       console.error("[ccf-format-sync] readNarratorNameSet failed", error);
       return new Set();
@@ -10233,8 +10258,9 @@
       try {
         const scraped = await scrapeCharacterSelectionNames();
         if (scraped.length) {
-          selectable = scraped;
-          ccfCachedSelectableNames = scraped;
+          // 덮어쓰지 않고 합친다 — 드롭다운이 덜 열린 채 읽히면 목록이 줄어든다.
+          selectable = uniqueCharacterNames([...scraped, ...ccfCachedSelectableNames]);
+          ccfCachedSelectableNames = selectable;
         }
       } catch (error) {
         console.warn("[ccf-format-sync] character selection scrape failed", error);
