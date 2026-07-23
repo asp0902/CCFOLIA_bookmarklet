@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.17
+// @version      0.1.18
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.17";
+  const VERSION = "0.1.18";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -271,11 +271,28 @@
     });
 
     if (msg.name === prevName) {
-      const avatar = row.querySelector(".MuiListItemAvatar-root");
-      if (avatar) avatar.style.visibility = "hidden";
-      if (head) head.style.display = "none";
+      // 같은 화자 이어짐 표시를 붙이면 roll20-bridge 의 CSS 가 네이티브와 똑같이
+      // 아이콘·이름을 숨기고 간격을 좁혀 준다(그 스크립트의 JS 는 우리 패널을 건너뛰지만
+      // CSS 는 전역이라 그대로 적용된다). 직접 숨기면 간격이 원본보다 크게 남는다.
+      row.setAttribute("data-ccf-prose-cont", "1");
     }
     return row;
+  }
+
+  // 사용자 지정 탭은 채널 키가 내부 ID(VgKD1sXol 같은)라 그대로 쓰면 읽을 수 없다.
+  // 코코포리아 탭 막대에서 같은 자리의 이름을 빌려온다.
+  function channelLabel(channel, index) {
+    if (CHANNEL_LABELS[channel]) return CHANNEL_LABELS[channel];
+    const nativeTabs = document.querySelector(`[role="tablist"]:not(#${PANEL_ID} [role="tablist"])`);
+    const labels = nativeTabs
+      ? [...nativeTabs.querySelectorAll('[role="tab"]')]
+        .map((el) => normalizeSpace(el.textContent || ""))
+        .filter(Boolean)
+      : [];
+    const label = index >= 0 ? labels[index] : "";
+    if (label) return label;
+    // 그래도 못 찾으면 ID 를 짧게 줄여 보여준다(칸을 잡아먹지 않게).
+    return channel.length > 6 ? `${channel.slice(0, 6)}…` : channel;
   }
 
   function renderTabs() {
@@ -289,7 +306,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "ccf-scp-tab" + (channel === currentChannel ? " is-active" : "");
-      btn.textContent = CHANNEL_LABELS[channel] || channel;
+      btn.textContent = channelLabel(channel, channels.indexOf(channel));
       btn.title = channel;
       btn.addEventListener("click", () => {
         currentChannel = channel;
