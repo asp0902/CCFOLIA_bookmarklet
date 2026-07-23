@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.61
+// @version      0.3.62
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.61"),
+    version: getUserscriptVersion("0.3.62"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5443,7 +5443,7 @@
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
       // 보드 메뉴 FAB Popover/Menu 항목도 h6+p 구조라 채팅으로 오인됨 (#20/#26).
       // 팝오버/메뉴/다이얼로그 내부 LI는 그룹핑 대상에서 제외.
-      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
+      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root, #ccf-second-chat-panel"));
     if (!messages.length) return;
     // 채팅 영역은 2개 이상일 수 있음 (메인 패널 + 룸 채팅 사이드패널) —
     // 보이는 스크롤러 전부를 잡아 각각 바닥 보정한다.
@@ -5535,7 +5535,7 @@
   function findVisibleChatScrollers(messages = null) {
     const visibleMessages = (messages || Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
-      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")))
+      .filter((li) => !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root, #ccf-second-chat-panel")))
       .filter((li) => li.offsetParent !== null);
     // 같은 목록(UL)의 LI는 같은 스크롤러 — UL 단위로 1회만 조상 탐색.
     const lists = new Set();
@@ -5687,7 +5687,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.61",
+    version: "0.3.62",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
