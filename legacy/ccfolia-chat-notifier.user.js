@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.1
+// @version      0.3.2
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.1";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.2";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -457,6 +457,9 @@
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmStopping = false; // 정지 중 발생한 ENDED 를 loop 재생과 구분
+  // "새로고침 전 곡 복원"은 페이지당 한 번뿐. 이후의 패널 재렌더(컷인 등)로는
+  // 다시 재생되지 않게 한다.
+  let ccfBgmRestoreConsumed = false;
   // 로컬에서 곡을 고른 직후, 그 전에 출발했던 폴링 응답(= 낡은 원격 신호)이 도착해
   // 다른 곡으로 갈아치우는 경쟁 상태를 막는다 (#A를 골랐는데 B가 재생되는 문제).
   let ccfBgmLocalIntentSeq = 0;      // 로컬 재생/정지 조작마다 증가
@@ -1706,6 +1709,7 @@
         ccfBgmSlotMap.set(persisted.entryKey, entry);
       }
 
+      ccfBgmRestoreConsumed = true;
       playCcfYoutubeBgmSlot(persisted.slotKey, entry, null, 0, persisted.entryKey);
     } catch (_) { /* fast path 실패해도 정상 init 흐름이 처리 */ }
   }
@@ -3102,7 +3106,17 @@
     // 복원 재생은 "수신 전용" — Firestore 송신 금지 (#85).
     // 송신하면 재실행자의 옛 곡이 룸 전체 BGM을 덮어씀. applying 가드로 emit 차단;
     // 이후 폴링이 원격 nowPlaying 신호를 받으면 그쪽으로 자연 전환된다.
+    // 복원 재생은 "페이지를 새로 연 직후 한 번"만이어야 한다.
+    // 이 함수는 BGM 패널이 다시 그려질 때마다 불리는데, 컷인 재생처럼 화면이 바뀌는
+    // 일이 생기면 패널이 다시 그려지면서 옛 곡이 되살아났다(BGM 미재생/일반 음원
+    // 재생 중에도 마지막 유튜브 곡이 갑자기 시작되는 문제). 이후 호출은 cue 만 한다.
+    if (persisted?.state === "playing" && ccfBgmRestoreConsumed) {
+      cueCcfYoutubeBgmSlot(targetSlotKey, hit[1], hit[0]);
+      return;
+    }
+
     if (persisted?.state === "playing") {
+      ccfBgmRestoreConsumed = true;
       if (shouldSkipCcfYoutubeRestoreForNativeBgm(targetSlotKey, "prepare-player")) {
         return;
       }
