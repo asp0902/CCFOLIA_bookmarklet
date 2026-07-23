@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.11
+// @version      0.3.12
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.11";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.12";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4051,6 +4051,21 @@
       if (anchorAssigned) {
         persistCcfBgmSlotMap();
       }
+    } else {
+      // 네이티브 음원이 하나도 없을 때 추가된 항목은 "맨 위"로 못박는다.
+      // 안 그러면 나중에 파일 음원을 넣는 순간 그 뒤(아래)로 밀려나, 먼저 넣은
+      // 유튜브 음원이 나중에 넣은 파일보다 아래에 놓인다.
+      let pinned = false;
+      entries.forEach(([entryKey, entry]) => {
+        if (entry && typeof entry.anchorSlot !== "string") {
+          entry.anchorSlot = "";
+          ccfBgmSlotMap.set(entryKey, entry);
+          pinned = true;
+        }
+      });
+      if (pinned) {
+        persistCcfBgmSlotMap();
+      }
     }
 
     const placementPlan = computeCcfYoutubeBgmPlacementPlan(entries, nativeAnchorOrder);
@@ -4059,6 +4074,7 @@
       container.querySelectorAll(".ccf-youtube-bgm-row-wrap").forEach((row) => row.remove());
       listRoot.querySelectorAll(".ccf-youtube-bgm-row-wrap").forEach((row) => row.remove());
       listRoot.dataset.ccfYoutubeBgmRenderSignature = `[]@${activeTabSig}`;
+      syncCcfBgmEmptyLibraryHint(listRoot);
       return;
     }
 
@@ -4103,8 +4119,33 @@
     container.querySelectorAll(".ccf-youtube-bgm-row-wrap").forEach((row) => row.remove());
 
     insertCcfYoutubeBgmRowsByPlan(container, placementPlan);
+    syncCcfBgmEmptyLibraryHint(listRoot);
     prepareCcfYoutubeBgmPlayerFromEntries(entries);
     syncCcfBgmYoutubeMultiSelectUI();
+  }
+
+  // 코코포리아는 "음원 없음" 상태에서 드래그&드롭 안내를 띄운다. 우리 유튜브 행은
+  // 코코포리아가 모르는 채로 넣는 것이라, 행이 있어도 안내가 그대로 남는다.
+  // 우리 행이 있으면 숨기고, 없어지면 되돌린다.
+  function syncCcfBgmEmptyLibraryHint(listRoot) {
+    if (!(listRoot instanceof HTMLElement)) return;
+    const hasOurRow = !!listRoot.querySelector(".ccf-youtube-bgm-row-wrap");
+    const hintRe = /드래그\s*앤\s*드롭|드래그\s*&\s*드롭|ドラッグ\s*&?\s*ドロップ|drag\s*(?:and|&)\s*drop/i;
+
+    listRoot.querySelectorAll(".MuiListItem-root").forEach((item) => {
+      if (!(item instanceof HTMLElement)) return;
+      if (item.closest(".ccf-youtube-bgm-row-wrap")) return;
+      const marked = item.dataset.ccfBgmEmptyHint === "1";
+      if (!marked && !hintRe.test(normalizeSpace(item.textContent || ""))) return;
+
+      if (hasOurRow) {
+        item.dataset.ccfBgmEmptyHint = "1";
+        item.style.display = "none";
+      } else if (marked) {
+        item.style.display = "";
+        delete item.dataset.ccfBgmEmptyHint;
+      }
+    });
   }
 
   function findCcfYoutubeBgmInsertionContainer(listRoot) {
@@ -7863,13 +7904,21 @@
 
       /* 등록된 음원이 하나도 없어 코코포리아의 자동생성 스타일이 없을 때만 쓰는 대체 레이아웃.
          (createCcfYoutubeBgmListRow 가 .ccf-youtube-bgm-standalone 을 붙인다) */
+      /* 폭이 새어 나가면 목록에 가로 스크롤이 생긴다 — 어디서도 넘치지 않게 막는다. */
+      .ccf-youtube-bgm-standalone {
+        max-width: 100% !important;
+        overflow: hidden !important;
+      }
       .ccf-youtube-bgm-standalone .MuiListItem-root {
         display: flex !important;
         align-items: center !important;
         position: relative !important;
         width: 100% !important;
+        max-width: 100% !important;
         padding: 0 !important;
+        padding-right: 48px !important;   /* 편집 버튼 자리 */
         box-sizing: border-box !important;
+        overflow: hidden !important;
       }
       .ccf-youtube-bgm-standalone .ccf-youtube-bgm-item {
         display: flex !important;
