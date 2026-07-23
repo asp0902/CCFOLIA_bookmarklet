@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.10
+// @version      0.1.11
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.10";
+  const VERSION = "0.1.11";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -50,8 +50,12 @@
   let pinnedToBottom = true;
   let sending = false;
   let layoutTimer = 0;
-  // "right" = 네이티브를 왼쪽으로 밀고 우리가 오른쪽. "left" = 네이티브 왼쪽 옆(밀지 않음).
-  let panelSide = "right";
+  // "left"  = 룸 채팅을 그대로 두고 그 왼쪽 옆에 붙는다 (기본값).
+  // "right" = 룸 채팅을 왼쪽으로 밀고 오른쪽 끝을 쓴다.
+  //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
+  let panelSide = "left";
+  // 기본값을 오른쪽 → 왼쪽으로 바꾼 뒤, 예전에 저장된 "right" 를 한 번 덮어쓰기 위한 표식.
+  const SIDE_PREF_VERSION = 2;
 
   /* ---------------- Redux store ---------------- */
 
@@ -414,7 +418,7 @@
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        channel: currentChannel, open: !!panelEl, side: panelSide
+        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
   }
@@ -922,7 +926,10 @@
   function init() {
     const prefs = readPrefs();
     if (prefs.channel) currentChannel = prefs.channel;
-    if (prefs.side === "left" || prefs.side === "right") panelSide = prefs.side;
+    // 기본값이 바뀌기 전에 저장된 값은 무시하고 새 기본값(왼쪽)으로 시작한다.
+    if (prefs.sideV === SIDE_PREF_VERSION && (prefs.side === "left" || prefs.side === "right")) {
+      panelSide = prefs.side;
+    }
     if (prefs.open) openPanel();
 
     // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
