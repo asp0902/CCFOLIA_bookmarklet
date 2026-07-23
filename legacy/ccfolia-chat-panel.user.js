@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.6
+// @version      0.1.7
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.6";
+  const VERSION = "0.1.7";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -128,12 +128,11 @@
   function listChannels() {
     const slice = getRoomMessagesSlice();
     const groups = slice?.idsGroupBy || {};
-    const keys = Object.keys(groups);
-    // 기본 3개는 메시지가 없어도 항상 보여준다.
-    for (const base of ["main", "info", "other"]) {
-      if (!keys.includes(base)) keys.push(base);
-    }
-    return keys;
+    // 저장소의 키 순서는 메시지가 들어온 순서라 뒤죽박죽이다(잡담·메인·정보).
+    // 코코포리아 탭 순서(메인·정보·잡담)를 먼저 두고, 나머지 사용자 탭을 뒤에 붙인다.
+    const base = ["main", "info", "other"];
+    const rest = Object.keys(groups).filter((key) => !base.includes(key)).sort();
+    return [...base, ...rest];
   }
 
   function readMessages(channel) {
@@ -160,11 +159,17 @@
 
   /* ---------------- 렌더 ---------------- */
 
+  // 코코포리아 표기와 맞춘다: "- 今日 15:02" / 지난 날짜는 "- 05/24 15:02".
   function formatTime(ms) {
     if (!ms) return "";
     const d = new Date(ms);
     const p = (n) => String(n).padStart(2, "0");
-    return `${p(d.getHours())}:${p(d.getMinutes())}`;
+    const clock = `${p(d.getHours())}:${p(d.getMinutes())}`;
+    const now = new Date();
+    const sameDay = d.getFullYear() === now.getFullYear()
+      && d.getMonth() === now.getMonth()
+      && d.getDate() === now.getDate();
+    return sameDay ? `今日 ${clock}` : `${p(d.getMonth() + 1)}/${p(d.getDate())} ${clock}`;
   }
 
   // 서식용 보이지 않는 문자(다른 스크립트가 붙인 봉투)는 표시에서 제거한다.
@@ -230,7 +235,10 @@
       const isCont = msg.name === prevName;
       prevName = msg.name;
 
-      const row = document.createElement("div");
+      // li + p 구조를 쓰는 이유: format-sync 의 렌더 대상 선택자에 'li p' 가 있어,
+      // 봉투가 든 원문을 넣어두면 서식·나레이션·이미지를 그쪽이 그려준다.
+      // MUI 클래스는 여전히 쓰지 않으므로 prose-mode/알림 스크립트는 이 패널을 건드리지 않는다.
+      const row = document.createElement("li");
       row.className = "ccf-scp-row" + (isCont ? " is-cont" : "");
 
       const avatar = document.createElement("div");
@@ -257,14 +265,16 @@
         head.appendChild(nameEl);
         const timeEl = document.createElement("span");
         timeEl.className = "ccf-scp-time";
-        timeEl.textContent = formatTime(msg.at);
+        timeEl.textContent = `- ${formatTime(msg.at)}`;
         head.appendChild(timeEl);
         bodyWrap.appendChild(head);
       }
 
-      const body = document.createElement("div");
+      const body = document.createElement("p");
       body.className = "ccf-scp-text";
-      body.textContent = stripInvisible(msg.text);
+      // 서식 스크립트가 있으면 봉투를 남긴 원문을 넣어 그쪽이 렌더하게 하고,
+      // 없으면 보이지 않는 문자를 지운 평문을 넣는다.
+      body.textContent = window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text);
       bodyWrap.appendChild(body);
       row.appendChild(bodyWrap);
       frag.appendChild(row);
@@ -445,15 +455,18 @@
       .ccf-scp-close { background: transparent; border: 0; color: inherit; cursor: pointer;
         font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
       .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px;
-        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
-      .ccf-scp-tab { padding: 4px 10px; border-radius: 999px; cursor: pointer;
-        border: 1px solid var(--scp-line, rgba(128,128,128,.32)); background: transparent;
-        color: inherit; opacity: .75; font-size: 12px; font-family: inherit; }
-      .ccf-scp-tab:hover { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
-      .ccf-scp-tab.is-active { background: #2196f3; border-color: #2196f3; color: #fff;
-        opacity: 1; font-weight: 700; }
-      .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px; }
+      /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
+      .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
+        border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
+      .ccf-scp-tab { padding: 10px 14px; cursor: pointer; border: 0; background: transparent;
+        border-bottom: 2px solid transparent; color: inherit; opacity: .6;
+        font-size: 13px; font-family: inherit; }
+      .ccf-scp-tab:hover { opacity: .9; }
+      .ccf-scp-tab.is-active { opacity: 1; font-weight: 700; border-bottom-color: #f44336; }
+      .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px;
+        margin: 0; list-style: none; }
+      .ccf-scp-text { margin: 0; }
       /* 네이티브 메시지 줄: 아이콘 열 + 본문 열 */
       .ccf-scp-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px;
         padding: 6px 0 2px; align-items: start; }
@@ -510,17 +523,18 @@
     bar.appendChild(close);
     panel.appendChild(bar);
 
-    tabsEl = document.createElement("div");
-    tabsEl.className = "ccf-scp-tabs";
-    panel.appendChild(tabsEl);
-
-    listEl = document.createElement("div");
+    listEl = document.createElement("ul");
     listEl.className = "ccf-scp-list";
     listEl.addEventListener("scroll", () => {
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
     });
     panel.appendChild(listEl);
+
+    // 탭은 코코포리아처럼 메시지 목록과 입력창 사이에 둔다.
+    tabsEl = document.createElement("div");
+    tabsEl.className = "ccf-scp-tabs";
+    panel.appendChild(tabsEl);
 
     const compose = document.createElement("div");
     compose.className = "ccf-scp-compose";
