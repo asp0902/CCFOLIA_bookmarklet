@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,9 +22,10 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.0";
+  const VERSION = "0.1.1";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
+  const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
   const FIRESTORE_PROJECT_ID = "ccfolia-160aa";
   const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
   const STORAGE_KEY = "ccf-second-chat-panel:v1";
@@ -436,10 +437,6 @@
       .ccf-scp-send:hover { filter: brightness(1.1); }
       .ccf-scp-status { font-size: 11px; margin-top: 4px; min-height: 14px; opacity: .7; }
       .ccf-scp-status.is-error { color: #ff8a8a; opacity: 1; }
-      #ccf-scp-launch { position: fixed; right: 12px; bottom: 12px; z-index: 1199;
-        padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
-        background: rgba(24,24,26,.92); color: #fff; cursor: pointer; font-size: 12px; }
-      #ccf-scp-launch:hover { filter: brightness(1.2); }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -567,29 +564,97 @@
 
   /* ---------------- 실행 ---------------- */
 
-  function ensureLaunchButton() {
-    if (document.getElementById("ccf-scp-launch")) return;
+  /* ---------------- 메뉴 항목 ---------------- */
+  // 룸 채팅 패널 환경설정 메뉴의 "다른 창으로 보기(beta)" 바로 아래에 끼워 넣는다.
+
+  function normalizeSpace(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function isVisible(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function isOtherWindowMenuItem(item) {
+    const text = normalizeSpace(item.textContent || "").toLowerCase();
+    if (!text) return false;
+    return /다른\s*창/.test(text)
+      || /別\s*ウ[ィイ]ンドウ/.test(text)
+      || /(another|separate|new)\s*window/.test(text);
+  }
+
+  function menuItemLabel() {
+    return panelEl ? "채팅 패널 닫기" : "채팅 패널 추가";
+  }
+
+  function createMenuItem(reference) {
+    const item = document.createElement("li");
+    // 네이티브 항목의 클래스를 그대로 빌려 생김새를 맞춘다.
+    item.className = reference?.className || "MuiButtonBase-root MuiMenuItem-root MuiMenuItem-gutters";
+    item.setAttribute(MENU_ITEM_ATTR, "1");
+    item.setAttribute(SAFE_ATTR, "1");
+    item.setAttribute("role", "menuitem");
+    item.setAttribute("tabindex", "-1");
+    item.textContent = menuItemLabel();
+
+    const ripple = reference?.querySelector?.(".MuiTouchRipple-root");
+    if (ripple instanceof HTMLElement) item.appendChild(ripple.cloneNode(false));
+
+    item.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePanel();
+      closeOpenMenus();
+    });
+    return item;
+  }
+
+  function closeOpenMenus() {
+    const init = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
+    document.dispatchEvent(new KeyboardEvent("keydown", init));
+    document.dispatchEvent(new KeyboardEvent("keyup", init));
+  }
+
+  function ensureMenuItem() {
     if (!getRoomId()) return;
-    injectStyle();
-    const btn = document.createElement("button");
-    btn.id = "ccf-scp-launch";
-    btn.type = "button";
-    btn.setAttribute(SAFE_ATTR, "1");
-    btn.textContent = "채팅 패널 +";
-    btn.title = "룸 채팅 패널을 하나 더 엽니다";
-    btn.addEventListener("click", togglePanel);
-    document.body.appendChild(btn);
+    for (const menu of document.querySelectorAll('[role="menu"]')) {
+      if (!(menu instanceof HTMLElement) || !isVisible(menu)) continue;
+
+      const existing = menu.querySelector(`[${MENU_ITEM_ATTR}="1"]`);
+      if (existing) {
+        // 패널 상태에 맞춰 라벨만 갱신 (ripple 자식은 건드리지 않는다).
+        if (existing.firstChild?.nodeType === Node.TEXT_NODE) {
+          existing.firstChild.nodeValue = menuItemLabel();
+        }
+        continue;
+      }
+
+      const items = [...menu.querySelectorAll('[role="menuitem"]')]
+        .filter((el) => el instanceof HTMLElement && el.closest('[role="menu"]') === menu);
+      const anchor = items.find(isOtherWindowMenuItem);
+      if (!anchor || !anchor.parentElement) continue;
+
+      injectStyle();
+      anchor.parentElement.insertBefore(createMenuItem(anchor), anchor.nextSibling);
+    }
   }
 
   function init() {
     const prefs = readPrefs();
     if (prefs.channel) currentChannel = prefs.channel;
-    ensureLaunchButton();
     if (prefs.open) openPanel();
-    const timer = window.setInterval(() => {
-      if (!active) return;
-      ensureLaunchButton();
-    }, 2000);
+
+    // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
+    const observer = new MutationObserver(() => { if (active) ensureMenuItem(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    // 애니메이션 중 삽입이 밀리는 경우를 대비한 보조 폴링.
+    const timer = window.setInterval(() => { if (active) ensureMenuItem(); }, 1000);
+    ensureMenuItem();
+
     window.__CCF_SECOND_CHAT_PANEL__ = {
       version: VERSION,
       open: openPanel,
@@ -597,11 +662,21 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
+      // 메뉴 항목을 못 찾을 때 원인 확인용.
+      menuDiag() {
+        return [...document.querySelectorAll('[role="menu"]')]
+          .filter(isVisible)
+          .map((menu) => ({
+            항목: [...menu.querySelectorAll('[role="menuitem"]')].map((i) => normalizeSpace(i.textContent)),
+            앵커발견: [...menu.querySelectorAll('[role="menuitem"]')].some(isOtherWindowMenuItem)
+          }));
+      },
       disable() {
         active = false;
+        observer.disconnect();
         window.clearInterval(timer);
         closePanel();
-        document.getElementById("ccf-scp-launch")?.remove();
+        document.querySelectorAll(`[${MENU_ITEM_ATTR}="1"]`).forEach((el) => el.remove());
         document.getElementById("ccf-scp-style")?.remove();
         return true;
       }
