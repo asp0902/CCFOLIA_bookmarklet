@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://gre0asyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.13
+// @version      0.1.14
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -86,7 +86,20 @@ window.__CCF_STANDING_PICKER_DEBUG__ = {
     clickCharacterSelectButton(btn);
     return true;
   },
-  disable() { return ccfspTeardown(); }
+  disable() { return ccfspTeardown(); },
+  // 선택 후 입력칸 포커스가 안 될 때 원인 확인용.
+  focusDiag() {
+    const input = getChatInput();
+    const before = document.activeElement;
+    ccfspFocusChatInput();
+    return {
+      입력칸찾음: !!input,
+      입력칸: input ? input.tagName + '[name=' + (input.getAttribute('name') || '') + ']' : null,
+      호출전포커스: before ? before.tagName + '.' + String(before.className || '').slice(0, 30) : null,
+      선택창남음: !!ccfspFindPicker(),
+      '1초뒤확인': '다시 focusDiag() 를 실행해 호출전포커스 가 입력칸인지 보세요'
+    };
+  }
 };
 
 const state = {
@@ -939,15 +952,24 @@ function ccfspActivate(item) {
 // 코코포리아가 선택 직후 포커스를 자기 쪽으로 되돌리므로 한 번만 시도하면 놓친다
 // → 몇 시점에 나눠 시도하고, 이미 입력칸에 있으면 건드리지 않는다.
 function ccfspFocusChatInput() {
-  [0, 60, 150, 320, 600].forEach((delay) => {
+  // 선택창이 남아 있는지로 건너뛰지 않는다 — 다른 목록(내 캐릭터 목록 등)이 잡히면
+  // 매번 걸려서 포커스가 영영 안 옮겨졌다. 선택은 이미 끝난 뒤라 그냥 옮기면 된다.
+  [0, 50, 120, 250, 450, 700, 1000].forEach((delay) => {
     setTimeout(() => {
       if (!ccfspActive) return;
       const input = getChatInput();
       if (!input || document.activeElement === input) return;
-      // 선택창이 아직 떠 있으면 기다린다 (그 위에서 포커스를 뺏으면 선택이 취소될 수 있다).
-      if (ccfspFindPicker()) return;
       try {
         input.focus({ preventScroll: true });
+        // focus() 만으로 안 붙는 경우가 있어 실제 클릭도 한 번 흉내낸다.
+        if (document.activeElement !== input) {
+          for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
+            const C = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+            input.dispatchEvent(new C(type, { bubbles: true, cancelable: true, view: window,
+              pointerId: 1, pointerType: 'mouse', button: 0, buttons: type.endsWith('down') ? 1 : 0 }));
+          }
+          input.focus({ preventScroll: true });
+        }
         if (typeof input.selectionStart === 'number') {
           const end = input.value ? input.value.length : 0;
           input.setSelectionRange(end, end);
