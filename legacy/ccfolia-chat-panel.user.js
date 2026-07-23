@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.2
+// @version      0.1.3
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.2";
+  const VERSION = "0.1.3";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -586,20 +586,37 @@
 
   // 룸 채팅 패널(드로어)을 찾는다. 채팅 메시지가 들어 있는 목록의 조상 중
   // 드로어/페이퍼가 곧 패널이다. 우리 패널은 당연히 제외한다.
-  function findNativeChatPanel() {
+  function findChatAnchor() {
     const item = [...document.querySelectorAll(".MuiListItem-root")]
       .find((li) => li instanceof HTMLElement
         && li.querySelector("h6.MuiListItemText-primary")
         && li.offsetParent !== null
         && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")
         && !li.closest(`#${PANEL_ID}`));
-    const fromItem = item?.closest(".MuiDrawer-paper") || item?.closest(".MuiPaper-root");
-    if (fromItem instanceof HTMLElement && isVisible(fromItem)) return fromItem;
+    if (item) return item;
+    return [...document.querySelectorAll('[role="log"]')]
+      .find((el) => el instanceof HTMLElement && isVisible(el) && !el.closest(`#${PANEL_ID}`)) || null;
+  }
 
-    const log = [...document.querySelectorAll('[role="log"]')]
-      .find((el) => el instanceof HTMLElement && isVisible(el) && !el.closest(`#${PANEL_ID}`));
-    const fromLog = log?.closest(".MuiDrawer-paper") || log?.closest(".MuiPaper-root") || log;
-    return fromLog instanceof HTMLElement && isVisible(fromLog) ? fromLog : null;
+  function findNativeChatPanel() {
+    const anchor = findChatAnchor();
+    if (!anchor) return null;
+
+    const drawer = anchor.closest(".MuiDrawer-paper");
+    if (drawer instanceof HTMLElement && isVisible(drawer)) return drawer;
+
+    // 드로어가 없으면 조상을 훑어 "사이드 패널 크기"인 가장 바깥 요소를 고른다.
+    // .MuiPaper-root 를 그냥 closest 로 잡으면 화면 전체를 덮는 컨테이너가 걸려
+    // 위치(우측 여백 0)와 색을 둘 다 엉뚱하게 가져온다.
+    let best = null;
+    for (let el = anchor; el && el !== document.body; el = el.parentElement) {
+      if (!isVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 200) continue;
+      if (rect.width > window.innerWidth * 0.7) break; // 여기부턴 패널이 아니라 컨테이너
+      best = el;
+    }
+    return best;
   }
 
   // 색·글꼴을 네이티브에서 그대로 읽어온다. 하드코딩하면 테마 커스텀 기능과 어긋난다.
@@ -637,14 +654,25 @@
     }
 
     const rect = native.getBoundingClientRect();
-    const width = Math.max(260, Math.min(rect.width || 340, 460));
+    const preferred = Math.max(260, Math.min(rect.width || 340, 460));
     const gapRight = window.innerWidth - rect.right;
     const gapLeft = rect.left;
+    const MIN_WIDTH = 220;
 
+    // 오른쪽을 우선한다(사용자 선호). 폭이 조금 부족해도 오른쪽 여백에 맞춰 좁혀서 넣고,
+    // 오른쪽이 정말 좁을 때만 왼쪽으로 보낸다.
     let left;
-    if (gapRight >= width) left = rect.right;          // 오른쪽에 자리가 있으면 그 옆
-    else if (gapLeft >= width) left = rect.left - width; // 없으면 왼쪽 옆
-    else left = Math.max(0, window.innerWidth - width); // 그래도 없으면 화면 끝
+    let width;
+    if (gapRight >= MIN_WIDTH) {
+      width = Math.min(preferred, gapRight);
+      left = rect.right;
+    } else if (gapLeft >= MIN_WIDTH) {
+      width = Math.min(preferred, gapLeft);
+      left = rect.left - width;
+    } else {
+      width = preferred;
+      left = Math.max(0, window.innerWidth - width);
+    }
 
     Object.assign(panelEl.style, {
       top: `${Math.round(rect.top)}px`,
@@ -754,6 +782,25 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
+      // 위치/디자인이 안 맞을 때: 어떤 요소를 네이티브 패널로 잡았는지 확인용.
+      layoutDiag() {
+        const native = findNativeChatPanel();
+        const rect = native?.getBoundingClientRect();
+        const cs = native ? getComputedStyle(native) : null;
+        const round = (n) => Math.round(n);
+        return {
+          찾음: !!native,
+          요소: native ? `${native.tagName}.${String(native.className).slice(0, 90)}` : null,
+          위치: rect ? { left: round(rect.left), right: round(rect.right), top: round(rect.top), 폭: round(rect.width), 높이: round(rect.height) } : null,
+          창너비: window.innerWidth,
+          오른쪽여백: rect ? round(window.innerWidth - rect.right) : null,
+          왼쪽여백: rect ? round(rect.left) : null,
+          배경: cs?.backgroundColor,
+          글자색: cs?.color,
+          글꼴: cs?.fontFamily?.slice(0, 60),
+          내패널: panelEl ? { left: panelEl.style.left, 폭: panelEl.style.width } : null
+        };
+      },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
       menuDiag() {
         return [...document.querySelectorAll('[role="menu"]')]
