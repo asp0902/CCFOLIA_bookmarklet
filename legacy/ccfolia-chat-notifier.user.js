@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.12
+// @version      0.3.13
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.12";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.13";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -2891,6 +2891,14 @@
       entry.tabSignature = tabSignature;
     }
 
+    // 지금 라이브러리에 네이티브 음원이 하나도 없다면 이 항목을 "맨 위"로 못박는다.
+    // 안 그러면 나중에 파일 음원을 넣는 순간 그 뒤로 밀려난다.
+    // 판단은 추가하는 이 순간 한 번만 — 렌더 때마다 하면 창이 닫혀 있는 순간에도
+    // 발동해 기존 음원 순서를 망가뜨린다.
+    if (!document.querySelector(".MuiList-root .MuiListItemButton-root:not(.ccf-youtube-bgm-item)")) {
+      entry.anchorSlot = "";
+    }
+
     ccfBgmLastDialogSlotKey = normalizedSlotKey;
     ccfBgmSlotMap.set(entryKey, entry);
     persistCcfBgmSlotMap();
@@ -4051,22 +4059,11 @@
       if (anchorAssigned) {
         persistCcfBgmSlotMap();
       }
-    } else {
-      // 네이티브 음원이 하나도 없을 때 추가된 항목은 "맨 위"로 못박는다.
-      // 안 그러면 나중에 파일 음원을 넣는 순간 그 뒤(아래)로 밀려나, 먼저 넣은
-      // 유튜브 음원이 나중에 넣은 파일보다 아래에 놓인다.
-      let pinned = false;
-      entries.forEach(([entryKey, entry]) => {
-        if (entry && typeof entry.anchorSlot !== "string") {
-          entry.anchorSlot = "";
-          ccfBgmSlotMap.set(entryKey, entry);
-          pinned = true;
-        }
-      });
-      if (pinned) {
-        persistCcfBgmSlotMap();
-      }
     }
+    // 여기서 "네이티브가 없으니 맨 위 고정" 같은 판단을 하면 안 된다.
+    // BGM 창이 닫혀 있거나 탭이 막 바뀌는 순간에도 목록이 비어 보여서,
+    // 기존 방의 음원 순서까지 통째로 바꿔버린다(실제로 그랬다).
+    // 빈 라이브러리 여부는 항목을 "추가하는 시점"에 한 번만 판단한다(storeCcfBgmSlotUrl).
 
     const placementPlan = computeCcfYoutubeBgmPlacementPlan(entries, nativeAnchorOrder);
 
