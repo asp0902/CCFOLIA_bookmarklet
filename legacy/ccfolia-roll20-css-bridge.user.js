@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.59
+// @version      0.3.60
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.59"),
+    version: getUserscriptVersion("0.3.60"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4740,13 +4740,16 @@
   }
 
   // preparePayloadForSend 와 같은 IIFE(#1) 안에 둔다 — #2 에서는 참조 불가.
+  // 메시지가 판정 명령으로 "시작"할 때만 명령으로 본다 (format-sync 와 동일 규칙).
+  // 문장 중간의 다이스 표기까지 명령 취급하면 나레이션·서식이 사라진다.
   function looksLikeCcfDiceCommand(text) {
     const raw = String(text || "");
     if (!raw) return false;
-    const body = raw.replace(/\[\[[^\]]*\]\]/g, "");
-    return /(?:^|[\s(（\[])S?(?:choice|CHOICE)\s*\[/.test(body)
-      || /(?:^|[\s(（<>=+\-*/])S?\d*[dD]\d+/.test(body)
-      || /(?:^|\s)S?CCB?\s*<=/i.test(body);
+    const body = raw.replace(/\[\[[^\]]*\]\]/g, "").trim();
+    if (!body) return false;
+    return /^S?(?:choice|CHOICE)\s*\[/.test(body)
+      || /^S?\d*[dD]\d+\b/.test(body)
+      || /^S?CCB?\s*<=/i.test(body);
   }
 
   function normalizeRoll20NarratorName(value) {
@@ -5676,7 +5679,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.59",
+    version: "0.3.60",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

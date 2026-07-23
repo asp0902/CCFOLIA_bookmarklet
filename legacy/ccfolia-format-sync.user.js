@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.39
+// @version      0.1.40
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.39 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.40 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.39"),
+    version: getUserscriptVersion("0.1.40"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9771,13 +9771,17 @@
   // 보이지 않는 서식 봉투가 섞이면 명령으로 인식되지 않아 결과가 아예 안 나온다.
   // (예: choice[비상 식량,음료수] → 결과 없음. 북마클릿 없는 탭에서는 정상 동작)
   // Roll20 인라인 롤 [[..]]은 브리지가 자체 계산해 표시하는 것이므로 판정 명령에서 제외한다.
+  // 메시지가 판정 명령으로 "시작"할 때만 명령으로 본다.
+  // 문장 중간에 1D6 이 섞였다는 이유로 명령 취급하면(이전 규칙) 나레이션·서식이
+  // 통째로 사라진다 — 예: "오늘 1D6 정도 남았다".
   function looksLikeCcfDiceCommand(text) {
     const raw = String(text || "");
     if (!raw) return false;
-    const body = raw.replace(/\[\[[^\]]*\]\]/g, "");
-    return /(?:^|[\s(（\[])S?(?:choice|CHOICE)\s*\[/.test(body)
-      || /(?:^|[\s(（<>=+\-*/])S?\d*[dD]\d+/.test(body)
-      || /(?:^|\s)S?CCB?\s*<=/i.test(body);
+    const body = raw.replace(/\[\[[^\]]*\]\]/g, "").trim(); // Roll20 인라인 롤은 제외
+    if (!body) return false;
+    return /^S?(?:choice|CHOICE)\s*\[/.test(body)
+      || /^S?\d*[dD]\d+\b/.test(body)
+      || /^S?CCB?\s*<=/i.test(body);
   }
 
   function normalizeMyCharacterName(value) {
