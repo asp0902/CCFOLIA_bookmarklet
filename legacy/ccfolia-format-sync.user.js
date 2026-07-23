@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.44
+// @version      0.1.45
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.44 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.45 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.44"),
+    version: getUserscriptVersion("0.1.45"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -9936,11 +9936,13 @@
   function closeMyCharacterPanel(panel) {
     if (!(panel instanceof HTMLElement)) return;
     const closeButton = panel.querySelector('button svg[data-testid="CloseIcon"]')?.closest("button")
-      || panel.querySelector('button[aria-label="\uB2EB\uAE30"], button[aria-label="Close"]');
+      // \uD55C\uAD6D\uC5B4/\uC77C\uBCF8\uC5B4/\uC911\uAD6D\uC5B4/\uC601\uC5B4 \uB77C\uBCA8 \uBAA8\uB450 \uB300\uC751 (\uB77C\uBCA8\uC774 \uB2E4\uB974\uBA74 \uBABB \uCC3E\uC544 \uD328\uB110\uC774 \uC5F4\uB9B0 \uCC44 \uB0A8\uB294\uB2E4).
+      || panel.querySelector('button[aria-label="\uB2EB\uAE30"], button[aria-label="Close"], button[aria-label="\u9589\u3058\u308B"], button[aria-label="\u95DC\u9589"], button[aria-label="\u5173\u95ED"]');
     if (closeButton instanceof HTMLElement) {
       closeButton.click();
       return;
     }
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   }
 
@@ -9958,10 +9960,28 @@
       const names = readMyCharacterPanelNames(panel);
       return names.length ? { panel, names } : null;
     }, 1000);
-    if (!opened) return [];
+    if (!opened) {
+      // 못 읽었더라도 우리가 연 패널은 닫아준다.
+      if (!existingPanel) await ensureMyCharacterPanelClosed(button);
+      return [];
+    }
 
-    if (!existingPanel) closeMyCharacterPanel(opened.panel);
+    // 원래 닫혀 있던 패널이면 반드시 다시 닫는다 (새로고침할 때마다 패널이 열린 채 남았다).
+    if (!existingPanel) await ensureMyCharacterPanelClosed(button, opened.panel);
     return opened.names;
+  }
+
+  // 닫기 버튼 → Esc → 그래도 안 닫히면 열었던 버튼을 다시 눌러 토글한다.
+  // "내 캐릭터 목록"은 버튼으로 여닫는 패널이라 닫기 버튼이 없을 수 있다.
+  async function ensureMyCharacterPanelClosed(toggleButton, panel = null) {
+    closeMyCharacterPanel(panel || getMyCharacterPanel());
+    if (await waitForCondition(() => !getMyCharacterPanel(), 400)) return true;
+
+    if (toggleButton instanceof HTMLElement) {
+      try { toggleButton.click(); } catch (error) { /* 토글 실패는 무시 */ }
+      if (await waitForCondition(() => !getMyCharacterPanel(), 500)) return true;
+    }
+    return !getMyCharacterPanel();
   }
 
   function findCharacterSelectButton() {
