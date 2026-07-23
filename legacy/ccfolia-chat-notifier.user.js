@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.16
+// @version      0.3.17
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.16";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.17";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -464,6 +464,7 @@
   let ccfBgmPlayerB = null;        // 두 번째 플레이어(둘 중 하나가 활성, 하나가 대기)
   let ccfBgmPlayerBReady = false;
   let ccfBgmXfadeTimer = 0;
+  const ccfBgmPlayerPair = [];     // 두 플레이어를 모두 기억(자리를 바꿔도 잃지 않도록)
   let ccfBgmPlayerDock = null;
   let ccfBgmPlayerVisible = false;
   let ccfBgmPlayerVideoId = "";
@@ -3453,10 +3454,19 @@
   // 재생 중인 곡이 없다고 보는데 플레이어는 실제로 재생/버퍼링 중인 어긋남을 바로잡는다.
   // 이 상태에서는 브라우저가 자동재생을 막아 소리가 안 날 뿐이라 눈치채기 어렵고,
   // 컷인처럼 다른 오디오가 재생돼 차단이 풀리는 순간 옛 곡이 갑자기 들린다.
+  // 두 플레이어를 모두 기억한다. 예전엔 두 번째만 들고 있어서, 한 번 자리를 바꾸면
+  // 원래 플레이어를 놓쳐 다음 크로스페이드도 정리도 못 했다.
+  function rememberCcfBgmPlayer(player) {
+    if (!player || ccfBgmPlayerPair.includes(player)) return;
+    ccfBgmPlayerPair.push(player);
+    if (ccfBgmPlayerPair.length > 2) ccfBgmPlayerPair.shift();
+  }
+
   // 대기 중인 플레이어(지금 들리지 않는 쪽). 크로스페이드가 아닐 땐 항상 조용해야 한다.
   function getCcfBgmStandbyPlayer() {
-    if (!ccfBgmPlayerB) return null;
-    return ccfBgmPlayer === ccfBgmPlayerB ? null : ccfBgmPlayerB;
+    rememberCcfBgmPlayer(ccfBgmPlayer);
+    rememberCcfBgmPlayer(ccfBgmPlayerB);
+    return ccfBgmPlayerPair.find((p) => p && p !== ccfBgmPlayer) || null;
   }
 
   function silenceCcfBgmStandby() {
@@ -3539,9 +3549,12 @@
     const outgoing = ccfBgmPlayer;
 
     try {
+      // 새 iframe 은 사용자 조작 이력이 없어, 소리가 켜진 채로는 브라우저가 재생을 막는다
+      // (재생 중이라고 보고하면서 소리는 안 나는 상태). 음소거로 시작해 실제로 재생이
+      // 걸린 뒤에 소리를 켠다.
+      incoming.mute?.();
       incoming.loadVideoById?.(videoId);
       incoming.setVolume?.(0);
-      incoming.unMute?.();
       incoming.playVideo?.();
     } catch (error) {
       debugLog("bgm-xfade-start-failed", serializeError(error));
@@ -3555,8 +3568,39 @@
     ccfBgmPlayerReady = true;
 
     const steps = Math.max(1, Math.round(CCF_BGM_XFADE_MS / CCF_BGM_XFADE_STEP_MS));
+    const waitLimit = Math.round(3000 / CCF_BGM_XFADE_STEP_MS); // 재생 시작을 기다리는 한도
     let step = 0;
+    let waited = 0;
+    let started = false;
     ccfBgmXfadeTimer = window.setInterval(() => {
+      // 새 곡이 실제로 재생될 때까지는 볼륨을 건드리지 않는다.
+      // (재생 전에 옛 곡을 줄이면 그 사이가 무음이 된다)
+      if (!started) {
+        let s = null;
+        try { s = incoming.getPlayerState?.(); } catch (error) { s = null; }
+        if (s === 1) {
+          started = true;
+          try { incoming.unMute?.(); } catch (error) { /* 무시 */ }
+        } else if (++waited < waitLimit) {
+          return;
+        } else {
+          // 끝내 재생되지 않으면 크로스페이드를 포기하고 옛 곡을 되돌린다.
+          window.clearInterval(ccfBgmXfadeTimer);
+          ccfBgmXfadeTimer = 0;
+          debugLog("bgm-xfade-give-up", { videoId, state: s });
+          try {
+            incoming.mute?.(); incoming.stopVideo?.();
+            ccfBgmPlayer = outgoing;
+            ccfBgmPlayerVideoId = videoId;
+            outgoing.setVolume?.(target);
+            outgoing.unMute?.();
+            outgoing.loadVideoById?.(videoId);
+            outgoing.playVideo?.();
+          } catch (error) { /* 무시 */ }
+          return;
+        }
+      }
+
       step += 1;
       const ratio = Math.min(1, step / steps);
       try {
