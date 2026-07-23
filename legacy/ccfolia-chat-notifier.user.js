@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.4
+// @version      0.3.5
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.4";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.5";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1488,6 +1488,28 @@
     ccfChatNotifierDebugApi = {
       isActive() {
         return chatNotifierLifecycle.isActive();
+      },
+      // [진단] 우리가 들고 있는 플레이어 객체와 실제 도크의 iframe 이 같은 것인지 확인.
+      // 끊어져 있으면 우리 정지/가드 로직이 전혀 닿지 않는다 (상태 로그도 안 옴).
+      ytDiag() {
+        const dockIframe = document.querySelector(".ccf-youtube-bgm-player-dock iframe");
+        const safe = (fn) => { try { return fn(); } catch (error) { return `err:${error?.message || error}`; } };
+        let playerIframe = null;
+        try { playerIframe = ccfBgmPlayer?.getIframe?.() || null; } catch (error) { playerIframe = "err"; }
+        return {
+          플레이어객체: !!ccfBgmPlayer,
+          준비됨: ccfBgmPlayerReady,
+          활성슬롯: ccfBgmActiveSlotKey || "(없음)",
+          반복: ccfBgmActiveLoop,
+          videoId: ccfBgmPlayerVideoId,
+          도크iframe: !!dockIframe,
+          같은iframe: !!(dockIframe && playerIframe === dockIframe),
+          상태값: safe(() => ccfBgmPlayer?.getPlayerState?.()),
+          볼륨: safe(() => ccfBgmPlayer?.getVolume?.()),
+          음소거: safe(() => ccfBgmPlayer?.isMuted?.()),
+          재생시간: safe(() => ccfBgmPlayer?.getCurrentTime?.()),
+          iframe수: document.querySelectorAll('iframe[src*="youtube"]').length
+        };
       },
       disable() {
         return runChatNotifierTeardown();
