@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.5
+// @version      0.3.6
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.5";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.6";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1756,6 +1756,14 @@
     tryEnhanceCcfBgmPanel();
     tryCenterCcfBgmDialogs();
 
+    // 이미 "재생 중"으로 들어와 버린 어긋남은 상태 변화 이벤트가 더 오지 않아
+    // 이벤트만으로는 못 잡는다. 주기적으로 점검해 조용히 정지시킨다.
+    const idleSweep = window.setInterval(() => {
+      if (!chatNotifierLifecycle.isActive()) return;
+      enforceCcfYoutubeIdleSilence("sweep");
+    }, 1500);
+    chatNotifierLifecycle.registerTeardown(() => window.clearInterval(idleSweep));
+
     loadCcfBgmSlotMap().then(() => {
       if (ccfBgmSlotMap.size) {
         loadYoutubeIframeApi();
@@ -3396,6 +3404,37 @@
     }
   }
 
+  // 재생 중인 곡이 없다고 보는데 플레이어는 실제로 재생/버퍼링 중인 어긋남을 바로잡는다.
+  // 이 상태에서는 브라우저가 자동재생을 막아 소리가 안 날 뿐이라 눈치채기 어렵고,
+  // 컷인처럼 다른 오디오가 재생돼 차단이 풀리는 순간 옛 곡이 갑자기 들린다.
+  function enforceCcfYoutubeIdleSilence(source = "sweep") {
+    if (ccfBgmActiveSlotKey) return;          // 정상 재생 중이면 관여하지 않는다
+    if (ccfBgmPreviewActive) return;          // 미리듣기는 별도 플레이어/흐름
+    if (ccfBgmFirestorePlaybackApplying) return;
+    if (!ccfBgmPlayer || !ccfBgmPlayerReady) return;
+
+    let state = null;
+    try {
+      state = typeof ccfBgmPlayer.getPlayerState === "function" ? ccfBgmPlayer.getPlayerState() : null;
+    } catch (error) {
+      return;
+    }
+    // 1 = 재생, 3 = 버퍼링
+    if (state !== 1 && state !== 3) return;
+
+    debugLog("bgm-youtube-idle-desync-stopped", { source, state });
+    // stopVideo 가 부르는 ENDED 를 loop 재생으로 오해하지 않도록 표시.
+    ccfBgmStopping = true;
+    window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
+    ccfBgmActiveLoop = false;
+    try {
+      if (typeof ccfBgmPlayer.pauseVideo === "function") ccfBgmPlayer.pauseVideo();
+      if (typeof ccfBgmPlayer.stopVideo === "function") ccfBgmPlayer.stopVideo();
+    } catch (error) {
+      debugLog("bgm-youtube-idle-desync-stop-failed", serializeError(error));
+    }
+  }
+
   function handleCcfBgmPlayerStateChange(event) {
     // [진단] 모든 상태 변화를 남긴다 (-1 시작안함 / 0 종료 / 1 재생 / 2 일시정지 / 3 버퍼링 / 5 대기)
     debugLog("bgm-yt-state", {
@@ -3428,6 +3467,11 @@
       }
     }
     if (event?.data === window.YT?.PlayerState?.PLAYING) {
+      // 우리가 시작시킨 적 없는 재생이면 즉시 되돌린다.
+      if (!ccfBgmActiveSlotKey) {
+        enforceCcfYoutubeIdleSilence("state-playing");
+        return;
+      }
       syncCcfActiveBgmState();
       window.setTimeout(syncCcfActiveBgmState, 120);
       window.setTimeout(syncCcfActiveBgmState, 500);
