@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.40
+// @version      0.1.41
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.40 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.41 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.40"),
+    version: getUserscriptVersion("0.1.41"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10060,6 +10060,10 @@
     lists.forEach((list) => {
       if (!(list instanceof HTMLElement) || !isVisible(list)) return;
       if (list.closest(`[${SAFE_UI_ATTR}="1"]`)) return;
+      // 채팅 로그를 캐릭터 선택창으로 오인하면 메시지 제목("이름 - 지난주 月曜日 22:49")이
+      // 캐릭터 이름으로 등록된다. 메시지 줄에도 아바타가 있어 항목 조건만으로는 못 거른다.
+      if (list.getAttribute("role") === "log" || list.closest('[role="log"]')) return;
+      if (list.closest("#ccf-second-chat-panel")) return;
       const items = [...list.children].filter((item) => {
         if (!(item instanceof HTMLElement) || !isVisible(item)) return false;
         const text = (item.querySelector(".MuiListItemText-primary")?.textContent || item.textContent || "").trim();
