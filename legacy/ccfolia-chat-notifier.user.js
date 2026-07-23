@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.9
+// @version      0.3.10
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.9";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.10";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4726,8 +4726,27 @@
       }
     }
 
-    return [...document.querySelectorAll(".MuiList-root")]
-      .find((list) => list instanceof HTMLElement && isCcfBgmNativeMusicList(list)) || null;
+    const byMusicIcon = [...document.querySelectorAll(".MuiList-root")]
+      .find((list) => list instanceof HTMLElement && isCcfBgmNativeMusicList(list));
+    if (byMusicIcon) return byMusicIcon;
+
+    // 등록된 음원이 하나도 없으면 음악 아이콘이 없어 위 판정이 전부 실패한다.
+    // 게다가 URL 입력은 별도 팝업에서 일어나므로 mountRoot 로도 목록에 닿지 못한다.
+    // → BGM 라이브러리 서랍을 탭 이름으로 알아보고 그 안의 목록을 쓴다.
+    const drawer = [...document.querySelectorAll(".MuiDrawer-root, .MuiModal-root, .MuiDialog-root")]
+      .filter((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .find((el) => {
+        const text = normalizeSpace(el.textContent || "");
+        return /\bBGM\b/i.test(text)
+          && /효과음|効果音|サウンド|라이브러리|library|sound/i.test(text);
+      });
+    return drawer ? findCcfBgmMusicListInDialog(drawer) : null;
   }
 
   function findCcfBgmMusicListInDialog(dialog) {
