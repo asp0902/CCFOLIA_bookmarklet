@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.16
+// @version      0.1.17
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.16";
+  const VERSION = "0.1.17";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -181,6 +181,103 @@
     return String(text || "").replace(/[\u200B-\u200F\u2028\u2029\u2060-\u2064\uFEFF]/g, "");
   }
 
+  /* ---------------- 네이티브 메시지 줄 복제 ----------------
+     실제 구조(진단으로 확인):
+       DIV.MuiListItem-root
+        ├ DIV.MuiListItemAvatar-root → 래퍼 → DIV.MuiAvatar-root → IMG.MuiAvatar-img
+        ├ DIV.MuiListItemText-root
+        │   ├ H6.…MuiListItemText-primary        (이름 = 자체 텍스트 노드)
+        │   │   └ SPAN.MuiTypography-caption     ("-" + "今日 23:17")
+        │   └ P.…MuiListItemText-secondary       (본문; format-sync 가 여기에 렌더)
+        └ DIV(styled) → BUTTON                   (답장 버튼)
+     ⚠ 패널 껍데기는 복제하지 않는다. 예전에 서랍째 복제했다가 우리 패널이
+        코코포리아용 선택자에 자기도 걸려 두 번이나 겹쳤다. */
+  let ccfScpRowTemplate = null;
+
+  function captureNativeRowTemplate() {
+    const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => {
+      return li instanceof HTMLElement
+        && li.querySelector("h6.MuiListItemText-primary")
+        && li.offsetParent !== null
+        && !li.closest(`#${PANEL_ID}`)
+        && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root");
+    });
+    // 나레이션·이어짐 줄을 본보기로 쓰면 그 표식이 모든 복제본에 따라간다.
+    const plain = rows.filter((li) => {
+      if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]')) return false;
+      if (li.querySelector('[data-ccf-narration="1"]')) return false;
+      return !!li.querySelector(".MuiListItemAvatar-root img");
+    });
+    const source = plain[plain.length - 1];
+    if (!source) return ccfScpRowTemplate;
+
+    const template = source.cloneNode(true);
+    // 다른 스크립트가 남긴 표식과 렌더 결과를 모두 지워 "빈 줄"로 만든다.
+    const strip = (el) => {
+      [...el.attributes].forEach((attr) => {
+        if (/^data-ccf|^data-ccr20/.test(attr.name)) el.removeAttribute(attr.name);
+      });
+    };
+    strip(template);
+    template.querySelectorAll("*").forEach((el) => {
+      if (el.classList.contains("ccf-render-overlay") || el.classList.contains("ccf-original-hidden")) {
+        el.remove();
+        return;
+      }
+      strip(el);
+      el.classList.remove("ccf-render-root");
+    });
+    ccfScpRowTemplate = template;
+    return ccfScpRowTemplate;
+  }
+
+  function buildRowFromNativeTemplate(msg, prevName) {
+    const template = ccfScpRowTemplate || captureNativeRowTemplate();
+    if (!template) return null;
+
+    const row = template.cloneNode(true);
+    // 우리 자체 레이아웃 클래스(.ccf-scp-row)는 붙이지 않는다 — 격자 규칙이 네이티브
+    // 배치를 덮어써 오히려 깨진다. 네이티브 클래스만 그대로 두면 서식 스크립트의
+    // 나레이션 CSS(.MuiListItem-root:has(...))도 저절로 걸린다.
+    row.setAttribute(SAFE_ATTR, "1");
+
+    const img = row.querySelector(".MuiListItemAvatar-root img");
+    if (img) {
+      if (msg.icon) img.src = msg.icon;
+      else img.removeAttribute("src");
+    }
+
+    const head = row.querySelector("h6.MuiListItemText-primary");
+    if (head) {
+      const nameNode = [...head.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+      if (nameNode) nameNode.nodeValue = msg.name;
+      else head.insertBefore(document.createTextNode(msg.name), head.firstChild);
+      const caption = head.querySelector("span");
+      if (caption) caption.textContent = ` - ${formatTime(msg.at)}`;
+      if (msg.color) head.style.color = msg.color;
+    }
+
+    const body = row.querySelector("p.MuiListItemText-secondary");
+    if (body) {
+      // 봉투를 남긴 원문을 넣으면 format-sync 가 서식·나레이션·이미지를 그려준다.
+      body.textContent = window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text);
+    }
+
+    // 답장 버튼은 우리 패널에서 동작시키지 않는다(모양만 유지).
+    row.querySelectorAll("button, [role='button']").forEach((btn) => {
+      btn.setAttribute("tabindex", "-1");
+      btn.style.pointerEvents = "none";
+      btn.style.opacity = "0.35";
+    });
+
+    if (msg.name === prevName) {
+      const avatar = row.querySelector(".MuiListItemAvatar-root");
+      if (avatar) avatar.style.visibility = "hidden";
+      if (head) head.style.display = "none";
+    }
+    return row;
+  }
+
   function renderTabs() {
     if (!tabsEl) return;
     const channels = listChannels();
@@ -236,6 +333,14 @@
     const frag = document.createDocumentFragment();
     let prevName = null;
     for (const msg of messages) {
+      // 네이티브 줄을 복제할 수 있으면 그쪽을 쓴다 — 글꼴·간격·아바타가 저절로 같아진다.
+      const cloned = buildRowFromNativeTemplate(msg, prevName);
+      if (cloned) {
+        prevName = msg.name;
+        frag.appendChild(cloned);
+        continue;
+      }
+
       const isCont = msg.name === prevName;
       prevName = msg.name;
 
@@ -610,6 +715,11 @@
     // 아직 메시지가 안 실렸고 그 뒤로 방이 조용하면 영영 빈 화면으로 남는다.
     layoutTimer = window.setInterval(() => {
       safeLayout();
+      // 본보기를 아직 못 잡았으면(룸 채팅이 닫혀 있었다 등) 계속 시도한다.
+      if (!ccfScpRowTemplate) {
+        captureNativeRowTemplate();
+        if (ccfScpRowTemplate) lastSignature = null;   // 잡히면 그 모양으로 다시 그린다
+      }
       renderTabs();
       renderList();
     }, 500);
@@ -621,6 +731,7 @@
     window.removeEventListener("resize", safeLayout);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
+    ccfScpRowTemplate = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
