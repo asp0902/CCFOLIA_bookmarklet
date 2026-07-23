@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.3
+// @version      0.3.4
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.3";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.4";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3351,7 +3351,38 @@
     });
   }
 
+  // [진단] 유튜브 BGM 이 저절로 켜지는 경로 추적용. 원인 확정 후 제거할 것.
+  // playVideo 를 감싸 호출한 쪽의 스택을 남긴다 — 기존 플레이어 재생 경로는
+  // 로그를 전혀 남기지 않아 어디서 시작되는지 알 수 없었다.
+  function instrumentCcfBgmPlayer(player, where) {
+    if (!player || player.__ccfPlayInstrumented) return;
+    try {
+      const origPlay = player.playVideo;
+      if (typeof origPlay === "function") {
+        player.__ccfPlayInstrumented = true;
+        player.playVideo = function (...args) {
+          debugLog("bgm-playvideo", {
+            where,
+            activeSlot: ccfBgmActiveSlotKey || "(없음)",
+            stack: (new Error().stack || "").split("\n").slice(1, 7).map((s) => s.trim()).join(" ⟵ ")
+          });
+          return origPlay.apply(this, args);
+        };
+      }
+    } catch (error) {
+      debugLog("bgm-playvideo-instrument-failed", serializeError(error));
+    }
+  }
+
   function handleCcfBgmPlayerStateChange(event) {
+    // [진단] 모든 상태 변화를 남긴다 (-1 시작안함 / 0 종료 / 1 재생 / 2 일시정지 / 3 버퍼링 / 5 대기)
+    debugLog("bgm-yt-state", {
+      data: event?.data,
+      activeSlot: ccfBgmActiveSlotKey || "(없음)",
+      loop: ccfBgmActiveLoop,
+      stopping: ccfBgmStopping
+    });
+    instrumentCcfBgmPlayer(event?.target, "state-change");
     if (event?.data === window.YT?.PlayerState?.ENDED) {
       // 재생 중인 유튜브 곡이 없으면 무엇도 되살리지 않는다.
       // ccfBgmActiveLoop 는 마지막에 재생한 곡의 설정이 그대로 남아 true 인 채였고,
@@ -5585,6 +5616,11 @@
 
   // ========== 유튜브 플레이어를 코코포리아 파괴 범위 밖으로 피난시키는 로직 ==========
   function mountCcfYoutubeBgmPlayerFrame(player = null) {
+    // [진단] iframe 을 옮겨 붙이면 다시 로드되며 재생될 수 있다. 호출 시점을 남긴다.
+    debugLog("bgm-player-mount", {
+      activeSlot: ccfBgmActiveSlotKey || "(없음)",
+      stack: (new Error().stack || "").split("\n").slice(1, 5).map((s) => s.trim()).join(" ⟵ ")
+    });
     const dock = ensureCcfYoutubeBgmPlayerDock();
     if (!(dock instanceof HTMLElement)) {
       return null;
