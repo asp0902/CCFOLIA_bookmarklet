@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.17
+// @version      0.2.18
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -216,7 +216,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.17"),
+    version: getUserscriptVersion("0.2.18"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5008,14 +5008,18 @@
   // 테마 게이트 상태를 콘솔로 확인할 수 있게 한다. 매 mutation 마다 로그가
   // 쌓이지 않도록 일회성. console.warn 사용 (Chrome DevTools 의 기본 필터
   // 에서도 안전하게 표시되며, info 보다 시각적으로 두드러진다).
-  const creeGrrrInjectState = {
-    firstCallLogged: false,
-    lastSampleLogged: 0,
-    callCount: 0
-  };
+  // var + 지연 생성: 이 함수는 스크립트가 끝까지 평가되기 전에 호출될 수 있어
+  // const 로 두면 "Cannot access before initialization"(TDZ) 로 초기화가 통째로 실패한다.
+  var creeGrrrInjectState;
+  function getCreeGrrrInjectState() {
+    if (!creeGrrrInjectState) {
+      creeGrrrInjectState = { firstCallLogged: false, lastSampleLogged: 0, callCount: 0 };
+    }
+    return creeGrrrInjectState;
+  }
 
   function injectCreeGrrrDiceFormatting() {
-    creeGrrrInjectState.callCount++;
+    getCreeGrrrInjectState().callCount++;
 
     const enabled = isSheetThemeEnabled();
     const themeId = getSelectedSheetThemeId();
@@ -5095,8 +5099,9 @@
     // (일반 채팅만 들어와서 fastPatternMissed 만 잔뜩 쌓이는 경우는 조용히 무시.)
     if (transformed > 0 || parserMissed > 0) {
       const now = Date.now();
-      if (now - creeGrrrInjectState.lastSampleLogged > 250) {
-        creeGrrrInjectState.lastSampleLogged = now;
+      const state = getCreeGrrrInjectState();
+      if (now - state.lastSampleLogged > 250) {
+        state.lastSampleLogged = now;
         try {
           console.info(
             `[CREE-GRRR!] dice cards: candidates=${candidates.length} scanned=${scanned} ` +
