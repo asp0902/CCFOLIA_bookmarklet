@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Standing Picker by Capybara_korea
 // @namespace    https://gre0asyfork.org/users/Capybara_korea/ccf-standing-picker
-// @version      0.1.12
+// @version      0.1.13
 // @description  Lets you select CCFOLIA standing labels quickly from chat with @.
 // @description:ko CCFOLIA 채팅 입력 중 @로 캐릭터 스탠딩 라벨을 빠르게 선택합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -932,6 +932,29 @@ function ccfspActivate(item) {
   }
   try { t.click(); } catch {}
   ccfspClearPick();
+  ccfspFocusChatInput();
+}
+
+// 캐릭터를 고른 뒤 바로 타이핑할 수 있도록 입력칸으로 커서를 옮긴다.
+// 코코포리아가 선택 직후 포커스를 자기 쪽으로 되돌리므로 한 번만 시도하면 놓친다
+// → 몇 시점에 나눠 시도하고, 이미 입력칸에 있으면 건드리지 않는다.
+function ccfspFocusChatInput() {
+  [0, 60, 150, 320, 600].forEach((delay) => {
+    setTimeout(() => {
+      if (!ccfspActive) return;
+      const input = getChatInput();
+      if (!input || document.activeElement === input) return;
+      // 선택창이 아직 떠 있으면 기다린다 (그 위에서 포커스를 뺏으면 선택이 취소될 수 있다).
+      if (ccfspFindPicker()) return;
+      try {
+        input.focus({ preventScroll: true });
+        if (typeof input.selectionStart === 'number') {
+          const end = input.value ? input.value.length : 0;
+          input.setSelectionRange(end, end);
+        }
+      } catch {}
+    }, delay);
+  });
 }
 function handleNativeCharacterPickerKey(event) {
   if (state.popupEl) return false;
