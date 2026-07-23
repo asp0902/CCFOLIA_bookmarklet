@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.5
+// @version      0.1.6
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.5";
+  const VERSION = "0.1.6";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -44,7 +44,9 @@
   let inputEl = null;
   let statusEl = null;
   let currentChannel = "main";
-  let lastSignature = "";
+  // null = "아직 한 번도 안 그림". 빈 목록의 서명도 "" 이라, 초기값을 "" 로 두면
+  // 처음 열었을 때 그릴 게 없다고 판단해 안내문조차 없이 빠져나간다(빈 패널).
+  let lastSignature = null;
   let pinnedToBottom = true;
   let sending = false;
   let layoutTimer = 0;
@@ -186,7 +188,7 @@
       btn.addEventListener("click", () => {
         currentChannel = channel;
         savePrefs();
-        lastSignature = "";
+        lastSignature = null;
         pinnedToBottom = true;
         renderTabs();
         renderList();
@@ -220,14 +222,32 @@
       return;
     }
 
+    // 네이티브와 같은 구성: [아이콘] [이름 · 시각 / 본문].
+    // 같은 화자가 이어 말하면 아이콘·이름을 생략하고 본문만 이어 붙인다.
     const frag = document.createDocumentFragment();
     let prevName = null;
     for (const msg of messages) {
-      const row = document.createElement("div");
-      row.className = "ccf-scp-row" + (msg.name === prevName ? " is-cont" : "");
+      const isCont = msg.name === prevName;
       prevName = msg.name;
 
-      if (row.className.indexOf("is-cont") === -1) {
+      const row = document.createElement("div");
+      row.className = "ccf-scp-row" + (isCont ? " is-cont" : "");
+
+      const avatar = document.createElement("div");
+      avatar.className = "ccf-scp-avatar";
+      if (!isCont && msg.icon) {
+        const img = document.createElement("img");
+        img.src = msg.icon;
+        img.alt = "";
+        img.loading = "lazy";
+        avatar.appendChild(img);
+      }
+      row.appendChild(avatar);
+
+      const bodyWrap = document.createElement("div");
+      bodyWrap.className = "ccf-scp-body";
+
+      if (!isCont) {
         const head = document.createElement("div");
         head.className = "ccf-scp-head";
         const nameEl = document.createElement("span");
@@ -239,13 +259,14 @@
         timeEl.className = "ccf-scp-time";
         timeEl.textContent = formatTime(msg.at);
         head.appendChild(timeEl);
-        row.appendChild(head);
+        bodyWrap.appendChild(head);
       }
 
       const body = document.createElement("div");
       body.className = "ccf-scp-text";
       body.textContent = stripInvisible(msg.text);
-      row.appendChild(body);
+      bodyWrap.appendChild(body);
+      row.appendChild(bodyWrap);
       frag.appendChild(row);
     }
     listEl.appendChild(frag);
@@ -433,9 +454,16 @@
       .ccf-scp-tab.is-active { background: #2196f3; border-color: #2196f3; color: #fff;
         opacity: 1; font-weight: 700; }
       .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px; }
-      .ccf-scp-row { padding: 2px 0 6px; }
+      /* 네이티브 메시지 줄: 아이콘 열 + 본문 열 */
+      .ccf-scp-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px;
+        padding: 6px 0 2px; align-items: start; }
       .ccf-scp-row.is-cont { padding-top: 0; }
-      .ccf-scp-head { display: flex; align-items: baseline; gap: 6px; }
+      .ccf-scp-avatar { width: 40px; height: 40px; }
+      .ccf-scp-row.is-cont .ccf-scp-avatar { height: 0; }
+      .ccf-scp-avatar img { width: 40px; height: 40px; border-radius: 4px;
+        object-fit: cover; display: block; }
+      .ccf-scp-body { min-width: 0; }
+      .ccf-scp-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
       .ccf-scp-name { font-weight: var(--scp-name-weight, 700); font-size: var(--scp-name-size, 12px);
         color: var(--scp-name-color, inherit); }
       .ccf-scp-time { font-size: 10px; opacity: .5; }
@@ -531,7 +559,7 @@
     document.body.appendChild(panel);
     panelEl = panel;
 
-    lastSignature = "";
+    lastSignature = null;
     // 배치가 실패해도 메시지는 보여야 한다 — 예전에 layoutPanel 의 예외가
     // 뒤따르는 renderTabs/renderList 까지 통째로 막아 빈 패널이 떴다.
     safeLayout();
@@ -540,7 +568,13 @@
     subscribeStore();
     // 네이티브 패널이 열리고 닫히거나 창 크기가 바뀌면 위치를 다시 맞춘다.
     window.addEventListener("resize", safeLayout);
-    layoutTimer = window.setInterval(safeLayout, 500);
+    // 저장소 변화가 없어도 주기적으로 다시 그린다. 구독만 믿으면, 패널을 연 시점에
+    // 아직 메시지가 안 실렸고 그 뒤로 방이 조용하면 영영 빈 화면으로 남는다.
+    layoutTimer = window.setInterval(() => {
+      safeLayout();
+      renderTabs();
+      renderList();
+    }, 500);
     savePrefs();
   }
 
