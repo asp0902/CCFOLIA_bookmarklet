@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.10
+// @version      0.3.11
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.10";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.11";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4254,6 +4254,13 @@
 
     row.style.opacity = "1";
     row.className = "ccf-youtube-bgm-row-wrap";
+    // 이 마크업은 코코포리아가 만들어 둔 자동생성 CSS 클래스(css-6h9gba 등)에 기대어
+    // 모양을 잡는다. 그런데 등록된 음원이 하나도 없으면 코코포리아가 그 스타일을
+    // 아예 만들지 않아 여백·크기가 전부 사라진다(아이콘이 왼쪽으로 튀어나옴).
+    // 그럴 때만 우리 자체 레이아웃을 입힌다 — 네이티브 항목이 있으면 건드리지 않는다.
+    if (!document.querySelector(".MuiList-root .MuiListItemButton-root:not(.ccf-youtube-bgm-item)")) {
+      row.classList.add("ccf-youtube-bgm-standalone");
+    }
     row.dataset.ccfYoutubeBgmSlot = slotKey;
     row.dataset.ccfYoutubeBgmEntry = entryKey;
 
@@ -7852,6 +7859,67 @@
         box-sizing: border-box !important;
         width: 100% !important;
         will-change: transform !important;
+      }
+
+      /* 등록된 음원이 하나도 없어 코코포리아의 자동생성 스타일이 없을 때만 쓰는 대체 레이아웃.
+         (createCcfYoutubeBgmListRow 가 .ccf-youtube-bgm-standalone 을 붙인다) */
+      .ccf-youtube-bgm-standalone .MuiListItem-root {
+        display: flex !important;
+        align-items: center !important;
+        position: relative !important;
+        width: 100% !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+      }
+      .ccf-youtube-bgm-standalone .ccf-youtube-bgm-item {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        padding: 8px 16px !important;
+        box-sizing: border-box !important;
+        cursor: pointer !important;
+      }
+      .ccf-youtube-bgm-standalone .MuiListItemAvatar-root {
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+      .ccf-youtube-bgm-standalone .ccf-youtube-bgm-main {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+      }
+      .ccf-youtube-bgm-standalone .ccf-youtube-bgm-title {
+        display: block !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      .ccf-youtube-bgm-standalone .MuiListItemSecondaryAction-root {
+        position: absolute !important;
+        right: 8px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+      }
+      /* 아바타 크기도 코코포리아 스타일에 의존하므로 여기서 지정.
+         overflow 는 기존 규칙(visible)을 유지 — 재생 표시 배지가 밖으로 나오기 때문. */
+      .ccf-youtube-bgm-standalone .ccf-youtube-bgm-avatar {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex: 0 0 auto !important;
+      }
+      .ccf-youtube-bgm-standalone .ccf-youtube-bgm-thumb {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 50% !important;
+        object-fit: cover !important;
       }
 
       /* native css-q3kgqo 그대로 — color + padding + border-radius */
