@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.12
+// @version      0.1.13
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -24,7 +24,7 @@
   //   roll20-css-bridge(그룹핑)와 chat-notifier(알림)에 #ccf-second-chat-panel 예외를 넣어 뒀다.
   //   새로 메시지를 훑는 코드를 추가할 때도 같은 예외가 필요하다.
 
-  const VERSION = "0.1.12";
+  const VERSION = "0.1.13";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -216,14 +216,22 @@
     const row = rowTemplate.cloneNode(true);
     row.setAttribute(SAFE_ATTR, "1");
     row.removeAttribute("data-index");
-    // 원본에 남아 있을 수 있는 다른 스크립트의 표식 제거 (그룹핑·렌더 상태 등)
-    [...row.attributes].forEach((attr) => {
-      if (/^data-ccf|^data-ccr20/.test(attr.name)) row.removeAttribute(attr.name);
+    // 본보기에 남아 있던 다른 스크립트의 표식을 줄 자신과 모든 하위 요소에서 지운다.
+    // (나레이션·같은 화자 이어짐·렌더 완료 표식이 남으면 복제본마다 그 모양이 따라간다)
+    const stripMarks = (el) => {
+      [...el.attributes].forEach((attr) => {
+        if (/^data-ccf|^data-ccr20/.test(attr.name)) el.removeAttribute(attr.name);
+      });
+    };
+    stripMarks(row);
+    row.querySelectorAll("*").forEach((el) => {
+      if (el.classList.contains("ccf-render-overlay")) { el.remove(); return; }
+      stripMarks(el);
+      // 서식 렌더가 만든 래퍼 표시도 제거 — 본문은 아래에서 새로 채운다.
+      el.classList.remove("ccf-render-root", "ccf-original-hidden");
     });
-    row.querySelectorAll("[data-ccf-rendered], [data-ccf-raw], .ccf-render-overlay").forEach((el) => {
-      if (el.classList.contains("ccf-render-overlay")) el.remove();
-      else { el.removeAttribute("data-ccf-rendered"); el.removeAttribute("data-ccf-raw"); }
-    });
+    row.style.removeProperty("display");
+    row.style.removeProperty("text-align");
 
     const avatarImg = row.querySelector(".MuiListItemAvatar-root img, .MuiAvatar-root img");
     if (avatarImg) {
@@ -880,7 +888,15 @@
   function findNativeParts(native) {
     const rows = [...native.querySelectorAll(".MuiListItem-root")]
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
-    const rowTemplate = rows[rows.length - 1] || null;
+    // 본보기는 "평범한 줄"이어야 한다. 나레이션 줄이나 같은 화자 이어짐 줄을 고르면
+    // 그 표식이 복제본마다 따라가 모든 메시지가 가운데 정렬·아바타 없음이 된다.
+    const isPlainRow = (li) => {
+      if (li.querySelector('[data-ccf-narration="1"]')) return false;
+      if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]')) return false;
+      return !!li.querySelector(".MuiListItemAvatar-root img");
+    };
+    const plain = rows.filter(isPlainRow);
+    const rowTemplate = plain[plain.length - 1] || rows[rows.length - 1] || null;
     const list = rowTemplate?.closest("ul, ol, [role='log'], .MuiList-root") || null;
     const input = native.querySelector('textarea[name="text"], textarea');
     const tabs = native.querySelector('[role="tablist"]')
