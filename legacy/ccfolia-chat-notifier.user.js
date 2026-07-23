@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.14
+// @version      0.3.15
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.14";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.15";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -450,6 +450,20 @@
   let ccfBgmApiReadyPromise = null;
   let ccfBgmPlayer = null;
   let ccfBgmPlayerHost = null;
+
+  /* ---- 유튜브 BGM 크로스페이드 ----
+     이전 시도는 "보조 플레이어를 만들어 승격하고 옛 것을 destroy" 하는 방식이었는데,
+     destroy 가 무시되거나 iframe 이 살아남아 **좀비 재생**이 생겼다(실사용 지장으로 롤백).
+     이번에는 **플레이어 두 개를 계속 유지하고 역할만 번갈아 맡긴다** — 승격도 파기도 없다.
+     ccfBgmPlayer 는 언제나 "지금 들리는 쪽"을 가리키므로 나머지 코드는 그대로 둔다.
+     안전장치: 크로스페이드 중이 아니면 대기 쪽은 항상 음소거+정지 상태로 유지한다.
+     아직 검증 전이라 기본은 꺼둔다 — setCrossfade(true) 로 켠다. */
+  const CCF_BGM_XFADE_MS = 1500;
+  const CCF_BGM_XFADE_STEP_MS = 50;
+  let ccfBgmCrossfadeEnabled = false;
+  let ccfBgmPlayerB = null;        // 두 번째 플레이어(둘 중 하나가 활성, 하나가 대기)
+  let ccfBgmPlayerBReady = false;
+  let ccfBgmXfadeTimer = 0;
   let ccfBgmPlayerDock = null;
   let ccfBgmPlayerVisible = false;
   let ccfBgmPlayerVideoId = "";
@@ -1493,6 +1507,31 @@
     ccfChatNotifierDebugApi = {
       isActive() {
         return chatNotifierLifecycle.isActive();
+      },
+      // 유튜브 BGM 크로스페이드 — 아직 검증 전이라 기본 꺼짐. setCrossfade(true) 로 켠다.
+      setCrossfade(on) {
+        ccfBgmCrossfadeEnabled = on !== false;
+        if (!ccfBgmCrossfadeEnabled) cancelCcfBgmCrossfade();
+        return { 크로스페이드: ccfBgmCrossfadeEnabled, 지속시간ms: CCF_BGM_XFADE_MS };
+      },
+      crossfadeDiag() {
+        const read = (p) => {
+          if (!p) return null;
+          const safe = (fn) => { try { return fn(); } catch (error) { return "err"; } };
+          return {
+            상태: safe(() => p.getPlayerState?.()),
+            볼륨: safe(() => p.getVolume?.()),
+            음소거: safe(() => p.isMuted?.())
+          };
+        };
+        return {
+          켜짐: ccfBgmCrossfadeEnabled,
+          진행중: !!ccfBgmXfadeTimer,
+          활성: read(ccfBgmPlayer),
+          대기: read(getCcfBgmStandbyPlayer()),
+          두번째생성됨: !!ccfBgmPlayerB,
+          iframe수: document.querySelectorAll('iframe[src*="youtube"]').length
+        };
       },
       // [진단] 우리가 들고 있는 플레이어 객체와 실제 도크의 iframe 이 같은 것인지 확인.
       // 끊어져 있으면 우리 정지/가드 로직이 전혀 닿지 않는다 (상태 로그도 안 옴).
@@ -3313,6 +3352,12 @@
       }
 
       try {
+        if (ccfBgmPlayerVideoId !== videoId && crossfadeCcfYoutubeBgm(videoId, state)) {
+          // 크로스페이드가 시작됐다 — 즉시 교체하면 겹치는 구간이 사라지므로 여기서 끝낸다.
+          adoptCcfYoutubeBgmPlayerTitle(resolvedEntryKey, videoId);
+          startCcfBgmProgressLoop();
+          return true;
+        }
         if (ccfBgmPlayerVideoId !== videoId && typeof ccfBgmPlayer.loadVideoById === "function") {
           ccfBgmPlayer.loadVideoById(videoId);
           ccfBgmPlayerVideoId = videoId;
@@ -3397,7 +3442,130 @@
   // 재생 중인 곡이 없다고 보는데 플레이어는 실제로 재생/버퍼링 중인 어긋남을 바로잡는다.
   // 이 상태에서는 브라우저가 자동재생을 막아 소리가 안 날 뿐이라 눈치채기 어렵고,
   // 컷인처럼 다른 오디오가 재생돼 차단이 풀리는 순간 옛 곡이 갑자기 들린다.
+  // 대기 중인 플레이어(지금 들리지 않는 쪽). 크로스페이드가 아닐 땐 항상 조용해야 한다.
+  function getCcfBgmStandbyPlayer() {
+    if (!ccfBgmPlayerB) return null;
+    return ccfBgmPlayer === ccfBgmPlayerB ? null : ccfBgmPlayerB;
+  }
+
+  function silenceCcfBgmStandby() {
+    const standby = getCcfBgmStandbyPlayer();
+    if (!standby) return;
+    try {
+      standby.mute?.();
+      standby.pauseVideo?.();
+      standby.stopVideo?.();
+    } catch (error) { /* 대기 플레이어 정리 실패는 무시 */ }
+  }
+
+  function cancelCcfBgmCrossfade() {
+    if (ccfBgmXfadeTimer) {
+      window.clearInterval(ccfBgmXfadeTimer);
+      ccfBgmXfadeTimer = 0;
+    }
+    silenceCcfBgmStandby();
+  }
+
+  // 대기 플레이어를 만들어 둔다(한 번만). 호스트 id 를 따로 두어 충돌을 없앴다.
+  function ensureCcfBgmSecondPlayer() {
+    if (ccfBgmPlayerB || !window.YT?.Player) return ccfBgmPlayerB;
+    const dock = ensureCcfYoutubeBgmPlayerDock();
+    if (!(dock instanceof HTMLElement)) return null;
+    let host = document.getElementById("ccf-youtube-bgm-player-b");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "ccf-youtube-bgm-player-b";
+      host.className = "ccf-youtube-bgm-player";
+      dock.appendChild(host);
+    }
+    try {
+      ccfBgmPlayerBReady = false;
+      ccfBgmPlayerB = new window.YT.Player(host, {
+        width: String(YOUTUBE_PLAYER_MIN_SIZE),
+        height: String(YOUTUBE_PLAYER_MIN_SIZE),
+        host: YOUTUBE_EMBED_HOST,
+        playerVars: {
+          autoplay: 0, controls: 0, disablekb: 1, fs: 0,
+          modestbranding: 1, playsinline: 1, rel: 0, origin: location.origin
+        },
+        events: {
+          onReady() {
+            ccfBgmPlayerBReady = true;
+            try { ccfBgmPlayerB.mute?.(); } catch (error) { /* 무시 */ }
+          },
+          onStateChange: handleCcfBgmPlayerStateChange
+        }
+      });
+    } catch (error) {
+      debugLog("bgm-xfade-second-player-failed", serializeError(error));
+      ccfBgmPlayerB = null;
+    }
+    return ccfBgmPlayerB;
+  }
+
+  // 곡 전환을 크로스페이드로 처리했으면 true. 못 하면 false → 호출 쪽이 즉시 전환한다.
+  function crossfadeCcfYoutubeBgm(videoId, state) {
+    if (!ccfBgmCrossfadeEnabled) return false;
+    if (!ccfBgmPlayer || !ccfBgmPlayerReady) return false;
+    const target = Math.max(0, Math.min(100, Number(state?.volume) || 0));
+    if (target <= 0) return false;
+
+    let current = null;
+    try { current = ccfBgmPlayer.getPlayerState?.(); } catch (error) { return false; }
+    if (current !== 1) return false;               // 지금 재생 중일 때만 의미가 있다
+
+    const incoming = ensureCcfBgmSecondPlayer() && getCcfBgmStandbyPlayer();
+    if (!incoming) return false;
+
+    cancelCcfBgmCrossfade();
+    const outgoing = ccfBgmPlayer;
+
+    try {
+      incoming.loadVideoById?.(videoId);
+      incoming.setVolume?.(0);
+      incoming.unMute?.();
+      incoming.playVideo?.();
+    } catch (error) {
+      debugLog("bgm-xfade-start-failed", serializeError(error));
+      return false;
+    }
+
+    debugLog("bgm-xfade-start", { videoId, target });
+    // 이 시점부터 "들리는 쪽"은 새 플레이어다 — 볼륨/정지 등 기존 로직이 이쪽을 향하게 한다.
+    ccfBgmPlayer = incoming;
+    ccfBgmPlayerVideoId = videoId;
+    ccfBgmPlayerReady = true;
+
+    const steps = Math.max(1, Math.round(CCF_BGM_XFADE_MS / CCF_BGM_XFADE_STEP_MS));
+    let step = 0;
+    ccfBgmXfadeTimer = window.setInterval(() => {
+      step += 1;
+      const ratio = Math.min(1, step / steps);
+      try {
+        incoming.setVolume?.(Math.round(target * ratio));
+        outgoing.setVolume?.(Math.round(target * (1 - ratio)));
+      } catch (error) { /* 중간 실패는 아래 정리에서 처리 */ }
+      if (ratio < 1) return;
+
+      window.clearInterval(ccfBgmXfadeTimer);
+      ccfBgmXfadeTimer = 0;
+      // 나간 쪽은 파기하지 않는다 — 조용히 세워 두었다가 다음 전환에 재사용한다.
+      try {
+        outgoing.setVolume?.(0);
+        outgoing.mute?.();
+        outgoing.pauseVideo?.();
+        outgoing.stopVideo?.();
+      } catch (error) { /* 무시 */ }
+      debugLog("bgm-xfade-done", { videoId });
+    }, CCF_BGM_XFADE_STEP_MS);
+
+    return true;
+  }
+
   function enforceCcfYoutubeIdleSilence(source = "sweep") {
+    // 크로스페이드 중이 아니면 대기 플레이어는 언제나 조용해야 한다.
+    // (이전 시도에서 좀비 재생을 만든 지점이라 재생 여부와 무관하게 매번 확인한다)
+    if (!ccfBgmXfadeTimer) silenceCcfBgmStandby();
     if (ccfBgmActiveSlotKey) return;          // 정상 재생 중이면 관여하지 않는다
     if (ccfBgmPreviewActive) return;          // 미리듣기는 별도 플레이어/흐름
     if (ccfBgmFirestorePlaybackApplying) return;
@@ -3489,6 +3657,8 @@
     // → 정지 → ENDED → 재생 → … 앞 0~1초 무한 반복. 정지 중임을 표시해 구분한다.
     ccfBgmStopping = true;
     window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
+    // 진행 중이던 크로스페이드를 끝내고 대기 플레이어도 확실히 세운다(좀비 방지).
+    cancelCcfBgmCrossfade();
     // 사용자가 의도적으로 정지/제거한 경우만 신호를 보낸다. 자동 전환(다른 BGM 시작 등)과
     // 원격 적용은 송신 안 함(원격은 applying 가드로 이중 안전).
     // - manual / stop-button / youtube-bgm-remove: 사용자 의도 → 전파 ✅
