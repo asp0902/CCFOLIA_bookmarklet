@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.15
+// @version      0.1.16
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -14,17 +14,15 @@
 (() => {
   "use strict";
 
-  // 구성: 코코포리아 채팅 패널을 **통째로 복제**해 껍데기로 쓰고(모양이 저절로 같아진다),
-  // 메시지는 같은 원본 데이터(Redux store)에서 읽어 **네이티브 메시지 줄을 복제**해 채운다.
-  // 복제본에는 이벤트가 따라오지 않으므로 목록·탭·입력칸·전송만 다시 연결하고,
-  // 나머지 조작 요소는 모양만 남기고 잠근다. 복제가 불가능하면 자체 구성으로 물러난다.
+  // 이 패널은 코코포리아 패널을 복제하지 않는다. 코코포리아 패널은 React 소유이고
+  // 보이는 줄만 만들어 쓰는 가상 스크롤이라, 복제해도 원본과 같은 탭·같은 스크롤만
+  // 따라간다(= 두 탭을 동시에 못 봄). 대신 같은 원본 데이터(Redux store)를 읽어
+  // 우리 DOM 으로 직접 그린다.
   //
-  // ⚠ 복제본은 MUI 클래스를 그대로 갖는다. 다른 카피바라 스크립트가 이걸 진짜 채팅으로
-  //   오인하면 알림음이 두 번 울리거나 같은 화자 묶기가 어긋난다 →
-  //   roll20-css-bridge(그룹핑)와 chat-notifier(알림)에 #ccf-second-chat-panel 예외를 넣어 뒀다.
-  //   새로 메시지를 훑는 코드를 추가할 때도 같은 예외가 필요하다.
+  // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
+  //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.15";
+  const VERSION = "0.1.16";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -52,8 +50,6 @@
   let pinnedToBottom = true;
   let sending = false;
   let layoutTimer = 0;
-  // 네이티브 메시지 줄 복제본(있으면 이걸로 각 줄을 만든다).
-  let rowTemplate = null;
   // "left"  = 룸 채팅을 그대로 두고 그 왼쪽 옆에 붙는다 (기본값).
   // "right" = 룸 채팅을 왼쪽으로 밀고 오른쪽 끝을 쓴다.
   //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
@@ -210,59 +206,6 @@
     }
   }
 
-  // 네이티브 메시지 줄을 복제해 내용만 갈아끼운다 → 서식·간격·아바타가 저절로 같아진다.
-  function buildRowFromTemplate(msg, prevName) {
-    if (!(rowTemplate instanceof HTMLElement)) return null;
-    const row = rowTemplate.cloneNode(true);
-    row.setAttribute(SAFE_ATTR, "1");
-    row.removeAttribute("data-index");
-    // 본보기에 남아 있던 다른 스크립트의 표식을 줄 자신과 모든 하위 요소에서 지운다.
-    // (나레이션·같은 화자 이어짐·렌더 완료 표식이 남으면 복제본마다 그 모양이 따라간다)
-    const stripMarks = (el) => {
-      [...el.attributes].forEach((attr) => {
-        if (/^data-ccf|^data-ccr20/.test(attr.name)) el.removeAttribute(attr.name);
-      });
-    };
-    stripMarks(row);
-    row.querySelectorAll("*").forEach((el) => {
-      if (el.classList.contains("ccf-render-overlay")) { el.remove(); return; }
-      stripMarks(el);
-      // 서식 렌더가 만든 래퍼 표시도 제거 — 본문은 아래에서 새로 채운다.
-      el.classList.remove("ccf-render-root", "ccf-original-hidden");
-    });
-    row.style.removeProperty("display");
-    row.style.removeProperty("text-align");
-
-    const avatarImg = row.querySelector(".MuiListItemAvatar-root img, .MuiAvatar-root img");
-    if (avatarImg) {
-      if (msg.icon) avatarImg.src = msg.icon;
-      else avatarImg.removeAttribute("src");
-    }
-
-    const head = row.querySelector("h6.MuiListItemText-primary");
-    if (head) {
-      const timeText = `- ${formatTime(msg.at)}`;
-      const textNode = [...head.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
-      if (textNode) textNode.nodeValue = msg.name;
-      else head.insertBefore(document.createTextNode(msg.name), head.firstChild);
-      const timeEl = head.querySelector("span, small, time");
-      if (timeEl) timeEl.textContent = timeText;
-      if (msg.color) head.style.color = msg.color;
-    }
-
-    const body = row.querySelector("p.MuiListItemText-secondary, .MuiListItemText-secondary");
-    if (body) {
-      body.textContent = window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text);
-    }
-
-    // 같은 화자가 이어 말하면 네이티브처럼 머리글을 숨긴다.
-    if (msg.name === prevName) {
-      row.querySelector(".MuiListItemAvatar-root")?.style.setProperty("visibility", "hidden");
-      if (head) head.style.display = "none";
-    }
-    return row;
-  }
-
   function renderList() {
     if (!listEl) return;
     const messages = readMessages(currentChannel);
@@ -293,13 +236,6 @@
     const frag = document.createDocumentFragment();
     let prevName = null;
     for (const msg of messages) {
-      // 네이티브 줄 복제본이 있으면 그쪽을 쓴다(모양이 코코포리아와 같아진다).
-      const cloned = buildRowFromTemplate(msg, prevName);
-      if (cloned) {
-        prevName = msg.name;
-        frag.appendChild(cloned);
-        continue;
-      }
       const isCont = msg.name === prevName;
       prevName = msg.name;
 
@@ -516,47 +452,6 @@
         line-height: 1.5;
       }
       #${PANEL_ID} * { box-sizing: border-box; }
-
-      /* 네이티브 패널을 복제해 쓰는 경우: 위치는 우리가 잡으므로 원본의 고정 배치를 끈다. */
-      #${PANEL_ID}.ccf-scp-clone {
-        position: fixed !important;
-        margin: 0 !important;
-        transform: none !important;
-        z-index: 1200;
-      }
-      /* 복제본 안의 패널은 원본에서 화면에 고정돼 있었다. 그대로 두면 우리 배치를 무시하고
-         네이티브와 같은 자리에 그려진다 → 우리 틀 안을 채우도록 되돌린다. */
-      #${PANEL_ID}.ccf-scp-clone .MuiDrawer-paper,
-      #${PANEL_ID}.ccf-scp-clone > .MuiPaper-root {
-        position: relative !important;
-        inset: auto !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        height: 100% !important;
-        max-height: 100% !important;
-        transform: none !important;
-        box-shadow: none !important;
-      }
-      /* 목록을 비우고 우리 줄만 넣기 때문에 네이티브의 구분선 요소가 사라진다 → 직접 그린다. */
-      #${PANEL_ID}.ccf-scp-clone .MuiListItem-root {
-        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.22));
-      }
-      /* 탭 선택 표시가 두 겹으로 보이지 않게, 복제본의 원래 표시는 끄고 우리가 그린다. */
-      #${PANEL_ID}.ccf-scp-clone .MuiTabs-indicator { display: none !important; }
-      #${PANEL_ID}.ccf-scp-clone [data-ccf-scp-channel] {
-        border-bottom: 2px solid transparent !important;
-      }
-      #${PANEL_ID}.ccf-scp-clone [data-ccf-scp-channel][aria-selected="true"] {
-        border-bottom-color: #f44336 !important;
-      }
-      .ccf-scp-clone-close {
-        position: absolute; top: 6px; right: 8px; z-index: 5;
-        width: 28px; height: 28px; line-height: 1;
-        border: 0; border-radius: 6px; cursor: pointer;
-        background: color-mix(in srgb, currentColor 14%, transparent);
-        color: inherit; font-size: 18px;
-      }
-      .ccf-scp-clone-close:hover { background: color-mix(in srgb, currentColor 26%, transparent); }
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
@@ -630,131 +525,9 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
-  // 복제본으로 패널을 연다. 성공하면 true.
-  function openClonedPanel() {
-    const built = buildClonedPanel();
-    if (!built) return false;
-
-    const { panel, list, input, tabs, sendBtn } = built;
-    rowTemplate = built.rowTemplate;
-
-    // 복제본의 조작 요소 중 우리가 다시 연결하지 않는 것들은 눌러도 아무 일이 없게 잠근다.
-    // (지우면 레이아웃이 무너지므로 모양은 그대로 두고 입력만 막는다)
-    panel.querySelectorAll("button, [role='button'], input, select").forEach((el) => {
-      if (el === sendBtn || el === input) return;
-      if (tabs && tabs.contains(el)) return;
-      el.setAttribute("tabindex", "-1");
-      el.style.pointerEvents = "none";
-      el.style.opacity = "0.45";
-    });
-
-    // 닫기 버튼을 헤더에 추가한다(복제본에는 우리 것이 없다).
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "ccf-scp-clone-close";
-    closeBtn.textContent = "×";
-    closeBtn.title = "추가 패널 닫기";
-    closeBtn.addEventListener("click", closePanel);
-    panel.appendChild(closeBtn);
-
-    // 탭: 복제된 탭 요소를 우리 채널 전환에 연결한다.
-    if (tabs) {
-      const tabEls = [...tabs.querySelectorAll("[role='tab'], button")];
-      const channels = listChannels();
-      tabEls.forEach((el, index) => {
-        const channel = channels[index];
-        if (!channel) { el.style.display = "none"; return; }
-        el.style.pointerEvents = "";
-        el.style.opacity = "";
-        el.dataset.ccfScpChannel = channel;
-        // 복제 시점의 선택 상태(빨간 밑줄 등)가 남아 있으면 우리 표시와 겹쳐 보인다.
-        el.classList.remove("Mui-selected", "Mui-focusVisible");
-        el.removeAttribute("aria-selected");
-        el.style.borderBottom = "";
-        el.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          currentChannel = channel;
-          savePrefs();
-          lastSignature = null;
-          pinnedToBottom = true;
-          syncClonedTabs();
-          renderList();
-        });
-      });
-    }
-
-    if (input) {
-      input.value = "";
-      input.readOnly = false;
-      input.disabled = false;
-      input.setAttribute(SAFE_ATTR, "1");
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-        event.preventDefault();
-        event.stopPropagation();
-        handleSend();
-      });
-    }
-    if (sendBtn) {
-      sendBtn.style.pointerEvents = "";
-      sendBtn.style.opacity = "";
-      sendBtn.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        handleSend();
-      });
-    }
-
-    document.body.appendChild(panel);
-    panelEl = panel;
-    listEl = list;
-    tabsEl = tabs;
-    inputEl = input;
-    statusEl = null;
-
-    listEl.textContent = "";
-    listEl.addEventListener("scroll", () => {
-      const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
-      pinnedToBottom = gap < 40;
-    });
-
-    lastSignature = null;
-    safeLayout();
-    syncClonedTabs();
-    renderList();
-    subscribeStore();
-    window.addEventListener("resize", safeLayout);
-    layoutTimer = window.setInterval(() => {
-      safeLayout();
-      syncClonedTabs();
-      renderList();
-    }, 500);
-    savePrefs();
-    return true;
-  }
-
-  // 복제된 탭의 선택 표시를 현재 채널에 맞춘다.
-  function syncClonedTabs() {
-    if (!tabsEl) return;
-    tabsEl.querySelectorAll("[data-ccf-scp-channel]").forEach((el) => {
-      const active = el.dataset.ccfScpChannel === currentChannel;
-      el.setAttribute("aria-selected", active ? "true" : "false");
-      el.style.opacity = active ? "" : "0.6";
-      el.style.fontWeight = active ? "700" : "";
-    });
-  }
-
   function openPanel() {
     if (panelEl) return;
     injectStyle();
-    // 코코포리아 패널을 통째로 복제해 쓰는 쪽을 우선한다. 복제가 불가능한 상황
-    // (패널이 닫혀 있음 등)에는 아래의 자체 구성으로 물러난다.
-    try {
-      if (openClonedPanel()) return;
-    } catch (error) {
-      console.warn("[ccf-chat-panel] clone failed, using built-in layout", error);
-    }
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
     panel.setAttribute(SAFE_ATTR, "1");
@@ -848,8 +621,6 @@
     window.removeEventListener("resize", safeLayout);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
-    applyPagePush(0);
-    rowTemplate = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
@@ -892,89 +663,6 @@
   }
 
   /* ---------------- 실행 ---------------- */
-
-  /* ---------------- 네이티브 패널 복제 ---------------- */
-
-  // 원본에서 찾은 요소를 복제본의 같은 자리로 옮기기 위한 경로(자식 인덱스 사슬).
-  function pathTo(root, el) {
-    const path = [];
-    let cur = el;
-    while (cur && cur !== root && cur.parentElement) {
-      path.unshift([...cur.parentElement.children].indexOf(cur));
-      cur = cur.parentElement;
-    }
-    return cur === root ? path : null;
-  }
-
-  function atPath(root, path) {
-    let cur = root;
-    for (const index of path) {
-      cur = cur?.children?.[index];
-      if (!cur) return null;
-    }
-    return cur;
-  }
-
-  function findNativeParts(native) {
-    const rows = [...native.querySelectorAll(".MuiListItem-root")]
-      .filter((li) => li.querySelector("h6.MuiListItemText-primary"));
-    // 본보기는 "평범한 줄"이어야 한다. 나레이션 줄이나 같은 화자 이어짐 줄을 고르면
-    // 그 표식이 복제본마다 따라가 모든 메시지가 가운데 정렬·아바타 없음이 된다.
-    const isPlainRow = (li) => {
-      if (li.querySelector('[data-ccf-narration="1"]')) return false;
-      if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]')) return false;
-      return !!li.querySelector(".MuiListItemAvatar-root img");
-    };
-    const plain = rows.filter(isPlainRow);
-    const rowTemplate = plain[plain.length - 1] || rows[rows.length - 1] || null;
-    const list = rowTemplate?.closest("ul, ol, [role='log'], .MuiList-root") || null;
-    const input = native.querySelector('textarea[name="text"], textarea');
-    const tabs = native.querySelector('[role="tablist"]')
-      || (native.querySelector('[role="tab"]')?.parentElement || null);
-    const sendBtn = [...native.querySelectorAll("button")]
-      .find((b) => /전송|送信|send/i.test(normalizeSpace(b.textContent || "")));
-    return { rowTemplate, list, input, tabs, sendBtn };
-  }
-
-  // 네이티브 패널을 통째로 복제한다. 복제본에는 이벤트가 따라오지 않으므로
-  // 우리가 쓸 부분(목록·입력칸·전송·탭)만 다시 연결하고, 나머지 조작 요소는
-  // 눌러도 아무 일이 없도록 잠근다(모양은 그대로 남긴다).
-  function buildClonedPanel() {
-    const native = findNativeChatPanel();
-    if (!(native instanceof HTMLElement)) return null;
-    const parts = findNativeParts(native);
-    if (!parts.list || !parts.rowTemplate) return null;
-
-    const listPath = pathTo(native, parts.list);
-    const inputPath = parts.input ? pathTo(native, parts.input) : null;
-    const tabsPath = parts.tabs ? pathTo(native, parts.tabs) : null;
-    const sendPath = parts.sendBtn ? pathTo(native, parts.sendBtn) : null;
-    if (!listPath) return null;
-
-    const clone = native.cloneNode(true);
-    clone.id = PANEL_ID;
-    clone.setAttribute(SAFE_ATTR, "1");
-    clone.classList.add("ccf-scp-clone");
-    // id 중복은 페이지 전체를 망가뜨린다(라벨/aria 연결이 엉킴).
-    clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
-    // 복제본 안의 리액트 내부 표식은 지워 혼동을 막는다.
-    clone.querySelectorAll("[data-index]").forEach((el) => el.removeAttribute("data-index"));
-
-    const clonedList = atPath(clone, listPath);
-    if (!clonedList) return null;
-    const clonedInput = inputPath ? atPath(clone, inputPath) : null;
-    const clonedTabs = tabsPath ? atPath(clone, tabsPath) : null;
-    const clonedSend = sendPath ? atPath(clone, sendPath) : null;
-
-    return {
-      panel: clone,
-      list: clonedList,
-      input: clonedInput instanceof HTMLTextAreaElement ? clonedInput : null,
-      tabs: clonedTabs,
-      sendBtn: clonedSend,
-      rowTemplate: parts.rowTemplate.cloneNode(true)
-    };
-  }
 
   /* ---------------- 네이티브 패널에 맞추기 ---------------- */
 
@@ -1049,38 +737,6 @@
     }
   }
 
-  // 겹쳐 띄우는 대신 화면을 실제로 좁힌다("밀어내기").
-  // 앱 루트의 폭을 줄이고, 화면에 고정된 서랍(룸 채팅 등)은 right 를 밀어 준다.
-  // → BGM 조작줄·상단바 등 무엇도 가리지 않는다. 닫으면 원래대로 돌아온다.
-  function applyPagePush(px) {
-    const id = "ccf-scp-push-style";
-    let style = document.getElementById(id);
-    if (!px) {
-      style?.remove();
-      return;
-    }
-    if (!style) {
-      style = document.createElement("style");
-      style.id = id;
-      style.setAttribute(SAFE_ATTR, "1");
-      (document.head || document.documentElement).appendChild(style);
-    }
-    style.textContent = `
-      #root {
-        width: calc(100% - ${px}px) !important;
-        max-width: calc(100% - ${px}px) !important;
-        overflow: hidden !important;
-      }
-      /* ⚠ 우리 패널은 룸 채팅을 복제한 것이라 같은 클래스를 갖는다.
-         제외하지 않으면 자기 자신도 밀려 네이티브와 같은 자리에 겹친다. */
-      body > .MuiDrawer-root:not(#${PANEL_ID}) .MuiDrawer-paper,
-      body > .MuiModal-root:not(#${PANEL_ID}) .MuiDrawer-paper,
-      body > [role="presentation"]:not(#${PANEL_ID}) .MuiDrawer-paper {
-        right: ${px}px !important;
-      }
-    `;
-  }
-
   // 화면 오른쪽 위에는 룸 상단바 아이콘들이 떠 있다. 우리 패널이 오른쪽 끝을 차지하면
   // 그 아이콘들을 덮어 누를 수 없게 된다 → 상단바 아래에서 시작하도록 여백을 잰다.
   // 네이티브 채팅 패널 안의 버튼은 제외한다(그건 패널 헤더라 기준이 아니다).
@@ -1137,21 +793,41 @@
       return;
     }
 
-    // 예전 방식(네이티브를 transform 으로 밀기)은 쓰지 않는다 — 밀린 패널이 다른 UI 를 덮었다.
+    const MIN_WIDTH = 220;
+    // 밀기 전 기준 위치 (transform 은 rect 에 반영되므로 먼저 해제하고 잰다).
     applyNativeShift(native, 0);
     const base = native.getBoundingClientRect();
     const width = Math.max(260, Math.min(base.width || 340, 460));
+    const gapRight = window.innerWidth - base.right;
 
-    // 화면을 실제로 좁히고, 우리는 그렇게 생긴 오른쪽 자리에 들어간다.
-    applyPagePush(width);
+    let left;
+    if (gapRight >= MIN_WIDTH) {
+      // 오른쪽에 이미 자리가 있으면 밀 필요 없이 그 옆에.
+      left = base.right;
+    } else if (panelSide === "right" && base.left >= width) {
+      // 오른쪽 끝에 붙어 있으면 네이티브를 왼쪽으로 밀고 그 자리를 쓴다.
+      applyNativeShift(native, width);
+      left = base.right - width;
+    } else if (base.left >= MIN_WIDTH) {
+      left = base.left - Math.min(width, base.left);
+    } else {
+      left = Math.max(0, window.innerWidth - width);
+    }
+
+    // 상단바 아이콘을 덮지 않도록 그 아래에서 시작한다(가릴 게 없으면 그대로).
+    const topBar = measureTopBarOffset(native);
+    const top = Math.max(Math.round(base.top), topBar);
+    const bottom = Math.round(base.top + base.height);
+    // 화면 밖으로 1px 이라도 새면 가로 스크롤이 생긴다.
+    const maxWidth = Math.max(120, window.innerWidth - Math.round(left));
 
     Object.assign(panelEl.style, {
-      top: "0px",
-      height: `${window.innerHeight}px`,
+      top: `${top}px`,
+      height: `${Math.max(120, bottom - top)}px`,
       bottom: "",
-      right: "0px",
-      left: "",
-      width: `${Math.round(width)}px`
+      right: "",
+      left: `${Math.round(left)}px`,
+      width: `${Math.min(Math.round(width), maxWidth)}px`
     });
   }
 
