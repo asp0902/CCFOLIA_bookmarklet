@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.17
+// @version      0.3.18
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.17";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.18";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -457,10 +457,11 @@
      이번에는 **플레이어 두 개를 계속 유지하고 역할만 번갈아 맡긴다** — 승격도 파기도 없다.
      ccfBgmPlayer 는 언제나 "지금 들리는 쪽"을 가리키므로 나머지 코드는 그대로 둔다.
      안전장치: 크로스페이드 중이 아니면 대기 쪽은 항상 음소거+정지 상태로 유지한다.
-     아직 검증 전이라 기본은 꺼둔다 — setCrossfade(true) 로 켠다. */
+     검증 완료(부드러운 전환/실제 재생/잔류 없음/연속 전환) 후 기본으로 켰다.
+     문제가 생기면 setCrossfade(false) 로 즉시 끌 수 있다. */
   const CCF_BGM_XFADE_MS = 1500;
   const CCF_BGM_XFADE_STEP_MS = 50;
-  let ccfBgmCrossfadeEnabled = false;
+  let ccfBgmCrossfadeEnabled = true;
   let ccfBgmPlayerB = null;        // 두 번째 플레이어(둘 중 하나가 활성, 하나가 대기)
   let ccfBgmPlayerBReady = false;
   let ccfBgmXfadeTimer = 0;
@@ -3432,6 +3433,9 @@
         events: {
           onReady(event) {
             ccfBgmPlayerReady = true;
+            // 대기 플레이어는 준비에 몇 초 걸린다. 첫 곡이 준비된 시점에 미리 만들어 둬야
+            // "첫 전환"부터 페이드가 걸린다(안 그러면 첫 전환만 즉시 교체된다).
+            if (ccfBgmCrossfadeEnabled) ensureCcfBgmSecondPlayer();
             mountCcfYoutubeBgmPlayerFrame(event.target);
             debugLog("bgm-youtube-ready", {
               slotKey: normalizedSlotKey,
