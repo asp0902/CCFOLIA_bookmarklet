@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.1
+// @version      0.1.2
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.1";
+  const VERSION = "0.1.2";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -47,6 +47,7 @@
   let lastSignature = "";
   let pinnedToBottom = true;
   let sending = false;
+  let layoutTimer = 0;
 
   /* ---------------- Redux store ---------------- */
 
@@ -398,26 +399,35 @@
     style.id = "ccf-scp-style";
     style.setAttribute(SAFE_ATTR, "1");
     style.textContent = `
+      /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
+         하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
       #${PANEL_ID} {
-        position: fixed; right: 0; top: 0; bottom: 0; width: 340px;
+        position: fixed; top: 0; height: 100%; width: 340px;
         display: flex; flex-direction: column; z-index: 1200;
-        background: rgba(24,24,26,.96); color: #f0f0f0;
-        border-left: 1px solid rgba(255,255,255,.14);
-        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--scp-bg, rgba(24,24,26,.96));
+        color: var(--scp-fg, #f0f0f0);
+        border-left: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        box-shadow: var(--scp-shadow, none);
+        font-family: var(--scp-font, system-ui, -apple-system, "Segoe UI", sans-serif);
+        font-size: var(--scp-fontsize, 13px);
+        line-height: 1.5;
       }
       #${PANEL_ID} * { box-sizing: border-box; }
+      /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
-        border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; }
+        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
       .ccf-scp-title { font-weight: 700; font-size: 12px; opacity: .75; margin-right: auto; }
-      .ccf-scp-close { background: transparent; border: 0; color: #f0f0f0; cursor: pointer;
+      .ccf-scp-close { background: transparent; border: 0; color: inherit; cursor: pointer;
         font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
-      .ccf-scp-close:hover { background: rgba(255,255,255,.12); }
+      .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px;
-        border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; }
+        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
       .ccf-scp-tab { padding: 4px 10px; border-radius: 999px; cursor: pointer;
-        border: 1px solid rgba(255,255,255,.18); background: transparent; color: #ddd; font-size: 12px; }
-      .ccf-scp-tab:hover { background: rgba(255,255,255,.10); }
-      .ccf-scp-tab.is-active { background: #2196f3; border-color: #2196f3; color: #fff; font-weight: 700; }
+        border: 1px solid var(--scp-line, rgba(128,128,128,.32)); background: transparent;
+        color: inherit; opacity: .75; font-size: 12px; font-family: inherit; }
+      .ccf-scp-tab:hover { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+      .ccf-scp-tab.is-active { background: #2196f3; border-color: #2196f3; color: #fff;
+        opacity: 1; font-weight: 700; }
       .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px; }
       .ccf-scp-row { padding: 2px 0 6px; }
       .ccf-scp-row.is-cont { padding-top: 0; }
@@ -426,9 +436,11 @@
       .ccf-scp-time { font-size: 10px; opacity: .5; }
       .ccf-scp-text { white-space: pre-wrap; word-break: break-word; }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
-      .ccf-scp-compose { flex: 0 0 auto; border-top: 1px solid rgba(255,255,255,.12); padding: 8px 10px; }
+      .ccf-scp-compose { flex: 0 0 auto; padding: 8px 10px;
+        border-top: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
       .ccf-scp-input { width: 100%; min-height: 56px; resize: vertical; border-radius: 8px;
-        border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.35); color: #f0f0f0;
+        border: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        background: color-mix(in srgb, currentColor 8%, transparent); color: inherit;
         padding: 7px 9px; font: inherit; }
       .ccf-scp-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
       .ccf-scp-hint { font-size: 11px; opacity: .5; margin-right: auto; }
@@ -513,14 +525,20 @@
     panelEl = panel;
 
     lastSignature = "";
+    layoutPanel();
     renderTabs();
     renderList();
     subscribeStore();
+    // 네이티브 패널이 열리고 닫히거나 창 크기가 바뀌면 위치를 다시 맞춘다.
+    window.addEventListener("resize", layoutPanel);
+    layoutTimer = window.setInterval(layoutPanel, 500);
     savePrefs();
   }
 
   function closePanel() {
     unsubscribeStore();
+    window.removeEventListener("resize", layoutPanel);
+    if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
@@ -563,6 +581,80 @@
   }
 
   /* ---------------- 실행 ---------------- */
+
+  /* ---------------- 네이티브 패널에 맞추기 ---------------- */
+
+  // 룸 채팅 패널(드로어)을 찾는다. 채팅 메시지가 들어 있는 목록의 조상 중
+  // 드로어/페이퍼가 곧 패널이다. 우리 패널은 당연히 제외한다.
+  function findNativeChatPanel() {
+    const item = [...document.querySelectorAll(".MuiListItem-root")]
+      .find((li) => li instanceof HTMLElement
+        && li.querySelector("h6.MuiListItemText-primary")
+        && li.offsetParent !== null
+        && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")
+        && !li.closest(`#${PANEL_ID}`));
+    const fromItem = item?.closest(".MuiDrawer-paper") || item?.closest(".MuiPaper-root");
+    if (fromItem instanceof HTMLElement && isVisible(fromItem)) return fromItem;
+
+    const log = [...document.querySelectorAll('[role="log"]')]
+      .find((el) => el instanceof HTMLElement && isVisible(el) && !el.closest(`#${PANEL_ID}`));
+    const fromLog = log?.closest(".MuiDrawer-paper") || log?.closest(".MuiPaper-root") || log;
+    return fromLog instanceof HTMLElement && isVisible(fromLog) ? fromLog : null;
+  }
+
+  // 색·글꼴을 네이티브에서 그대로 읽어온다. 하드코딩하면 테마 커스텀 기능과 어긋난다.
+  function syncTheme(native) {
+    if (!panelEl) return;
+    const cs = native ? getComputedStyle(native) : null;
+    const set = (key, value) => { if (value) panelEl.style.setProperty(key, value); };
+    if (!cs) return;
+    // 배경이 투명이면 조상에서 실제 색을 찾아 올라간다.
+    let bg = cs.backgroundColor;
+    for (let el = native.parentElement; el && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg); el = el.parentElement) {
+      bg = getComputedStyle(el).backgroundColor;
+    }
+    set("--scp-bg", bg);
+    set("--scp-fg", cs.color);
+    set("--scp-font", cs.fontFamily);
+    set("--scp-fontsize", cs.fontSize);
+    const line = cs.borderLeftColor && cs.borderLeftWidth !== "0px" ? cs.borderLeftColor : "";
+    set("--scp-line", line || "rgba(128,128,128,.32)");
+    set("--scp-shadow", cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "");
+  }
+
+  // 위에 겹치지 않고 네이티브 패널 옆에 나란히 붙인다.
+  function layoutPanel() {
+    if (!panelEl) return;
+    const native = findNativeChatPanel();
+    syncTheme(native);
+
+    if (!native) {
+      // 패널을 못 찾으면(닫혀 있음 등) 화면 우측에 기본 배치.
+      Object.assign(panelEl.style, {
+        top: "0px", bottom: "0px", height: "", right: "0px", left: "", width: "340px"
+      });
+      return;
+    }
+
+    const rect = native.getBoundingClientRect();
+    const width = Math.max(260, Math.min(rect.width || 340, 460));
+    const gapRight = window.innerWidth - rect.right;
+    const gapLeft = rect.left;
+
+    let left;
+    if (gapRight >= width) left = rect.right;          // 오른쪽에 자리가 있으면 그 옆
+    else if (gapLeft >= width) left = rect.left - width; // 없으면 왼쪽 옆
+    else left = Math.max(0, window.innerWidth - width); // 그래도 없으면 화면 끝
+
+    Object.assign(panelEl.style, {
+      top: `${Math.round(rect.top)}px`,
+      height: `${Math.round(rect.height)}px`,
+      bottom: "",
+      right: "",
+      left: `${Math.round(left)}px`,
+      width: `${Math.round(width)}px`
+    });
+  }
 
   /* ---------------- 메뉴 항목 ---------------- */
   // 룸 채팅 패널 환경설정 메뉴의 "다른 창으로 보기(beta)" 바로 아래에 끼워 넣는다.
