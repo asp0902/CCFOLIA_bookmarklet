@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.26
+// @version      0.1.27
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.26";
+  const VERSION = "0.1.27";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -195,6 +195,7 @@
         코코포리아용 선택자에 자기도 걸려 두 번이나 겹쳤다. */
   let ccfScpRowTemplate = null;
   let ccfScpListClass = "";
+  let ccfScpRowDivider = "";
 
   function captureNativeRowTemplate() {
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => {
@@ -229,7 +230,16 @@
       strip(el);
       el.classList.remove("ccf-render-root");
     });
-    // 줄을 담고 있던 목록의 클래스도 함께 기억한다(구분선이 여기서 나온다).
+    // 구분선은 줄 자신의 border-bottom 이다(rowDiag 로 확인). 다만 그 규칙은 네이티브
+    // 목록 안에서만 걸려서, 클래스를 그대로 복제해도 우리 쪽엔 안 붙는다(0px).
+    // 그래서 흉내 내지 말고 살아 있는 원본에서 값을 읽어 변수로 넘긴다.
+    const sourceStyle = getComputedStyle(source);
+    ccfScpRowDivider = sourceStyle.borderBottomWidth !== "0px"
+      ? `${sourceStyle.borderBottomWidth} ${sourceStyle.borderBottomStyle} ${sourceStyle.borderBottomColor}`
+      : "";
+    if (panelEl && ccfScpRowDivider) panelEl.style.setProperty("--scp-row-divider", ccfScpRowDivider);
+
+    // 줄을 담고 있던 목록의 클래스도 함께 기억한다.
     const parent = source.parentElement;
     if (parent instanceof HTMLElement && typeof parent.className === "string") {
       const cls = parent.className.split(/\s+/)
@@ -694,6 +704,15 @@
         padding-right: var(--ccf-scp-inset, 0px) !important;
       }
 
+      /* 메시지 사이 구분선. 값은 살아 있는 네이티브 줄에서 읽어 온다. 같은 화자가
+         이어 말하는 줄에는 네이티브도 선을 긋지 않으므로 그때만 없앤다. */
+      #${PANEL_ID} .MuiListItem-root {
+        border-bottom: var(--scp-row-divider, none);
+      }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-prose-cont="1"] {
+        border-bottom: none;
+      }
+
       /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
          하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
       #${PANEL_ID} {
@@ -887,6 +906,7 @@
     try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ }
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
+    ccfScpRowDivider = "";
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
@@ -985,6 +1005,8 @@
     const line = cs.borderLeftColor && cs.borderLeftWidth !== "0px" ? cs.borderLeftColor : "";
     set("--scp-line", line || "rgba(128,128,128,.32)");
     set("--scp-shadow", cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "");
+    // 줄 본보기를 잡을 때 읽어 둔 구분선(패널이 그 뒤에 생겼을 수도 있으니 여기서도).
+    set("--scp-row-divider", ccfScpRowDivider);
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
     const nameEl = document.querySelector(`h6.MuiListItemText-primary`);
