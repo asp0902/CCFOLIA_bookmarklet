@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.20
+// @version      0.1.21
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.20";
+  const VERSION = "0.1.21";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -987,23 +987,29 @@
 
   function findContentContainer(edge) {
     const root = document.getElementById("root") || document.body;
-    // 가장 바깥(얕은) 컨테이너를 잡아야 상단바까지 함께 밀린다 → 너비 우선 탐색.
+    // 본문 컨테이너 하나만으로는 부족하다. 상단바는 그 바깥에 따로 떠 있어서,
+    // 본문만 좁히면 상단바 아이콘이 우리 패널 뒤로 들어간다. 그래서 "패널 왼쪽에서
+    // 끝나는" 최상위 요소를 전부 모은다(찾은 요소 안쪽은 따라오므로 더 안 판다).
+    // 여백 때문에 몇 px 어긋나는 요소가 있어 오차를 넉넉히 준다.
+    const found = [];
     let level = [root];
     for (let depth = 0; depth <= 4 && level.length; depth += 1) {
       const next = [];
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
-        if (!el.closest(`#${PANEL_ID}`)) {
-          const r = el.getBoundingClientRect();
-          // 이미 좁혀 둔 요소는 오른쪽 끝이 우리 패널 왼쪽에 있으니 표식으로도 인정한다.
-          const rightOk = Math.abs(r.right - edge) <= 14 || el.hasAttribute(SQUEEZE_ATTR);
-          if (r.width > 200 && r.height > 200 && rightOk) return el;
+        if (el.closest(`#${PANEL_ID}`)) continue;
+        const r = el.getBoundingClientRect();
+        // 이미 좁혀 둔 요소는 오른쪽 끝이 우리 패널 왼쪽에 있으니 표식으로도 인정한다.
+        const rightOk = Math.abs(r.right - edge) <= 28 || el.hasAttribute(SQUEEZE_ATTR);
+        if (r.width > 200 && r.height > 24 && rightOk) {
+          found.push(el);
+          continue; // 자식은 부모를 따라오므로 더 내려가지 않는다.
         }
         next.push(...el.children);
       }
       level = next;
     }
-    return null;
+    return found;
   }
 
   function clearSqueeze() {
@@ -1015,18 +1021,22 @@
 
   let squeezeResizeTimer = 0;
   let lastSqueezeWidth = 0;
-  function applySqueeze(el, width) {
-    if (!el || !(width > 200)) return false;
-    if (squeezeEl && squeezeEl !== el) clearSqueeze();
+  function applySqueeze(elements, width) {
+    const targets = (elements || []).filter((el) => el instanceof HTMLElement);
+    if (!targets.length || !(width > 200)) return false;
     const px = Math.round(width);
     // 배치는 0.5초마다 다시 도는데, 그때마다 아래 resize 를 쏘면 지도가 끊임없이
     // 다시 그려진다. 폭이 실제로 달라졌을 때만 손댄다.
-    const changed = px !== lastSqueezeWidth || !el.hasAttribute(SQUEEZE_ATTR);
-    if (!changed) return true;
+    const missing = targets.some((el) => !el.hasAttribute(SQUEEZE_ATTR));
+    if (px === lastSqueezeWidth && !missing) return true;
 
     document.documentElement.style.setProperty("--ccf-scp-content-width", `${px}px`);
-    if (!el.hasAttribute(SQUEEZE_ATTR)) el.setAttribute(SQUEEZE_ATTR, "1");
-    squeezeEl = el;
+    // 대상에서 빠진 옛 요소의 표식은 거둬들인다(패널 폭이 바뀔 때 찌꺼기 방지).
+    document.querySelectorAll(`[${SQUEEZE_ATTR}]`).forEach((el) => {
+      if (!targets.includes(el)) el.removeAttribute(SQUEEZE_ATTR);
+    });
+    targets.forEach((el) => { if (!el.hasAttribute(SQUEEZE_ATTR)) el.setAttribute(SQUEEZE_ATTR, "1"); });
+    squeezeEl = targets[0];
     lastSqueezeWidth = px;
 
     // 지도 캔버스는 창 크기가 바뀔 때만 다시 그려진다. 알려주지 않으면 옛 폭 그대로
@@ -1070,8 +1080,8 @@
     // 상단바·BGM 이 함께 왼쪽으로 오므로 가릴 것이 없어 위아래를 꽉 채운다.
     if (pushEnabled) {
       const edge = Math.round(base.left);
-      const container = findContentContainer(edge);
-      if (container && applySqueeze(container, edge - width)) {
+      const containers = findContentContainer(edge);
+      if (containers.length && applySqueeze(containers, edge - width)) {
         Object.assign(panelEl.style, {
           top: `${Math.round(base.top)}px`,
           height: `${Math.round(base.height)}px`,
@@ -1327,6 +1337,32 @@
           BGM: bgm
             ? { 요소: `${bgm.tagName}.${String(bgm.className).slice(0, 50)}`, left: round(bgmRect.left), right: round(bgmRect.right), position: getComputedStyle(bgm).position }
             : "BGM 컨트롤 못 찾음"
+        };
+      },
+      // 탭이 네이티브보다 적게 나올 때: 탭 막대를 찾았는지, 채널 키를 어디서
+      // 꺼낼 수 있는지 확인용(React 가 붙여 둔 속성 이름은 버전마다 다르다).
+      tabDiag() {
+        const lists = [...document.querySelectorAll('[role="tablist"]')]
+          .filter((el) => !el.closest(`#${PANEL_ID}`));
+        return {
+          탭막대수: lists.length,
+          우리가읽은것: readNativeTabs(),
+          최종채널목록: listChannels(),
+          막대: lists.map((list) => ({
+            요소: `${list.tagName}.${String(list.className).slice(0, 40)}`,
+            탭: [...list.querySelectorAll('[role="tab"]')].map((tab) => {
+              const keys = Object.keys(tab).filter((k) => k.startsWith("__react"));
+              const props = keys.map((k) => tab[k]?.memoizedProps || tab[k]).filter(Boolean);
+              return {
+                글자: normalizeSpace(tab.textContent).slice(0, 20),
+                리액트키: keys.map((k) => k.slice(0, 14)),
+                속성: props.length ? Object.keys(props[0]).slice(0, 18) : [],
+                value: props.map((p) => p.value).find((v) => v != null) ?? null,
+                id: tab.id || null,
+                aria: tab.getAttribute("aria-controls")
+              };
+            })
+          }))
         };
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
