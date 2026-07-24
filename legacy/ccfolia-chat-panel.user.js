@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.24
+// @version      0.1.25
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.24";
+  const VERSION = "0.1.25";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -310,16 +310,31 @@
     return undefined;
   }
 
+  // DOM 노드에 붙은 props 는 onClick 같은 것뿐이다(진단으로 확인). 채널 키는 그 위
+  // 컴포넌트(MUI Tab)가 들고 있으므로 fiber 를 거슬러 올라가며 찾는다.
+  function readFiberValue(el) {
+    const key = Object.keys(el).find((k) => k.startsWith("__reactFiber"));
+    let fiber = key ? el[key] : null;
+    for (let i = 0; fiber && i < 8; i += 1) {
+      const value = fiber.memoizedProps?.value;
+      if (typeof value === "string" && value) return value;
+      fiber = fiber.return;
+    }
+    return "";
+  }
+
   // 채널 키가 어디 있는지는 진단으로 확인했다: DOM 의 id 다(id="main" 등).
   // role="tab" 으로는 일부만 잡히므로 자식 요소를 그대로 훑는다.
   function tabEntryFrom(el) {
     if (!(el instanceof HTMLElement)) return null;
-    const id = el.id || "";
-    // MUI 가 자동으로 붙이는 id 는 채널 키가 아니다.
-    const channel = id && !/^mui-|^:r/.test(id) ? id : readReactProp(el, "value");
-    if (typeof channel !== "string" || !channel) return null;
+    // 글자가 없는 것은 탭이 아니라 "+"(탭 추가) 버튼이다.
     const label = normalizeSpace(el.textContent || "");
-    return { channel, label: label || CHANNEL_LABELS[channel] || channel };
+    if (!label) return null;
+    // id 는 선택된 탭에만 붙으므로(진단으로 확인) fiber 를 먼저 본다.
+    const id = el.id && !/^mui-|^:r/.test(el.id) ? el.id : "";
+    const channel = readFiberValue(el) || id || readReactProp(el, "value");
+    if (typeof channel !== "string" || !channel) return null;
+    return { channel, label };
   }
 
   function readNativeTabs() {
@@ -340,8 +355,35 @@
         if (out.length > best.length) best = out;
       }
     }
-    // 기본 3탭도 못 채우면 신뢰하지 않는다(엉뚱한 탭 막대를 잡은 것).
-    return best.length >= 3 ? best : [];
+    if (best.length >= 3) return best;
+    // 채널 키를 못 캐냈을 때의 대안: 탭 이름은 언제나 읽히므로, 앞의 셋은 고정 채널에
+    // 맞추고 나머지 사용자 탭은 저장소에 있는 나머지 키에 순서대로 짝지운다.
+    return readNativeTabsByLabel();
+  }
+
+  function readNativeTabsByLabel() {
+    const lists = [...document.querySelectorAll('[role="tablist"], .MuiTabs-flexContainer')]
+      .filter((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+    let labels = [];
+    for (const list of lists) {
+      const texts = [...list.children]
+        .map((el) => normalizeSpace(el.textContent || ""))
+        .filter(Boolean); // 글자 없는 "+" 버튼 제외
+      if (texts.length > labels.length) labels = texts;
+    }
+    if (labels.length < 3) return [];
+
+    const base = ["main", "info", "other"];
+    const groups = Object.keys(getRoomMessagesSlice()?.idsGroupBy || {});
+    const extras = groups.filter((key) => !base.includes(key));
+    const out = [];
+    labels.forEach((label, index) => {
+      if (index < base.length) { out.push({ channel: base[index], label }); return; }
+      // 키를 모르는 탭은 넣지 않는다 — 이름만 맞고 내용이 빈 탭이 생긴다.
+      const key = extras[index - base.length];
+      if (key) out.push({ channel: key, label });
+    });
+    return out;
   }
 
   function channelLabel(channel) {
@@ -1024,6 +1066,10 @@
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
         if (el.closest(`#${PANEL_ID}`)) continue;
+        // ⚠ 여백을 준 막대(상단바)와 그 안쪽은 건드리지 않는다. 여백을 주면 안쪽 툴바의
+        //   오른쪽 끝이 패널 경계와 같아져 다음 순번에 "좁힐 대상"으로 걸리고,
+        //   여백 + 폭축소가 이중으로 먹어 아이콘이 왼쪽으로 몰린다(v0.1.24 에서 그랬다).
+        if (el.closest(`[${INSET_ATTR}]`)) continue;
         const r = el.getBoundingClientRect();
         // 이미 좁혀 둔 요소는 오른쪽 끝이 우리 패널 왼쪽에 있으니 표식으로도 인정한다.
         const rightOk = Math.abs(r.right - edge) <= 28 || el.hasAttribute(SQUEEZE_ATTR);
@@ -1494,9 +1540,11 @@
               role: el.getAttribute("role"),
               클래스: String(el.className).slice(0, 40),
               글자: normalizeSpace(el.textContent).slice(0, 16),
+              fiber값: readFiberValue(el) || null,
               보임: el instanceof HTMLElement ? el.offsetParent !== null : null
             }))
           })),
+          이름순대안: readNativeTabsByLabel(),
           // 탭 막대 밖에 흩어져 있을 가능성까지 확인한다.
           id있는탭후보: [...document.querySelectorAll('[role="tab"], .MuiTab-root')]
             .filter((el) => !el.closest(`#${PANEL_ID}`))
