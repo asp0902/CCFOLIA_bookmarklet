@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.25
+// @version      0.1.26
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.25";
+  const VERSION = "0.1.26";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -325,10 +325,18 @@
 
   // 채널 키가 어디 있는지는 진단으로 확인했다: DOM 의 id 다(id="main" 등).
   // role="tab" 으로는 일부만 잡히므로 자식 요소를 그대로 훑는다.
+  // 탭 안에는 안 읽음 배지가 같이 들어 있다. 그대로 읽으면 "메인0" 이 된다.
+  function tabLabelOf(el) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll(".MuiBadge-badge, .MuiChip-root, .MuiTouchRipple-root, svg")
+      .forEach((node) => node.remove());
+    return normalizeSpace(clone.textContent || "");
+  }
+
   function tabEntryFrom(el) {
     if (!(el instanceof HTMLElement)) return null;
     // 글자가 없는 것은 탭이 아니라 "+"(탭 추가) 버튼이다.
-    const label = normalizeSpace(el.textContent || "");
+    const label = tabLabelOf(el);
     if (!label) return null;
     // id 는 선택된 탭에만 붙으므로(진단으로 확인) fiber 를 먼저 본다.
     const id = el.id && !/^mui-|^:r/.test(el.id) ? el.id : "";
@@ -367,7 +375,7 @@
     let labels = [];
     for (const list of lists) {
       const texts = [...list.children]
-        .map((el) => normalizeSpace(el.textContent || ""))
+        .map((el) => (el instanceof HTMLElement ? tabLabelOf(el) : ""))
         .filter(Boolean); // 글자 없는 "+" 버튼 제외
       if (texts.length > labels.length) labels = texts;
     }
@@ -1553,6 +1561,47 @@
               글자: normalizeSpace(el.textContent).slice(0, 16),
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
+        };
+      },
+      // 구분선이 우리 패널에만 없을 때: 그 선이 어느 요소의 무슨 속성인지 찾는다.
+      // (목록 컨테이너 클래스를 물려주는 방법은 효과가 없었다.)
+      rowDiag() {
+        const describe = (el, depth) => {
+          if (!(el instanceof HTMLElement)) return null;
+          const cs = getComputedStyle(el);
+          const after = getComputedStyle(el, "::after");
+          return {
+            깊이: depth,
+            요소: `${el.tagName}.${String(el.className).slice(0, 50)}`,
+            자식수: el.childElementCount,
+            borderBottom: cs.borderBottomWidth === "0px" ? null : `${cs.borderBottomWidth} ${cs.borderBottomStyle} ${cs.borderBottomColor}`,
+            borderTop: cs.borderTopWidth === "0px" ? null : `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`,
+            boxShadow: cs.boxShadow === "none" ? null : cs.boxShadow.slice(0, 60),
+            background: cs.backgroundColor,
+            afterContent: after.content === "none" ? null : after.content,
+            afterHeight: after.content === "none" ? null : after.height,
+            afterBg: after.content === "none" ? null : after.backgroundColor
+          };
+        };
+        const chainOf = (row) => {
+          const out = [];
+          let el = row;
+          for (let i = 0; el && i < 4; i += 1) { out.push(describe(el, i)); el = el.parentElement; }
+          return out;
+        };
+        const native = [...document.querySelectorAll(".MuiListItem-root")]
+          .filter((li) => li instanceof HTMLElement
+            && li.querySelector("h6.MuiListItemText-primary")
+            && li.offsetParent !== null
+            && !li.closest(`#${PANEL_ID}`)
+            && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
+        const mine = panelEl?.querySelectorAll(".MuiListItem-root") || [];
+        return {
+          네이티브줄수: native.length,
+          네이티브: native.length ? chainOf(native[native.length - 1]) : null,
+          내줄수: mine.length,
+          내줄: mine.length ? chainOf(mine[mine.length - 1]) : null,
+          내목록클래스: ccfScpListClass || null
         };
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
