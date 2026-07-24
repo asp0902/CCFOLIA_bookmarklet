@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.23
+// @version      0.1.24
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.23";
+  const VERSION = "0.1.24";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -637,6 +637,12 @@
         width: var(--ccf-scp-content-width) !important;
         max-width: var(--ccf-scp-content-width) !important;
       }
+      /* 상단바처럼 화면 전체를 가로지르는 막대는 폭이 아니라 오른쪽 여백으로 비운다.
+         폭을 줄이면 왼쪽 정렬인 룸 제목까지 오른쪽으로 딸려 간다(v0.1.23 에서 그랬다). */
+      [${INSET_ATTR}] {
+        box-sizing: border-box !important;
+        padding-right: var(--ccf-scp-inset, 0px) !important;
+      }
 
       /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
          하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
@@ -999,6 +1005,9 @@
        끝나는 가장 바깥 컨테이너"라는 위치 조건으로만 찾는다. */
 
   const SQUEEZE_ATTR = "data-ccf-scp-squeeze";
+  // 화면 전체 폭 막대(상단바)는 폭을 줄이면 안 된다 — 안쪽이 오른쪽 정렬이라
+  // 왼쪽 내용(룸 제목)까지 딸려 움직인다. 오른쪽 여백만 주면 오른쪽 것만 밀린다.
+  const INSET_ATTR = "data-ccf-scp-inset";
   let squeezeEl = null;
   let pushEnabled = true;
 
@@ -1029,8 +1038,7 @@
       }
       level = next;
     }
-    found.push(...findTopBars());
-    return [...new Set(found)];
+    return { squeeze: [...new Set(found)], inset: [...new Set(findTopBars())] };
   }
 
   /* 상단바는 위 조건에 걸리지 않는다: 진단으로 확인한 실제 모습은
@@ -1046,9 +1054,7 @@
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
         if (el.closest(`#${PANEL_ID}`)) continue;
-        // ⚠ 한 번 좁히면 더 이상 "꽉 찬 막대"가 아니라서 조건에서 빠진다. 그대로 두면
-        //   폭이 원복 → 다시 매치 → 다시 좁힘을 반복하며 상단바가 떨린다.
-        if (el.hasAttribute(SQUEEZE_ATTR)) { out.push(el); continue; }
+        if (el.hasAttribute(INSET_ATTR)) { out.push(el); continue; }
         const cs = getComputedStyle(el);
         if (cs.position === "fixed") {
           const r = el.getBoundingClientRect();
@@ -1094,28 +1100,37 @@
 
   function clearSqueeze() {
     document.documentElement.style.removeProperty("--ccf-scp-content-width");
+    document.documentElement.style.removeProperty("--ccf-scp-inset");
     document.querySelectorAll(`[${SQUEEZE_ATTR}]`).forEach((el) => el.removeAttribute(SQUEEZE_ATTR));
+    document.querySelectorAll(`[${INSET_ATTR}]`).forEach((el) => el.removeAttribute(INSET_ATTR));
     squeezeEl = null;
     lastSqueezeWidth = 0;
   }
 
   let squeezeResizeTimer = 0;
   let lastSqueezeWidth = 0;
-  function applySqueeze(elements, width) {
-    const targets = (elements || []).filter((el) => el instanceof HTMLElement);
+  function applySqueeze(groups, width, inset) {
+    const targets = (groups?.squeeze || []).filter((el) => el instanceof HTMLElement);
+    const insets = (groups?.inset || []).filter((el) => el instanceof HTMLElement);
     if (!targets.length || !(width > 200)) return false;
     const px = Math.round(width);
     // 배치는 0.5초마다 다시 도는데, 그때마다 아래 resize 를 쏘면 지도가 끊임없이
     // 다시 그려진다. 폭이 실제로 달라졌을 때만 손댄다.
-    const missing = targets.some((el) => !el.hasAttribute(SQUEEZE_ATTR));
+    const missing = targets.some((el) => !el.hasAttribute(SQUEEZE_ATTR))
+      || insets.some((el) => !el.hasAttribute(INSET_ATTR));
     if (px === lastSqueezeWidth && !missing) return true;
 
     document.documentElement.style.setProperty("--ccf-scp-content-width", `${px}px`);
+    document.documentElement.style.setProperty("--ccf-scp-inset", `${Math.round(inset)}px`);
     // 대상에서 빠진 옛 요소의 표식은 거둬들인다(패널 폭이 바뀔 때 찌꺼기 방지).
     document.querySelectorAll(`[${SQUEEZE_ATTR}]`).forEach((el) => {
       if (!targets.includes(el)) el.removeAttribute(SQUEEZE_ATTR);
     });
+    document.querySelectorAll(`[${INSET_ATTR}]`).forEach((el) => {
+      if (!insets.includes(el)) el.removeAttribute(INSET_ATTR);
+    });
     targets.forEach((el) => { if (!el.hasAttribute(SQUEEZE_ATTR)) el.setAttribute(SQUEEZE_ATTR, "1"); });
+    insets.forEach((el) => { if (!el.hasAttribute(INSET_ATTR)) el.setAttribute(INSET_ATTR, "1"); });
     squeezeEl = targets[0];
     lastSqueezeWidth = px;
 
@@ -1161,7 +1176,7 @@
     if (pushEnabled) {
       const edge = Math.round(base.left);
       const containers = findContentContainer(edge);
-      if (containers.length && applySqueeze(containers, edge - width)) {
+      if (containers.squeeze.length && applySqueeze(containers, edge - width, width)) {
         Object.assign(panelEl.style, {
           top: `${Math.round(base.top)}px`,
           height: `${Math.round(base.height)}px`,
@@ -1440,7 +1455,20 @@
           패널왼쪽: round(edge),
           창너비: window.innerWidth,
           자리비운요소: out,
-          밀린요소수: document.querySelectorAll(`[${SQUEEZE_ATTR}]`).length,
+          // 무엇을 실제로 건드렸는지 — "왜 저렇게 움직였나"의 답.
+          좁힌것: [...document.querySelectorAll(`[${SQUEEZE_ATTR}]`)].map((el) => {
+            const r = el.getBoundingClientRect();
+            return { 요소: `${el.tagName}.${String(el.className).slice(0, 40)}`, left: round(r.left), right: round(r.right), 폭: round(r.width) };
+          }),
+          여백준것: [...document.querySelectorAll(`[${INSET_ATTR}]`)].map((el) => {
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return {
+              요소: `${el.tagName}.${String(el.className).slice(0, 40)}`,
+              left: round(r.left), right: round(r.right), 폭: round(r.width),
+              paddingRight: cs.paddingRight
+            };
+          }),
           아직겹치는것: overlap,
           BGM: bgm
             ? { 요소: `${bgm.tagName}.${String(bgm.className).slice(0, 50)}`, left: round(bgmRect.left), right: round(bgmRect.right), position: getComputedStyle(bgm).position }
@@ -1456,21 +1484,27 @@
           탭막대수: lists.length,
           우리가읽은것: readNativeTabs(),
           최종채널목록: listChannels(),
+          // 자식을 통째로 본다 — role="tab" 으로는 일부만 잡혔다.
           막대: lists.map((list) => ({
             요소: `${list.tagName}.${String(list.className).slice(0, 40)}`,
-            탭: [...list.querySelectorAll('[role="tab"]')].map((tab) => {
-              const keys = Object.keys(tab).filter((k) => k.startsWith("__react"));
-              const props = keys.map((k) => tab[k]?.memoizedProps || tab[k]).filter(Boolean);
-              return {
-                글자: normalizeSpace(tab.textContent).slice(0, 20),
-                리액트키: keys.map((k) => k.slice(0, 14)),
-                속성: props.length ? Object.keys(props[0]).slice(0, 18) : [],
-                value: props.map((p) => p.value).find((v) => v != null) ?? null,
-                id: tab.id || null,
-                aria: tab.getAttribute("aria-controls")
-              };
-            })
-          }))
+            자식수: list.children.length,
+            자식: [...list.children].map((el) => ({
+              태그: el.tagName,
+              id: el.id || null,
+              role: el.getAttribute("role"),
+              클래스: String(el.className).slice(0, 40),
+              글자: normalizeSpace(el.textContent).slice(0, 16),
+              보임: el instanceof HTMLElement ? el.offsetParent !== null : null
+            }))
+          })),
+          // 탭 막대 밖에 흩어져 있을 가능성까지 확인한다.
+          id있는탭후보: [...document.querySelectorAll('[role="tab"], .MuiTab-root')]
+            .filter((el) => !el.closest(`#${PANEL_ID}`))
+            .map((el) => ({
+              id: el.id || null,
+              글자: normalizeSpace(el.textContent).slice(0, 16),
+              부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
+            }))
         };
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
