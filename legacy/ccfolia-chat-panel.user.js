@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.19
+// @version      0.1.20
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.19";
+  const VERSION = "0.1.20";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -613,6 +613,14 @@
     style.id = "ccf-scp-style";
     style.setAttribute(SAFE_ATTR, "1");
     style.textContent = `
+      /* 본문 컨테이너를 우리 폭만큼 좁혀 화면을 밀어낸다. 클래스가 아니라 우리가
+         붙인 표식으로만 거는다 — 코코포리아 클래스명은 빌드마다 바뀐다.
+         !important 인 이유: 대상이 styled-components 로 폭을 직접 지정한다. */
+      [${SQUEEZE_ATTR}] {
+        width: var(--ccf-scp-content-width) !important;
+        max-width: var(--ccf-scp-content-width) !important;
+      }
+
       /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
          하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
       #${PANEL_ID} {
@@ -801,6 +809,9 @@
     window.removeEventListener("resize", safeLayout);
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
+    // 밀어낸 화면은 반드시 되돌린다. 남으면 패널이 없는데 지도만 좁아진 채로 남는다.
+    clearSqueeze();
+    try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ }
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     panelEl?.remove();
@@ -961,6 +972,79 @@
     });
   }
 
+  /* ---------------- 화면 밀어내기 ----------------
+     코코포리아는 이미 네이티브 패널 자리를 비워 둔다: 본문 전체를 감싼 컨테이너
+     하나가 패널 왼쪽에서 딱 끝난다(진단으로 확인 — 깊이 2, 폭 = 패널 left).
+     상단바·지도·BGM 이 모두 그 안에 있으므로, 그 컨테이너만 우리 폭만큼 더
+     좁히면 전부 함께 왼쪽으로 따라온다.
+
+     ⚠ 클래스명(sc-jcsPWJ 등)은 빌드마다 바뀌므로 쓰지 않는다. "패널 왼쪽에서
+       끝나는 가장 바깥 컨테이너"라는 위치 조건으로만 찾는다. */
+
+  const SQUEEZE_ATTR = "data-ccf-scp-squeeze";
+  let squeezeEl = null;
+  let pushEnabled = true;
+
+  function findContentContainer(edge) {
+    const root = document.getElementById("root") || document.body;
+    // 가장 바깥(얕은) 컨테이너를 잡아야 상단바까지 함께 밀린다 → 너비 우선 탐색.
+    let level = [root];
+    for (let depth = 0; depth <= 4 && level.length; depth += 1) {
+      const next = [];
+      for (const el of level) {
+        if (!(el instanceof HTMLElement)) continue;
+        if (!el.closest(`#${PANEL_ID}`)) {
+          const r = el.getBoundingClientRect();
+          // 이미 좁혀 둔 요소는 오른쪽 끝이 우리 패널 왼쪽에 있으니 표식으로도 인정한다.
+          const rightOk = Math.abs(r.right - edge) <= 14 || el.hasAttribute(SQUEEZE_ATTR);
+          if (r.width > 200 && r.height > 200 && rightOk) return el;
+        }
+        next.push(...el.children);
+      }
+      level = next;
+    }
+    return null;
+  }
+
+  function clearSqueeze() {
+    document.documentElement.style.removeProperty("--ccf-scp-content-width");
+    document.querySelectorAll(`[${SQUEEZE_ATTR}]`).forEach((el) => el.removeAttribute(SQUEEZE_ATTR));
+    squeezeEl = null;
+    lastSqueezeWidth = 0;
+  }
+
+  let squeezeResizeTimer = 0;
+  let lastSqueezeWidth = 0;
+  function applySqueeze(el, width) {
+    if (!el || !(width > 200)) return false;
+    if (squeezeEl && squeezeEl !== el) clearSqueeze();
+    const px = Math.round(width);
+    // 배치는 0.5초마다 다시 도는데, 그때마다 아래 resize 를 쏘면 지도가 끊임없이
+    // 다시 그려진다. 폭이 실제로 달라졌을 때만 손댄다.
+    const changed = px !== lastSqueezeWidth || !el.hasAttribute(SQUEEZE_ATTR);
+    if (!changed) return true;
+
+    document.documentElement.style.setProperty("--ccf-scp-content-width", `${px}px`);
+    if (!el.hasAttribute(SQUEEZE_ATTR)) el.setAttribute(SQUEEZE_ATTR, "1");
+    squeezeEl = el;
+    lastSqueezeWidth = px;
+
+    // 지도 캔버스는 창 크기가 바뀔 때만 다시 그려진다. 알려주지 않으면 옛 폭 그대로
+    // 남아 가로 스크롤이 생긴다(예전 실패 원인 중 하나).
+    clearTimeout(squeezeResizeTimer);
+    squeezeResizeTimer = setTimeout(() => {
+      try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ }
+    }, 60);
+
+    // 안전장치: 밀었는데 오히려 화면 밖으로 넘치면 즉시 되돌린다.
+    if (document.documentElement.scrollWidth > window.innerWidth + 4) {
+      clearSqueeze();
+      console.warn("[ccf-chat-panel] 화면 밀기 취소 — 가로 넘침");
+      return false;
+    }
+    return true;
+  }
+
   // 위에 겹치지 않고 네이티브 패널 옆에 나란히 붙인다.
   function layoutPanel() {
     if (!panelEl) return;
@@ -981,6 +1065,25 @@
     const base = native.getBoundingClientRect();
     const width = Math.max(260, Math.min(base.width || 340, 460));
     const gapRight = window.innerWidth - base.right;
+
+    // 화면 밀기: 본문 컨테이너를 우리 폭만큼 좁히고 그 자리에 들어간다.
+    // 상단바·BGM 이 함께 왼쪽으로 오므로 가릴 것이 없어 위아래를 꽉 채운다.
+    if (pushEnabled) {
+      const edge = Math.round(base.left);
+      const container = findContentContainer(edge);
+      if (container && applySqueeze(container, edge - width)) {
+        Object.assign(panelEl.style, {
+          top: `${Math.round(base.top)}px`,
+          height: `${Math.round(base.height)}px`,
+          bottom: "",
+          right: "",
+          left: `${Math.round(edge - width)}px`,
+          width: `${Math.round(width)}px`
+        });
+        return;
+      }
+      clearSqueeze();
+    }
 
     let left;
     if (gapRight >= MIN_WIDTH) {
@@ -1148,6 +1251,14 @@
             text: String(sample.text || "").slice(0, 20), removed: sample.removed
           } : null
         };
+      },
+      // 화면 밀기가 문제를 일으키면 즉시 끄는 비상구(새로고침 없이 원상복구).
+      setPush(on) {
+        pushEnabled = !!on;
+        clearSqueeze();
+        layoutPanel();
+        try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ }
+        return pushEnabled;
       },
       // 네이티브를 미는 게 불편하면 "left" 로 바꾸면 밀지 않고 왼쪽 옆에 붙는다.
       setSide(side) {
