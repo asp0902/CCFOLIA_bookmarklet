@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.21
+// @version      0.1.22
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.21";
+  const VERSION = "0.1.22";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1003,13 +1003,41 @@
         const rightOk = Math.abs(r.right - edge) <= 28 || el.hasAttribute(SQUEEZE_ATTR);
         if (r.width > 200 && r.height > 24 && rightOk) {
           found.push(el);
-          continue; // 자식은 부모를 따라오므로 더 내려가지 않는다.
+          // 자식은 보통 부모를 따라오지만, position:fixed 인 자식은 부모 폭을
+          // 아예 무시한다(상단바가 그래서 안 밀렸다). 그런 것만 따로 찾아 둔다.
+          found.push(...findFixedStragglers(el, edge));
+          continue;
         }
         next.push(...el.children);
       }
       level = next;
     }
     return found;
+  }
+
+  // 좁힌 컨테이너 안에 있으면서도 부모를 안 따라오는 요소(position:fixed)를 모은다.
+  // 폭 조건을 두는 이유: BGM 컨트롤처럼 오른쪽 끝만 같고 좁은 요소를 늘리면 안 된다.
+  function findFixedStragglers(root, edge) {
+    const out = [];
+    let level = [...root.children];
+    for (let depth = 0; depth <= 5 && level.length; depth += 1) {
+      const next = [];
+      for (const el of level) {
+        if (!(el instanceof HTMLElement)) continue;
+        if (el.closest(`#${PANEL_ID}`)) continue;
+        const cs = getComputedStyle(el);
+        if (cs.position === "fixed") {
+          const r = el.getBoundingClientRect();
+          if (r.width > 200 && Math.abs(r.right - edge) <= 28) {
+            out.push(el);
+            continue;
+          }
+        }
+        next.push(...el.children);
+      }
+      level = next;
+    }
+    return out;
   }
 
   function clearSqueeze() {
@@ -1328,12 +1356,40 @@
           for (const child of el.children) walk(child, depth + 1);
         };
         walk(document.getElementById("root") || document.body, 0);
+        // 우리 패널 위에 남아 있는 요소를 직접 지목한다("왜 안 밀렸나"의 답).
+        const panelRect = panelEl?.getBoundingClientRect();
+        const overlap = [];
+        if (panelRect) {
+          const seen = new Set();
+          for (const el of document.querySelectorAll("div, header, nav")) {
+            if (!(el instanceof HTMLElement)) continue;
+            if (el.closest(`#${PANEL_ID}`)) continue;
+            const r = el.getBoundingClientRect();
+            // 화면 위쪽에서 우리 패널 영역을 침범하는 것만.
+            if (r.top > 90 || r.height < 20 || r.width < 60) continue;
+            if (r.right <= panelRect.left + 4 || r.left >= panelRect.right) continue;
+            const cs = getComputedStyle(el);
+            const key = `${Math.round(r.left)}:${Math.round(r.right)}:${cs.position}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (overlap.length < 12) {
+              overlap.push({
+                요소: `${el.tagName}.${String(el.className).slice(0, 40)}`,
+                left: round(r.left), right: round(r.right), 폭: round(r.width),
+                position: cs.position, cssLeft: cs.left, cssRight: cs.right, cssWidth: cs.width,
+                밀림대상: el.hasAttribute(SQUEEZE_ATTR)
+              });
+            }
+          }
+        }
         const bgm = document.querySelector("[data-ccf-bgm-controls], .ccf-bgm-controls, #ccf-bgm-controls");
         const bgmRect = bgm?.getBoundingClientRect();
         return {
           패널왼쪽: round(edge),
           창너비: window.innerWidth,
           자리비운요소: out,
+          밀린요소수: document.querySelectorAll(`[${SQUEEZE_ATTR}]`).length,
+          아직겹치는것: overlap,
           BGM: bgm
             ? { 요소: `${bgm.tagName}.${String(bgm.className).slice(0, 50)}`, left: round(bgmRect.left), right: round(bgmRect.right), position: getComputedStyle(bgm).position }
             : "BGM 컨트롤 못 찾음"
