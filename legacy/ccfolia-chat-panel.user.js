@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.22
+// @version      0.1.23
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.22";
+  const VERSION = "0.1.23";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -310,21 +310,38 @@
     return undefined;
   }
 
+  // 채널 키가 어디 있는지는 진단으로 확인했다: DOM 의 id 다(id="main" 등).
+  // role="tab" 으로는 일부만 잡히므로 자식 요소를 그대로 훑는다.
+  function tabEntryFrom(el) {
+    if (!(el instanceof HTMLElement)) return null;
+    const id = el.id || "";
+    // MUI 가 자동으로 붙이는 id 는 채널 키가 아니다.
+    const channel = id && !/^mui-|^:r/.test(id) ? id : readReactProp(el, "value");
+    if (typeof channel !== "string" || !channel) return null;
+    const label = normalizeSpace(el.textContent || "");
+    return { channel, label: label || CHANNEL_LABELS[channel] || channel };
+  }
+
   function readNativeTabs() {
-    const lists = [...document.querySelectorAll('[role="tablist"]')]
+    const lists = [...document.querySelectorAll('[role="tablist"], .MuiTabs-flexContainer')]
       .filter((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+    let best = [];
     for (const list of lists) {
-      const out = [];
-      for (const tab of list.querySelectorAll('[role="tab"]')) {
-        const value = readReactProp(tab, "value");
-        if (typeof value !== "string" || !value) continue;
-        const label = normalizeSpace(tab.textContent || "");
-        out.push({ channel: value, label: label || CHANNEL_LABELS[value] || value });
+      // 자식만으로 부족하면(탭이 한 겹 더 싸여 있는 경우) 후손까지 훑는다.
+      for (const scope of [[...list.children], [...list.querySelectorAll("[id]")]]) {
+        const out = [];
+        const seen = new Set();
+        for (const el of scope) {
+          const entry = tabEntryFrom(el);
+          if (!entry || seen.has(entry.channel)) continue;
+          seen.add(entry.channel);
+          out.push(entry);
+        }
+        if (out.length > best.length) best = out;
       }
-      // 기본 3탭만 나오는 목록은 다른 탭 막대일 수 있으니, 가장 많이 담긴 것을 쓴다.
-      if (out.length >= 3) return out;
     }
-    return [];
+    // 기본 3탭도 못 채우면 신뢰하지 않는다(엉뚱한 탭 막대를 잡은 것).
+    return best.length >= 3 ? best : [];
   }
 
   function channelLabel(channel) {
@@ -1012,7 +1029,40 @@
       }
       level = next;
     }
-    return found;
+    found.push(...findTopBars());
+    return [...new Set(found)];
+  }
+
+  /* 상단바는 위 조건에 걸리지 않는다: 진단으로 확인한 실제 모습은
+       HEADER  position:fixed  left:0 right:0  width = 창 전체
+     즉 네이티브 패널 경계가 아니라 화면 끝까지 뻗어 있고, 코코포리아는 그 오른쪽을
+     패널로 덮어버린다. 그래서 "화면 위쪽에 가로로 꽉 찬 고정 막대"로 따로 찾는다. */
+  function findTopBars() {
+    const out = [];
+    const root = document.getElementById("root") || document.body;
+    let level = [root, ...document.body.children];
+    for (let depth = 0; depth <= 5 && level.length; depth += 1) {
+      const next = [];
+      for (const el of level) {
+        if (!(el instanceof HTMLElement)) continue;
+        if (el.closest(`#${PANEL_ID}`)) continue;
+        // ⚠ 한 번 좁히면 더 이상 "꽉 찬 막대"가 아니라서 조건에서 빠진다. 그대로 두면
+        //   폭이 원복 → 다시 매치 → 다시 좁힘을 반복하며 상단바가 떨린다.
+        if (el.hasAttribute(SQUEEZE_ATTR)) { out.push(el); continue; }
+        const cs = getComputedStyle(el);
+        if (cs.position === "fixed") {
+          const r = el.getBoundingClientRect();
+          const fullWidth = r.width >= window.innerWidth * 0.9;
+          if (fullWidth && r.top <= 4 && r.height > 20 && r.height <= 160) {
+            out.push(el);
+            continue; // 안쪽 툴바는 부모를 따라 좁아진다.
+          }
+        }
+        next.push(...el.children);
+      }
+      level = next;
+    }
+    return out;
   }
 
   // 좁힌 컨테이너 안에 있으면서도 부모를 안 따라오는 요소(position:fixed)를 모은다.
@@ -1025,6 +1075,8 @@
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
         if (el.closest(`#${PANEL_ID}`)) continue;
+        // 위와 같은 이유로, 이미 좁힌 것은 조건을 다시 재지 않고 계속 대상으로 둔다.
+        if (el.hasAttribute(SQUEEZE_ATTR)) { out.push(el); continue; }
         const cs = getComputedStyle(el);
         if (cs.position === "fixed") {
           const r = el.getBoundingClientRect();
