@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.27
+// @version      0.1.28
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.27";
+  const VERSION = "0.1.28";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -522,9 +522,19 @@
       row.appendChild(bodyWrap);
       frag.appendChild(row);
     }
-    // 메시지 사이 구분선은 줄이 아니라 목록 쪽 CSS 에서 나온다. 네이티브 목록의
-    // 클래스를 그대로 쓴 래퍼 안에 줄을 넣어야 그 규칙이 우리 줄에도 걸린다.
-    // (우리 스크롤 컨테이너에 직접 붙이면 목록 CSS 의 overflow 가 스크롤을 깬다.)
+    // 구분선: 화자가 바뀌는 자리에만 긋는다(= 묶음의 마지막 줄 아래). 규칙으로 걸면
+    // 어딘가에 눌려 0px 로 남으므로, 해당 줄에 직접·강제로 넣는다.
+    const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
+    const built = [...frag.children];
+    built.forEach((row, index) => {
+      const next = built[index + 1];
+      const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
+      if (nextIsCont) return; // 같은 화자가 이어지는 중 — 선을 그으면 묶음이 쪼개진다.
+      if (row instanceof HTMLElement) row.style.setProperty("border-bottom", divider, "important");
+    });
+
+    // 네이티브 목록의 클래스를 쓴 래퍼 안에 줄을 넣는다(간격·여백이 따라온다).
+    // 우리 스크롤 컨테이너에 직접 붙이면 목록 CSS 의 overflow 가 스크롤을 깬다.
     if (ccfScpListClass) {
       const inner = document.createElement("ul");
       inner.className = ccfScpListClass;
@@ -704,14 +714,9 @@
         padding-right: var(--ccf-scp-inset, 0px) !important;
       }
 
-      /* 메시지 사이 구분선. 값은 살아 있는 네이티브 줄에서 읽어 온다. 같은 화자가
-         이어 말하는 줄에는 네이티브도 선을 긋지 않으므로 그때만 없앤다. */
-      #${PANEL_ID} .MuiListItem-root {
-        border-bottom: var(--scp-row-divider, none);
-      }
-      #${PANEL_ID} .MuiListItem-root[data-ccf-prose-cont="1"] {
-        border-bottom: none;
-      }
+      /* 구분선은 여기서 긋지 않는다. CSS 규칙으로는 무엇엔가 눌려 값이 0px 로 남았다
+         (v0.1.27). 어느 화자 묶음의 마지막 줄인지는 그릴 때만 알 수 있기도 해서,
+         renderList 에서 해당 줄에 직접 넣는다. */
 
       /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
          하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
@@ -738,11 +743,15 @@
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
-      .ccf-scp-tab { padding: 10px 14px; cursor: pointer; border: 0; background: transparent;
-        border-bottom: 2px solid transparent; color: inherit; opacity: .6;
-        font-size: 13px; font-family: inherit; }
-      .ccf-scp-tab:hover { opacity: .9; }
-      .ccf-scp-tab.is-active { opacity: 1; font-weight: 700; border-bottom-color: #f44336; }
+      .ccf-scp-tab { padding: var(--scp-tab-pad, 10px 14px); cursor: pointer; border: 0;
+        background: transparent; border-bottom: 2px solid transparent;
+        color: var(--scp-tab-idle, inherit); font-family: inherit;
+        font-size: var(--scp-tab-size, 13px); font-weight: var(--scp-tab-weight, 500);
+        letter-spacing: var(--scp-tab-spacing, normal); min-width: 0; white-space: nowrap; }
+      .ccf-scp-tab:hover { color: var(--scp-tab-active, inherit); }
+      /* 선택 표시 색은 네이티브 인디케이터에서 읽는다 — 테마마다 다르다. */
+      .ccf-scp-tab.is-active { color: var(--scp-tab-active, inherit);
+        border-bottom-color: var(--scp-tab-indicator, currentColor); }
       .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px;
         margin: 0; list-style: none; }
       .ccf-scp-text { margin: 0; }
@@ -987,6 +996,22 @@
     return best;
   }
 
+  // 반투명한 배경을 그대로 쓰면 뒤에 있는 코코포리아 UI(패널 접기 "|<" 버튼 등)가
+  // 비쳐 보인다. 페이지 바탕색 위에 미리 겹쳐 같은 색의 불투명한 값으로 만든다.
+  function toOpaqueColor(color, backdrop) {
+    const nums = (value) => {
+      const found = String(value || "").match(/[\d.]+/g);
+      return found ? found.map(Number) : null;
+    };
+    const front = nums(color);
+    if (!front || front.length < 3) return color;
+    const alpha = front.length > 3 ? front[3] : 1;
+    if (alpha >= 1) return color;
+    const back = nums(backdrop) || [24, 24, 26];
+    const mix = (i) => Math.round(front[i] * alpha + (back[i] ?? 24) * (1 - alpha));
+    return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
+  }
+
   // 색·글꼴을 네이티브에서 그대로 읽어온다. 하드코딩하면 테마 커스텀 기능과 어긋난다.
   function syncTheme(native) {
     if (!panelEl) return;
@@ -998,15 +1023,33 @@
     for (let el = native.parentElement; el && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg); el = el.parentElement) {
       bg = getComputedStyle(el).backgroundColor;
     }
-    set("--scp-bg", bg);
+    const pageBg = getComputedStyle(document.body).backgroundColor;
+    set("--scp-bg", toOpaqueColor(bg, pageBg));
     set("--scp-fg", cs.color);
     set("--scp-font", cs.fontFamily);
     set("--scp-fontsize", cs.fontSize);
     const line = cs.borderLeftColor && cs.borderLeftWidth !== "0px" ? cs.borderLeftColor : "";
     set("--scp-line", line || "rgba(128,128,128,.32)");
     set("--scp-shadow", cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "");
-    // 줄 본보기를 잡을 때 읽어 둔 구분선(패널이 그 뒤에 생겼을 수도 있으니 여기서도).
-    set("--scp-row-divider", ccfScpRowDivider);
+    // 탭 모양도 네이티브에서 읽는다 — 선택 표시 색은 테마마다 다르다.
+    const nativeTabBar = [...document.querySelectorAll(".MuiTabs-flexContainer, [role='tablist']")]
+      .find((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+    if (nativeTabBar) {
+      const kids = [...nativeTabBar.children].filter((el) => el instanceof HTMLElement);
+      const selected = kids.find((el) => el.classList.contains("Mui-selected")) || kids[0];
+      const idle = kids.find((el) => el !== selected && tabLabelOf(el));
+      if (selected) {
+        const ts = getComputedStyle(selected);
+        set("--scp-tab-active", ts.color);
+        set("--scp-tab-size", ts.fontSize);
+        set("--scp-tab-weight", ts.fontWeight);
+        set("--scp-tab-spacing", ts.letterSpacing);
+        set("--scp-tab-pad", `${ts.paddingTop} ${ts.paddingRight} ${ts.paddingBottom} ${ts.paddingLeft}`);
+      }
+      if (idle) set("--scp-tab-idle", getComputedStyle(idle).color);
+      const indicator = nativeTabBar.parentElement?.querySelector(".MuiTabs-indicator");
+      if (indicator) set("--scp-tab-indicator", getComputedStyle(indicator).backgroundColor);
+    }
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
     const nameEl = document.querySelector(`h6.MuiListItemText-primary`);
