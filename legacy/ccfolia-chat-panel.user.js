@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.35
+// @version      0.1.36
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.35";
+  const VERSION = "0.1.36";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -668,6 +668,21 @@
     statusEl.className = "ccf-scp-status" + (kind ? ` is-${kind}` : "");
   }
 
+  // 입력창 커서 위치에 텍스트를 넣는다(선택 영역이 있으면 대체). 주사위·서식 버튼 공용.
+  function insertAtCursor(text) {
+    if (!inputEl) return;
+    const start = inputEl.selectionStart ?? inputEl.value.length;
+    const end = inputEl.selectionEnd ?? inputEl.value.length;
+    const before = inputEl.value.slice(0, start);
+    const after = inputEl.value.slice(end);
+    // 앞 글자가 공백·줄바꿈이 아니면 한 칸 띄워 명령이 붙지 않게 한다.
+    const sep = before && !/\s$/.test(before) ? " " : "";
+    inputEl.value = before + sep + text + after;
+    const caret = (before + sep + text).length;
+    inputEl.focus();
+    inputEl.setSelectionRange(caret, caret);
+  }
+
   async function handleSend() {
     if (sending || !inputEl) return;
     const text = inputEl.value.trim();
@@ -829,6 +844,13 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1));
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
+      /* 주사위 버튼 줄 */
+      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+      .ccf-scp-die { padding: 3px 8px; border-radius: 5px; cursor: pointer; font: inherit;
+        font-size: 12px; color: inherit;
+        border: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        background: color-mix(in srgb, currentColor 6%, transparent); }
+      .ccf-scp-die:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
       .ccf-scp-input { width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
         background: color-mix(in srgb, currentColor 6%, transparent); color: inherit;
@@ -891,6 +913,21 @@
 
     const compose = document.createElement("div");
     compose.className = "ccf-scp-compose";
+
+    // 주사위 버튼 줄 — 누르면 커서 위치에 해당 명령을 넣는다. 실제 굴림 여부는
+    // 전송 후 코코포리아가 처리한다(우리 경로로도 굴려지는지 검증 대상).
+    const diceRow = document.createElement("div");
+    diceRow.className = "ccf-scp-dice";
+    for (const die of ["1d4", "1d6", "1d8", "1d10", "1d12", "1d20", "1d100"]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ccf-scp-die";
+      b.textContent = die;
+      b.addEventListener("click", () => insertAtCursor(die));
+      diceRow.appendChild(b);
+    }
+    compose.appendChild(diceRow);
+
     inputEl = document.createElement("textarea");
     inputEl.className = "ccf-scp-input";
     inputEl.placeholder = "메시지 입력 (Enter 전송 / Shift+Enter 줄바꿈)";
