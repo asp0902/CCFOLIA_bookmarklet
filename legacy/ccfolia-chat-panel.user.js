@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.29
+// @version      0.1.30
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.29";
+  const VERSION = "0.1.30";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -54,6 +54,8 @@
   // "right" = 룸 채팅을 왼쪽으로 밀고 오른쪽 끝을 쓴다.
   //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
   let panelSide = "left";
+  // 배경을 불투명하게 만들지 여부. 기본은 반투명(원본과 동일한 질감). 켜면 |< 가림.
+  let opaqueBg = false;
   // 기본값을 오른쪽 → 왼쪽으로 바꾼 뒤, 예전에 저장된 "right" 를 한 번 덮어쓰기 위한 표식.
   const SIDE_PREF_VERSION = 2;
 
@@ -680,7 +682,7 @@
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION
+        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
   }
@@ -1031,10 +1033,12 @@
       bg = getComputedStyle(el).backgroundColor;
     }
     const pageBg = getComputedStyle(document.body).backgroundColor;
-    set("--scp-bg", toOpaqueColor(bg, pageBg));
-    // 원본 패널의 질감(그라데이션·블러)까지 얹어 "원본처럼" 보이게 한다. 불투명 바탕색은
-    // 그 아래 깔려 |< 가 비치지 않는다. 없으면(none) 그냥 평평한 불투명색이 된다.
-    if (cs.backgroundImage && cs.backgroundImage !== "none") set("--scp-bg-image", cs.backgroundImage);
+    // 원본의 "질감"은 이 반투명(alpha<1) 자체다 — 배경 이미지도 블러도 없다(bgDiag 확인).
+    // 반투명을 그대로 쓰면 원본처럼 보이지만 뒤의 |< 가 살짝 비친다. opaqueBg 를 켜면
+    // 페이지 바탕색 위에 겹쳐 불투명하게 만들어 |< 를 가린다(질감은 평평해진다).
+    set("--scp-bg", opaqueBg ? toOpaqueColor(bg, pageBg) : bg);
+    // 원본 패널의 질감(그라데이션·블러)까지 얹는다(있을 때만). 반투명 배경 위에 겹친다.
+    set("--scp-bg-image", cs.backgroundImage && cs.backgroundImage !== "none" ? cs.backgroundImage : "");
     const blur = cs.backdropFilter && cs.backdropFilter !== "none"
       ? cs.backdropFilter
       : (cs.webkitBackdropFilter && cs.webkitBackdropFilter !== "none" ? cs.webkitBackdropFilter : "");
@@ -1459,6 +1463,7 @@
     if (prefs.sideV === SIDE_PREF_VERSION && (prefs.side === "left" || prefs.side === "right")) {
       panelSide = prefs.side;
     }
+    if (typeof prefs.opaqueBg === "boolean") opaqueBg = prefs.opaqueBg;
     if (prefs.open) openPanel();
 
     // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
@@ -1495,6 +1500,14 @@
             text: String(sample.text || "").slice(0, 20), removed: sample.removed
           } : null
         };
+      },
+      // 배경 반투명(원본 질감) ↔ 불투명(|< 가림) 전환. 저장되어 다음에도 유지된다.
+      setOpaqueBg(on) {
+        opaqueBg = !!on;
+        savePrefs();
+        const native = findNativeChatPanel();
+        if (native) syncTheme(native);
+        return opaqueBg;
       },
       // 화면 밀기가 문제를 일으키면 즉시 끄는 비상구(새로고침 없이 원상복구).
       setPush(on) {
