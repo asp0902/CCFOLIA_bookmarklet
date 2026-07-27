@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.33
+// @version      0.1.34
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.33";
+  const VERSION = "0.1.34";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -750,7 +750,8 @@
       /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
          걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다.
          높이·글꼴·정렬은 네이티브 헤더에서 읽어 맞춘다(가운데 정렬 제목). */
-      .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 0 10px;
+      .ccf-scp-bar { display: flex; align-items: center; gap: 6px;
+        padding: 0 var(--scp-header-padx, 12px);
         height: var(--scp-header-h, 48px); flex: 0 0 auto;
         background: var(--scp-header-bg, var(--scp-bg-opaque, rgba(24,24,26,1)));
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
@@ -868,8 +869,8 @@
     close.type = "button";
     close.className = "ccf-scp-close";
     close.setAttribute("aria-label", "닫기");
-    // 코코포리아 설정 버튼과 비슷한 크기의 꽉 찬 X 아이콘(SVG).
-    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.88 18.3 9.17 12 2.88 5.71 4.3 4.3l6.29 6.29 6.3-6.3z"/></svg>';
+    // 코코포리아 설정 버튼과 비슷한 크기의 굵은 X 아이콘(선 두께 2.6).
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
     close.title = "닫기";
     close.addEventListener("click", closePanel);
     bar.appendChild(close);
@@ -1151,6 +1152,8 @@
       const hs = getComputedStyle(header.bar);
       set("--scp-header-h", `${Math.round(header.bar.getBoundingClientRect().height)}px`);
       set("--scp-header-bg", toOpaqueColor(hs.backgroundColor, pageBg));
+      // 우측 여백: 네이티브 설정 버튼과 오른쪽 끝 사이 간격을 그대로 쓴다.
+      set("--scp-header-padx", hs.paddingRight !== "0px" ? hs.paddingRight : "12px");
       if (header.title) {
         const ttl = getComputedStyle(header.title);
         set("--scp-header-size", ttl.fontSize);
