@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.34
+// @version      0.1.35
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.34";
+  const VERSION = "0.1.35";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -763,9 +763,9 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-spacer { flex: 0 0 32px; }
       .ccf-scp-close { flex: 0 0 32px; height: 32px; display: flex; align-items: center;
-        justify-content: center; background: transparent; border: 0; color: inherit;
-        cursor: pointer; padding: 0; border-radius: 50%; opacity: .7; }
-      .ccf-scp-close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+        justify-content: center; background: transparent; border: 0;
+        color: var(--scp-close-color, #fff); cursor: pointer; padding: 0; border-radius: 50%; }
+      .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-close svg { display: block; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
@@ -1150,10 +1150,28 @@
     const header = findNativeChatHeader(native);
     if (header) {
       const hs = getComputedStyle(header.bar);
-      set("--scp-header-h", `${Math.round(header.bar.getBoundingClientRect().height)}px`);
+      const barRect = header.bar.getBoundingClientRect();
+      set("--scp-header-h", `${Math.round(barRect.height)}px`);
       set("--scp-header-bg", toOpaqueColor(hs.backgroundColor, pageBg));
-      // 우측 여백: 네이티브 설정 버튼과 오른쪽 끝 사이 간격을 그대로 쓴다.
-      set("--scp-header-padx", hs.paddingRight !== "0px" ? hs.paddingRight : "12px");
+      // 우측 여백·아이콘 색: 네이티브 헤더의 맨 오른쪽 아이콘 버튼(설정 톱니)을 찾아
+      // 그것과 오른쪽 끝 사이 간격을 그대로 쓰고, 색도 그 아이콘에서 읽는다.
+      const icons = [...header.bar.querySelectorAll("button, svg")]
+        .filter((el) => el instanceof HTMLElement || el instanceof SVGElement);
+      let rightIcon = null;
+      for (const el of icons) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 8 || r.width > 60) continue;
+        if (!rightIcon || r.right > rightIcon.getBoundingClientRect().right) rightIcon = el;
+      }
+      if (rightIcon) {
+        const ir = rightIcon.getBoundingClientRect();
+        const gap = Math.max(8, Math.round(barRect.right - ir.right));
+        set("--scp-header-padx", `${gap}px`);
+        const iconColor = getComputedStyle(rightIcon).color;
+        set("--scp-close-color", iconColor);
+      } else {
+        set("--scp-header-padx", hs.paddingRight !== "0px" ? hs.paddingRight : "12px");
+      }
       if (header.title) {
         const ttl = getComputedStyle(header.title);
         set("--scp-header-size", ttl.fontSize);
