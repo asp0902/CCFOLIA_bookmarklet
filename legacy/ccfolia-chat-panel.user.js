@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.28
+// @version      0.1.29
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.28";
+  const VERSION = "0.1.29";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -723,7 +723,9 @@
       #${PANEL_ID} {
         position: fixed; top: 0; height: 100%; width: 340px;
         display: flex; flex-direction: column; z-index: 1200;
-        background: var(--scp-bg, rgba(24,24,26,.96));
+        background: var(--scp-bg-image, none), var(--scp-bg, rgba(24,24,26,.96));
+        -webkit-backdrop-filter: var(--scp-backdrop, none);
+        backdrop-filter: var(--scp-backdrop, none);
         color: var(--scp-fg, #f0f0f0);
         border-left: 1px solid var(--scp-line, rgba(128,128,128,.32));
         box-shadow: var(--scp-shadow, none);
@@ -743,16 +745,21 @@
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
+      /* 비활성 탭은 색이 아니라 opacity 로 흐려진다(네이티브 확인). 색·opacity 를
+         둘 다 변수로 받아, MUI 가 어느 방식을 쓰든 그대로 재현한다. */
       .ccf-scp-tab { padding: var(--scp-tab-pad, 10px 14px); cursor: pointer; border: 0;
         background: transparent; border-bottom: 2px solid transparent;
-        color: var(--scp-tab-idle, inherit); font-family: inherit;
+        color: var(--scp-tab-idle, inherit); opacity: var(--scp-tab-idle-opacity, .65);
+        font-family: inherit;
         font-size: var(--scp-tab-size, 13px); font-weight: var(--scp-tab-weight, 500);
         letter-spacing: var(--scp-tab-spacing, normal); min-width: 0; white-space: nowrap; }
-      .ccf-scp-tab:hover { color: var(--scp-tab-active, inherit); }
+      .ccf-scp-tab:hover { opacity: 1; }
       /* 선택 표시 색은 네이티브 인디케이터에서 읽는다 — 테마마다 다르다. */
-      .ccf-scp-tab.is-active { color: var(--scp-tab-active, inherit);
+      .ccf-scp-tab.is-active { color: var(--scp-tab-active, inherit); opacity: 1;
         border-bottom-color: var(--scp-tab-indicator, currentColor); }
-      .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px;
+      /* 목록의 좌우 여백을 0 으로 — 구분선이 패널 끝까지 이어져야 한다. 글자 들여쓰기는
+         줄(MuiListItem-gutters) 자체의 좌우 패딩이 담당하므로 내용은 그대로 들여쓰인다. */
+      .ccf-scp-list { flex: 1 1 auto; overflow-y: auto; padding: 10px 0;
         margin: 0; list-style: none; }
       .ccf-scp-text { margin: 0; }
       /* 네이티브 메시지 줄: 아이콘 열 + 본문 열.
@@ -1025,6 +1032,13 @@
     }
     const pageBg = getComputedStyle(document.body).backgroundColor;
     set("--scp-bg", toOpaqueColor(bg, pageBg));
+    // 원본 패널의 질감(그라데이션·블러)까지 얹어 "원본처럼" 보이게 한다. 불투명 바탕색은
+    // 그 아래 깔려 |< 가 비치지 않는다. 없으면(none) 그냥 평평한 불투명색이 된다.
+    if (cs.backgroundImage && cs.backgroundImage !== "none") set("--scp-bg-image", cs.backgroundImage);
+    const blur = cs.backdropFilter && cs.backdropFilter !== "none"
+      ? cs.backdropFilter
+      : (cs.webkitBackdropFilter && cs.webkitBackdropFilter !== "none" ? cs.webkitBackdropFilter : "");
+    set("--scp-backdrop", blur);
     set("--scp-fg", cs.color);
     set("--scp-font", cs.fontFamily);
     set("--scp-fontsize", cs.fontSize);
@@ -1046,7 +1060,13 @@
         set("--scp-tab-spacing", ts.letterSpacing);
         set("--scp-tab-pad", `${ts.paddingTop} ${ts.paddingRight} ${ts.paddingBottom} ${ts.paddingLeft}`);
       }
-      if (idle) set("--scp-tab-idle", getComputedStyle(idle).color);
+      if (idle) {
+        const is = getComputedStyle(idle);
+        set("--scp-tab-idle", is.color);
+        // MUI 는 비활성 탭을 opacity 로 흐린다(#A6A6A6 ≈ 흰색 0.65). 색이 이미 회색이면
+        // opacity 는 1 일 테니, 둘을 그대로 넘기면 어느 쪽이든 맞는다.
+        set("--scp-tab-idle-opacity", is.opacity);
+      }
       const indicator = nativeTabBar.parentElement?.querySelector(".MuiTabs-indicator");
       if (indicator) set("--scp-tab-indicator", getComputedStyle(indicator).backgroundColor);
     }
@@ -1626,6 +1646,27 @@
               글자: normalizeSpace(el.textContent).slice(0, 16),
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
+        };
+      },
+      // 배경이 원본과 다르게 보일 때: 네이티브 패널이 실제로 쓰는 배경 스택을 뽑는다.
+      bgDiag() {
+        const native = findNativeChatPanel();
+        if (!native) return "no panel";
+        const cs = getComputedStyle(native);
+        const mine = panelEl ? getComputedStyle(panelEl) : null;
+        return {
+          네이티브: {
+            backgroundColor: cs.backgroundColor,
+            backgroundImage: cs.backgroundImage.slice(0, 120),
+            backdropFilter: cs.backdropFilter,
+            webkitBackdropFilter: cs.webkitBackdropFilter
+          },
+          내패널: mine ? {
+            backgroundColor: mine.backgroundColor,
+            backgroundImage: mine.backgroundImage.slice(0, 120),
+            backdropFilter: mine.backdropFilter
+          } : null,
+          페이지바탕: getComputedStyle(document.body).backgroundColor
         };
       },
       // 구분선이 우리 패널에만 없을 때: 그 선이 어느 요소의 무슨 속성인지 찾는다.
