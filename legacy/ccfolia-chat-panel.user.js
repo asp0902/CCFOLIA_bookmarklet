@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.30
+// @version      0.1.31
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.30";
+  const VERSION = "0.1.31";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -737,7 +737,10 @@
       }
       #${PANEL_ID} * { box-sizing: border-box; }
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
+      /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
+         걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다. */
       .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+        background: var(--scp-bg-opaque, rgba(24,24,26,1));
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
       .ccf-scp-title { font-weight: 700; font-size: 12px; opacity: .75; margin-right: auto; }
       .ccf-scp-close { background: transparent; border: 0; color: inherit; cursor: pointer;
@@ -1036,7 +1039,10 @@
     // 원본의 "질감"은 이 반투명(alpha<1) 자체다 — 배경 이미지도 블러도 없다(bgDiag 확인).
     // 반투명을 그대로 쓰면 원본처럼 보이지만 뒤의 |< 가 살짝 비친다. opaqueBg 를 켜면
     // 페이지 바탕색 위에 겹쳐 불투명하게 만들어 |< 를 가린다(질감은 평평해진다).
-    set("--scp-bg", opaqueBg ? toOpaqueColor(bg, pageBg) : bg);
+    const opaque = toOpaqueColor(bg, pageBg);
+    set("--scp-bg", opaqueBg ? opaque : bg);
+    // 헤더는 토글과 무관하게 항상 불투명(|< 가림). 나머지는 opaqueBg 를 따른다.
+    set("--scp-bg-opaque", opaque);
     // 원본 패널의 질감(그라데이션·블러)까지 얹는다(있을 때만). 반투명 배경 위에 겹친다.
     set("--scp-bg-image", cs.backgroundImage && cs.backgroundImage !== "none" ? cs.backgroundImage : "");
     const blur = cs.backdropFilter && cs.backdropFilter !== "none"
@@ -1660,6 +1666,29 @@
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
         };
+      },
+      // |< 가 헤더 밖까지 비치면: 그 버튼이 세로로 어디까지 걸치는지 확인해 불투명
+      // 영역을 얼마나 넓혀야 하는지 정한다.
+      seamDiag() {
+        const panelRect = panelEl?.getBoundingClientRect();
+        if (!panelRect) return "no panel";
+        const round = (n) => Math.round(n);
+        const out = [];
+        for (const el of document.querySelectorAll("button, [role='button'], svg, a")) {
+          if (!(el instanceof Element)) continue;
+          if (el.closest(`#${PANEL_ID}`)) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 8 || r.width > 80 || r.height < 8) continue;
+          // 우리 패널 오른쪽 경계 ±40px 안에 있는 것(= 이음새에 걸친 것).
+          if (r.left > panelRect.right + 40 || r.right < panelRect.right - 40) continue;
+          out.push({
+            요소: `${el.tagName}.${String(el.getAttribute("class") || "").slice(0, 30)}`,
+            글자: normalizeSpace(el.textContent || "").slice(0, 8),
+            left: round(r.left), right: round(r.right), top: round(r.top), bottom: round(r.bottom)
+          });
+          if (out.length > 10) break;
+        }
+        return { 패널: { left: round(panelRect.left), right: round(panelRect.right), top: round(panelRect.top) }, 이음새요소: out };
       },
       // 배경이 원본과 다르게 보일 때: 네이티브 패널이 실제로 쓰는 배경 스택을 뽑는다.
       bgDiag() {
