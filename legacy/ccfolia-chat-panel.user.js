@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.32
+// @version      0.1.33
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,13 +22,15 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.32";
+  const VERSION = "0.1.33";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
   const FIRESTORE_PROJECT_ID = "ccfolia-160aa";
   const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
   const STORAGE_KEY = "ccf-second-chat-panel:v1";
+  // 지금은 패널이 하나뿐이라 항상 1. 여러 개를 지원하게 되면 이 값을 늘려 제목에 쓴다.
+  const PANEL_INDEX = 1;
   const MAX_RENDER = 300;
 
   const CHANNEL_LABELS = Object.freeze({
@@ -529,10 +531,18 @@
     const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
     const built = [...frag.children];
     built.forEach((row, index) => {
+      if (!(row instanceof HTMLElement)) return;
       const next = built[index + 1];
       const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
-      if (nextIsCont) return; // 같은 화자가 이어지는 중 — 선을 그으면 묶음이 쪼개진다.
-      if (row instanceof HTMLElement) row.style.setProperty("border-bottom", divider, "important");
+      // roll20-bridge 가 네이티브 줄에 붙이는 표식을 그대로 붙인다 → 같은 전역 CSS 가
+      // 걸려 이어짐 간격이 네이티브와 똑같아진다. 그 스크립트 JS 는 우리 패널을
+      // 건너뛰므로 여기서 직접 붙여야 한다.
+      if (nextIsCont) {
+        row.setAttribute("data-ccf-prose-cont-leader", "1"); // 이어짐 바로 앞 줄: 아래 여백 축소
+        return; // 이어지는 중 — 선을 그으면 화자 묶음이 쪼개진다.
+      }
+      row.removeAttribute("data-ccf-prose-cont-leader");
+      row.style.setProperty("border-bottom", divider, "important");
     });
 
     // 네이티브 목록의 클래스를 쓴 래퍼 안에 줄을 넣는다(간격·여백이 따라온다).
@@ -750,11 +760,12 @@
         font-size: var(--scp-header-size, 15px); font-weight: var(--scp-header-weight, 500);
         color: var(--scp-header-color, inherit); letter-spacing: var(--scp-header-spacing, normal);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .ccf-scp-spacer { flex: 0 0 28px; }
-      .ccf-scp-close { flex: 0 0 28px; background: transparent; border: 0; color: inherit;
-        cursor: pointer; font-size: 18px; line-height: 1; padding: 4px; border-radius: 6px;
-        opacity: .7; }
+      .ccf-scp-spacer { flex: 0 0 32px; }
+      .ccf-scp-close { flex: 0 0 32px; height: 32px; display: flex; align-items: center;
+        justify-content: center; background: transparent; border: 0; color: inherit;
+        cursor: pointer; padding: 0; border-radius: 50%; opacity: .7; }
       .ccf-scp-close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+      .ccf-scp-close svg { display: block; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
@@ -813,17 +824,22 @@
         font-size: var(--scp-text-size, inherit); line-height: var(--scp-text-line, 1.5);
         color: var(--scp-text-color, inherit); }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
-      .ccf-scp-compose { flex: 0 0 auto; padding: 8px 10px;
+      /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 색을 읽어 맞춘다. */
+      .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
+        background: var(--scp-bg-opaque, rgba(24,24,26,1));
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
-      .ccf-scp-input { width: 100%; min-height: 56px; resize: vertical; border-radius: 8px;
+      .ccf-scp-input { width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
-        background: color-mix(in srgb, currentColor 8%, transparent); color: inherit;
-        padding: 7px 9px; font: inherit; }
-      .ccf-scp-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        background: color-mix(in srgb, currentColor 6%, transparent); color: inherit;
+        padding: 8px 10px; font: inherit; line-height: 1.5; }
+      .ccf-scp-input:focus { outline: none;
+        border-color: var(--scp-send-bg, #2196f3); }
+      .ccf-scp-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
       .ccf-scp-hint { font-size: 11px; opacity: .5; margin-right: auto; }
-      .ccf-scp-send { padding: 5px 14px; border-radius: 8px; border: 0; cursor: pointer;
-        background: #2196f3; color: #fff; font-weight: 700; }
-      .ccf-scp-send:hover { filter: brightness(1.1); }
+      .ccf-scp-send { padding: 6px 18px; border-radius: var(--scp-send-radius, 6px); border: 0;
+        cursor: pointer; background: var(--scp-send-bg, #2196f3);
+        color: var(--scp-send-color, #fff); font-weight: 700; font-size: 13px; }
+      .ccf-scp-send:hover { filter: brightness(1.08); }
       .ccf-scp-status { font-size: 11px; margin-top: 4px; min-height: 14px; opacity: .7; }
       .ccf-scp-status.is-error { color: #ff8a8a; opacity: 1; }
     `;
@@ -845,12 +861,15 @@
     bar.appendChild(spacer);
     const title = document.createElement("span");
     title.className = "ccf-scp-title";
-    title.textContent = "룸 채팅 (추가 패널)";
+    // 추후 패널을 더 띄우면 #2, #3… 이 되도록 번호를 붙인다(지금은 1개라 #1).
+    title.textContent = `룸 채팅 #${PANEL_INDEX}`;
     bar.appendChild(title);
     const close = document.createElement("button");
     close.type = "button";
     close.className = "ccf-scp-close";
-    close.textContent = "×";
+    close.setAttribute("aria-label", "닫기");
+    // 코코포리아 설정 버튼과 비슷한 크기의 꽉 찬 X 아이콘(SVG).
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.88 18.3 9.17 12 2.88 5.71 4.3 4.3l6.29 6.29 6.3-6.3z"/></svg>';
     close.title = "닫기";
     close.addEventListener("click", closePanel);
     bar.appendChild(close);
@@ -1139,6 +1158,17 @@
         set("--scp-header-color", ttl.color);
         set("--scp-header-spacing", ttl.letterSpacing);
       }
+    }
+
+    // 하단 전송 버튼 색을 네이티브에서 읽어 맞춘다("전송" 글자를 가진 버튼).
+    const sendBtn = [...document.querySelectorAll("button")].find((b) =>
+      b instanceof HTMLElement && !b.closest(`#${PANEL_ID}`)
+      && normalizeSpace(b.textContent || "") === "전송");
+    if (sendBtn) {
+      const ss = getComputedStyle(sendBtn);
+      set("--scp-send-bg", ss.backgroundColor);
+      set("--scp-send-color", ss.color);
+      set("--scp-send-radius", ss.borderRadius);
     }
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
