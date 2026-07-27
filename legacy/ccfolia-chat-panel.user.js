@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.31
+// @version      0.1.32
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.31";
+  const VERSION = "0.1.32";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -738,14 +738,23 @@
       #${PANEL_ID} * { box-sizing: border-box; }
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
-         걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다. */
-      .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
-        background: var(--scp-bg-opaque, rgba(24,24,26,1));
-        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); flex: 0 0 auto; }
-      .ccf-scp-title { font-weight: 700; font-size: 12px; opacity: .75; margin-right: auto; }
-      .ccf-scp-close { background: transparent; border: 0; color: inherit; cursor: pointer;
-        font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
-      .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+         걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다.
+         높이·글꼴·정렬은 네이티브 헤더에서 읽어 맞춘다(가운데 정렬 제목). */
+      .ccf-scp-bar { display: flex; align-items: center; gap: 6px; padding: 0 10px;
+        height: var(--scp-header-h, 48px); flex: 0 0 auto;
+        background: var(--scp-header-bg, var(--scp-bg-opaque, rgba(24,24,26,1)));
+        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
+      /* 제목은 네이티브처럼 막대 정중앙. 닫기 버튼이 오른쪽에 있어도 가운데를 유지하도록
+         양옆에 같은 폭의 여백(스페이서)을 둔다. */
+      .ccf-scp-title { flex: 1 1 auto; text-align: center;
+        font-size: var(--scp-header-size, 15px); font-weight: var(--scp-header-weight, 500);
+        color: var(--scp-header-color, inherit); letter-spacing: var(--scp-header-spacing, normal);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ccf-scp-spacer { flex: 0 0 28px; }
+      .ccf-scp-close { flex: 0 0 28px; background: transparent; border: 0; color: inherit;
+        cursor: pointer; font-size: 18px; line-height: 1; padding: 4px; border-radius: 6px;
+        opacity: .7; }
+      .ccf-scp-close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
@@ -830,6 +839,10 @@
 
     const bar = document.createElement("div");
     bar.className = "ccf-scp-bar";
+    // 왼쪽 스페이서 — 오른쪽 닫기 버튼과 폭을 맞춰 제목이 정중앙에 오게 한다.
+    const spacer = document.createElement("span");
+    spacer.className = "ccf-scp-spacer";
+    bar.appendChild(spacer);
     const title = document.createElement("span");
     title.className = "ccf-scp-title";
     title.textContent = "룸 채팅 (추가 패널)";
@@ -1024,6 +1037,38 @@
     return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
   }
 
+  // 네이티브 채팅 패널의 헤더 막대와 제목을 찾는다. 제목 텍스트는 로케일마다 다르므로
+  // 글자가 아니라 "패널 맨 위에 있는, 폭이 거의 꽉 찬 낮은 막대"로 찾는다.
+  function findNativeChatHeader(native) {
+    if (!native) return null;
+    const panelRect = native.getBoundingClientRect();
+    let bar = null;
+    let level = [...native.children];
+    for (let depth = 0; depth <= 3 && level.length && !bar; depth += 1) {
+      const next = [];
+      for (const el of level) {
+        if (!(el instanceof HTMLElement)) continue;
+        const r = el.getBoundingClientRect();
+        const atTop = Math.abs(r.top - panelRect.top) <= 6;
+        const wide = r.width >= panelRect.width * 0.8;
+        if (atTop && wide && r.height >= 36 && r.height <= 96) { bar = el; break; }
+        next.push(...el.children);
+      }
+      level = next;
+    }
+    if (!bar) return null;
+    // 제목: 막대 안에서 글자가 있는 가장 큰 글씨(보통 h6). 아이콘 버튼은 글자가 없다.
+    let title = null;
+    let best = 0;
+    for (const el of bar.querySelectorAll("*")) {
+      const text = normalizeSpace(el.textContent || "");
+      if (!text || text.length > 24 || el.children.length > 1) continue;
+      const size = parseFloat(getComputedStyle(el).fontSize) || 0;
+      if (size > best) { best = size; title = el; }
+    }
+    return { bar, title };
+  }
+
   // 색·글꼴을 네이티브에서 그대로 읽어온다. 하드코딩하면 테마 커스텀 기능과 어긋난다.
   function syncTheme(native) {
     if (!panelEl) return;
@@ -1079,6 +1124,21 @@
       }
       const indicator = nativeTabBar.parentElement?.querySelector(".MuiTabs-indicator");
       if (indicator) set("--scp-tab-indicator", getComputedStyle(indicator).backgroundColor);
+    }
+
+    // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
+    const header = findNativeChatHeader(native);
+    if (header) {
+      const hs = getComputedStyle(header.bar);
+      set("--scp-header-h", `${Math.round(header.bar.getBoundingClientRect().height)}px`);
+      set("--scp-header-bg", toOpaqueColor(hs.backgroundColor, pageBg));
+      if (header.title) {
+        const ttl = getComputedStyle(header.title);
+        set("--scp-header-size", ttl.fontSize);
+        set("--scp-header-weight", ttl.fontWeight);
+        set("--scp-header-color", ttl.color);
+        set("--scp-header-spacing", ttl.letterSpacing);
+      }
     }
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
