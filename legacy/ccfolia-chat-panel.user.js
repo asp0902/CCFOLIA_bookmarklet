@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.36
+// @version      0.1.37
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.36";
+  const VERSION = "0.1.37";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -784,6 +784,7 @@
       .ccf-scp-close svg { display: block; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
+        background: var(--scp-tabs-bg, var(--scp-bg-opaque, #212121));
         border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
       /* 비활성 탭은 색이 아니라 opacity 로 흐려진다(네이티브 확인). 색·opacity 를
@@ -1181,6 +1182,12 @@
       }
       const indicator = nativeTabBar.parentElement?.querySelector(".MuiTabs-indicator");
       if (indicator) set("--scp-tab-indicator", getComputedStyle(indicator).backgroundColor);
+      // 탭 바 배경색 — 투명이면 조상으로 올라가며 실제 색을 찾는다(원본 #212121).
+      let tabsBg = getComputedStyle(nativeTabBar).backgroundColor;
+      for (let el = nativeTabBar.parentElement; el && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(tabsBg); el = el.parentElement) {
+        tabsBg = getComputedStyle(el).backgroundColor;
+      }
+      set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
     }
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
@@ -1813,6 +1820,39 @@
               글자: normalizeSpace(el.textContent).slice(0, 16),
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
+        };
+      },
+      // 주사위가 안 굴려질 때: 진짜 주사위 메시지가 어떤 필드로 저장돼 있는지 본다.
+      // 우리가 보낼 때 그 필드를 재현하면 굴려지는지 판단하는 근거.
+      diceDiag() {
+        const slice = getRoomMessagesSlice();
+        if (!slice) return "no store";
+        const entities = slice.entities || {};
+        const dieRe = /(^|\s)s?\d*d\d+/i;
+        const dump = (msg) => {
+          const out = {};
+          for (const [k, v] of Object.entries(msg || {})) {
+            if (v == null) continue;
+            if (typeof v === "object") out[k] = Array.isArray(v) ? `[배열 ${v.length}]` : `{객체 ${Object.keys(v).join(",")}}`;
+            else out[k] = String(v).slice(0, 60);
+          }
+          return out;
+        };
+        let dice = null;
+        let plain = null;
+        for (const id of Object.keys(entities)) {
+          const m = entities[id];
+          if (!m || m.removed) continue;
+          const text = String(m.text || m.message || "");
+          if (!dice && dieRe.test(text)) dice = m;
+          else if (!plain && text && !dieRe.test(text)) plain = m;
+          if (dice && plain) break;
+        }
+        return {
+          주사위메시지: dice ? dump(dice) : "못 찾음(이 룸에서 주사위 한 번 굴려주세요)",
+          일반메시지: plain ? dump(plain) : "못 찾음",
+          주사위필드전체: dice ? Object.keys(dice) : [],
+          일반필드전체: plain ? Object.keys(plain) : []
         };
       },
       // |< 가 헤더 밖까지 비치면: 그 버튼이 세로로 어디까지 걸치는지 확인해 불투명
