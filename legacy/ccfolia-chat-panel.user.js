@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.38
+// @version      0.1.39
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.38";
+  const VERSION = "0.1.39";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -635,6 +635,60 @@
     return { timestampValue: new Date().toISOString() };
   }
 
+  // 자바스크립트 값을 Firestore REST 의 타입 있는 값으로 바꾼다(extend.roll 중첩용).
+  function toFirestoreValue(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === "boolean") return { booleanValue: v };
+    if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === "string") return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(toFirestoreValue) } };
+    if (typeof v === "object") {
+      const fields = {};
+      for (const [k, val] of Object.entries(v)) fields[k] = toFirestoreValue(val);
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(v) };
+  }
+
+  const DICE_SKIN = Object.freeze({
+    d4: "basic", d6: "basic", d8: "basic", d10: "basic", d12: "basic", d20: "basic", d100: "basic"
+  });
+
+  // 순수 산술 주사위(NdM±K)만 직접 굴린다. 코코포리아는 네이티브 전송 때 미리 굴려
+  // 결과를 extend.roll 에 넣으므로(diceDiag 로 확인), 같은 구조를 만들어 넣는다.
+  // 게임 시스템 판정(CC<=, 특수룰)은 BCDice 엔진이 필요해 여기선 다루지 않는다(글자로 감).
+  function evaluateDiceCommand(text) {
+    const raw = String(text || "").trim();
+    // 맨 앞이 정확히 주사위 식이어야 한다. 뒤의 코멘트(" 피해(…)")는 허용.
+    const m = raw.match(/^(\d*)[dD](\d+)\s*([+\-]\s*\d+)?(?:\s|$)/);
+    if (!m) return null;
+    const count = m[1] ? parseInt(m[1], 10) : 1;
+    const faces = parseInt(m[2], 10);
+    const modStr = m[3] ? m[3].replace(/\s+/g, "") : "";
+    const mod = modStr ? parseInt(modStr, 10) : 0;
+    if (count < 1 || count > 100 || faces < 2 || faces > 1000) return null;
+
+    const values = [];
+    let sum = 0;
+    for (let i = 0; i < count; i += 1) {
+      const v = Math.floor(Math.random() * faces) + 1;
+      values.push(v);
+      sum += v;
+    }
+    const total = sum + mod;
+    const commandNorm = `${count}D${faces}${modStr}`;
+    const core = count > 1 ? `${sum}[${values.join(",")}]${modStr}` : `${values[0]}${modStr}`;
+    const result = `(${commandNorm}) ＞ ${core} ＞ ${total}`;
+    return {
+      roll: {
+        result,
+        success: false, fumble: false, critical: false, failure: false, secret: false,
+        dices: values.map((value) => ({ faces, value, kind: "normal" })),
+        skin: { ...DICE_SKIN }
+      }
+    };
+  }
+
   async function sendMessage(text) {
     const ctx = await getAuthContext();
     const template = await fetchTemplateFields(ctx);
@@ -646,6 +700,10 @@
     }
     fields.text = { stringValue: text };
     fields.channel = { stringValue: currentChannel };
+    // 순수 주사위면 결과를 계산해 extend.roll 로 넣는다 → 굴려진 카드로 렌더된다.
+    // 아니면 템플릿의 빈 extend 를 그대로 둔다(일반 메시지).
+    const rolled = evaluateDiceCommand(text);
+    if (rolled) fields.extend = toFirestoreValue(rolled);
     if ("createdAt" in template) fields.createdAt = makeTimestampLike(template.createdAt);
     if ("updatedAt" in template) fields.updatedAt = makeTimestampLike(template.updatedAt);
     if (ctx.uid && "from" in template) fields.from = { stringValue: ctx.uid };
