@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.39
+// @version      0.1.40
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.39";
+  const VERSION = "0.1.40";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -153,10 +153,15 @@
     for (const id of ids) {
       const msg = entities[id];
       if (!msg || msg.removed) continue;
+      // 주사위 메시지는 결과가 text 가 아니라 extend.roll.result 에 있다(diceDiag 로 확인).
+      // 네이티브 CREE-GRRR 카드는 우리 패널을 처리하지 않으므로, 최소한 결과 문자열을
+      // 붙여 굴림이 보이게 한다.
+      const rollResult = String(pick(msg, ["extend.roll.result"]) || "");
       out.push({
         id,
         name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
         text: String(pick(msg, ["text", "message", "body"]) || ""),
+        roll: rollResult,
         color: String(pick(msg, ["color", "character.color"]) || ""),
         icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
         at: readCreatedAt(msg)
@@ -285,7 +290,11 @@
     const body = row.querySelector("p.MuiListItemText-secondary");
     if (body) {
       // 봉투를 남긴 원문을 넣으면 format-sync 가 서식·나레이션·이미지를 그려준다.
-      body.textContent = window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text);
+      // 주사위 메시지는 굴림 결과 문자열을 대신 보여준다(네이티브 카드는 우리 패널
+      // 밖에서 그려지므로 여기선 결과 텍스트로).
+      body.textContent = msg.roll
+        ? msg.roll
+        : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
     }
 
     // 답장 버튼은 우리 패널에서 동작시키지 않는다(모양만 유지).
@@ -520,8 +529,10 @@
       const body = document.createElement("p");
       body.className = "ccf-scp-text";
       // 서식 스크립트가 있으면 봉투를 남긴 원문을 넣어 그쪽이 렌더하게 하고,
-      // 없으면 보이지 않는 문자를 지운 평문을 넣는다.
-      body.textContent = window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text);
+      // 없으면 보이지 않는 문자를 지운 평문을 넣는다. 주사위는 굴림 결과를 보여준다.
+      body.textContent = msg.roll
+        ? msg.roll
+        : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
       bodyWrap.appendChild(body);
       row.appendChild(bodyWrap);
       frag.appendChild(row);
