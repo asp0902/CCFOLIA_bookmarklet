@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.43
+// @version      0.1.44
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.43";
+  const VERSION = "0.1.44";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -50,6 +50,16 @@
   // 처음 열었을 때 그릴 게 없다고 판단해 안내문조차 없이 빠져나간다(빈 패널).
   let lastSignature = null;
   let pinnedToBottom = true;
+  let suppressScrollEval = false;
+  let suppressScrollTimer = 0;
+  // 바닥으로 내리되, 그로 인한 scroll 이벤트가 고정을 풀지 않게 잠시 평가를 막는다.
+  function scrollListToBottom() {
+    if (!listEl) return;
+    suppressScrollEval = true;
+    listEl.scrollTop = listEl.scrollHeight;
+    clearTimeout(suppressScrollTimer);
+    suppressScrollTimer = setTimeout(() => { suppressScrollEval = false; }, 120);
+  }
   let sending = false;
   let layoutTimer = 0;
   // "left"  = 룸 채팅을 그대로 두고 그 왼쪽 옆에 붙는다 (기본값).
@@ -472,9 +482,9 @@
     const prevTop = listEl.scrollTop;
     const finishScroll = () => {
       if (wasPinned) {
-        listEl.scrollTop = listEl.scrollHeight;
+        scrollListToBottom();
         // 아바타 이미지가 늦게 로드되며 높이가 늘면 바닥이 밀리므로 한 번 더 맞춘다.
-        requestAnimationFrame(() => { if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight; });
+        requestAnimationFrame(() => { if (pinnedToBottom) scrollListToBottom(); });
       } else {
         listEl.scrollTop = prevTop;
       }
@@ -944,7 +954,7 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-compose-bg, var(--scp-bg-opaque, rgba(24,24,26,1))); }
       /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게. */
-      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 8px; }
+      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 8px; }
       .ccf-scp-die { padding: 3px 8px; border-radius: 5px; cursor: pointer; font: inherit;
         font-size: 12px; color: inherit;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
@@ -1007,6 +1017,9 @@
     listEl = document.createElement("ul");
     listEl.className = "ccf-scp-list";
     listEl.addEventListener("scroll", () => {
+      // 우리가 프로그램적으로 내린 스크롤은 무시한다. 안 그러면 높이가 아직 안 찬
+      // 순간의 스크롤 이벤트가 "바닥 아님"으로 오판해 고정을 풀어 버린다(시작 시 튐).
+      if (suppressScrollEval) return;
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
     });
@@ -1090,7 +1103,7 @@
     // 안 잡혀 높이가 확정 안 되므로, 몇 차례 더 바닥으로 맞춘다(그 사이 위로 올리면 멈춤).
     pinnedToBottom = true;
     [80, 250, 500, 900].forEach((ms) => window.setTimeout(() => {
-      if (panelEl && listEl && pinnedToBottom) listEl.scrollTop = listEl.scrollHeight;
+      if (panelEl && listEl && pinnedToBottom) scrollListToBottom();
     }, ms));
     // 네이티브 패널이 열리고 닫히거나 창 크기가 바뀌면 위치를 다시 맞춘다.
     window.addEventListener("resize", safeLayout);
@@ -1949,6 +1962,24 @@
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
         };
+      },
+      // 하단 배경색이 안 맞을 때: 네이티브 주사위 버튼의 조상들 배경색을 훑어 #282828 이
+      // 어느 요소인지 찾는다(첫 불투명 조상이 #1D1D1D 라 그걸 잡고 있었다).
+      composerBgDiag() {
+        const die = [...document.querySelectorAll("button")].find((b) =>
+          b instanceof HTMLElement && !b.closest(`#${PANEL_ID}`) && b.querySelector("svg")
+          && /[dD]\s*\d+|\d+\s*면/.test(b.getAttribute("aria-label") || b.title || b.textContent || ""));
+        if (!die) return "네이티브 주사위 버튼 못 찾음";
+        const chain = [];
+        for (let el = die; el && el !== document.body && chain.length < 10; el = el.parentElement) {
+          const cs = getComputedStyle(el);
+          chain.push({
+            요소: `${el.tagName}.${String(el.className).slice(0, 30)}`,
+            bg: cs.backgroundColor,
+            폭: Math.round(el.getBoundingClientRect().width)
+          });
+        }
+        return { 주사위버튼조상: chain };
       },
       // 주사위 아이콘이 텍스트로 대체될 때: 네이티브 주사위 버튼이 어떤 라벨을 갖는지 본다.
       diceButtonsDiag() {
