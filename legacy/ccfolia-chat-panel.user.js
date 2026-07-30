@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.46
+// @version      0.1.47
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.46";
+  const VERSION = "0.1.47";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -953,8 +953,10 @@
       /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 입력영역 배경색. */
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
-      /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게. */
-      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 8px; }
+      /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게, 전송 버튼은 오른쪽 끝. */
+      .ccf-scp-dice { display: flex; flex-wrap: nowrap; align-items: center; gap: 0;
+        margin-bottom: 8px; }
+      .ccf-scp-dice .ccf-scp-send { margin-left: auto; }
       .ccf-scp-die { padding: 3px 8px; border-radius: 5px; cursor: pointer; font: inherit;
         font-size: 12px; color: inherit;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
@@ -1055,6 +1057,13 @@
       b.addEventListener("click", () => insertAtCursor(`1d${faces}`));
       diceRow.appendChild(b);
     }
+    // 전송 버튼 — 네이티브처럼 주사위 바 오른쪽 끝에 둔다.
+    const send = document.createElement("button");
+    send.type = "button";
+    send.className = "ccf-scp-send";
+    send.textContent = "전송";
+    send.addEventListener("click", handleSend);
+    diceRow.appendChild(send);
     compose.appendChild(diceRow);
 
     inputEl = document.createElement("textarea");
@@ -1076,12 +1085,6 @@
     hint.className = "ccf-scp-hint";
     hint.textContent = "선택한 탭으로 전송됩니다";
     actions.appendChild(hint);
-    const send = document.createElement("button");
-    send.type = "button";
-    send.className = "ccf-scp-send";
-    send.textContent = "전송";
-    send.addEventListener("click", handleSend);
-    actions.appendChild(send);
     compose.appendChild(actions);
 
     statusEl = document.createElement("div");
