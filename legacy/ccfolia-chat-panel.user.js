@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.49
+// @version      0.1.50
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.49";
+  const VERSION = "0.1.50";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -51,6 +51,7 @@
   let lastSignature = null;
   let pinnedToBottom = true;
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
+  let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
   // 바닥으로 내리되, 그로 인한 scroll 이벤트가 고정을 풀지 않게 잠시 평가를 막는다.
@@ -755,7 +756,9 @@
       fields.name = { stringValue: selectedChar.name };
       fields.iconUrl = { stringValue: selectedChar.icon };
       fields.imageUrl = { stringValue: selectedChar.icon };
-      fields.color = { stringValue: selectedChar.color || "#888888" };
+      fields.color = { stringValue: colorOverride || selectedChar.color || "#888888" };
+    } else if (colorOverride) {
+      fields.color = { stringValue: colorOverride };
     }
     // 순수 주사위면 결과를 계산해 extend.roll 로 넣는다 → 굴려진 카드로 렌더된다.
     // 아니면 템플릿의 빈 extend 를 그대로 둔다(일반 메시지).
@@ -977,12 +980,22 @@
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       /* 화자 선택 바 */
       .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
-        padding: 4px 6px; margin-bottom: 8px; border-radius: 6px; cursor: pointer;
+        padding: 6px 8px; margin-bottom: 8px; border-radius: 6px; cursor: pointer;
         background: color-mix(in srgb, currentColor 6%, transparent); }
       .ccf-scp-speaker:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
-      .ccf-scp-sp-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+      .ccf-scp-sp-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
         background: color-mix(in srgb, currentColor 12%, transparent); flex: 0 0 auto; }
-      .ccf-scp-sp-name { font-size: 13px; opacity: .9; }
+      .ccf-scp-sp-name { font-size: 14px; opacity: .95; flex: 1 1 auto;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ccf-scp-sp-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+      .ccf-scp-sp-tool { position: relative; width: 28px; height: 28px; border: 0; cursor: pointer;
+        background: transparent; color: inherit; opacity: .8; border-radius: 6px; font-size: 16px;
+        line-height: 1; }
+      .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+      .ccf-scp-sp-color { width: 26px; height: 26px; padding: 0; border: 0; background: transparent;
+        cursor: pointer; }
+      .ccf-scp-palette { left: auto; right: 0; min-width: 200px; }
+      .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
         z-index: 5; max-height: 260px; overflow-y: auto; min-width: 180px;
         background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
@@ -1089,10 +1102,63 @@
     charList.className = "ccf-scp-charlist";
     charList.hidden = true;
 
+    // 오른쪽 컨트롤: 채팅 팔레트(커맨드) + 색상.
+    const spTools = document.createElement("div");
+    spTools.className = "ccf-scp-sp-tools";
+    const paletteBtn = document.createElement("button");
+    paletteBtn.type = "button";
+    paletteBtn.className = "ccf-scp-sp-tool";
+    paletteBtn.title = "채팅 팔레트";
+    paletteBtn.textContent = "☰";
+    const paletteList = document.createElement("div");
+    paletteList.className = "ccf-scp-charlist ccf-scp-palette";
+    paletteList.hidden = true;
+    const colorBtn = document.createElement("input");
+    colorBtn.type = "color";
+    colorBtn.className = "ccf-scp-sp-color";
+    colorBtn.title = "색상";
+    colorBtn.value = "#888888";
+    colorBtn.addEventListener("input", () => { colorOverride = colorBtn.value; });
+    colorBtn.addEventListener("click", (e) => e.stopPropagation());
+    paletteBtn.appendChild(paletteList);
+    spTools.appendChild(paletteBtn);
+    spTools.appendChild(colorBtn);
+
+    const buildPalette = () => {
+      paletteList.textContent = "";
+      const cmds = String(selectedChar?.commands || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      if (!cmds.length) {
+        const e = document.createElement("div");
+        e.className = "ccf-scp-charlist-empty";
+        e.textContent = selectedChar ? "커맨드가 없습니다." : "먼저 화자를 고르세요.";
+        paletteList.appendChild(e);
+        return;
+      }
+      for (const cmd of cmds) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "ccf-scp-charitem ccf-scp-cmditem";
+        item.textContent = cmd;
+        item.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (inputEl) { inputEl.value = cmd; inputEl.focus(); }
+          paletteList.hidden = true;
+        });
+        paletteList.appendChild(item);
+      }
+    };
+    paletteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (paletteList.hidden) { buildPalette(); paletteList.hidden = false; }
+      else paletteList.hidden = true;
+    });
+
     const renderSpeaker = () => {
       spName.textContent = selectedChar ? selectedChar.name : "캐릭터 선택";
       if (selectedChar && selectedChar.icon) { spAvatar.src = selectedChar.icon; spAvatar.style.visibility = ""; }
       else spAvatar.style.visibility = "hidden";
+      colorBtn.value = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
+      colorOverride = "";
     };
     const buildCharList = () => {
       charList.textContent = "";
@@ -1138,6 +1204,7 @@
     });
     speaker.appendChild(spAvatar);
     speaker.appendChild(spName);
+    speaker.appendChild(spTools);
     speaker.appendChild(charList);
     renderSpeaker();
     compose.appendChild(speaker);
