@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.54
+// @version      0.1.55
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.54";
+  const VERSION = "0.1.55";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -998,11 +998,11 @@
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
       /* 이름칸 — 각진 어두운 바탕. 아바타는 40x40 정사각(배경 없음). */
-      .ccf-scp-sp-field { position: relative; display: flex; align-items: center; gap: 8px;
-        flex: 1 1 auto; min-width: 0; padding: 4px 8px; cursor: pointer; background: #202020; }
+      .ccf-scp-sp-field { position: relative; display: flex; align-items: center; gap: 6px;
+        flex: 1 1 auto; min-width: 0; padding: 3px 6px; cursor: pointer; background: #202020; }
       .ccf-scp-sp-avatar { width: 40px; height: 40px; border-radius: 0; object-fit: cover;
         background: transparent; flex: 0 0 auto; }
-      .ccf-scp-sp-name { font-size: 14px; opacity: .95; flex: 1 1 auto;
+      .ccf-scp-sp-name { font-size: 16px; opacity: .95; flex: 1 1 auto;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-sp-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
       /* 툴 버튼 — 호버 원형 #393939(흰 8%), 툴팁은 아래. */
@@ -1011,12 +1011,27 @@
         display: flex; align-items: center; justify-content: center; padding: 4px; line-height: 1; }
       .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
       .ccf-scp-sp-tool svg { width: 22px; height: 22px; display: block; }
-      .ccf-scp-color-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-        border: 0; opacity: 0; pointer-events: none; }
+      /* 색상 버튼 = 현재 색 스와치 */
+      .ccf-scp-color-swatch { width: 20px; height: 20px; border-radius: 4px;
+        border: 1px solid rgba(255,255,255,.4); background: #888888; display: block; }
       .ccf-scp-sp-tool[data-tip]:hover::after { content: attr(data-tip); position: absolute;
         top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px;
-        background: #000; color: #fff; font-size: 11px; padding: 3px 7px; border-radius: 4px;
+        background: #000; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px;
         white-space: nowrap; pointer-events: none; z-index: 20; }
+      /* 색상 피커 팝업 — 스와치 그리드 + hex */
+      .ccf-scp-colorpop { position: absolute; right: 0; bottom: 100%; margin-bottom: 6px; z-index: 30;
+        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
+        border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.5); padding: 10px; }
+      .ccf-scp-colorpop[hidden] { display: none; }
+      .ccf-scp-swatch-grid { display: grid; grid-template-columns: repeat(7, 26px); gap: 6px; }
+      .ccf-scp-swatch { width: 26px; height: 26px; border: 0; border-radius: 6px; cursor: pointer;
+        padding: 0; }
+      .ccf-scp-swatch:hover { outline: 2px solid #fff; outline-offset: 1px; }
+      .ccf-scp-hexrow { display: flex; align-items: center; gap: 4px; margin-top: 10px;
+        background: #fff; border-radius: 6px; padding: 4px 8px; }
+      .ccf-scp-hexrow span { color: #888; font-size: 13px; }
+      .ccf-scp-hexinput { flex: 1 1 auto; border: 0; outline: none; background: transparent;
+        color: #222; font-size: 14px; min-width: 0; }
       /* 채팅 팔레트 — 헤더 아래 떠 있는 카드(패널 전체 아님). */
       .ccf-scp-palette { position: absolute; top: calc(var(--scp-header-h, 48px) + 8px);
         left: 8px; right: 8px; max-height: 55%; z-index: 10; display: flex; flex-direction: column;
@@ -1148,26 +1163,65 @@
     paletteBtn.dataset.tip = "채팅 팔레트";
     const palIcon = captureNativeToolIcon(/팔레트|palette/i);
     if (palIcon) paletteBtn.appendChild(palIcon.cloneNode(true));
-    else paletteBtn.textContent = "☰";
+    else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z"/></svg>';
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
     paletteList.hidden = true;
 
-    // 색상: 네이티브 색상 아이콘 버튼 + 뒤에 숨긴 <input type=color>(클릭 시 피커 열기).
-    const colorInput = document.createElement("input");
-    colorInput.type = "color";
-    colorInput.className = "ccf-scp-color-input";
-    colorInput.value = "#888888";
-    colorInput.addEventListener("input", () => { colorOverride = colorInput.value; });
+    // 색상: 현재 색을 보여주는 스와치 버튼 + 스와치 그리드 팝업(네이티브 피커 모양).
     const colorBtn = document.createElement("button");
     colorBtn.type = "button";
-    colorBtn.className = "ccf-scp-sp-tool";
+    colorBtn.className = "ccf-scp-sp-tool ccf-scp-color-btn";
     colorBtn.dataset.tip = "색상";
-    const colIcon = captureNativeToolIcon(/색|color/i);
-    if (colIcon) colorBtn.appendChild(colIcon.cloneNode(true));
-    else colorBtn.textContent = "🎨";
-    colorBtn.addEventListener("click", (e) => { e.stopPropagation(); colorInput.click(); });
-    colorBtn.appendChild(colorInput);
+    const colorSwatch = document.createElement("span");
+    colorSwatch.className = "ccf-scp-color-swatch";
+    colorBtn.appendChild(colorSwatch);
+    const colorPop = document.createElement("div");
+    colorPop.className = "ccf-scp-colorpop";
+    colorPop.hidden = true;
+    colorBtn.appendChild(colorPop);
+
+    const setColor = (hex) => {
+      if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+      colorOverride = hex;
+      colorSwatch.style.background = hex;
+    };
+    const SWATCHES = [
+      "#000000", "#F44336", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
+      "#03A9F4", "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#CDDC39", "#FFEB3B",
+      "#FFC107", "#FF9800", "#FF5722", "#795548", "#607D8B", "#9E9E9E", "#EEEEEE"
+    ];
+    const grid = document.createElement("div");
+    grid.className = "ccf-scp-swatch-grid";
+    for (const hex of SWATCHES) {
+      const sw = document.createElement("button");
+      sw.type = "button";
+      sw.className = "ccf-scp-swatch";
+      sw.style.background = hex;
+      sw.title = hex;
+      sw.addEventListener("click", (e) => { e.stopPropagation(); setColor(hex); colorPop.hidden = true; });
+      grid.appendChild(sw);
+    }
+    const hexRow = document.createElement("div");
+    hexRow.className = "ccf-scp-hexrow";
+    const hexHash = document.createElement("span");
+    hexHash.textContent = "#";
+    const hexInput = document.createElement("input");
+    hexInput.type = "text";
+    hexInput.maxLength = 6;
+    hexInput.className = "ccf-scp-hexinput";
+    hexInput.addEventListener("click", (e) => e.stopPropagation());
+    hexInput.addEventListener("input", () => { const v = "#" + hexInput.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) setColor(v); });
+    hexRow.appendChild(hexHash);
+    hexRow.appendChild(hexInput);
+    colorPop.appendChild(grid);
+    colorPop.appendChild(hexRow);
+    colorBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (colorPop.hidden) { hexInput.value = (colorOverride || selectedChar?.color || "#888888").replace("#", ""); colorPop.hidden = false; }
+      else colorPop.hidden = true;
+    });
+
     spTools.appendChild(paletteBtn);
     spTools.appendChild(colorBtn);
 
@@ -1220,8 +1274,8 @@
       spName.textContent = selectedChar ? selectedChar.name : "캐릭터 선택";
       if (selectedChar && selectedChar.icon) { spAvatar.src = selectedChar.icon; spAvatar.style.visibility = ""; }
       else spAvatar.style.visibility = "hidden";
-      colorInput.value = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
       colorOverride = "";
+      colorSwatch.style.background = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
     };
     const buildCharList = () => {
       charList.textContent = "";
@@ -2233,6 +2287,25 @@
           data: state.data ? { myCharacter: state.data.myCharacter, 키: Object.keys(state.data) } : null,
           캐릭터샘플: sampleChar
         };
+      },
+      // 팔레트·색상 아이콘 복제 실패 시: 네이티브 컴포저 아이콘 버튼들의 라벨을 본다.
+      toolIconsDiag() {
+        const out = [];
+        for (const b of document.querySelectorAll("button")) {
+          if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+          const svg = b.querySelector("svg");
+          if (!svg) continue;
+          const r = b.getBoundingClientRect();
+          if (r.width < 8 || r.width > 60 || b.offsetParent === null || r.top < 200) continue;
+          out.push({
+            aria: (b.getAttribute("aria-label") || "").slice(0, 24),
+            title: (b.title || "").slice(0, 24),
+            svg뷰박스: svg.getAttribute("viewBox"),
+            위치: `${Math.round(r.left)},${Math.round(r.top)}`
+          });
+          if (out.length > 24) break;
+        }
+        return out;
       },
       // 하단 배경색이 안 맞을 때: 네이티브 주사위 버튼의 조상들 배경색을 훑어 #282828 이
       // 어느 요소인지 찾는다(첫 불투명 조상이 #1D1D1D 라 그걸 잡고 있었다).
