@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.44
+// @version      0.1.45
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.44";
+  const VERSION = "0.1.45";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1368,13 +1368,19 @@
       set("--scp-send-bg", ss.backgroundColor);
       set("--scp-send-color", ss.color);
       set("--scp-send-radius", ss.borderRadius);
-      // 입력 영역(전송 버튼이 든 컨테이너)의 실제 배경색을 찾아 하단 바탕에 쓴다(#282828).
+      // 입력 영역의 실제 배경색. 첫 불투명이 아니라 첫 "완전 불투명(alpha 1)" 조상을
+      // 쓴다 — 컴포저는 반투명 오버레이(rgba(0,0,0,0.1)) 위에 불투명 종이(#121212)가
+      // 깔린 구조라, 오버레이를 잡으면 엉뚱하게 밝아진다(#1D1D1D).
+      const alphaOf = (c) => {
+        const n = String(c).match(/[\d.]+/g);
+        return n && n.length > 3 ? parseFloat(n[3]) : 1;
+      };
       let compBg = "";
       for (let el = sendBtn.parentElement; el && el !== document.body; el = el.parentElement) {
         const c = getComputedStyle(el).backgroundColor;
-        if (!/^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) { compBg = c; break; }
+        if (!/^(transparent|rgba\(0, 0, 0, 0\))$/.test(c) && alphaOf(c) >= 0.99) { compBg = c; break; }
       }
-      if (compBg) set("--scp-compose-bg", toOpaqueColor(compBg, pageBg));
+      if (compBg) set("--scp-compose-bg", compBg);
     }
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
