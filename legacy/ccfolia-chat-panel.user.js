@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.56
+// @version      0.1.57
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.56";
+  const VERSION = "0.1.57";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -51,6 +51,7 @@
   let lastSignature = null;
   let pinnedToBottom = true;
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
+  let paletteBtnRef = null; // 팔레트 아이콘 늦은 복제 재시도용
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
@@ -1002,7 +1003,7 @@
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
       /* 아바타(분리, 배경 없음) + 이름칸(#202020, 각짐, 높이 32/패딩 4). */
-      .ccf-scp-sp-group { position: relative; display: flex; align-items: center; gap: 8px;
+      .ccf-scp-sp-group { position: relative; display: flex; align-items: center; gap: 0;
         flex: 1 1 auto; min-width: 0; cursor: pointer; }
       .ccf-scp-sp-avatar { width: 40px; height: 40px; border-radius: 0; object-fit: cover;
         background: transparent; flex: 0 0 auto; }
@@ -1020,25 +1021,28 @@
       /* 색상 버튼 = 현재 색 스와치 */
       .ccf-scp-color-swatch { width: 20px; height: 20px; border-radius: 4px;
         border: 1px solid rgba(255,255,255,.4); background: #888888; display: block; }
-      .ccf-scp-sp-tool[data-tip]:hover::after { content: attr(data-tip); position: absolute;
-        top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px;
-        background: #000; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 4px;
-        white-space: nowrap; pointer-events: none; z-index: 20; }
-      /* 색상 피커 — 화면(룸) 정중앙 모달. */
+      /* 툴팁 — 좁게, 조금 더 아래, 부드럽게 페이드. */
+      .ccf-scp-sp-tool[data-tip]::after { content: attr(data-tip); position: absolute;
+        top: 100%; left: 50%; transform: translateX(-50%); margin-top: 9px;
+        background: #000; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px;
+        white-space: nowrap; pointer-events: none; z-index: 20;
+        opacity: 0; transition: opacity .15s ease; }
+      .ccf-scp-sp-tool[data-tip]:hover::after { opacity: 1; }
+      /* 색상 피커 — 화면(룸) 정중앙, 배경 투명(네이티브 react-color 모양). */
       .ccf-scp-colorpop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-        z-index: 2147483000;
-        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
-        border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); padding: 15px 9px 9px 15px; }
+        z-index: 2147483000; background: transparent; padding: 15px 9px 9px 15px; }
       .ccf-scp-colorpop[hidden] { display: none; }
-      .ccf-scp-swatch-grid { display: grid; grid-template-columns: repeat(7, 26px); gap: 6px; }
-      .ccf-scp-swatch { width: 26px; height: 26px; border: 0; border-radius: 6px; cursor: pointer;
+      .ccf-scp-swatch-grid { display: grid; grid-template-columns: repeat(7, 30px); gap: 6px; }
+      .ccf-scp-swatch { width: 30px; height: 30px; border: 0; border-radius: 4px; cursor: pointer;
         padding: 0; }
       .ccf-scp-swatch:hover { outline: 2px solid #fff; outline-offset: 1px; }
-      .ccf-scp-hexrow { display: flex; align-items: center; gap: 4px; margin-top: 10px;
-        background: #fff; border-radius: 6px; padding: 4px 8px; }
-      .ccf-scp-hexrow span { color: #888; font-size: 13px; }
-      .ccf-scp-hexinput { flex: 1 1 auto; border: 0; outline: none; background: transparent;
-        color: #222; font-size: 14px; min-width: 0; }
+      .ccf-scp-hexrow { display: flex; align-items: stretch; margin-top: 6px; width: 246px;
+        border-radius: 4px; overflow: hidden; }
+      .ccf-scp-hexrow span { display: flex; align-items: center; justify-content: center;
+        width: 30px; background: #f0f0f0; color: #98a1a4; font-size: 14px; }
+      .ccf-scp-hexinput { flex: 1 1 auto; border: 0; outline: none; height: 30px;
+        box-shadow: #f0f0f0 0 0 0 1px inset; color: #666; font-size: 14px; min-width: 0;
+        padding-left: 8px; }
       /* 채팅 팔레트 — 헤더 아래 떠 있는 카드(패널 전체 아님). */
       .ccf-scp-palette { position: absolute; top: calc(var(--scp-header-h, 48px) + 8px);
         left: 8px; right: 8px; max-height: 55%; z-index: 10; display: flex; flex-direction: column;
@@ -1169,8 +1173,9 @@
     paletteBtn.className = "ccf-scp-sp-tool";
     paletteBtn.dataset.tip = "채팅 팔레트";
     const palIcon = captureNativePaletteIcon();
-    if (palIcon) paletteBtn.appendChild(palIcon.cloneNode(true));
+    if (palIcon) { paletteBtn.appendChild(palIcon.cloneNode(true)); paletteBtn.dataset.cloned = "1"; }
     else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z"/></svg>';
+    paletteBtnRef = paletteBtn;
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
     paletteList.hidden = true;
@@ -1428,6 +1433,11 @@
         captureNativeRowTemplate();
         if (ccfScpRowTemplate) lastSignature = null;   // 잡히면 그 모양으로 다시 그린다
       }
+      // 팔레트 아이콘을 아직 못 복제했으면(컴포저가 늦게 준비됨) 다시 시도.
+      if (paletteBtnRef && !paletteBtnRef.dataset.cloned) {
+        const ic = captureNativePaletteIcon();
+        if (ic) { paletteBtnRef.textContent = ""; paletteBtnRef.appendChild(ic.cloneNode(true)); paletteBtnRef.dataset.cloned = "1"; }
+      }
       renderTabs();
       renderList();
     }, 500);
@@ -1446,6 +1456,7 @@
     ccfScpListClass = "";
     ccfScpRowDivider = "";
     selectedChar = null;
+    paletteBtnRef = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
