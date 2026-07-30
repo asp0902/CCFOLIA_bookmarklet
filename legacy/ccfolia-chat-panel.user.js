@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.41
+// @version      0.1.42
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.41";
+  const VERSION = "0.1.42";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -466,6 +466,20 @@
     if (signature === lastSignature) return;
     lastSignature = signature;
 
+    // 다시 그리기 전 스크롤 상태를 기억한다. 바닥에 고정돼 있었으면 다시 바닥으로,
+    // 아니면 보던 위치를 유지한다(안 그러면 목록을 새로 만들 때 중간으로 튄다).
+    const wasPinned = pinnedToBottom;
+    const prevTop = listEl.scrollTop;
+    const finishScroll = () => {
+      if (wasPinned) {
+        listEl.scrollTop = listEl.scrollHeight;
+        // 아바타 이미지가 늦게 로드되며 높이가 늘면 바닥이 밀리므로 한 번 더 맞춘다.
+        requestAnimationFrame(() => { if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight; });
+      } else {
+        listEl.scrollTop = prevTop;
+      }
+    };
+
     listEl.textContent = "";
     if (!messages.length) {
       const empty = document.createElement("div");
@@ -566,11 +580,11 @@
       inner.style.margin = "0";
       inner.appendChild(frag);
       listEl.appendChild(inner);
+      finishScroll();
       return;
     }
     listEl.appendChild(frag);
-
-    if (pinnedToBottom) listEl.scrollTop = listEl.scrollHeight;
+    finishScroll();
   }
 
   /* ---------------- 전송 ---------------- */
@@ -938,9 +952,12 @@
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
         background: color-mix(in srgb, currentColor 6%, transparent); }
       .ccf-scp-die:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
-      /* 아이콘 버튼: 정사각형, svg 를 24px 로 */
+      /* 아이콘 버튼: 네이티브처럼 배경·테두리 없이 아이콘만. */
       .ccf-scp-die-icon { padding: 4px; width: 34px; height: 34px; display: flex;
-        align-items: center; justify-content: center; }
+        align-items: center; justify-content: center;
+        background: transparent; border: 0; border-radius: 6px; opacity: .85; }
+      .ccf-scp-die-icon:hover { opacity: 1;
+        background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-die-icon svg { width: 24px; height: 24px; display: block; }
       .ccf-scp-input { width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
