@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.52
+// @version      0.1.53
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.52";
+  const VERSION = "0.1.53";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1008,6 +1008,9 @@
       .ccf-scp-palette { position: absolute; inset: var(--scp-header-h, 48px) 0 0 0; z-index: 10;
         display: flex; flex-direction: column;
         background: var(--scp-bg-opaque, #222); }
+      /* display:flex 가 [hidden] 의 display:none 을 덮어써서 팝업이 항상 떠 패널을
+         가리는 문제 방지. */
+      .ccf-scp-palette[hidden] { display: none; }
       .ccf-scp-palette-head { display: flex; align-items: center; justify-content: space-between;
         padding: 10px 12px; font-size: 14px; font-weight: 700; flex: 0 0 auto;
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
