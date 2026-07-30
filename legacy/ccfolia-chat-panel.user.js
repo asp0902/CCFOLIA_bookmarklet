@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.57
+// @version      0.1.58
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.57";
+  const VERSION = "0.1.58";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1008,7 +1008,7 @@
       .ccf-scp-sp-avatar { width: 40px; height: 40px; border-radius: 0; object-fit: cover;
         background: transparent; flex: 0 0 auto; }
       .ccf-scp-sp-field { display: flex; align-items: center; flex: 1 1 auto; min-width: 0;
-        height: 32px; padding: 4px; box-sizing: border-box; background: #202020; }
+        height: 40px; padding: 4px; box-sizing: border-box; background: #202020; }
       .ccf-scp-sp-name { font-size: 16px; opacity: .95; flex: 1 1 auto;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-sp-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
@@ -1021,16 +1021,17 @@
       /* 색상 버튼 = 현재 색 스와치 */
       .ccf-scp-color-swatch { width: 20px; height: 20px; border-radius: 4px;
         border: 1px solid rgba(255,255,255,.4); background: #888888; display: block; }
-      /* 툴팁 — 좁게, 조금 더 아래, 부드럽게 페이드. */
+      /* 툴팁 — 좁게, 더 아래로, 호버 후 약간의 지연 뒤 부드럽게 나타남. */
       .ccf-scp-sp-tool[data-tip]::after { content: attr(data-tip); position: absolute;
-        top: 100%; left: 50%; transform: translateX(-50%); margin-top: 9px;
-        background: #000; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px;
+        top: 100%; left: 50%; transform: translateX(-50%); margin-top: 14px;
+        background: #000; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 4px;
         white-space: nowrap; pointer-events: none; z-index: 20;
-        opacity: 0; transition: opacity .15s ease; }
-      .ccf-scp-sp-tool[data-tip]:hover::after { opacity: 1; }
-      /* 색상 피커 — 화면(룸) 정중앙, 배경 투명(네이티브 react-color 모양). */
+        opacity: 0; transition: opacity .18s ease; }
+      .ccf-scp-sp-tool[data-tip]:hover::after { opacity: 1; transition-delay: .4s; }
+      /* 색상 피커 — 화면(룸) 정중앙. 배경은 네이티브 고정색(테마 무관). */
       .ccf-scp-colorpop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-        z-index: 2147483000; background: transparent; padding: 15px 9px 9px 15px; }
+        z-index: 2147483000; background: rgba(44, 44, 44, 0.87);
+        border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.5); padding: 15px 9px 9px 15px; }
       .ccf-scp-colorpop[hidden] { display: none; }
       .ccf-scp-swatch-grid { display: grid; grid-template-columns: repeat(7, 30px); gap: 6px; }
       .ccf-scp-swatch { width: 30px; height: 30px; border: 0; border-radius: 4px; cursor: pointer;
@@ -1174,7 +1175,7 @@
     paletteBtn.dataset.tip = "채팅 팔레트";
     const palIcon = captureNativePaletteIcon();
     if (palIcon) { paletteBtn.appendChild(palIcon.cloneNode(true)); paletteBtn.dataset.cloned = "1"; }
-    else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z"/></svg>';
+    else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="4" cy="6" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="4" cy="18" r="1.6"/><rect x="8" y="5" width="12" height="2"/><rect x="8" y="11" width="12" height="2"/><rect x="8" y="17" width="12" height="2"/></svg>';
     paletteBtnRef = paletteBtn;
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
