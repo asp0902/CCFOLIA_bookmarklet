@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.42
+// @version      0.1.43
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.42";
+  const VERSION = "0.1.43";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -883,10 +883,9 @@
       .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-close svg { display: block; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
+      /* 탭 바 — 네이티브처럼 위아래 구분선 없이 배경색만. */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
-        background: var(--scp-tabs-bg, var(--scp-bg-opaque, #212121));
-        border-top: 1px solid var(--scp-line, rgba(128,128,128,.32));
-        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
+        background: var(--scp-tabs-bg, var(--scp-bg-opaque, #212121)); }
       /* 비활성 탭은 색이 아니라 opacity 로 흐려진다(네이티브 확인). 색·opacity 를
          둘 다 변수로 받아, MUI 가 어느 방식을 쓰든 그대로 재현한다. */
       .ccf-scp-tab { padding: var(--scp-tab-pad, 10px 14px); cursor: pointer; border: 0;
@@ -941,23 +940,22 @@
         font-size: var(--scp-text-size, inherit); line-height: var(--scp-text-line, 1.5);
         color: var(--scp-text-color, inherit); }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
-      /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 색을 읽어 맞춘다. */
+      /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 입력영역 배경색. */
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
-        background: var(--scp-bg-opaque, rgba(24,24,26,1));
-        border-top: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
-      /* 주사위 버튼 줄 */
-      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+        background: var(--scp-compose-bg, var(--scp-bg-opaque, rgba(24,24,26,1))); }
+      /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게. */
+      .ccf-scp-dice { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 8px; }
       .ccf-scp-die { padding: 3px 8px; border-radius: 5px; cursor: pointer; font: inherit;
         font-size: 12px; color: inherit;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
         background: color-mix(in srgb, currentColor 6%, transparent); }
       .ccf-scp-die:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
-      /* 아이콘 버튼: 네이티브처럼 배경·테두리 없이 아이콘만. */
+      /* 아이콘 버튼: 네이티브처럼 배경·테두리 없이 아이콘만, 호버는 원형(#393939≈흰 8%). */
       .ccf-scp-die-icon { padding: 4px; width: 34px; height: 34px; display: flex;
         align-items: center; justify-content: center;
-        background: transparent; border: 0; border-radius: 6px; opacity: .85; }
+        background: transparent; border: 0; border-radius: 50%; opacity: .85; }
       .ccf-scp-die-icon:hover { opacity: 1;
-        background: color-mix(in srgb, currentColor 14%, transparent); }
+        background: color-mix(in srgb, currentColor 8%, transparent); }
       .ccf-scp-die-icon svg { width: 24px; height: 24px; display: block; }
       .ccf-scp-input { width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
@@ -1088,6 +1086,12 @@
     renderTabs();
     renderList();
     subscribeStore();
+    // 처음 열 때는 바닥에서 시작해야 한다. 초기 렌더 직후엔 아바타·본보기가 아직
+    // 안 잡혀 높이가 확정 안 되므로, 몇 차례 더 바닥으로 맞춘다(그 사이 위로 올리면 멈춤).
+    pinnedToBottom = true;
+    [80, 250, 500, 900].forEach((ms) => window.setTimeout(() => {
+      if (panelEl && listEl && pinnedToBottom) listEl.scrollTop = listEl.scrollHeight;
+    }, ms));
     // 네이티브 패널이 열리고 닫히거나 창 크기가 바뀌면 위치를 다시 맞춘다.
     window.addEventListener("resize", safeLayout);
     // 저장소 변화가 없어도 주기적으로 다시 그린다. 구독만 믿으면, 패널을 연 시점에
@@ -1351,6 +1355,13 @@
       set("--scp-send-bg", ss.backgroundColor);
       set("--scp-send-color", ss.color);
       set("--scp-send-radius", ss.borderRadius);
+      // 입력 영역(전송 버튼이 든 컨테이너)의 실제 배경색을 찾아 하단 바탕에 쓴다(#282828).
+      let compBg = "";
+      for (let el = sendBtn.parentElement; el && el !== document.body; el = el.parentElement) {
+        const c = getComputedStyle(el).backgroundColor;
+        if (!/^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) { compBg = c; break; }
+      }
+      if (compBg) set("--scp-compose-bg", toOpaqueColor(compBg, pageBg));
     }
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
