@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.53
+// @version      0.1.54
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.53";
+  const VERSION = "0.1.54";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -805,6 +805,18 @@
     return map;
   }
 
+  // 네이티브 컴포저의 아이콘 버튼(팔레트·색상 등) svg 를 접근 이름으로 찾아 복제.
+  function captureNativeToolIcon(re) {
+    for (const b of document.querySelectorAll("button")) {
+      if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+      const svg = b.querySelector("svg");
+      if (!svg) continue;
+      const label = (b.getAttribute("aria-label") || b.title || "").trim();
+      if (re.test(label)) return svg;
+    }
+    return null;
+  }
+
   // 입력창 커서 위치에 텍스트를 넣는다(선택 영역이 있으면 대체). 주사위·서식 버튼 공용.
   function insertAtCursor(text) {
     if (!inputEl) return;
@@ -985,31 +997,32 @@
         padding: 4px 0; margin-bottom: 8px; background: transparent; }
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
+      /* 이름칸 — 각진 어두운 바탕. 아바타는 40x40 정사각(배경 없음). */
       .ccf-scp-sp-field { position: relative; display: flex; align-items: center; gap: 8px;
-        flex: 1 1 auto; min-width: 0; padding: 4px 8px; border-radius: 6px; cursor: pointer;
-        background: #202020; }
-      .ccf-scp-sp-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
-        background: color-mix(in srgb, currentColor 12%, transparent); flex: 0 0 auto; }
+        flex: 1 1 auto; min-width: 0; padding: 4px 8px; cursor: pointer; background: #202020; }
+      .ccf-scp-sp-avatar { width: 40px; height: 40px; border-radius: 0; object-fit: cover;
+        background: transparent; flex: 0 0 auto; }
       .ccf-scp-sp-name { font-size: 14px; opacity: .95; flex: 1 1 auto;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-sp-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-      .ccf-scp-sp-tool { position: relative; width: 28px; height: 28px; border: 0; cursor: pointer;
-        background: transparent; color: inherit; opacity: .8; border-radius: 6px; font-size: 16px;
-        line-height: 1; }
-      .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-sp-color { width: 26px; height: 26px; padding: 0; border: 0; background: transparent;
-        cursor: pointer; }
-      /* 툴팁 — 기본 title 대신 CSS. */
+      /* 툴 버튼 — 호버 원형 #393939(흰 8%), 툴팁은 아래. */
+      .ccf-scp-sp-tool { position: relative; width: 32px; height: 32px; border: 0; cursor: pointer;
+        background: transparent; color: inherit; opacity: .8; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; padding: 4px; line-height: 1; }
+      .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
+      .ccf-scp-sp-tool svg { width: 22px; height: 22px; display: block; }
+      .ccf-scp-color-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        border: 0; opacity: 0; pointer-events: none; }
       .ccf-scp-sp-tool[data-tip]:hover::after { content: attr(data-tip); position: absolute;
-        bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px;
+        top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px;
         background: #000; color: #fff; font-size: 11px; padding: 3px 7px; border-radius: 4px;
         white-space: nowrap; pointer-events: none; z-index: 20; }
-      /* 채팅 팔레트 팝업 — 헤더 아래 패널 전체를 덮는다. */
-      .ccf-scp-palette { position: absolute; inset: var(--scp-header-h, 48px) 0 0 0; z-index: 10;
-        display: flex; flex-direction: column;
-        background: var(--scp-bg-opaque, #222); }
-      /* display:flex 가 [hidden] 의 display:none 을 덮어써서 팝업이 항상 떠 패널을
-         가리는 문제 방지. */
+      /* 채팅 팔레트 — 헤더 아래 떠 있는 카드(패널 전체 아님). */
+      .ccf-scp-palette { position: absolute; top: calc(var(--scp-header-h, 48px) + 8px);
+        left: 8px; right: 8px; max-height: 55%; z-index: 10; display: flex; flex-direction: column;
+        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.5); overflow: hidden; }
+      /* display:flex 가 [hidden] 의 display:none 을 덮어써 항상 뜨는 문제 방지. */
       .ccf-scp-palette[hidden] { display: none; }
       .ccf-scp-palette-head { display: flex; align-items: center; justify-content: space-between;
         padding: 10px 12px; font-size: 14px; font-weight: 700; flex: 0 0 auto;
@@ -1133,17 +1146,28 @@
     paletteBtn.type = "button";
     paletteBtn.className = "ccf-scp-sp-tool";
     paletteBtn.dataset.tip = "채팅 팔레트";
-    paletteBtn.textContent = "☰";
+    const palIcon = captureNativeToolIcon(/팔레트|palette/i);
+    if (palIcon) paletteBtn.appendChild(palIcon.cloneNode(true));
+    else paletteBtn.textContent = "☰";
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
     paletteList.hidden = true;
-    const colorBtn = document.createElement("input");
-    colorBtn.type = "color";
-    colorBtn.className = "ccf-scp-sp-color";
-    colorBtn.title = "색상";
-    colorBtn.value = "#888888";
-    colorBtn.addEventListener("input", () => { colorOverride = colorBtn.value; });
-    colorBtn.addEventListener("click", (e) => e.stopPropagation());
+
+    // 색상: 네이티브 색상 아이콘 버튼 + 뒤에 숨긴 <input type=color>(클릭 시 피커 열기).
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.className = "ccf-scp-color-input";
+    colorInput.value = "#888888";
+    colorInput.addEventListener("input", () => { colorOverride = colorInput.value; });
+    const colorBtn = document.createElement("button");
+    colorBtn.type = "button";
+    colorBtn.className = "ccf-scp-sp-tool";
+    colorBtn.dataset.tip = "색상";
+    const colIcon = captureNativeToolIcon(/색|color/i);
+    if (colIcon) colorBtn.appendChild(colIcon.cloneNode(true));
+    else colorBtn.textContent = "🎨";
+    colorBtn.addEventListener("click", (e) => { e.stopPropagation(); colorInput.click(); });
+    colorBtn.appendChild(colorInput);
     spTools.appendChild(paletteBtn);
     spTools.appendChild(colorBtn);
 
@@ -1196,7 +1220,7 @@
       spName.textContent = selectedChar ? selectedChar.name : "캐릭터 선택";
       if (selectedChar && selectedChar.icon) { spAvatar.src = selectedChar.icon; spAvatar.style.visibility = ""; }
       else spAvatar.style.visibility = "hidden";
-      colorBtn.value = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
+      colorInput.value = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
       colorOverride = "";
     };
     const buildCharList = () => {
