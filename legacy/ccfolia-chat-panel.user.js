@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.40
+// @version      0.1.41
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.40";
+  const VERSION = "0.1.41";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -737,6 +737,23 @@
     statusEl.className = "ccf-scp-status" + (kind ? ` is-${kind}` : "");
   }
 
+  // 네이티브 주사위 버튼의 아이콘(svg)을 면 수(faces)별로 복제해 둔다. 접근 이름
+  // (aria-label·title·글자)에서 d숫자를 읽어 매칭한다. 못 읽으면 텍스트로 대체된다.
+  function captureNativeDiceIcons() {
+    const map = new Map();
+    for (const b of document.querySelectorAll("button")) {
+      if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+      const svg = b.querySelector("svg");
+      if (!svg) continue;
+      const label = (b.getAttribute("aria-label") || b.title || b.textContent || "").trim();
+      const m = label.match(/(\d+)\s*[dD]\s*(\d+)/) || label.match(/[dD]\s*(\d+)/) || label.match(/(\d+)\s*면/);
+      const faces = m ? parseInt(m[2] || m[1], 10) : 0;
+      if (![4, 6, 8, 10, 12, 20, 100].includes(faces)) continue;
+      if (!map.has(faces)) map.set(faces, svg);
+    }
+    return map;
+  }
+
   // 입력창 커서 위치에 텍스트를 넣는다(선택 영역이 있으면 대체). 주사위·서식 버튼 공용.
   function insertAtCursor(text) {
     if (!inputEl) return;
@@ -921,6 +938,10 @@
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
         background: color-mix(in srgb, currentColor 6%, transparent); }
       .ccf-scp-die:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+      /* 아이콘 버튼: 정사각형, svg 를 24px 로 */
+      .ccf-scp-die-icon { padding: 4px; width: 34px; height: 34px; display: flex;
+        align-items: center; justify-content: center; }
+      .ccf-scp-die-icon svg { width: 24px; height: 24px; display: block; }
       .ccf-scp-input { width: 100%; min-height: 60px; resize: vertical; border-radius: 6px;
         border: 1px solid var(--scp-line, rgba(128,128,128,.32));
         background: color-mix(in srgb, currentColor 6%, transparent); color: inherit;
@@ -984,16 +1005,26 @@
     const compose = document.createElement("div");
     compose.className = "ccf-scp-compose";
 
-    // 주사위 버튼 줄 — 누르면 커서 위치에 해당 명령을 넣는다. 실제 굴림 여부는
-    // 전송 후 코코포리아가 처리한다(우리 경로로도 굴려지는지 검증 대상).
+    // 주사위 버튼 줄 — 누르면 커서 위치에 해당 명령을 넣는다. 아이콘은 네이티브
+    // 주사위 버튼에서 복제해 쓰고, 못 찾으면 텍스트로 대체한다.
     const diceRow = document.createElement("div");
     diceRow.className = "ccf-scp-dice";
-    for (const die of ["1d4", "1d6", "1d8", "1d10", "1d12", "1d20", "1d100"]) {
+    const nativeIcons = captureNativeDiceIcons();
+    const dice = [4, 6, 8, 10, 12, 20, 100];
+    for (const faces of dice) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "ccf-scp-die";
-      b.textContent = die;
-      b.addEventListener("click", () => insertAtCursor(die));
+      const icon = nativeIcons.get(faces);
+      if (icon) {
+        b.classList.add("ccf-scp-die-icon");
+        b.appendChild(icon.cloneNode(true));
+        b.title = `1d${faces}`;
+        b.setAttribute("aria-label", `1d${faces}`);
+      } else {
+        b.textContent = `1d${faces}`;
+      }
+      b.addEventListener("click", () => insertAtCursor(`1d${faces}`));
       diceRow.appendChild(b);
     }
     compose.appendChild(diceRow);
@@ -1890,6 +1921,29 @@
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
         };
+      },
+      // 주사위 아이콘이 텍스트로 대체될 때: 네이티브 주사위 버튼이 어떤 라벨을 갖는지 본다.
+      diceButtonsDiag() {
+        const out = [];
+        for (const b of document.querySelectorAll("button")) {
+          if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+          const svg = b.querySelector("svg");
+          if (!svg) continue;
+          const label = (b.getAttribute("aria-label") || b.title || b.textContent || "").trim();
+          const r = b.getBoundingClientRect();
+          // 화면에 보이는, 크기가 작은(아이콘) 버튼만.
+          if (r.width < 8 || r.width > 60 || r.height < 8 || b.offsetParent === null) continue;
+          out.push({
+            라벨: label.slice(0, 20) || "(없음)",
+            제목: (b.title || "").slice(0, 20),
+            aria: (b.getAttribute("aria-label") || "").slice(0, 20),
+            svg뷰박스: svg.getAttribute("viewBox"),
+            위치: `${Math.round(r.left)},${Math.round(r.top)}`,
+            부모: `${b.parentElement?.tagName}.${String(b.parentElement?.className || "").slice(0, 24)}`
+          });
+          if (out.length > 20) break;
+        }
+        return { 잡힌아이콘: [...captureNativeDiceIcons().keys()], 버튼목록: out };
       },
       // 주사위가 안 굴려질 때: 진짜 주사위 메시지가 어떤 필드로 저장돼 있는지 본다.
       // 우리가 보낼 때 그 필드를 재현하면 굴려지는지 판단하는 근거.
