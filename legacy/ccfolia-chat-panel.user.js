@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.50
+// @version      0.1.51
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.50";
+  const VERSION = "0.1.51";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -762,8 +762,10 @@
     }
     // 순수 주사위면 결과를 계산해 extend.roll 로 넣는다 → 굴려진 카드로 렌더된다.
     // 아니면 템플릿의 빈 extend 를 그대로 둔다(일반 메시지).
+    // 템플릿이 다이스 메시지면 extend.roll 이 딸려온다. 다이스가 아니면 반드시 비운다
+    // (안 그러면 직전 판정이 그대로 반복돼 나간다).
     const rolled = evaluateDiceCommand(text);
-    if (rolled) fields.extend = toFirestoreValue(rolled);
+    fields.extend = toFirestoreValue(rolled || {});
     if ("createdAt" in template) fields.createdAt = makeTimestampLike(template.createdAt);
     if ("updatedAt" in template) fields.updatedAt = makeTimestampLike(template.updatedAt);
     if (ctx.uid && "from" in template) fields.from = { stringValue: ctx.uid };
@@ -980,9 +982,7 @@
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       /* 화자 선택 바 */
       .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
-        padding: 6px 8px; margin-bottom: 8px; border-radius: 6px; cursor: pointer;
-        background: color-mix(in srgb, currentColor 6%, transparent); }
-      .ccf-scp-speaker:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+        padding: 4px 2px; margin-bottom: 8px; cursor: pointer; background: transparent; }
       .ccf-scp-sp-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
         background: color-mix(in srgb, currentColor 12%, transparent); flex: 0 0 auto; }
       .ccf-scp-sp-name { font-size: 14px; opacity: .95; flex: 1 1 auto;
@@ -994,7 +994,8 @@
       .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-sp-color { width: 26px; height: 26px; padding: 0; border: 0; background: transparent;
         cursor: pointer; }
-      .ccf-scp-palette { left: auto; right: 0; min-width: 200px; }
+      .ccf-scp-palette { left: 0; right: 0; min-width: 0; }
+      .ccf-scp-palette-head { font-size: 11px; opacity: .6; padding: 4px 8px 6px; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
         z-index: 5; max-height: 260px; overflow-y: auto; min-width: 180px;
@@ -1120,12 +1121,15 @@
     colorBtn.value = "#888888";
     colorBtn.addEventListener("input", () => { colorOverride = colorBtn.value; });
     colorBtn.addEventListener("click", (e) => e.stopPropagation());
-    paletteBtn.appendChild(paletteList);
     spTools.appendChild(paletteBtn);
     spTools.appendChild(colorBtn);
 
     const buildPalette = () => {
       paletteList.textContent = "";
+      const head = document.createElement("div");
+      head.className = "ccf-scp-palette-head";
+      head.textContent = "채팅 팔레트";
+      paletteList.appendChild(head);
       const cmds = String(selectedChar?.commands || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       if (!cmds.length) {
         const e = document.createElement("div");
@@ -1206,6 +1210,7 @@
     speaker.appendChild(spName);
     speaker.appendChild(spTools);
     speaker.appendChild(charList);
+    speaker.appendChild(paletteList);
     renderSpeaker();
     compose.appendChild(speaker);
 
