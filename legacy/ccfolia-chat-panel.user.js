@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.48
+// @version      0.1.49
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.48";
+  const VERSION = "0.1.49";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -50,6 +50,7 @@
   // 처음 열었을 때 그릴 게 없다고 판단해 안내문조차 없이 빠져나간다(빈 패널).
   let lastSignature = null;
   let pinnedToBottom = true;
+  let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
   // 바닥으로 내리되, 그로 인한 scroll 이벤트가 고정을 풀지 않게 잠시 평가를 막는다.
@@ -115,6 +116,20 @@
     } catch (error) {
       return null;
     }
+  }
+
+  // 화자로 쓸 수 있는 캐릭터 목록(entities.roomCharacters). order 순.
+  function readCharacters() {
+    try {
+      const ent = findStore()?.getState()?.entities?.roomCharacters?.entities || {};
+      return Object.values(ent)
+        .filter((c) => c && !c.archived)
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((c) => ({
+          id: c._id, name: String(c.name || ""), icon: String(c.iconUrl || ""),
+          color: String(c.color || ""), commands: String(c.commands || "")
+        }));
+    } catch (error) { return []; }
   }
 
   function getRoomId() {
@@ -735,6 +750,13 @@
     }
     fields.text = { stringValue: text };
     fields.channel = { stringValue: currentChannel };
+    // 화자를 골랐으면 이름·아이콘·색을 그 캐릭터로 바꾼다(from 은 내 uid 유지).
+    if (selectedChar) {
+      fields.name = { stringValue: selectedChar.name };
+      fields.iconUrl = { stringValue: selectedChar.icon };
+      fields.imageUrl = { stringValue: selectedChar.icon };
+      fields.color = { stringValue: selectedChar.color || "#888888" };
+    }
     // 순수 주사위면 결과를 계산해 extend.roll 로 넣는다 → 굴려진 카드로 렌더된다.
     // 아니면 템플릿의 빈 extend 를 그대로 둔다(일반 메시지).
     const rolled = evaluateDiceCommand(text);
@@ -953,6 +975,26 @@
       /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 입력영역 배경색. */
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
+      /* 화자 선택 바 */
+      .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
+        padding: 4px 6px; margin-bottom: 8px; border-radius: 6px; cursor: pointer;
+        background: color-mix(in srgb, currentColor 6%, transparent); }
+      .ccf-scp-speaker:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+      .ccf-scp-sp-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+        background: color-mix(in srgb, currentColor 12%, transparent); flex: 0 0 auto; }
+      .ccf-scp-sp-name { font-size: 13px; opacity: .9; }
+      .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
+        z-index: 5; max-height: 260px; overflow-y: auto; min-width: 180px;
+        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
+        border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.5); padding: 4px; }
+      .ccf-scp-charitem { display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 5px 8px; border: 0; background: transparent; color: inherit; cursor: pointer;
+        border-radius: 5px; font: inherit; font-size: 13px; text-align: left; }
+      .ccf-scp-charitem:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+      .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 24px; height: 24px;
+        border-radius: 50%; object-fit: cover; flex: 0 0 auto;
+        background: color-mix(in srgb, currentColor 12%, transparent); }
+      .ccf-scp-charlist-empty { padding: 8px; opacity: .6; font-size: 12px; }
       /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게, 전송 버튼은 오른쪽 끝. */
       .ccf-scp-dice { display: flex; flex-wrap: nowrap; align-items: center; gap: 0;
         margin-bottom: 8px; }
@@ -1034,6 +1076,71 @@
 
     const compose = document.createElement("div");
     compose.className = "ccf-scp-compose";
+
+    // 화자 선택 바 — 아바타 + 이름. 클릭하면 캐릭터 목록. 고르면 전송이 그 화자로 나감.
+    const speaker = document.createElement("div");
+    speaker.className = "ccf-scp-speaker";
+    const spAvatar = document.createElement("img");
+    spAvatar.className = "ccf-scp-sp-avatar";
+    spAvatar.alt = "";
+    const spName = document.createElement("span");
+    spName.className = "ccf-scp-sp-name";
+    const charList = document.createElement("div");
+    charList.className = "ccf-scp-charlist";
+    charList.hidden = true;
+
+    const renderSpeaker = () => {
+      spName.textContent = selectedChar ? selectedChar.name : "캐릭터 선택";
+      if (selectedChar && selectedChar.icon) { spAvatar.src = selectedChar.icon; spAvatar.style.visibility = ""; }
+      else spAvatar.style.visibility = "hidden";
+    };
+    const buildCharList = () => {
+      charList.textContent = "";
+      const chars = readCharacters();
+      if (!chars.length) {
+        const e = document.createElement("div");
+        e.className = "ccf-scp-charlist-empty";
+        e.textContent = "이 룸에 캐릭터가 없습니다.";
+        charList.appendChild(e);
+        return;
+      }
+      // 첫 항목: 화자 해제(내 기본값으로 전송).
+      const chars2 = [{ id: "", name: "(기본)", icon: "", color: "" }, ...chars];
+      for (const c of chars2) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "ccf-scp-charitem";
+        if (c.icon) {
+          const img = document.createElement("img");
+          img.src = c.icon; img.alt = "";
+          item.appendChild(img);
+        } else {
+          const sp = document.createElement("span");
+          sp.className = "ccf-scp-charitem-noicon";
+          item.appendChild(sp);
+        }
+        const nm = document.createElement("span");
+        nm.textContent = c.name;
+        item.appendChild(nm);
+        item.addEventListener("click", () => {
+          selectedChar = c.id ? c : null;
+          charList.hidden = true;
+          renderSpeaker();
+          inputEl?.focus();
+        });
+        charList.appendChild(item);
+      }
+    };
+    speaker.addEventListener("click", (e) => {
+      if (e.target.closest(".ccf-scp-charlist")) return;
+      if (charList.hidden) { buildCharList(); charList.hidden = false; }
+      else charList.hidden = true;
+    });
+    speaker.appendChild(spAvatar);
+    speaker.appendChild(spName);
+    speaker.appendChild(charList);
+    renderSpeaker();
+    compose.appendChild(speaker);
 
     // 주사위 버튼 줄 — 누르면 커서 위치에 해당 명령을 넣는다. 아이콘은 네이티브
     // 주사위 버튼에서 복제해 쓰고, 못 찾으면 텍스트로 대체한다.
@@ -1136,6 +1243,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
+    selectedChar = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
