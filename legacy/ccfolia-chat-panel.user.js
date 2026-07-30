@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.47
+// @version      0.1.48
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.47";
+  const VERSION = "0.1.48";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1959,6 +1959,35 @@
               글자: normalizeSpace(el.textContent).slice(0, 16),
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
+        };
+      },
+      // 캐릭터 바 만들기 전: store 안 캐릭터 데이터 구조를 확인한다(이름·아이콘·색·id).
+      charDiag() {
+        const store = findStore();
+        const state = store ? store.getState() : null;
+        if (!state) return "no store";
+        const ent = state.entities || {};
+        const safe = (o) => { try { return JSON.parse(JSON.stringify(o)); } catch (e) { return String(o); } };
+        // 캐릭터로 보이는 슬라이스 찾기: entities 안에 name+iconUrl 가진 엔티티 모음.
+        const slices = {};
+        for (const [k, v] of Object.entries(ent)) {
+          if (v && typeof v === "object" && v.entities) {
+            const first = Object.values(v.entities)[0];
+            slices[k] = { 개수: Object.keys(v.entities).length, 첫샘플키: first ? Object.keys(first) : [] };
+          }
+        }
+        // characters 슬라이스가 있으면 첫 엔티티 통째로.
+        let sampleChar = null;
+        const charSlice = ent.characters || ent.character || null;
+        if (charSlice?.entities) {
+          const first = Object.values(charSlice.entities)[0];
+          if (first) sampleChar = safe(first);
+        }
+        return {
+          state키: Object.keys(state),
+          entities슬라이스: slices,
+          data: state.data ? { myCharacter: state.data.myCharacter, 키: Object.keys(state.data) } : null,
+          캐릭터샘플: sampleChar
         };
       },
       // 하단 배경색이 안 맞을 때: 네이티브 주사위 버튼의 조상들 배경색을 훑어 #282828 이
