@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.61
+// @version      0.1.62
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.61";
+  const VERSION = "0.1.62";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -231,6 +231,7 @@
   let ccfScpRowTemplate = null;
   let ccfScpListClass = "";
   let ccfScpRowDivider = "";
+  let ccfScpRowPadBottom = 0; // 네이티브 줄의 아래 패딩(구분선 위 여백 +1px 계산용)
   let ccfScpInnerUl = null; // 증분 렌더용: 현재 줄들이 담긴 내부 ul
 
   function captureNativeRowTemplate() {
@@ -270,6 +271,7 @@
     // 목록 안에서만 걸려서, 클래스를 그대로 복제해도 우리 쪽엔 안 붙는다(0px).
     // 그래서 흉내 내지 말고 살아 있는 원본에서 값을 읽어 변수로 넘긴다.
     const sourceStyle = getComputedStyle(source);
+    ccfScpRowPadBottom = parseFloat(sourceStyle.paddingBottom) || 0;
     ccfScpRowDivider = sourceStyle.borderBottomWidth !== "0px"
       ? `${sourceStyle.borderBottomWidth} ${sourceStyle.borderBottomStyle} ${sourceStyle.borderBottomColor}`
       : "";
@@ -530,9 +532,12 @@
       if (nextIsCont) {
         row.setAttribute("data-ccf-prose-cont-leader", "1");
         row.style.removeProperty("border-bottom");
+        row.style.removeProperty("padding-bottom");
       } else {
         row.removeAttribute("data-ccf-prose-cont-leader");
         row.style.setProperty("border-bottom", divider, "important");
+        // 구분선 위에 1px 여백을 더 준다(고정값이라 재실행돼도 누적되지 않음).
+        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + 1}px`, "important");
       }
     });
   }
