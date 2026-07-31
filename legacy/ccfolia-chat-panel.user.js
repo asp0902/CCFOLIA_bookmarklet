@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.65
+// @version      0.1.66
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.65";
+  const VERSION = "0.1.66";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1015,9 +1015,10 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       /* 화자 선택 바 */
-      /* 네이티브 캐릭터 이름 바 박스모델: padding 8 전체, 내용 높이 40, margin 0. */
+      /* 네이티브 캐릭터 이름 바 박스모델: padding 8 전체, 내용 359×40, 패널 폭 꽉 참.
+         compose 좌우 패딩(12)을 음수 마진으로 상쇄해 네이티브처럼 폭을 채운다. */
       .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
-        padding: 8px; margin-bottom: 0; background: transparent; }
+        padding: 8px; margin: 0 -12px 8px; background: transparent; }
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
       /* 아바타(분리, 배경 없음) + 이름칸(#202020, 각짐, 높이 32/패딩 4). */
