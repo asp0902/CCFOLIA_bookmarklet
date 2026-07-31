@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.63
+// @version      0.1.64
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.63";
+  const VERSION = "0.1.64";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -995,8 +995,9 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       /* 화자 선택 바 */
+      /* 네이티브 캐릭터 이름 바 박스모델: padding 8 전체, 내용 높이 40, margin 0. */
       .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
-        padding: 4px 0; margin-bottom: 8px; background: transparent; }
+        padding: 8px; margin-bottom: 0; background: transparent; }
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
       /* 아바타(분리, 배경 없음) + 이름칸(#202020, 각짐, 높이 32/패딩 4). */
@@ -1014,7 +1015,7 @@
         background: transparent; color: inherit; opacity: .8; border-radius: 50%;
         display: flex; align-items: center; justify-content: center; padding: 4px; line-height: 1; }
       .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
-      .ccf-scp-sp-tool svg { width: 22px; height: 22px; display: block; }
+      .ccf-scp-sp-tool svg { width: 24px; height: 24px; display: block; }
       /* 색상 버튼 = 현재 색 스와치 */
       .ccf-scp-color-swatch { width: 20px; height: 20px; border-radius: 4px;
         border: 1px solid rgba(255,255,255,.4); background: #888888; display: block; }
