@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.64
+// @version      0.1.65
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.64";
+  const VERSION = "0.1.65";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -51,6 +51,8 @@
   let lastSignature = null;
   let pinnedToBottom = true;
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
+  let speakerPaletteBtn = null; // 팔레트·색상 아이콘 늦은 복제 재시도용
+  let speakerColorBtn = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
@@ -819,6 +821,24 @@
     return map;
   }
 
+  // 네이티브 캐릭터 이름 바(form 의 해당 div) 안의 아이콘: 3번째=채팅 팔레트, 4번째=색상.
+  // aria 가 없어 위치로 복제한다(사용자 제공 셀렉터 기준).
+  function captureNativeSpeakerIcons() {
+    const form = [...document.querySelectorAll("form")].find((f) =>
+      f instanceof HTMLElement && !f.closest(`#${PANEL_ID}`) && f.querySelector("button svg"));
+    if (!form) return {};
+    // 이름 바 = 아바타·이름 input·팔레트·색상 버튼을 담은 div. name input(MuiInputBase)이
+    // 있는 자식으로 찾는다(nth-child 하드코딩보다 견고).
+    const bar = [...form.children].find((c) =>
+      c instanceof HTMLElement && c.querySelector(".MuiInputBase-root, input") && c.querySelector("button svg"));
+    if (!bar) return {};
+    const iconButtons = [...bar.querySelectorAll("button")].filter((b) => b.querySelector("svg"));
+    return {
+      palette: iconButtons[0]?.querySelector("svg") || null,
+      color: iconButtons[1]?.querySelector("svg") || null
+    };
+  }
+
   // 입력창 커서 위치에 텍스트를 넣는다(선택 영역이 있으면 대체). 주사위·서식 버튼 공용.
   function insertAtCursor(text) {
     if (!inputEl) return;
@@ -1016,9 +1036,6 @@
         display: flex; align-items: center; justify-content: center; padding: 4px; line-height: 1; }
       .ccf-scp-sp-tool:hover { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
       .ccf-scp-sp-tool svg { width: 24px; height: 24px; display: block; }
-      /* 색상 버튼 = 현재 색 스와치 */
-      .ccf-scp-color-swatch { width: 20px; height: 20px; border-radius: 4px;
-        border: 1px solid rgba(255,255,255,.4); background: #888888; display: block; }
       /* 툴팁 — 좁게, 더 아래로, 호버 후 약간의 지연 뒤 부드럽게 나타남. */
       .ccf-scp-sp-tool[data-tip]::after { content: attr(data-tip); position: absolute;
         top: 100%; left: 50%; transform: translateX(-50%); margin-top: 14px;
@@ -1171,21 +1188,25 @@
     paletteBtn.type = "button";
     paletteBtn.className = "ccf-scp-sp-tool";
     paletteBtn.dataset.tip = "채팅 팔레트";
-    // 네이티브 "채팅 팔레트" 버튼과 동일한 MUI Palette 아이콘(사용자 제공 path). 색은
-    // currentColor 라 테마 아이콘색을 따라간다.
-    paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
+    // 아이콘은 네이티브에서 복제(이름 바의 1번째 아이콘 = 채팅 팔레트). MUI Palette 는
+    // 사실 색상 버튼 아이콘이라, 이전엔 팔레트에 잘못 썼다. 늦게 준비되면 tick 에서 재시도.
+    const spIcons = captureNativeSpeakerIcons();
+    if (spIcons.palette) { paletteBtn.appendChild(spIcons.palette.cloneNode(true)); paletteBtn.dataset.cloned = "1"; }
+    else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="4" cy="6" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="4" cy="18" r="1.6"/><rect x="8" y="5" width="12" height="2"/><rect x="8" y="11" width="12" height="2"/><rect x="8" y="17" width="12" height="2"/></svg>';
+    speakerPaletteBtn = paletteBtn;
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
     paletteList.hidden = true;
 
-    // 색상: 현재 색을 보여주는 스와치 버튼 + 스와치 그리드 팝업(네이티브 피커 모양).
+    // 색상: 네이티브 색상 아이콘(이름 바의 2번째 = MUI Palette) + 스와치 그리드 팝업.
+    // 아이콘은 현재 색으로 tint 해서 지금 색을 보여준다.
     const colorBtn = document.createElement("button");
     colorBtn.type = "button";
     colorBtn.className = "ccf-scp-sp-tool ccf-scp-color-btn";
     colorBtn.dataset.tip = "캐릭터 색상 변경";
-    const colorSwatch = document.createElement("span");
-    colorSwatch.className = "ccf-scp-color-swatch";
-    colorBtn.appendChild(colorSwatch);
+    if (spIcons.color) { colorBtn.appendChild(spIcons.color.cloneNode(true)); colorBtn.dataset.cloned = "1"; }
+    else colorBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
+    speakerColorBtn = colorBtn;
     const colorPop = document.createElement("div");
     colorPop.className = "ccf-scp-colorpop";
     colorPop.hidden = true;
@@ -1195,7 +1216,7 @@
     const setColor = (hex) => {
       if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
       colorOverride = hex;
-      colorSwatch.style.background = hex;
+      colorBtn.style.color = hex; // 아이콘을 현재 색으로 물들여 지금 색을 표시
     };
     const SWATCHES = [
       "#222222", "#f44336", "#e91e63", "#9c27b0", "#673ab7", "#3f51b5", "#2196f3",
@@ -1286,7 +1307,7 @@
       if (selectedChar && selectedChar.icon) { spAvatar.src = selectedChar.icon; spAvatar.style.visibility = ""; }
       else spAvatar.style.visibility = "hidden";
       colorOverride = "";
-      colorSwatch.style.background = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "#888888";
+      colorBtn.style.color = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "";
     };
     const buildCharList = () => {
       charList.textContent = "";
@@ -1431,6 +1452,19 @@
         captureNativeRowTemplate();
         if (ccfScpRowTemplate) lastSignature = null;   // 잡히면 그 모양으로 다시 그린다
       }
+      // 팔레트·색상 아이콘을 아직 못 복제했으면(컴포저가 늦게 준비됨) 다시 시도.
+      if ((speakerPaletteBtn && !speakerPaletteBtn.dataset.cloned)
+          || (speakerColorBtn && !speakerColorBtn.dataset.cloned)) {
+        const ic = captureNativeSpeakerIcons();
+        if (ic.palette && speakerPaletteBtn && !speakerPaletteBtn.dataset.cloned) {
+          speakerPaletteBtn.textContent = ""; speakerPaletteBtn.appendChild(ic.palette.cloneNode(true));
+          speakerPaletteBtn.dataset.cloned = "1";
+        }
+        if (ic.color && speakerColorBtn && !speakerColorBtn.dataset.cloned) {
+          speakerColorBtn.textContent = ""; speakerColorBtn.appendChild(ic.color.cloneNode(true));
+          speakerColorBtn.dataset.cloned = "1";
+        }
+      }
       renderTabs();
       renderList();
     }, 500);
@@ -1450,6 +1484,8 @@
     ccfScpRowDivider = "";
     ccfScpInnerUl = null;
     selectedChar = null;
+    speakerPaletteBtn = null;
+    speakerColorBtn = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
