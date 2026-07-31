@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.60
+// @version      0.1.61
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.60";
+  const VERSION = "0.1.61";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -231,6 +231,7 @@
   let ccfScpRowTemplate = null;
   let ccfScpListClass = "";
   let ccfScpRowDivider = "";
+  let ccfScpInnerUl = null; // 증분 렌더용: 현재 줄들이 담긴 내부 ul
 
   function captureNativeRowTemplate() {
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => {
@@ -476,11 +477,72 @@
     }
   }
 
+  // 한 메시지의 줄 요소를 만든다(네이티브 복제 우선, 없으면 자체 li 구성).
+  function buildRow(msg, prevName) {
+    const cloned = buildRowFromNativeTemplate(msg, prevName);
+    if (cloned) return cloned;
+
+    const isCont = msg.name === prevName;
+    const row = document.createElement("li");
+    row.className = "ccf-scp-row" + (isCont ? " is-cont" : "");
+    const avatar = document.createElement("div");
+    avatar.className = "ccf-scp-avatar";
+    if (!isCont && msg.icon) {
+      const img = document.createElement("img");
+      img.src = msg.icon; img.alt = ""; img.loading = "lazy";
+      avatar.appendChild(img);
+    }
+    row.appendChild(avatar);
+    const bodyWrap = document.createElement("div");
+    bodyWrap.className = "ccf-scp-body";
+    if (!isCont) {
+      const head = document.createElement("div");
+      head.className = "ccf-scp-head";
+      const nameEl = document.createElement("span");
+      nameEl.className = "ccf-scp-name";
+      nameEl.textContent = msg.name;
+      if (msg.color) nameEl.style.color = msg.color;
+      head.appendChild(nameEl);
+      const timeEl = document.createElement("span");
+      timeEl.className = "ccf-scp-time";
+      timeEl.textContent = `- ${formatTime(msg.at)}`;
+      head.appendChild(timeEl);
+      bodyWrap.appendChild(head);
+    }
+    const body = document.createElement("p");
+    body.className = "ccf-scp-text";
+    body.textContent = msg.roll
+      ? msg.roll
+      : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
+    bodyWrap.appendChild(body);
+    row.appendChild(bodyWrap);
+    return row;
+  }
+
+  // 화자가 바뀌는 줄에만 구분선을 긋고, 이어짐 앞 줄엔 leader 표식(간격 축소)을 준다.
+  // CSS 규칙은 어딘가에 눌려 0px 가 되므로 줄에 직접·강제로 넣는다.
+  function applyRowMarkers(rows) {
+    const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
+    rows.forEach((row, i) => {
+      if (!(row instanceof HTMLElement)) return;
+      const next = rows[i + 1];
+      const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
+      if (nextIsCont) {
+        row.setAttribute("data-ccf-prose-cont-leader", "1");
+        row.style.removeProperty("border-bottom");
+      } else {
+        row.removeAttribute("data-ccf-prose-cont-leader");
+        row.style.setProperty("border-bottom", divider, "important");
+      }
+    });
+  }
+
   function renderList() {
     if (!listEl) return;
     const messages = readMessages(currentChannel);
     if (messages == null) {
       listEl.textContent = "";
+      ccfScpInnerUl = null;
       const empty = document.createElement("div");
       empty.className = "ccf-scp-empty";
       empty.textContent = "코코포리아 룸 데이터를 아직 찾지 못했습니다. 잠시 후 자동으로 표시됩니다.";
@@ -490,23 +552,43 @@
 
     const signature = messages.map((m) => m.id).join(",");
     if (signature === lastSignature) return;
-    lastSignature = signature;
 
-    // 다시 그리기 전 스크롤 상태를 기억한다. 바닥에 고정돼 있었으면 다시 바닥으로,
-    // 아니면 보던 위치를 유지한다(안 그러면 목록을 새로 만들 때 중간으로 튄다).
     const wasPinned = pinnedToBottom;
     const prevTop = listEl.scrollTop;
-    const finishScroll = () => {
+    const restoreScroll = () => {
       if (wasPinned) {
         scrollListToBottom();
-        // 아바타 이미지가 늦게 로드되며 높이가 늘면 바닥이 밀리므로 한 번 더 맞춘다.
+        // 아바타가 늦게 로드돼 높이가 늘면 바닥이 밀리므로 한 번 더 맞춘다.
         requestAnimationFrame(() => { if (pinnedToBottom) scrollListToBottom(); });
       } else {
         listEl.scrollTop = prevTop;
       }
     };
 
+    // 증분 렌더: 기존 목록 뒤에 메시지가 추가만 됐고 내부 ul 이 살아 있으면, 전체를
+    // 다시 그리지 않고 새 줄만 붙인다. 전체 재생성이 아바타 리로드(깜박임)와 스크롤
+    // 소실(중간으로 튐)의 원인이었다.
+    if (lastSignature && ccfScpInnerUl && ccfScpInnerUl.isConnected
+        && signature.startsWith(lastSignature + ",")) {
+      const oldCount = lastSignature.split(",").length;
+      const oldLast = ccfScpInnerUl.lastElementChild;
+      let prevName = messages[oldCount - 1]?.name ?? null;
+      const appended = [];
+      for (const msg of messages.slice(oldCount)) {
+        const row = buildRow(msg, prevName);
+        prevName = msg.name;
+        ccfScpInnerUl.appendChild(row);
+        appended.push(row);
+      }
+      applyRowMarkers([oldLast, ...appended].filter(Boolean));
+      lastSignature = signature;
+      restoreScroll();
+      return;
+    }
+
+    lastSignature = signature;
     listEl.textContent = "";
+    ccfScpInnerUl = null;
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "ccf-scp-empty";
@@ -515,89 +597,16 @@
       return;
     }
 
-    // 네이티브와 같은 구성: [아이콘] [이름 · 시각 / 본문].
-    // 같은 화자가 이어 말하면 아이콘·이름을 생략하고 본문만 이어 붙인다.
     const frag = document.createDocumentFragment();
     let prevName = null;
     for (const msg of messages) {
-      // 네이티브 줄을 복제할 수 있으면 그쪽을 쓴다 — 글꼴·간격·아바타가 저절로 같아진다.
-      const cloned = buildRowFromNativeTemplate(msg, prevName);
-      if (cloned) {
-        prevName = msg.name;
-        frag.appendChild(cloned);
-        continue;
-      }
-
-      const isCont = msg.name === prevName;
+      frag.appendChild(buildRow(msg, prevName));
       prevName = msg.name;
-
-      // li + p 구조를 쓰는 이유: format-sync 의 렌더 대상 선택자에 'li p' 가 있어,
-      // 봉투가 든 원문을 넣어두면 서식·나레이션·이미지를 그쪽이 그려준다.
-      // MUI 클래스는 여전히 쓰지 않으므로 prose-mode/알림 스크립트는 이 패널을 건드리지 않는다.
-      const row = document.createElement("li");
-      row.className = "ccf-scp-row" + (isCont ? " is-cont" : "");
-
-      const avatar = document.createElement("div");
-      avatar.className = "ccf-scp-avatar";
-      if (!isCont && msg.icon) {
-        const img = document.createElement("img");
-        img.src = msg.icon;
-        img.alt = "";
-        img.loading = "lazy";
-        avatar.appendChild(img);
-      }
-      row.appendChild(avatar);
-
-      const bodyWrap = document.createElement("div");
-      bodyWrap.className = "ccf-scp-body";
-
-      if (!isCont) {
-        const head = document.createElement("div");
-        head.className = "ccf-scp-head";
-        const nameEl = document.createElement("span");
-        nameEl.className = "ccf-scp-name";
-        nameEl.textContent = msg.name;
-        if (msg.color) nameEl.style.color = msg.color;
-        head.appendChild(nameEl);
-        const timeEl = document.createElement("span");
-        timeEl.className = "ccf-scp-time";
-        timeEl.textContent = `- ${formatTime(msg.at)}`;
-        head.appendChild(timeEl);
-        bodyWrap.appendChild(head);
-      }
-
-      const body = document.createElement("p");
-      body.className = "ccf-scp-text";
-      // 서식 스크립트가 있으면 봉투를 남긴 원문을 넣어 그쪽이 렌더하게 하고,
-      // 없으면 보이지 않는 문자를 지운 평문을 넣는다. 주사위는 굴림 결과를 보여준다.
-      body.textContent = msg.roll
-        ? msg.roll
-        : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
-      bodyWrap.appendChild(body);
-      row.appendChild(bodyWrap);
-      frag.appendChild(row);
     }
-    // 구분선: 화자가 바뀌는 자리에만 긋는다(= 묶음의 마지막 줄 아래). 규칙으로 걸면
-    // 어딘가에 눌려 0px 로 남으므로, 해당 줄에 직접·강제로 넣는다.
-    const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
-    const built = [...frag.children];
-    built.forEach((row, index) => {
-      if (!(row instanceof HTMLElement)) return;
-      const next = built[index + 1];
-      const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
-      // roll20-bridge 가 네이티브 줄에 붙이는 표식을 그대로 붙인다 → 같은 전역 CSS 가
-      // 걸려 이어짐 간격이 네이티브와 똑같아진다. 그 스크립트 JS 는 우리 패널을
-      // 건너뛰므로 여기서 직접 붙여야 한다.
-      if (nextIsCont) {
-        row.setAttribute("data-ccf-prose-cont-leader", "1"); // 이어짐 바로 앞 줄: 아래 여백 축소
-        return; // 이어지는 중 — 선을 그으면 화자 묶음이 쪼개진다.
-      }
-      row.removeAttribute("data-ccf-prose-cont-leader");
-      row.style.setProperty("border-bottom", divider, "important");
-    });
+    applyRowMarkers([...frag.children]);
 
-    // 네이티브 목록의 클래스를 쓴 래퍼 안에 줄을 넣는다(간격·여백이 따라온다).
-    // 우리 스크롤 컨테이너에 직접 붙이면 목록 CSS 의 overflow 가 스크롤을 깬다.
+    // 네이티브 목록 클래스를 쓴 래퍼 안에 줄을 넣는다(간격·여백이 따라온다). 우리 스크롤
+    // 컨테이너에 직접 붙이면 목록 CSS 의 overflow 가 스크롤을 깬다.
     if (ccfScpListClass) {
       const inner = document.createElement("ul");
       inner.className = ccfScpListClass;
@@ -606,11 +615,12 @@
       inner.style.margin = "0";
       inner.appendChild(frag);
       listEl.appendChild(inner);
-      finishScroll();
+      ccfScpInnerUl = inner;
+      restoreScroll();
       return;
     }
     listEl.appendChild(frag);
-    finishScroll();
+    restoreScroll();
   }
 
   /* ---------------- 전송 ---------------- */
@@ -1433,6 +1443,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
+    ccfScpInnerUl = null;
     selectedChar = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
