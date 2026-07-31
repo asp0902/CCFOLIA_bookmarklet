@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.59
+// @version      0.1.60
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.59";
+  const VERSION = "0.1.60";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1010,7 +1010,7 @@
         background: #000; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 4px;
         white-space: nowrap; pointer-events: none; z-index: 20;
         opacity: 0; transition: opacity .18s ease; }
-      .ccf-scp-sp-tool[data-tip]:hover::after { opacity: 1; transition-delay: .2s; }
+      .ccf-scp-sp-tool[data-tip]:hover::after { opacity: 1; transition-delay: .1s; }
       /* 색상 피커 — 화면(룸) 정중앙. 배경은 네이티브 고정색(테마 무관). */
       .ccf-scp-colorpop { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
         z-index: 2147483000; background: rgba(44, 44, 44, 0.87);
