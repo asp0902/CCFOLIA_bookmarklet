@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.67
+// @version      0.1.68
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.67";
+  const VERSION = "0.1.68";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -881,7 +881,8 @@
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg
+        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg,
+        selectedCharId: selectedChar?.id || ""
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
   }
@@ -1365,6 +1366,7 @@
           selectedChar = c.id ? c : null;
           charList.hidden = true;
           renderSpeaker();
+          savePrefs(); // 마지막 화자를 기억한다(재열기·새로고침 시 복원).
           inputEl?.focus();
         });
         charList.appendChild(item);
@@ -1387,6 +1389,17 @@
     speaker.appendChild(nameGroup);
     speaker.appendChild(spTools);
     renderSpeaker();
+    // 마지막으로 골랐던 화자를 복원한다(id 로 이 룸에서 다시 찾는다 — 없으면 그대로 기본).
+    // 저장소가 늦게 로드될 수 있어 몇 차례 재시도.
+    const restoreSpeaker = () => {
+      if (selectedChar) return;
+      const savedId = readPrefs().selectedCharId;
+      if (!savedId) return;
+      const c = readCharacters().find((x) => x.id === savedId);
+      if (c) { selectedChar = c; renderSpeaker(); }
+    };
+    restoreSpeaker();
+    [300, 800, 1500].forEach((ms) => window.setTimeout(() => { if (panelEl) restoreSpeaker(); }, ms));
     compose.appendChild(speaker);
     // 팔레트·색상 팝업은 패널 최상위에 붙인다(버튼 중첩 방지 + 겹침 관리).
     panel.appendChild(paletteList);
