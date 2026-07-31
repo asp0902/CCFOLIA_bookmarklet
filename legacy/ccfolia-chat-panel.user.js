@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.66
+// @version      0.1.67
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.66";
+  const VERSION = "0.1.67";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -51,8 +51,9 @@
   let lastSignature = null;
   let pinnedToBottom = true;
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
-  let speakerPaletteBtn = null; // 팔레트·색상 아이콘 늦은 복제 재시도용
+  let speakerPaletteBtn = null; // 팔레트·색상·도움말 아이콘 늦은 복제 재시도용
   let speakerColorBtn = null;
+  let speakerHelpBtn = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
@@ -835,7 +836,9 @@
     const iconButtons = [...bar.querySelectorAll("button")].filter((b) => b.querySelector("svg"));
     return {
       palette: iconButtons[0]?.querySelector("svg") || null,
-      color: iconButtons[1]?.querySelector("svg") || null
+      color: iconButtons[1]?.querySelector("svg") || null,
+      help: iconButtons[2]?.querySelector("svg") || null,
+      helpBtn: iconButtons[2] || null
     };
   }
 
@@ -1011,14 +1014,18 @@
         font-size: var(--scp-text-size, inherit); line-height: var(--scp-text-line, 1.5);
         color: var(--scp-text-color, inherit); }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
-      /* 하단은 헤더처럼 불투명하게(반투명이면 뒤가 비친다) + 네이티브 입력영역 배경색. */
-      .ccf-scp-compose { flex: 0 0 auto; padding: 10px 12px;
+      /* 하단은 헤더처럼 불투명. 패딩 0 — 각 섹션(이름 바/주사위/입력)이 네이티브처럼
+         패널 폭을 꽉 채우고 자체 좌우 인셋(8px)을 가진다. */
+      .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
+      .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
+      .ccf-scp-input { width: calc(100% - 16px); margin: 0 8px; }
+      .ccf-scp-actions { padding-left: 8px; padding-right: 8px; }
+      .ccf-scp-status { padding-left: 8px; padding-right: 8px; }
       /* 화자 선택 바 */
-      /* 네이티브 캐릭터 이름 바 박스모델: padding 8 전체, 내용 359×40, 패널 폭 꽉 참.
-         compose 좌우 패딩(12)을 음수 마진으로 상쇄해 네이티브처럼 폭을 채운다. */
+      /* 네이티브 캐릭터 이름 바: padding 8, 내용 359×40, 패널 폭 꽉 참(compose 패딩 0). */
       .ccf-scp-speaker { position: relative; display: flex; align-items: center; gap: 8px;
-        padding: 8px; margin: 0 -12px 8px; background: transparent; }
+        padding: 8px; margin: 0; background: transparent; }
       /* 아바타+이름 필드 — 네이티브 입력칸처럼 어두운 바탕(#202020). ponytail: 색 고정,
          테마 달라지면 네이티브 입력칸에서 읽어 var 로 뺄 것. */
       /* 아바타(분리, 배경 없음) + 이름칸(#202020, 각짐, 높이 32/패딩 4). */
@@ -1255,8 +1262,24 @@
       else colorPop.hidden = true;
     });
 
+    // 도움말("채팅 커맨드에 대해") — 아이콘 복제 + 클릭 시 네이티브 도움말 버튼을 눌러
+    // 코코포리아가 여는 안내를 그대로 띄운다(기능 재구현 대신 원본 재사용).
+    const helpBtn = document.createElement("button");
+    helpBtn.type = "button";
+    helpBtn.className = "ccf-scp-sp-tool";
+    helpBtn.dataset.tip = "채팅 커맨드에 대해";
+    if (spIcons.help) { helpBtn.appendChild(spIcons.help.cloneNode(true)); helpBtn.dataset.cloned = "1"; }
+    else helpBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>';
+    speakerHelpBtn = helpBtn;
+    helpBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nb = captureNativeSpeakerIcons().helpBtn;
+      if (nb) nb.click();
+    });
+
     spTools.appendChild(paletteBtn);
     spTools.appendChild(colorBtn);
+    spTools.appendChild(helpBtn);
 
     const buildPalette = () => {
       paletteList.textContent = "";
@@ -1455,16 +1478,17 @@
       }
       // 팔레트·색상 아이콘을 아직 못 복제했으면(컴포저가 늦게 준비됨) 다시 시도.
       if ((speakerPaletteBtn && !speakerPaletteBtn.dataset.cloned)
-          || (speakerColorBtn && !speakerColorBtn.dataset.cloned)) {
+          || (speakerColorBtn && !speakerColorBtn.dataset.cloned)
+          || (speakerHelpBtn && !speakerHelpBtn.dataset.cloned)) {
         const ic = captureNativeSpeakerIcons();
-        if (ic.palette && speakerPaletteBtn && !speakerPaletteBtn.dataset.cloned) {
-          speakerPaletteBtn.textContent = ""; speakerPaletteBtn.appendChild(ic.palette.cloneNode(true));
-          speakerPaletteBtn.dataset.cloned = "1";
-        }
-        if (ic.color && speakerColorBtn && !speakerColorBtn.dataset.cloned) {
-          speakerColorBtn.textContent = ""; speakerColorBtn.appendChild(ic.color.cloneNode(true));
-          speakerColorBtn.dataset.cloned = "1";
-        }
+        const put = (btn, svg) => {
+          if (svg && btn && !btn.dataset.cloned) {
+            btn.textContent = ""; btn.appendChild(svg.cloneNode(true)); btn.dataset.cloned = "1";
+          }
+        };
+        put(speakerPaletteBtn, ic.palette);
+        put(speakerColorBtn, ic.color);
+        put(speakerHelpBtn, ic.help);
       }
       renderTabs();
       renderList();
@@ -1487,6 +1511,7 @@
     selectedChar = null;
     speakerPaletteBtn = null;
     speakerColorBtn = null;
+    speakerHelpBtn = null;
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
