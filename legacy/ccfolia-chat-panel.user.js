@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.68
+// @version      0.1.69
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.68";
+  const VERSION = "0.1.69";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1344,9 +1344,7 @@
         charList.appendChild(e);
         return;
       }
-      // 첫 항목: 화자 해제(내 기본값으로 전송).
-      const chars2 = [{ id: "", name: "(기본)", icon: "", color: "" }, ...chars];
-      for (const c of chars2) {
+      for (const c of chars) {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "ccf-scp-charitem";
@@ -1521,7 +1519,8 @@
     ccfScpListClass = "";
     ccfScpRowDivider = "";
     ccfScpInnerUl = null;
-    selectedChar = null;
+    // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
+    // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.
     speakerPaletteBtn = null;
     speakerColorBtn = null;
     speakerHelpBtn = null;
