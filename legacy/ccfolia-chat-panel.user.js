@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.62
+// @version      0.1.63
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.62";
+  const VERSION = "0.1.63";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -532,12 +532,11 @@
       if (nextIsCont) {
         row.setAttribute("data-ccf-prose-cont-leader", "1");
         row.style.removeProperty("border-bottom");
-        row.style.removeProperty("padding-bottom");
       } else {
         row.removeAttribute("data-ccf-prose-cont-leader");
         row.style.setProperty("border-bottom", divider, "important");
-        // 구분선 위에 1px 여백을 더 준다(고정값이라 재실행돼도 누적되지 않음).
-        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + 1}px`, "important");
+        // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
+        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom}px`, "important");
       }
     });
   }
