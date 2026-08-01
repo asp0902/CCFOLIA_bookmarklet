@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.77
+// @version      0.1.78
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.77";
+  const VERSION = "0.1.78";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1483,9 +1483,9 @@
 
     // 팝업(캐릭터 목록·팔레트·색상) 바깥을 클릭하면 닫는다. 각 팝업의 여는 버튼은
     // stopPropagation 하거나 자기 영역 안이라 이 검사에서 제외된다.
+    // 팔레트는 X 로만 닫는다(바깥 클릭으로 안 닫음). 목록·색상만 바깥 클릭 닫기.
     onDocClickHandler = (e) => {
       if (!charList.hidden && !e.target.closest(".ccf-scp-sp-group") && !e.target.closest(".ccf-scp-charlist")) charList.hidden = true;
-      if (!paletteList.hidden && !e.target.closest(".ccf-scp-palette") && !paletteBtn.contains(e.target)) paletteList.hidden = true;
       if (!colorPop.hidden && !e.target.closest(".ccf-scp-colorpop") && !colorBtn.contains(e.target)) colorPop.hidden = true;
     };
     document.addEventListener("click", onDocClickHandler);
