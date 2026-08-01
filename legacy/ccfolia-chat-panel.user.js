@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.79
+// @version      0.1.80
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.79";
+  const VERSION = "0.1.80";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -55,6 +55,8 @@
   let speakerColorBtn = null;
   let speakerHelpBtn = null;
   let onDocClickHandler = null; // 팝업 바깥 클릭 감지
+  let onDocDragMove = null; // 팔레트 드래그 이동
+  let onDocDragUp = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
@@ -1074,19 +1076,23 @@
       /* 채팅 팔레트 — 네이티브처럼 페이지 정중앙 플로팅 다이얼로그(반투명 어두운 배경). */
       .ccf-scp-palette { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
         width: 320px; max-height: 60vh; z-index: 2147483000; display: flex; flex-direction: column;
-        background: rgba(44,44,44,.87); border-radius: 6px;
+        background: rgba(44,44,44,.87); border-radius: 0;
         box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden; }
       /* display:flex 가 [hidden] 의 display:none 을 덮어써 항상 뜨는 문제 방지. */
       .ccf-scp-palette[hidden] { display: none; }
+      /* 헤더는 드래그 손잡이 — 마우스로 팝업을 옮긴다. */
       .ccf-scp-palette-head { display: flex; align-items: center; gap: 4px;
-        padding: 10px 12px; font-size: 14px; font-weight: 700; flex: 0 0 auto; }
+        padding: 12px 12px 12px 16px; font-size: 14px; font-weight: 700; flex: 0 0 auto;
+        cursor: move; user-select: none; }
       .ccf-scp-palette-head > span { flex: 1 1 auto; }
       .ccf-scp-palette-edit, .ccf-scp-palette-close { display: flex; align-items: center;
         justify-content: center; width: 30px; height: 30px; border: 0; background: transparent;
         color: inherit; cursor: pointer; border-radius: 50%; opacity: .8; }
       .ccf-scp-palette-edit:hover, .ccf-scp-palette-close:hover { opacity: 1;
         background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
+      .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 0; }
+      /* 커맨드 한 줄 — 박스모델: padding 8/16, 좌우 꽉 참. */
+      .ccf-scp-cmditem { padding: 8px 16px; border-radius: 0; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       /* 스크롤 없이 캐릭터 수만큼 높이가 늘어난다(위로 자라남). */
       .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
@@ -1215,6 +1221,7 @@
     const paletteList = document.createElement("div");
     paletteList.className = "ccf-scp-palette";
     paletteList.hidden = true;
+    let palDrag = null; // 드래그 중이면 {dx,dy}
 
     // 색상: 네이티브 색상 아이콘(이름 바의 2번째 = MUI Palette) + 스와치 그리드 팝업.
     // 아이콘은 현재 색으로 tint 해서 지금 색을 보여준다.
@@ -1310,6 +1317,16 @@
       hclose.setAttribute("aria-label", "닫기");
       hclose.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
       hclose.addEventListener("click", (e) => { e.stopPropagation(); paletteList.hidden = true; });
+      // 헤더를 잡고 드래그하면 팝업이 따라온다(버튼 위는 제외).
+      head.addEventListener("mousedown", (e) => {
+        if (e.target.closest("button")) return;
+        const r = paletteList.getBoundingClientRect();
+        paletteList.style.transform = "none";
+        paletteList.style.left = `${r.left}px`;
+        paletteList.style.top = `${r.top}px`;
+        palDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+        e.preventDefault();
+      });
       head.appendChild(htitle);
       head.appendChild(hedit);
       head.appendChild(hclose);
@@ -1332,8 +1349,8 @@
         item.textContent = cmd;
         item.addEventListener("click", (e) => {
           e.stopPropagation();
+          // 커맨드를 입력창에 넣되 팝업은 그대로 둔다(연속으로 고를 수 있게).
           if (inputEl) { inputEl.value = cmd; inputEl.focus(); }
-          paletteList.hidden = true;
         });
         body.appendChild(item);
       }
@@ -1500,6 +1517,16 @@
     };
     document.addEventListener("click", onDocClickHandler);
 
+    // 팔레트 드래그 이동(헤더 mousedown 에서 palDrag 설정).
+    onDocDragMove = (e) => {
+      if (!palDrag) return;
+      paletteList.style.left = `${e.clientX - palDrag.dx}px`;
+      paletteList.style.top = `${e.clientY - palDrag.dy}px`;
+    };
+    onDocDragUp = () => { palDrag = null; };
+    document.addEventListener("mousemove", onDocDragMove);
+    document.addEventListener("mouseup", onDocDragUp);
+
     lastSignature = null;
     // 배치가 실패해도 메시지는 보여야 한다 — 예전에 layoutPanel 의 예외가
     // 뒤따르는 renderTabs/renderList 까지 통째로 막아 빈 패널이 떴다.
@@ -1553,6 +1580,8 @@
     unsubscribeStore();
     window.removeEventListener("resize", safeLayout);
     if (onDocClickHandler) { document.removeEventListener("click", onDocClickHandler); onDocClickHandler = null; }
+    if (onDocDragMove) { document.removeEventListener("mousemove", onDocDragMove); onDocDragMove = null; }
+    if (onDocDragUp) { document.removeEventListener("mouseup", onDocDragUp); onDocDragUp = null; }
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     clearNativeShift();
     // 밀어낸 화면은 반드시 되돌린다. 남으면 패널이 없는데 지도만 좁아진 채로 남는다.
