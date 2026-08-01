@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.69
+// @version      0.1.70
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.69";
+  const VERSION = "0.1.70";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -131,7 +131,8 @@
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map((c) => ({
           id: c._id, name: String(c.name || ""), icon: String(c.iconUrl || ""),
-          color: String(c.color || ""), commands: String(c.commands || "")
+          color: String(c.color || ""), commands: String(c.commands || ""),
+          active: !!c.active
         }));
     } catch (error) { return []; }
   }
@@ -1088,13 +1089,17 @@
         z-index: 5; max-height: 260px; overflow-y: auto; min-width: 180px;
         background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
         border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.5); padding: 4px; }
-      .ccf-scp-charitem { display: flex; align-items: center; gap: 8px; width: 100%;
-        padding: 5px 8px; border: 0; background: transparent; color: inherit; cursor: pointer;
-        border-radius: 5px; font: inherit; font-size: 13px; text-align: left; }
+      .ccf-scp-charitem { display: flex; align-items: center; gap: 12px; width: 100%;
+        padding: 8px 12px; border: 0; background: transparent; color: inherit; cursor: pointer;
+        border-radius: 6px; font: inherit; text-align: left; }
       .ccf-scp-charitem:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 24px; height: 24px;
+      .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 44px; height: 44px;
         border-radius: 50%; object-fit: cover; flex: 0 0 auto;
         background: color-mix(in srgb, currentColor 12%, transparent); }
+      .ccf-scp-charitem-col { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+      .ccf-scp-charitem-name { font-size: 15px; font-weight: 700;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ccf-scp-charitem-status { font-size: 12px; opacity: .55; }
       .ccf-scp-charlist-empty { padding: 8px; opacity: .6; font-size: 12px; }
       /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게, 전송 버튼은 오른쪽 끝. */
       .ccf-scp-dice { display: flex; flex-wrap: nowrap; align-items: center; gap: 0;
@@ -1357,11 +1362,20 @@
           sp.className = "ccf-scp-charitem-noicon";
           item.appendChild(sp);
         }
+        // 네이티브처럼 이름(굵게) + 상태 부제.
+        const col = document.createElement("span");
+        col.className = "ccf-scp-charitem-col";
         const nm = document.createElement("span");
+        nm.className = "ccf-scp-charitem-name";
         nm.textContent = c.name;
-        item.appendChild(nm);
+        const st = document.createElement("span");
+        st.className = "ccf-scp-charitem-status";
+        st.textContent = c.active ? "활성화 상태" : "비활성화 상태";
+        col.appendChild(nm);
+        col.appendChild(st);
+        item.appendChild(col);
         item.addEventListener("click", () => {
-          selectedChar = c.id ? c : null;
+          selectedChar = c;
           charList.hidden = true;
           renderSpeaker();
           savePrefs(); // 마지막 화자를 기억한다(재열기·새로고침 시 복원).
