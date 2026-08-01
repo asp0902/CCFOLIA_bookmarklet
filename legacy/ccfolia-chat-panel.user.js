@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.70
+// @version      0.1.71
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.70";
+  const VERSION = "0.1.71";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1086,20 +1086,21 @@
       .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
-        z-index: 5; max-height: 260px; overflow-y: auto; min-width: 180px;
-        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.4));
-        border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.5); padding: 4px; }
+        z-index: 5; max-height: 320px; overflow-y: auto; min-width: 200px;
+        background: transparent; border: 0; border-radius: 6px; padding: 4px;
+        scrollbar-width: none; }
+      .ccf-scp-charlist::-webkit-scrollbar { display: none; }
       .ccf-scp-charitem { display: flex; align-items: center; gap: 12px; width: 100%;
         padding: 8px 12px; border: 0; background: transparent; color: inherit; cursor: pointer;
         border-radius: 6px; font: inherit; text-align: left; }
       .ccf-scp-charitem:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 44px; height: 44px;
+      .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 40px; height: 40px;
         border-radius: 50%; object-fit: cover; flex: 0 0 auto;
         background: color-mix(in srgb, currentColor 12%, transparent); }
       .ccf-scp-charitem-col { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-      .ccf-scp-charitem-name { font-size: 15px; font-weight: 700;
+      .ccf-scp-charitem-name { font-size: 14px; font-weight: 400;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .ccf-scp-charitem-status { font-size: 12px; opacity: .55; }
+      .ccf-scp-charitem-status { font-size: 14px; color: rgba(255,255,255,.7); }
       .ccf-scp-charlist-empty { padding: 8px; opacity: .6; font-size: 12px; }
       /* 주사위 버튼 줄 — 아이콘 사이 간격 좁게, 전송 버튼은 오른쪽 끝. */
       .ccf-scp-dice { display: flex; flex-wrap: nowrap; align-items: center; gap: 0;
