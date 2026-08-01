@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.80
+// @version      0.1.81
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.80";
+  const VERSION = "0.1.81";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1080,10 +1080,10 @@
         box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden; }
       /* display:flex 가 [hidden] 의 display:none 을 덮어써 항상 뜨는 문제 방지. */
       .ccf-scp-palette[hidden] { display: none; }
-      /* 헤더는 드래그 손잡이 — 마우스로 팝업을 옮긴다. */
+      /* 헤더는 드래그 손잡이 — 마우스로 팝업을 옮긴다. 제목 좌측 여백 24, 높이 48. */
       .ccf-scp-palette-head { display: flex; align-items: center; gap: 4px;
-        padding: 12px 12px 12px 16px; font-size: 14px; font-weight: 700; flex: 0 0 auto;
-        cursor: move; user-select: none; }
+        min-height: 48px; padding: 0 12px 0 24px; font-size: 14px; font-weight: 700;
+        flex: 0 0 auto; cursor: move; user-select: none; }
       .ccf-scp-palette-head > span { flex: 1 1 auto; }
       .ccf-scp-palette-edit, .ccf-scp-palette-close { display: flex; align-items: center;
         justify-content: center; width: 30px; height: 30px; border: 0; background: transparent;
@@ -1091,8 +1091,8 @@
       .ccf-scp-palette-edit:hover, .ccf-scp-palette-close:hover { opacity: 1;
         background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 0; }
-      /* 커맨드 한 줄 — 박스모델: padding 8/16, 좌우 꽉 참. */
-      .ccf-scp-cmditem { padding: 8px 16px; border-radius: 0; }
+      /* 커맨드 한 줄 — 박스모델: 내용 272×48, 좌우 패딩 24, 상하 0. */
+      .ccf-scp-cmditem { min-height: 48px; padding: 0 24px; border-radius: 0; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       /* 스크롤 없이 캐릭터 수만큼 높이가 늘어난다(위로 자라남). */
       .ccf-scp-charlist { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px;
