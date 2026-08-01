@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.78
+// @version      0.1.79
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.78";
+  const VERSION = "0.1.79";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -840,6 +840,7 @@
       palette: iconButtons[0]?.querySelector("svg") || null,
       color: iconButtons[1]?.querySelector("svg") || null,
       help: iconButtons[2]?.querySelector("svg") || null,
+      paletteBtnEl: iconButtons[0] || null,
       helpBtn: iconButtons[2] || null
     };
   }
@@ -1070,20 +1071,21 @@
       .ccf-scp-hexinput { flex: 1 1 auto; border: 0; outline: none; height: 30px;
         box-shadow: #f0f0f0 0 0 0 1px inset; color: #666; font-size: 14px; min-width: 0;
         padding-left: 8px; }
-      /* 채팅 팔레트 — 헤더 아래 떠 있는 카드(패널 전체 아님). */
-      .ccf-scp-palette { position: absolute; top: calc(var(--scp-header-h, 48px) + 8px);
-        left: 8px; right: 8px; max-height: 55%; z-index: 10; display: flex; flex-direction: column;
-        background: var(--scp-bg-opaque, #222); border: 1px solid var(--scp-line, rgba(128,128,128,.32));
-        border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.5); overflow: hidden; }
+      /* 채팅 팔레트 — 네이티브처럼 페이지 정중앙 플로팅 다이얼로그(반투명 어두운 배경). */
+      .ccf-scp-palette { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 320px; max-height: 60vh; z-index: 2147483000; display: flex; flex-direction: column;
+        background: rgba(44,44,44,.87); border-radius: 6px;
+        box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden; }
       /* display:flex 가 [hidden] 의 display:none 을 덮어써 항상 뜨는 문제 방지. */
       .ccf-scp-palette[hidden] { display: none; }
-      .ccf-scp-palette-head { display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 12px; font-size: 14px; font-weight: 700; flex: 0 0 auto;
-        border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
-      .ccf-scp-palette-close { display: flex; align-items: center; justify-content: center;
-        width: 30px; height: 30px; border: 0; background: transparent; color: inherit;
-        cursor: pointer; border-radius: 50%; opacity: .8; }
-      .ccf-scp-palette-close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+      .ccf-scp-palette-head { display: flex; align-items: center; gap: 4px;
+        padding: 10px 12px; font-size: 14px; font-weight: 700; flex: 0 0 auto; }
+      .ccf-scp-palette-head > span { flex: 1 1 auto; }
+      .ccf-scp-palette-edit, .ccf-scp-palette-close { display: flex; align-items: center;
+        justify-content: center; width: 30px; height: 30px; border: 0; background: transparent;
+        color: inherit; cursor: pointer; border-radius: 50%; opacity: .8; }
+      .ccf-scp-palette-edit:hover, .ccf-scp-palette-close:hover { opacity: 1;
+        background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       /* 스크롤 없이 캐릭터 수만큼 높이가 늘어난다(위로 자라남). */
@@ -1295,6 +1297,13 @@
       head.className = "ccf-scp-palette-head";
       const htitle = document.createElement("span");
       htitle.textContent = "채팅 팔레트";
+      // 편집(✏) — 네이티브 팔레트 편집을 위해 네이티브 팔레트 버튼을 연다.
+      const hedit = document.createElement("button");
+      hedit.type = "button";
+      hedit.className = "ccf-scp-palette-edit";
+      hedit.title = "편집";
+      hedit.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+      hedit.addEventListener("click", (e) => { e.stopPropagation(); paletteList.hidden = true; captureNativeSpeakerIcons().paletteBtnEl?.click(); });
       const hclose = document.createElement("button");
       hclose.type = "button";
       hclose.className = "ccf-scp-palette-close";
@@ -1302,6 +1311,7 @@
       hclose.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
       hclose.addEventListener("click", (e) => { e.stopPropagation(); paletteList.hidden = true; });
       head.appendChild(htitle);
+      head.appendChild(hedit);
       head.appendChild(hclose);
       paletteList.appendChild(head);
       const body = document.createElement("div");
