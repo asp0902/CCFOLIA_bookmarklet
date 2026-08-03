@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.92
+// @version      0.1.93
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.92";
+  const VERSION = "0.1.93";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -736,7 +736,6 @@
   const CCF_INVIS_START = "\u2063\u2063\u2063";
   const CCF_INVIS_END = "\u2062\u2062\u2062";
   const CCF_INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
-  const CCF_ENVELOPE_SOURCE = "ccr20-roll20-desc";
 
   function encodeEnvelopeToInvisible(obj) {
     const json = JSON.stringify(obj);
@@ -754,9 +753,10 @@
 
   // 마크다운 마커(**굵게** 등)를 스타일 run 으로 파싱하고 마커는 제거한다. 겹치는 스타일은
   // 같은 범위에 run 을 여러 개 만들어 표현한다(렌더가 각 run 스타일을 겹쳐 적용).
+  // format-sync 스타일 키: bold/italic/underline/strike / codeMode / blur / rubyText.
   const CCF_MD_MARKERS = [
-    ["~~", "strike"], ["**", "bold"], ["__", "underline"], ["||", "spoiler"],
-    ["*", "italic"], ["`", "code"]
+    ["~~", { strike: true }], ["**", { bold: true }], ["__", { underline: true }],
+    ["||", { blur: "8px" }], ["*", { italic: true }], ["`", { codeMode: true }]
   ];
   function parseFormatMarkers(input) {
     let text = "";
@@ -764,19 +764,25 @@
     const runs = [];
     let i = 0;
     while (i < input.length) {
-      // 루비: [base|읽기] → base 를 보이는 텍스트로, 읽기를 rubyText 스타일 run 으로.
+      // 루비 [base|읽기] / 툴팁 [base^툴팁] → base 는 보이는 텍스트, 나머지는 스타일 run.
       if (input[i] === "[") {
         const close = input.indexOf("]", i);
-        const bar = close >= 0 ? input.lastIndexOf("|", close) : -1;
-        if (close >= 0 && bar > i) {
-          const base = input.slice(i + 1, bar);
-          const reading = input.slice(bar + 1, close);
-          if (base && reading) {
-            const start = text.length;
-            text += base;
-            runs.push({ start, end: text.length, style: { rubyText: reading } });
-            i = close + 1;
-            continue;
+        if (close >= 0) {
+          const inner = input.slice(i + 1, close);
+          const barPos = inner.lastIndexOf("|");
+          const tipPos = inner.lastIndexOf("^");
+          const sep = barPos > tipPos ? barPos : tipPos;
+          if (sep > 0) {
+            const base = inner.slice(0, sep);
+            const value = inner.slice(sep + 1);
+            if (base && value) {
+              const start = text.length;
+              text += base;
+              const style = barPos > tipPos ? { rubyText: value } : { tooltipText: value };
+              runs.push({ start, end: text.length, style });
+              i = close + 1;
+              continue;
+            }
           }
         }
       }
@@ -784,12 +790,12 @@
       for (const pair of CCF_MD_MARKERS) { if (input.startsWith(pair[0], i)) { m = pair; break; } }
       if (m) {
         const [tok, style] = m;
-        if (open.has(style)) {
-          const start = open.get(style);
-          open.delete(style);
-          if (text.length > start) runs.push({ start, end: text.length, style: { [style]: true } });
+        if (open.has(tok)) {
+          const o = open.get(tok);
+          open.delete(tok);
+          if (text.length > o.start) runs.push({ start: o.start, end: text.length, style: { ...o.style } });
         } else {
-          open.set(style, text.length);
+          open.set(tok, { start: text.length, style });
         }
         i += tok.length;
       } else {
@@ -885,11 +891,12 @@
     let outText = cleanText;
     if (!rolled && (parsed.runs.length > 0 || narrationOn)) {
       const payload = {
-        v: 1, source: CCF_ENVELOPE_SOURCE, text: cleanText,
+        v: 1, text: cleanText,
         formatRuns: parsed.runs, alignRuns: [],
         blockStyle: narrationOn ? { narration: true } : {}
       };
-      outText = encodeEnvelopeToInvisible(payload) + cleanText;
+      // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
+      outText = cleanText + encodeEnvelopeToInvisible(payload);
     }
     fields.text = { stringValue: outText };
     fields.channel = { stringValue: currentChannel };
@@ -1642,12 +1649,25 @@
       inputEl.value = `${v.slice(0, s)}[${base}|${reading}]${v.slice(e)}`;
       inputEl.focus();
     };
+    // 툴팁: [base^툴팁] 문법(파서가 tooltipText run 으로).
+    const applyTip = () => {
+      const s = inputEl.selectionStart ?? 0;
+      const e = inputEl.selectionEnd ?? 0;
+      const base = inputEl.value.slice(s, e);
+      if (!base) { inputEl.focus(); return; }
+      const tip = window.prompt("툴팁(마우스 올리면 뜨는 설명):", "");
+      if (!tip) { inputEl.focus(); return; }
+      const v = inputEl.value;
+      inputEl.value = `${v.slice(0, s)}[${base}^${tip}]${v.slice(e)}`;
+      inputEl.focus();
+    };
     const FMT_BTNS = [
       ["B", () => wrapSel("**")],
       ["I", () => wrapSel("*")],
       ["U", () => wrapSel("__")],
       ["S", () => wrapSel("~~")],
       ["Rb", applyRuby],
+      ["Tip", applyTip],
       ["Bl", () => wrapSel("||")],
       ["</>", () => wrapSel("`")]
     ];
