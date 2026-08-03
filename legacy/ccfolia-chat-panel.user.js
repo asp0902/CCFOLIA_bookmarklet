@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.87
+// @version      0.1.88
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.87";
+  const VERSION = "0.1.88";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1058,7 +1058,17 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
-      .ccf-scp-input { width: calc(100% - 16px); margin: 0 8px; }
+      .ccf-scp-inputwrap { position: relative; margin: 0 8px; }
+      .ccf-scp-input { width: 100%; margin: 0; }
+      /* 매크로 자동완성 — 입력창 위로 뜨는 목록. */
+      .ccf-scp-suggest { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 4px;
+        z-index: 20; background: rgba(44,44,44,.97); border-radius: 4px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.5); max-height: 200px; overflow-y: auto; }
+      .ccf-scp-suggest[hidden] { display: none; }
+      .ccf-scp-suggest-item { padding: 8px 12px; cursor: pointer; font-size: 13px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ccf-scp-suggest-item:hover, .ccf-scp-suggest-item.is-active {
+        background: color-mix(in srgb, currentColor 16%, transparent); }
       .ccf-scp-actions { padding-left: 8px; padding-right: 8px; }
       .ccf-scp-status { padding-left: 8px; padding-right: 8px; }
       /* 화자 선택 바 */
@@ -1515,18 +1525,68 @@
     diceRow.appendChild(send);
     compose.appendChild(diceRow);
 
+    // 입력창 + 매크로 자동완성 드롭업(입력 단어가 화자 팔레트 커맨드에 걸리면 추천).
+    const inputWrap = document.createElement("div");
+    inputWrap.className = "ccf-scp-inputwrap";
+    const suggestEl = document.createElement("div");
+    suggestEl.className = "ccf-scp-suggest";
+    suggestEl.hidden = true;
     inputEl = document.createElement("textarea");
     inputEl.className = "ccf-scp-input";
     inputEl.placeholder = "메시지 입력 (Enter 전송 / Shift+Enter 줄바꿈)";
     // 다른 스크립트가 이 입력창을 채팅 입력창으로 오인해 가공하지 않도록 표시.
     inputEl.setAttribute(SAFE_ATTR, "1");
+
+    let suggestActive = -1;
+    const buildSuggest = () => {
+      const q = inputEl.value.trim();
+      const cmds = String(selectedChar?.commands || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      const ql = q.toLowerCase();
+      const matches = q ? cmds.filter((c) => c.toLowerCase().includes(ql) && c !== q).slice(0, 8) : [];
+      suggestEl.textContent = "";
+      suggestActive = -1;
+      if (!matches.length) { suggestEl.hidden = true; return; }
+      matches.forEach((c) => {
+        const it = document.createElement("div");
+        it.className = "ccf-scp-suggest-item";
+        it.textContent = c;
+        // mousedown 로 잡아야 textarea blur 로 목록이 사라지기 전에 실행된다.
+        it.addEventListener("mousedown", (e) => { e.preventDefault(); inputEl.value = c; suggestEl.hidden = true; inputEl.focus(); });
+        suggestEl.appendChild(it);
+      });
+      suggestEl.hidden = false;
+    };
+    const moveSuggest = (dir) => {
+      const items = [...suggestEl.querySelectorAll(".ccf-scp-suggest-item")];
+      if (!items.length) return false;
+      suggestActive = (suggestActive + dir + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle("is-active", i === suggestActive));
+      return true;
+    };
+    inputEl.addEventListener("input", buildSuggest);
+    inputEl.addEventListener("blur", () => window.setTimeout(() => { suggestEl.hidden = true; }, 150));
     inputEl.addEventListener("keydown", (event) => {
+      if (!suggestEl.hidden) {
+        if (event.key === "ArrowDown") { event.preventDefault(); moveSuggest(1); return; }
+        if (event.key === "ArrowUp") { event.preventDefault(); moveSuggest(-1); return; }
+        if (event.key === "Enter" && suggestActive >= 0 && !event.isComposing) {
+          const items = suggestEl.querySelectorAll(".ccf-scp-suggest-item");
+          event.preventDefault(); event.stopPropagation();
+          inputEl.value = items[suggestActive].textContent;
+          suggestEl.hidden = true;
+          return;
+        }
+        if (event.key === "Escape") { suggestEl.hidden = true; return; }
+      }
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
+      suggestEl.hidden = true;
       handleSend();
     });
-    compose.appendChild(inputEl);
+    inputWrap.appendChild(suggestEl);
+    inputWrap.appendChild(inputEl);
+    compose.appendChild(inputWrap);
 
     const actions = document.createElement("div");
     actions.className = "ccf-scp-actions";
