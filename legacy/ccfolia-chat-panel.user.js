@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.88
+// @version      0.1.89
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.88";
+  const VERSION = "0.1.89";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -328,8 +328,10 @@
       // 봉투를 남긴 원문을 넣으면 format-sync 가 서식·나레이션·이미지를 그려준다.
       // 주사위 메시지는 굴림 결과 문자열을 대신 보여준다(네이티브 카드는 우리 패널
       // 밖에서 그려지므로 여기선 결과 텍스트로).
+      // 판정은 "명령+코멘트 결과문자열" 전체를 넣어야 테마가 스킬명(코멘트)을 뽑아
+      // 카드에 붙인다. 결과만 넣으면 코멘트가 사라진다.
       body.textContent = msg.roll
-        ? msg.roll
+        ? `${stripInvisible(msg.text)} ${msg.roll}`.trim()
         : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
     }
 
@@ -1551,7 +1553,9 @@
         it.className = "ccf-scp-suggest-item";
         it.textContent = c;
         // mousedown 로 잡아야 textarea blur 로 목록이 사라지기 전에 실행된다.
-        it.addEventListener("mousedown", (e) => { e.preventDefault(); inputEl.value = c; suggestEl.hidden = true; inputEl.focus(); });
+        const pick = (e) => { e.preventDefault(); e.stopPropagation(); inputEl.value = c; suggestEl.hidden = true; inputEl.focus(); };
+        it.addEventListener("mousedown", pick);
+        it.addEventListener("click", pick);
         suggestEl.appendChild(it);
       });
       suggestEl.hidden = false;
@@ -1564,6 +1568,7 @@
       return true;
     };
     inputEl.addEventListener("input", buildSuggest);
+    inputEl.addEventListener("focus", buildSuggest); // 다시 포커스해도 추천이 뜨게
     inputEl.addEventListener("blur", () => window.setTimeout(() => { suggestEl.hidden = true; }, 150));
     inputEl.addEventListener("keydown", (event) => {
       if (!suggestEl.hidden) {
