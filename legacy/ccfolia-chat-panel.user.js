@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.91
+// @version      0.1.92
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.91";
+  const VERSION = "0.1.92";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -764,6 +764,22 @@
     const runs = [];
     let i = 0;
     while (i < input.length) {
+      // 루비: [base|읽기] → base 를 보이는 텍스트로, 읽기를 rubyText 스타일 run 으로.
+      if (input[i] === "[") {
+        const close = input.indexOf("]", i);
+        const bar = close >= 0 ? input.lastIndexOf("|", close) : -1;
+        if (close >= 0 && bar > i) {
+          const base = input.slice(i + 1, bar);
+          const reading = input.slice(bar + 1, close);
+          if (base && reading) {
+            const start = text.length;
+            text += base;
+            runs.push({ start, end: text.length, style: { rubyText: reading } });
+            i = close + 1;
+            continue;
+          }
+        }
+      }
       let m = null;
       for (const pair of CCF_MD_MARKERS) { if (input.startsWith(pair[0], i)) { m = pair; break; } }
       if (m) {
@@ -1615,13 +1631,25 @@
       inputEl.focus();
       inputEl.setSelectionRange(s + marker.length, e + marker.length);
     };
+    const applyRuby = () => {
+      const s = inputEl.selectionStart ?? 0;
+      const e = inputEl.selectionEnd ?? 0;
+      const base = inputEl.value.slice(s, e);
+      if (!base) { inputEl.focus(); return; }
+      const reading = window.prompt("루비(글자 위에 다는 읽기):", "");
+      if (!reading) { inputEl.focus(); return; }
+      const v = inputEl.value;
+      inputEl.value = `${v.slice(0, s)}[${base}|${reading}]${v.slice(e)}`;
+      inputEl.focus();
+    };
     const FMT_BTNS = [
-      ["B", () => wrapSel("**"), "bold"],
-      ["I", () => wrapSel("*"), "italic"],
-      ["U", () => wrapSel("__"), "underline"],
-      ["S", () => wrapSel("~~"), "strike"],
-      ["Bl", () => wrapSel("||"), "spoiler"],
-      ["</>", () => wrapSel("`"), "code"]
+      ["B", () => wrapSel("**")],
+      ["I", () => wrapSel("*")],
+      ["U", () => wrapSel("__")],
+      ["S", () => wrapSel("~~")],
+      ["Rb", applyRuby],
+      ["Bl", () => wrapSel("||")],
+      ["</>", () => wrapSel("`")]
     ];
     for (const [label, fn] of FMT_BTNS) {
       const b = document.createElement("button");
