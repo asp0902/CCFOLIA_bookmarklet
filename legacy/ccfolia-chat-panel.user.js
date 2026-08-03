@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.84
+// @version      0.1.85
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.84";
+  const VERSION = "0.1.85";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2559,24 +2559,26 @@
         };
         let dice = null;
         let plain = null;
-        for (const id of Object.keys(entities)) {
-          const m = entities[id];
+        // 판정(주사위·CC<= 등)은 extend.roll 이 있다. 가장 마지막(최근) 것을 잡는다.
+        const ids = Object.keys(entities);
+        for (let i = ids.length - 1; i >= 0; i -= 1) {
+          const m = entities[ids[i]];
           if (!m || m.removed) continue;
-          const text = String(m.text || m.message || "");
-          if (!dice && dieRe.test(text)) dice = m;
-          else if (!plain && text && !dieRe.test(text)) plain = m;
+          const hasRoll = m.extend && m.extend.roll;
+          if (!dice && hasRoll) dice = m;
+          else if (!plain && !hasRoll && String(m.text || "")) plain = m;
           if (dice && plain) break;
         }
+        void dieRe;
         // extend 안이 굴림의 핵심이라 통째로 펼친다(순환참조 대비 안전 복제).
         const safe = (obj) => {
           try { return JSON.parse(JSON.stringify(obj)); }
           catch (e) { return String(obj); }
         };
         return {
-          주사위메시지: dice ? dump(dice) : "못 찾음(이 룸에서 주사위 한 번 굴려주세요)",
-          주사위_extend: dice ? safe(dice.extend) : null,
-          일반_extend: plain ? safe(plain.extend) : null,
-          주사위필드전체: dice ? Object.keys(dice) : []
+          판정text: dice ? String(dice.text || "").slice(0, 60) : "못 찾음(CC<=70 한 번 굴려주세요)",
+          판정_extend: dice ? safe(dice.extend) : null,
+          일반_extend: plain ? safe(plain.extend) : null
         };
       },
       // |< 가 헤더 밖까지 비치면: 그 버튼이 세로로 어디까지 걸치는지 확인해 불투명
