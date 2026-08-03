@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.82
+// @version      0.1.83
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.82";
+  const VERSION = "0.1.83";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2421,6 +2421,40 @@
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
         };
+      },
+      // 페이지에 번들된 BCDice 엔진을 찾는다(webpack 모듈 캐시 탐색). 찾으면 게임 판정을
+      // 우리 전송에서도 굴릴 수 있다.
+      bcdiceDiag() {
+        const out = { windowKeys: [], webpackKey: null, reqGot: false, cacheSize: 0, found: [] };
+        out.windowKeys = Object.keys(window).filter((k) => /bcdice|dynamicloader/i.test(k)).slice(0, 20);
+        const wpKey = Object.keys(window).find((k) => /^webpackChunk/i.test(k));
+        out.webpackKey = wpKey || null;
+        if (!wpKey) return out;
+        try {
+          let req = null;
+          const marker = "ccf-bcdice-probe-" + Date.now();
+          window[wpKey].push([[marker], {}, (r) => { req = r; }]);
+          out.reqGot = !!req;
+          const cache = req && req.c;
+          if (cache) {
+            out.cacheSize = Object.keys(cache).length;
+            for (const id in cache) {
+              const mod = cache[id] && cache[id].exports;
+              if (!mod || typeof mod !== "object") continue;
+              let keys;
+              try { keys = Object.keys(mod); } catch (e) { continue; }
+              const blob = keys.join(",");
+              if (/bcdice|dynamicLoad|GameSystem|diceRoll|gameSystemClass/i.test(blob)) {
+                out.found.push({ id, keys: keys.slice(0, 14) });
+              }
+              // 기본 내보내기(default)가 BCDice 클래스일 수도 있다.
+              if (mod.default && /bcdice/i.test(String(mod.default.name || mod.default))) {
+                out.found.push({ id, defaultName: String(mod.default.name || "").slice(0, 30) });
+              }
+            }
+          }
+        } catch (e) { out.err = String(e).slice(0, 120); }
+        return out;
       },
       // 캐릭터 바 만들기 전: store 안 캐릭터 데이터 구조를 확인한다(이름·아이콘·색·id).
       charDiag() {
