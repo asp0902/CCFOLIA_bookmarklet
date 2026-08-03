@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.81
+// @version      0.1.82
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.81";
+  const VERSION = "0.1.82";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1075,7 +1075,7 @@
         padding-left: 8px; }
       /* 채팅 팔레트 — 네이티브처럼 페이지 정중앙 플로팅 다이얼로그(반투명 어두운 배경). */
       .ccf-scp-palette { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-        width: 320px; max-height: 60vh; z-index: 2147483000; display: flex; flex-direction: column;
+        width: 320px; z-index: 2147483000; display: flex; flex-direction: column;
         background: rgba(44,44,44,.87); border-radius: 0;
         box-shadow: 0 8px 40px rgba(0,0,0,.5); overflow: hidden; }
       /* display:flex 가 [hidden] 의 display:none 을 덮어써 항상 뜨는 문제 방지. */
@@ -1090,7 +1090,8 @@
         color: inherit; cursor: pointer; border-radius: 50%; opacity: .8; }
       .ccf-scp-palette-edit:hover, .ccf-scp-palette-close:hover { opacity: 1;
         background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-palette-body { flex: 1 1 auto; overflow-y: auto; padding: 0; }
+      /* 네이티브 DialogContent 320×232 + 리스트 상하 8px 패딩. */
+      .ccf-scp-palette-body { height: 232px; overflow-y: auto; padding: 8px 0; box-sizing: border-box; }
       /* 커맨드 한 줄 — 박스모델: 내용 272×48, 좌우 패딩 24, 상하 0. */
       .ccf-scp-cmditem { min-height: 48px; padding: 0 24px; border-radius: 0; }
       .ccf-scp-cmditem { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1309,13 +1310,13 @@
       hedit.type = "button";
       hedit.className = "ccf-scp-palette-edit";
       hedit.title = "편집";
-      hedit.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+      hedit.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
       hedit.addEventListener("click", (e) => { e.stopPropagation(); paletteList.hidden = true; captureNativeSpeakerIcons().paletteBtnEl?.click(); });
       const hclose = document.createElement("button");
       hclose.type = "button";
       hclose.className = "ccf-scp-palette-close";
       hclose.setAttribute("aria-label", "닫기");
-      hclose.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
+      hclose.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
       hclose.addEventListener("click", (e) => { e.stopPropagation(); paletteList.hidden = true; });
       // 헤더를 잡고 드래그하면 팝업이 따라온다(버튼 위는 제외).
       head.addEventListener("mousedown", (e) => {
