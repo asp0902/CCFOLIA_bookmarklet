@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.89
+// @version      0.1.90
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.89";
+  const VERSION = "0.1.90";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1574,12 +1574,15 @@
       if (!suggestEl.hidden) {
         if (event.key === "ArrowDown") { event.preventDefault(); moveSuggest(1); return; }
         if (event.key === "ArrowUp") { event.preventDefault(); moveSuggest(-1); return; }
-        if (event.key === "Enter" && suggestActive >= 0 && !event.isComposing) {
+        // 추천이 떠 있으면 Enter 는 항상 "채우기만" — 전송은 다음 Enter 로(추천 닫힌 뒤).
+        if (event.key === "Enter" && !event.isComposing) {
           const items = suggestEl.querySelectorAll(".ccf-scp-suggest-item");
-          event.preventDefault(); event.stopPropagation();
-          inputEl.value = items[suggestActive].textContent;
-          suggestEl.hidden = true;
-          return;
+          if (items.length) {
+            event.preventDefault(); event.stopPropagation();
+            inputEl.value = items[suggestActive >= 0 ? suggestActive : 0].textContent;
+            suggestEl.hidden = true;
+            return;
+          }
         }
         if (event.key === "Escape") { suggestEl.hidden = true; return; }
       }
