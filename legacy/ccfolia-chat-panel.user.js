@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.85
+// @version      0.1.86
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.85";
+  const VERSION = "0.1.86";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -726,10 +726,43 @@
     d4: "basic", d6: "basic", d8: "basic", d10: "basic", d12: "basic", d20: "basic", d100: "basic"
   });
 
-  // 순수 산술 주사위(NdM±K)만 직접 굴린다. 코코포리아는 네이티브 전송 때 미리 굴려
-  // 결과를 extend.roll 에 넣으므로(diceDiag 로 확인), 같은 구조를 만들어 넣는다.
-  // 게임 시스템 판정(CC<=, 특수룰)은 BCDice 엔진이 필요해 여기선 다루지 않는다(글자로 감).
+  // 크툴루(CoC 7판) CC<=X 판정. 네이티브 형식(diceDiag)을 그대로 재현한다:
+  //   result: "(1D100<=X) 보너스, 패널티 주사위[0] ＞ R ＞ R ＞ 어려운 성공"
+  //   dices: d100 을 2×d10(십·일의 자리)로. 성공수준은 result 텍스트로 표시(플래그는 네이티브가
+  //   대성공/펌블만 세우고 나머진 전부 false 였음).
+  function evaluateCocCheck(text) {
+    const m = String(text || "").trim().match(/^s?(?:CCB?)\s*<=\s*(\d+)/i);
+    if (!m) return null;
+    const target = parseInt(m[1], 10);
+    if (!(target >= 1)) return null;
+    const t = Math.floor(Math.random() * 10);
+    const u = Math.floor(Math.random() * 10);
+    let roll = t * 10 + u;
+    if (roll === 0) roll = 100;
+    const flags = { success: false, critical: false, fumble: false, failure: false };
+    let outcome;
+    if (roll === 1) { outcome = "대성공"; flags.critical = true; }
+    else if (roll <= Math.floor(target / 5)) outcome = "극단적 성공";
+    else if (roll <= Math.floor(target / 2)) outcome = "어려운 성공";
+    else if (roll <= target) outcome = "성공";
+    else if (target < 50 ? roll >= 96 : roll === 100) { outcome = "펌블"; flags.fumble = true; }
+    else outcome = "실패";
+    const result = `(1D100<=${target}) 보너스, 패널티 주사위[0] ＞ ${roll} ＞ ${roll} ＞ ${outcome}`;
+    return {
+      roll: {
+        result, secret: false, ...flags,
+        dices: [{ value: t, faces: 10, kind: "normal" }, { value: u, faces: 10, kind: "normal" }],
+        skin: { ...DICE_SKIN }
+      }
+    };
+  }
+
+  // 순수 산술 주사위(NdM±K) + CC<= 판정을 직접 굴린다. 코코포리아는 네이티브 전송 때
+  // 미리 굴려 extend.roll 에 넣으므로(diceDiag 로 확인), 같은 구조를 만들어 넣는다.
+  // 그 밖의 게임 시스템은 BCDice 엔진이 필요해 여기선 못 굴린다(글자로 감).
   function evaluateDiceCommand(text) {
+    const coc = evaluateCocCheck(text);
+    if (coc) return coc;
     const raw = String(text || "").trim();
     // 맨 앞이 정확히 주사위 식이어야 한다. 뒤의 코멘트(" 피해(…)")는 허용.
     const m = raw.match(/^(\d*)[dD](\d+)\s*([+\-]\s*\d+)?(?:\s|$)/);
