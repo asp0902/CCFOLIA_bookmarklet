@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.90
+// @version      0.1.91
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.90";
+  const VERSION = "0.1.91";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -58,6 +58,7 @@
   let onDocDragMove = null; // 팔레트 드래그 이동
   let onDocDragUp = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
+  let narrationOn = false; // 나레이션(Nr) 토글
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
   // 바닥으로 내리되, 그로 인한 scroll 이벤트가 고정을 풀지 않게 잠시 평가를 막는다.
@@ -728,6 +729,61 @@
     d4: "basic", d6: "basic", d8: "basic", d10: "basic", d12: "basic", d20: "basic", d100: "basic"
   });
 
+  /* ---------------- 서식(invisible envelope) ----------------
+     roll20-css-bridge 와 동일한 봉투 포맷. 서식 메시지 = 봉투(보이지 않는 문자) + 보이는 텍스트.
+     봉투 = JSON → base64 → 2비트씩 INVIS_MAP 문자, START/END 로 감싼다.
+     payload: { v:1, source, text, formatRuns:[{start,end,style}], alignRuns:[], blockStyle:{} } */
+  const CCF_INVIS_START = "\u2063\u2063\u2063";
+  const CCF_INVIS_END = "\u2062\u2062\u2062";
+  const CCF_INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
+  const CCF_ENVELOPE_SOURCE = "ccr20-roll20-desc";
+
+  function encodeEnvelopeToInvisible(obj) {
+    const json = JSON.stringify(obj);
+    const base64 = btoa(unescape(encodeURIComponent(json)));
+    let bits = "";
+    for (const ch of base64) bits += ch.charCodeAt(0).toString(2).padStart(8, "0");
+    let out = CCF_INVIS_START;
+    for (let i = 0; i < bits.length; i += 2) {
+      const pair = bits.slice(i, i + 2).padEnd(2, "0");
+      out += CCF_INVIS_MAP[parseInt(pair, 2)];
+    }
+    out += CCF_INVIS_END;
+    return out;
+  }
+
+  // 마크다운 마커(**굵게** 등)를 스타일 run 으로 파싱하고 마커는 제거한다. 겹치는 스타일은
+  // 같은 범위에 run 을 여러 개 만들어 표현한다(렌더가 각 run 스타일을 겹쳐 적용).
+  const CCF_MD_MARKERS = [
+    ["~~", "strike"], ["**", "bold"], ["__", "underline"], ["||", "spoiler"],
+    ["*", "italic"], ["`", "code"]
+  ];
+  function parseFormatMarkers(input) {
+    let text = "";
+    const open = new Map(); // style -> 시작 위치(클린 텍스트 기준)
+    const runs = [];
+    let i = 0;
+    while (i < input.length) {
+      let m = null;
+      for (const pair of CCF_MD_MARKERS) { if (input.startsWith(pair[0], i)) { m = pair; break; } }
+      if (m) {
+        const [tok, style] = m;
+        if (open.has(style)) {
+          const start = open.get(style);
+          open.delete(style);
+          if (text.length > start) runs.push({ start, end: text.length, style: { [style]: true } });
+        } else {
+          open.set(style, text.length);
+        }
+        i += tok.length;
+      } else {
+        text += input[i];
+        i += 1;
+      }
+    }
+    return { text, runs };
+  }
+
   // 크툴루(CoC 7판) CC<=X 판정. 네이티브 형식(diceDiag)을 그대로 재현한다:
   //   result: "(1D100<=X) 보너스, 패널티 주사위[0] ＞ R ＞ R ＞ 어려운 성공"
   //   dices: d100 을 2×d10(십·일의 자리)로. 성공수준은 result 텍스트로 표시(플래그는 네이티브가
@@ -805,7 +861,21 @@
       if (key === "removed") continue;
       fields[key] = value;
     }
-    fields.text = { stringValue: text };
+    // 서식: 마크다운 마커를 파싱해 봉투(invisible envelope)를 만든다. 다이스 판정이면
+    // 서식은 무시하고 명령 원문만 보낸다(판정 카드에 서식은 의미 없음).
+    const parsed = parseFormatMarkers(text);
+    const cleanText = parsed.text;
+    const rolled = evaluateDiceCommand(cleanText);
+    let outText = cleanText;
+    if (!rolled && (parsed.runs.length > 0 || narrationOn)) {
+      const payload = {
+        v: 1, source: CCF_ENVELOPE_SOURCE, text: cleanText,
+        formatRuns: parsed.runs, alignRuns: [],
+        blockStyle: narrationOn ? { narration: true } : {}
+      };
+      outText = encodeEnvelopeToInvisible(payload) + cleanText;
+    }
+    fields.text = { stringValue: outText };
     fields.channel = { stringValue: currentChannel };
     // 화자를 골랐으면 이름·아이콘·색을 그 캐릭터로 바꾼다(from 은 내 uid 유지).
     if (selectedChar) {
@@ -816,11 +886,8 @@
     } else if (colorOverride) {
       fields.color = { stringValue: colorOverride };
     }
-    // 순수 주사위면 결과를 계산해 extend.roll 로 넣는다 → 굴려진 카드로 렌더된다.
-    // 아니면 템플릿의 빈 extend 를 그대로 둔다(일반 메시지).
-    // 템플릿이 다이스 메시지면 extend.roll 이 딸려온다. 다이스가 아니면 반드시 비운다
-    // (안 그러면 직전 판정이 그대로 반복돼 나간다).
-    const rolled = evaluateDiceCommand(text);
+    // 순수 주사위/CC 판정이면 위에서 계산한 rolled 를 extend.roll 로. 아니면 빈 extend
+    // (템플릿이 판정 메시지였을 때 직전 판정이 반복돼 나가는 것 방지).
     fields.extend = toFirestoreValue(rolled || {});
     if ("createdAt" in template) fields.createdAt = makeTimestampLike(template.createdAt);
     if ("updatedAt" in template) fields.updatedAt = makeTimestampLike(template.updatedAt);
@@ -1060,6 +1127,15 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
+      /* 서식 버튼 줄 */
+      .ccf-scp-fmt { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 8px 8px; }
+      .ccf-scp-fmt-btn { min-width: 30px; height: 28px; padding: 0 8px; cursor: pointer;
+        border: 1px solid var(--scp-line, rgba(128,128,128,.32)); border-radius: 4px;
+        background: color-mix(in srgb, currentColor 6%, transparent); color: inherit;
+        font: inherit; font-size: 12px; }
+      .ccf-scp-fmt-btn:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+      .ccf-scp-fmt-nr.is-active { background: var(--scp-send-bg, #2196f3); color: #fff;
+        border-color: transparent; }
       .ccf-scp-inputwrap { position: relative; margin: 0 8px; }
       .ccf-scp-input { width: 100%; margin: 0; }
       /* 매크로 자동완성 — 입력창 위로 뜨는 목록. */
@@ -1526,6 +1602,47 @@
     send.addEventListener("click", handleSend);
     diceRow.appendChild(send);
     compose.appendChild(diceRow);
+
+    // 서식 버튼 줄. 선택 텍스트를 마크다운 마커로 감싼다 → 전송 시 봉투로 변환된다.
+    // Nr(나레이션)은 토글. Rb/Tip 은 입력이 더 필요해 다음 단계.
+    const fmtRow = document.createElement("div");
+    fmtRow.className = "ccf-scp-fmt";
+    const wrapSel = (marker) => {
+      const s = inputEl.selectionStart ?? inputEl.value.length;
+      const e = inputEl.selectionEnd ?? inputEl.value.length;
+      const v = inputEl.value;
+      inputEl.value = v.slice(0, s) + marker + v.slice(s, e) + marker + v.slice(e);
+      inputEl.focus();
+      inputEl.setSelectionRange(s + marker.length, e + marker.length);
+    };
+    const FMT_BTNS = [
+      ["B", () => wrapSel("**"), "bold"],
+      ["I", () => wrapSel("*"), "italic"],
+      ["U", () => wrapSel("__"), "underline"],
+      ["S", () => wrapSel("~~"), "strike"],
+      ["Bl", () => wrapSel("||"), "spoiler"],
+      ["</>", () => wrapSel("`"), "code"]
+    ];
+    for (const [label, fn] of FMT_BTNS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ccf-scp-fmt-btn";
+      b.textContent = label;
+      b.addEventListener("click", (ev) => { ev.preventDefault(); fn(); });
+      fmtRow.appendChild(b);
+    }
+    const nrBtn = document.createElement("button");
+    nrBtn.type = "button";
+    nrBtn.className = "ccf-scp-fmt-btn ccf-scp-fmt-nr";
+    nrBtn.textContent = "Nr";
+    nrBtn.title = "나레이션";
+    nrBtn.addEventListener("click", () => {
+      narrationOn = !narrationOn;
+      nrBtn.classList.toggle("is-active", narrationOn);
+      inputEl?.focus();
+    });
+    fmtRow.appendChild(nrBtn);
+    compose.appendChild(fmtRow);
 
     // 입력창 + 매크로 자동완성 드롭업(입력 단어가 화자 팔레트 커맨드에 걸리면 추천).
     const inputWrap = document.createElement("div");
