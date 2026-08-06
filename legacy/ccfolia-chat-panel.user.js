@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.95
+// @version      0.1.96
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.95";
+  const VERSION = "0.1.96";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -760,7 +760,7 @@
   // format-sync 스타일 키: bold/italic/underline/strike / codeMode / blur / rubyText.
   const CCF_MD_MARKERS = [
     ["~~", { strike: true }], ["**", { bold: true }], ["__", { underline: true }],
-    ["||", { blur: "5px" }], ["*", { italic: true }], ["`", { codeMode: true }]
+    ["||", { blur: 5 }], ["*", { italic: true }], ["`", { codeMode: true }]
   ];
   function parseFormatMarkers(input) {
     let text = "";
@@ -1154,6 +1154,12 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
+      /* 커스텀 툴팁 — 잘림 없이 패널 위에 뜬다. */
+      .ccf-scp-tooltip { position: fixed; z-index: 2147483001; max-width: 260px;
+        background: #000; color: #fff; font-size: 12px; line-height: 1.4;
+        padding: 6px 10px; border-radius: 4px; white-space: pre-wrap;
+        pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+      .ccf-scp-tooltip[hidden] { display: none; }
       /* 서식 버튼 줄 */
       .ccf-scp-fmt { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 8px 8px; }
       .ccf-scp-fmt-btn { min-width: 30px; height: 28px; padding: 0 8px; cursor: pointer;
@@ -1323,12 +1329,32 @@
     bar.appendChild(close);
     panel.appendChild(bar);
 
+    // 커스텀 툴팁 — format-sync 의 ::after 툴팁은 우리 스크롤 목록에 잘리므로, 잘림 없이
+    // 패널 위에 직접 띄운다.
+    const tipEl = document.createElement("div");
+    tipEl.className = "ccf-scp-tooltip";
+    tipEl.hidden = true;
+
     listEl = document.createElement("ul");
     listEl.className = "ccf-scp-list";
+    listEl.addEventListener("mouseover", (e) => {
+      const frag = e.target.closest?.(".ccf-tooltip-frag[data-tooltip]");
+      if (!frag) return;
+      tipEl.textContent = frag.getAttribute("data-tooltip") || "";
+      tipEl.hidden = false;
+      const r = frag.getBoundingClientRect();
+      const tr = tipEl.getBoundingClientRect();
+      tipEl.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - tr.width - 6))}px`;
+      tipEl.style.top = `${Math.max(6, r.top - tr.height - 6)}px`;
+    });
+    listEl.addEventListener("mouseout", (e) => {
+      if (e.target.closest?.(".ccf-tooltip-frag[data-tooltip]")) tipEl.hidden = true;
+    });
     listEl.addEventListener("scroll", () => {
       // 우리가 프로그램적으로 내린 스크롤은 무시한다. 안 그러면 높이가 아직 안 찬
       // 순간의 스크롤 이벤트가 "바닥 아님"으로 오판해 고정을 풀어 버린다(시작 시 튐).
       if (suppressScrollEval) return;
+      tipEl.hidden = true;
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
     });
@@ -1598,6 +1624,7 @@
     // 팔레트·색상 팝업은 패널 최상위에 붙인다(버튼 중첩 방지 + 겹침 관리).
     panel.appendChild(paletteList);
     panel.appendChild(colorPop);
+    panel.appendChild(tipEl);
 
     // 주사위 버튼 줄 — 누르면 커서 위치에 해당 명령을 넣는다. 아이콘은 네이티브
     // 주사위 버튼에서 복제해 쓰고, 못 찾으면 텍스트로 대체한다.
@@ -1843,12 +1870,6 @@
         const sig = readCharacters().map((c) => c.id + (c.active ? "1" : "0")).join(",");
         if (sig !== charListSig) { charListSig = sig; buildCharList(); }
       }
-      // 툴팁: format-sync 의 ::after 툴팁은 우리 목록 overflow 에 잘린다. 브라우저 기본
-      // title 을 대신 달아 잘림 없이 보이게 한다.
-      panelEl.querySelectorAll('.ccf-tooltip-frag[data-tooltip]:not([data-ccf-scp-tip])').forEach((el) => {
-        el.title = el.getAttribute("data-tooltip") || "";
-        el.setAttribute("data-ccf-scp-tip", "1");
-      });
       renderTabs();
       renderList();
     }, 500);
