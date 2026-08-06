@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.94
+// @version      0.1.95
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.94";
+  const VERSION = "0.1.95";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -572,8 +572,12 @@
     const restoreScroll = () => {
       if (wasPinned) {
         scrollListToBottom();
-        // 아바타가 늦게 로드돼 높이가 늘면 바닥이 밀리므로 한 번 더 맞춘다.
+        // 아바타 로드·format-sync 의 서식 렌더가 높이를 늦게 바꿔 바닥이 밀리므로,
+        // 잠깐 동안 여러 번 다시 바닥으로 맞춘다.
         requestAnimationFrame(() => { if (pinnedToBottom) scrollListToBottom(); });
+        [80, 200, 400].forEach((ms) => window.setTimeout(() => {
+          if (panelEl && pinnedToBottom) scrollListToBottom();
+        }, ms));
       } else {
         listEl.scrollTop = prevTop;
       }
@@ -756,7 +760,7 @@
   // format-sync 스타일 키: bold/italic/underline/strike / codeMode / blur / rubyText.
   const CCF_MD_MARKERS = [
     ["~~", { strike: true }], ["**", { bold: true }], ["__", { underline: true }],
-    ["||", { blur: "3px" }], ["*", { italic: true }], ["`", { codeMode: true }]
+    ["||", { blur: "5px" }], ["*", { italic: true }], ["`", { codeMode: true }]
   ];
   function parseFormatMarkers(input) {
     let text = "";
@@ -1839,6 +1843,12 @@
         const sig = readCharacters().map((c) => c.id + (c.active ? "1" : "0")).join(",");
         if (sig !== charListSig) { charListSig = sig; buildCharList(); }
       }
+      // 툴팁: format-sync 의 ::after 툴팁은 우리 목록 overflow 에 잘린다. 브라우저 기본
+      // title 을 대신 달아 잘림 없이 보이게 한다.
+      panelEl.querySelectorAll('.ccf-tooltip-frag[data-tooltip]:not([data-ccf-scp-tip])').forEach((el) => {
+        el.title = el.getAttribute("data-tooltip") || "";
+        el.setAttribute("data-ccf-scp-tip", "1");
+      });
       renderTabs();
       renderList();
     }, 500);
