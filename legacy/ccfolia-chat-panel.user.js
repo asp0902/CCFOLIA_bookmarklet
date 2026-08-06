@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.99
+// @version      0.2.0
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.99";
+  const VERSION = "0.2.0";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -760,7 +760,8 @@
   // format-sync 스타일 키: bold/italic/underline/strike / codeMode / blur / rubyText.
   const CCF_MD_MARKERS = [
     ["~~", { strike: true }], ["**", { bold: true }], ["__", { underline: true }],
-    ["||", { blur: 5 }], ["*", { italic: true }], ["`", { codeMode: true }]
+    ["||", { color: "rgba(0,0,0,0)", textShadow: "5px 0 10px #cccccc,-5px 0 10px #cccccc" }],
+    ["*", { italic: true }], ["`", { codeMode: true }]
   ];
   function parseFormatMarkers(input) {
     let text = "";
@@ -1154,14 +1155,7 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
-      /* 블러(Bl): 네이티브와 동일한 방식 — 투명 글자 + 좌우 이중 그림자로 번짐 효과.
-         (format-sync 기본은 단일 currentColor 그림자라 블록처럼 보였음.) 클릭 시 해제. */
-      #${PANEL_ID} [data-ccf-blurred="1"] {
-        -webkit-text-fill-color: transparent !important;
-        text-shadow: 5px 0 10px currentColor, -5px 0 10px currentColor !important;
-        filter: none !important; }
-      #${PANEL_ID} [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] {
-        -webkit-text-fill-color: inherit !important; text-shadow: none !important; }
+      /* 블러(Bl) = 투명 글자 + 좌우 이중 그림자(run 의 color/textShadow 로 직접). Ctrl+클릭 해제. */
       /* 커스텀 툴팁 — 잘림 없이 패널 위에 뜬다. */
       .ccf-scp-tooltip { position: fixed; z-index: 2147483001; max-width: 260px;
         background: #000; color: #fff; font-size: 12px; line-height: 1.4;
@@ -1358,16 +1352,23 @@
     listEl.addEventListener("mouseout", (e) => {
       if (e.target.closest?.(".ccf-tooltip-frag[data-tooltip]")) tipEl.hidden = true;
     });
-    // 블러 해제는 Ctrl+클릭만. 일반 클릭으로 열리는 format-sync 기본 동작을 캡처 단계에서 막는다.
+    // 블러(투명 글자 + text-shadow 조각)는 Ctrl+클릭으로만 선명해진다. 일반 클릭은
+    // 캡처 단계에서 막아 계속 가려둔다.
     listEl.addEventListener("click", (e) => {
-      const blurred = e.target.closest?.('[data-ccf-blurred="1"]');
-      if (!blurred) return;
+      const frag = e.target.closest?.(".ccf-frag");
+      if (!frag) return;
+      const isBlur = /text-shadow/i.test(frag.getAttribute("style") || "") || frag.dataset.scpBlurOrig != null;
+      if (!isBlur) return;
       e.stopPropagation();
-      if (e.ctrlKey || e.metaKey) {
-        if (blurred.getAttribute("data-ccf-blur-revealed") === "1") blurred.removeAttribute("data-ccf-blur-revealed");
-        else blurred.setAttribute("data-ccf-blur-revealed", "1");
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (frag.dataset.scpBlurRevealed === "1") {
+        frag.setAttribute("style", frag.dataset.scpBlurOrig || "");
+        frag.dataset.scpBlurRevealed = "0";
       } else {
-        blurred.removeAttribute("data-ccf-blur-revealed");
+        frag.dataset.scpBlurOrig = frag.getAttribute("style") || "";
+        frag.style.color = "";
+        frag.style.textShadow = "";
+        frag.dataset.scpBlurRevealed = "1";
       }
     }, true);
     listEl.addEventListener("scroll", () => {
