@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.98
+// @version      0.1.99
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.98";
+  const VERSION = "0.1.99";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1358,6 +1358,18 @@
     listEl.addEventListener("mouseout", (e) => {
       if (e.target.closest?.(".ccf-tooltip-frag[data-tooltip]")) tipEl.hidden = true;
     });
+    // 블러 해제는 Ctrl+클릭만. 일반 클릭으로 열리는 format-sync 기본 동작을 캡처 단계에서 막는다.
+    listEl.addEventListener("click", (e) => {
+      const blurred = e.target.closest?.('[data-ccf-blurred="1"]');
+      if (!blurred) return;
+      e.stopPropagation();
+      if (e.ctrlKey || e.metaKey) {
+        if (blurred.getAttribute("data-ccf-blur-revealed") === "1") blurred.removeAttribute("data-ccf-blur-revealed");
+        else blurred.setAttribute("data-ccf-blur-revealed", "1");
+      } else {
+        blurred.removeAttribute("data-ccf-blur-revealed");
+      }
+    }, true);
     listEl.addEventListener("scroll", () => {
       // 우리가 프로그램적으로 내린 스크롤은 무시한다. 안 그러면 높이가 아직 안 찬
       // 순간의 스크롤 이벤트가 "바닥 아님"으로 오판해 고정을 풀어 버린다(시작 시 튐).
@@ -2728,6 +2740,18 @@
               부모: `${el.parentElement?.tagName}.${String(el.parentElement?.className || "").slice(0, 30)}`
             }))
         };
+      },
+      // 블러가 우리 패널에서 렌더되는지 확인용.
+      blurDiag() {
+        const inPanel = panelEl ? panelEl.querySelectorAll('[data-ccf-blurred]').length : 0;
+        const native = document.querySelectorAll('[data-ccf-blurred]').length;
+        const frags = panelEl ? panelEl.querySelectorAll('.ccf-frag').length : 0;
+        const sample = panelEl ? [...panelEl.querySelectorAll('.ccf-frag')].slice(-3).map((el) => ({
+          cls: el.className.slice(0, 40),
+          blurred: el.getAttribute('data-ccf-blurred'),
+          style: (el.getAttribute('style') || '').slice(0, 80)
+        })) : [];
+        return { 우리패널_blurred: inPanel, 전체_blurred: native, 우리패널_frag수: frags, 최근frag: sample };
       },
       // 페이지에 번들된 BCDice 엔진을 찾는다(webpack 모듈 캐시 탐색). 찾으면 게임 판정을
       // 우리 전송에서도 굴릴 수 있다.
