@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.1.96
+// @version      0.1.97
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.1.96";
+  const VERSION = "0.1.97";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1154,6 +1154,12 @@
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
         background: var(--scp-bg-opaque, rgba(24,24,26,1)); }
       .ccf-scp-dice { padding-left: 8px; padding-right: 8px; }
+      /* 블러(Bl): format-sync 기본은 투명 글자 + 큰 text-shadow(뭉개져 블록처럼 보임).
+         우리 패널에선 진짜 filter: blur 로 덮어써 "흐림"으로 보이게 한다. 클릭 시 해제. */
+      #${PANEL_ID} [data-ccf-blurred="1"] {
+        -webkit-text-fill-color: inherit !important; text-shadow: none !important;
+        filter: blur(4px) !important; }
+      #${PANEL_ID} [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] { filter: none !important; }
       /* 커스텀 툴팁 — 잘림 없이 패널 위에 뜬다. */
       .ccf-scp-tooltip { position: fixed; z-index: 2147483001; max-width: 260px;
         background: #000; color: #fff; font-size: 12px; line-height: 1.4;
