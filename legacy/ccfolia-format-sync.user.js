@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.46
+// @version      0.1.47
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.46 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.47 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.46"),
+    version: getUserscriptVersion("0.1.47"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2090,7 +2090,8 @@
   function applySoftBlur(el, blurValue) {
     if (!(el instanceof HTMLElement)) return;
     const radius = Math.max(2, parseFloat(blurValue) || 4);
-    el.style.setProperty("--ccf-blur-r", `${radius * 2}px`);
+    // filter: blur() 에 그대로 넣는 값이라 2배로 부풀리지 않는다.
+    el.style.setProperty("--ccf-blur-r", `${radius}px`);
     el.style.userSelect = "none";
     el.style.webkitUserSelect = "none";
     el.setAttribute("data-ccf-blurred", "1");
@@ -2121,16 +2122,16 @@
       const style = document.createElement("style");
       style.id = "ccf-blur-reveal-style";
       style.textContent = `
+        /* filter: blur() — 글자 테두리가 자연스럽게 뭉개진다. 투명글자+text-shadow 방식은
+           글자 윤곽이 또렷하게 남아 읽혀서 버렸다. */
         [data-ccf-blurred="1"] {
-          -webkit-text-fill-color: transparent !important;
-          text-shadow: 0 0 var(--ccf-blur-r, 8px) currentColor !important;
+          filter: blur(var(--ccf-blur-r, 4px)) !important;
           user-select: none !important;
           -webkit-user-select: none !important;
           /* cursor: help 제거 — reveal 기능 존재 단서 차단 */
         }
         [data-ccf-blurred="1"][data-ccf-blur-revealed="1"] {
-          -webkit-text-fill-color: inherit !important;
-          text-shadow: none !important;
+          filter: none !important;
           user-select: text !important;
           -webkit-user-select: text !important;
           /* cursor: text 제거 — reveal 상태에서도 hover 단서 안 남김 */
