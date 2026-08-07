@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.99";
+  const VERSION = "0.3.0";
   const BUILD_ID = "2026-06-16-loader-render-cleanup-reverted-173";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
@@ -26,6 +26,11 @@
     } catch (error) { /* 레지스트리 파싱 실패는 무시 */ }
     const versions = { loader: VERSION };
     for (const [id, info] of Object.entries(scripts)) versions[id] = info?.version || "?";
+    // 콘솔 필터("version" 또는 스크립트 id)로 검색되도록 한 줄 텍스트로도 남긴다 —
+    // console.table 은 필터 검색에 안 걸린다.
+    for (const [id, v] of Object.entries(versions)) {
+      console.info(`[CCF VERSION] ${id} v${v}`);
+    }
     console.table(versions);
     return versions;
   };
