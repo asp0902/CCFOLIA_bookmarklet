@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.62
+// @version      0.3.63
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.62"),
+    version: getUserscriptVersion("0.3.63"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4864,6 +4864,9 @@
     if (!(node instanceof HTMLElement)) return null;
     if (node.id === SOURCE_ID) return null;
     if (node.closest?.(`#${MODAL_ID}`)) return null;
+    // 두 번째 채팅 패널의 입력창은 그 스크립트가 자체 봉투로 직접 전송한다. 여기서
+    // 잡아 preparePayloadForSend 가 값을 덮으면 그쪽 서식(||=블러 등)이 통째로 죽는다.
+    if (node.closest?.("#ccf-second-chat-panel")) return null;
     // #23 fix: CCFolia native MUI Dialog (이미지 변경, Unsplash 검색 등) 안 input 은 chat editor 가 아님 → 제외
     if (node.closest?.('.MuiDialog-root, [role="dialog"]')) return null;
     if (node.matches?.(EDITOR_SELECTOR)) return node;
@@ -5687,7 +5690,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.62",
+    version: "0.3.63",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
