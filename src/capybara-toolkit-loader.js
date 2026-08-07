@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.98";
+  const VERSION = "0.2.99";
   const BUILD_ID = "2026-06-16-loader-render-cleanup-reverted-173";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
@@ -16,6 +16,20 @@
   const LEGACY_REQUEST_EVENT = "ccf-suite:request-register";
   const ROUTE_CHANGE_EVENT = "capybara-toolkit:route-change";
   const SESSION_ID = `capybara-toolkit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // 어떤 버전이 실제로 도는지 콘솔에서 바로 보이게 한 번 찍는다(다시 보려면 CCFV()).
+  // 스크립트들은 로드되면서 각자 ccf-suite-registry-v1 에 버전을 적어 둔다.
+  window.CCFV = () => {
+    let scripts = {};
+    try {
+      scripts = JSON.parse(window.localStorage.getItem("ccf-suite-registry-v1") || "{}").scripts || {};
+    } catch (error) { /* 레지스트리 파싱 실패는 무시 */ }
+    const versions = { loader: VERSION };
+    for (const [id, info] of Object.entries(scripts)) versions[id] = info?.version || "?";
+    console.table(versions);
+    return versions;
+  };
+  window.setTimeout(() => window.CCFV(), 3000);
 
   const FEATURE_CATALOG = Object.freeze([
     {
