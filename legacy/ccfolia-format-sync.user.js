@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.47
+// @version      0.1.48
 // @description  Adds a rich formatting editor, renderer, effects, and cut-in image mirroring to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능과 컷인 이미지 미러링을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -17,7 +17,7 @@
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.47 @", new Date().toISOString());
+  console.info("[CCF NAR] format-sync IIFE entry v0.1.48 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.47"),
+    version: getUserscriptVersion("0.1.48"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -265,7 +265,10 @@
     isActive() { return ccfFsLifecycle.isActive(); },
     teardown: ccfFsTeardown,
     // 두 번째 IIFE 의 preparePayloadForSend 등이 봉투 디코딩에 사용 (cross-IIFE bridge).
-    extractEnvelope
+    extractEnvelope,
+    // 외부 패널(두 번째 채팅 패널 등)이 줄을 꽂고 스크롤을 잡은 뒤 부른다. 렌더 게이트가
+    // "아직 바닥 아님"으로 막았던 줄을 다시 훑는다. 이미 렌더된 줄은 raw text 게이트로 스킵.
+    rescan: scanAndRenderAll
   };
 
   // [v0.0.42] 나레이션 가디언 WeakMap — initRenderer()가 즉시 기존 메시지를 스캔하면서

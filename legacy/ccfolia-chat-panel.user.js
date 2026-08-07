@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.3
+// @version      0.2.4
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.3";
+  const VERSION = "0.2.4";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -577,6 +577,9 @@
         requestAnimationFrame(() => { if (pinnedToBottom) scrollListToBottom(); });
         [80, 200, 400].forEach((ms) => window.setTimeout(() => {
           if (panelEl && pinnedToBottom) scrollListToBottom();
+          // 바닥으로 붙인 다음 서식 렌더를 다시 부른다 — 줄을 꽂던 순간엔 목록이 아직
+          // 맨 위라 format-sync 의 렌더 게이트가 전부 막는다(최초 로딩 시 서식 누락).
+          window.__CCF_FORMAT_SYNC_RUNTIME__?.rescan?.();
         }, ms));
       } else {
         listEl.scrollTop = prevTop;
