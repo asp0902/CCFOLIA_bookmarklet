@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.4
+// @version      0.2.5
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.4";
+  const VERSION = "0.2.5";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -333,7 +333,7 @@
       // 카드에 붙인다. 결과만 넣으면 코멘트가 사라진다.
       body.textContent = msg.roll
         ? `${stripInvisible(msg.text)} ${msg.roll}`.trim()
-        : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
+        : msg.text;
     }
 
     // 답장 버튼은 우리 패널에서 동작시키지 않는다(모양만 유지).
@@ -525,7 +525,7 @@
     body.className = "ccf-scp-text";
     body.textContent = msg.roll
       ? msg.roll
-      : (window.__CCF_FORMAT_SYNC_DEBUG__ ? msg.text : stripInvisible(msg.text));
+      : msg.text;
     bodyWrap.appendChild(body);
     row.appendChild(bodyWrap);
     return row;
