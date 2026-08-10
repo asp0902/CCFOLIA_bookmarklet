@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.5
+// @version      0.2.6
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.5";
+  const VERSION = "0.2.6";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2735,11 +2735,31 @@
         const frags = panelEl ? panelEl.querySelectorAll('.ccf-frag').length : 0;
         // 블러 조각만 뽑는다 — 전체 frag 의 마지막 3개를 보면 스타일 없는 꼬리만 잡혀
         // "스타일이 안 붙었다"고 오판한다(지난 세션의 헛발질).
-        const sample = panelEl ? [...panelEl.querySelectorAll('.ccf-frag[data-ccf-blurred]')].slice(-3).map((el) => ({
-          cls: el.className.slice(0, 40),
-          blurred: el.getAttribute('data-ccf-blurred'),
-          style: (el.getAttribute('style') || '').slice(0, 80)
-        })) : [];
+        const sample = panelEl ? [...panelEl.querySelectorAll('.ccf-frag[data-ccf-blurred]')].slice(-3).map((el) => {
+          const ancestors = [];
+          for (let node = el; node instanceof HTMLElement && ancestors.length < 16; node = node.parentElement) {
+            const cs = getComputedStyle(node);
+            const rect = node.getBoundingClientRect();
+            const cls = String(node.className).trim().replace(/\s+/g, ".").slice(0, 80);
+            ancestors.push({
+              depth: ancestors.length,
+              element: `${node.tagName}${node.id ? `#${node.id}` : ""}${cls ? `.${cls}` : ""}`,
+              overflow: cs.overflow,
+              overflowX: cs.overflowX,
+              overflowY: cs.overflowY,
+              padding: cs.padding,
+              display: cs.display,
+              rect: { left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width) }
+            });
+            if (node === panelEl) break;
+          }
+          return {
+            cls: el.className.slice(0, 40),
+            blurred: el.getAttribute('data-ccf-blurred'),
+            style: (el.getAttribute('style') || '').slice(0, 80),
+            ancestors
+          };
+        }) : [];
         return { 우리패널_blurred: inPanel, 전체_blurred: native, 우리패널_frag수: frags, 최근frag: sample };
       },
       // 페이지에 번들된 BCDice 엔진을 찾는다(webpack 모듈 캐시 탐색). 찾으면 게임 판정을
