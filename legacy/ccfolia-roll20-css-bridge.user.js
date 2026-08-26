@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.70
+// @version      0.3.71
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.70"),
+    version: getUserscriptVersion("0.3.71"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -634,29 +634,42 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 16px 24px;
+        min-height: 56px;
+        padding: 0 4px 0 24px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        cursor: move;
+        touch-action: none;
+        user-select: none;
       }
 
       .ccr20-title {
-        font-size: 20px;
-        font-weight: 500;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        font-size: 0.875rem;
+        font-weight: 700;
+        line-height: 1.5;
       }
 
       .ccr20-close {
-        width: 34px;
-        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
         border: 0;
         border-radius: 0;
         background: transparent;
         color: inherit;
         cursor: pointer;
-        font-size: 18px;
-        line-height: 1;
       }
 
       .ccr20-close:hover {
         background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ccr20-close svg {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
       }
 
       .ccr20-body {
@@ -742,16 +755,17 @@
 
       .ccr20-footer {
         display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        padding: 8px 16px;
+        padding: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
       }
 
       .ccr20-btn {
+        flex: 1 1 0;
         border: 0;
         border-radius: 0;
-        min-width: 64px;
-        padding: 6px 8px;
+        min-width: 0;
+        min-height: 48px;
+        padding: 8px;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
@@ -765,11 +779,12 @@
 
       .ccr20-btn.primary {
         background: transparent;
-        color: #90caf9;
+        color: #f50057;
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
       }
 
       .ccr20-btn.primary:hover {
-        background: rgba(144, 202, 249, 0.08);
+        background: rgba(245, 0, 87, 0.08);
       }
 
       .ccr20-render-root {
@@ -1887,6 +1902,7 @@
 
     document.body.appendChild(backdrop);
     document.body.appendChild(modal);
+    bindModalDrag(modal);
 
     modal.querySelector(`#${CLOSE_ID}`)?.addEventListener("click", closeModal, ccr20WithSignal());
     modal.querySelector(`#${CONVERT_ID}`)?.addEventListener("click", () => {
@@ -1927,11 +1943,48 @@
     return modal;
   }
 
+  function bindModalDrag(modal) {
+    const header = modal.querySelector(".ccr20-header");
+    if (!(header instanceof HTMLElement)) return;
+
+    let drag = null;
+    header.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target instanceof Element && event.target.closest("button")) return;
+      const rect = modal.getBoundingClientRect();
+      drag = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+      modal.style.left = `${Math.round(rect.left)}px`;
+      modal.style.top = `${Math.round(rect.top)}px`;
+      modal.style.transform = "none";
+      header.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    }, ccr20WithSignal());
+
+    header.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const maxLeft = Math.max(0, window.innerWidth - modal.offsetWidth);
+      const maxTop = Math.max(0, window.innerHeight - modal.offsetHeight);
+      const left = Math.min(maxLeft, Math.max(0, event.clientX - drag.offsetX));
+      const top = Math.min(maxTop, Math.max(0, event.clientY - drag.offsetY));
+      modal.style.left = `${Math.round(left)}px`;
+      modal.style.top = `${Math.round(top)}px`;
+    }, ccr20WithSignal());
+
+    const endDrag = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      drag = null;
+      header.releasePointerCapture?.(event.pointerId);
+    };
+    header.addEventListener("pointerup", endDrag, ccr20WithSignal());
+    header.addEventListener("pointercancel", endDrag, ccr20WithSignal());
+  }
+
   function getModalMarkup() {
     return `
       <div class="ccr20-header">
         <div class="ccr20-title">${MODAL_TEXT.title}</div>
-        <button type="button" class="ccr20-close" id="${CLOSE_ID}" aria-label="${MODAL_TEXT.close}">\u00D7</button>
+        <button type="button" class="ccr20-close" id="${CLOSE_ID}" aria-label="${MODAL_TEXT.close}">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+        </button>
       </div>
       <div class="ccr20-body">
         <p class="ccr20-note">${MODAL_TEXT.note}</p>
@@ -5771,7 +5824,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.70",
+    version: "0.3.71",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
