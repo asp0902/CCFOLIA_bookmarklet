@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.69
+// @version      0.3.70
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.69"),
+    version: getUserscriptVersion("0.3.70"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -604,8 +604,7 @@
         position: fixed;
         inset: 0;
         z-index: 1400;
-        background: rgba(0, 0, 0, 0.42);
-        backdrop-filter: blur(2px);
+        background: rgba(0, 0, 0, 0.5);
       }
 
       #${MODAL_ID} {
@@ -619,11 +618,10 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        border-radius: 18px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: #20242b;
-        color: #f3f5f7;
-        box-shadow: 0 28px 64px rgba(0, 0, 0, 0.45);
+        border-radius: 0;
+        background: #212121;
+        color: #fff;
+        box-shadow: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 24px 38px 3px rgba(0, 0, 0, 0.14), 0 9px 46px 8px rgba(0, 0, 0, 0.12);
       }
 
       #${MODAL_ID}[hidden],
@@ -636,39 +634,42 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 16px 18px 14px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 16px 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
       }
 
       .ccr20-title {
-        font-size: 15px;
-        font-weight: 700;
-        letter-spacing: 0.01em;
+        font-size: 20px;
+        font-weight: 500;
       }
 
       .ccr20-close {
         width: 34px;
         height: 34px;
         border: 0;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
+        border-radius: 0;
+        background: transparent;
         color: inherit;
         cursor: pointer;
         font-size: 18px;
         line-height: 1;
       }
 
+      .ccr20-close:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
       .ccr20-body {
         display: flex;
         flex-direction: column;
         gap: 10px;
-        padding: 16px 18px;
+        padding: 16px 24px;
         min-height: 0;
       }
 
       .ccr20-note {
         margin: 0;
-        color: rgba(243, 245, 247, 0.78);
+        color: rgba(255, 255, 255, 0.7);
         font-size: 12px;
         line-height: 1.55;
       }
@@ -678,9 +679,9 @@
         min-height: 180px;
         resize: vertical;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 12px;
-        background: #15181d;
-        color: #f3f5f7;
+        border-radius: 0;
+        background: rgba(255, 255, 255, 0.04);
+        color: #fff;
         padding: 12px 13px;
         font-family: Consolas, "Courier New", monospace;
         font-size: 12px;
@@ -690,8 +691,7 @@
 
       #${SOURCE_ID}:focus {
         outline: none;
-        border-color: rgba(114, 156, 255, 0.82);
-        box-shadow: 0 0 0 3px rgba(114, 156, 255, 0.16);
+        border-color: #90caf9;
       }
 
       .ccr20-background-row {
@@ -704,9 +704,9 @@
       #${BACKGROUND_ID} {
         min-width: 88px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
-        background: #15181d;
-        color: #f3f5f7;
+        border-radius: 0;
+        background: #212121;
+        color: #fff;
         padding: 6px 8px;
       }
 
@@ -714,7 +714,7 @@
         min-height: 19px;
         font-size: 12px;
         line-height: 1.45;
-        color: rgba(243, 245, 247, 0.7);
+        color: rgba(255, 255, 255, 0.7);
       }
 
       #${STATUS_ID}[data-state="success"] {
@@ -730,45 +730,46 @@
         max-height: 280px;
         overflow: auto;
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
+        border-radius: 0;
         background: rgba(255, 255, 255, 0.04);
         padding: 14px;
         box-sizing: border-box;
       }
 
       #${PREVIEW_ID}.is-empty {
-        color: rgba(243, 245, 247, 0.45);
+        color: rgba(255, 255, 255, 0.5);
       }
 
       .ccr20-footer {
         display: flex;
         justify-content: flex-end;
         gap: 8px;
-        padding: 0 18px 18px;
+        padding: 8px 16px;
       }
 
       .ccr20-btn {
         border: 0;
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-size: 12px;
-        font-weight: 700;
+        border-radius: 0;
+        min-width: 64px;
+        padding: 6px 8px;
+        font-size: 14px;
+        font-weight: 500;
         cursor: pointer;
         color: inherit;
-        background: rgba(255, 255, 255, 0.08);
+        background: transparent;
       }
 
       .ccr20-btn:hover {
-        background: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.08);
       }
 
       .ccr20-btn.primary {
-        background: linear-gradient(135deg, #6f8fff, #5cc0ff);
-        color: #0e1117;
+        background: transparent;
+        color: #90caf9;
       }
 
       .ccr20-btn.primary:hover {
-        filter: brightness(1.05);
+        background: rgba(144, 202, 249, 0.08);
       }
 
       .ccr20-render-root {
@@ -965,13 +966,19 @@
 
       .ccr20-render-root .ccr20-image {
         display: block;
-        width: 100%;
-        max-width: 100%;
+        width: auto;
+        max-width: min(100%, 360px);
         height: auto;
         margin: 0 auto;
         border: 0;
         border-radius: 0;
         box-sizing: border-box;
+      }
+
+      .ccr20-render-root .ccr20-line:first-child .ccr20-image,
+      .ccr20-render-root .ccr20-line:last-child .ccr20-image {
+        width: 100%;
+        max-width: 100%;
       }
 
       [data-ccf-narration-hidden="1"] {
@@ -5764,7 +5771,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.69",
+    version: "0.3.70",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
