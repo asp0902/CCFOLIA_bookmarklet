@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.68
+// @version      0.3.69
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -46,6 +46,8 @@
   const CONVERT_ID = "ccr20-convert";
   const APPLY_ID = "ccr20-apply";
   const CLOSE_ID = "ccr20-close";
+  const BACKGROUND_ID = "ccr20-background";
+  const MACRO_BACKGROUND_ATTR = "data-ccr20-macro-background";
   const OPEN_BTN_SIZE = 32;
   const OPEN_BTN_GAP = 4;
 
@@ -67,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.68"),
+    version: getUserscriptVersion("0.3.69"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -156,6 +158,9 @@
     previewEmpty: "/desc \uBCC0\uD658 \uACB0\uACFC\uAC00 \uC5EC\uAE30\uC5D0 \uBBF8\uB9AC\uBCF4\uAE30\uB85C \uD45C\uC2DC\uB429\uB2C8\uB2E4.",
     convert: "\uBCC0\uD658",
     apply: "\uC801\uC6A9",
+    background: "\uBC30\uACBD",
+    backgroundBlack: "\uAC80\uC815",
+    backgroundWhite: "\uD558\uC591",
     reusedRoll20: "\uC774\uC804\uC5D0 \uC801\uC6A9\uD55C Roll20 \uBCC0\uD658 \uACB0\uACFC\uB97C \uBBF8\uB9AC\uBCF4\uAE30\uB85C \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4.",
     reusedCurrent: "\uD604\uC7AC \uC785\uB825\uCC3D\uC5D0 \uC801\uC6A9\uB41C \uC11C\uC2DD\uC744 \uBBF8\uB9AC\uBCF4\uAE30\uB85C \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4. \uD544\uC694\uD558\uBA74 Roll20 \uC6D0\uBB38\uC744 \uB2E4\uC2DC \uBD99\uC5EC \uB123\uC5B4 \uBCC0\uD658\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
     dirty: "\uC785\uB825 \uB0B4\uC6A9\uC774 \uBC14\uB00C\uC5B4\uC11C \uC774\uC804 \uBCC0\uD658 \uACB0\uACFC\uB97C \uC9C0\uC6E0\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uBCC0\uD658\uD574 \uC8FC\uC138\uC694.",
@@ -238,6 +243,7 @@
   let modalDraftAlignRuns = [];
   let modalDraftRoll20Text = "";
   let modalDraftRoll20ConvertedSource = "";
+  let macroBackground = "black";
   let suppressEditorSyncDepth = 0;
   let ensureUiFrame = 0;
   let openButtonLayoutFrame = 0;
@@ -467,6 +473,10 @@
     }
   }
 
+  function normalizeMacroBackground(value) {
+    return value === "white" ? "white" : "black";
+  }
+
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
 
@@ -684,6 +694,22 @@
         box-shadow: 0 0 0 3px rgba(114, 156, 255, 0.16);
       }
 
+      .ccr20-background-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      #${BACKGROUND_ID} {
+        min-width: 88px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        background: #15181d;
+        color: #f3f5f7;
+        padding: 6px 8px;
+      }
+
       #${STATUS_ID} {
         min-height: 19px;
         font-size: 12px;
@@ -757,8 +783,12 @@
         overflow-wrap: anywhere;
       }
 
-      .ccr20-render-root.ccr20-roll20-bubble {
-        background: #000;
+      .ccr20-render-root.ccr20-roll20-bubble[${MACRO_BACKGROUND_ATTR}="black"] {
+        background: #000 !important;
+      }
+
+      .ccr20-render-root.ccr20-roll20-bubble[${MACRO_BACKGROUND_ATTR}="white"] {
+        background: #fff !important;
       }
 
       .ccr20-render-root .ccr20-line {
@@ -929,14 +959,14 @@
         display: block;
         max-width: 100%;
         min-width: 0;
-        margin: 4px 0;
+        margin: 0;
         overflow: hidden;
       }
 
       .ccr20-render-root .ccr20-image {
         display: block;
-        width: auto;
-        max-width: min(100%, 360px);
+        width: 100%;
+        max-width: 100%;
         height: auto;
         margin: 0 auto;
         border: 0;
@@ -1862,6 +1892,15 @@
       if (applyModalConversion()) closeModal();
     }, ccr20WithSignal());
 
+    const background = modal.querySelector(`#${BACKGROUND_ID}`);
+    if (background instanceof HTMLSelectElement) {
+      background.value = macroBackground;
+      background.addEventListener("change", () => {
+        macroBackground = normalizeMacroBackground(background.value);
+        if (modalDraftRoll20ConvertedSource) renderPreviewFromDraft();
+      }, ccr20WithSignal());
+    }
+
     const source = getModalSourceEditor();
     source?.addEventListener("input", () => {
       if (!ccr20Lifecycle.isActive()) return;
@@ -1894,6 +1933,13 @@
           spellcheck="false"
           placeholder="${MODAL_TEXT.placeholder}"
         ></textarea>
+        <div class="ccr20-background-row">
+          <label for="${BACKGROUND_ID}">${MODAL_TEXT.background}</label>
+          <select id="${BACKGROUND_ID}">
+            <option value="black">${MODAL_TEXT.backgroundBlack}</option>
+            <option value="white">${MODAL_TEXT.backgroundWhite}</option>
+          </select>
+        </div>
         <div id="${STATUS_ID}" data-state="idle">${MODAL_TEXT.idle}</div>
         <div id="${PREVIEW_ID}" class="ccr20-render-root is-empty">${MODAL_TEXT.previewEmpty}</div>
       </div>
@@ -1968,6 +2014,7 @@
     const preview = getModalPreview();
     if (!preview) return;
     preview.classList.add("is-empty");
+    applyRoll20MacroBubbleClass(preview, false);
     preview.textContent = message;
   }
 
@@ -1980,6 +2027,7 @@
     const alignRuns = getEffectiveAlignRuns(text, modalDraftAlignRuns);
 
     preview.classList.remove("is-empty");
+    applyRoll20MacroBubbleClass(preview, true, macroBackground);
     renderStyledText(preview, text, runs, alignRuns);
   }
 
@@ -2338,6 +2386,7 @@
     };
     if (isRoll20Macro) {
       envelopePayload.roll20Macro = true;
+      envelopePayload.roll20Background = macroBackground;
     }
     const outgoing = needsEnvelope
       ? encodeEnvelopeToInvisible(envelopePayload) + outgoingText
@@ -2501,7 +2550,7 @@
 
     el.innerHTML = "";
     el.classList.add("ccr20-render-root");
-    applyRoll20MacroBubbleClass(el, !!envelope?.roll20Macro);
+    applyRoll20MacroBubbleClass(el, !!envelope?.roll20Macro, envelope?.roll20Background);
     applyNarrationRenderMarker(el, envelope?.blockStyle?.narration === true);
 
     if (!effectiveRuns.length && !alignRuns.length) {
@@ -2514,14 +2563,16 @@
     el.setAttribute(CCF_RENDERED_ATTR, "1");
   }
 
-  function applyRoll20MacroBubbleClass(el, isRoll20Macro) {
+  function applyRoll20MacroBubbleClass(el, isRoll20Macro, background = "black") {
     if (!(el instanceof HTMLElement)) return;
     const bubble = el.closest("li") || el.parentElement;
     if (isRoll20Macro) {
       el.classList.add("ccr20-roll20-bubble");
+      el.setAttribute(MACRO_BACKGROUND_ATTR, normalizeMacroBackground(background));
       if (bubble) bubble.classList.add("ccr20-roll20-bubble-container");
     } else {
       el.classList.remove("ccr20-roll20-bubble");
+      el.removeAttribute(MACRO_BACKGROUND_ATTR);
       if (bubble) bubble.classList.remove("ccr20-roll20-bubble-container");
     }
   }
@@ -2803,7 +2854,7 @@
     const { renderText, effectiveRuns, alignRuns } = renderState;
     root.innerHTML = "";
     root.classList.add("ccr20-render-root");
-    applyRoll20MacroBubbleClass(root, !!envelope?.roll20Macro);
+    applyRoll20MacroBubbleClass(root, !!envelope?.roll20Macro, envelope?.roll20Background);
     applyNarrationRenderMarker(root, envelope?.blockStyle?.narration === true);
 
     if (!effectiveRuns.length && !alignRuns.length) {
@@ -5713,7 +5764,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.68",
+    version: "0.3.69",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
