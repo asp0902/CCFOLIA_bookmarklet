@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.66
+// @version      0.3.67
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -67,7 +67,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.66"),
+    version: getUserscriptVersion("0.3.67"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -170,6 +170,7 @@
   const FONT_SIZE_MAX = 200;
 
   const EXTRA_CSS_ORDER = [
+    "fontStyle",
     "fontFamily",
     "boxShadow",
     "backgroundPosition",
@@ -933,6 +934,7 @@
         width: auto;
         max-width: min(100%, 360px);
         height: auto;
+        margin: 0 auto;
         border: 0;
         border-radius: 10px;
         box-sizing: border-box;
@@ -4023,6 +4025,7 @@
   function collectExtraCssFromStyle(style) {
     const out = {};
 
+    assignExtraCss(out, "fontStyle", normalizeKeyword(style.fontStyle, ["normal", "italic", "oblique"]));
     assignExtraCss(out, "fontFamily", normalizeFontFamily(style.fontFamily));
     assignExtraCss(out, "boxShadow", normalizeCssValue(style.boxShadow, 240));
     assignExtraCss(out, "backgroundPosition", normalizeCssValue(style.backgroundPosition, 80));
@@ -4499,6 +4502,8 @@
 
   function normalizeExtraCssValue(key, value) {
     switch (key) {
+      case "fontStyle":
+        return normalizeKeyword(value, ["normal", "italic", "oblique"]);
       case "fontFamily":
         return normalizeFontFamily(value);
       case "boxShadow":
@@ -5704,7 +5709,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.66",
+    version: "0.3.67",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
