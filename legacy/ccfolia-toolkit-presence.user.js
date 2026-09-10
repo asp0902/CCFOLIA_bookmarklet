@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.2
+// @version      0.0.3
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -513,7 +513,7 @@
     // 네이티브 MUI 다이얼로그(캐릭터 이미지 라이브러리 / Unsplash 검색 등) 안의 입력은
     // 채팅 입력창이 아니므로 presence 페이로드를 주입하지 않는다.
     // (주입 시 Unsplash 검색 쿼리가 오염되어 414 URI Too Long 발생)
-    if (editor instanceof Element && editor.closest?.(".MuiDialog-root")) return true;
+    if (editor instanceof Element && editor.closest?.('.MuiDialog-root, [role="dialog"]')) return true;
     const currentText = getEditorText(editor);
     const visibleText = stripInvisibleEnvelope(currentText);
     if (!visibleText.trim()) return true;
