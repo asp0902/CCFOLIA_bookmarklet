@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.83
+// @version      0.1.84
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.83",
+    version: "0.1.84",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -888,7 +888,7 @@
       display: flex; align-items: center; gap: 4px; margin-bottom: 18px;
     }
     .handout-edit-header .title-input {
-      flex: 1; background: rgba(0,0,0,.35);
+      flex: 1; min-width: 0; background: rgba(0,0,0,.35);
       border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
       color: #fff; font-size: 0.875rem; padding: 8px 12px;
       transition: border-color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms;
@@ -903,6 +903,7 @@
       transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
     }
     .handout-edit-header .action-icon:hover { background: rgba(255,255,255,.1); }
+    .handout-edit-header .folder-select { width: 140px; max-width: 35%; }
     .handout-edit-cols {
       display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 28px;
     }
@@ -956,7 +957,7 @@
     /* #40 — 공개 본문 마크다운 서식 툴바 */
     .handout-format-toolbar {
       display: flex; flex-wrap: wrap; align-items: center;
-      gap: 2px; margin-top: -9px; margin-bottom: 5px;
+      gap: 2px; margin-top: -9px; margin-bottom: 28px;
       padding: 2px 4px;
       background: rgba(255,255,255,.04);
       border: 1px solid rgba(255,255,255,.08);
@@ -3294,6 +3295,10 @@
 
     return `
       <div class="handout-edit-header">
+        <select class="settings-select folder-select" data-field="folderId" aria-label="소속 폴더">
+          <option value="">폴더 없음</option>
+          ${(state.data.folders || []).map((folder) => `<option value="${escapeAttr(folder.id)}"${folder.id === h.folderId ? " selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
+        </select>
         <input class="title-input" type="text" data-field="title" value="${escapeHtml(h.title)}" placeholder="핸드아웃 제목">
         ${editing ? `<button class="action-icon" data-action="delete-handout" data-id="${escapeHtml(editing.id)}" title="삭제" aria-label="삭제">${ICON_TRASH}</button>` : ""}
       </div>
@@ -3302,10 +3307,12 @@
         <div class="col">
           <label>공개 핸드아웃</label>
           <div class="rich-editor" contenteditable="true" data-field="description" data-format-receiver="1" data-placeholder="공개 핸드아웃 본문...">${renderHandoutBody(h.description)}</div>
+          <div class="preview" data-preview="description" aria-label="공개 매크로 미리보기" hidden></div>
         </div>
         <div class="col">
           <label>비밀 핸드아웃</label>
           <div class="rich-editor" contenteditable="true" data-field="gmNotes" data-format-receiver="1" data-placeholder="비밀 핸드아웃 본문...">${renderHandoutBody(h.gmNotes)}</div>
+          <div class="preview" data-preview="gmNotes" aria-label="비밀 매크로 미리보기" hidden></div>
         </div>
       </div>
       <div class="perm-section">
@@ -3829,14 +3836,23 @@
     // 그 외: 브라우저 기본 paste 진행
   }
 
-  // 실시간 마크다운 프리뷰
+  function renderEditorMacro(editor) {
+    const text = editor.innerText || editor.textContent || "";
+    return window.__CCF_ROLL20_BRIDGE_DEBUG__?.renderMacroHtml?.(text) ?? null;
+  }
+
+  // 원문과 커서를 유지한 채 공개/비밀 입력의 매크로만 미리 본다.
   function onShadowInput(event) {
-    const ta = event.target.closest('textarea[data-field]');
+    const ta = event.target.closest('.rich-editor[data-field]');
     if (!ta) return;
     const field = ta.dataset.field;
     if (field !== "description" && field !== "gmNotes") return;
     const previewEl = state.shadow?.querySelector(`.preview[data-preview="${field}"]`);
-    if (previewEl) previewEl.innerHTML = renderMarkdown(ta.value);
+    if (previewEl) {
+      const html = renderEditorMacro(ta);
+      previewEl.hidden = html === null;
+      previewEl.innerHTML = html || "";
+    }
   }
 
   function getFieldValue(name) {
@@ -3844,7 +3860,7 @@
     if (!el) return "";
     // contenteditable 본문 (rich-editor) 은 innerHTML 사용
     if (el.getAttribute && el.getAttribute("contenteditable") === "true") {
-      return el.innerHTML || "";
+      return renderEditorMacro(el) ?? (el.innerHTML || "");
     }
     return el.value || "";
   }
@@ -3889,6 +3905,7 @@
     const existing = isNew ? null : findHandout(state.editingId);
     const handout = {
       id, title, image, description, gmNotes, permissions,
+      folderId: (state.data.folders || []).some((folder) => folder.id === getFieldValue("folderId")) ? getFieldValue("folderId") : "",
       tags: existing?.tags || [],
       ownerUid: existing?.ownerUid,
       ownerName: existing?.ownerName,
