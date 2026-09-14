@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.3";
-  const BUILD_ID = "2026-09-14-insane-sheet-import-176";
+  const VERSION = "0.3.4";
+  const BUILD_ID = "2026-09-14-insane-sheet-dialog-177";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

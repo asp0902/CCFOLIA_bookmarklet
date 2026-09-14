@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA inSANe Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.2.0
+// @version      0.2.1
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 인세인 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -20,7 +20,8 @@
   const ROOT_ID = "ccf-character-sheet-root";
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
-  const VERSION = "0.2.0";
+  const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
+  const VERSION = "0.2.1";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -66,6 +67,18 @@
       distance = Math.min(distance, next);
     }
     return Number.isFinite(distance) ? 5 + distance : null;
+  }
+
+  function clampDialogDrag(rect, deltaX, deltaY, viewportWidth, viewportHeight, margin = 8) {
+    return {
+      x: Math.min(Math.max(deltaX, margin - rect.left), viewportWidth - margin - rect.right),
+      y: Math.min(Math.max(deltaY, margin - rect.top), viewportHeight - margin - rect.bottom)
+    };
+  }
+
+  function isCharacterEditTitle(value) {
+    const text = normalizedText(value);
+    return ["캐릭터 편집", "キャラクター編集", "edit character", "character edit", "编辑角色"].some((label) => text.includes(label));
   }
 
   function validSkillId(id) {
@@ -163,7 +176,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, clampDialogDrag, isCharacterEditTitle, parseTransferPayload });
     return;
   }
 
@@ -178,7 +191,8 @@
     open: false,
     tab: "basic",
     renderFrame: 0,
-    saveTimer: 0
+    saveTimer: 0,
+    dialogPosition: { x: 0, y: 0 }
   };
 
   registerWithSuite();
@@ -232,7 +246,7 @@
     clearTimeout(state.saveTimer);
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
-    document.querySelectorAll(`[${ICON_ATTR}]`).forEach((node) => node.remove());
+    document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}]`).forEach((node) => node.remove());
     if (window[DEBUG_KEY]?.__owner === signal) delete window[DEBUG_KEY];
     return true;
   }
@@ -261,9 +275,12 @@
         state.data = await loadData(nextRoom);
         if (state.open) render();
       }
-      if (detectRoom()) mountIcon();
+      if (detectRoom()) {
+        mountIcon();
+        mountCharacterDialogButtons();
+      }
       else {
-        document.querySelectorAll(`[${ICON_ATTR}]`).forEach((node) => node.remove());
+        document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}]`).forEach((node) => node.remove());
         closeSheet();
       }
     });
@@ -358,6 +375,33 @@
     anchor.parentElement.insertBefore(button, anchor.nextSibling);
   }
 
+  function mountCharacterDialogButtons() {
+    document.querySelectorAll('.MuiDialog-root, [role="dialog"]').forEach((dialog) => {
+      if (!(dialog instanceof HTMLElement) || dialog.closest(`#${ROOT_ID}`)) return;
+      const title = dialog.querySelector(".MuiAppBar-root, .MuiDialogTitle-root")?.textContent || "";
+      const actions = dialog.querySelector(".MuiDialogActions-root");
+      if (!isCharacterEditTitle(title) || !actions || actions.querySelector(`[${DIALOG_BUTTON_ATTR}]`)) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = actions.querySelector("button")?.className || "";
+      button.setAttribute(DIALOG_BUTTON_ATTR, "native-dialog");
+      button.setAttribute("aria-label", "인세인 캐릭터 시트 열기");
+      button.textContent = "인세인 시트";
+      button.addEventListener("click", () => openSheetFromCharacterDialog(dialog), { signal });
+      actions.appendChild(button);
+    });
+  }
+
+  function openSheetFromCharacterDialog(dialog) {
+    const closeLabels = ["닫기", "close", "閉じる", "关闭"];
+    const closeButton = [...dialog.querySelectorAll("button")].find((button) => {
+      const label = normalizedText(`${button.getAttribute("aria-label") || ""} ${button.title || ""}`);
+      return button.getAttribute(DIALOG_BUTTON_ATTR) == null && closeLabels.some((item) => label.includes(item));
+    }) || dialog.querySelector(".MuiAppBar-root button");
+    closeButton?.click();
+    setTimeout(openSheet, 80);
+  }
+
   function openSheet() {
     if (!detectRoom()) return false;
     state.open = true;
@@ -400,6 +444,32 @@
         <main>${renderTab(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}<button class="ccf-cs-save" data-action="save">저장</button></footer>
       </section>`;
+    const dialog = root.querySelector(".ccf-cs-dialog");
+    dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
+    enableDialogDrag(dialog);
+  }
+
+  function enableDialogDrag(dialog) {
+    const handle = dialog?.querySelector("header");
+    if (!handle) return;
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target.closest("button,input,select,textarea,a") || innerWidth <= 700) return;
+      event.preventDefault();
+      const start = { x: event.clientX, y: event.clientY, position: { ...state.dialogPosition }, rect: dialog.getBoundingClientRect() };
+      const move = (nextEvent) => {
+        const delta = clampDialogDrag(start.rect, nextEvent.clientX - start.x, nextEvent.clientY - start.y, innerWidth, innerHeight);
+        state.dialogPosition = { x: start.position.x + delta.x, y: start.position.y + delta.y };
+        dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
+      };
+      const stop = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", stop);
+        document.removeEventListener("pointercancel", stop);
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", stop);
+      document.addEventListener("pointercancel", stop);
+    }, { signal });
   }
 
   function renderTab(sheet) {
@@ -609,11 +679,13 @@
     style.textContent = `
       [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle }
       [${ICON_ATTR}]:hover { background:rgba(255,255,255,.1) }
+      [${DIALOG_BUTTON_ATTR}] { white-space:nowrap }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px }
       #${ROOT_ID} .ccf-cs-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.64) }
       #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:12px;margin:auto;width:min(980px,calc(100vw - 24px));height:min(820px,calc(100vh - 24px));display:grid;grid-template-rows:56px 50px 44px minmax(0,1fr) auto;background:#212121;border:1px solid #555;border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
       #${ROOT_ID} header,#${ROOT_ID} .ccf-cs-sheetbar,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #424242 }
+      #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} header h2 { margin:0;font-size:.875rem;font-weight:bold;flex:1 }
       #${ROOT_ID} button,#${ROOT_ID} input,#${ROOT_ID} select,#${ROOT_ID} textarea { font:inherit;color:inherit }
       #${ROOT_ID} button { min-height:34px;padding:0 12px;background:#303030;border:1px solid #555;border-radius:2px;cursor:pointer }
@@ -646,7 +718,8 @@
       #${ROOT_ID} footer { flex-wrap:wrap;border-top:1px solid #424242;border-bottom:0 }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
       @media (max-width:700px) {
-        #${ROOT_ID} .ccf-cs-dialog { inset:0;width:100vw;height:100vh;border:0;border-radius:0 }
+        #${ROOT_ID} .ccf-cs-dialog { inset:0;width:100vw;height:100vh;border:0;border-radius:0;transform:none!important }
+        #${ROOT_ID} header { cursor:default }
         #${ROOT_ID} .ccf-cs-basic { grid-template-columns:repeat(2,minmax(0,1fr)) }
         #${ROOT_ID} .ccf-cs-repeaters section,#${ROOT_ID} .ccf-cs-notes { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:10px }

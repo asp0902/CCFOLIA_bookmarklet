@@ -18,6 +18,12 @@ assert.equal(hook.getSkillTarget(["0:0"], "0:1", []), 6);
 assert.equal(hook.getSkillTarget(["0:0"], "1:0", [false]), 7);
 assert.equal(hook.getSkillTarget(["0:0"], "1:0", [true]), 6);
 assert.equal(hook.getSkillTarget([], "1:0", []), null);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(hook.clampDialogDrag({ left: 100, right: 500, top: 50, bottom: 450 }, -200, 600, 800, 600))),
+  { x: -92, y: 142 }
+);
+assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
+assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
 
 const imported = hook.parseTransferPayload(JSON.stringify({
   kind: "capybara.insane-sheet",
