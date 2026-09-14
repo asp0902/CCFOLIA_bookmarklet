@@ -79,6 +79,10 @@ assert.match(source, /input\._valueTracker\?\.setValue\(previous\)/);
 assert.match(source, /new InputEvent\("input", \{ bubbles: true, inputType: "insertText" \}\)/);
 assert.match(source, /ccf-cs-profile-memo textarea \{ width:calc\(100% \+ 32px\)[^}]*resize:none/);
 assert.match(source, /공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정/);
+assert.match(source, /ccf-cs-note-toggle\$\{noteOpen \|\| memo \? " is-active" : ""\}/);
+assert.match(source, /ccf-cs-note-toggle \{[^}]*width:13px[^}]*height:13px[^}]*border-radius:0/);
+assert.match(source, /ccf-cs-note-toggle\.is-active \{ background:#f50057 \}/);
+assert.doesNotMatch(source, /noteOpen \|\| memo \? "◆" : "◇"/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
   { "*": { view: true, secret: false, edit: false } }
