@@ -69,6 +69,11 @@ assert.match(tistoryHtml, /class="ccf-tistory-text ccf-tistory-roll20"/);
 assert.match(tistoryHtml, /grid-template-columns: 48px minmax\(0, 1fr\)/);
 assert.match(tistoryHtml, /background: #000 !important/);
 assert.match(tistoryHtml, /border-radius: 0/);
+for (const html of [editor, tistoryHtml]) {
+  assert.match(html, /\.ccf-roll20-bubble > \.ccf-line:first-child \.ccf-image,/);
+  assert.match(html, /\.ccf-roll20-bubble > \.ccf-line:last-child \.ccf-image \{\s*width: 100%;\s*max-width: 100%;/);
+  assert.match(html, /\.ccf-roll20-bubble \.ccf-image \{ max-width: min\(100%, 360px\); \}/);
+}
 assert.match(tistoryHtml, /ccf-tistory-timestamp/);
 assert.match(tistoryHtml, /2026\. 09\. 14\. 17:30:00/);
 

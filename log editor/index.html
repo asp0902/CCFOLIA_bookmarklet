@@ -565,15 +565,15 @@
     box-sizing: border-box;
   }
   .ccf-render-root.ccf-roll20-bubble {
-    width: min(100%, 420px);
+    width: 100%;
     margin-inline: auto;
     overflow: hidden;
   }
   .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="black"] {
-    background: #000;
+    background: #000 !important;
   }
   .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="white"] {
-    background: #fff;
+    background: #fff !important;
   }
   .ccf-render-root .ccf-line {
     display: block;
@@ -605,6 +605,14 @@
     box-sizing: border-box;
     margin: 0 auto;
   }
+  .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
+  .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
+  .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
+    width: 100%;
+    max-width: 100%;
+  }
+  .entry.system-entry .body:has(.ccf-roll20-bubble) { opacity: 1; }
+  .entry.system-entry .ccf-roll20-bubble { font-style: normal; }
   /* 이미지 fragment에 함께 박혀있는 원본 URL 토큰을 숨긴다. */
   .ccf-render-root .ccf-image-token {
     display: inline-block;
@@ -1831,7 +1839,7 @@
       box-sizing: border-box;
     }
     .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble {
-      width: min(100%, 420px);
+      width: 100%;
       margin-inline: auto;
       overflow: hidden;
     }
@@ -1872,6 +1880,14 @@
     .ccf-tistory-log .ccf-image-token {
       display: none;
     }
+    .ccf-tistory-log .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
+    .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
+    .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
+      width: 100%;
+      max-width: 100%;
+    }
+    .ccf-tistory-system-text:has(.ccf-roll20-bubble) { opacity: 1; }
+    .ccf-tistory-system-text .ccf-roll20-bubble { font-style: normal; }
     .ccf-tistory-log .ccf-frag {
       white-space: pre-wrap;
     }
