@@ -269,6 +269,7 @@
     user-select: none;
   }
   .tab-check-item input {
+    margin: 0;
     accent-color: var(--accent);
   }
   .tab-check-item small {
@@ -1065,6 +1066,10 @@
             <div class="output-tab-options">
             <div class="editor-option-title">출력 탭 선택</div>
             <div class="tab-check-list">
+              <label class="tab-check-item">
+                <input type="checkbox" id="output-tabs-all">
+                <span>전체</span>
+              </label>
               ${tabs.map((tab, i) => {
                 const id = tab?.id || `tab-${i + 1}`;
                 const label = escapeHtml(tab?.name || `탭 ${i + 1}`);
@@ -1157,13 +1162,29 @@
       });
     }
 
-    els.main.querySelectorAll(".js-output-tab-check").forEach((checkbox) => {
+    const allTabsCheckbox = document.getElementById("output-tabs-all");
+    const tabCheckboxes = [...els.main.querySelectorAll(".js-output-tab-check")];
+    function syncAllTabsCheckbox() {
+      if (!allTabsCheckbox) return;
+      const count = tabCheckboxes.filter((input) => input.checked).length;
+      allTabsCheckbox.checked = count === tabCheckboxes.length;
+      allTabsCheckbox.indeterminate = count > 0 && count < tabCheckboxes.length;
+    }
+    syncAllTabsCheckbox();
+    allTabsCheckbox?.addEventListener("change", () => {
+      tabCheckboxes.forEach((input) => { input.checked = allTabsCheckbox.checked; });
+      state.selectedTabIds = new Set(allTabsCheckbox.checked ? tabIds : []);
+      syncAllTabsCheckbox();
+      renderSelectedTabEntries(room, assetMaps);
+    });
+    tabCheckboxes.forEach((checkbox) => {
       checkbox.addEventListener("change", () => {
         state.selectedTabIds = new Set(
           [...els.main.querySelectorAll(".js-output-tab-check:checked")]
             .map((input) => input.value)
             .filter(Boolean)
         );
+        syncAllTabsCheckbox();
         renderSelectedTabEntries(room, assetMaps);
       });
     });

@@ -91,6 +91,34 @@ assert.match(timeSandbox.formatEntryTimestamp("2026-09-14T08:30:00Z"), /2026/);
 assert.strictEqual(timeSandbox.formatEntryTimestamp(""), "");
 
 const marker = "  const CAPYBARA_LOG_EDITOR_HTML = ";
+const allTabs = { addEventListener(_event, callback) { this.change = callback; } };
+const tabInputs = ["main", "info"].map(value => ({ value, checked: true, addEventListener(_event, callback) { this.change = callback; } }));
+const tabState = { selectedTabIds: new Set(["main", "info"]) };
+let renders = 0;
+const tabsStart = editor.indexOf('    const allTabsCheckbox = document.getElementById("output-tabs-all");');
+const tabsEnd = editor.indexOf('    const systemSpeakerSelect =', tabsStart);
+assert(tabsStart >= 0 && tabsEnd > tabsStart);
+vm.runInNewContext(editor.slice(tabsStart, tabsEnd), {
+  document: { getElementById: () => allTabs },
+  els: { main: { querySelectorAll: selector => selector.endsWith(":checked") ? tabInputs.filter(input => input.checked) : tabInputs } },
+  state: tabState, tabIds: ["main", "info"], room: {}, assetMaps: {},
+  renderSelectedTabEntries: () => { renders += 1; }
+});
+assert.strictEqual(allTabs.checked, true);
+allTabs.checked = false;
+allTabs.change();
+assert.strictEqual(tabState.selectedTabIds.size, 0);
+assert(tabInputs.every(input => !input.checked));
+tabInputs[0].checked = true;
+tabInputs[0].change();
+assert.strictEqual(allTabs.indeterminate, true);
+assert.strictEqual(allTabs.checked, false);
+allTabs.checked = true;
+allTabs.change();
+assert.strictEqual(tabState.selectedTabIds.size, 2);
+assert(tabInputs.every(input => input.checked));
+assert.strictEqual(allTabs.indeterminate, false);
+assert.strictEqual(renders, 3);
 const embeddedStart = source.indexOf(marker);
 const embeddedEnd = source.lastIndexOf("\n})();");
 assert(embeddedStart >= 0 && embeddedEnd > embeddedStart, "embedded editor not found");
