@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.0
+// @version      0.3.1
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.0";
+  const VERSION = "0.3.1";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -67,6 +67,16 @@
       distance = Math.min(distance, next);
     }
     return Number.isFinite(distance) ? 5 + distance : null;
+  }
+
+  function getCuriosityGaps(value) {
+    const gaps = [false, false, false, false, false];
+    if (value === "" || value == null) return gaps;
+    const column = Number(value);
+    if (!Number.isInteger(column) || column < 0 || column > 5) return gaps;
+    if (column > 0) gaps[column - 1] = true;
+    if (column < 5) gaps[column] = true;
+    return gaps;
   }
 
   function clampDialogDrag(rect, deltaX, deltaY, viewportWidth, viewportHeight, margin = 8) {
@@ -117,11 +127,7 @@
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("시트 데이터가 없습니다.");
     const curiosityNumber = Number(raw.curiosity);
     const curiosity = Number.isInteger(curiosityNumber) && curiosityNumber >= 0 && curiosityNumber < 6 ? curiosityNumber : "";
-    const defaultGaps = [false, false, false, false, false];
-    if (curiosity !== "") {
-      if (curiosity > 0) defaultGaps[curiosity - 1] = true;
-      if (curiosity < 5) defaultGaps[curiosity] = true;
-    }
+    const defaultGaps = getCuriosityGaps(curiosity);
     const sheet = makeSheet(cleanText(raw.name || "가져온 시트", 200), idFactory);
     return {
       ...copyJsonObject(raw),
@@ -187,7 +193,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, clampDialogDrag, isCharacterEditTitle, normalizePermissions, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, normalizePermissions, parseTransferPayload });
     return;
   }
 
@@ -493,7 +499,6 @@
       ${numberField("life", "생명력", sheet.life)}${numberField("lifeMax", "최대 생명력", sheet.lifeMax)}${numberField("sanity", "이성치", sheet.sanity)}${numberField("sanityMax", "최대 이성치", sheet.sanityMax)}
       <label>호기심 분야<select data-field="curiosity"><option value="">선택 안 함</option>${CATEGORIES.map((category, index) => `<option value="${index}"${String(index) === String(sheet.curiosity) ? " selected" : ""}>${category[0]}</option>`).join("")}</select></label>
       <label>공포심<select data-field="fear"><option value="">선택 안 함</option>${skillOptions}</select></label>
-      <fieldset class="ccf-cs-gaps"><legend>무시할 갭</legend>${sheet.removedGaps.map((checked, index) => `<label><input type="checkbox" data-gap="${index}"${checked ? " checked" : ""}> ${CATEGORIES[index][0]}–${CATEGORIES[index + 1][0]}</label>`).join("")}</fieldset>
     </div>`;
     return section("기본", basic)
       + section("특기", renderSkills(sheet), "ccf-cs-section-wide")
@@ -540,7 +545,7 @@
       const id = `${column}:${row}`;
       const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
       return `<div class="ccf-cs-skill${sheet.fear === id ? " is-fear" : ""}"><input type="checkbox" data-skill="${id}" aria-label="${name} 습득"${sheet.skills.includes(id) ? " checked" : ""}><button data-roll="${id}" title="${name} 판정 입력">${name}<small>${target || "–"}</small></button></div>`;
-    }).join("")}</section>`).join("")}</div>`;
+    }).join("")}</section>${column < CATEGORIES.length - 1 ? `<i class="ccf-cs-gap${sheet.removedGaps[column] ? " is-active" : ""}" aria-hidden="true"></i>` : ""}`).join("")}</div>`;
   }
 
   function renderRepeaters(key, items, fields) {
@@ -575,23 +580,12 @@
       const key = target.dataset.field;
       sheet[key] = target.type === "number" ? Number(target.value) : target.value;
       if (key === "curiosity") {
-        sheet.removedGaps.fill(false);
-        const column = Number(target.value);
-        if (Number.isInteger(column)) {
-          if (column > 0) sheet.removedGaps[column - 1] = true;
-          if (column < 5) sheet.removedGaps[column] = true;
-        }
+        sheet.removedGaps = getCuriosityGaps(target.value);
         render();
       } else if (key === "name") {
         const option = document.querySelector(`#${ROOT_ID} select[data-action="select-sheet"] option:checked`);
         if (option) option.textContent = target.value || "이름 없음";
       }
-      saveSoon();
-      return;
-    }
-    if (target.dataset.gap != null) {
-      sheet.removedGaps[Number(target.dataset.gap)] = target.checked;
-      render();
       saveSoon();
       return;
     }
@@ -742,8 +736,9 @@
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px }
       #${ROOT_ID} .ccf-cs-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.64) }
-      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:24px;margin:auto;width:min(920px,calc(100vw - 48px));height:min(840px,calc(100vh - 48px));display:grid;grid-template-rows:56px 50px minmax(0,1fr) auto;background:#212121;border:1px solid rgba(255,255,255,.18);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
+      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:24px;margin:auto;width:min(920px,calc(100vw - 48px));height:min(840px,calc(100vh - 48px));display:grid;grid-template-rows:56px 50px minmax(0,1fr) auto;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
       #${ROOT_ID} header,#${ROOT_ID} .ccf-cs-sheetbar,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #424242 }
+      #${ROOT_ID} .ccf-cs-dialog>header,#${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} header h2 { margin:0;font-size:.875rem;font-weight:bold;flex:1 }
       #${ROOT_ID} button,#${ROOT_ID} input,#${ROOT_ID} select,#${ROOT_ID} textarea { font:inherit;color:inherit }
@@ -763,11 +758,11 @@
       #${ROOT_ID} input:focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-color:#f50057 }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px }
-      #${ROOT_ID} .ccf-cs-gaps { grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px;border:1px solid rgba(255,255,255,.18);padding:12px;border-radius:4px }
-      #${ROOT_ID} .ccf-cs-gaps label { display:flex;align-items:center;gap:4px }
-      #${ROOT_ID} .ccf-cs-gaps input,#${ROOT_ID} .ccf-cs-skill input { width:18px;min-height:18px;accent-color:#f50057 }
-      #${ROOT_ID} .ccf-cs-skills { display:grid;grid-template-columns:repeat(6,minmax(118px,1fr));gap:1px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.18);min-width:760px }
-      #${ROOT_ID} .ccf-cs-skills section { background:#212121 }
+      #${ROOT_ID} .ccf-cs-skill input { width:18px;min-height:18px;accent-color:#f50057 }
+      #${ROOT_ID} .ccf-cs-skills { display:grid;grid-template-columns:repeat(5,minmax(118px,1fr) 8px) minmax(118px,1fr);min-width:800px }
+      #${ROOT_ID} .ccf-cs-skills section { background:rgba(33,33,33,.86);border:1px solid rgba(255,255,255,.18) }
+      #${ROOT_ID} .ccf-cs-gap { display:block;background:rgba(255,255,255,.16) }
+      #${ROOT_ID} .ccf-cs-gap.is-active { background:rgba(0,0,0,.72) }
       #${ROOT_ID} .ccf-cs-skills h3 { margin:0;padding:10px;text-align:center;font-size:14px;background:#292929 }
       #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:4px;padding:3px 5px;border-top:1px solid rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-skill.is-fear { box-shadow:inset 3px 0 #d32f2f }

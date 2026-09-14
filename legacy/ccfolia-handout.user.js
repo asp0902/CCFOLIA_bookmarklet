@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.82
+// @version      0.1.83
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.82",
+    version: "0.1.83",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -4512,7 +4512,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "1");
-    btn.title = "핸드아웃 (Capybara Toolkit)";
+    btn.title = "핸드아웃";
     btn.setAttribute("aria-label", "핸드아웃");
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer;
@@ -4639,7 +4639,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "toolbar");
-    btn.title = "핸드아웃 (Capybara Toolkit)";
+    btn.title = "핸드아웃";
     btn.setAttribute("aria-label", "핸드아웃");
     // MUI IconButton 매치 — 40x40 hit, 24 icon, color inherits from app bar
     btn.style.cssText = `
@@ -4661,7 +4661,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.setAttribute(ICON_MARKER, "floating");
-    btn.title = "핸드아웃 (Capybara Toolkit) — 폴백 위치";
+    btn.title = "핸드아웃";
     btn.innerHTML = JOURNAL_ICON_HTML;
     btn.style.cssText = `
       all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
