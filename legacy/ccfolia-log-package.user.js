@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.38
+// @version      0.0.39
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.27"),
+  version: getUserscriptVersion("0.0.39"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -1663,6 +1663,14 @@
     document.querySelectorAll("ul.MuiList-root, .MuiMenu-list, [role=\"listbox\"], [role=\"menu\"]").forEach((list) => {
       if (!(list instanceof HTMLElement) || !isVisible(list)) return;
 
+      // Native sortable rows can share one wrapper; never drag or reorder that wrapper.
+      if (list.querySelector('[aria-roledescription="sortable"]')) {
+        list.removeAttribute(CHARACTER_LIST_ATTR);
+        list.removeAttribute(CHARACTER_SELECTION_LIST_ATTR);
+        list.querySelectorAll(`[${CHARACTER_ITEM_ATTR}]`).forEach(clearCharacterSortableDecoration);
+        return;
+      }
+
       const selectionItems = getCharacterSelectionItems(list);
       if (selectionItems.length && isCharacterSelectionList(list)) {
         list.removeAttribute(CHARACTER_LIST_ATTR);
@@ -1701,6 +1709,11 @@
 
   function clearCharacterSortableDecoration(item) {
     if (!(item instanceof HTMLElement)) return;
+    item.removeEventListener("dragstart", handleCharacterItemDragStart);
+    item.removeEventListener("dragover", handleCharacterItemDragOver);
+    item.removeEventListener("drop", handleCharacterItemDrop);
+    item.removeEventListener("dragend", handleCharacterItemDragEnd);
+    item.removeEventListener("click", suppressCharacterItemClickAfterDrag, true);
     item.removeAttribute(CHARACTER_ITEM_ATTR);
     item.removeAttribute(CHARACTER_ITEM_ID_ATTR);
     item.removeAttribute(CHARACTER_ITEM_BOUND_ATTR);
