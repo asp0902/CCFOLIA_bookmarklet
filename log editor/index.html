@@ -331,7 +331,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border);
+    border: 0;
     flex: 0 0 48px;
   }
   .entry + .entry { border-top: 1px solid var(--border); }
@@ -607,6 +607,8 @@
     margin: 0 auto;
   }
   .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
+  .ccf-render-root .ccf-line:has(.ccf-image-frag) + .ccf-line:not(:has(.ccf-image-frag)),
+  .ccf-render-root .ccf-line:not(:has(.ccf-image-frag)) + .ccf-line:has(.ccf-image-frag) { margin-top: 8px; }
   .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
   .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
     width: 100%;
@@ -1809,7 +1811,7 @@
     .ccf-tistory-avatar {
       width: 48px;
       height: 48px;
-      border: 1px solid #d4d4d4;
+      border: 0;
       border-radius: 0;
       overflow: hidden;
       background: #f4f4f4;
@@ -1902,6 +1904,8 @@
       display: none;
     }
     .ccf-tistory-log .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
+    .ccf-tistory-log .ccf-line:has(.ccf-image-frag) + .ccf-line:not(:has(.ccf-image-frag)),
+    .ccf-tistory-log .ccf-line:not(:has(.ccf-image-frag)) + .ccf-line:has(.ccf-image-frag) { margin-top: 8px; }
     .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
     .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
       width: 100%;
