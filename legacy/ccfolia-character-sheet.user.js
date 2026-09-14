@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.3
+// @version      0.5.4
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.3";
+  const VERSION = "0.5.4";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -135,6 +135,15 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function normalizeItems(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).slice(0, 100).flatMap(([key, raw]) => {
+      const label = cleanText(key, 100).trim();
+      if (!label || raw === "" || raw == null || !Number.isFinite(Number(raw))) return [];
+      return [[label, nonNegativeNumber(raw)]];
+    }));
+  }
+
   function normalizeTransferSheet(raw, idFactory = makeId) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("시트 데이터가 없습니다.");
     const curiosityNumber = Number(raw.curiosity);
@@ -183,7 +192,7 @@
         gain: !!raw.respec?.gain, empathy: nonNegativeNumber(raw.respec?.empathy),
         mission: !!raw.respec?.mission, other: nonNegativeNumber(raw.respec?.other)
       },
-      items: Object.fromEntries(Object.entries(copyJsonObject(raw.items)).slice(0, 100).map(([key, value]) => [cleanText(key, 100), nonNegativeNumber(value)])),
+      items: normalizeItems(raw.items),
       madnessState: { ...copyJsonObject(raw.madnessState), current: nonNegativeNumber(raw.madnessState?.current), delirium: !!raw.madnessState?.delirium },
       madness: (Array.isArray(raw.madness) ? raw.madness : []).slice(0, 100).map((item) => ({
         ...copyJsonObject(item),
@@ -207,7 +216,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizePermissions, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, parseTransferPayload });
     return;
   }
 
@@ -433,6 +442,7 @@
   function openSheetFromCharacterDialog(dialog) {
     syncSheetFromNativeDialog(dialog);
     state.nativeCharacterDialog = dialog;
+    syncNativeItems(currentSheet(), dialog);
     state.view = "sheet";
     openSheet();
   }
@@ -473,6 +483,10 @@
       if (label) input = dialog.querySelector(`input[name="${label.name.replace(/\.label$/, `.${statusKey[1]}`)}"]`);
     }
     if (!input) return;
+    setNativeInputValue(input, value);
+  }
+
+  function setNativeInputValue(input, value) {
     const previous = input.value;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
@@ -481,6 +495,38 @@
     input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  }
+
+  function findNativeCharacterDialog() {
+    return [...document.querySelectorAll('.MuiDialog-root, [role="dialog"]')].find((dialog) => {
+      if (!(dialog instanceof HTMLElement) || dialog.closest(`#${ROOT_ID}`)) return false;
+      return [...dialog.querySelectorAll("h1,h2,h3,h4,h5,h6,[class*='MuiTypography']")].some((node) => isCharacterEditTitle(node.textContent));
+    }) || null;
+  }
+
+  async function syncNativeItems(sheet, dialog = state.nativeCharacterDialog || findNativeCharacterDialog()) {
+    if (!(dialog instanceof HTMLElement) || !dialog.isConnected) return;
+    const entries = Object.entries(normalizeItems(sheet.items));
+    if (!entries.length) return;
+    const labels = () => [...dialog.querySelectorAll('input[name^="status."][name$=".label"]')];
+    const add = [...dialog.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+      .find((node) => node.textContent.trim() === "스테이터스")?.parentElement?.querySelector('button:has(svg[data-testid="AddIcon"])');
+    for (const [labelText, value] of entries) {
+      let label = labels().find((node) => node.value.trim() === labelText);
+      if (!label && add) {
+        const known = new Set(labels().map((node) => node.name));
+        add.click();
+        for (let frame = 0; frame < 10 && !label; frame += 1) {
+          await new Promise(requestAnimationFrame);
+          label = labels().find((node) => !known.has(node.name));
+        }
+        if (label) setNativeInputValue(label, labelText);
+      }
+      if (!label) continue;
+      await new Promise(requestAnimationFrame);
+      const input = dialog.querySelector(`input[name="${label.name.replace(/\.label$/, ".value")}"]`);
+      if (input) setNativeInputValue(input, value);
+    }
   }
 
   function openSheet() {
@@ -819,6 +865,7 @@
       state.view = "sheet";
       ensureRoot();
       render();
+      syncNativeItems(sheet);
       status("시트 가져옴");
       saveSoon();
       return sheet;

@@ -37,6 +37,10 @@ assert.deepEqual(
   ]))),
   { life: 4, lifeMax: 6, sanity: 3, sanityMax: 5 }
 );
+assert.deepEqual(
+  JSON.parse(JSON.stringify(hook.normalizeItems({ 진통제: 2, 무기: "0", 부적: "", 기타: null, 오류: "abc" }))),
+  { 진통제: 2, 무기: 0 }
+);
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);
 assert.match(source, /button\.title = "사이코로픽션"/);
 assert.match(source, /button\.addEventListener\("click", openPanel/);
@@ -76,6 +80,10 @@ assert.doesNotMatch(source, /class="ccf-cs-sheetbar"/);
 assert.match(source, /data-list="\$\{key\}" data-index="\$\{index\}" data-prop="\$\{fieldName\}"/);
 assert.match(source, /item\[target\.dataset\.prop\] = target\.value/);
 assert.match(source, /input\._valueTracker\?\.setValue\(previous\)/);
+assert.match(source, /async function syncNativeItems\(sheet/);
+assert.match(source, /button:has\(svg\[data-testid="AddIcon"\]\)/);
+assert.match(source, /known = new Set\(labels\(\)\.map/);
+assert.match(source, /syncNativeItems\(sheet\)/);
 assert.match(source, /new InputEvent\("input", \{ bubbles: true, inputType: "insertText" \}\)/);
 assert.match(source, /ccf-cs-profile-memo textarea \{ width:calc\(100% \+ 32px\)[^}]*resize:none/);
 assert.match(source, /공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정/);
