@@ -30,8 +30,8 @@ assert.deepEqual(
 assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
 assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);
-assert.match(source, /m4 11 8 3 8-3-8-3z/);
-assert.match(source, /M10 3\.3v3M10 7\.9h\.01/);
+assert.match(source, /M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4/);
+assert.doesNotMatch(source, /M10 3\.3v3M10 7\.9h\.01/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
 assert.match(source, /section\("기본"[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"[\s\S]+section\("메모"/);

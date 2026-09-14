@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.4
+// @version      0.3.5
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.4";
+  const VERSION = "0.3.5";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -547,7 +547,7 @@
   }
 
   function diceIcon() {
-    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 11 8 3 8-3-8-3z"/><path d="m4 11 1 7 7 3 7-3 1-7M12 14v7"/><circle cx="7.8" cy="15.3" r=".7" fill="currentColor" stroke="none"/><circle cx="16.3" cy="14.3" r=".7" fill="currentColor" stroke="none"/><circle cx="15.2" cy="17.1" r=".7" fill="currentColor" stroke="none"/><path fill="var(--ccf-icon-bg,#212121)" d="M14.2 8.7A4.8 4.8 0 1 0 7.3 9l1.1 2.2L10 9.8c1.6 0 3.1-.4 4.2-1.1Z"/><path d="M10 3.3v3M10 7.9h.01"/></svg>';
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 8 3 8-3-8-3z"/><path d="m4 10 1 8 7 3 7-3 1-8M12 13v8"/><path d="M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4"/><circle cx="7.8" cy="14.6" r=".8" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13.8" r=".8" fill="currentColor" stroke="none"/><circle cx="15.4" cy="17.1" r=".8" fill="currentColor" stroke="none"/></svg>';
   }
 
   function renderSkills(sheet) {
