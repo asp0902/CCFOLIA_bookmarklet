@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.84
+// @version      0.1.85
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.84",
+    version: "0.1.85",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2041,6 +2041,7 @@
           transition: background-color 150ms;
         }
         .show-close:hover, .show-head-btn:hover { background: rgba(255,255,255,.1); }
+        .show-head-btn[data-action="show-edit"] + .show-close { margin-left: -4px; }
         .show-close svg, .show-head-btn svg { pointer-events: none; }
         .show-body { padding: 20px 24px; overflow: auto; }
         .show-body > *:first-child { margin-top: 0 !important; }
