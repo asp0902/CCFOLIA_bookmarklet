@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.87
+// @version      0.1.88
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.87",
+    version: "0.1.88",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -163,6 +163,8 @@
   }
 
   lifecycle.installDebugApi({
+    getPlayerImage(name) { return getPlayerImage(name); },
+    getPlayers() { return (state.data.plList || []).map((pl) => ({ name: pl.name, image: getPlayerImage(pl.name) })); },
     open() { openPanel(); },
     close() { closePanel(); },
     locateAnchor() { return diagnoseAnchors(); },
@@ -1307,7 +1309,7 @@
     .folder-section .card { padding-left: 32px; }
     /* PL 아바타 (#74) */
     .pl-avatar {
-      display: inline-flex; width: 28px; height: 28px; border-radius: 50%;
+      display: inline-flex; width: 28px; height: 28px; border-radius: 0;
       overflow: hidden; background: rgba(255,255,255,.08); flex: 0 0 28px;
       vertical-align: middle;
     }
@@ -2435,7 +2437,7 @@
       if (image) {
         const owner = (state.data.plList || []).find((p) =>
           normalizePlNameKey(p.name) === key);
-        if (owner && !owner.image) { owner.image = image; imageUpdated += 1; }
+        if (owner && owner.image !== image) { owner.image = image; imageUpdated += 1; }
       }
       if (state.chatSeenAuthors.has(key)) return;
       state.chatSeenAuthors.add(key);
@@ -2459,6 +2461,7 @@
     if (!added.length && !merged) {
       // 이미지만 갱신 — 토스트 없이 저장만
       await saveAll(state.data);
+      if (state.isOpen && state.activeTab === "settings") render();
       return;
     }
     state.data.plList.push(...added);
@@ -2511,7 +2514,7 @@
       const key = normalizePlNameKey(name);
       if (!key || key === me) return;
       const owner = (state.data.plList || []).find((p) => normalizePlNameKey(p.name) === key);
-      if (image && owner && !owner.image) { owner.image = image; imageUpdated += 1; }
+      if (image && owner && owner.image !== image) { owner.image = image; imageUpdated += 1; }
       if (existing.has(key)) return;
       if (state.data.plDeleted && state.data.plDeleted[key]) return;
       existing.add(key);
@@ -2536,7 +2539,7 @@
       if (!key) return;
       const owner = state.data.plList.find((p) =>
         normalizePlNameKey(p.name) === key);
-      if (owner && !owner.image) { owner.image = image; updated += 1; }
+      if (owner && owner.image !== image) { owner.image = image; updated += 1; }
     });
     if (updated) {
       await saveAll(state.data).catch(() => {});
@@ -2559,23 +2562,23 @@
 
   // 이름 + 아바타 이미지 쌍 수집 (#74)
   function collectChatAuthorEntries(items) {
-    const entries = [];
-    const seen = new Set();
+    const entries = new Map();
     items.forEach((item) => {
       if (!(item instanceof HTMLElement)) return;
       if (!isLikelyChatAuthorItem(item)) return;
       const name = extractChatAuthorName(item);
       const key = normalizePlNameKey(name);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      entries.push({ name, image: extractChatAuthorImage(item) });
+      if (!key) return;
+      const image = extractChatAuthorImage(item);
+      if (!entries.has(key) || image) entries.set(key, { name, image });
     });
-    return entries;
+    return [...entries.values()];
   }
 
   function extractChatAuthorImage(item) {
     const img = item.querySelector(".MuiAvatar-root img, .MuiListItemAvatar-root img");
-    const src = img?.getAttribute("src") || "";
+    if (img?.complete && !img.naturalWidth) return "";
+    const src = img?.currentSrc || img?.getAttribute("src") || "";
     return /^https?:\/\//i.test(src) ? src : "";
   }
 
@@ -3357,7 +3360,7 @@
       const merged = aliases.length > 0 ? "1" : "0";
       const perms = aggregatePermissionsForPl(pl);
       const aliasHtml = aliases.map((a) => `<span class="settings-pl-alias" title="${escapeAttr(a)}">${escapeHtml(a)}</span>`).join("");
-      const image = typeof pl?.image === "string" ? pl.image : "";
+      const image = getPlayerImage(pl.name);
       return `
         <div class="settings-pl-row" data-pl-role="${role}" data-pl-merged="${merged}">
           <span class="settings-pl-strip" aria-hidden="true"></span>
@@ -4275,6 +4278,14 @@
       if (normalizePlNameKey(entry.name) === key && entry.image) return entry.image;
     }
     return "";
+  }
+
+  function getPlayerImage(name) {
+    const key = normalizePlNameKey(name || "");
+    const pl = (state.data.plList || []).find((entry) =>
+      [entry.name, ...(entry.aliases || [])].some((value) => normalizePlNameKey(value) === key));
+    const image = findChatAuthorImageByName(pl?.name || name) || pl?.image || "";
+    return /^https?:\/\//i.test(image) ? image : "";
   }
 
   // 모든 핸드아웃의 권한 키를 oldName → newName 으로 이전. 둘 다 있으면 OR 병합.

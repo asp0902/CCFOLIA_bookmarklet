@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.2
+// @version      0.5.3
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.2";
+  const VERSION = "0.5.3";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -538,8 +538,10 @@
   }
 
   function renderSettings(sheet) {
+    const players = permissionRows(sheet).filter((row) => row.key !== "*")
+      .map((row) => `<div class="ccf-cs-player-row">${renderPlayerAvatar(row.image)}<span>${escapeHtml(row.label)}</span></div>`).join("");
     const options = state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정</p><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">공개·비밀·수정 권한 설정</button></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>플레이어 목록</h3><div>${players}</div><h3>시트 권한</h3><p>공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정</p><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">공개·비밀·수정 권한 설정</button></section>`;
   }
 
   function enableDialogDrag(dialog) {
@@ -598,6 +600,8 @@
 
   function permissionRows(sheet) {
     const rows = [{ key: "*", label: "전원" }];
+    const handout = window.__CCF_HANDOUT_DEBUG__;
+    const players = handout?.getPlayers?.() || [];
     const peers = window.__CAPYBARA_TOOLKIT_PRESENCE__?.getPeers?.() || [];
     for (const peer of peers) {
       const name = cleanText(peer?.name, 100).trim();
@@ -606,13 +610,23 @@
     for (const key of Object.keys(sheet.permissions || {})) {
       if (key !== "*" && !rows.some((row) => row.key === key)) rows.push({ key, label: key });
     }
+    for (const player of players) {
+      if (player.name && !rows.some((row) => row.key === player.name)) rows.push({ key: player.name, label: player.name });
+    }
+    for (const row of rows) {
+      if (row.key !== "*") row.image = handout?.getPlayerImage?.(row.key) || "";
+    }
     return rows;
   }
 
+  function renderPlayerAvatar(image) {
+    return `<span class="ccf-cs-player-avatar" aria-hidden="true">${/^https?:\/\//i.test(image || "") ? `<img src="${escapeHtml(image)}" alt="" loading="lazy">` : ""}</span>`;
+  }
+
   function renderPermissions(sheet) {
-    const rows = permissionRows(sheet).map(({ key, label }) => {
+    const rows = permissionRows(sheet).map(({ key, label, image }) => {
       const value = state.permissionDraft?.[key] || {};
-      return `<div class="ccf-cs-perm-name">${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
+      return `<div class="ccf-cs-perm-name">${key === "*" ? "" : renderPlayerAvatar(image)}${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
     }).join("");
     return `<div class="ccf-cs-perm-backdrop" data-action="close-permissions"></div><section class="ccf-cs-perm-dialog" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-perm-title"><header><h2 id="ccf-cs-perm-title">시트 권한 설정</h2><button class="ccf-cs-icon" data-action="close-permissions" aria-label="닫기" title="닫기">${closeIcon()}</button></header><p>공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div><footer><button data-action="close-permissions">취소</button><button class="ccf-cs-save" data-action="save-permissions">저장</button></footer></section>`;
   }
@@ -893,6 +907,10 @@
       #${ROOT_ID} .ccf-cs-sheet-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-sheet-row span { overflow:hidden;color:#bdbdbd;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-settings { display:grid;gap:18px }
+      #${ROOT_ID} .ccf-cs-player-row,#${ROOT_ID} .ccf-cs-perm-name { display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere }
+      #${ROOT_ID} .ccf-cs-player-row { padding:8px 0 }
+      #${ROOT_ID} .ccf-cs-player-avatar { display:inline-flex;width:24px;height:24px;flex:0 0 24px;border-radius:0;overflow:hidden;background:rgba(255,255,255,.08) }
+      #${ROOT_ID} .ccf-cs-player-avatar img { display:block;width:100%;height:100%;object-fit:cover;border-radius:0 }
       #${ROOT_ID} .ccf-cs-settings>p { margin:0;color:#bdbdbd;line-height:1.65 }
       #${ROOT_ID} .ccf-cs-settings>button { justify-self:start;border:0;border-radius:0;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-form-section { padding:22px 0 24px }
