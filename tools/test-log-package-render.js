@@ -43,6 +43,31 @@ assert.match(macro, /class="ccf-render-root ccf-roll20-bubble"/);
 assert.match(macro, /data-ccr20-macro-background="white"/);
 assert.match(editor, /\.ccf-render-root\.ccf-roll20-bubble\[data-ccr20-macro-background="black"\]/);
 assert.match(editor, /overflow-wrap: anywhere/);
+assert.match(editor, /\.ccf-tistory-roll20 \{/);
+assert.match(editor, /\.ccf-tistory-log \.ccf-render-root\.ccf-roll20-bubble\[data-ccr20-macro-background="black"\]/);
+
+const tistoryStart = editor.indexOf("  function buildEditorTistoryHtml(");
+const tistoryEnd = editor.indexOf("\n\n  function exportEditorHtml(", tistoryStart);
+assert(tistoryStart >= 0 && tistoryEnd > tistoryStart, "buildEditorTistoryHtml not found");
+const tistorySandbox = {
+  state: { mergeSameSpeaker: false, systemSpeaker: "" },
+  buildTistoryAssetMaps: () => ({ byRenderUrl: new Map() }),
+  getSelectedTabEntries: () => [{
+    sender: "speaker",
+    bodyHtml: '<div class="ccf-render-root ccf-roll20-bubble" data-ccr20-macro-background="black">message</div>'
+  }],
+  rewriteEntryHtml: (html) => html,
+  resolveAvatarUrl: () => "avatar.png",
+  normalizeCssColorForHtml: (color) => color,
+  escapeHtml: (value) => String(value),
+  escapeAttr: (value) => String(value)
+};
+vm.runInNewContext(editor.slice(tistoryStart, tistoryEnd), tistorySandbox);
+const tistoryHtml = tistorySandbox.buildEditorTistoryHtml({ payload: { assets: [] } });
+assert.match(tistoryHtml, /class="ccf-tistory-text ccf-tistory-roll20"/);
+assert.match(tistoryHtml, /grid-template-columns: 48px minmax\(0, 1fr\)/);
+assert.match(tistoryHtml, /background: #000 !important/);
+assert.match(tistoryHtml, /border-radius: 0/);
 
 const marker = "  const CAPYBARA_LOG_EDITOR_HTML = ";
 const embeddedStart = source.indexOf(marker);

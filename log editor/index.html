@@ -302,7 +302,7 @@
     padding: 12px;
     background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
   }
   .entry .avatar {
     width: 48px;
@@ -589,7 +589,7 @@
     position: relative;
     display: inline-block;
     width: 100%;
-    margin: 4px 0;
+    margin: 0;
     vertical-align: top;
   }
   .ccf-render-root .ccf-image {
@@ -598,7 +598,7 @@
     max-width: min(100%, 420px);
     height: auto;
     border: 0;
-    border-radius: 4px;
+    border-radius: 0;
     box-sizing: border-box;
     margin: 0 auto;
   }
@@ -1712,6 +1712,10 @@
       const sender = String(entry?.sender || "").trim();
       const isSystem = !!(state.systemSpeaker && sender === state.systemSpeaker);
       const bodyHtml = rewriteEntryHtml(entry?.packageHtml || entry?.bodyHtml || "", tistoryAssetMaps.byRenderUrl);
+      const isRoll20Macro = bodyHtml.includes("ccf-roll20-bubble");
+      const textClass = isRoll20Macro
+        ? "ccf-tistory-text ccf-tistory-roll20"
+        : "ccf-tistory-text";
       const avatarUrl = resolveAvatarUrl(entry, tistoryAssetMaps);
       const speakerColor = normalizeCssColorForHtml(entry?.baseColor || "");
       const speakerStyle = speakerColor ? ` style="color:${escapeAttr(speakerColor)}"` : "";
@@ -1719,7 +1723,7 @@
       if (isSystem) {
         return `
           <div class="ccf-tistory-system">
-            <div class="ccf-tistory-system-text">${bodyHtml}</div>
+            <div class="ccf-tistory-system-text${isRoll20Macro ? " ccf-tistory-roll20" : ""}">${bodyHtml}</div>
           </div>`;
       }
 
@@ -1728,7 +1732,7 @@
           ${avatarUrl ? `<div class="ccf-tistory-avatar"><img src="${escapeAttr(avatarUrl)}" alt=""></div>` : `<div class="ccf-tistory-avatar"></div>`}
           <div class="ccf-tistory-body">
             <div class="ccf-tistory-speaker"${speakerStyle}>${escapeHtml(sender || "(이름 없음)")}</div>
-            <div class="ccf-tistory-text">${bodyHtml}</div>
+            <div class="${textClass}">${bodyHtml}</div>
           </div>
         </div>`;
     }).join("\n");
@@ -1751,18 +1755,20 @@
       font-weight: 800;
     }
     .ccf-tistory-entry {
-      display: flex;
-      gap: 10px;
-      margin: 12px 0;
-      align-items: flex-start;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 12px;
+      margin: 10px 0;
+      align-items: start;
     }
     .ccf-tistory-avatar {
-      width: 42px;
-      height: 42px;
-      flex: 0 0 42px;
-      border-radius: 8px;
+      width: 48px;
+      height: 48px;
+      border: 1px solid #d4d4d4;
+      border-radius: 0;
       overflow: hidden;
-      background: #f2f2f2;
+      background: #f4f4f4;
+      box-sizing: border-box;
     }
     .ccf-tistory-avatar img {
       width: 100%;
@@ -1776,15 +1782,78 @@
     }
     .ccf-tistory-speaker {
       display: inline-block;
-      margin-bottom: 3px;
-      font-size: 13px;
-      font-weight: 800;
+      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 700;
     }
     .ccf-tistory-text {
       padding: 9px 12px;
-      border-radius: 10px;
+      border-radius: 0;
       background: #f7f7f7;
+      font-size: 14px;
+      white-space: pre-wrap;
       word-break: break-word;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
+    }
+    .ccf-tistory-roll20 {
+      width: min(100%, 420px);
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .ccf-tistory-log .ccf-render-root {
+      max-width: 100%;
+      min-width: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
+    }
+    .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble {
+      width: min(100%, 420px);
+      margin-inline: auto;
+      overflow: hidden;
+    }
+    .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="black"] {
+      background: #000 !important;
+    }
+    .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="white"] {
+      background: #fff !important;
+    }
+    .ccf-tistory-log .ccf-line {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      min-width: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
+    }
+    .ccf-tistory-log .ccf-roll20-bubble .ccf-line:not(:has(.ccf-image-frag)) {
+      padding-inline: 16px;
+    }
+    .ccf-tistory-log .ccf-image-frag {
+      display: inline-block;
+      width: 100%;
+      margin: 0;
+      vertical-align: top;
+    }
+    .ccf-tistory-log .ccf-image {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+      border: 0;
+      border-radius: 0;
+    }
+    .ccf-tistory-log .ccf-image-token {
+      display: none;
+    }
+    .ccf-tistory-log .ccf-frag {
+      white-space: pre-wrap;
     }
     .ccf-tistory-system {
       margin: 16px auto;
