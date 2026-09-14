@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.2
+// @version      0.3.3
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.2";
+  const VERSION = "0.3.3";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -390,7 +390,7 @@
     button.setAttribute(ICON_ATTR, "toolbar");
     button.setAttribute("aria-label", "사이코로픽션 캐릭터 시트");
     button.title = "사이코로픽션 캐릭터 시트";
-    button.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>';
+    button.innerHTML = diceIcon();
     button.addEventListener("click", openSheet, { signal });
     anchor.parentElement.insertBefore(button, anchor.nextSibling);
   }
@@ -398,17 +398,19 @@
   function mountCharacterDialogButtons() {
     document.querySelectorAll('.MuiDialog-root, [role="dialog"]').forEach((dialog) => {
       if (!(dialog instanceof HTMLElement) || dialog.closest(`#${ROOT_ID}`)) return;
-      const title = dialog.querySelector(".MuiAppBar-root, .MuiDialogTitle-root")?.textContent || "";
-      const actions = dialog.querySelector(".MuiDialogActions-root");
-      if (!isCharacterEditTitle(title) || !actions || actions.querySelector(`[${DIALOG_BUTTON_ATTR}]`)) return;
+      const topbar = dialog.querySelector(".MuiAppBar-root, .MuiDialogTitle-root");
+      const host = topbar?.querySelector(".MuiToolbar-root") || topbar;
+      const title = [...(host?.querySelectorAll("h1,h2,h3,h4,h5,h6,[class*='MuiTypography']") || [])].find((node) => isCharacterEditTitle(node.textContent));
+      if (!title || host.querySelector(`[${DIALOG_BUTTON_ATTR}]`)) return;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = actions.querySelector("button")?.className || "";
-      button.setAttribute(DIALOG_BUTTON_ATTR, "native-dialog");
+      button.className = host.querySelector("button")?.className || "";
+      button.setAttribute(DIALOG_BUTTON_ATTR, "native-topbar");
       button.setAttribute("aria-label", "사이코로픽션 캐릭터 시트 열기");
-      button.textContent = "사이코로픽션 시트";
+      button.title = "사이코로픽션 캐릭터 시트";
+      button.innerHTML = diceIcon();
       button.addEventListener("click", () => openSheetFromCharacterDialog(dialog), { signal });
-      actions.appendChild(button);
+      title.insertAdjacentElement("afterend", button);
     });
   }
 
@@ -417,7 +419,7 @@
     const closeButton = [...dialog.querySelectorAll("button")].find((button) => {
       const label = normalizedText(`${button.getAttribute("aria-label") || ""} ${button.title || ""}`);
       return button.getAttribute(DIALOG_BUTTON_ATTR) == null && closeLabels.some((item) => label.includes(item));
-    }) || dialog.querySelector(".MuiAppBar-root button");
+    }) || dialog.querySelector(`.MuiAppBar-root button:not([${DIALOG_BUTTON_ATTR}])`);
     closeButton?.click();
     setTimeout(openSheet, 80);
   }
@@ -542,6 +544,10 @@
 
   function settingsIcon() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.08-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.2 7.2 0 0 0-1.69-.98L14.5 2.42A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.49.49 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.08.66-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.38.31.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>';
+  }
+
+  function diceIcon() {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="12" cy="12" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/></svg>';
   }
 
   function renderSkills(sheet) {
@@ -752,7 +758,8 @@
     style.textContent = `
       [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle }
       [${ICON_ATTR}]:hover { background:rgba(255,255,255,.1) }
-      [${DIALOG_BUTTON_ATTR}] { white-space:nowrap }
+      [${DIALOG_BUTTON_ATTR}] { display:inline-grid;place-items:center;width:48px;height:48px;padding:0 }
+      [${DIALOG_BUTTON_ATTR}] svg { pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px }
       #${ROOT_ID} .ccf-cs-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.64) }

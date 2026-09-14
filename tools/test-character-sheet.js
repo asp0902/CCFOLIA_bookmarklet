@@ -29,6 +29,9 @@ assert.deepEqual(
 );
 assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
 assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
+assert.match(source, /button\.innerHTML = diceIcon\(\)/);
+assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
+assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
 assert.match(source, /section\("기본"[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"[\s\S]+section\("메모"/);
 assert.doesNotMatch(source, /ccf-cs-tabs|state\.tab/);
 assert.deepEqual(
