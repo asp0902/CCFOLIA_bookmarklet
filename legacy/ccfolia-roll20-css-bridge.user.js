@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.72
+// @version      0.3.73
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.72"),
+    version: getUserscriptVersion("0.3.73"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5518,36 +5518,24 @@
     const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
-    const SPEAKER_START = CONT_ATTR + "-speaker-start";
-    const MSG = CONT_ATTR + "-msg";
-    const MSG_WRAP = MSG + "-wrap";
     style.textContent = [
-      // === 모든 채팅 메시지 li/wrapper의 native border/separator 일괄 제거 ===
-      // (CCFOLIA가 박스 카드별로 가진 native border-top/bottom, ::before/::after, hr 등을
-      //  싹 끔. 우리는 SPEAKER_START에만 1px line을 추가해서 line 중복을 막는다.)
-      `.MuiListItem-root[${MSG}="1"] { border-top: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }`,
-      `.MuiListItem-root[${MSG}="1"]::before, .MuiListItem-root[${MSG}="1"]::after { display: none !important; }`,
-      `[${MSG_WRAP}="1"] { border-top: 0 !important; border-bottom: 0 !important; box-shadow: none !important; }`,
-      `[${MSG_WRAP}="1"]::before, [${MSG_WRAP}="1"]::after { display: none !important; }`,
-      `[${MSG_WRAP}="1"] > hr, [${MSG_WRAP}="1"] > .MuiDivider-root { display: none !important; }`,
-      `[${MSG_WRAP}="1"] + hr, [${MSG_WRAP}="1"] + .MuiDivider-root { display: none !important; }`,
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 6px !important; margin: 0 !important; min-height: 0 !important; }`,
+      // 연속 묶음 내부 선만 숨기고 마지막 행의 네이티브 하단선은 보존한다.
+      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; padding-left: 56px !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
       // === leader li === 자기 아래쪽 padding만 cont와 맞춤
-      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 6px !important; }`,
+      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 6px !important; border-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] .MuiListItemText-root { margin-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
       // === leader 부모 wrapper === 아래쪽 padding/margin만 제거
       `[${LEADER_WRAP}="1"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }`,
       // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
-      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; min-height: 0 !important; }`,
-      // === 화자 다른 메시지 시작 = 옅은 구분선 1개 + 좁은 간격 ===
-      `.MuiListItem-root[${SPEAKER_START}="1"] { border-top: 1px solid rgba(255,255,255,.05) !important; padding-top: 6px !important; margin-top: 6px !important; }`
+      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; min-height: 0 !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -5577,9 +5565,6 @@
     const LEADER_WRAP = CONT_ATTR + "-leader-wrap";
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
-    const SPEAKER_START = CONT_ATTR + "-speaker-start";
-    const MSG = CONT_ATTR + "-msg";
-    const MSG_WRAP = MSG + "-wrap";
     const messages = Array.from(document.querySelectorAll(".MuiListItem-root"))
       .filter((li) => li.querySelector("h6.MuiListItemText-primary"))
       // 보드 메뉴 FAB Popover/Menu 항목도 h6+p 구조라 채팅으로 오인됨 (#20/#26).
@@ -5615,22 +5600,14 @@
       const isCont = !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
       const isLast = isCont && nextAuthor !== author;
-      // 화자 시작 = 직전 화자와 다른 메시지 (첫 메시지 제외)
-      // lone 메시지(양옆 다른 화자) 위아래 모두 명시적 boundary를 그려 대칭 유지.
-      const isSpeakerStart = i > 0 && !!author && author !== prevAuthor;
-      // 모든 채팅 메시지에 MSG 마커 → native border/separator 일괄 제거 타겟
-      changed = setOrRemove(li, MSG, true) || changed;
       changed = setOrRemove(li, CONT_ATTR, isCont) || changed;
       changed = setOrRemove(li, LEADER, isLeader) || changed;
       changed = setOrRemove(li, LAST, isLast) || changed;
-      changed = setOrRemove(li, SPEAKER_START, isSpeakerStart) || changed;
       const parent = li.parentElement;
       if (parent) {
-        changed = setOrRemove(parent, MSG_WRAP, true) || changed;
         changed = setOrRemove(parent, WRAP, isCont) || changed;
         changed = setOrRemove(parent, WRAP_LAST, isLast) || changed;
         changed = setOrRemove(parent, LEADER_WRAP, isLeader) || changed;
-        changed = setOrRemove(parent, SPEAKER_START + "-wrap", isSpeakerStart) || changed;
       }
     }
     // 고정 상태인 스크롤러는 attr 적용 직후 바닥 유지 (RO 보정의 동기 선행판).
@@ -5796,7 +5773,7 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
-    console.info("[ccf-prose-mode] active v0.0.45 (quiet scrollbar reverted)");
+    console.info("[ccf-prose-mode] active v0.0.46 (native message layout preserved)");
   }
 
   function teardown() {
@@ -5828,7 +5805,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.72",
+    version: "0.3.73",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.1";
-  const BUILD_ID = "2026-09-14-insane-character-sheet-174";
+  const VERSION = "0.3.2";
+  const BUILD_ID = "2026-09-14-native-chat-layout-175";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
