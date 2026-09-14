@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.4.0
+// @version      0.4.1
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.4.0";
+  const VERSION = "0.4.1";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -500,6 +500,7 @@
   function render() {
     const root = document.getElementById(ROOT_ID);
     if (!root || !state.open) return;
+    const scrollTop = root.querySelector(".ccf-cs-dialog>main")?.scrollTop || 0;
     const sheet = currentSheet();
     root.innerHTML = `
       <div class="ccf-cs-backdrop" data-action="close"></div>
@@ -516,6 +517,7 @@
       </section>${state.permissionOpen ? renderPermissions(sheet) : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
+    dialog.querySelector("main").scrollTop = scrollTop;
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
   }
@@ -547,7 +549,7 @@
     const skillOptions = CATEGORIES.flatMap((category, column) => category.slice(1).map((name, row) => `<option value="${column}:${row}"${sheet.fear === `${column}:${row}` ? " selected" : ""}>${category[0]} · ${name}</option>`)).join("");
     const basic = `<div class="ccf-cs-basic">
       ${field("player", "플레이어", sheet.player)}${field("name", "캐릭터명", sheet.name)}
-      <label class="ccf-cs-profile-memo">메모<textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
+      <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
       <div class="ccf-cs-field-pair">${numberField("life", "생명력", sheet.life)}${numberField("lifeMax", "최대 생명력", sheet.lifeMax)}</div>
       <div class="ccf-cs-field-pair">${numberField("sanity", "이성치", sheet.sanity)}${numberField("sanityMax", "최대 이성치", sheet.sanityMax)}</div>
     </div>`;
@@ -557,7 +559,7 @@
     </div>`;
     return section("", basic, "ccf-cs-basic-section")
       + section("특기", renderSkills(sheet) + skillSettings, "ccf-cs-section-wide")
-      + section("어빌리티", renderRepeaters("abilities", sheet.abilities, [["name", "이름"], ["type", "종류"], ["target", "지정 특기"], ["cost", "코스트"], ["effect", "효과"]]), "", "abilities")
+      + section("어빌리티 리스트", renderRepeaters("abilities", sheet.abilities, [["name", "어빌리티"], ["type", "타입"], ["target", "지정특기"]]), "", "abilities")
       + section("인물", renderRepeaters("people", sheet.people, [["name", "이름"], ["emotion", "감정"], ["detail", "설명"]]), "", "people");
   }
 
@@ -611,16 +613,18 @@
     return `<div class="ccf-cs-skills">${CATEGORIES.map((category, column) => `<section><h3>${category[0]}</h3>${category.slice(1).map((name, row) => {
       const id = `${column}:${row}`;
       const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
-      return `<div class="ccf-cs-skill${sheet.fear === id ? " is-fear" : ""}"><input type="checkbox" data-skill="${id}" aria-label="${name} 습득"${sheet.skills.includes(id) ? " checked" : ""}><button data-roll="${id}" title="${name} 판정 입력">${name}<small>${target || "–"}</small></button></div>`;
+      return `<div class="ccf-cs-skill${sheet.fear === id ? " is-fear" : ""}${sheet.skills.includes(id) ? " is-selected" : ""}"><input type="checkbox" data-skill="${id}" aria-label="${name} 습득"${sheet.skills.includes(id) ? " checked" : ""}><button data-roll="${id}" title="${name} 판정 입력">${name}<small>${target || "–"}</small></button></div>`;
     }).join("")}</section>${column < CATEGORIES.length - 1 ? `<i class="ccf-cs-gap${sheet.removedGaps[column] ? " is-active" : ""}" aria-hidden="true"></i>` : ""}`).join("")}</div>`;
   }
 
   function renderRepeaters(key, items, fields) {
-    return `<div class="ccf-cs-repeaters">${items.map((item, index) => {
+    const heading = `<div class="ccf-cs-repeater-head" aria-hidden="true"><div class="ccf-cs-repeater-fields">${fields.map(([, label]) => `<span>${label}</span>`).join("")}</div></div>`;
+    return `<div class="ccf-cs-repeaters">${heading}${items.map((item, index) => {
       const noteKey = `${currentSheet().id}:${key}:${item.id || index}`;
       const noteOpen = state.openNotes.has(noteKey);
       const itemName = item.name || `${index + 1}번 항목`;
-      return `<section><button class="ccf-cs-note-toggle" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteOpen || item.memo ? "◆" : "◇"}</button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => `<label>${label}${fieldName === "effect" || fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" value="${escapeHtml(item[fieldName] || "")}">`}</label>`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(item.memo || "")}</textarea>` : ""}</section>`;
+      const memo = item.memo || (key === "abilities" ? item.effect : "");
+      return `<section><button class="ccf-cs-note-toggle" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteOpen || memo ? "◆" : "◇"}</button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
 
@@ -667,6 +671,7 @@
     }
     if (target.dataset.skill) {
       sheet.skills = target.checked ? [...new Set([...sheet.skills, target.dataset.skill])] : sheet.skills.filter((id) => id !== target.dataset.skill);
+      target.closest(".ccf-cs-skill")?.classList.toggle("is-selected", target.checked);
       updateSkillsView();
       saveSoon();
       return;
@@ -853,7 +858,7 @@
       #${ROOT_ID} .ccf-cs-section-wide { overflow-x:auto }
       #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px;transition:color 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} .ccf-cs-dialog main label:focus-within { color:#2196f3 }
-      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:40px;padding:8px 2px;color:#fff;font-size:16px;background-color:transparent;background-image:linear-gradient(#2196f3,#2196f3);background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
+      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:36px;padding:4px 2px 2px;color:#fff;font-size:16px;background-color:transparent;background-image:linear-gradient(#2196f3,#2196f3);background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} select { padding-right:32px }
       #${ROOT_ID} select option { color:#000 }
       #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87);border-bottom-width:2px }
@@ -861,25 +866,31 @@
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
-      #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1 }
+      #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1;display:block;padding:12px 16px 0;background:rgba(255,255,255,.1);color:#bdbdbd }
+      #${ROOT_ID} .ccf-cs-profile-memo span { display:block;margin-bottom:2px }
+      #${ROOT_ID} .ccf-cs-profile-memo textarea { min-height:140px;padding:0 0 4px;background-color:transparent }
       #${ROOT_ID} .ccf-cs-field-pair,#${ROOT_ID} .ccf-cs-skill-options { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-skill-options { margin-top:18px }
       #${ROOT_ID} .ccf-cs-skill input { appearance:none;width:13px;min-width:13px;height:13px;min-height:13px;margin:2px;background:#363636;border:0;border-radius:4px;cursor:pointer;transition:background-color 200ms ease }
       #${ROOT_ID} .ccf-cs-skill input:checked { background:#f50057 }
       #${ROOT_ID} .ccf-cs-skills { display:grid;grid-template-columns:repeat(5,minmax(105px,1fr) 12px) minmax(105px,1fr);min-width:740px }
       #${ROOT_ID} .ccf-cs-skills section { background:transparent;border:0 }
-      #${ROOT_ID} .ccf-cs-gap { display:block;width:6px;justify-self:center;background:#363636;border-radius:3px;transition:background-color 200ms ease }
-      #${ROOT_ID} .ccf-cs-gap.is-active { background:#111 }
+      #${ROOT_ID} .ccf-cs-gap { display:block;width:6px;justify-self:center;background:#363636;border-radius:0;transition:background-color 200ms ease }
+      #${ROOT_ID} .ccf-cs-gap.is-active { background:#f50057 }
       #${ROOT_ID} .ccf-cs-skills h3 { margin:0;padding:4px;text-align:center;font-size:13px;font-weight:600;background:transparent;border-bottom:2px solid #363636 }
       #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:6px;padding:4px 10px;border:0 }
+      #${ROOT_ID} .ccf-cs-skill.is-selected { background:rgba(245,0,87,.14) }
+      #${ROOT_ID} .ccf-cs-skill.is-selected button { font-weight:bold }
       #${ROOT_ID} .ccf-cs-skill.is-fear button { color:#f50057 }
       #${ROOT_ID} .ccf-cs-skill button { flex:1;display:flex;justify-content:space-between;align-items:center;min-height:22px;border:0;background:transparent;padding:0;font-size:.9em }
-      #${ROOT_ID} .ccf-cs-skill small { color:#9e9e9e }
+      #${ROOT_ID} .ccf-cs-skill small { color:#fff }
       #${ROOT_ID} .ccf-cs-repeaters { display:grid;gap:12px }
+      #${ROOT_ID} .ccf-cs-repeater-head { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;color:#bdbdbd;font-size:13px }
+      #${ROOT_ID} .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
       #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-note-toggle,#${ROOT_ID} .ccf-cs-remove { width:32px;font-size:20px;color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-repeater-fields { display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px }
-      #${ROOT_ID} .ccf-cs-repeater-fields input,#${ROOT_ID} .ccf-cs-repeater-fields textarea { height:72px;min-height:72px;resize:none }
+      #${ROOT_ID} .ccf-cs-repeater-fields input,#${ROOT_ID} .ccf-cs-repeater-fields textarea { height:36px;min-height:36px;resize:none }
       #${ROOT_ID} .ccf-cs-inline-memo { grid-column:2/3;min-height:40px;height:auto;overflow:hidden;resize:none;field-sizing:content }
       #${ROOT_ID} footer { flex-wrap:wrap;border-top:1px solid #424242;border-bottom:0 }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }

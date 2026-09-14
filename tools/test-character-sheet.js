@@ -51,11 +51,17 @@ assert.match(source, /main label:focus-within \{ color:#2196f3 \}/);
 assert.match(source, /background-position:center bottom;background-size:0 2px/);
 assert.match(source, /background-size:100% 2px/);
 assert.match(source, /function updateSkillsView\(\)/);
+assert.match(source, /const scrollTop = root\.querySelector\("\.ccf-cs-dialog>main"\)\?\.scrollTop \|\| 0/);
+assert.match(source, /dialog\.querySelector\("main"\)\.scrollTop = scrollTop/);
 assert.doesNotMatch(source, /data-action="save">저장/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
-assert.match(source, /section\("", basic, "ccf-cs-basic-section"\)[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"/);
+assert.match(source, /section\("", basic, "ccf-cs-basic-section"\)[\s\S]+section\("특기"[\s\S]+section\("어빌리티 리스트"[\s\S]+section\("인물"/);
 assert.doesNotMatch(source, /section\("메모"/);
+assert.match(source, /section\("어빌리티 리스트"[\s\S]+\[\["name", "어빌리티"\], \["type", "타입"\], \["target", "지정특기"\]\]/);
+assert.match(source, /ccf-cs-gap\.is-active \{ background:#f50057 \}/);
+assert.match(source, /ccf-cs-skill\.is-selected button \{ font-weight:bold \}/);
+assert.match(source, /ccf-cs-skill small \{ color:#fff \}/);
 assert.doesNotMatch(source, /ccf-cs-tabs|state\.tab/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
