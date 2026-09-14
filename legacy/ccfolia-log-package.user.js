@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.31
+// @version      0.0.32
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4615,7 +4615,7 @@
     wrapper.className = "ccf-render-root";
     if (roll20Macro) {
       wrapper.classList.add("ccf-roll20-bubble");
-      wrapper.dataset.ccr20MacroBackground = roll20Background === "white" ? "white" : "black";
+      wrapper.dataset.ccr20MacroBackground = roll20Background === "black" || roll20Background === "white" ? roll20Background : "transparent";
     }
 
     renderStyledText(wrapper, text || "", formatRuns || [], getEffectiveAlignRuns(text || "", alignRuns || [], blockStyle || {}));

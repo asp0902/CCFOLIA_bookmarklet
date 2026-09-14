@@ -41,6 +41,20 @@ const macro = sandbox.buildRenderedMessageHtml({ roll20Macro: true, roll20Backgr
 assert.strictEqual(plain, "<span>message</span>");
 assert.match(macro, /class="ccf-render-root ccf-roll20-bubble"/);
 assert.match(macro, /data-ccr20-macro-background="white"/);
+for (const value of [undefined, "transparent", "invalid", "black", "white"]) {
+  const expected = value === "black" || value === "white" ? value : "transparent";
+  assert(sandbox.buildRenderedMessageHtml({ roll20Macro: true, roll20Background: value }).includes(`data-ccr20-macro-background="${expected}"`));
+}
+const bridge = fs.readFileSync(path.join(root, "legacy", "ccfolia-roll20-css-bridge.user.js"), "utf8");
+const backgroundStart = bridge.indexOf("  function normalizeMacroBackground(");
+const backgroundEnd = bridge.indexOf("\n\n  function injectStyles(", backgroundStart);
+const backgroundSandbox = {};
+vm.runInNewContext(bridge.slice(backgroundStart, backgroundEnd), backgroundSandbox);
+assert.strictEqual(backgroundSandbox.normalizeMacroBackground(undefined), "transparent");
+assert.strictEqual(backgroundSandbox.normalizeMacroBackground("black"), "black");
+assert.strictEqual(backgroundSandbox.normalizeMacroBackground("white"), "white");
+assert.match(bridge, /let macroBackground = "transparent"/);
+assert.match(bridge, /option value="transparent"/);
 assert.match(editor, /\.ccf-render-root\.ccf-roll20-bubble\[data-ccr20-macro-background="black"\]/);
 assert.match(editor, /overflow-wrap: anywhere/);
 assert.match(editor, /\.ccf-tistory-roll20 \{/);
