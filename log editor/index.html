@@ -553,8 +553,37 @@
   }
 
   /* 패키지 렌더러(buildRenderedMessageHtml)가 만드는 구조용 규칙. */
+  .ccf-render-root {
+    max-width: 100%;
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+  }
+  .ccf-render-root.ccf-roll20-bubble {
+    width: min(100%, 420px);
+    margin-inline: auto;
+    overflow: hidden;
+  }
+  .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="black"] {
+    background: #000;
+  }
+  .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="white"] {
+    background: #fff;
+  }
   .ccf-render-root .ccf-line {
     display: block;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+  }
+  .ccf-render-root.ccf-roll20-bubble .ccf-line:not(:has(.ccf-image-frag)) {
+    padding-inline: 16px;
   }
   .ccf-render-root .ccf-image-frag {
     position: relative;
