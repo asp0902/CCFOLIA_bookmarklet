@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.5
+// @version      0.3.6
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.5";
+  const VERSION = "0.3.6";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -756,21 +756,23 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle }
+      [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${ICON_ATTR}]:hover { background:rgba(255,255,255,.1) }
-      [${DIALOG_BUTTON_ATTR}] { display:inline-grid;place-items:center;width:48px;height:48px;padding:0 }
+      [${DIALOG_BUTTON_ATTR}] { display:inline-grid;place-items:center;width:48px;height:48px;padding:0;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${DIALOG_BUTTON_ATTR}] svg { pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px }
       #${ROOT_ID} .ccf-cs-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.64) }
       #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:24px;margin:auto;width:min(920px,calc(100vw - 48px));height:min(840px,calc(100vh - 48px));display:grid;grid-template-rows:56px 50px minmax(0,1fr) auto;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
       #${ROOT_ID} header,#${ROOT_ID} .ccf-cs-sheetbar,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #424242 }
-      #${ROOT_ID} .ccf-cs-dialog>header,#${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
+      #${ROOT_ID} .ccf-cs-dialog>header { background:#212121!important;color:#fff }
+      #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} header h2 { margin:0;font-size:.875rem;font-weight:bold;flex:1 }
       #${ROOT_ID} button,#${ROOT_ID} input,#${ROOT_ID} select,#${ROOT_ID} textarea { font:inherit;color:inherit }
-      #${ROOT_ID} button { min-height:36px;padding:0 12px;background:transparent;border:1px solid rgba(255,255,255,.23);border-radius:4px;cursor:pointer }
+      #${ROOT_ID} button { min-height:36px;padding:0 12px;background:transparent;border:1px solid rgba(255,255,255,.23);border-radius:4px;cursor:pointer;transition:background-color 150ms cubic-bezier(.4,0,.2,1),color 150ms cubic-bezier(.4,0,.2,1),border-color 150ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} button:hover { background:rgba(255,255,255,.08) }
+      #${ROOT_ID} button:active { background:rgba(255,255,255,.16) }
       #${ROOT_ID} .ccf-cs-icon { width:40px;min-width:40px;padding:0;border:0;background:transparent;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-icon svg { width:24px;height:24px;fill:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-sheetbar select { flex:1;min-width:0;max-width:260px;padding-right:36px }
@@ -779,13 +781,14 @@
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
       #${ROOT_ID} .ccf-cs-form-section { padding:22px 0 24px }
       #${ROOT_ID} .ccf-cs-section-head { display:flex;align-items:center;gap:8px;margin:0 0 16px }
-      #${ROOT_ID} .ccf-cs-section-head h3 { margin:0;color:#fff;font-size:1rem;font-weight:500 }
+      #${ROOT_ID} .ccf-cs-section-head h3 { margin:0;color:#fff;font-size:14px;font-weight:bold }
       #${ROOT_ID} .ccf-cs-section-add,#${ROOT_ID} .ccf-cs-note-toggle,#${ROOT_ID} .ccf-cs-remove { min-height:32px;padding:0;border:0;border-radius:0;background:transparent }
       #${ROOT_ID} .ccf-cs-section-add { width:32px;font-size:20px }
       #${ROOT_ID} .ccf-cs-section-wide { overflow-x:auto }
-      #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:1rem }
-      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:40px;padding:8px 2px;background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0 }
+      #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px }
+      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:40px;padding:8px 2px;background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} select { padding-right:32px }
+      #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87) }
       #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:#f50057 }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
