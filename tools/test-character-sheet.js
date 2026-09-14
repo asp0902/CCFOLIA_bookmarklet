@@ -38,6 +38,8 @@ assert.deepEqual(
   { life: 4, lifeMax: 6, sanity: 3, sanityMax: 5 }
 );
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);
+assert.match(source, /button\.title = "사이코로픽션"/);
+assert.match(source, /button\.addEventListener\("click", openPanel/);
 assert.match(source, /M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4/);
 assert.doesNotMatch(source, /M10 3\.3v3M10 7\.9h\.01/);
 assert.match(source, /ccf-cs-dialog>header \{ background:#212121!important;color:#fff \}/);
@@ -62,7 +64,10 @@ assert.match(source, /section\("어빌리티 리스트"[\s\S]+\[\["name", "어�
 assert.match(source, /ccf-cs-gap\.is-active \{ background:#f50057 \}/);
 assert.match(source, /ccf-cs-skill\.is-selected button \{ font-weight:bold \}/);
 assert.match(source, /ccf-cs-skill small \{ color:#fff \}/);
-assert.doesNotMatch(source, /ccf-cs-tabs|state\.tab/);
+assert.match(source, /function renderPanelTabs\(\)/);
+assert.match(source, /data-action="panel-list"/);
+assert.match(source, /data-action="panel-settings"/);
+assert.match(source, /data-action="open-sheet"/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
   { "*": { view: true, secret: false, edit: false } }

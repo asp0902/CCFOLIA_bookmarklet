@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.4.1
+// @version      0.5.0
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.4.1";
+  const VERSION = "0.5.0";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -220,6 +220,7 @@
     roomKey: "",
     data: makeData(),
     open: false,
+    view: "list",
     permissionOpen: false,
     permissionDraft: null,
     renderFrame: 0,
@@ -403,10 +404,10 @@
     const button = document.createElement("button");
     button.type = "button";
     button.setAttribute(ICON_ATTR, "toolbar");
-    button.setAttribute("aria-label", "사이코로픽션 캐릭터 시트");
-    button.title = "사이코로픽션 캐릭터 시트";
+    button.setAttribute("aria-label", "사이코로픽션");
+    button.title = "사이코로픽션";
     button.innerHTML = diceIcon();
-    button.addEventListener("click", () => { state.nativeCharacterDialog = null; openSheet(); }, { signal });
+    button.addEventListener("click", openPanel, { signal });
     anchor.parentElement.insertBefore(button, anchor.nextSibling);
   }
 
@@ -421,8 +422,8 @@
       button.type = "button";
       button.className = host.querySelector("button")?.className || "";
       button.setAttribute(DIALOG_BUTTON_ATTR, "native-topbar");
-      button.setAttribute("aria-label", "사이코로픽션 캐릭터 시트 열기");
-      button.title = "사이코로픽션 캐릭터 시트";
+      button.setAttribute("aria-label", "사이코로픽션 열기");
+      button.title = "사이코로픽션";
       button.innerHTML = diceIcon();
       button.addEventListener("click", () => openSheetFromCharacterDialog(dialog), { signal });
       title.insertAdjacentElement("afterend", button);
@@ -432,6 +433,13 @@
   function openSheetFromCharacterDialog(dialog) {
     syncSheetFromNativeDialog(dialog);
     state.nativeCharacterDialog = dialog;
+    state.view = "sheet";
+    openSheet();
+  }
+
+  function openPanel() {
+    state.nativeCharacterDialog = null;
+    state.view = "list";
     openSheet();
   }
 
@@ -502,24 +510,40 @@
     if (!root || !state.open) return;
     const scrollTop = root.querySelector(".ccf-cs-dialog>main")?.scrollTop || 0;
     const sheet = currentSheet();
+    const editor = state.view === "sheet";
     root.innerHTML = `
       <div class="ccf-cs-backdrop" data-action="close"></div>
-      <section class="ccf-cs-dialog" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-title">
-        <header><h2 id="ccf-cs-title">사이코로픽션 캐릭터 시트</h2><button class="ccf-cs-icon" data-action="permissions" aria-label="시트 권한 설정" title="시트 권한 설정">${settingsIcon()}</button><button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
-        <div class="ccf-cs-sheetbar">
+      <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-title">
+        <header><h2 id="ccf-cs-title">${editor ? "사이코로픽션 캐릭터 시트" : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="permissions" aria-label="시트 권한 설정" title="시트 권한 설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
+        ${editor ? `<div class="ccf-cs-sheetbar">
+          <button data-action="back-list">목록</button>
           <select data-action="select-sheet" aria-label="캐릭터 시트 선택">${state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("")}</select>
           <button data-action="add-sheet">추가</button>
           <button data-action="delete-sheet">삭제</button>
           <span id="ccf-cs-status" role="status" aria-live="polite"></span>
         </div>
         <main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>
+        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings(sheet) : renderSheetList()}</main>`}
       </section>${state.permissionOpen ? renderPermissions(sheet) : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
     dialog.querySelector("main").scrollTop = scrollTop;
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
+  }
+
+  function renderPanelTabs() {
+    return `<nav class="ccf-cs-tabs" aria-label="사이코로픽션 메뉴"><button data-action="panel-list" aria-selected="${state.view === "list"}">목록</button><button data-action="panel-settings" aria-selected="${state.view === "settings"}">설정</button></nav>`;
+  }
+
+  function renderSheetList() {
+    const rows = state.data.sheets.map((sheet) => `<button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button>`).join("");
+    return `<section class="ccf-cs-panel-section"><div class="ccf-cs-panel-heading"><h3>캐릭터 시트 목록</h3><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
+  }
+
+  function renderSettings(sheet) {
+    const options = state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("");
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">권한 설정</button></section>`;
   }
 
   function enableDialogDrag(dialog) {
@@ -697,12 +721,15 @@
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
+    if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
+    if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
+    if (button.dataset.action === "open-sheet") { state.data.selectedId = button.dataset.sheetId; state.view = "sheet"; return render(); }
     if (button.dataset.action === "permissions") { state.permissionOpen = true; state.permissionDraft = structuredClone(currentSheet().permissions || {}); return render(); }
     if (button.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
     if (button.dataset.action === "save-permissions") { currentSheet().permissions = normalizePermissions(state.permissionDraft); state.permissionOpen = false; state.permissionDraft = null; saveSoon(); return render(); }
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
-      state.data.sheets.push(sheet); state.data.selectedId = sheet.id; render(); saveSoon(); return;
+      state.data.sheets.push(sheet); state.data.selectedId = sheet.id; state.view = "sheet"; render(); saveSoon(); return;
     }
     if (button.dataset.action === "delete-sheet") {
       if (state.data.sheets.length === 1) return status("시트 1개는 남아야 함");
@@ -774,6 +801,7 @@
       state.data.sheets.push(sheet);
       state.data.selectedId = sheet.id;
       state.open = true;
+      state.view = "sheet";
       ensureRoot();
       render();
       status("시트 가져옴");
@@ -850,6 +878,20 @@
       #${ROOT_ID} .ccf-cs-sheetbar button { flex:0 0 auto;white-space:nowrap }
       #${ROOT_ID} #ccf-cs-status { margin-left:auto;color:#aaa;font-size:12px }
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
+      #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border-bottom:1px solid #424242 }
+      #${ROOT_ID} .ccf-cs-tabs button { min-width:96px;height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#9e9e9e;font-weight:bold }
+      #${ROOT_ID} .ccf-cs-tabs button[aria-selected="true"] { color:#fff;border-bottom-color:#f50057 }
+      #${ROOT_ID} .ccf-cs-panel-main { padding:20px }
+      #${ROOT_ID} .ccf-cs-panel-section { max-width:680px;margin:0 auto }
+      #${ROOT_ID} .ccf-cs-panel-heading { display:flex;align-items:center;margin-bottom:8px }
+      #${ROOT_ID} .ccf-cs-panel-heading h3,#${ROOT_ID} .ccf-cs-settings h3 { margin:0;font-size:14px;font-weight:bold }
+      #${ROOT_ID} .ccf-cs-panel-heading button { margin-left:auto;width:36px;padding:0;border:0;border-radius:0;font-size:20px }
+      #${ROOT_ID} .ccf-cs-sheet-list { display:grid }
+      #${ROOT_ID} .ccf-cs-sheet-row { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;padding:14px 8px;border:0;border-bottom:1px solid rgba(255,255,255,.16);border-radius:0;text-align:left }
+      #${ROOT_ID} .ccf-cs-sheet-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+      #${ROOT_ID} .ccf-cs-sheet-row span { overflow:hidden;color:#bdbdbd;text-overflow:ellipsis;white-space:nowrap }
+      #${ROOT_ID} .ccf-cs-settings { display:grid;gap:18px }
+      #${ROOT_ID} .ccf-cs-settings>button { justify-self:start;border:0;border-radius:0;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-form-section { padding:22px 0 24px }
       #${ROOT_ID} .ccf-cs-section-head { display:flex;align-items:center;gap:8px;margin:0 0 16px }
       #${ROOT_ID} .ccf-cs-section-head h3 { margin:0;color:#fff;font-size:14px;font-weight:bold }
