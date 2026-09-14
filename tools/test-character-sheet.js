@@ -69,6 +69,8 @@ assert.doesNotMatch(source, /직업표|랜덤 특기|>공포표</);
 assert.match(source, /data-action="fear-roll" title="공포판정 입력">공포판정/);
 assert.match(source, /data-command-select aria-label="특기표"/);
 assert.match(source, /data-command="2D6>=\? \[회피\]"/);
+assert.match(source, /data-action="plot" title="플롯 입력">플롯/);
+assert.match(source, /writeChat\(`sc\(\$\{value\}\)`\)/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
 assert.match(source, /section\("", basic, "ccf-cs-basic-section"\)[\s\S]+section\("특기"[\s\S]+section\("어빌리티 리스트"[\s\S]+section\("인물"/);
