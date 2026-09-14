@@ -609,11 +609,6 @@
   .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
   .ccf-render-root .ccf-line:has(.ccf-image-frag) + .ccf-line:not(:has(.ccf-image-frag)),
   .ccf-render-root .ccf-line:not(:has(.ccf-image-frag)) + .ccf-line:has(.ccf-image-frag) { margin-top: 8px; }
-  .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
-  .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
-    width: 100%;
-    max-width: 100%;
-  }
   .entry.system-entry .body:has(.ccf-roll20-bubble) { opacity: 1; }
   .entry.system-entry .ccf-roll20-bubble { font-style: normal; }
   /* 이미지 fragment에 함께 박혀있는 원본 URL 토큰을 숨긴다. */
@@ -903,10 +898,10 @@
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
     tpl.content.querySelectorAll(".ccf-image-token").forEach((node) => node.remove());
-    // Tistory removes image wrapper spans, so edge sizing must travel with the image.
-    for (const img of tpl.content.querySelectorAll(".ccf-roll20-bubble > .ccf-line:first-child .ccf-image, .ccf-roll20-bubble > .ccf-line:last-child .ccf-image")) {
-      img.style.width = "100%";
-      img.style.maxWidth = "100%";
+    // Keep image sizing when Tistory removes the surrounding spans.
+    for (const img of tpl.content.querySelectorAll(".ccf-roll20-bubble .ccf-image")) {
+      img.style.width = "auto";
+      img.style.maxWidth = "min(100%, 360px)";
       img.style.height = "auto";
     }
     for (const img of tpl.content.querySelectorAll("img[src]")) {
@@ -1935,11 +1930,6 @@
     .ccf-tistory-log .ccf-roll20-bubble .ccf-image { max-width: min(100%, 360px); }
     .ccf-tistory-log .ccf-line:has(.ccf-image-frag) + .ccf-line:not(:has(.ccf-image-frag)),
     .ccf-tistory-log .ccf-line:not(:has(.ccf-image-frag)) + .ccf-line:has(.ccf-image-frag) { margin-top: 8px; }
-    .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:first-child .ccf-image,
-    .ccf-tistory-log .ccf-roll20-bubble > .ccf-line:last-child .ccf-image {
-      width: 100%;
-      max-width: 100%;
-    }
     .ccf-tistory-system-text:has(.ccf-roll20-bubble) { opacity: 1; }
     .ccf-tistory-system-text .ccf-roll20-bubble { font-style: normal; }
     .ccf-tistory-log .ccf-frag {

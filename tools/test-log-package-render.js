@@ -84,8 +84,6 @@ assert.match(tistoryHtml, /grid-template-columns: 48px minmax\(0, 1fr\)/);
 assert.match(tistoryHtml, /background: #000 !important/);
 assert.match(tistoryHtml, /border-radius: 0/);
 for (const html of [editor, tistoryHtml]) {
-  assert.match(html, /\.ccf-roll20-bubble > \.ccf-line:first-child \.ccf-image,/);
-  assert.match(html, /\.ccf-roll20-bubble > \.ccf-line:last-child \.ccf-image \{\s*width: 100%;\s*max-width: 100%;/);
   assert.match(html, /\.ccf-roll20-bubble \.ccf-image \{ max-width: min\(100%, 360px\); \}/);
 }
 assert.match(tistoryHtml, /ccf-tistory-timestamp/);
@@ -123,13 +121,13 @@ const edgeImages = [{ style: {} }, { style: {} }];
 const rewriteStart = editor.indexOf("  function rewriteEntryHtml(");
 const rewriteEnd = editor.indexOf("\n\n  function resolveAvatarUrl(", rewriteStart);
 const rewriteSandbox = { document: { createElement: () => ({ content: {
-  querySelectorAll: selector => selector.includes(".ccf-line:first-child") ? edgeImages : []
+  querySelectorAll: selector => selector === ".ccf-roll20-bubble .ccf-image" ? edgeImages : []
 } }) } };
 vm.runInNewContext(editor.slice(rewriteStart, rewriteEnd), rewriteSandbox);
 rewriteSandbox.rewriteEntryHtml("macro", new Map());
 for (const img of edgeImages) {
-  assert.strictEqual(img.style.width, "100%");
-  assert.strictEqual(img.style.maxWidth, "100%");
+  assert.strictEqual(img.style.width, "auto");
+  assert.strictEqual(img.style.maxWidth, "min(100%, 360px)");
   assert.strictEqual(img.style.height, "auto");
 }
 const allTabs = { addEventListener(_event, callback) { this.change = callback; } };
