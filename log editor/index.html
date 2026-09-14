@@ -583,7 +583,7 @@
     box-sizing: border-box;
   }
   .ccf-render-root.ccf-roll20-bubble .ccf-line:not(:has(.ccf-image-frag)) {
-    padding-inline: 16px;
+    padding-inline: 4px;
   }
   .ccf-render-root .ccf-image-frag {
     position: relative;
@@ -1779,12 +1779,16 @@
     .ccf-tistory-body {
       flex: 1;
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
     }
     .ccf-tistory-speaker {
-      display: inline-block;
-      margin-bottom: 4px;
+      display: block;
+      margin: 0 0 4px;
       font-size: 14px;
       font-weight: 700;
+      line-height: 1.5;
     }
     .ccf-tistory-text {
       padding: 9px 12px;
@@ -1832,7 +1836,7 @@
       box-sizing: border-box;
     }
     .ccf-tistory-log .ccf-roll20-bubble .ccf-line:not(:has(.ccf-image-frag)) {
-      padding-inline: 16px;
+      padding-inline: 4px;
     }
     .ccf-tistory-log .ccf-image-frag {
       display: inline-block;
