@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.85
+// @version      0.1.86
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.85",
+    version: "0.1.86",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -914,6 +914,8 @@
       display: block; font-size: 0.9375rem; font-weight: 500; color: #fff;
       margin-bottom: 8px; margin-left: 3px;
     }
+    .handout-preview-title { all: unset; cursor: pointer; }
+    .handout-preview-title:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
     .handout-edit-cols .col .rich-editor {
       width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: vertical;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
@@ -1978,9 +1980,10 @@
       });
   }
 
-  function showHandoutModal(handout, fromName) {
+  function showHandoutModal(handout, fromName, isPreview = false) {
+    const previewOpener = isPreview ? (state.shadow?.activeElement || document.activeElement) : null;
     const me = state.data.myCharacter;
-    const hasSecret = handout._canSecret === true || canViewSecret(handout, me);
+    const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me));
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
@@ -1991,7 +1994,7 @@
     const offset = (existingCount % 8) * 24;
     const initLeft = Math.max(8, Math.round((window.innerWidth - POPUP_W) / 2) + offset);
     const initTop = Math.max(8, Math.round((window.innerHeight - POPUP_H_INIT) / 2) + offset);
-    host.style.cssText = `all: initial; position: fixed; left: ${initLeft}px; top: ${initTop}px; z-index: 2147483645;`;
+    host.style.cssText = `all: initial; position: fixed; left: ${initLeft}px; top: ${initTop}px; z-index: ${isPreview ? 2147483647 : 2147483645};`;
     const sh = host.attachShadow({ mode: "open" });
     sh.innerHTML = `
       <style>
@@ -2070,10 +2073,10 @@
       <div class="show-paper" data-collapsed="0" role="dialog" aria-label="핸드아웃">
         <div class="show-head" data-drag-handle="1" title="더블클릭으로 접기/펼치기, 드래그로 이동">
           <h2 title="${escapeAttr(handout.title || "(제목 없음)")}">${escapeHtml(handout.title || "(제목 없음)")}</h2>
-          <button class="show-head-btn" data-action="show-go-list" aria-label="핸드아웃 목록으로 이동" title="핸드아웃 목록으로 이동">
+          ${!isPreview ? `<button class="show-head-btn" data-action="show-go-list" aria-label="핸드아웃 목록으로 이동" title="핸드아웃 목록으로 이동">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
-          </button>
-          ${canManageHandout(handout) ? `<button class="show-head-btn" data-action="show-edit" aria-label="이 핸드아웃 편집" title="이 핸드아웃 편집">
+          </button>` : ""}
+          ${!isPreview && canManageHandout(handout) ? `<button class="show-head-btn" data-action="show-edit" aria-label="이 핸드아웃 편집" title="이 핸드아웃 편집">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           </button>` : ""}
           <button class="show-close" data-action="close-show" aria-label="닫기">
@@ -2152,7 +2155,7 @@
     // 헤더 버튼
     sh.addEventListener("click", (e) => {
       const closeBtn = e.target.closest('[data-action="close-show"]');
-      if (closeBtn) { host.remove(); return; }
+      if (closeBtn) { host.remove(); previewOpener?.focus(); return; }
       const goListBtn = e.target.closest('[data-action="show-go-list"]');
       if (goListBtn) {
         openPanel().then(() => setTab("list")).catch(() => {});
@@ -2166,6 +2169,15 @@
       }
     });
     (document.body || document.documentElement).appendChild(host);
+    if (isPreview) {
+      const close = sh.querySelector('[data-action="close-show"]');
+      close.focus();
+      sh.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        close.click();
+      });
+    }
     // 보여주기 팝업 본문의 Firestore 이미지 토큰도 실제 이미지로 교체.
     resolveHandoutImagesIn(sh);
     registerTeardown(() => host.remove());
@@ -3306,12 +3318,12 @@
       ${renderFormatToolbar()}
       <div class="handout-edit-cols">
         <div class="col">
-          <label>공개 핸드아웃</label>
+          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="description" aria-haspopup="dialog" title="공개 핸드아웃 미리보기">공개 핸드아웃</button></label>
           <div class="rich-editor" contenteditable="true" data-field="description" data-format-receiver="1" data-placeholder="공개 핸드아웃 본문...">${renderHandoutBody(h.description)}</div>
           <div class="preview" data-preview="description" aria-label="공개 매크로 미리보기" hidden></div>
         </div>
         <div class="col">
-          <label>비밀 핸드아웃</label>
+          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="gmNotes" aria-haspopup="dialog" title="비밀 핸드아웃 미리보기">비밀 핸드아웃</button></label>
           <div class="rich-editor" contenteditable="true" data-field="gmNotes" data-format-receiver="1" data-placeholder="비밀 핸드아웃 본문...">${renderHandoutBody(h.gmNotes)}</div>
           <div class="preview" data-preview="gmNotes" aria-label="비밀 매크로 미리보기" hidden></div>
         </div>
@@ -3524,6 +3536,16 @@
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
+    if (action === "preview-handout") {
+      const field = btn.dataset.previewField;
+      if (field !== "description" && field !== "gmNotes") return;
+      const title = getFieldValue("title").trim();
+      showHandoutModal({
+        title: `${title ? title + " · " : ""}${field === "description" ? "공개" : "비밀"} 핸드아웃 미리보기`,
+        description: getFieldValue(field)
+      }, "", true);
+      return;
+    }
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
     if (action === "close") { closePanel(); return; }

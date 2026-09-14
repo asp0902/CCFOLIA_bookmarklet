@@ -19,10 +19,11 @@ function extract(name) {
     await page.addScriptTag({ path: path.join(root, 'legacy/ccfolia-roll20-css-bridge.user.js') });
     const css = source.split('const STYLE_CSS = `')[1].split('`;')[0];
     await page.addStyleTag({ content: css });
-    const funcs = ['renderEdit', 'renderEditorMacro', 'onShadowInput', 'getFieldValue', 'saveHandoutFromForm'].map(extract).join('\n');
+    const funcs = ['renderEdit', 'renderEditorMacro', 'onShadowInput', 'onShadowClick', 'showHandoutModal', 'getFieldValue', 'saveHandoutFromForm'].map(extract).join('\n');
     const result = await page.evaluate(async (funcs) => {
       const state = { editingId: 'new', data: { handouts: [], folders: [{ id: 'f1', name: 'Folder' }] }, formPermissions: {}, shadow: document.body };
       const ICON_TRASH = '';
+      const canViewSecret = () => false, resolveHandoutImagesIn = () => {}, registerTeardown = () => {};
       const findHandout = id => state.data.handouts.find(h => h.id === id);
       const canManageHandout = () => true, isAdminMode = () => true;
       const ensurePermissions = h => h, permissionRowKeys = () => [];
@@ -46,6 +47,13 @@ function extract(name) {
           onShadowInput({ target: editor });
           const preview = document.querySelector('[data-preview="' + field + '"]');
           checks.push(!preview.hidden, preview.textContent === 'Hello', preview.querySelector('.ccr20-frag').style.borderRadius === '99px', editor.innerText === macro);
+          const button = document.querySelector('[data-preview-field="' + field + '"]');
+          onShadowClick({ target: button });
+          const host = document.querySelector('[data-ccf-handout-show]');
+          const popup = host.shadowRoot;
+          checks.push(popup.querySelector('.rendered').textContent === 'Hello', !popup.querySelector('[data-action="show-edit"]'), !popup.querySelector('[data-action="show-go-list"]'), host.style.zIndex === '2147483647', state.data.handouts.length === 0, editor.innerText === macro);
+          popup.querySelector('[data-action="close-show"]').click();
+          checks.push(!host.isConnected);
         }
         await saveHandoutFromForm();
         checks.push(state.data.handouts[0].folderId === 'f1', !state.data.handouts[0].description.includes('/desc'));
