@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.5
+// @version      0.5.6
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.5";
+  const VERSION = "0.5.6";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -578,7 +578,7 @@
 
   function renderSheetList() {
     const rows = state.data.sheets.map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
-    return `<section class="ccf-cs-panel-section"><div class="ccf-cs-panel-heading"><h3>캐릭터 시트 목록</h3><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-panel-heading"><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
   }
 
   function renderSettings() {
@@ -615,7 +615,7 @@
   function renderSections(sheet) {
     const skillOptions = CATEGORIES.flatMap((category, column) => category.slice(1).map((name, row) => `<option value="${column}:${row}"${sheet.fear === `${column}:${row}` ? " selected" : ""}>${category[0]} · ${name}</option>`)).join("");
     const basic = `<div class="ccf-cs-basic">
-      ${field("player", "플레이어", sheet.player)}${field("name", "캐릭터명", sheet.name)}
+      ${playerField(sheet.player)}
       <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
       <div class="ccf-cs-field-pair">${numberField("life", "생명력", sheet.life)}${numberField("lifeMax", "최대 생명력", sheet.lifeMax)}</div>
       <div class="ccf-cs-field-pair">${numberField("sanity", "이성치", sheet.sanity)}${numberField("sanityMax", "최대 이성치", sheet.sanityMax)}</div>
@@ -710,8 +710,11 @@
     });
   }
 
-  function field(name, label, value) {
-    return `<label>${label}<input data-field="${name}" value="${escapeHtml(value)}"></label>`;
+  function playerField(value) {
+    const players = permissionRows(state.data.permissions).filter((row) => row.key !== "*");
+    if (value && !players.some((row) => row.key === value)) players.push({ key: value, label: value });
+    const options = players.map((row) => `<option value="${escapeHtml(row.key)}"${row.key === value ? " selected" : ""}>${escapeHtml(row.label)}</option>`).join("");
+    return `<label>플레이어<select data-field="player"><option value="">선택 안 함</option>${options}</select></label>`;
   }
 
   function numberField(name, label, value) {
@@ -908,6 +911,7 @@
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
       #${ROOT_ID} .ccf-cs-dialog.is-editor { grid-template-rows:56px minmax(0,1fr) auto }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor { width:min(900px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px)) }
       #${ROOT_ID} .ccf-cs-dialog.is-panel { grid-template-rows:56px 48px minmax(0,1fr) }
       #${ROOT_ID} header,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border:0 }
       #${ROOT_ID} .ccf-cs-dialog>header { background:#212121!important;color:#fff }
@@ -929,6 +933,7 @@
       #${ROOT_ID} .ccf-cs-panel-heading { display:flex;align-items:center;margin-bottom:8px }
       #${ROOT_ID} .ccf-cs-panel-heading h3,#${ROOT_ID} .ccf-cs-settings h3 { margin:0;font-size:14px;font-weight:bold }
       #${ROOT_ID} .ccf-cs-panel-heading button { margin-left:auto;width:36px;padding:0;border:0;border-radius:0;font-size:20px }
+      #${ROOT_ID} .ccf-cs-sheet-panel .ccf-cs-panel-heading { height:36px;margin-top:-12px;margin-bottom:4px }
       #${ROOT_ID} .ccf-cs-sheet-list { display:grid }
       #${ROOT_ID} .ccf-cs-sheet-item { display:grid;grid-template-columns:minmax(0,1fr) 40px;align-items:center }
       #${ROOT_ID} .ccf-cs-sheet-row { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;padding:14px 8px;border:0;border-radius:0;text-align:left }
