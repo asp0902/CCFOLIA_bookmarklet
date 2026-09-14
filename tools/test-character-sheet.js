@@ -38,6 +38,7 @@ assert.match(source, /#\$\{ROOT_ID\} label \{[^}]*font-size:13px/);
 assert.match(source, /ccf-cs-skill input \{ appearance:none;width:13px/);
 assert.match(source, /ccf-cs-skills \{[^}]*min-width:740px/);
 assert.match(source, /ccf-cs-gap \{[^}]*width:6px/);
+assert.match(source, /select option \{ color:#000 \}/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
 assert.match(source, /section\("기본"[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"[\s\S]+section\("메모"/);
