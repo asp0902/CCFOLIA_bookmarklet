@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.6
+// @version      0.5.7
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.6";
+  const VERSION = "0.5.7";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -586,7 +586,7 @@
       const value = state.data.permissions?.[key] || {};
       return `<div class="ccf-cs-perm-name">${key === "*" ? "" : renderPlayerAvatar(image)}${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
     }).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>모든 캐릭터 시트에 공통 적용됩니다.<br>공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>모든 캐릭터 시트에 공통 적용됩니다.<br>전체: 특기·어빌리티·인물 표시<br>개인: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>전체</b><b>개인</b><b>수정</b>${rows}</div></section>`;
   }
 
   function enableDialogDrag(dialog) {
