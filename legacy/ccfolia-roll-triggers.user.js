@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll Triggers by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers
-// @version      0.1.2
+// @version      0.1.3
 // @description  Click rendered /desc judgement macros in chat to auto-roll the matching palette command.
 // @description:ko 채팅에 렌더된 판정 매크로(/desc 알약 버튼)를 클릭하면 채팅 팔레트를 자동으로 골라 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
     id: "ccf-roll-triggers",
     name: "CCFOLIA Roll Triggers",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.2",
+    version: "0.1.3",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-roll-triggers"
   });
 
@@ -255,7 +255,6 @@
     el.setAttribute(BOUND_ATTR, "1");
     el.classList.add(ACTIVE_CLASS);
     el.style.cursor = "pointer";
-    el.title = `${skill} 판정 자동 실행 (클릭)`;
     el.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
