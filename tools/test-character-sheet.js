@@ -63,11 +63,22 @@ assert.doesNotMatch(source, /section\("메모"/);
 assert.match(source, /section\("어빌리티 리스트"[\s\S]+\[\["name", "어빌리티"\], \["type", "타입"\], \["target", "지정특기"\]\]/);
 assert.match(source, /ccf-cs-gap\.is-active \{ background:#f50057 \}/);
 assert.match(source, /ccf-cs-skill\.is-selected button \{ font-weight:bold \}/);
+assert.match(source, /ccf-cs-skill\.is-selected \{ background:rgba\(255,255,255,\.14\) \}/);
 assert.match(source, /ccf-cs-skill small \{ color:#fff \}/);
 assert.match(source, /function renderPanelTabs\(\)/);
 assert.match(source, /data-action="panel-list"/);
 assert.match(source, /data-action="panel-settings"/);
 assert.match(source, /data-action="open-sheet"/);
+assert.match(source, /data-action="delete-sheet-list"/);
+assert.match(source, /data-action="back-list" aria-label="캐릭터 시트 목록"/);
+assert.match(source, /editor \? escapeHtml\(sheet\.name \|\| "이름 없음"\)/);
+assert.doesNotMatch(source, /class="ccf-cs-sheetbar"/);
+assert.match(source, /data-list="\$\{key\}" data-index="\$\{index\}" data-prop="\$\{fieldName\}"/);
+assert.match(source, /item\[target\.dataset\.prop\] = target\.value/);
+assert.match(source, /input\._valueTracker\?\.setValue\(previous\)/);
+assert.match(source, /new InputEvent\("input", \{ bubbles: true, inputType: "insertText" \}\)/);
+assert.match(source, /ccf-cs-profile-memo textarea \{ width:calc\(100% \+ 32px\)[^}]*resize:none/);
+assert.match(source, /공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
   { "*": { view: true, secret: false, edit: false } }

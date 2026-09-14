@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.0
+// @version      0.5.1
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.0";
+  const VERSION = "0.5.1";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -473,10 +473,14 @@
       if (label) input = dialog.querySelector(`input[name="${label.name.replace(/\.label$/, `.${statusKey[1]}`)}"]`);
     }
     if (!input) return;
-    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")?.set;
+    const previous = input.value;
+    const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
     if (setter) setter.call(input, String(value)); else input.value = String(value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input._valueTracker?.setValue(previous);
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   }
 
   function openSheet() {
@@ -512,17 +516,9 @@
     const sheet = currentSheet();
     const editor = state.view === "sheet";
     root.innerHTML = `
-      <div class="ccf-cs-backdrop" data-action="close"></div>
-      <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-title">
-        <header><h2 id="ccf-cs-title">${editor ? "사이코로픽션 캐릭터 시트" : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="permissions" aria-label="시트 권한 설정" title="시트 권한 설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
-        ${editor ? `<div class="ccf-cs-sheetbar">
-          <button data-action="back-list">목록</button>
-          <select data-action="select-sheet" aria-label="캐릭터 시트 선택">${state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("")}</select>
-          <button data-action="add-sheet">추가</button>
-          <button data-action="delete-sheet">삭제</button>
-          <span id="ccf-cs-status" role="status" aria-live="polite"></span>
-        </div>
-        <main>${renderSections(sheet)}</main>
+      <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
+        <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="permissions" aria-label="시트 권한 설정" title="시트 권한 설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
+        ${editor ? `<main>${renderSections(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings(sheet) : renderSheetList()}</main>`}
       </section>${state.permissionOpen ? renderPermissions(sheet) : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
@@ -537,20 +533,20 @@
   }
 
   function renderSheetList() {
-    const rows = state.data.sheets.map((sheet) => `<button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button>`).join("");
+    const rows = state.data.sheets.map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
     return `<section class="ccf-cs-panel-section"><div class="ccf-cs-panel-heading"><h3>캐릭터 시트 목록</h3><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
   }
 
   function renderSettings(sheet) {
     const options = state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">권한 설정</button></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정</p><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">공개·비밀·수정 권한 설정</button></section>`;
   }
 
   function enableDialogDrag(dialog) {
     const handle = dialog?.querySelector("header");
     if (!handle) return;
     handle.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || event.target.closest("button,input,select,textarea,a") || innerWidth <= 700) return;
+      if (event.button !== 0 || event.target.closest("button,input,select,textarea,a")) return;
       event.preventDefault();
       const start = { x: event.clientX, y: event.clientY, position: { ...state.dialogPosition }, rect: dialog.getBoundingClientRect() };
       const move = (nextEvent) => {
@@ -629,6 +625,10 @@
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.08-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.2 7.2 0 0 0-1.69-.98L14.5 2.42A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.49.49 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.08.66-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.38.31.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>';
   }
 
+  function backIcon() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z"/></svg>';
+  }
+
   function diceIcon() {
     return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 10 8 3 8-3-8-3z"/><path d="m4 10 1 8 7 3 7-3 1-8M12 13v8"/><path d="M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4"/><circle cx="7.8" cy="14.6" r=".8" fill="currentColor" stroke="none"/><circle cx="16.5" cy="13.8" r=".8" fill="currentColor" stroke="none"/><circle cx="15.4" cy="17.1" r=".8" fill="currentColor" stroke="none"/></svg>';
   }
@@ -686,8 +686,8 @@
         sheet.removedGaps = getCuriosityGaps(target.value);
         updateSkillsView();
       } else if (key === "name") {
-        const option = document.querySelector(`#${ROOT_ID} select[data-action="select-sheet"] option:checked`);
-        if (option) option.textContent = target.value || "이름 없음";
+        const title = document.querySelector(`#${ROOT_ID} #ccf-cs-title`);
+        if (title) title.textContent = target.value || "이름 없음";
       }
       syncNativeCharacterField(key, sheet[key]);
       saveSoon();
@@ -716,7 +716,6 @@
   }
 
   function handleClick(event) {
-    if (event.target.classList.contains("ccf-cs-backdrop")) return closeSheet();
     if (event.target.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
     const button = event.target.closest("button");
     if (!button) return;
@@ -724,18 +723,20 @@
     if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
     if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
     if (button.dataset.action === "open-sheet") { state.data.selectedId = button.dataset.sheetId; state.view = "sheet"; return render(); }
+    if (button.dataset.action === "delete-sheet-list") {
+      if (state.data.sheets.length === 1) return;
+      const sheet = state.data.sheets.find((item) => item.id === button.dataset.sheetId);
+      if (!sheet || !confirm(`'${sheet.name || "이름 없음"}' 시트를 삭제할까요?`)) return;
+      state.data.sheets = state.data.sheets.filter((item) => item.id !== sheet.id);
+      if (state.data.selectedId === sheet.id) state.data.selectedId = state.data.sheets[0].id;
+      render(); saveSoon(); return;
+    }
     if (button.dataset.action === "permissions") { state.permissionOpen = true; state.permissionDraft = structuredClone(currentSheet().permissions || {}); return render(); }
     if (button.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
     if (button.dataset.action === "save-permissions") { currentSheet().permissions = normalizePermissions(state.permissionDraft); state.permissionOpen = false; state.permissionDraft = null; saveSoon(); return render(); }
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
       state.data.sheets.push(sheet); state.data.selectedId = sheet.id; state.view = "sheet"; render(); saveSoon(); return;
-    }
-    if (button.dataset.action === "delete-sheet") {
-      if (state.data.sheets.length === 1) return status("시트 1개는 남아야 함");
-      if (!confirm("현재 시트를 삭제할까요?")) return;
-      state.data.sheets = state.data.sheets.filter((sheet) => sheet.id !== state.data.selectedId);
-      state.data.selectedId = state.data.sheets[0].id; render(); saveSoon(); return;
     }
     if (button.dataset.add) {
       currentSheet()[button.dataset.add].push({ id: makeId() }); render(); saveSoon(); return;
@@ -860,10 +861,11 @@
       [${DIALOG_BUTTON_ATTR}] { display:inline-grid;place-items:center;width:48px;height:48px;padding:0;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${DIALOG_BUTTON_ATTR}] svg { pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
-      #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px }
-      #${ROOT_ID} .ccf-cs-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.64) }
-      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:24px;margin:auto;width:min(920px,calc(100vw - 48px));height:min(840px,calc(100vh - 48px));display:grid;grid-template-rows:56px 50px minmax(0,1fr) auto;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
-      #${ROOT_ID} header,#${ROOT_ID} .ccf-cs-sheetbar,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #424242 }
+      #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
+      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor { grid-template-rows:56px minmax(0,1fr) auto }
+      #${ROOT_ID} .ccf-cs-dialog.is-panel { grid-template-rows:56px 48px minmax(0,1fr) }
+      #${ROOT_ID} header,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border:0 }
       #${ROOT_ID} .ccf-cs-dialog>header { background:#212121!important;color:#fff }
       #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
@@ -874,11 +876,8 @@
       #${ROOT_ID} button:active { background:rgba(255,255,255,.16) }
       #${ROOT_ID} .ccf-cs-icon { width:40px;min-width:40px;padding:0;border:0;background:transparent;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-icon svg { width:24px;height:24px;fill:currentColor;pointer-events:none }
-      #${ROOT_ID} .ccf-cs-sheetbar select { flex:1;min-width:0;max-width:260px;padding-right:36px }
-      #${ROOT_ID} .ccf-cs-sheetbar button { flex:0 0 auto;white-space:nowrap }
-      #${ROOT_ID} #ccf-cs-status { margin-left:auto;color:#aaa;font-size:12px }
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
-      #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border-bottom:1px solid #424242 }
+      #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border:0 }
       #${ROOT_ID} .ccf-cs-tabs button { min-width:96px;height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#9e9e9e;font-weight:bold }
       #${ROOT_ID} .ccf-cs-tabs button[aria-selected="true"] { color:#fff;border-bottom-color:#f50057 }
       #${ROOT_ID} .ccf-cs-panel-main { padding:20px }
@@ -887,10 +886,14 @@
       #${ROOT_ID} .ccf-cs-panel-heading h3,#${ROOT_ID} .ccf-cs-settings h3 { margin:0;font-size:14px;font-weight:bold }
       #${ROOT_ID} .ccf-cs-panel-heading button { margin-left:auto;width:36px;padding:0;border:0;border-radius:0;font-size:20px }
       #${ROOT_ID} .ccf-cs-sheet-list { display:grid }
-      #${ROOT_ID} .ccf-cs-sheet-row { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;padding:14px 8px;border:0;border-bottom:1px solid rgba(255,255,255,.16);border-radius:0;text-align:left }
+      #${ROOT_ID} .ccf-cs-sheet-item { display:grid;grid-template-columns:minmax(0,1fr) 40px;align-items:center }
+      #${ROOT_ID} .ccf-cs-sheet-row { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;padding:14px 8px;border:0;border-radius:0;text-align:left }
+      #${ROOT_ID} .ccf-cs-sheet-delete { width:40px;min-width:40px;padding:0;border:0;border-radius:0;display:grid;place-items:center }
+      #${ROOT_ID} .ccf-cs-sheet-delete svg { width:20px;height:20px;fill:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-sheet-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-sheet-row span { overflow:hidden;color:#bdbdbd;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-settings { display:grid;gap:18px }
+      #${ROOT_ID} .ccf-cs-settings>p { margin:0;color:#bdbdbd;line-height:1.65 }
       #${ROOT_ID} .ccf-cs-settings>button { justify-self:start;border:0;border-radius:0;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-form-section { padding:22px 0 24px }
       #${ROOT_ID} .ccf-cs-section-head { display:flex;align-items:center;gap:8px;margin:0 0 16px }
@@ -910,7 +913,7 @@
       #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
       #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1;display:block;padding:12px 16px 0;background:rgba(255,255,255,.1);color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-profile-memo span { display:block;margin-bottom:2px }
-      #${ROOT_ID} .ccf-cs-profile-memo textarea { min-height:140px;padding:0 0 4px;background-color:transparent }
+      #${ROOT_ID} .ccf-cs-profile-memo textarea { width:calc(100% + 32px);min-height:140px;margin:0 -16px;padding:0 16px;background-color:transparent;resize:none }
       #${ROOT_ID} .ccf-cs-field-pair,#${ROOT_ID} .ccf-cs-skill-options { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-skill-options { margin-top:18px }
       #${ROOT_ID} .ccf-cs-skill input { appearance:none;width:13px;min-width:13px;height:13px;min-height:13px;margin:2px;background:#363636;border:0;border-radius:4px;cursor:pointer;transition:background-color 200ms ease }
@@ -921,7 +924,7 @@
       #${ROOT_ID} .ccf-cs-gap.is-active { background:#f50057 }
       #${ROOT_ID} .ccf-cs-skills h3 { margin:0;padding:4px;text-align:center;font-size:13px;font-weight:600;background:transparent;border-bottom:2px solid #363636 }
       #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:6px;padding:4px 10px;border:0 }
-      #${ROOT_ID} .ccf-cs-skill.is-selected { background:rgba(245,0,87,.14) }
+      #${ROOT_ID} .ccf-cs-skill.is-selected { background:rgba(255,255,255,.14) }
       #${ROOT_ID} .ccf-cs-skill.is-selected button { font-weight:bold }
       #${ROOT_ID} .ccf-cs-skill.is-fear button { color:#f50057 }
       #${ROOT_ID} .ccf-cs-skill button { flex:1;display:flex;justify-content:space-between;align-items:center;min-height:22px;border:0;background:transparent;padding:0;font-size:.9em }
@@ -929,15 +932,16 @@
       #${ROOT_ID} .ccf-cs-repeaters { display:grid;gap:12px }
       #${ROOT_ID} .ccf-cs-repeater-head { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;color:#bdbdbd;font-size:13px }
       #${ROOT_ID} .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
-      #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12) }
+      #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border:0 }
       #${ROOT_ID} .ccf-cs-note-toggle,#${ROOT_ID} .ccf-cs-remove { width:32px;font-size:20px;color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-repeater-fields { display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px }
       #${ROOT_ID} .ccf-cs-repeater-fields input,#${ROOT_ID} .ccf-cs-repeater-fields textarea { height:36px;min-height:36px;resize:none }
       #${ROOT_ID} .ccf-cs-inline-memo { grid-column:2/3;min-height:40px;height:auto;overflow:hidden;resize:none;field-sizing:content }
-      #${ROOT_ID} footer { flex-wrap:wrap;border-top:1px solid #424242;border-bottom:0 }
+      #${ROOT_ID} footer { flex-wrap:wrap }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-dialog>footer button { border:0;border-radius:0 }
-      #${ROOT_ID} .ccf-cs-perm-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.55) }
+      #${ROOT_ID} .ccf-cs-perm-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.55);pointer-events:auto }
+      #${ROOT_ID} .ccf-cs-perm-dialog { pointer-events:auto }
       #${ROOT_ID} .ccf-cs-perm-dialog { position:absolute;inset:0;margin:auto;width:min(620px,calc(100vw - 32px));height:max-content;max-height:calc(100vh - 32px);display:flex;flex-direction:column;background:#212121;border:1px solid rgba(255,255,255,.18);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6);overflow:hidden }
       #${ROOT_ID} .ccf-cs-perm-dialog header { cursor:default }
       #${ROOT_ID} .ccf-cs-perm-dialog>p { margin:0;padding:14px 16px;color:#bdbdbd;line-height:1.65;border-bottom:1px solid rgba(255,255,255,.12) }
@@ -950,8 +954,6 @@
       #${ROOT_ID} .ccf-cs-perm-cell span { display:none }
       #${ROOT_ID} .ccf-cs-perm-dialog footer { justify-content:flex-end }
       @media (max-width:700px) {
-        #${ROOT_ID} .ccf-cs-dialog { inset:0;width:100vw;height:100vh;border:0;border-radius:0;transform:none!important }
-        #${ROOT_ID} header { cursor:default }
         #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
