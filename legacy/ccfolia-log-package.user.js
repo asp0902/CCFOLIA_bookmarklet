@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.37
+// @version      0.0.38
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4761,6 +4761,10 @@
 
   function cleanupStyle(style) {
     const out = {};
+    const fontStyle = String(style.extraCss?.fontStyle || style.fontStyle || "").trim().toLowerCase();
+    if (["normal", "italic", "oblique"].includes(fontStyle)) out.fontStyle = fontStyle;
+    const borderRadius = String(style.borderRadius || "").trim().slice(0, 80);
+    if (borderRadius) out.borderRadius = borderRadius;
     if (style.bold) out.bold = true;
     if (style.italic) out.italic = true;
     if (style.underline) out.underline = true;
@@ -5098,6 +5102,8 @@
     if (!style) return;
     if (style.bold) el.style.fontWeight = "700";
     if (style.italic) el.style.fontStyle = "italic";
+    if (style.fontStyle) el.style.fontStyle = style.fontStyle;
+    if (style.borderRadius) el.style.borderRadius = style.borderRadius;
     if (style.underline || style.strike) {
       const parts = [];
       if (style.underline) parts.push("underline");
@@ -10511,6 +10517,8 @@ ${root.outerHTML}
     if (!el || !style) return;
     if (style.bold) el.style.fontWeight = "700";
     if (style.italic) el.style.fontStyle = "italic";
+    if (style.fontStyle) el.style.fontStyle = style.fontStyle;
+    if (style.borderRadius) el.style.borderRadius = style.borderRadius;
     if (style.underline || style.strike) {
       const parts = [];
       if (style.underline) parts.push("underline");
@@ -10552,12 +10560,18 @@ ${root.outerHTML}
     const endIndex = fullText.indexOf(INVIS_END, startIndex + INVIS_START.length);
     if (startIndex < 0 || endIndex < 0) return null;
 
-    const visibleText = fullText.slice(0, startIndex);
+    const visibleText = fullText.slice(0, startIndex) + fullText.slice(endIndex + INVIS_END.length);
     const encodedPart = fullText.slice(startIndex + INVIS_START.length, endIndex);
 
     try {
       const json = decodeInvisibleToJson(encodedPart);
       const envelope = JSON.parse(json);
+      // Only discard a standing suffix when CCFOLIA has removed it from the visible text.
+      const visibleBody = visibleText.trimEnd();
+      if (visibleBody && typeof envelope.text === "string" && envelope.text.startsWith(visibleBody)
+        && /^\s*@[^\r\n]+$/.test(envelope.text.slice(visibleBody.length))) {
+        envelope.text = visibleBody;
+      }
       return { visibleText, envelope };
     } catch (error) {
       console.warn("[CCF LOG PACKAGE] failed to decode payload", error);
