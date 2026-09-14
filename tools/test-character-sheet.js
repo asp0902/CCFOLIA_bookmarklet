@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, "..", "legacy", "ccfolia-cha
 const hook = {};
 vm.runInNewContext(
   source,
-  { window: { __CCF_CHARACTER_SHEET_TEST_HOOK__: hook }, TextEncoder }
+  { window: { __CCF_CHARACTER_SHEET_TEST_HOOK__: hook }, TextEncoder, crypto: { randomUUID: () => "generated-id" } }
 );
 
 assert.equal(hook.isInsaneDicebot(["인세인"], []), true);
@@ -41,6 +41,9 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizeItems({ 진통제: 2, 무기: "0", 부적: "", 기타: null, 오류: "abc" }))),
   { 진통제: 2, 무기: 0 }
 );
+const migrated = hook.normalizeData({ selectedId: "sheet-a", sheets: [{ id: "sheet-a", name: "A", permissions: { "*": { view: true } } }] });
+assert.equal(migrated.permissions["*"].view, true);
+assert.equal("permissions" in migrated.sheets[0], false);
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);
 assert.match(source, /button\.title = "사이코로픽션"/);
 assert.match(source, /button\.addEventListener\("click", openPanel/);
@@ -86,7 +89,11 @@ assert.match(source, /known = new Set\(labels\(\)\.map/);
 assert.match(source, /syncNativeItems\(sheet\)/);
 assert.match(source, /new InputEvent\("input", \{ bubbles: true, inputType: "insertText" \}\)/);
 assert.match(source, /ccf-cs-profile-memo textarea \{ width:calc\(100% \+ 32px\)[^}]*resize:none/);
-assert.match(source, /공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정/);
+assert.match(source, /공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정/);
+assert.match(source, /모든 캐릭터 시트에 공통 적용됩니다/);
+assert.doesNotMatch(source, /<h3>플레이어 목록<\/h3>/);
+assert.doesNotMatch(source, /data-action="permissions"/);
+assert.doesNotMatch(source, /ccf-cs-perm-dialog/);
 assert.match(source, /ccf-cs-note-toggle\$\{noteOpen \|\| memo \? " is-active" : ""\}/);
 assert.match(source, /ccf-cs-note-toggle \{[^}]*width:13px[^}]*height:13px[^}]*border-radius:0/);
 assert.match(source, /ccf-cs-note-toggle\.is-active \{ background:#f50057 \}/);

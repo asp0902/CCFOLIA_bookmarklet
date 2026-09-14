@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.4
+// @version      0.5.5
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.4";
+  const VERSION = "0.5.5";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -216,7 +216,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
     return;
   }
 
@@ -230,8 +230,6 @@
     data: makeData(),
     open: false,
     view: "list",
-    permissionOpen: false,
-    permissionDraft: null,
     renderFrame: 0,
     saveTimer: 0,
     dialogPosition: { x: 0, y: 0 },
@@ -339,13 +337,13 @@
       id: idFactory(), name, player: "", age: "", gender: "", occupation: "",
       life: 6, lifeMax: 6, sanity: 6, sanityMax: 6,
       curiosity: "", removedGaps: [false, false, false, false, false],
-      skills: [], fear: "", abilities: [], people: [], mission: "", secret: "", memo: "", permissions: {}
+      skills: [], fear: "", abilities: [], people: [], mission: "", secret: "", memo: ""
     };
   }
 
   function makeData() {
     const sheet = makeSheet();
-    return { version: 1, selectedId: sheet.id, sheets: [sheet] };
+    return { version: 1, selectedId: sheet.id, sheets: [sheet], permissions: {} };
   }
 
   function normalizeData(value) {
@@ -357,10 +355,12 @@
       sheet.skills = Array.isArray(raw.skills) ? raw.skills.filter(validSkillId) : [];
       sheet.abilities = (Array.isArray(raw.abilities) ? raw.abilities : []).map((item, itemIndex) => ({ ...item, id: item.id || `${sheet.id}:ability:${itemIndex}` }));
       sheet.people = (Array.isArray(raw.people) ? raw.people : []).map((item, itemIndex) => ({ ...item, id: item.id || `${sheet.id}:person:${itemIndex}` }));
-      sheet.permissions = normalizePermissions(raw.permissions);
       return sheet;
     });
-    return { version: 1, selectedId: sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0].id, sheets };
+    const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0].id;
+    const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
+    sheets.forEach((sheet) => { delete sheet.permissions; });
+    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions) };
   }
 
   async function loadData(key) {
@@ -539,8 +539,6 @@
 
   function closeSheet() {
     state.open = false;
-    state.permissionOpen = false;
-    state.permissionDraft = null;
     state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
   }
@@ -563,10 +561,10 @@
     const editor = state.view === "sheet";
     root.innerHTML = `
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
-        <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="permissions" aria-label="시트 권한 설정" title="시트 권한 설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
+        <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="panel-settings" aria-label="설정" title="설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings(sheet) : renderSheetList()}</main>`}
-      </section>${state.permissionOpen ? renderPermissions(sheet) : ""}`;
+        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+      </section>`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
     dialog.querySelector("main").scrollTop = scrollTop;
@@ -583,11 +581,12 @@
     return `<section class="ccf-cs-panel-section"><div class="ccf-cs-panel-heading"><h3>캐릭터 시트 목록</h3><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
   }
 
-  function renderSettings(sheet) {
-    const players = permissionRows(sheet).filter((row) => row.key !== "*")
-      .map((row) => `<div class="ccf-cs-player-row">${renderPlayerAvatar(row.image)}<span>${escapeHtml(row.label)}</span></div>`).join("");
-    const options = state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>플레이어 목록</h3><div>${players}</div><h3>시트 권한</h3><p>공개: 특기·어빌리티·인물<br>비밀: 캐릭터 메모<br>수정: 시트 열람 및 수정</p><label>캐릭터 시트<select data-action="select-sheet">${options}</select></label><button data-action="permissions">공개·비밀·수정 권한 설정</button></section>`;
+  function renderSettings() {
+    const rows = permissionRows(state.data.permissions).map(({ key, label, image }) => {
+      const value = state.data.permissions?.[key] || {};
+      return `<div class="ccf-cs-perm-name">${key === "*" ? "" : renderPlayerAvatar(image)}${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
+    }).join("");
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>모든 캐릭터 시트에 공통 적용됩니다.<br>공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div></section>`;
   }
 
   function enableDialogDrag(dialog) {
@@ -644,7 +643,7 @@
       .join("\n");
   }
 
-  function permissionRows(sheet) {
+  function permissionRows(permissions = {}) {
     const rows = [{ key: "*", label: "전원" }];
     const handout = window.__CCF_HANDOUT_DEBUG__;
     const players = handout?.getPlayers?.() || [];
@@ -653,7 +652,7 @@
       const name = cleanText(peer?.name, 100).trim();
       if (name && !rows.some((row) => row.key === name)) rows.push({ key: name, label: peer.self ? `${name} (나)` : name });
     }
-    for (const key of Object.keys(sheet.permissions || {})) {
+    for (const key of Object.keys(permissions)) {
       if (key !== "*" && !rows.some((row) => row.key === key)) rows.push({ key, label: key });
     }
     for (const player of players) {
@@ -667,14 +666,6 @@
 
   function renderPlayerAvatar(image) {
     return `<span class="ccf-cs-player-avatar" aria-hidden="true">${/^https?:\/\//i.test(image || "") ? `<img src="${escapeHtml(image)}" alt="" loading="lazy">` : ""}</span>`;
-  }
-
-  function renderPermissions(sheet) {
-    const rows = permissionRows(sheet).map(({ key, label, image }) => {
-      const value = state.permissionDraft?.[key] || {};
-      return `<div class="ccf-cs-perm-name">${key === "*" ? "" : renderPlayerAvatar(image)}${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
-    }).join("");
-    return `<div class="ccf-cs-perm-backdrop" data-action="close-permissions"></div><section class="ccf-cs-perm-dialog" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-perm-title"><header><h2 id="ccf-cs-perm-title">시트 권한 설정</h2><button class="ccf-cs-icon" data-action="close-permissions" aria-label="닫기" title="닫기">${closeIcon()}</button></header><p>공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div><footer><button data-action="close-permissions">취소</button><button class="ccf-cs-save" data-action="save-permissions">저장</button></footer></section>`;
   }
 
   function closeIcon() {
@@ -731,14 +722,6 @@
     const target = event.target;
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
-    if (target.dataset.action === "select-sheet") {
-      state.data.selectedId = target.value;
-      state.permissionOpen = false;
-      state.permissionDraft = null;
-      render();
-      saveSoon();
-      return;
-    }
     if (target.dataset.field) {
       const key = target.dataset.field;
       sheet[key] = target.type === "number" ? Number(target.value) : target.value;
@@ -769,14 +752,15 @@
     }
     if (target.dataset.permKey && target.dataset.permCol) {
       const key = target.dataset.permKey;
-      state.permissionDraft ||= {};
-      state.permissionDraft[key] ||= { view: false, secret: false, edit: false };
-      state.permissionDraft[key][target.dataset.permCol] = target.checked;
+      state.data.permissions ||= {};
+      state.data.permissions[key] ||= { view: false, secret: false, edit: false };
+      state.data.permissions[key][target.dataset.permCol] = target.checked;
+      state.data.permissions = normalizePermissions(state.data.permissions);
+      saveSoon();
     }
   }
 
   function handleClick(event) {
-    if (event.target.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
@@ -791,9 +775,6 @@
       if (state.data.selectedId === sheet.id) state.data.selectedId = state.data.sheets[0].id;
       render(); saveSoon(); return;
     }
-    if (button.dataset.action === "permissions") { state.permissionOpen = true; state.permissionDraft = structuredClone(currentSheet().permissions || {}); return render(); }
-    if (button.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
-    if (button.dataset.action === "save-permissions") { currentSheet().permissions = normalizePermissions(state.permissionDraft); state.permissionOpen = false; state.permissionDraft = null; saveSoon(); return render(); }
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
       state.data.sheets.push(sheet); state.data.selectedId = sheet.id; state.view = "sheet"; render(); saveSoon(); return;
@@ -859,6 +840,8 @@
   function importTransferText(text) {
     try {
       const sheet = parseTransferPayload(text);
+      if (!Object.keys(state.data.permissions || {}).length) state.data.permissions = normalizePermissions(sheet.permissions);
+      delete sheet.permissions;
       state.data.sheets.push(sheet);
       state.data.selectedId = sheet.id;
       state.open = true;
@@ -954,8 +937,7 @@
       #${ROOT_ID} .ccf-cs-sheet-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-sheet-row span { overflow:hidden;color:#bdbdbd;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-settings { display:grid;gap:18px }
-      #${ROOT_ID} .ccf-cs-player-row,#${ROOT_ID} .ccf-cs-perm-name { display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere }
-      #${ROOT_ID} .ccf-cs-player-row { padding:8px 0 }
+      #${ROOT_ID} .ccf-cs-perm-name { display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere }
       #${ROOT_ID} .ccf-cs-player-avatar { display:inline-flex;width:24px;height:24px;flex:0 0 24px;border-radius:0;overflow:hidden;background:rgba(255,255,255,.08) }
       #${ROOT_ID} .ccf-cs-player-avatar img { display:block;width:100%;height:100%;object-fit:cover;border-radius:0 }
       #${ROOT_ID} .ccf-cs-settings>p { margin:0;color:#bdbdbd;line-height:1.65 }
@@ -1007,11 +989,6 @@
       #${ROOT_ID} footer { flex-wrap:wrap }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-dialog>footer button { border:0;border-radius:0 }
-      #${ROOT_ID} .ccf-cs-perm-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.55);pointer-events:auto }
-      #${ROOT_ID} .ccf-cs-perm-dialog { pointer-events:auto }
-      #${ROOT_ID} .ccf-cs-perm-dialog { position:absolute;inset:0;margin:auto;width:min(620px,calc(100vw - 32px));height:max-content;max-height:calc(100vh - 32px);display:flex;flex-direction:column;background:#212121;border:1px solid rgba(255,255,255,.18);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6);overflow:hidden }
-      #${ROOT_ID} .ccf-cs-perm-dialog header { cursor:default }
-      #${ROOT_ID} .ccf-cs-perm-dialog>p { margin:0;padding:14px 16px;color:#bdbdbd;line-height:1.65;border-bottom:1px solid rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-perm-grid { display:grid;grid-template-columns:minmax(0,1fr) repeat(3,64px);align-items:center;padding:8px 16px;overflow:auto }
       #${ROOT_ID} .ccf-cs-perm-grid>b { padding:8px 4px;color:#fff;text-align:center }
       #${ROOT_ID} .ccf-cs-perm-grid>b:first-child { text-align:left }
@@ -1019,7 +996,6 @@
       #${ROOT_ID} .ccf-cs-perm-cell { display:grid;place-items:center;align-self:stretch;border-top:1px solid rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-perm-cell input { width:18px;min-height:18px;accent-color:#f50057 }
       #${ROOT_ID} .ccf-cs-perm-cell span { display:none }
-      #${ROOT_ID} .ccf-cs-perm-dialog footer { justify-content:flex-end }
       @media (max-width:700px) {
         #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
