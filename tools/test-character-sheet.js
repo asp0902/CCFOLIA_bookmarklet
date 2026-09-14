@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const hook = {};
 vm.runInNewContext(
   fs.readFileSync(path.join(__dirname, "..", "legacy", "ccfolia-character-sheet.user.js"), "utf8"),
-  { window: { __CCF_CHARACTER_SHEET_TEST_HOOK__: hook } }
+  { window: { __CCF_CHARACTER_SHEET_TEST_HOOK__: hook }, TextEncoder }
 );
 
 assert.equal(hook.isInsaneDicebot(["인세인"], []), true);
@@ -18,5 +18,24 @@ assert.equal(hook.getSkillTarget(["0:0"], "0:1", []), 6);
 assert.equal(hook.getSkillTarget(["0:0"], "1:0", [false]), 7);
 assert.equal(hook.getSkillTarget(["0:0"], "1:0", [true]), 6);
 assert.equal(hook.getSkillTarget([], "1:0", []), null);
+
+const imported = hook.parseTransferPayload(JSON.stringify({
+  kind: "capybara.insane-sheet",
+  version: 1,
+  data: {
+    name: "테스트", life: 4, lifeMax: 8, sanity: 3, sanityMax: 6,
+    curiosity: 0, skills: ["0:0", "0:0:extra", "bad"], fear: "0:0", modifier: -2,
+    rootLaw: true, abilities: [{ name: "기습", target: "사격" }],
+    people: [{ name: "조력자", shelter: true }], extensions: { future: { value: 1 } }, futureTop: { keep: true }
+  }
+}), () => "imported-id");
+assert.equal(imported.id, "imported-id");
+assert.deepEqual(Array.from(imported.skills), ["0:0"]);
+assert.equal(imported.modifier, -2);
+assert.equal(imported.rootLaw, true);
+assert.equal(imported.people[0].shelter, true);
+assert.equal(imported.extensions.future.value, 1);
+assert.equal(imported.futureTop.keep, true);
+assert.throws(() => hook.parseTransferPayload('{"kind":"character"}', () => "x"), /형식/);
 
 console.log("character-sheet checks passed");

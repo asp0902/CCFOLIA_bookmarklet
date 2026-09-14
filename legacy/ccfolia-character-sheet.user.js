@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA inSANe Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.1.0
+// @version      0.2.0
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 인세인 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -20,7 +20,10 @@
   const ROOT_ID = "ccf-character-sheet-root";
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
+  const TRANSFER_KIND = "capybara.insane-sheet";
+  const TRANSFER_VERSION = 1;
+  const MAX_TRANSFER_BYTES = 500_000;
   const CATEGORIES = Object.freeze([
     ["폭력", "소각", "고문", "포박", "협박", "파괴", "구타", "절단", "찌르기", "사격", "전쟁", "매장"],
     ["정서", "연심", "기쁨", "걱정", "부끄러움", "웃음", "인내", "놀람", "노여움", "원한", "슬픔", "친애"],
@@ -65,9 +68,102 @@
     return Number.isFinite(distance) ? 5 + distance : null;
   }
 
+  function validSkillId(id) {
+    return /^([0-5]):(10|[0-9])$/.test(String(id));
+  }
+
+  function cleanText(value, maxLength = 20_000) {
+    return typeof value === "string" ? value.slice(0, maxLength) : String(value ?? "").slice(0, maxLength);
+  }
+
+  function finiteNumber(value, fallback = 0) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function nonNegativeNumber(value, fallback = 0) {
+    return Math.max(0, finiteNumber(value, fallback));
+  }
+
+  function copyJsonObject(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeTransferSheet(raw, idFactory = makeId) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("시트 데이터가 없습니다.");
+    const curiosityNumber = Number(raw.curiosity);
+    const curiosity = Number.isInteger(curiosityNumber) && curiosityNumber >= 0 && curiosityNumber < 6 ? curiosityNumber : "";
+    const defaultGaps = [false, false, false, false, false];
+    if (curiosity !== "") {
+      if (curiosity > 0) defaultGaps[curiosity - 1] = true;
+      if (curiosity < 5) defaultGaps[curiosity] = true;
+    }
+    const sheet = makeSheet(cleanText(raw.name || "가져온 시트", 200), idFactory);
+    return {
+      ...copyJsonObject(raw),
+      ...sheet,
+      name: cleanText(raw.name || "가져온 시트", 200),
+      player: cleanText(raw.player, 200),
+      age: cleanText(raw.age, 100),
+      gender: cleanText(raw.gender, 100),
+      occupation: cleanText(raw.occupation, 300),
+      life: nonNegativeNumber(raw.life, 6),
+      lifeMax: nonNegativeNumber(raw.lifeMax, 6),
+      sanity: nonNegativeNumber(raw.sanity, 6),
+      sanityMax: nonNegativeNumber(raw.sanityMax, 6),
+      merit: nonNegativeNumber(raw.merit),
+      curiosity,
+      removedGaps: Array.from({ length: 5 }, (_, index) => Array.isArray(raw.removedGaps) ? !!raw.removedGaps[index] : defaultGaps[index]),
+      skills: [...new Set((Array.isArray(raw.skills) ? raw.skills : []).filter(validSkillId))].slice(0, 66),
+      fear: validSkillId(raw.fear) ? String(raw.fear) : "",
+      modifier: finiteNumber(raw.modifier),
+      rootLaw: !!raw.rootLaw,
+      abilities: (Array.isArray(raw.abilities) ? raw.abilities : []).slice(0, 100).map((item) => ({
+        ...copyJsonObject(item),
+        name: cleanText(item?.name, 300), type: cleanText(item?.type, 100), target: cleanText(item?.target, 300),
+        cost: cleanText(item?.cost, 100), effect: cleanText(item?.effect, 20_000), extensions: copyJsonObject(item?.extensions)
+      })),
+      people: (Array.isArray(raw.people) ? raw.people : []).slice(0, 100).map((item) => ({
+        ...copyJsonObject(item),
+        name: cleanText(item?.name, 300), shelter: !!item?.shelter, emotion: cleanText(item?.emotion, 300),
+        detail: cleanText(item?.detail, 20_000), extensions: copyJsonObject(item?.extensions)
+      })),
+      mission: cleanText(raw.mission, 50_000),
+      secret: cleanText(raw.secret, 50_000),
+      memo: cleanText(raw.memo, 50_000),
+      profile: { ...copyJsonObject(raw.profile), catchphrase: cleanText(raw.profile?.catchphrase, 20_000), setting: cleanText(raw.profile?.setting, 50_000) },
+      flashback: cleanText(raw.flashback, 50_000),
+      respec: {
+        ...copyJsonObject(raw.respec),
+        newWorld: !!raw.respec?.newWorld, session: !!raw.respec?.session, roleplay: !!raw.respec?.roleplay,
+        gain: !!raw.respec?.gain, empathy: nonNegativeNumber(raw.respec?.empathy),
+        mission: !!raw.respec?.mission, other: nonNegativeNumber(raw.respec?.other)
+      },
+      items: Object.fromEntries(Object.entries(copyJsonObject(raw.items)).slice(0, 100).map(([key, value]) => [cleanText(key, 100), nonNegativeNumber(value)])),
+      madnessState: { ...copyJsonObject(raw.madnessState), current: nonNegativeNumber(raw.madnessState?.current), delirium: !!raw.madnessState?.delirium },
+      madness: (Array.isArray(raw.madness) ? raw.madness : []).slice(0, 100).map((item) => ({
+        ...copyJsonObject(item),
+        name: cleanText(item?.name, 300), trigger: cleanText(item?.trigger, 10_000),
+        revealed: !!item?.revealed, effect: cleanText(item?.effect, 20_000), extensions: copyJsonObject(item?.extensions)
+      })),
+      extensions: copyJsonObject(raw.extensions)
+    };
+  }
+
+  function parseTransferPayload(text, idFactory = makeId) {
+    if (typeof text !== "string" || !text.trim()) throw new Error("붙여넣을 JSON이 없습니다.");
+    if (new TextEncoder().encode(text).length > MAX_TRANSFER_BYTES) throw new Error("시트 JSON이 너무 큽니다.");
+    let payload;
+    try { payload = JSON.parse(text); } catch (error) { throw new Error("올바른 JSON이 아닙니다."); }
+    if (payload?.kind !== TRANSFER_KIND) throw new Error("인세인 시트 API 형식이 아닙니다.");
+    if (payload.version !== TRANSFER_VERSION) throw new Error(`지원하지 않는 시트 버전: ${payload.version ?? "없음"}`);
+    return normalizeTransferSheet(payload.data, idFactory);
+  }
+
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, parseTransferPayload });
     return;
   }
 
@@ -89,6 +185,7 @@
   installStyle();
   const observer = new MutationObserver(scheduleRefresh);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("paste", handleTransferPaste, { capture: true, signal });
   window.addEventListener("capybara-toolkit:route-change", scheduleRefresh, { signal });
   window.addEventListener("popstate", scheduleRefresh, { signal });
   window[DEBUG_KEY] = {
@@ -98,6 +195,7 @@
     detected: detectRoom,
     open: () => openSheet(),
     data: () => structuredClone(state.data),
+    importText: (text) => importTransferText(text),
     disable
   };
   scheduleRefresh();
@@ -175,9 +273,9 @@
     return crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   }
 
-  function makeSheet(name = "새 시트") {
+  function makeSheet(name = "새 시트", idFactory = makeId) {
     return {
-      id: makeId(), name, player: "", age: "", gender: "", occupation: "",
+      id: idFactory(), name, player: "", age: "", gender: "", occupation: "",
       life: 6, lifeMax: 6, sanity: 6, sanityMax: 6,
       curiosity: "", removedGaps: [false, false, false, false, false],
       skills: [], fear: "", abilities: [], people: [], mission: "", secret: "", memo: ""
@@ -201,11 +299,6 @@
       return sheet;
     });
     return { version: 1, selectedId: sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0].id, sheets };
-  }
-
-  function validSkillId(id) {
-    const [column, row] = String(id).split(":").map(Number);
-    return Number.isInteger(column) && column >= 0 && column < 6 && Number.isInteger(row) && row >= 0 && row < 11;
   }
 
   async function loadData(key) {
@@ -298,6 +391,7 @@
         <header><h2 id="ccf-cs-title">인세인 캐릭터 시트</h2><button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">×</button></header>
         <div class="ccf-cs-sheetbar">
           <select data-action="select-sheet" aria-label="캐릭터 시트 선택">${state.data.sheets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === sheet.id ? " selected" : ""}>${escapeHtml(item.name || "이름 없음")}</option>`).join("")}</select>
+          <button data-action="import-sheet" title="관리 도구 시트 API 붙여넣기">붙여넣기</button>
           <button class="ccf-cs-icon" data-action="add-sheet" aria-label="시트 추가" title="시트 추가">＋</button>
           <button class="ccf-cs-icon" data-action="delete-sheet" aria-label="시트 삭제" title="시트 삭제">−</button>
           <span id="ccf-cs-status" role="status" aria-live="polite"></span>
@@ -401,6 +495,7 @@
     if (button.dataset.action === "close") return closeSheet();
     if (button.dataset.tab) { state.tab = button.dataset.tab; return render(); }
     if (button.dataset.action === "save") return saveData();
+    if (button.dataset.action === "import-sheet") return readTransferFromClipboard();
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
       state.data.sheets.push(sheet); state.data.selectedId = sheet.id; render(); saveSoon(); return;
@@ -429,6 +524,46 @@
     const name = CATEGORIES[column][row + 1];
     const fear = sheet.fear === id;
     writeChat(`2D6${fear ? "-2" : ""}>=${target} [${name}${fear ? "/공포심" : ""}]`);
+  }
+
+  function looksLikeTransfer(text) {
+    return typeof text === "string" && text.includes(`"${TRANSFER_KIND}"`);
+  }
+
+  function handleTransferPaste(event) {
+    const text = event.clipboardData?.getData("text/plain") || "";
+    if (!looksLikeTransfer(text) || !detectRoom()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    importTransferText(text);
+  }
+
+  async function readTransferFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      importTransferText(text);
+    } catch (error) {
+      status("클립보드를 읽지 못함: Ctrl+V 사용");
+    }
+  }
+
+  function importTransferText(text) {
+    try {
+      const sheet = parseTransferPayload(text);
+      state.data.sheets.push(sheet);
+      state.data.selectedId = sheet.id;
+      state.tab = "basic";
+      state.open = true;
+      ensureRoot();
+      render();
+      status("시트 가져옴");
+      saveSoon();
+      return sheet;
+    } catch (error) {
+      if (state.open) status(error.message || "시트를 가져오지 못함");
+      console.warn("[ccf-character-sheet] import failed", error);
+      return null;
+    }
   }
 
   function writeChat(command) {
