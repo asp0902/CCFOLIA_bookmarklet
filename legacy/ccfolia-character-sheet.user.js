@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.6
+// @version      0.3.7
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.6";
+  const VERSION = "0.3.7";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -794,15 +794,16 @@
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-field-pair,#${ROOT_ID} .ccf-cs-skill-options { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-skill-options { margin-top:18px }
-      #${ROOT_ID} .ccf-cs-skill input { width:18px;min-height:18px;accent-color:#f50057 }
-      #${ROOT_ID} .ccf-cs-skills { display:grid;grid-template-columns:repeat(5,minmax(118px,1fr) 8px) minmax(118px,1fr);min-width:800px }
-      #${ROOT_ID} .ccf-cs-skills section { background:rgba(33,33,33,.86);border:1px solid rgba(255,255,255,.18) }
-      #${ROOT_ID} .ccf-cs-gap { display:block;background:rgba(255,255,255,.16) }
-      #${ROOT_ID} .ccf-cs-gap.is-active { background:rgba(0,0,0,.72) }
-      #${ROOT_ID} .ccf-cs-skills h3 { margin:0;padding:10px;text-align:center;font-size:14px;background:#292929 }
-      #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:4px;padding:3px 5px;border-top:1px solid rgba(255,255,255,.12) }
+      #${ROOT_ID} .ccf-cs-skill input { appearance:none;width:13px;min-width:13px;height:13px;min-height:13px;margin:2px;background:#363636;border:0;border-radius:4px;cursor:pointer;transition:background-color 200ms ease }
+      #${ROOT_ID} .ccf-cs-skill input:checked { background:#f50057 }
+      #${ROOT_ID} .ccf-cs-skills { display:grid;grid-template-columns:repeat(5,minmax(105px,1fr) 12px) minmax(105px,1fr);min-width:740px }
+      #${ROOT_ID} .ccf-cs-skills section { background:transparent;border:0 }
+      #${ROOT_ID} .ccf-cs-gap { display:block;width:6px;justify-self:center;background:#363636;border-radius:3px;transition:background-color 200ms ease }
+      #${ROOT_ID} .ccf-cs-gap.is-active { background:#111 }
+      #${ROOT_ID} .ccf-cs-skills h3 { margin:0;padding:4px;text-align:center;font-size:13px;font-weight:600;background:transparent;border-bottom:2px solid #363636 }
+      #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:6px;padding:4px 10px;border:0 }
       #${ROOT_ID} .ccf-cs-skill.is-fear button { color:#f50057 }
-      #${ROOT_ID} .ccf-cs-skill button { flex:1;display:flex;justify-content:space-between;align-items:center;border:0;background:transparent;padding:0 5px }
+      #${ROOT_ID} .ccf-cs-skill button { flex:1;display:flex;justify-content:space-between;align-items:center;min-height:22px;border:0;background:transparent;padding:0;font-size:.9em }
       #${ROOT_ID} .ccf-cs-skill small { color:#9e9e9e }
       #${ROOT_ID} .ccf-cs-repeaters { display:grid;gap:12px }
       #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12) }
