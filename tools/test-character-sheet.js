@@ -3,9 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+const source = fs.readFileSync(path.join(__dirname, "..", "legacy", "ccfolia-character-sheet.user.js"), "utf8");
 const hook = {};
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, "..", "legacy", "ccfolia-character-sheet.user.js"), "utf8"),
+  source,
   { window: { __CCF_CHARACTER_SHEET_TEST_HOOK__: hook }, TextEncoder }
 );
 
@@ -24,6 +25,12 @@ assert.deepEqual(
 );
 assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
 assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
+assert.match(source, /section\("기본"[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"[\s\S]+section\("메모"/);
+assert.doesNotMatch(source, /ccf-cs-tabs|state\.tab/);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
+  { "*": { view: true, secret: false, edit: false } }
+);
 
 const imported = hook.parseTransferPayload(JSON.stringify({
   kind: "capybara.insane-sheet",
@@ -31,6 +38,7 @@ const imported = hook.parseTransferPayload(JSON.stringify({
   data: {
     name: "테스트", life: 4, lifeMax: 8, sanity: 3, sanityMax: 6,
     curiosity: 0, skills: ["0:0", "0:0:extra", "bad"], fear: "0:0", modifier: -2,
+    permissions: { "*": { view: true }, 플레이어: { secret: true } },
     rootLaw: true, abilities: [{ name: "기습", target: "사격" }],
     people: [{ name: "조력자", shelter: true }], extensions: { future: { value: 1 } }, futureTop: { keep: true }
   }
@@ -40,6 +48,8 @@ assert.deepEqual(Array.from(imported.skills), ["0:0"]);
 assert.equal(imported.modifier, -2);
 assert.equal(imported.rootLaw, true);
 assert.equal(imported.people[0].shelter, true);
+assert.equal(imported.permissions["*"].view, true);
+assert.equal(imported.permissions.플레이어.secret, true);
 assert.equal(imported.extensions.future.value, 1);
 assert.equal(imported.futureTop.keep, true);
 assert.throws(() => hook.parseTransferPayload('{"kind":"character"}', () => "x"), /형식/);

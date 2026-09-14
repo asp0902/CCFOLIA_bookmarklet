@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.4";
-  const BUILD_ID = "2026-09-14-insane-sheet-dialog-177";
+  const VERSION = "0.3.5";
+  const BUILD_ID = "2026-09-14-saikoro-sheet-dialog-178";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -88,8 +88,8 @@
     {
       id: "ccf-character-sheet",
       debugKey: "__CCF_CHARACTER_SHEET_DEBUG__",
-      title: "인세인 캐릭터 시트",
-      summary: "룸 다이스봇이 인세인이면 캐릭터 시트 버튼 추가",
+      title: "사이코로픽션 캐릭터 시트",
+      summary: "지원하는 사이코로픽션 다이스봇이면 캐릭터 시트 버튼 추가",
       scripts: ["legacy/ccfolia-character-sheet.user.js"],
       roomOnly: true,
       alwaysOn: true,
