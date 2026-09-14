@@ -75,8 +75,11 @@ assert.match(source, /data-command="2D6>=\? \[회피\]"/);
 assert.match(source, /data-plot-select aria-label="플롯"/);
 assert.match(source, /<option value="1D6">가변<\/option>/);
 assert.match(source, /writeChat\(`sc\(\$\{value\}\)`\)/);
-assert.match(source, /playerLinkField\(sheet\.player\)/);
+assert.match(source, /backIcon\(\)\}<\/button>\$\{playerLinkField\(sheet\.player\)\}/);
+assert.doesNotMatch(source, /data-action="panel-settings" aria-label="설정"/);
 assert.match(source, /data-ability-roll="\$\{index\}"/);
+assert.match(source, /M12 2 21 8l-3 11H6L3 8z/);
+assert.match(source, /ccf-cs-ability-roll svg \{ width:20px;height:20px;fill:none;stroke:currentColor/);
 assert.match(source, /inputSkillRoll\(skill, ability\?\.name, true\)/);
 assert.match(source, /querySelector\('button\[type="submit"\]'\)\?\.click\(\)/);
 assert.match(source, /ccf-cs-abilities \{ gap:4px \}/);
@@ -126,8 +129,15 @@ assert.doesNotMatch(source, /<h3>캐릭터 시트 목록<\/h3>/);
 assert.match(source, /ccf-cs-sheet-panel"><div class="ccf-cs-panel-heading"><button data-action="add-sheet"/);
 assert.match(source, /ccf-cs-dialog\.is-editor \{ width:min\(900px,calc\(100vw - 64px\)\);height:min\(900px,calc\(100vh - 64px\)\) \}/);
 assert.doesNotMatch(source, /field\("name", "캐릭터명"/);
-assert.match(source, /function playerField\(value\)/);
-assert.match(source, /<label>플레이어<select data-field="player">/);
+assert.doesNotMatch(source, /function playerField\(value\)/);
+assert.doesNotMatch(source, /<label>플레이어<select data-field="player">/);
+assert.match(source, /ccf-cs-player-link \{[^}]*color:#fff/);
+assert.match(source, /ccf-cs-player-link svg \{ width:18px;height:18px \}/);
+assert.match(source, /ccf-cs-stats-items \{[^}]*grid-template-columns:minmax\(220px,\.8fr\) minmax\(0,1\.2fr\)/);
+assert.match(source, /vitalField\("생명력", "life", sheet\.life, "lifeMax", sheet\.lifeMax\)/);
+assert.match(source, /vitalField\("이성치", "sanity", sheet\.sanity, "sanityMax", sheet\.sanityMax\)/);
+assert.match(source, /numberField\("merit", "공적점", sheet\.merit\)/);
+assert.match(source, /textField\("etc", "ETC", sheet\.etc\)/);
 assert.match(source, /ccf-cs-note-toggle\$\{noteOpen \|\| memo \? " is-active" : ""\}/);
 assert.match(source, /ccf-cs-note-toggle \{[^}]*width:13px[^}]*height:13px[^}]*border-radius:0/);
 assert.match(source, /ccf-cs-note-toggle\.is-active \{ background:#f50057 \}/);
@@ -145,7 +155,9 @@ const imported = hook.parseTransferPayload(JSON.stringify({
     curiosity: 0, skills: ["0:0", "0:0:extra", "bad"], fear: "0:0", modifier: -2,
     permissions: { "*": { view: true }, 플레이어: { secret: true } },
     rootLaw: true, abilities: [{ name: "기습", target: "사격", memo: "능력 메모" }],
-    people: [{ name: "조력자", shelter: true, memo: "인물 메모" }], extensions: { future: { value: 1 } }, futureTop: { keep: true }
+    people: [{ name: "조력자", shelter: true, memo: "인물 메모" }],
+    items: { 진통제: 2, 빈값: "", 오류: "abc" },
+    extensions: { future: { value: 1 }, trpgManagement: { sourceData: { basic: { etc: "메모 값" } } } }, futureTop: { keep: true }
   }
 }), () => "imported-id");
 assert.equal(imported.id, "imported-id");
@@ -154,6 +166,8 @@ assert.equal(imported.modifier, -2);
 assert.equal(imported.rootLaw, true);
 assert.equal(imported.abilities[0].memo, "능력 메모");
 assert.equal(imported.people[0].shelter, true);
+assert.equal(imported.etc, "메모 값");
+assert.deepEqual(JSON.parse(JSON.stringify(imported.items)), { 진통제: 2 });
 assert.equal(imported.people[0].memo, "인물 메모");
 assert.equal(imported.permissions["*"].view, true);
 assert.equal(imported.permissions.플레이어.secret, true);
