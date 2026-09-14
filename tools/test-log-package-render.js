@@ -105,6 +105,19 @@ assert.match(timeSandbox.formatEntryTimestamp("2026-09-14T08:30:00Z"), /2026/);
 assert.strictEqual(timeSandbox.formatEntryTimestamp(""), "");
 
 const marker = "  const CAPYBARA_LOG_EDITOR_HTML = ";
+const edgeImages = [{ style: {} }, { style: {} }];
+const rewriteStart = editor.indexOf("  function rewriteEntryHtml(");
+const rewriteEnd = editor.indexOf("\n\n  function resolveAvatarUrl(", rewriteStart);
+const rewriteSandbox = { document: { createElement: () => ({ content: {
+  querySelectorAll: selector => selector.includes(".ccf-line:first-child") ? edgeImages : []
+} }) } };
+vm.runInNewContext(editor.slice(rewriteStart, rewriteEnd), rewriteSandbox);
+rewriteSandbox.rewriteEntryHtml("macro", new Map());
+for (const img of edgeImages) {
+  assert.strictEqual(img.style.width, "100%");
+  assert.strictEqual(img.style.maxWidth, "100%");
+  assert.strictEqual(img.style.height, "auto");
+}
 const allTabs = { addEventListener(_event, callback) { this.change = callback; } };
 const tabInputs = ["main", "info"].map(value => ({ value, checked: true, addEventListener(_event, callback) { this.change = callback; } }));
 const tabState = { selectedTabIds: new Set(["main", "info"]) };

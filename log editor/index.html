@@ -903,6 +903,12 @@
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
     tpl.content.querySelectorAll(".ccf-image-token").forEach((node) => node.remove());
+    // Tistory removes image wrapper spans, so edge sizing must travel with the image.
+    for (const img of tpl.content.querySelectorAll(".ccf-roll20-bubble > .ccf-line:first-child .ccf-image, .ccf-roll20-bubble > .ccf-line:last-child .ccf-image")) {
+      img.style.width = "100%";
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+    }
     for (const img of tpl.content.querySelectorAll("img[src]")) {
       const src = img.getAttribute("src") || "";
       const replacement = byRenderUrl.get(src);
