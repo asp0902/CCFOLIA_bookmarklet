@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.9
+// @version      0.5.10
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.9";
+  const VERSION = "0.5.10";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -623,6 +623,7 @@
       <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
       <div class="ccf-cs-field-pair">${numberField("life", "생명력", sheet.life)}${numberField("lifeMax", "최대 생명력", sheet.lifeMax)}</div>
       <div class="ccf-cs-field-pair">${numberField("sanity", "이성치", sheet.sanity)}${numberField("sanityMax", "최대 이성치", sheet.sanityMax)}</div>
+      ${renderItemFields(sheet.items)}
     </div>`;
     const skillSettings = `<div class="ccf-cs-skill-options">
       <label>호기심 분야<select data-field="curiosity"><option value="">선택 안 함</option>${CATEGORIES.map((category, index) => `<option value="${index}"${String(index) === String(sheet.curiosity) ? " selected" : ""}>${category[0]}</option>`).join("")}</select></label>
@@ -725,6 +726,11 @@
     return `<label>${label}<input type="number" min="0" data-field="${name}" value="${Number(value) || 0}"></label>`;
   }
 
+  function renderItemFields(items) {
+    const entries = Object.entries(normalizeItems(items));
+    return entries.length ? `<div class="ccf-cs-field-pair ccf-cs-item-fields">${entries.map(([label, value]) => `<label>${escapeHtml(label)}<input type="number" min="0" data-item="${escapeHtml(label)}" value="${value}"></label>`).join("")}</div>` : "";
+  }
+
   function handleInput(event) {
     const target = event.target;
     const sheet = currentSheet();
@@ -733,6 +739,12 @@
       const command = target.value;
       target.value = "";
       if (command) writeChat(command);
+      return;
+    }
+    if (target.dataset.item) {
+      sheet.items ||= {};
+      sheet.items[target.dataset.item] = nonNegativeNumber(target.value);
+      saveSoon();
       return;
     }
     if (target.dataset.field) {
