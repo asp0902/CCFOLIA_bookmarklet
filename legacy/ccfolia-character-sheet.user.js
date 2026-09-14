@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.10
+// @version      0.5.11
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.10";
+  const VERSION = "0.5.11";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -119,6 +119,16 @@
 
   function validSkillId(id) {
     return /^([0-5]):(10|[0-9])$/.test(String(id));
+  }
+
+  function findSkillId(value) {
+    if (validSkillId(value)) return String(value);
+    const name = cleanText(value, 300).trim();
+    for (let column = 0; column < CATEGORIES.length; column += 1) {
+      const row = CATEGORIES[column].slice(1).indexOf(name);
+      if (row >= 0) return `${column}:${row}`;
+    }
+    return "";
   }
 
   function cleanText(value, maxLength = 20_000) {
@@ -220,7 +230,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, TABLE_COMMANDS, SKILL_TABLE_COMMANDS, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, TABLE_COMMANDS, SKILL_TABLE_COMMANDS, findSkillId, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
     return;
   }
 
@@ -565,9 +575,9 @@
     const editor = state.view === "sheet";
     root.innerHTML = `
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
-        <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="panel-settings" aria-label="설정" title="설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
+        <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `${playerLinkField(sheet.player)}<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="panel-settings" aria-label="설정" title="설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}<button data-action="fear-roll" title="공포판정 입력">공포판정</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표" title="특기표 명령 입력"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]" title="회피 판정 입력">회피</button><button data-action="plot" title="플롯 입력">플롯</button></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}<button data-action="fear-roll" title="공포판정 입력">공포판정</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표" title="특기표 명령 입력"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]" title="회피 판정 입력">회피</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯" title="플롯 입력"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
@@ -681,6 +691,14 @@
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.08-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.2 7.2 0 0 0-1.69-.98L14.5 2.42A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.49.49 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.08.66-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.38.31.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>';
   }
 
+  function linkIcon() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  function rollIcon() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8.5" cy="15.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/></svg>';
+  }
+
   function backIcon() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z"/></svg>';
   }
@@ -699,12 +717,12 @@
 
   function renderRepeaters(key, items, fields) {
     const heading = `<div class="ccf-cs-repeater-head" aria-hidden="true"><div class="ccf-cs-repeater-fields">${fields.map(([, label]) => `<span>${label}</span>`).join("")}</div></div>`;
-    return `<div class="ccf-cs-repeaters">${heading}${items.map((item, index) => {
+    return `<div class="ccf-cs-repeaters ccf-cs-${key}">${heading}${items.map((item, index) => {
       const noteKey = `${currentSheet().id}:${key}:${item.id || index}`;
       const noteOpen = state.openNotes.has(noteKey);
       const itemName = item.name || `${index + 1}번 항목`;
       const memo = item.memo || (key === "abilities" ? item.effect : "");
-      return `<section><button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
+      return `<section>${key === "abilities" ? `<button class="ccf-cs-ability-roll" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${rollIcon()}</button>` : ""}<button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
 
@@ -716,10 +734,17 @@
   }
 
   function playerField(value) {
+    return `<label>플레이어<select data-field="player"><option value="">선택 안 함</option>${playerOptions(value)}</select></label>`;
+  }
+
+  function playerLinkField(value) {
+    return `<label class="ccf-cs-icon ccf-cs-player-link" title="플레이어 연결">${linkIcon()}<select data-field="player" aria-label="플레이어 연결"><option value="">선택 안 함</option>${playerOptions(value)}</select></label>`;
+  }
+
+  function playerOptions(value) {
     const players = permissionRows(state.data.permissions).filter((row) => row.key !== "*");
     if (value && !players.some((row) => row.key === value)) players.push({ key: value, label: value });
-    const options = players.map((row) => `<option value="${escapeHtml(row.key)}"${row.key === value ? " selected" : ""}>${escapeHtml(row.label)}</option>`).join("");
-    return `<label>플레이어<select data-field="player"><option value="">선택 안 함</option>${options}</select></label>`;
+    return players.map((row) => `<option value="${escapeHtml(row.key)}"${row.key === value ? " selected" : ""}>${escapeHtml(row.label)}</option>`).join("");
   }
 
   function numberField(name, label, value) {
@@ -739,6 +764,12 @@
       const command = target.value;
       target.value = "";
       if (command) writeChat(command);
+      return;
+    }
+    if (target.dataset.plotSelect !== undefined) {
+      const value = target.value;
+      target.value = "";
+      if (value) writeChat(`sc(${value})`);
       return;
     }
     if (target.dataset.item) {
@@ -815,13 +846,14 @@
     if (button.dataset.remove) {
       currentSheet()[button.dataset.remove].splice(Number(button.dataset.index), 1); state.openNotes.clear(); render(); saveSoon(); return;
     }
+    if (button.dataset.abilityRoll !== undefined) {
+      const ability = currentSheet().abilities[Number(button.dataset.abilityRoll)];
+      const skill = findSkillId(ability?.target);
+      return skill ? inputSkillRoll(skill, ability?.name, true) : status("지정특기를 먼저 선택");
+    }
     if (button.dataset.action === "fear-roll") {
       const fear = currentSheet().fear;
       return fear ? inputSkillRoll(fear) : status("공포심을 먼저 선택");
-    }
-    if (button.dataset.action === "plot") {
-      const value = prompt("플롯 값 (1~6)", "1");
-      return /^[1-6]$/.test(value || "") ? writeChat(`sc(${value})`) : value !== null && status("플롯은 1~6만 입력");
     }
     if (button.dataset.command) return writeChat(button.dataset.command);
     if (button.dataset.roll) return inputSkillRoll(button.dataset.roll);
@@ -839,14 +871,14 @@
     });
   }
 
-  function inputSkillRoll(id) {
+  function inputSkillRoll(id, subject = "", submit = false) {
     const sheet = currentSheet();
     const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
     if (!target) return status("습득 특기를 먼저 선택");
     const [column, row] = id.split(":").map(Number);
     const name = CATEGORIES[column][row + 1];
     const fear = sheet.fear === id;
-    writeChat(`2D6${fear ? "-2" : ""}>=${target} [${name}${fear ? "/공포심" : ""}]`);
+    writeChat(`2D6${fear ? "-2" : ""}>=${target} [${subject ? `${subject}/` : ""}${name}${fear ? "/공포심" : ""}]`, submit);
   }
 
   function looksLikeTransfer(text) {
@@ -892,7 +924,7 @@
     }
   }
 
-  function writeChat(command) {
+  function writeChat(command, submit = false) {
     const editors = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
     const editor = editors.find((node) => !node.closest(`#${ROOT_ID}, [role="dialog"], .MuiDialog-root`) && isVisible(node) && findSubmitScope(node));
     if (!editor) return status("채팅 입력창을 찾지 못함");
@@ -901,7 +933,8 @@
       if (setter) setter.call(editor, command); else editor.value = command;
     } else editor.textContent = command;
     editor.dispatchEvent(new Event("input", { bubbles: true }));
-    editor.focus();
+    if (submit) findSubmitScope(editor)?.querySelector('button[type="submit"]')?.click();
+    else editor.focus();
     closeSheet();
   }
 
@@ -948,12 +981,15 @@
       #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} header h2 { margin:0;font-size:.875rem;font-weight:bold;flex:1 }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor>header h2 { flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} button,#${ROOT_ID} input,#${ROOT_ID} select,#${ROOT_ID} textarea { font:inherit;color:inherit }
       #${ROOT_ID} button { min-height:36px;padding:0 12px;background:transparent;border:1px solid rgba(255,255,255,.23);border-radius:4px;cursor:pointer;transition:background-color 150ms cubic-bezier(.4,0,.2,1),color 150ms cubic-bezier(.4,0,.2,1),border-color 150ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} button:hover { background:rgba(255,255,255,.08) }
       #${ROOT_ID} button:active { background:rgba(255,255,255,.16) }
       #${ROOT_ID} .ccf-cs-icon { width:40px;min-width:40px;padding:0;border:0;background:transparent;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-icon svg { width:24px;height:24px;fill:currentColor;pointer-events:none }
+      #${ROOT_ID} .ccf-cs-player-link { position:relative;display:grid;margin-right:auto;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-player-link select { position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer }
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
       #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border:0 }
       #${ROOT_ID} .ccf-cs-tabs button { min-width:96px;height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#9e9e9e;font-weight:bold }
@@ -1008,13 +1044,20 @@
       #${ROOT_ID} .ccf-cs-skill { display:flex;align-items:center;gap:6px;padding:4px 10px;border:0 }
       #${ROOT_ID} .ccf-cs-skill.is-selected { background:rgba(255,255,255,.14) }
       #${ROOT_ID} .ccf-cs-skill.is-selected button { font-weight:bold }
-      #${ROOT_ID} .ccf-cs-skill.is-fear button { color:#f50057 }
+      #${ROOT_ID} .ccf-cs-skill.is-fear button { color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-skill button { flex:1;display:flex;justify-content:space-between;align-items:center;min-height:22px;border:0;background:transparent;padding:0;font-size:.9em }
       #${ROOT_ID} .ccf-cs-skill small { color:#fff }
       #${ROOT_ID} .ccf-cs-repeaters { display:grid;gap:12px }
       #${ROOT_ID} .ccf-cs-repeater-head { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;color:#bdbdbd;font-size:13px }
       #${ROOT_ID} .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
       #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border:0 }
+      #${ROOT_ID} .ccf-cs-abilities { gap:4px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:32px 32px minmax(0,1fr) 32px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:3 }
+      #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px 32px minmax(0,1fr) 32px;padding-bottom:4px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-inline-memo { grid-column:3/4 }
+      #${ROOT_ID} .ccf-cs-ability-roll { width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border:0;border-radius:0;display:grid;place-items:center }
+      #${ROOT_ID} .ccf-cs-ability-roll svg { width:20px;height:20px;fill:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-note-toggle { align-self:center;justify-self:center;width:13px;min-width:13px;height:13px;min-height:13px;padding:0;background:#363636;border:0;border-radius:0 }
       #${ROOT_ID} .ccf-cs-note-toggle.is-active { background:#f50057 }
       #${ROOT_ID} .ccf-cs-remove { width:32px;font-size:20px;color:#bdbdbd }
@@ -1024,7 +1067,7 @@
       #${ROOT_ID} footer { flex-wrap:wrap }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-dialog>footer button { border:0;border-radius:0 }
-      #${ROOT_ID} .ccf-cs-dialog>footer .ccf-cs-table-select { width:auto;min-height:36px;padding:0 28px 0 12px;background-color:transparent;background-image:none;border:0;border-radius:0 }
+      #${ROOT_ID} .ccf-cs-dialog>footer .ccf-cs-table-select { width:auto;min-height:36px;padding:0 28px 0 12px;background-color:transparent;background-image:none;border:0;border-radius:0;font-size:14px }
       #${ROOT_ID} .ccf-cs-perm-grid { display:grid;grid-template-columns:minmax(0,1fr) repeat(3,64px);align-items:center;padding:8px 16px;overflow:auto }
       #${ROOT_ID} .ccf-cs-perm-grid>b { padding:8px 4px;color:#fff;text-align:center }
       #${ROOT_ID} .ccf-cs-perm-grid>b:first-child { text-align:left }
@@ -1034,6 +1077,7 @@
       #${ROOT_ID} .ccf-cs-perm-cell span { display:none }
       @media (max-width:700px) {
         #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
+        #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px 32px minmax(0,1fr) 32px }
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
         #${ROOT_ID} #ccf-cs-status { display:none }
