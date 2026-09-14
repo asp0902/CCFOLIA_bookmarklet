@@ -51,6 +51,8 @@ function extract(name) {
           onShadowClick({ target: button });
           const host = document.querySelector('[data-ccf-handout-show]');
           const popup = host.shadowRoot;
+          const popupRect = popup.querySelector('.show-paper').getBoundingClientRect();
+          checks.push(popupRect.width === 500, popupRect.height === 600);
           checks.push(popup.querySelector('.rendered').textContent === 'Hello', !popup.querySelector('[data-action="show-edit"]'), !popup.querySelector('[data-action="show-go-list"]'), host.style.zIndex === '2147483647', state.data.handouts.length === 0, editor.innerText === macro);
           popup.querySelector('[data-action="close-show"]').click();
           checks.push(!host.isConnected);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.86
+// @version      0.1.87
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.86",
+    version: "0.1.87",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1987,9 +1987,9 @@
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
-    const POPUP_W = 400; // 기본 크기 (이전 600의 2/3)
-    const POPUP_W_COLLAPSED = 200; // 접혔을 때 = 기본의 절반
-    const POPUP_H_INIT = 320;
+    const POPUP_W = 500;
+    const POPUP_W_COLLAPSED = 250;
+    const POPUP_H_INIT = 600;
     const existingCount = document.querySelectorAll('[data-ccf-handout-show="1"]').length;
     const offset = (existingCount % 8) * 24;
     const initLeft = Math.max(8, Math.round((window.innerWidth - POPUP_W) / 2) + offset);
@@ -2001,7 +2001,7 @@
         :host { all: initial; display: block; }
         * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
         .show-paper {
-          width: ${POPUP_W}px; max-width: 95vw; max-height: 88vh;
+          width: ${POPUP_W}px; height: ${POPUP_H_INIT}px; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px);
           min-width: 240px; min-height: 160px;
           display: flex; flex-direction: column;
           background-color: rgba(44,44,44,0.95); color: #fff;
@@ -2668,8 +2668,8 @@
   }
 
   // ===== floating window 위치/크기 =====
-  const RECT_STORAGE_KEY = "ccf-handout:window-rect-v1";
-  const DEFAULT_RECT = { w: 720, h: 560 };
+  const RECT_STORAGE_KEY = "ccf-handout:window-rect-v2";
+  const DEFAULT_RECT = { w: 500, h: 600 };
 
   function loadStoredRect() {
     try {
