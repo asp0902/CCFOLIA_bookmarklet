@@ -43,15 +43,17 @@ const imported = hook.parseTransferPayload(JSON.stringify({
     name: "테스트", life: 4, lifeMax: 8, sanity: 3, sanityMax: 6,
     curiosity: 0, skills: ["0:0", "0:0:extra", "bad"], fear: "0:0", modifier: -2,
     permissions: { "*": { view: true }, 플레이어: { secret: true } },
-    rootLaw: true, abilities: [{ name: "기습", target: "사격" }],
-    people: [{ name: "조력자", shelter: true }], extensions: { future: { value: 1 } }, futureTop: { keep: true }
+    rootLaw: true, abilities: [{ name: "기습", target: "사격", memo: "능력 메모" }],
+    people: [{ name: "조력자", shelter: true, memo: "인물 메모" }], extensions: { future: { value: 1 } }, futureTop: { keep: true }
   }
 }), () => "imported-id");
 assert.equal(imported.id, "imported-id");
 assert.deepEqual(Array.from(imported.skills), ["0:0"]);
 assert.equal(imported.modifier, -2);
 assert.equal(imported.rootLaw, true);
+assert.equal(imported.abilities[0].memo, "능력 메모");
 assert.equal(imported.people[0].shelter, true);
+assert.equal(imported.people[0].memo, "인물 메모");
 assert.equal(imported.permissions["*"].view, true);
 assert.equal(imported.permissions.플레이어.secret, true);
 assert.equal(imported.extensions.future.value, 1);
