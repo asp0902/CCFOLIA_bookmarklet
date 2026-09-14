@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.0";
-  const BUILD_ID = "2026-06-16-loader-render-cleanup-reverted-173";
+  const VERSION = "0.3.1";
+  const BUILD_ID = "2026-09-14-insane-character-sheet-174";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -82,6 +82,16 @@
       scripts: ["legacy/ccfolia-slash-macros.user.js"],
       roomOnly: true,
       // 항상 동작해야 하므로 패널 카드 목록에서 숨기고, 룸 진입 시 자동 로드.
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-character-sheet",
+      debugKey: "__CCF_CHARACTER_SHEET_DEBUG__",
+      title: "인세인 캐릭터 시트",
+      summary: "룸 다이스봇이 인세인이면 캐릭터 시트 버튼 추가",
+      scripts: ["legacy/ccfolia-character-sheet.user.js"],
+      roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
     },
