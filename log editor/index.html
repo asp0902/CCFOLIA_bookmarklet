@@ -570,6 +570,11 @@
     margin-inline: auto;
     overflow: hidden;
   }
+  .ccf-render-root.ccf-roll20-bubble:has(.ccf-image) {
+    width: max-content;
+    max-width: min(100%, 360px);
+  }
+  .ccf-roll20-bubble:has(.ccf-image) .ccf-line:not(:has(.ccf-image-frag)) { contain: inline-size; }
   .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="black"] {
     background: #000 !important;
   }
@@ -1890,6 +1895,11 @@
       margin-inline: auto;
       overflow: hidden;
     }
+    .ccf-tistory-log .ccf-roll20-bubble:has(.ccf-image) {
+      width: max-content;
+      max-width: min(100%, 360px);
+    }
+    .ccf-tistory-log .ccf-roll20-bubble:has(.ccf-image) .ccf-line:not(:has(.ccf-image-frag)) { contain: inline-size; }
     .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble[data-ccr20-macro-background="black"] {
       background: #000 !important;
     }
