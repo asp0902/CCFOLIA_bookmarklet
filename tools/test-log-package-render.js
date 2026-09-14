@@ -59,6 +59,7 @@ const tistorySandbox = {
   rewriteEntryHtml: (html) => html,
   resolveAvatarUrl: () => "avatar.png",
   normalizeCssColorForHtml: (color) => color,
+  formatEntryTimestamp: () => "2026. 09. 14. 17:30:00",
   escapeHtml: (value) => String(value),
   escapeAttr: (value) => String(value)
 };
@@ -68,6 +69,21 @@ assert.match(tistoryHtml, /class="ccf-tistory-text ccf-tistory-roll20"/);
 assert.match(tistoryHtml, /grid-template-columns: 48px minmax\(0, 1fr\)/);
 assert.match(tistoryHtml, /background: #000 !important/);
 assert.match(tistoryHtml, /border-radius: 0/);
+assert.match(tistoryHtml, /ccf-tistory-timestamp/);
+assert.match(tistoryHtml, /2026\. 09\. 14\. 17:30:00/);
+
+const avatarStart = editor.indexOf("  function resolveAvatarUrl(");
+const avatarEnd = editor.indexOf("\n\n  function buildTistoryAssetMaps(", avatarStart);
+const avatarSandbox = { DEFAULT_AVATAR_URL: "data:image/png;base64,test" };
+vm.runInNewContext(editor.slice(avatarStart, avatarEnd), avatarSandbox);
+assert.strictEqual(avatarSandbox.resolveAvatarUrl({}, { bySource: new Map() }), avatarSandbox.DEFAULT_AVATAR_URL);
+assert.strictEqual(avatarSandbox.resolveAvatarUrl({ avatarSource: "https://example.com/avatar.png" }, { bySource: new Map() }), "https://example.com/avatar.png");
+const timeStart = editor.indexOf("  function formatEntryTimestamp(");
+const timeEnd = editor.indexOf("\n\n  function showEmpty(", timeStart);
+const timeSandbox = {};
+vm.runInNewContext(editor.slice(timeStart, timeEnd), timeSandbox);
+assert.match(timeSandbox.formatEntryTimestamp("2026-09-14T08:30:00Z"), /2026/);
+assert.strictEqual(timeSandbox.formatEntryTimestamp(""), "");
 
 const marker = "  const CAPYBARA_LOG_EDITOR_HTML = ";
 const embeddedStart = source.indexOf(marker);

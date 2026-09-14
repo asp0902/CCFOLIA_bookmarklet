@@ -55,6 +55,8 @@
     overflow: hidden;
   }
   aside.sidebar header {
+    background: #000;
+    color: #fff;
     padding: 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -65,8 +67,12 @@
     font-size: 16px;
     margin: 0;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
+  aside.sidebar header .btn { color: #fff; }
+  .sidebar-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+  .sidebar-actions .btn { flex: 1; }
+  button:disabled { opacity: 0.45; cursor: default; }
   aside.sidebar .room-list {
     flex: 1;
     overflow-y: auto;
@@ -122,6 +128,7 @@
     color: var(--fg-muted);
   }
   main.content {
+    min-width: 0;
     overflow-y: auto;
     padding: 24px 32px;
   }
@@ -134,6 +141,13 @@
     color: var(--fg-muted);
     text-align: center;
     gap: 12px;
+  }
+  @media (max-width: 700px) {
+    body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    aside.sidebar .room-list { max-height: 100px; flex: auto; }
+    aside.sidebar header { padding: 8px 12px; }
+    aside.sidebar footer { padding: 8px 12px; }
+    main.content { padding: 16px 12px; }
   }
   .empty-state h2 {
     margin: 0;
@@ -231,13 +245,16 @@
     font-size: 12px;
     font-weight: 800;
     color: var(--fg-muted);
-    margin-bottom: 8px;
+    margin: 0;
+    white-space: nowrap;
   }
+  .editor-option-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; border: 0; border-radius: 0; padding: 12px 0; background: transparent; }
+  .output-tab-options { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
   .tab-check-list {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 0;
   }
   .tab-check-item {
     display: inline-flex;
@@ -245,7 +262,7 @@
     gap: 6px;
     padding: 6px 10px;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: 4px;
     background: var(--bg);
     font-size: 12px;
     cursor: pointer;
@@ -262,7 +279,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-    margin-top: 8px;
+    margin-top: 0;
   }
   .editor-option-row label {
     font-size: 12px;
@@ -293,15 +310,15 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
   }
   .entry {
     display: grid;
-    grid-template-columns: 48px 1fr;
+    grid-template-columns: 48px minmax(0, 1fr);
     gap: 12px;
     padding: 12px;
     background: var(--bg-elev);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: 0;
   }
   .entry .avatar {
@@ -316,26 +333,12 @@
     border: 1px solid var(--border);
     flex: 0 0 48px;
   }
+  .entry + .entry { border-top: 1px solid var(--border); }
   .entry .avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-  }
-  /* 화자에게 이미지가 지정되지 않은 경우, 아바타 슬롯은 비워두되
-     옅은 사람 실루엣을 배경으로 표시한다 (외부 의존성 없는 inline SVG). */
-  .entry .avatar:empty {
-    background-color: #f3f4f6;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23d1d5db'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-    background-size: 60%;
-    background-repeat: no-repeat;
-    background-position: center bottom;
-  }
-  @media (prefers-color-scheme: dark) {
-    .entry .avatar:empty {
-      background-color: #1c1c1c;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234a4a4a'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-    }
   }
   .entry .body { min-width: 0; }
   .entry .head {
@@ -682,7 +685,13 @@
     <button class="btn" id="btn-refresh" title="목록 새로고침">새로고침</button>
   </header>
   <ul class="room-list" id="room-list"></ul>
-  <footer id="storage-info">v0.1</footer>
+  <footer>
+    <div class="sidebar-actions">
+      <button class="btn" id="btn-export-edit-data" title="편집 데이터 내보내기" disabled>내보내기</button>
+      <button class="btn js-import-edit-data" type="button" title="편집 데이터 가져오기">가져오기</button>
+    </div>
+    <div id="storage-info">v0.1</div>
+  </footer>
 </aside>
 <main class="content" id="main-content">
   <div class="empty-state" id="empty-state">
@@ -699,6 +708,7 @@
 (() => {
   "use strict";
 
+  const DEFAULT_AVATAR_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIEAAACBCAIAAABowk4HAAAABmJLR0QAAAAAAAD5Q7t/AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAN3klEQVR4Xu2d+VdTZxrH83cQCEnIzr4EZCkIiNbWUh1UdCytqMip1pnTukzpcal2Ga3W9qh0GHsEK0odinVEtLSiU4EooOJWS5EiyCKCEAKBJJCA8w2p1FLkhvBe3sRzv+f5ATA3ee/zeZ/t3gvyFEpvN05UxeMYUBfHgL44BvTFMaAvjgF9cQzoi2NAXxwD+uIY0BfHgL44BvTFMaAvjgF9cQzoi2NAXxwD+uIY0BfHgL44BvTFU3IMaItjQF8cA/riGNAXx4C+OAb0xTGgL44BfXEM6ItjQF8cA/p6Thh4eHiIxWKZTObr6xsSEjJjxoyIiIjIyEh8ERwcjB/K5XK8AC/j8/lMbzbdcmEGcKiXl1dQUNCsWbMWL16cnp6+YcOGnTt3ZmdnFxQUFBYWFhUV4YtDhw7t2rVr06ZNeEFycnJCQgIOkUgkOJzpE6ZJrscAG1kkEqnV6gULFqxZsyYrK6u6urqjo6O3t7evr89gMJhMpsGnhG+NRiP+qaenp6ur6/r16zhk3bp1OBwRg+CgHhmuxADOwv6Ni4tbuXLl4cOHGxoa4Fb412KxPLZPw8PDeDGoABgOR8QgOPCGSGLu7u5Mn8+WXIYBNizSyNq1a0tLSzs7O+HHoaEhJp9PJByON9FqtRcuXHj77bfj4+MBmEpMOCMDOEIgECDhIN2jlqpUKhRY7P2ysjK4zGw2M7l3EkJkIF/pdLqSkhJkttDQUE9PT6YFEpazMIDfcfIKhSI8PHzu3LmosampqXDKxo0bt2/fjtLa2toKZzG51EHZSLS3tx88eDApKQngpzMg6DOA6318fNDbLFu2LCMj49tvv62trW1ra0P9xPbU6/X9/f1wENzE5MmpCh+Bz0KFR8X28/ObtgpBkwGyTVhYGLb8hx9+WFlZCb/D4wMDA9Pg7gmEXNfc3Lxjxw5EJFIi00kQEB0GQqEQZ/j6668fP34c/Qlcb39vMw3CYlB40MLGxsZOQ3mYbgYI8ICAgKVLl+bn5zc1NaGzpLvrnyWsCv0rOmB0rmxjmFYGtv5y7969dXV1Tuv9Udkw5OTkREdHs5qUpokB2gwU3pSUFDTjqLRO7v1R2TDs378fEzV7JXo6GAAAzmHz5s01NTUouUwn7lwCBoyEWDzGFJYaVtYZYPtgwsJWamlpmeJkS0so0Y2NjatWrcLMyHS6johdBgAQGRmZnZ396NEjV8k/4woDikajwRDDxtVWFhkgctGAAgCmLZcGYBMa6N27d6OqEc9IbDHAQgMDAzMzM109AkaFRIp0iq4aww3T2U9OrDAAALlcvm3bttbWVhetAePKZDLl5eUFBQWRDQVWGGCoeeONN2pra51q+p26ENAI69dee41sKJBngDocExNTWlrqcm2oPUIo5Obm+vv7M7lhEiLMAEGqUCi++OILDGJMp+OSQii0tbXNmzeP4ORMmAFWtmTJkrq6uuepDIxRf38/RjaZTMbkDHvFU6qIMUAQ+Pr6FhYWGo1GphNxYaHIlZeXh4aGkqrMJBkgCFJTU5uamp6PZvRZsl29eOWVV0jNayQZKJXK06dPO28QjNyxNOv15p6eIaNxeArZEvPaunXrSF26IMYAmyIxMbG+vt45gwAeH+zU6qquPsgvaDly7NH35/rr7w2ZTEzHjS90Rzk5Od7eZFxHjAE2RVZWFjYI0/rpaKCzszXv+PUlKZfCYzTqyMrY2bWb3++5cXPIoQYaJeHGjRtqtZrJK3aJDANUJ7TMVVVVZB88IaVhs7nju++rXnq1VBVwUe5rs3J/de2W7cbWB48nH7i2khAXF0fkpgIZBqjGSUlJzc3NzpmILL362ve2lgeFjQKwWWXCS7orV4cd2jfd3d3z588nMiWQYSAWi/ft29fT08O0cjoa6Oy6vXpNmW/wGAaXZkR3FP/gWFXo7e0lddGCDAO5XF5SUuK0FyfMOt3P6/9RFhA6hkFF7GxtmcaxkoDKl5aWJhKJmHzDLDIMMJrdvHlzqlfohoaGLRZkBqsNDloNX+AnaCKnluLg5ZbcvMr4ub/XA4VfmV/IT2v+ZrjX4FiTiml57dq1SABMvmEWAQYoyNHR0ffv32da9p+E6mE2WwxGNOwDHY8MDff1P9foqq/rKqu6L1d0V1Tqrlb33vqp/9dfTQ8fDnbrLP39VjAOuQy1t+6jf1bNmacJiSgPmoHu6GbKikfnzuM9mQ4dX2BAakQgwMA2Hre3tzMt+4mGh4dGZiVjc4vu6rWOs8UtuccaPtv/y3tbb6evvb405dr8hVdfnn81Mal60V9vpa6uWb+p/pNPmw/lPDxZqC2/1P9r/aBWiyQ+KRh4MUC2HM27u3XHLxlb6nfv1VVdsfT1ORxhYPDWW285CwPkxG3btmm1WqZlWx0xZDCaHrRhmz84/k3djo+rFy+7HBWLNvGi0n9Msv6DIXX4Bl8Ke+HK3ERk9qYvs7GFAcPc02vtauz2ozXs9H04ymI02X/UuOrr60tPT3eWXIS9kJmZiT5hghXD+5Z+Q/+9BvQh2NTX5i8qDw6HZyfy+7MNqbwiZlbNxowHx/N7b9wa1HZPigQRoSYvX77cWWqyRCI5evRo/7MSKzKPyWS434ScU5uxBb4rnXjL228KPyT3WyvSUW97b9029/YOT7EpmIzQiC9atIjIY5BkGJw4ccJgMPx5oXAKNmlXmebujo9Iev+PJBBSKCRtBSdB2tpoTktAdHV1zZkzh8ilUzIMCgoK/swA48KDu3V1uccqEpN+9A5k9uZUTOF3KTy6fuduVFprQEymXDsg1LV79+6Fh4cTuYVAhkFubu7TuQg9J5BUVlR88s76DwLVn0sUeRJVsczngtz3R0ZvTsHK/IJvpKx4eOr0QEcHq3lpcHDw1KlTpO4qE2Bgu1AxWpMBAPXq/PnzSUlJKFmebnxfvnuyQPS+WPqlRHlmhASjNx02pLuK2DnNOUeMLS2OXQiyR2RvZxJgIBQKMzIykB8fjwBAsSoqKkpISHj6ehYiVsTnz/QQZIgkByWKszKf/zF5cyqmmfFCY+a/DI33WcLQ3d1NqiC7EWFgu4/f1tZme1K8sLAwJibmWcUKqwaJLWLpUanynNyHvdSkUUc0fL7f0NhIHAOKQU1NTVRUFJFi4EaEAZYSFhZWX1+PCD179uzMmTMZuwXExCJP4ade8iI2A8KKYV+msaWVbG0wGo0HDhxQqVQTn6P9IsAAwoIuX7588eLF2bNn239JPdDd4z2RNF+qOi/3YXSoY6aZEY3aMPCo8zGhTsl292bhwoWkEpEbKQZojfbs2TNv3rzJrkzM56/yFB+WKEtkbOWlyrgXO858Z9HricwN6Iiw1Qg+2OJGigGSj7e3N2MKGlc45i8C4b8linPsYECndCMltedatWP3CcZIp9OtXr2ayGWiUZFhMEVhR70s8MxiDUOZX0jdjo+NzS1TnN3MZjNSLqoxkdvIo3IKBm5PMHw5goHRpw7Y5ciZD0+esuj7mPz8TNkeuk5LSyMbBG7Ow8BtBMMCgfAriZKNIa5U4Xcr7U19zS8O90hoh86cOaNWqwlWApuciIHbSG1Y4Sk+IfNmo2HVhES0fHXU3NPjQHG2WCx37txJTEy0v+uzX87FAPLi87eKpGfZKAwKv5vL0xwIBWShjo6OLVu2yOVypuU7IqdjAAXzPQ54Kc6xMDRo1JEPvv6P9Ram3QKAvr6+/Px8NrKQTc7IAEoSCL+RqohnJFSFO39/x9DUbH+DhDJw4cKFuLg4xzpve+SkDDC7fSSWfc9Cj1QZN6errNzOWcFkMmk0GpSByc6ekxLh38MhqFgPwTEJ+VAo91c3ZmaZmX5VCykIEVBRUbF48WIiD9NNIOdlIHDjvy+SFbMQCrffXGdoapqgO7L9Qa/y8vLk5GS2Abg5MwMonp1QqJr9cnfVleHB8a9pDw0NabXa4uJitlPQqJyaAapChvXCqvd5JrdOyjTqiLZvTljGewhhcHCwoaHB9jeL2CvCY+Ts/z+alM/H1HbQS1FMbmIo9Qm6t+ezMSXBdgewqqpq06ZNbPxRignk7AzcRq5hzPQQbBfJjklVpG691Wx419TebisJtuxfW1ubm5vrwOX3qcsFGNgkcuO/KhB+IpZ9LVX9MOWYuLUyvb+hcchi0ev1d+/ePXnyZGpq6jT/WdNRuQwDm7z4IOH5gViWI1H+V4Y64QgMHFL5l+S6ixevX7uWl5e3fPlyhUJBxfs28RQKV2JgE2pllIcgXSj+dAQGJuoimc/5CYMD/1Qi9zkj88GLD0uU+8Mi3l2xMiE+nsgDo1MUT+6CDEaFGSLc3SNZIFwvlCBNZUkU2RLlEYkSlePrETsqVR2RqPDDLIlyl1j2jlCS7CnCIaz3/JORazMYI/SyAXyPKHfBLA/BiwJPWLyHJ74NcHdHOaGWa5j0XDFwUfFkHAPa4snkHAPK4hjQF0/KMaAtjgF98aQyjgFl8SQcA9riGNAXx4C+eF5SjgFlcQzoi2NAXzwxx4C2eGIJx4CyeCKOAW1xDOiLJ/LiGFAWx4C+eEKOAW1xDOiLY0BfHAP64nmKOQaUxTGgL44BfXEM6ItjQF88AceAtjgG9MWT+s/1Ukb9bqrfTPKUSb1/MxnMJ0oO841SjJjSz2oqmH+UNywgyicgyjfQan6woCh/WHBUwIgFhlgtCKa2WrDNQq0WMhkLftqevE/QM8z2oRNYwNMWPI75j7GgP5jfGAv8zXyfthG3/G42Xz2x/wObj6MLLXHCSwAAAABJRU5ErkJggg==";
   const HANDOFF_MESSAGE_SOURCE = "capybara-log-userscript";
   const HANDOFF_MESSAGE_TYPE = "capybara-log:handoff";
   const HANDOFF_EDITOR_SOURCE = "capybara-log-editor";
@@ -900,12 +910,12 @@
 
   function resolveAvatarUrl(entry, assetMaps) {
     const source = String(entry?.avatarSource || "").trim();
-    if (!source) return "";
+    if (!source) return DEFAULT_AVATAR_URL;
     const bundled = assetMaps.bySource.get(source);
     if (bundled) return bundled;
     if (/^\/\//.test(source)) return "https:" + source;
     if (/^(https?:|data:image\/)/i.test(source)) return source;
-    return "";
+    return DEFAULT_AVATAR_URL;
   }
 
   function buildTistoryAssetMaps(assets) {
@@ -1044,6 +1054,7 @@
     const tabsHtml = entries.length
       ? `<div class="editor-option-panel">
           ${tabs.length ? `
+            <div class="output-tab-options">
             <div class="editor-option-title">출력 탭 선택</div>
             <div class="tab-check-list">
               ${tabs.map((tab, i) => {
@@ -1057,6 +1068,7 @@
                   <small>${count}</small>
                 </label>`;
               }).join("")}
+            </div>
             </div>
           ` : ""}
           <div class="editor-option-row">
@@ -1089,10 +1101,6 @@
         <h2>${escapeHtml(room.roomTitle || "(제목 없음)")}</h2>
         <div class="room-meta">${meta.join(" · ")}</div>
         <div class="room-actions">
-          <button class="btn" id="btn-export-edit-data" title="편집 데이터 내보내기">내보내기</button>
-          <button class="btn js-import-edit-data" type="button" title="편집 데이터 가져오기">가져오기</button>
-        </div>
-        <div class="room-actions">
           <button class="btn danger" id="btn-delete-room">이 룸 데이터 삭제</button>
           <button class="btn" id="btn-export-html">HTML 내보내기</button>
           ${tistoryActionHtml}
@@ -1118,14 +1126,15 @@
 
     const exportEditDataBtn = document.getElementById("btn-export-edit-data");
     if (exportEditDataBtn) {
-      exportEditDataBtn.addEventListener("click", () => {
+      exportEditDataBtn.disabled = false;
+      exportEditDataBtn.onclick = () => {
         try {
           exportEditorData(room);
           showToast("편집 데이터 파일을 내보냈습니다.");
         } catch (error) {
           showToast("편집 데이터 내보내기 실패: " + (error?.message || error));
         }
-      });
+      };
     }
 
     const exportHtmlBtn = document.getElementById("btn-export-html");
@@ -1719,6 +1728,7 @@
       const avatarUrl = resolveAvatarUrl(entry, tistoryAssetMaps);
       const speakerColor = normalizeCssColorForHtml(entry?.baseColor || "");
       const speakerStyle = speakerColor ? ` style="color:${escapeAttr(speakerColor)}"` : "";
+      const timestamp = formatEntryTimestamp(entry?.timestamp);
 
       if (isSystem) {
         return `
@@ -1731,7 +1741,11 @@
         <div class="ccf-tistory-entry">
           ${avatarUrl ? `<div class="ccf-tistory-avatar"><img src="${escapeAttr(avatarUrl)}" alt=""></div>` : `<div class="ccf-tistory-avatar"></div>`}
           <div class="ccf-tistory-body">
-            <div class="ccf-tistory-speaker"${speakerStyle}>${escapeHtml(sender || "(이름 없음)")}</div>
+            <div class="ccf-tistory-head">
+              <span class="ccf-tistory-speaker"${speakerStyle}>${escapeHtml(sender || "(이름 없음)")}</span>
+              ${timestamp ? `<span class="ccf-tistory-timestamp">${escapeHtml(timestamp)}</span>` : ""}
+              ${entry?.channel ? `<span class="ccf-tistory-channel">${escapeHtml(entry.channel)}</span>` : ""}
+            </div>
             <div class="${textClass}">${bodyHtml}</div>
           </div>
         </div>`;
@@ -1743,9 +1757,9 @@
     .ccf-tistory-log {
       max-width: 760px;
       margin: 0 auto;
-      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      color: #222;
-      line-height: 1.7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
+      color: #111;
+      line-height: 1.5;
     }
     .ccf-tistory-title {
       margin: 0 0 20px;
@@ -1758,7 +1772,9 @@
       display: grid;
       grid-template-columns: 48px minmax(0, 1fr);
       gap: 12px;
-      margin: 10px 0;
+      margin: 0;
+      padding: 12px;
+      background: #fafafa;
       align-items: start;
     }
     .ccf-tistory-avatar {
@@ -1785,15 +1801,15 @@
     }
     .ccf-tistory-speaker {
       display: block;
-      margin: 0 0 4px;
+      margin: 0;
       font-size: 14px;
       font-weight: 700;
       line-height: 1.5;
     }
     .ccf-tistory-text {
-      padding: 9px 12px;
+      padding: 0;
       border-radius: 0;
-      background: #f7f7f7;
+      background: transparent;
       font-size: 14px;
       white-space: pre-wrap;
       word-break: break-word;
@@ -1801,7 +1817,7 @@
       box-sizing: border-box;
     }
     .ccf-tistory-roll20 {
-      width: min(100%, 420px);
+      width: 100%;
       padding: 0;
       border: 0;
       background: transparent;
@@ -1860,18 +1876,29 @@
       white-space: pre-wrap;
     }
     .ccf-tistory-system {
-      margin: 16px auto;
+      margin: 0;
+      padding: 12px;
+      background: #fafafa;
       text-align: center;
     }
     .ccf-tistory-system-text {
-      display: inline-block;
+      display: block;
       max-width: 86%;
-      padding: 8px 12px;
+      margin: 0 auto;
+      padding: 0;
+      opacity: 0.92;
       color: #666;
       font-style: italic;
-      border-top: 1px solid #ddd;
-      border-bottom: 1px solid #ddd;
+      font-size: 14px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
+    .ccf-tistory-log > :is(.ccf-tistory-entry, .ccf-tistory-system) + :is(.ccf-tistory-entry, .ccf-tistory-system) { border-top: 1px solid #d4d4d4; }
+    .ccf-tistory-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    .ccf-tistory-timestamp, .ccf-tistory-channel { font-size: 11px; color: #666; }
+    .ccf-tistory-channel { margin-left: auto; border: 1px solid #d4d4d4; border-radius: 3px; padding: 0 6px; line-height: 1.4; }
+    .ccf-tistory-text p { margin: 0 0 4px; }
+    .ccf-tistory-text p:last-child { margin-bottom: 0; }
     .ccf-tistory-log img {
       max-width: 100%;
     }
@@ -2113,6 +2140,7 @@
 <head>
 <meta charset="UTF-8">
 <title>티스토리 HTML 미리보기</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
 ${html}
@@ -2148,6 +2176,7 @@ ${html}
   }
 
   const _fmtTimeOfDay = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit"
   });
   function formatTimeOfDay(d) {
@@ -2155,6 +2184,9 @@ ${html}
   }
 
   function showEmpty() {
+    const exportButton = document.getElementById("btn-export-edit-data");
+    exportButton.disabled = true;
+    exportButton.onclick = null;
     els.main.innerHTML = `
       <div class="empty-state">
         <h2>대기 중</h2>
@@ -2247,7 +2279,7 @@ ${html}
     refreshRoomList().catch((e) => showToast("새로고침 실패: " + (e?.message || e)));
   });
 
-  els.main.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target.closest(".js-import-edit-data") : null;
     if (!target || !(els.importEditData instanceof HTMLInputElement)) return;
     els.importEditData.value = "";
