@@ -105,6 +105,20 @@ assert.match(timeSandbox.formatEntryTimestamp("2026-09-14T08:30:00Z"), /2026/);
 assert.strictEqual(timeSandbox.formatEntryTimestamp(""), "");
 
 const marker = "  const CAPYBARA_LOG_EDITOR_HTML = ";
+const mergeStart = editor.indexOf("  function mergeConsecutiveSpeakerEntries(");
+const mergeEnd = editor.indexOf("\n\n  function renderSelectedTabEntries(", mergeStart);
+const mergeSandbox = { getHtmlEdgeType: html => html.includes("<img") ? "image" : html ? "text" : "" };
+vm.runInNewContext(editor.slice(mergeStart, mergeEnd), mergeSandbox);
+const merged = mergeSandbox.mergeConsecutiveSpeakerEntries([
+  { sender: "A", tabId: "main", bodyHtml: "text" },
+  { sender: "A", tabId: "main", bodyHtml: '<img src="a.png">' },
+  { sender: "A", tabId: "main", bodyHtml: '<img src="b.png">' },
+  { sender: "A", tabId: "main", bodyHtml: "text again" },
+  { sender: "A", tabId: "other", bodyHtml: "other tab" }
+]);
+assert.strictEqual(merged.length, 2);
+assert.strictEqual((merged[0].bodyHtml.match(/padding-top:8px/g) || []).length, 2);
+assert(merged[0].bodyHtml.includes('<br><img src="b.png">'));
 const edgeImages = [{ style: {} }, { style: {} }];
 const rewriteStart = editor.indexOf("  function rewriteEntryHtml(");
 const rewriteEnd = editor.indexOf("\n\n  function resolveAvatarUrl(", rewriteStart);

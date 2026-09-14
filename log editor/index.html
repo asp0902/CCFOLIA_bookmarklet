@@ -1270,6 +1270,23 @@
     });
   }
 
+  function getHtmlEdgeType(html, fromEnd = false) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let type = "";
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node.parentElement?.closest(".ccf-image-token, style, script")) continue;
+      const current = node.nodeName === "IMG" ? "image"
+        : node.nodeType === Node.TEXT_NODE && node.textContent.trim() ? "text" : "";
+      if (!current) continue;
+      type = current;
+      if (!fromEnd) break;
+    }
+    return type;
+  }
+
   function mergeConsecutiveSpeakerEntries(entries, systemSpeaker = "") {
     const out = [];
     for (const entry of Array.isArray(entries) ? entries : []) {
@@ -1305,7 +1322,13 @@
 
       const prevHtml = prev.packageHtml || prev.bodyHtml || "";
       const nextHtml = entry.packageHtml || entry.bodyHtml || "";
-      const mergedHtml = [prevHtml, nextHtml].filter(Boolean).join("<br>");
+      const previousEntry = prev.__mergedEntries[prev.__mergedEntries.length - 2];
+      const previousEdge = getHtmlEdgeType(previousEntry.packageHtml || previousEntry.bodyHtml || "", true);
+      const nextEdge = getHtmlEdgeType(nextHtml);
+      const needsImageGap = previousEdge && nextEdge && previousEdge !== nextEdge;
+      const mergedHtml = needsImageGap
+        ? `${prevHtml}<div style="padding-top:8px">${nextHtml}</div>`
+        : [prevHtml, nextHtml].filter(Boolean).join("<br>");
       prev.packageHtml = mergedHtml;
       prev.bodyHtml = mergedHtml;
 
