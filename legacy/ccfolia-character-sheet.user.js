@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.11
+// @version      0.5.12
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.11";
+  const VERSION = "0.5.12";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -454,11 +454,19 @@
   }
 
   function openSheetFromCharacterDialog(dialog) {
-    syncSheetFromNativeDialog(dialog);
     state.nativeCharacterDialog = dialog;
-    syncNativeItems(currentSheet(), dialog);
-    state.view = "sheet";
+    state.view = "list";
     openSheet();
+  }
+
+  function selectSheet(sheetId) {
+    state.data.selectedId = sheetId;
+    if (state.nativeCharacterDialog?.isConnected) {
+      syncSheetFromNativeDialog(state.nativeCharacterDialog);
+      syncNativeItems(currentSheet(), state.nativeCharacterDialog);
+    }
+    state.view = "sheet";
+    render();
   }
 
   function openPanel() {
@@ -822,7 +830,7 @@
     if (button.dataset.action === "close") return closeSheet();
     if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
     if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
-    if (button.dataset.action === "open-sheet") { state.data.selectedId = button.dataset.sheetId; state.view = "sheet"; return render(); }
+    if (button.dataset.action === "open-sheet") return selectSheet(button.dataset.sheetId);
     if (button.dataset.action === "delete-sheet-list") {
       if (state.data.sheets.length === 1) return;
       const sheet = state.data.sheets.find((item) => item.id === button.dataset.sheetId);
@@ -833,7 +841,7 @@
     }
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
-      state.data.sheets.push(sheet); state.data.selectedId = sheet.id; state.view = "sheet"; render(); saveSoon(); return;
+      state.data.sheets.push(sheet); selectSheet(sheet.id); saveSoon(); return;
     }
     if (button.dataset.add) {
       currentSheet()[button.dataset.add].push({ id: makeId() }); render(); saveSoon(); return;
@@ -968,8 +976,8 @@
     style.textContent = `
       [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${ICON_ATTR}]:hover { background:rgba(255,255,255,.1) }
-      [${DIALOG_BUTTON_ATTR}] { display:inline-grid;place-items:center;width:48px;height:48px;padding:0;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
-      [${DIALOG_BUTTON_ATTR}] svg { pointer-events:none }
+      [${DIALOG_BUTTON_ATTR}] { position:static!important;display:inline-grid!important;place-items:center;width:36px!important;min-width:36px!important;height:36px!important;margin:0 52px 0 4px!important;padding:6px!important;flex:0 0 36px;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
+      [${DIALOG_BUTTON_ATTR}] svg { width:24px;height:24px;pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(33,33,33,.82);border:0;border-radius:0;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden }

@@ -84,6 +84,11 @@ assert.match(source, /ccf-cs-skill\.is-fear button \{ color:#f50057;font-weight:
 assert.match(source, /ccf-cs-table-select \{[^}]*font-size:14px/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
+assert.match(source, /function openSheetFromCharacterDialog\(dialog\) \{\s*state\.nativeCharacterDialog = dialog;\s*state\.view = "list";\s*openSheet\(\);/);
+assert.match(source, /function selectSheet\(sheetId\) \{[\s\S]+state\.nativeCharacterDialog\?\.isConnected[\s\S]+syncSheetFromNativeDialog\(state\.nativeCharacterDialog\)[\s\S]+state\.view = "sheet";/);
+assert.match(source, /dataset\.action === "open-sheet"\) return selectSheet\(button\.dataset\.sheetId\)/);
+assert.match(source, /state\.data\.sheets\.push\(sheet\); selectSheet\(sheet\.id\)/);
+assert.match(source, /position:static!important;display:inline-grid!important;place-items:center;width:36px!important;min-width:36px!important;height:36px!important;margin:0 52px 0 4px!important/);
 assert.match(source, /section\("", basic, "ccf-cs-basic-section"\)[\s\S]+section\("특기"[\s\S]+section\("어빌리티 리스트"[\s\S]+section\("인물"/);
 assert.doesNotMatch(source, /section\("메모"/);
 assert.match(source, /section\("어빌리티 리스트"[\s\S]+\[\["name", "어빌리티"\], \["type", "타입"\], \["target", "지정특기"\]\]/);
