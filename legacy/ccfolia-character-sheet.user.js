@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.7
+// @version      0.5.8
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.7";
+  const VERSION = "0.5.8";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -34,7 +34,11 @@
     ["괴이", "시간", "혼돈", "심해", "죽음", "영혼", "마술", "암흑", "종말", "꿈", "지저", "우주"]
   ]);
   const TABLE_COMMANDS = Object.freeze([
-    ["장면표", "ST"], ["공포표", "FT"], ["직업표", "JT"], ["관계표", "RCT"], ["랜덤 특기", "RTT"]
+    ["장면표", "ST"], ["관계표", "FT"], ["엔딩표", "BET"]
+  ]);
+  const SKILL_TABLE_COMMANDS = Object.freeze([
+    ["랜덤", "RTT"], ["폭력", "TVT"], ["정서", "TET"], ["지각", "TPT"],
+    ["기술", "TST"], ["지식", "TKT"], ["괴이", "TMT"]
   ]);
 
   function normalizedText(value) {
@@ -216,7 +220,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, TABLE_COMMANDS, SKILL_TABLE_COMMANDS, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
     return;
   }
 
@@ -563,7 +567,7 @@
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button><button class="ccf-cs-icon" data-action="panel-settings" aria-label="설정" title="설정">${settingsIcon()}</button>` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}<button data-action="fear-roll" title="공포판정 입력">공포판정</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표" title="특기표 명령 입력"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]" title="회피 판정 입력">회피</button></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
@@ -725,6 +729,12 @@
     const target = event.target;
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
+    if (target.dataset.commandSelect !== undefined) {
+      const command = target.value;
+      target.value = "";
+      if (command) writeChat(command);
+      return;
+    }
     if (target.dataset.field) {
       const key = target.dataset.field;
       sheet[key] = target.type === "number" ? Number(target.value) : target.value;
@@ -792,6 +802,10 @@
     }
     if (button.dataset.remove) {
       currentSheet()[button.dataset.remove].splice(Number(button.dataset.index), 1); state.openNotes.clear(); render(); saveSoon(); return;
+    }
+    if (button.dataset.action === "fear-roll") {
+      const fear = currentSheet().fear;
+      return fear ? inputSkillRoll(fear) : status("공포심을 먼저 선택");
     }
     if (button.dataset.command) return writeChat(button.dataset.command);
     if (button.dataset.roll) return inputSkillRoll(button.dataset.roll);
@@ -994,6 +1008,7 @@
       #${ROOT_ID} footer { flex-wrap:wrap }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-dialog>footer button { border:0;border-radius:0 }
+      #${ROOT_ID} .ccf-cs-dialog>footer .ccf-cs-table-select { width:auto;min-height:36px;padding:0 28px 0 12px;background-color:transparent;background-image:none;border:0;border-radius:0 }
       #${ROOT_ID} .ccf-cs-perm-grid { display:grid;grid-template-columns:minmax(0,1fr) repeat(3,64px);align-items:center;padding:8px 16px;overflow:auto }
       #${ROOT_ID} .ccf-cs-perm-grid>b { padding:8px 4px;color:#fff;text-align:center }
       #${ROOT_ID} .ccf-cs-perm-grid>b:first-child { text-align:left }
