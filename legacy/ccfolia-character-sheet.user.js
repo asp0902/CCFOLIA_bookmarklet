@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.3.8
+// @version      0.4.0
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.3.8";
+  const VERSION = "0.4.0";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -91,6 +91,18 @@
     return ["캐릭터 편집", "キャラクター編集", "edit character", "character edit", "编辑角色"].some((label) => text.includes(label));
   }
 
+  function nativeStatusPatch(rows = []) {
+    const patch = {};
+    const fields = { 생명력: ["life", "lifeMax"], 이성치: ["sanity", "sanityMax"] };
+    for (const row of rows) {
+      const keys = fields[String(row?.label || "").trim()];
+      if (!keys) continue;
+      patch[keys[0]] = nonNegativeNumber(row.value);
+      patch[keys[1]] = nonNegativeNumber(row.max);
+    }
+    return patch;
+  }
+
   function normalizePermissions(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(Object.entries(value).flatMap(([key, flags]) => {
@@ -148,13 +160,15 @@
       fear: validSkillId(raw.fear) ? String(raw.fear) : "",
       modifier: finiteNumber(raw.modifier),
       rootLaw: !!raw.rootLaw,
-      abilities: (Array.isArray(raw.abilities) ? raw.abilities : []).slice(0, 100).map((item) => ({
+      abilities: (Array.isArray(raw.abilities) ? raw.abilities : []).slice(0, 100).map((item, index) => ({
         ...copyJsonObject(item),
+        id: cleanText(item?.id, 100) || `${sheet.id}:ability:${index}`,
         name: cleanText(item?.name, 300), type: cleanText(item?.type, 100), target: cleanText(item?.target, 300),
         cost: cleanText(item?.cost, 100), effect: cleanText(item?.effect, 20_000), memo: cleanText(item?.memo, 20_000), extensions: copyJsonObject(item?.extensions)
       })),
-      people: (Array.isArray(raw.people) ? raw.people : []).slice(0, 100).map((item) => ({
+      people: (Array.isArray(raw.people) ? raw.people : []).slice(0, 100).map((item, index) => ({
         ...copyJsonObject(item),
+        id: cleanText(item?.id, 100) || `${sheet.id}:person:${index}`,
         name: cleanText(item?.name, 300), shelter: !!item?.shelter, emotion: cleanText(item?.emotion, 300),
         detail: cleanText(item?.detail, 20_000), memo: cleanText(item?.memo, 20_000), extensions: copyJsonObject(item?.extensions)
       })),
@@ -193,7 +207,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, normalizePermissions, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizePermissions, parseTransferPayload });
     return;
   }
 
@@ -211,7 +225,8 @@
     renderFrame: 0,
     saveTimer: 0,
     dialogPosition: { x: 0, y: 0 },
-    openNotes: new Set()
+    openNotes: new Set(),
+    nativeCharacterDialog: null
   };
 
   registerWithSuite();
@@ -330,8 +345,8 @@
       const sheet = { ...base, ...raw };
       sheet.removedGaps = Array.from({ length: 5 }, (_, i) => !!raw.removedGaps?.[i]);
       sheet.skills = Array.isArray(raw.skills) ? raw.skills.filter(validSkillId) : [];
-      sheet.abilities = Array.isArray(raw.abilities) ? raw.abilities : [];
-      sheet.people = Array.isArray(raw.people) ? raw.people : [];
+      sheet.abilities = (Array.isArray(raw.abilities) ? raw.abilities : []).map((item, itemIndex) => ({ ...item, id: item.id || `${sheet.id}:ability:${itemIndex}` }));
+      sheet.people = (Array.isArray(raw.people) ? raw.people : []).map((item, itemIndex) => ({ ...item, id: item.id || `${sheet.id}:person:${itemIndex}` }));
       sheet.permissions = normalizePermissions(raw.permissions);
       return sheet;
     });
@@ -391,7 +406,7 @@
     button.setAttribute("aria-label", "사이코로픽션 캐릭터 시트");
     button.title = "사이코로픽션 캐릭터 시트";
     button.innerHTML = diceIcon();
-    button.addEventListener("click", openSheet, { signal });
+    button.addEventListener("click", () => { state.nativeCharacterDialog = null; openSheet(); }, { signal });
     anchor.parentElement.insertBefore(button, anchor.nextSibling);
   }
 
@@ -415,13 +430,45 @@
   }
 
   function openSheetFromCharacterDialog(dialog) {
-    const closeLabels = ["닫기", "close", "閉じる", "关闭"];
-    const closeButton = [...dialog.querySelectorAll("button")].find((button) => {
-      const label = normalizedText(`${button.getAttribute("aria-label") || ""} ${button.title || ""}`);
-      return button.getAttribute(DIALOG_BUTTON_ATTR) == null && closeLabels.some((item) => label.includes(item));
-    }) || dialog.querySelector(`.MuiAppBar-root button:not([${DIALOG_BUTTON_ATTR}])`);
-    closeButton?.click();
-    setTimeout(openSheet, 80);
+    syncSheetFromNativeDialog(dialog);
+    state.nativeCharacterDialog = dialog;
+    openSheet();
+  }
+
+  function syncSheetFromNativeDialog(dialog) {
+    if (!(dialog instanceof HTMLElement)) return;
+    const sheet = currentSheet();
+    const name = dialog.querySelector('input[name="name"]');
+    const memo = dialog.querySelector('textarea[name="memo"]');
+    const rows = [...dialog.querySelectorAll('input[name^="status."][name$=".label"]')].map((label) => {
+      const base = label.name.replace(/\.label$/, "");
+      return {
+        label: label.value,
+        value: dialog.querySelector(`input[name="${base}.value"]`)?.value,
+        max: dialog.querySelector(`input[name="${base}.max"]`)?.value
+      };
+    });
+    if (name?.value) sheet.name = name.value;
+    if (memo) sheet.memo = memo.value;
+    Object.assign(sheet, nativeStatusPatch(rows));
+    saveSoon();
+  }
+
+  function syncNativeCharacterField(key, value) {
+    const dialog = state.nativeCharacterDialog;
+    if (!(dialog instanceof HTMLElement) || !dialog.isConnected) return;
+    const direct = { name: 'input[name="name"]', memo: 'textarea[name="memo"]' };
+    let input = direct[key] ? dialog.querySelector(direct[key]) : null;
+    if (!input) {
+      const statusKey = { life: ["생명력", "value"], lifeMax: ["생명력", "max"], sanity: ["이성치", "value"], sanityMax: ["이성치", "max"] }[key];
+      const label = statusKey && [...dialog.querySelectorAll('input[name^="status."][name$=".label"]')].find((node) => node.value.trim() === statusKey[0]);
+      if (label) input = dialog.querySelector(`input[name="${label.name.replace(/\.label$/, `.${statusKey[1]}`)}"]`);
+    }
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value")?.set;
+    if (setter) setter.call(input, String(value)); else input.value = String(value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function openSheet() {
@@ -436,6 +483,7 @@
     state.open = false;
     state.permissionOpen = false;
     state.permissionDraft = null;
+    state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
   }
 
@@ -464,7 +512,7 @@
           <span id="ccf-cs-status" role="status" aria-live="polite"></span>
         </div>
         <main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}<button class="ccf-cs-save" data-action="save">저장</button></footer>
+        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}" title="${label} 명령 입력">${label}</button>`).join("")}</footer>
       </section>${state.permissionOpen ? renderPermissions(sheet) : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
@@ -498,7 +546,8 @@
   function renderSections(sheet) {
     const skillOptions = CATEGORIES.flatMap((category, column) => category.slice(1).map((name, row) => `<option value="${column}:${row}"${sheet.fear === `${column}:${row}` ? " selected" : ""}>${category[0]} · ${name}</option>`)).join("");
     const basic = `<div class="ccf-cs-basic">
-      ${field("player", "플레이어", sheet.player)}${field("name", "이름", sheet.name)}${field("age", "나이", sheet.age)}${field("gender", "성별", sheet.gender)}${field("occupation", "직업", sheet.occupation)}
+      ${field("player", "플레이어", sheet.player)}${field("name", "캐릭터명", sheet.name)}
+      <label class="ccf-cs-profile-memo">메모<textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
       <div class="ccf-cs-field-pair">${numberField("life", "생명력", sheet.life)}${numberField("lifeMax", "최대 생명력", sheet.lifeMax)}</div>
       <div class="ccf-cs-field-pair">${numberField("sanity", "이성치", sheet.sanity)}${numberField("sanityMax", "최대 이성치", sheet.sanityMax)}</div>
     </div>`;
@@ -506,15 +555,23 @@
       <label>호기심 분야<select data-field="curiosity"><option value="">선택 안 함</option>${CATEGORIES.map((category, index) => `<option value="${index}"${String(index) === String(sheet.curiosity) ? " selected" : ""}>${category[0]}</option>`).join("")}</select></label>
       <label>공포심<select data-field="fear"><option value="">선택 안 함</option>${skillOptions}</select></label>
     </div>`;
-    return section("기본", basic)
+    return section("", basic, "ccf-cs-basic-section")
       + section("특기", renderSkills(sheet) + skillSettings, "ccf-cs-section-wide")
       + section("어빌리티", renderRepeaters("abilities", sheet.abilities, [["name", "이름"], ["type", "종류"], ["target", "지정 특기"], ["cost", "코스트"], ["effect", "효과"]]), "", "abilities")
-      + section("인물", renderRepeaters("people", sheet.people, [["name", "이름"], ["emotion", "감정"], ["detail", "설명"]]), "", "people")
-      + section("메모", `<div class="ccf-cs-notes">${textArea("mission", "사명", sheet.mission)}${textArea("secret", "비밀", sheet.secret)}${textArea("memo", "메모", sheet.memo)}</div>`);
+      + section("인물", renderRepeaters("people", sheet.people, [["name", "이름"], ["emotion", "감정"], ["detail", "설명"]]), "", "people");
   }
 
   function section(title, content, className = "", addKey = "") {
-    return `<section class="ccf-cs-form-section ${className}"><div class="ccf-cs-section-head"><h3>${title}</h3>${addKey ? `<button class="ccf-cs-section-add" data-add="${addKey}" aria-label="${title} 추가" title="${title} 추가">＋</button>` : ""}</div>${content}</section>`;
+    const heading = title || addKey ? `<div class="ccf-cs-section-head">${title ? `<h3>${title}</h3>` : ""}${addKey ? `<button class="ccf-cs-section-add" data-add="${addKey}" aria-label="${title} 추가" title="${title} 추가">＋</button>` : ""}</div>` : "";
+    return `<section class="ccf-cs-form-section ${className}">${heading}${content}</section>`;
+  }
+
+  function profileMemo(sheet) {
+    if (sheet.memo) return sheet.memo;
+    return [["나이", sheet.age], ["성별", sheet.gender], ["직업", sheet.occupation]]
+      .filter(([, value]) => String(value || "").trim())
+      .map(([label, value]) => `${label}: ${value}`)
+      .join("\n");
   }
 
   function permissionRows(sheet) {
@@ -535,7 +592,7 @@
       const value = state.permissionDraft?.[key] || {};
       return `<div class="ccf-cs-perm-name">${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
     }).join("");
-    return `<div class="ccf-cs-perm-backdrop" data-action="close-permissions"></div><section class="ccf-cs-perm-dialog" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-perm-title"><header><h2 id="ccf-cs-perm-title">시트 권한 설정</h2><button class="ccf-cs-icon" data-action="close-permissions" aria-label="닫기" title="닫기">${closeIcon()}</button></header><p>공개: 기본·특기·어빌리티·인물 표시<br>비밀: 사명·비밀·메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div><footer><button data-action="close-permissions">취소</button><button class="ccf-cs-save" data-action="save-permissions">저장</button></footer></section>`;
+    return `<div class="ccf-cs-perm-backdrop" data-action="close-permissions"></div><section class="ccf-cs-perm-dialog" role="dialog" aria-modal="true" aria-labelledby="ccf-cs-perm-title"><header><h2 id="ccf-cs-perm-title">시트 권한 설정</h2><button class="ccf-cs-icon" data-action="close-permissions" aria-label="닫기" title="닫기">${closeIcon()}</button></header><p>공개: 특기·어빌리티·인물 표시<br>비밀: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>공개</b><b>비밀</b><b>수정</b>${rows}</div><footer><button data-action="close-permissions">취소</button><button class="ccf-cs-save" data-action="save-permissions">저장</button></footer></section>`;
   }
 
   function closeIcon() {
@@ -560,9 +617,10 @@
 
   function renderRepeaters(key, items, fields) {
     return `<div class="ccf-cs-repeaters">${items.map((item, index) => {
-      const noteKey = `${currentSheet().id}:${key}:${index}`;
+      const noteKey = `${currentSheet().id}:${key}:${item.id || index}`;
       const noteOpen = state.openNotes.has(noteKey);
-      return `<section><button class="ccf-cs-note-toggle" data-note="${key}" data-index="${index}" aria-label="메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteOpen || item.memo ? "◆" : "◇"}</button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => `<label>${label}${fieldName === "effect" || fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" value="${escapeHtml(item[fieldName] || "")}">`}</label>`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="메모">${escapeHtml(item.memo || "")}</textarea>` : ""}</section>`;
+      const itemName = item.name || `${index + 1}번 항목`;
+      return `<section><button class="ccf-cs-note-toggle" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteOpen || item.memo ? "◆" : "◇"}</button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => `<label>${label}${fieldName === "effect" || fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" value="${escapeHtml(item[fieldName] || "")}">`}</label>`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(item.memo || "")}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
 
@@ -579,10 +637,6 @@
 
   function numberField(name, label, value) {
     return `<label>${label}<input type="number" min="0" data-field="${name}" value="${Number(value) || 0}"></label>`;
-  }
-
-  function textArea(name, label, value) {
-    return `<label>${label}<textarea data-field="${name}">${escapeHtml(value)}</textarea></label>`;
   }
 
   function handleInput(event) {
@@ -602,17 +656,18 @@
       sheet[key] = target.type === "number" ? Number(target.value) : target.value;
       if (key === "curiosity") {
         sheet.removedGaps = getCuriosityGaps(target.value);
-        render();
+        updateSkillsView();
       } else if (key === "name") {
         const option = document.querySelector(`#${ROOT_ID} select[data-action="select-sheet"] option:checked`);
         if (option) option.textContent = target.value || "이름 없음";
       }
+      syncNativeCharacterField(key, sheet[key]);
       saveSoon();
       return;
     }
     if (target.dataset.skill) {
       sheet.skills = target.checked ? [...new Set([...sheet.skills, target.dataset.skill])] : sheet.skills.filter((id) => id !== target.dataset.skill);
-      render();
+      updateSkillsView();
       saveSoon();
       return;
     }
@@ -640,7 +695,6 @@
     if (button.dataset.action === "permissions") { state.permissionOpen = true; state.permissionDraft = structuredClone(currentSheet().permissions || {}); return render(); }
     if (button.dataset.action === "close-permissions") { state.permissionOpen = false; state.permissionDraft = null; return render(); }
     if (button.dataset.action === "save-permissions") { currentSheet().permissions = normalizePermissions(state.permissionDraft); state.permissionOpen = false; state.permissionDraft = null; saveSoon(); return render(); }
-    if (button.dataset.action === "save") return saveData();
     if (button.dataset.action === "add-sheet") {
       const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
       state.data.sheets.push(sheet); state.data.selectedId = sheet.id; render(); saveSoon(); return;
@@ -652,10 +706,10 @@
       state.data.selectedId = state.data.sheets[0].id; render(); saveSoon(); return;
     }
     if (button.dataset.add) {
-      currentSheet()[button.dataset.add].push({}); render(); saveSoon(); return;
+      currentSheet()[button.dataset.add].push({ id: makeId() }); render(); saveSoon(); return;
     }
     if (button.dataset.note) {
-      const noteKey = `${currentSheet().id}:${button.dataset.note}:${button.dataset.index}`;
+      const noteKey = `${currentSheet().id}:${button.dataset.note}:${button.dataset.itemId || button.dataset.index}`;
       state.openNotes.has(noteKey) ? state.openNotes.delete(noteKey) : state.openNotes.add(noteKey);
       render(); return;
     }
@@ -664,6 +718,18 @@
     }
     if (button.dataset.command) return writeChat(button.dataset.command);
     if (button.dataset.roll) return inputSkillRoll(button.dataset.roll);
+  }
+
+  function updateSkillsView() {
+    const root = document.getElementById(ROOT_ID);
+    const sheet = currentSheet();
+    root?.querySelectorAll(".ccf-cs-gap").forEach((gap, index) => gap.classList.toggle("is-active", !!sheet.removedGaps[index]));
+    root?.querySelectorAll("button[data-roll]").forEach((button) => {
+      button.parentElement?.classList.toggle("is-fear", sheet.fear === button.dataset.roll);
+      const target = getSkillTarget(sheet.skills, button.dataset.roll, sheet.removedGaps);
+      const value = button.querySelector("small");
+      if (value) value.textContent = target || "–";
+    });
   }
 
   function inputSkillRoll(id) {
@@ -785,14 +851,17 @@
       #${ROOT_ID} .ccf-cs-section-add,#${ROOT_ID} .ccf-cs-note-toggle,#${ROOT_ID} .ccf-cs-remove { min-height:32px;padding:0;border:0;border-radius:0;background:transparent }
       #${ROOT_ID} .ccf-cs-section-add { width:32px;font-size:20px }
       #${ROOT_ID} .ccf-cs-section-wide { overflow-x:auto }
-      #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px }
-      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:40px;padding:8px 2px;background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1) }
+      #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px;transition:color 200ms cubic-bezier(.4,0,.2,1) }
+      #${ROOT_ID} .ccf-cs-dialog main label:focus-within { color:#2196f3 }
+      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:40px;padding:8px 2px;color:#fff;font-size:16px;background-color:transparent;background-image:linear-gradient(#2196f3,#2196f3);background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} select { padding-right:32px }
       #${ROOT_ID} select option { color:#000 }
-      #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87) }
-      #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:#f50057 }
+      #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87);border-bottom-width:2px }
+      #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:transparent;border-bottom-width:2px;background-size:100% 2px }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
+      #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
+      #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1 }
       #${ROOT_ID} .ccf-cs-field-pair,#${ROOT_ID} .ccf-cs-skill-options { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-skill-options { margin-top:18px }
       #${ROOT_ID} .ccf-cs-skill input { appearance:none;width:13px;min-width:13px;height:13px;min-height:13px;margin:2px;background:#363636;border:0;border-radius:4px;cursor:pointer;transition:background-color 200ms ease }
@@ -812,9 +881,9 @@
       #${ROOT_ID} .ccf-cs-repeater-fields { display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px }
       #${ROOT_ID} .ccf-cs-repeater-fields input,#${ROOT_ID} .ccf-cs-repeater-fields textarea { height:72px;min-height:72px;resize:none }
       #${ROOT_ID} .ccf-cs-inline-memo { grid-column:2/3;min-height:40px;height:auto;overflow:hidden;resize:none;field-sizing:content }
-      #${ROOT_ID} .ccf-cs-notes { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px }
       #${ROOT_ID} footer { flex-wrap:wrap;border-top:1px solid #424242;border-bottom:0 }
       #${ROOT_ID} footer .ccf-cs-save { margin-left:auto;color:#f50057;font-weight:bold }
+      #${ROOT_ID} .ccf-cs-dialog>footer button { border:0;border-radius:0 }
       #${ROOT_ID} .ccf-cs-perm-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.55) }
       #${ROOT_ID} .ccf-cs-perm-dialog { position:absolute;inset:0;margin:auto;width:min(620px,calc(100vw - 32px));height:max-content;max-height:calc(100vh - 32px);display:flex;flex-direction:column;background:#212121;border:1px solid rgba(255,255,255,.18);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6);overflow:hidden }
       #${ROOT_ID} .ccf-cs-perm-dialog header { cursor:default }
@@ -831,7 +900,7 @@
         #${ROOT_ID} .ccf-cs-dialog { inset:0;width:100vw;height:100vh;border:0;border-radius:0;transform:none!important }
         #${ROOT_ID} header { cursor:default }
         #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
-        #${ROOT_ID} .ccf-cs-repeater-fields,#${ROOT_ID} .ccf-cs-notes { grid-template-columns:1fr }
+        #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
         #${ROOT_ID} #ccf-cs-status { display:none }
         #${ROOT_ID} .ccf-cs-perm-grid { grid-template-columns:minmax(0,1fr) repeat(3,52px);padding:8px }

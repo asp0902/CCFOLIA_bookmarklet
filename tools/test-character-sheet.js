@@ -29,6 +29,14 @@ assert.deepEqual(
 );
 assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
 assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(hook.nativeStatusPatch([
+    { label: "생명력", value: 4, max: 6 },
+    { label: "이성치", value: 3, max: 5 },
+    { label: "광기", value: 2, max: 6 }
+  ]))),
+  { life: 4, lifeMax: 6, sanity: 3, sanityMax: 5 }
+);
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);
 assert.match(source, /M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4/);
 assert.doesNotMatch(source, /M10 3\.3v3M10 7\.9h\.01/);
@@ -39,9 +47,15 @@ assert.match(source, /ccf-cs-skill input \{ appearance:none;width:13px/);
 assert.match(source, /ccf-cs-skills \{[^}]*min-width:740px/);
 assert.match(source, /ccf-cs-gap \{[^}]*width:6px/);
 assert.match(source, /select option \{ color:#000 \}/);
+assert.match(source, /main label:focus-within \{ color:#2196f3 \}/);
+assert.match(source, /background-position:center bottom;background-size:0 2px/);
+assert.match(source, /background-size:100% 2px/);
+assert.match(source, /function updateSkillsView\(\)/);
+assert.doesNotMatch(source, /data-action="save">저장/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
-assert.match(source, /section\("기본"[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"[\s\S]+section\("메모"/);
+assert.match(source, /section\("", basic, "ccf-cs-basic-section"\)[\s\S]+section\("특기"[\s\S]+section\("어빌리티"[\s\S]+section\("인물"/);
+assert.doesNotMatch(source, /section\("메모"/);
 assert.doesNotMatch(source, /ccf-cs-tabs|state\.tab/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
