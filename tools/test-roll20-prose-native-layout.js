@@ -38,5 +38,6 @@ assert.ok(css.includes('[data-ccf-prose-cont-leader="1"] { padding-bottom: 6px !
 assert.ok(css.includes('[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) { border-bottom: 0 !important; }'));
 assert.ok(!css.includes("data-ccf-prose-cont-msg"));
 assert.ok(!css.includes("data-ccf-prose-cont-speaker-start"));
+assert.ok(css.includes('.MuiListItem-root[data-ccf-prose-cont-leader="1"] + .MuiDivider-root, .MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) + .MuiDivider-root { display: none !important; }'));
 
 console.log("roll20 prose native-layout checks passed");
