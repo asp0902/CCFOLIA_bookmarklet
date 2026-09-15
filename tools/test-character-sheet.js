@@ -47,6 +47,9 @@ assert.deepEqual(
   { 진통제: 2, 무기: 0 }
 );
 const migrated = hook.normalizeData({ selectedId: "sheet-a", sheets: [{ id: "sheet-a", name: "A", permissions: { "*": { view: true } } }] });
+assert.deepEqual(JSON.parse(JSON.stringify(hook.normalizeItems({ 기타: 2 }))), { "보상 및 기타": 2 });
+assert.deepEqual(JSON.parse(JSON.stringify(hook.normalizeItems({ "보상 및 기타": 3, 기타: 2 }))), { "보상 및 기타": 3 });
+assert.match(source, /if \(!label && labelText === "보상 및 기타"\)/);
 assert.equal(migrated.permissions["*"].view, true);
 assert.equal("permissions" in migrated.sheets[0], false);
 assert.match(source, /button\.innerHTML = diceIcon\(\)/);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.13
+// @version      0.5.14
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.13";
+  const VERSION = "0.5.14";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -151,11 +151,16 @@
 
   function normalizeItems(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value).slice(0, 100).flatMap(([key, raw]) => {
+    const items = Object.fromEntries(Object.entries(value).slice(0, 100).flatMap(([key, raw]) => {
       const label = cleanText(key, 100).trim();
       if (!label || raw === "" || raw == null || !Number.isFinite(Number(raw))) return [];
       return [[label, nonNegativeNumber(raw)]];
     }));
+    if ("기타" in items) {
+      if (!("보상 및 기타" in items)) items["보상 및 기타"] = items.기타;
+      delete items.기타;
+    }
+    return items;
   }
 
   function normalizeTransferSheet(raw, idFactory = makeId) {
@@ -536,6 +541,10 @@
       .find((node) => node.textContent.trim() === "스테이터스")?.parentElement?.querySelector('button:has(svg[data-testid="AddIcon"])');
     for (const [labelText, value] of entries) {
       let label = labels().find((node) => node.value.trim() === labelText);
+      if (!label && labelText === "보상 및 기타") {
+        label = labels().find((node) => node.value.trim() === "기타");
+        if (label) setNativeInputValue(label, labelText);
+      }
       if (!label && add) {
         const known = new Set(labels().map((node) => node.name));
         add.click();
