@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.88
+// @version      0.1.89
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -48,7 +48,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.88",
+    version: "0.1.89",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -168,7 +168,6 @@
     open() { openPanel(); },
     close() { closePanel(); },
     locateAnchor() { return diagnoseAnchors(); },
-    forceFloating() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountFloatingIcon(); return true; },
     remount() { document.querySelectorAll(`[${ICON_MARKER}]`).forEach((el) => el.remove()); mountIcon(); return true; },
     showGreeting() { maybeShowGreeting(); },
     resetGreetingFlags() { return clearGreetingFlags(); },
@@ -4580,7 +4579,6 @@
   // 1) 상단 탑바의 "내 캐릭터 목록" 토글 버튼 옆 (가장 우선)
   // 2) 상단 탑바 우측 끝
   // 3) 사이드 패널 h6 (열려 있을 때만)
-  // 4) floating fallback
   const TOOLBAR_BUTTON_LABELS = [
     "내 캐릭터", "캐릭터 목록", "캐릭터",
     "My character", "My characters", "Character list", "Characters",
@@ -4653,6 +4651,7 @@
 
   function mountIcon() {
     if (!isActive()) return;
+    document.querySelectorAll(`[${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
     const existing = document.querySelector(`[${ICON_MARKER}]`);
     if (existing && existing.isConnected) return;
 
@@ -4681,9 +4680,7 @@
       console.info("[ccf-handout] mounted next to side panel h6");
       return;
     }
-    // 4순위: floating
-    mountFloatingIcon();
-    console.info("[ccf-handout] mounted as floating fallback (no anchor found)");
+    // Wait for the native toolbar; the mount observer retries after React renders it.
   }
 
   function buildToolbarIcon() {
@@ -4705,25 +4702,6 @@
     btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
     btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); togglePanel(); }, true);
     return btn;
-  }
-
-  function mountFloatingIcon() {
-    if (document.querySelector(`[${ICON_MARKER}="floating"]`)) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.setAttribute(ICON_MARKER, "floating");
-    btn.title = "핸드아웃";
-    btn.innerHTML = JOURNAL_ICON_HTML;
-    btn.style.cssText = `
-      all: unset; box-sizing: border-box; cursor: pointer; position: fixed;
-      top: 64px; right: 80px; z-index: 2147483647;
-      width: 44px; height: 44px; border-radius: 50%;
-      background: #b53030; color: #fff; display: grid; place-items: center;
-      border: 2px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,.42);
-    `;
-    btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); togglePanel(); }, true);
-    (document.body || document.documentElement).appendChild(btn);
-    registerTeardown(() => btn.remove());
   }
 
   // React 리렌더 대응 — body 변경 감시
