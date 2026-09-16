@@ -81,6 +81,8 @@ const key = 'ccf-theme-switcher-settings-v1';
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       assert.equal(await color('.MuiDialog-paper'), 'rgb(31, 31, 31)');
+      assert.equal(await color('.ccf-roll20-emotion-card', 'fontSize'), '15px');
+      assert.equal(await color('.ccf-roll20-emotion-card > small', 'fontSize'), '11px');
       assert(await page.locator('.ccf-roll20-emotion-card').evaluate(el => el.scrollWidth <= el.clientWidth));
       if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `insane-theme-${viewport.width}.png`) });
     }
