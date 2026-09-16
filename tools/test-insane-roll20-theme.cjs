@@ -91,6 +91,38 @@ const key = 'ccf-theme-switcher-settings-v1';
     }
     await page.evaluate(() => { document.querySelector('#emotion').firstChild.data = '일반 메시지'; document.querySelector('#emotion > span:not(.ccf-roll20-emotion-card)').remove(); });
     await page.waitForFunction(() => !document.querySelector('.ccf-roll20-emotion-card'));
+    const checkText = '2D6>=5 시간 (2D6>=5) ＞ 10[4,6] ＞ 10 ＞ 성공';
+    const setCheck = text => page.evaluate(text => {
+      let host = document.querySelector('#check');
+      if (!host) { host = document.createElement('p'); host.id = 'check'; host.className = 'MuiTypography-body2'; document.querySelector('#emotion').parentElement.appendChild(host); }
+      if (host.firstChild) host.firstChild.textContent = text;
+      else host.appendChild(document.createTextNode(text));
+    }, text);
+    await setCheck(checkText);
+    await page.waitForSelector('.ccf-roll20-check-card');
+    assert.equal(await page.locator('.ccf-roll20-check-skill').textContent(), '시간');
+    assert.equal(await page.locator('.ccf-roll20-die b').allTextContents().then(x => x.join(',')), '10,4,6');
+    assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 5');
+    assert.equal(await page.locator('.ccf-roll20-check-card > small').textContent(), '브릿지');
+    for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await page.locator('#check').evaluate(el => { el.style.maxWidth = '320px'; });
+      assert(await page.locator('.ccf-roll20-check-card').evaluate(el => el.scrollWidth <= el.clientWidth));
+      if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-check-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `insane-check-${viewport.width}.png`) });
+    }
+    for (const result of ['실패', '스페셜', '펌블']) {
+      await setCheck(`2D6+1>=7 긴 특기 이름 (2D6+1>=7) > 4[2,2]+1 > 5 > ${result}`);
+      await page.waitForFunction(result => document.querySelector('.ccf-roll20-check-result')?.textContent === result, result);
+      assert.equal(await page.locator('.ccf-roll20-check-card').count(), 1);
+      assert.equal(await page.locator('.ccf-roll20-die.is-total').textContent(), '5');
+    }
+    await select('none');
+    assert.equal(await page.locator('.ccf-roll20-check-card').count(), 0);
+    assert((await page.locator('#check').textContent()).includes('4[2,2]+1 > 5 > 펌블'));
+    await select('insane-roll20');
+    await page.waitForSelector('.ccf-roll20-check-card');
+    await setCheck('2D6>=5 시간 (2D6>=5) > 10[9,1] > 10 > 성공');
+    await page.waitForFunction(() => !document.querySelector('.ccf-roll20-check-card'));
     assert.deepEqual(errors, []);
     console.log('PASS: theme selection, persistence, toggle, restoration, native/custom styles and responsive viewports');
   } finally {

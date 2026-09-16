@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.24
+// @version      0.2.25
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.24"),
+    version: getUserscriptVersion("0.2.25"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1916,6 +1916,23 @@
         display: block; margin-bottom: 5px; color: #999 !important;
         font-size: 11px; line-height: 1.4; font-weight: normal;
       }
+      ${scope} .ccf-roll20-check-card { padding: 12px 16px; }
+      ${scope} .ccf-roll20-check-body {
+        display: grid; grid-template-columns: 72px minmax(0,1fr); align-items: center; gap: 8px;
+      }
+      ${scope} .ccf-roll20-check-dice { display: grid; justify-items: center; gap: 2px; }
+      ${scope} .ccf-roll20-die {
+        position: relative; display: inline-grid; place-items: center;
+        width: 22px; height: 24px; font-size: 12px; font-weight: normal; line-height: 1;
+      }
+      ${scope} .ccf-roll20-die.is-total { width: 58px; height: 64px; font-size: 28px; font-weight: bold; }
+      ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
+      ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
+      ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
+      ${scope} .ccf-roll20-check-skill { display: block; margin-bottom: 8px; font-size: 18px; }
+      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 0; color: white; background: linear-gradient(to right,transparent,#83c7d1); }
+      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,transparent,#ca8290); }
+      ${scope} .ccf-roll20-check-target { display: block; margin-top: 6px; font-size: 12px; font-weight: normal; }
     `;
   }
 
@@ -5048,7 +5065,8 @@
       const original = Array.from(host.childNodes).filter(node => node !== existing)
         .map(node => node.textContent || '').join('');
       const match = original.match(/^\s*(.*?)\s*감정표\s*[（(][1-6][)）]\s*[＞>→]\s*(.+?[（(]\s*플러스\s*[)）])\s*[／/]\s*(.+?[（(]\s*마이너스\s*[)）])\s*$/u);
-      if (!match) {
+      const check = parseInsaneRoll20Check(original);
+      if (!match && !check) {
         existing?.remove();
         host.removeAttribute('data-ccf-roll20-emotion');
         return;
@@ -5057,8 +5075,8 @@
       const speaker = heading ? Array.from(heading.childNodes)
         .filter(node => !(node instanceof Element && node.matches('.MuiTypography-caption')))
         .map(node => node.textContent || '').join('').trim() : '';
-      const name = match[1] && !/^FT$/i.test(match[1]) ? match[1] : speaker;
-      const result = `${match[2]} / ${match[3]}`.replace(/（/g, '(').replace(/）/g, ')').replace(/\s+\(/g, '(');
+      const name = match && match[1] && !/^FT$/i.test(match[1]) ? match[1] : speaker;
+      const result = match ? `${match[2]} / ${match[3]}`.replace(/（/g, '(').replace(/）/g, ')').replace(/\s+\(/g, '(') : '';
       const signature = JSON.stringify([original, name]);
       if (existing && host.getAttribute('data-ccf-roll20-emotion') === signature) return;
       existing?.remove();
@@ -5069,10 +5087,47 @@
         label.textContent = name;
         card.appendChild(label);
       }
-      card.appendChild(document.createTextNode(result));
+      if (check) appendInsaneRoll20Check(card, check);
+      else card.appendChild(document.createTextNode(result));
       host.setAttribute('data-ccf-roll20-emotion', signature);
       host.appendChild(card);
     });
+  }
+
+  function parseInsaneRoll20Check(text) {
+    const normalized = text.replace(/＞/g, '>').replace(/（/g, '(').replace(/）/g, ')')
+      .replace(/［/g, '[').replace(/］/g, ']');
+    const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)\s*$/i);
+    if (!match) return null;
+    return { skill: match[1].replace(/^2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim() || '판정',
+      target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6] };
+  }
+
+  function appendInsaneRoll20Check(card, check) {
+    card.classList.add('ccf-roll20-check-card');
+    card.dataset.result = /실패|펌블/.test(check.result) ? 'failure' : 'success';
+    const body = document.createElement('span');
+    body.className = 'ccf-roll20-check-body';
+    const dice = document.createElement('span');
+    dice.className = 'ccf-roll20-check-dice';
+    const makeDie = (value, total = false) => {
+      const die = document.createElement('span');
+      die.className = 'ccf-roll20-die' + (total ? ' is-total' : '');
+      die.innerHTML = '<svg viewBox="0 0 60 66" aria-hidden="true"><path d="M30 2 57 18 55 49 30 64 5 49 3 18Z M30 2 15 24 45 24 30 2 M3 18 15 24 5 49 30 44 55 49 45 24 57 18 M15 24 30 44 45 24 M5 49 30 64 30 44 55 49"/></svg>';
+      const number = document.createElement('b'); number.textContent = value; die.appendChild(number);
+      return die;
+    };
+    dice.appendChild(makeDie(check.total, true));
+    const faces = document.createElement('span');
+    check.dice.forEach(value => faces.appendChild(makeDie(value)));
+    dice.appendChild(faces);
+    const detail = document.createElement('span'); detail.className = 'ccf-roll20-check-detail';
+    for (const [key, value] of [['skill', check.skill], ['result', check.result], ['target', `목표치 ${check.target}`]]) {
+      const field = document.createElement('span'); field.className = `ccf-roll20-check-${key}`; field.textContent = value;
+      detail.appendChild(field);
+    }
+    body.append(dice, detail);
+    card.appendChild(body);
   }
 
   // React-safe 카드 부착: host(p.MuiTypography-*)의 원본 children 은 손대지 않고
