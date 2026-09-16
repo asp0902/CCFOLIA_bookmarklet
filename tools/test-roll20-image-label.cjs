@@ -17,6 +17,35 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
     const macro = '/desc [인트로 페이즈](https://imgur.com/95RxNez.gif)';
     const original = await render(macro);
     assert(original.includes('<img'), 'baseline is an image');
+    const background = `/desc [Intro](<#" style="background-image: url('https://i.imgur.com/95RxNez.gif'); background-color: #2A2A2A; background-repeat: no-repeat; background-position: center; background-size: contain; display: block; width: 100%; max-width: 400px; height: 238px; font-size: 0px; cursor: default;>)`;
+    const backgroundHtml = await render(background);
+    assert(!backgroundHtml.includes('height: 238px; font-size'), 'CSS declarations must not leak into chat text');
+    const backgroundStyle = await page.evaluate(html => {
+      const box = document.createElement('div');
+      box.innerHTML = html;
+      const frag = box.querySelector('.ccr20-frag');
+      return { text: box.textContent, image: frag.style.backgroundImage, height: frag.style.height, width: frag.style.maxWidth, size: frag.style.backgroundSize };
+    }, backgroundHtml);
+    assert.deepEqual(backgroundStyle, { text: 'Intro', image: 'url("https://i.imgur.com/95RxNez.gif")', height: '238px', width: '100%', size: 'contain' });
+    assert.equal(await render(background.replace(';>)', ';">)')), backgroundHtml, 'closed style attribute also parses');
+    const backgroundSent = await page.evaluate(value => {
+      const editor = document.createElement('textarea'); document.body.appendChild(editor);
+      editor.value = value;
+      const api = window.__CCF_ROLL20_BRIDGE_DEBUG__;
+      api.preparePayloadForSend(editor);
+      return api.extractEnvelope(editor.value).envelope;
+    }, background);
+    assert.equal(backgroundSent.text, 'Intro');
+    assert.equal(backgroundSent.formatRuns[0].style.extraCss.height, '238px');
+    assert(backgroundSent.formatRuns[0].style.backgroundImage.includes('95RxNez.gif'));
+    for (const css of ["background-image: linear-gradient(135deg, rgb(10, 20, 30), #fff); height: 20px;", "background-image: url('https://example.com/a)b.gif'); height: 20px;"]) {
+      const html = await render(`/desc [A](#" style="${css})[B](#" style="color: red;)`);
+      const result = await page.evaluate(html => {
+        const box = document.createElement('div'); box.innerHTML = html;
+        return { text: box.textContent, height: box.querySelector('.ccr20-frag').style.height };
+      }, html);
+      assert.deepEqual(result, { text: 'AB', height: '20px' });
+    }
     for (const suffix of [' @인트로', ' @인트로 페이즈', ' @intro  ']) {
       assert.equal(await render(macro + suffix), original, 'standing label must not affect rendered HTML');
     }
@@ -55,6 +84,6 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
       return { count: bytes[index + 13] + 256 * bytes[index + 14], sameSize: api.makeGifLoopForever(bytes).length === bytes.length, finiteReset: repeated[index + 13] === 0, rejectsInvalid };
     });
     assert.deepEqual(loopCheck, { count: 0, sameSize: true, finiteReset: true, rejectsInvalid: true });
-    console.log('PASS: image label rendering parity, multiline labels, preserved link content');
+    console.log('PASS: CSS background functions and dimensions, image labels, send parity, GIF looping');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

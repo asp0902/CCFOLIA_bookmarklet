@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.84
+// @version      0.3.85
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.84"),
+    version: getUserscriptVersion("0.3.85"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -3956,7 +3956,35 @@
       if (closeBracket < 0) return null;
 
       if (!isMarkdownEscaped(source, closeBracket) && source[closeBracket + 1] === "(") {
-        const closeParen = source.indexOf(")", closeBracket + 2);
+        const payloadStart = closeBracket + 2;
+        const marker = source.slice(payloadStart).match(/^\s*<?#"\s*style\s*=\s*["']?/i);
+        if (!marker) {
+          cursor = closeBracket + 1;
+          continue;
+        }
+        let closeParen = -1;
+        let depth = 1;
+        let quote = "";
+        // CSS functions have their own parentheses; only the outer one ends the link.
+        for (let index = payloadStart + marker[0].length; index < source.length; index += 1) {
+          const char = source[index];
+          if (isMarkdownEscaped(source, index)) continue;
+          if (quote) {
+            if (char === quote) quote = "";
+            continue;
+          }
+          if (depth === 1 && (char === "'" || char === '"') && /^\s*>?\)/.test(source.slice(index + 1))) continue;
+          if (char === ">" && source[index + 1] === ")" && marker[0].includes("<")) {
+            closeParen = index + 1;
+            break;
+          }
+          if (char === "'" || char === '"') quote = char;
+          else if (char === "(") depth += 1;
+          else if (char === ")" && --depth === 0) {
+            closeParen = index;
+            break;
+          }
+        }
         if (closeParen < 0) return null;
 
         const payload = source.slice(closeBracket + 2, closeParen);
@@ -5938,7 +5966,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.84",
+    version: "0.3.85",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
