@@ -12,7 +12,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
       ? route.fulfill({ contentType: 'image/gif', headers: { 'access-control-allow-origin': '*' }, body: gif })
       : route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><body></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
-    await page.addScriptTag({ content: source.replace('installDebugApi({ renderMacroHtml })', 'installDebugApi({ renderMacroHtml, preparePayloadForSend, extractEnvelope, createImageFragmentNode, makeGifLoopForever })') });
+    await page.addScriptTag({ content: source.replace('installDebugApi({ renderMacroHtml })', 'installDebugApi({ renderMacroHtml, preparePayloadForSend, extractEnvelope, createImageFragmentNode, makeGifLoopForever, renderStyledText })') });
     const render = text => page.evaluate(value => window.__CCF_ROLL20_BRIDGE_DEBUG__.renderMacroHtml(value), text);
     const macro = '/desc [인트로 페이즈](https://imgur.com/95RxNez.gif)';
     const original = await render(macro);
@@ -33,11 +33,39 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
       editor.value = value;
       const api = window.__CCF_ROLL20_BRIDGE_DEBUG__;
       api.preparePayloadForSend(editor);
+      const once = editor.value;
+      api.preparePayloadForSend(editor);
+      if (editor.value !== once) throw Error('background send must be idempotent');
       return api.extractEnvelope(editor.value).envelope;
-    }, background);
+    }, background + ' @intro');
     assert.equal(backgroundSent.text, 'Intro');
+    assert.equal(backgroundSent.standingSuffix, '@intro');
+    assert.equal(backgroundSent.formatRuns[0].style.fontSize, 0);
+    assert.equal(await render(background + ' @intro'), backgroundHtml);
     assert.equal(backgroundSent.formatRuns[0].style.extraCss.height, '238px');
     assert(backgroundSent.formatRuns[0].style.backgroundImage.includes('95RxNez.gif'));
+    const layout = await page.evaluate(envelope => {
+      const box = document.createElement('div'); box.id = 'background-test';
+      box.style.cssText = 'width:272px;font-size:14px;line-height:20px';
+      document.body.appendChild(box);
+      const run = envelope.formatRuns[0];
+      run.style.extraCss.height = '0px'; run.style.padding = '59.5% 0 0'; run.style.lineHeight = '0';
+      window.__CCF_ROLL20_BRIDGE_DEBUG__.renderStyledText(box, envelope.text + ' ', [run], envelope.alignRuns);
+      const frag = box.querySelector('.ccr20-frag');
+      return { font: getComputedStyle(frag).fontSize, height: box.getBoundingClientRect().height, imageHeight: frag.getBoundingClientRect().height, count: box.querySelectorAll('.ccr20-frag').length };
+    }, backgroundSent);
+    assert.equal(layout.font, '0px');
+    assert.equal(layout.count, 1, 'trailing whitespace after a block must not add a line');
+    assert(Math.abs(layout.height - 272 * .595) < 1);
+    assert.equal(layout.height, layout.imageHeight);
+    await page.waitForFunction(() => document.querySelector('#background-test .ccr20-frag').style.backgroundImage.includes('blob:'));
+    const backgroundLoop = await page.evaluate(async () => {
+      const url = document.querySelector('#background-test .ccr20-frag').style.backgroundImage.slice(5, -2);
+      const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+      const index = new TextDecoder('latin1').decode(bytes).indexOf('NETSCAPE2.0');
+      return index >= 0 && bytes[index + 13] === 0 && bytes[index + 14] === 0;
+    });
+    assert(backgroundLoop, 'CSS background GIF must loop infinitely too');
     for (const css of ["background-image: linear-gradient(135deg, rgb(10, 20, 30), #fff); height: 20px;", "background-image: url('https://example.com/a)b.gif'); height: 20px;"]) {
       const html = await render(`/desc [A](#" style="${css})[B](#" style="color: red;)`);
       const result = await page.evaluate(html => {

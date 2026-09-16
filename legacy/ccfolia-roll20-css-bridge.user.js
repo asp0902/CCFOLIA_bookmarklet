@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.85
+// @version      0.3.86
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.85"),
+    version: getUserscriptVersion("0.3.86"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -2476,7 +2476,7 @@
       envelopePayload.roll20Background = macroBackground;
       // Render the GIF from the payload; send the suffix separately for native cut-ins.
       const lastLine = normalizeEditorText(state.roll20Source).trimEnd().split("\n").pop() || "";
-      const suffix = lastLine.replace(ROLL20_DESC_RE, "").match(ROLL20_IMAGE_LINK_RE)?.[3]?.trim();
+      const suffix = parseRoll20StyledLine(lastLine.replace(ROLL20_DESC_RE, "")).standingSuffix;
       if (suffix) envelopePayload.standingSuffix = suffix;
     }
     const visibleOutgoingText = outgoingText + (envelopePayload.standingSuffix ? " " + envelopePayload.standingSuffix : "");
@@ -3937,12 +3937,15 @@
       };
     }
 
-    text += decodeHtmlEntities(rawLine.slice(cursor));
+    const tail = rawLine.slice(cursor);
+    const standingSuffix = tail.match(/^\s+(@[^\r\n]+)\s*$/)?.[1]?.trim();
+    if (!standingSuffix) text += decodeHtmlEntities(tail);
 
     return {
       text,
       runs,
-      segmentCount
+      segmentCount,
+      standingSuffix
     };
   }
 
@@ -4038,6 +4041,7 @@
 
     return {
       text: label,
+      standingSuffix: match[3]?.trim(),
       runs: [{
         start: 0,
         end: label.length,
@@ -4288,7 +4292,10 @@
       } else if (!lineRuns.length) {
         lineEl.textContent = line.text;
       } else {
-        buildFragments(line.text, lineRuns).forEach((frag) => {
+        const fragments = buildFragments(line.text, lineRuns);
+        if (fragments.length > 1 && !fragments[fragments.length - 1].text.trim() &&
+            fragments[fragments.length - 2].style?.display === "block") fragments.pop();
+        fragments.forEach((frag) => {
           lineEl.appendChild(createStyledFragmentNode(frag));
         });
       }
@@ -4501,7 +4508,15 @@
 
     if (style.color) el.style.color = style.color;
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
-    if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
+    if (style.backgroundImage) {
+      el.style.backgroundImage = style.backgroundImage;
+      const gif = style.backgroundImage.match(/^url\(["']?(.*?\.gif(?:[?#][^"']*)?)["']?\)$/i);
+      if (gif) getLoopingGifUrl(gif[1]).then(url => {
+        if (url && el.isConnected && ccr20Lifecycle.isActive() && el.style.backgroundImage === style.backgroundImage) {
+          el.style.backgroundImage = `url("${url}")`;
+        }
+      });
+    }
     if (style.fontSize != null) {
       el.style.fontSize = typeof style.fontSize === "number" ? `${style.fontSize}px` : String(style.fontSize);
     }
@@ -5415,6 +5430,7 @@
     if (value == null) return null;
     const numeric = Math.round(Number.parseFloat(String(value).trim()));
     if (!Number.isFinite(numeric)) return null;
+    if (numeric === 0) return 0;
     return clamp(numeric, FONT_SIZE_MIN, FONT_SIZE_MAX);
   }
 
@@ -5966,7 +5982,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.85",
+    version: "0.3.86",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
