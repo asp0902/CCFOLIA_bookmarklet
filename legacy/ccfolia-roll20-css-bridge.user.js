@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.78
+// @version      0.3.79
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.77"),
+    version: getUserscriptVersion("0.3.79"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5527,6 +5527,7 @@
   let tabSnapFrame = 0;
   let tabSnapTimer = 0;
   let forceBottomOnNextScan = false;
+  const bottomFinishers = new Map();
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -5685,12 +5686,13 @@
     for (const list of lists) {
       for (let el = list; el && el !== document.documentElement; el = el.parentElement) {
         const overflowY = getComputedStyle(el).overflowY || "";
-        if (/(?:auto|scroll|overlay)/i.test(overflowY) && el.scrollHeight > el.clientHeight + 8) {
+        if (/(?:auto|scroll|overlay)/i.test(overflowY)) {
           scrollers.add(el);
           break;
         }
       }
     }
+    bottomFinishers.forEach((state, el) => { if (!el.isConnected) state.dispose(); });
     scrollers.forEach(bindBottomFinisher);
     return [...scrollers];
   }
@@ -5709,7 +5711,13 @@
   }
 
   function bindBottomFinisher(scroller) {
-    if (!(scroller instanceof HTMLElement) || scroller.__ccr20BottomFinisher) return;
+    if (!(scroller instanceof HTMLElement)) return;
+    if (bottomFinishers.has(scroller)) {
+      bottomFinishers.get(scroller).refresh();
+      return;
+    }
+    const controller = new AbortController();
+    const listenerOptions = { passive: true, signal: controller.signal };
     scroller.__ccr20BottomFinisher = true;
     scroller.__ccr20Pinned = true;
     let lastUserIntentAt = 0;
@@ -5717,16 +5725,16 @@
     scroller.addEventListener("wheel", (event) => {
       markUserIntent();
       if (event.deltaY < 0) scroller.__ccr20Pinned = false;
-    }, { passive: true });
+    }, listenerOptions);
     scroller.addEventListener("touchmove", () => {
       markUserIntent();
       scroller.__ccr20Pinned = false;
-    }, { passive: true });
+    }, listenerOptions);
     scroller.addEventListener("pointerdown", (event) => {
       markUserIntent();
       // 스크롤바 영역(콘텐츠 폭 바깥) 드래그 시작 — 사용자 의도 스크롤
       if (event.offsetX > scroller.clientWidth) scroller.__ccr20Pinned = false;
-    }, { passive: true });
+    }, listenerOptions);
     scroller.addEventListener("scroll", () => {
       const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       if (gap <= 2) {
@@ -5738,13 +5746,37 @@
       if (scroller.__ccr20Pinned && Date.now() - lastUserIntentAt > 600) {
         snapScrollerToBottom(scroller);
       }
-    }, { passive: true });
-    const content = scroller.firstElementChild || scroller;
+    }, listenerOptions);
+    let content = null;
+    let loadFrame = 0;
     const resizeObserver = new ResizeObserver(() => {
       if (!active || !scroller.__ccr20Pinned) return;
       snapScrollerToBottom(scroller);
     });
-    resizeObserver.observe(content);
+    const refresh = () => {
+      const nextContent = scroller.firstElementChild || scroller;
+      if (nextContent === content) return;
+      resizeObserver.disconnect();
+      content = nextContent;
+      resizeObserver.observe(content);
+    };
+    // Virtual lists may keep a fixed spacer height while the image itself grows.
+    scroller.addEventListener('load', event => {
+      if (!(event.target instanceof HTMLImageElement) || loadFrame) return;
+      loadFrame = requestAnimationFrame(() => {
+        loadFrame = 0;
+        if (active && scroller.__ccr20Pinned) snapScrollerToBottom(scroller);
+      });
+    }, { capture: true, signal: controller.signal });
+    bottomFinishers.set(scroller, { refresh, dispose() {
+      controller.abort();
+      resizeObserver.disconnect();
+      if (loadFrame) cancelAnimationFrame(loadFrame);
+      delete scroller.__ccr20BottomFinisher;
+      delete scroller.__ccr20Pinned;
+      bottomFinishers.delete(scroller);
+    } });
+    refresh();
     // 새 스크롤러 발견(패널 첫 렌더/탭 전환) — 즉시 바닥으로
     snapScrollerToBottom(scroller);
   }
@@ -5799,6 +5831,7 @@
 
   function teardown() {
     active = false;
+    bottomFinishers.forEach(state => state.dispose());
     try { observer?.disconnect(); } catch (_) {}
     document.removeEventListener("click", handlePotentialChatTabActivation, true);
     document.removeEventListener("keydown", handlePotentialChatTabKeydown, true);
@@ -5826,7 +5859,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.77",
+    version: "0.3.79",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
