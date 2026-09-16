@@ -83,7 +83,7 @@ const key = 'ccf-theme-switcher-settings-v1';
       assert.equal(await color('.MuiDialog-paper'), 'rgb(31, 31, 31)');
       assert.equal(await color('.ccf-roll20-emotion-card', 'fontSize'), '15px');
       assert.equal(await color('.ccf-roll20-emotion-card > small', 'fontSize'), '11px');
-      assert.equal(await color('.ccf-roll20-emotion-card > small', 'marginBottom'), '7px');
+      assert.equal(await color('.ccf-roll20-emotion-card > small', 'marginBottom'), '5px');
       assert.equal(await color('.ccf-roll20-emotion-card', 'paddingTop'), '21px');
       assert.equal(await color('.ccf-roll20-emotion-card', 'paddingBottom'), '21px');
       assert(await page.locator('.ccf-roll20-emotion-card').evaluate(el => el.scrollWidth <= el.clientWidth));
