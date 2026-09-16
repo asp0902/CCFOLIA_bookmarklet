@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "카피바라 3세 (개인용)",
+  "version": "1.0.0",
+  "minimum_chrome_version": "111",
+  "description": "기존 카피바라 북마클릿을 코코포리아에서 자동 실행합니다. 개인용 로컬 설치 전용입니다.",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://ccfolia.com/*"],
+  "icons": { "128": "icon.png" },
+  "action": {
+    "default_title": "카피바라 3세 열기 (코코포리아에서 사용)",
+    "default_icon": "icon.png"
+  },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://ccfolia.com/*"],
+    "js": ["bootstrap.js"],
+    "run_at": "document_idle",
+    "world": "MAIN",
+    "all_frames": false
+  }]
+}
