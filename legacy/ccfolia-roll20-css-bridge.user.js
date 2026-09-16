@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.77
+// @version      0.3.78
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4913,7 +4913,9 @@
     if (!body) return false;
     return /^S?(?:choice|CHOICE)\s*\[/.test(body)
       || /^S?\d*[dD]\d+\b/.test(body)
-      || /^S?CCB?\s*<=/i.test(body);
+      || /^S?CCB?\s*<=/i.test(body)
+      || /^S?(?:ST|FT|BET|RTT[1-6]?|TVT|TET|TPT|TST|TKT|TMT)\b/i.test(body)
+      || /^SC\([1-6]\)/i.test(body);
   }
 
   function normalizeRoll20NarratorName(value) {

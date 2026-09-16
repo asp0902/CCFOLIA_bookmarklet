@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.3
+// @version      0.0.4
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -506,7 +506,9 @@
     if (!body) return false;
     return /^S?(?:choice|CHOICE)\s*\[/.test(body)
       || /^S?\d*[dD]\d+\b/.test(body)
-      || /^S?CCB?\s*<=/i.test(body);
+      || /^S?CCB?\s*<=/i.test(body)
+      || /^S?(?:ST|FT|BET|RTT[1-6]?|TVT|TET|TPT|TST|TKT|TMT)\b/i.test(body)
+      || /^SC\([1-6]\)/i.test(body);
   }
 
   function preparePresenceForSend(editor) {
