@@ -34,10 +34,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
       api.preparePayloadForSend(editor);
       return { once, twice: editor.value, envelope: api.extractEnvelope(editor.value).envelope };
     }, macro + ' @인트로');
-    assert(!sent.once.includes('@인트로'), 'native cut-in trigger must not be transmitted');
+    assert(sent.once.endsWith(' @인트로'), 'native cut-in trigger is transmitted alongside the inline GIF');
     assert.equal(sent.once, sent.twice, 'Enter and click handlers preserve the image payload');
     assert.equal(sent.envelope.text, '인트로 페이즈', 'rendered content excludes the trigger');
-    assert.equal(sent.envelope.standingSuffix, undefined);
+    assert.equal(sent.envelope.standingSuffix, '@인트로');
     assert(sent.envelope.formatRuns.some(run => run.style.imageUrl === 'https://imgur.com/95RxNez.gif'), 'inline GIF URL is preserved');
     console.log('PASS: image label rendering parity, multiline labels, preserved link content');
   } finally { await browser.close(); }
