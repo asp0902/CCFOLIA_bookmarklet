@@ -34,6 +34,10 @@ assert.deepEqual(
 );
 assert.equal(hook.isCharacterEditTitle("캐릭터 편집"), true);
 assert.equal(hook.isCharacterEditTitle("BGM 편집"), false);
+const linkedSheets = [{ id: "a", player: "플레이어 A" }, { id: "b", player: "플레이어 B" }];
+assert.equal(hook.findLinkedSheet(linkedSheets, " 플레이어 A ")?.id, "a");
+assert.equal(hook.findLinkedSheet(linkedSheets, "플레이어 C"), null);
+assert.equal(hook.findLinkedSheet(linkedSheets, ""), null);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.nativeStatusPatch([
     { label: "생명력", value: 4, max: 6 },
@@ -90,7 +94,7 @@ assert.match(source, /ccf-cs-skill\.is-fear button \{ color:#f50057;font-weight:
 assert.match(source, /ccf-cs-table-select \{[^}]*font-size:14px/);
 assert.match(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
-assert.match(source, /function openSheetFromCharacterDialog\(dialog\) \{\s*state\.nativeCharacterDialog = dialog;\s*state\.view = "list";\s*openSheet\(\);/);
+assert.match(source, /function openSheetFromCharacterDialog\(dialog\) \{[\s\S]+findLinkedSheet\(state\.data\.sheets, dialog\.querySelector\('input\[name="name"\]'\)\?\.value\)[\s\S]+selectSheet\(linkedSheet\.id\)[\s\S]+state\.view = "list";/);
 assert.match(source, /function selectSheet\(sheetId\) \{[\s\S]+state\.nativeCharacterDialog\?\.isConnected[\s\S]+syncSheetFromNativeDialog\(state\.nativeCharacterDialog\)[\s\S]+state\.view = "sheet";/);
 assert.match(source, /dataset\.action === "open-sheet"\) return selectSheet\(button\.dataset\.sheetId\)/);
 assert.match(source, /state\.data\.sheets\.push\(sheet\); selectSheet\(sheet\.id\)/);

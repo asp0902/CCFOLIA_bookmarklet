@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.15
+// @version      0.5.16
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.15";
+  const VERSION = "0.5.16";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -93,6 +93,11 @@
   function isCharacterEditTitle(value) {
     const text = normalizedText(value);
     return ["캐릭터 편집", "キャラクター編集", "edit character", "character edit", "编辑角色"].some((label) => text.includes(label));
+  }
+
+  function findLinkedSheet(sheets = [], playerName = "") {
+    const key = normalizedText(playerName);
+    return key ? sheets.find((sheet) => normalizedText(sheet?.player) === key) || null : null;
   }
 
   function nativeStatusPatch(rows = []) {
@@ -236,7 +241,7 @@
 
   const testHook = window.__CCF_CHARACTER_SHEET_TEST_HOOK__;
   if (testHook && typeof testHook === "object") {
-    Object.assign(testHook, { CATEGORIES, TABLE_COMMANDS, SKILL_TABLE_COMMANDS, findSkillId, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
+    Object.assign(testHook, { CATEGORIES, TABLE_COMMANDS, SKILL_TABLE_COMMANDS, findSkillId, findLinkedSheet, isInsaneDicebot, getSkillTarget, getCuriosityGaps, clampDialogDrag, isCharacterEditTitle, nativeStatusPatch, normalizeItems, normalizePermissions, normalizeData, parseTransferPayload });
     return;
   }
 
@@ -461,6 +466,11 @@
 
   function openSheetFromCharacterDialog(dialog) {
     state.nativeCharacterDialog = dialog;
+    const linkedSheet = findLinkedSheet(state.data.sheets, dialog.querySelector('input[name="name"]')?.value);
+    if (linkedSheet) {
+      selectSheet(linkedSheet.id);
+      return openSheet();
+    }
     state.view = "list";
     openSheet();
   }
