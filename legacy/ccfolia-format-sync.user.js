@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.56
+// @version      0.1.57
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.56"),
+    version: getUserscriptVersion("0.1.57"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -848,14 +848,23 @@
         text-align: center !important;
       }
 
-      /* 나레이션 상하여백 — 시작(비연속) 메시지에만 위 8px.
-         연속(data-ccf-prose-cont) 나레이션은 prose-cont의 margin:0 규칙이 적용되어
-         일반 같은 화자 연속발화와 동일한 간격(6px)을 유지한다. */
+      /* Group edges are symmetric; continuation rows retain the 6px message gap. */
+      .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
+        padding-top: 16px !important;
+        padding-bottom: 16px !important;
+      }
+      .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
+        padding-top: 0 !important;
+      }
+      .MuiListItem-root[data-ccf-prose-cont-leader="1"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]),
+      .MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
+        padding-bottom: 6px !important;
+      }
       .MuiListItem-root:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
       li:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
       [role="listitem"]:not([data-ccf-prose-cont="1"]):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root,
       [data-index]:not([data-ccf-prose-cont="1"]):not(:has([data-ccf-prose-cont="1"])):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) .MuiListItemText-root {
-        margin: 8px auto 0 !important;
+        margin: 0 auto !important;
       }
 
       /* 본문 텍스트 자체 — 가운데 + 이탤릭 */
@@ -877,7 +886,7 @@
         text-align: center !important;
       }
       [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root):not([data-ccf-prose-cont="1"]) .MuiListItemText-root {
-        margin: 8px auto 0 !important;
+        margin: 0 auto !important;
       }
 
       /* 미리보기 패널 등 */
