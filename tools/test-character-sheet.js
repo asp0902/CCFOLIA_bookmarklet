@@ -22,7 +22,7 @@ assert.equal(hook.getSkillTarget([], "1:0", []), null);
 assert.equal(hook.findSkillId("꿈"), "5:8");
 assert.equal(hook.findSkillId("0:0"), "0:0");
 assert.equal(hook.findSkillId("없는 특기"), "");
-assert.deepEqual(Array.from(hook.TABLE_COMMANDS, (item) => Array.from(item)), [["장면표", "ST"], ["관계표", "FT"], ["엔딩표", "BET"]]);
+assert.deepEqual(Array.from(hook.TABLE_COMMANDS, (item) => Array.from(item)), [["장면표", "ST"], ["감정표", "FT"], ["엔딩표", "BET"]]);
 assert.deepEqual(Array.from(hook.SKILL_TABLE_COMMANDS, (item) => Array.from(item)), [["랜덤", "RTT"], ["폭력", "TVT"], ["정서", "TET"], ["지각", "TPT"], ["기술", "TST"], ["지식", "TKT"], ["괴이", "TMT"]]);
 assert.deepEqual(Array.from(hook.getCuriosityGaps("")), [false, false, false, false, false]);
 assert.deepEqual(Array.from(hook.getCuriosityGaps(0)), [true, false, false, false, false]);

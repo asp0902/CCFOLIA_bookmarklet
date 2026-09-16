@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.14
+// @version      0.5.15
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.14";
+  const VERSION = "0.5.15";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -34,7 +34,7 @@
     ["괴이", "시간", "혼돈", "심해", "죽음", "영혼", "마술", "암흑", "종말", "꿈", "지저", "우주"]
   ]);
   const TABLE_COMMANDS = Object.freeze([
-    ["장면표", "ST"], ["관계표", "FT"], ["엔딩표", "BET"]
+    ["장면표", "ST"], ["감정표", "FT"], ["엔딩표", "BET"]
   ]);
   const SKILL_TABLE_COMMANDS = Object.freeze([
     ["랜덤", "RTT"], ["폭력", "TVT"], ["정서", "TET"], ["지각", "TPT"],

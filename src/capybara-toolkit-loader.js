@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.29";
-  const BUILD_ID = "2026-09-15-saikoro-item-label-202";
+  const VERSION = "0.3.30";
+  const BUILD_ID = "2026-09-16-saikoro-emotion-table-203";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
