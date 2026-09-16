@@ -28,7 +28,12 @@ const key = 'ccf-theme-switcher-settings-v1';
       <div id="ccf-character-sheet-root"><section class="ccf-cs-dialog is-editor">
       <header>inSANe</header><main><div class="ccf-cs-section-head"><h3>Skills</h3></div>
       <div class="ccf-cs-skill is-selected is-fear"><input type="checkbox" checked><button>Fear</button></div>
-      </main></section></div><div id="unrelated">Unrelated content</div></body></html>` }));
+      </main></section></div><div id="unrelated">Unrelated content</div>
+      <div class="MuiListItem-root"><div class="MuiListItemText-root">
+      <h6 class="MuiListItemText-primary">브릿지<span class="MuiTypography-caption"> - 오늘 14:44</span></h6>
+      <p id="emotion" class="MuiTypography-body2">FT<span> 감정표(4) ＞ 충성（플러스）／모멸（마이너스）</span></p>
+      <p id="ordinary" class="MuiTypography-body2">일반 메시지</p>
+      </div></div></body></html>` }));
     const load = async () => {
       await page.goto('https://ccfolia.com/rooms/theme-test');
       await page.addScriptTag({ content: source });
@@ -39,11 +44,14 @@ const key = 'ccf-theme-switcher-settings-v1';
     const select = id => page.locator('#ccf-theme-switcher-sheet-theme-select-panel').selectOption(id, { force: true });
     await load();
     assert.equal(await selected(), null);
-    assert.equal(await page.locator('option[value="insane-roll20"]').textContent(), '인세인(Roll20)');
+    assert.equal(await page.locator('option[value="insane-roll20"]').textContent(), 'Roll20');
     const before = await color('.MuiDialog-paper');
     const unrelated = await color('#unrelated', 'color');
     await select('insane-roll20');
     assert.equal(await selected(), 'insane-roll20');
+    assert.equal(await page.locator('#emotion .ccf-roll20-emotion-card').textContent(), '브릿지충성(플러스) / 모멸(마이너스)');
+    assert.equal(await page.locator('#ordinary .ccf-roll20-emotion-card').count(), 0);
+    assert.equal(await color('.ccf-roll20-emotion-card'), 'rgb(255, 255, 255)');
     assert.equal(await color('.MuiDialog-paper'), 'rgb(31, 31, 31)');
     assert.equal(await color('.ccf-cs-dialog'), 'rgb(31, 31, 31)');
     assert.equal(await color('.ccf-cs-dialog > header'), 'rgb(33, 33, 40)');
@@ -54,6 +62,8 @@ const key = 'ccf-theme-switcher-settings-v1';
     assert.equal(await selected(), 'insane-roll20', 'selection survives reload');
     await page.locator('#ccf-theme-switcher-unsung-duet-toggle').dispatchEvent('click');
     assert.equal(await selected(), null, 'master switch disables theme');
+    assert.equal(await page.locator('.ccf-roll20-emotion-card').count(), 0);
+    assert.equal(await page.locator('#emotion').textContent(), 'FT 감정표(4) ＞ 충성（플러스）／모멸（마이너스）');
     assert.equal(await color('.MuiDialog-paper'), before);
     await page.locator('#ccf-theme-switcher-unsung-duet-toggle').dispatchEvent('click');
     assert.equal(await selected(), 'insane-roll20');
@@ -63,11 +73,19 @@ const key = 'ccf-theme-switcher-settings-v1';
     }
     assert.equal(await color('.MuiDialog-paper'), before, 'default restores native appearance');
     await select('insane-roll20');
+    await page.evaluate(() => {
+      document.querySelector('#emotion > span:not(.ccf-roll20-emotion-card)').firstChild.data = ' 감정표(1) > 공감(플러스) / 불신(마이너스)';
+    });
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-emotion-card')?.textContent.includes('공감'));
+    assert.equal(await page.locator('.ccf-roll20-emotion-card').count(), 1, 'message edits update without duplicate cards');
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       assert.equal(await color('.MuiDialog-paper'), 'rgb(31, 31, 31)');
+      assert(await page.locator('.ccf-roll20-emotion-card').evaluate(el => el.scrollWidth <= el.clientWidth));
       if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `insane-theme-${viewport.width}.png`) });
     }
+    await page.evaluate(() => { document.querySelector('#emotion').firstChild.data = '일반 메시지'; document.querySelector('#emotion > span:not(.ccf-roll20-emotion-card)').remove(); });
+    await page.waitForFunction(() => !document.querySelector('.ccf-roll20-emotion-card'));
     assert.deepEqual(errors, []);
     console.log('PASS: theme selection, persistence, toggle, restoration, native/custom styles and responsive viewports');
   } finally {

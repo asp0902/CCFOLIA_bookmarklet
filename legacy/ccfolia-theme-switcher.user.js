@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.20
+// @version      0.2.21
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,7 +52,7 @@
     }),
     Object.freeze({
       id: "insane-roll20",
-      name: "인세인(Roll20)",
+      name: "Roll20",
       description: "Roll20 인세인 다크 시트 색상 / 팝업·사이코로픽션 시트 디자인"
     })
   ]);
@@ -220,13 +220,14 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.20"),
+    version: getUserscriptVersion("0.2.21"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
   const ccfThemeLifecycle = createLegacyLifecycle(CCF_THEME_SWITCHER_SCRIPT_INFO, {
     debugKey: "__CCF_THEME_SWITCHER_DEBUG__",
     onTeardown() {
+      revertRoll20EmotionCards();
       if (toggleLayoutFrame) {
         try { window.cancelAnimationFrame(toggleLayoutFrame); } catch (error) { /* raf cleanup failed */ }
         toggleLayoutFrame = 0;
@@ -1888,6 +1889,33 @@
         background: rgba(156, 74, 76, .3) !important;
       }
       ${sheet} select option { background: #212128; color: #f3f3f3; }
+      ${scope} [data-ccf-roll20-emotion] {
+        font-size: 0 !important; line-height: 0 !important;
+      }
+      ${scope} [data-ccf-roll20-emotion] > :not(.ccf-roll20-emotion-card) { display: none !important; }
+      ${scope} .ccf-roll20-emotion-card {
+        position: relative; display: block !important; box-sizing: border-box;
+        width: 100%; margin: 6px 0; padding: 22px 16px;
+        border: 1px solid #aaa; border-radius: 0; background: #fff !important;
+        color: #333 !important; font-size: 20px !important; line-height: 1.4 !important;
+        font-weight: bold; font-style: normal; text-align: center;
+        white-space: normal; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: 0;
+      }
+      ${scope} .ccf-roll20-emotion-card::before,
+      ${scope} .ccf-roll20-emotion-card::after {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background: linear-gradient(#333,#333) left top / 26px 4px no-repeat,
+          linear-gradient(#333,#333) right top / 26px 4px no-repeat,
+          linear-gradient(#333,#333) left bottom / 26px 4px no-repeat,
+          linear-gradient(#333,#333) right bottom / 26px 4px no-repeat;
+      }
+      ${scope} .ccf-roll20-emotion-card::after {
+        background-size: 4px 26px;
+      }
+      ${scope} .ccf-roll20-emotion-card > small {
+        display: block; margin-bottom: 8px; color: #999 !important;
+        font-size: 14px; line-height: 1.4; font-weight: normal;
+      }
     `;
   }
 
@@ -2407,6 +2435,7 @@
     try { bindUnsungDuetTriggerFields(); } catch (e) { try { console.warn("[CCF Theme] bindUnsungDuetTriggerFields failed", e); } catch (_) {} }
     try { injectUnsungDuetMessageImages(); } catch (e) { try { console.warn("[CCF Theme] injectUnsungDuetMessageImages failed", e); } catch (_) {} }
     try { injectCreeGrrrDiceFormatting(); } catch (e) { try { console.warn("[CCF Theme] injectCreeGrrrDiceFormatting failed", e); } catch (_) {} }
+    injectRoll20EmotionCards();
     try { installYouTubePauseInterceptor(); } catch (e) { try { console.warn("[CCF Theme] installYouTubePauseInterceptor failed", e); } catch (_) {} }
     if (!document.getElementById(PANEL_ID)) {
       const panel = document.createElement("aside");
@@ -4033,6 +4062,7 @@
 
     bodyObserver.observe(document.body, {
       childList: true,
+      characterData: true,
       subtree: true
     });
     ccfThemeRegisterTeardown(() => { bodyObserver?.disconnect(); bodyObserver = null; });
@@ -4975,6 +5005,7 @@
   // 토글 OFF 시 — 이미 채팅에 인젝트된 <img>와 마킹된 li 속성을 청소해
   // CCFOLIA 원본 메시지가 다시 텍스트 그대로 보이도록 복원.
   function revertUnsungDuetDomState() {
+    revertRoll20EmotionCards();
     document.querySelectorAll(`.${UNSUNG_DUET_IMG_CLASS}`).forEach((img) => {
       const url = img.getAttribute("src") || "";
       const alt = UNSUNG_DUET_URL_TO_ALT[url] || "";
@@ -4998,7 +5029,50 @@
       bindUnsungDuetTriggerFields();
       injectUnsungDuetMessageImages();
       injectCreeGrrrDiceFormatting();
+      injectRoll20EmotionCards();
     } catch (error) { /* 인젝션 실패는 무시 — 다음 mutation 에서 재시도 */ }
+  }
+
+  function revertRoll20EmotionCards() {
+    document.querySelectorAll('[data-ccf-roll20-emotion]').forEach(host => {
+      host.querySelectorAll(':scope > .ccf-roll20-emotion-card').forEach(card => card.remove());
+      host.removeAttribute('data-ccf-roll20-emotion');
+    });
+  }
+
+  function injectRoll20EmotionCards() {
+    if (!isSheetThemeEnabled() || getSelectedSheetThemeId() !== 'insane-roll20') return;
+    document.querySelectorAll('.MuiListItemText-root > p.MuiTypography-body2').forEach(host => {
+      if (!host.closest('.MuiListItem-root')) return;
+      const existing = host.querySelector(':scope > .ccf-roll20-emotion-card');
+      const original = Array.from(host.childNodes).filter(node => node !== existing)
+        .map(node => node.textContent || '').join('');
+      const match = original.match(/^\s*(.*?)\s*감정표\s*[（(][1-6][)）]\s*[＞>→]\s*(.+?[（(]\s*플러스\s*[)）])\s*[／/]\s*(.+?[（(]\s*마이너스\s*[)）])\s*$/u);
+      if (!match) {
+        existing?.remove();
+        host.removeAttribute('data-ccf-roll20-emotion');
+        return;
+      }
+      const heading = host.parentElement.querySelector('.MuiListItemText-primary');
+      const speaker = heading ? Array.from(heading.childNodes)
+        .filter(node => !(node instanceof Element && node.matches('.MuiTypography-caption')))
+        .map(node => node.textContent || '').join('').trim() : '';
+      const name = match[1] && !/^FT$/i.test(match[1]) ? match[1] : speaker;
+      const result = `${match[2]} / ${match[3]}`.replace(/（/g, '(').replace(/）/g, ')').replace(/\s+\(/g, '(');
+      const signature = JSON.stringify([original, name]);
+      if (existing && host.getAttribute('data-ccf-roll20-emotion') === signature) return;
+      existing?.remove();
+      const card = document.createElement('span');
+      card.className = 'ccf-roll20-emotion-card';
+      if (name) {
+        const label = document.createElement('small');
+        label.textContent = name;
+        card.appendChild(label);
+      }
+      card.appendChild(document.createTextNode(result));
+      host.setAttribute('data-ccf-roll20-emotion', signature);
+      host.appendChild(card);
+    });
   }
 
   // React-safe 카드 부착: host(p.MuiTypography-*)의 원본 children 은 손대지 않고
