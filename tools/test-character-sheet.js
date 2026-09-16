@@ -76,7 +76,10 @@ assert.match(source, /const scrollTop = root\.querySelector\("\.ccf-cs-dialog>ma
 assert.match(source, /dialog\.querySelector\("main"\)\.scrollTop = scrollTop/);
 assert.doesNotMatch(source, /data-action="save">저장/);
 assert.doesNotMatch(source, /직업표|랜덤 특기|>공포표</);
-assert.match(source, /data-action="fear-roll" title="공포판정 입력">공포판정/);
+assert.match(source, /data-action="fear-roll">공포판정/);
+const footerMarkup = source.match(/<footer>\$\{TABLE_COMMANDS[\s\S]*?<\/footer>/)?.[0] || "";
+assert.ok(footerMarkup);
+assert.doesNotMatch(footerMarkup, /title=/);
 assert.match(source, /data-command-select aria-label="특기표"/);
 assert.match(source, /data-command="2D6>=\? \[회피\]"/);
 assert.match(source, /data-plot-select aria-label="플롯"/);
