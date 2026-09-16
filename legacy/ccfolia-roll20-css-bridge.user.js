@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.83
+// @version      0.3.84
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.83"),
+    version: getUserscriptVersion("0.3.84"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4356,7 +4356,76 @@
     img.decoding = "async";
     applyInlineStyle(img, frag.style);
     wrapper.appendChild(img);
+    if (/\.gif(?:[?#]|$)/i.test(imageUrl)) {
+      getLoopingGifUrl(imageUrl).then(url => {
+        if (url && img.isConnected && ccr20Lifecycle.isActive()) img.src = url;
+      });
+    }
     return wrapper;
+  }
+
+  function makeGifLoopForever(buffer) {
+    const bytes = new Uint8Array(buffer).slice();
+    const signature = String.fromCharCode(...bytes.subarray(0, 6));
+    if (!/^GIF8[79]a$/.test(signature) || bytes.length < 14) throw new Error("Invalid GIF");
+    const start = 13 + ((bytes[10] & 128) ? 3 * (2 ** ((bytes[10] & 7) + 1)) : 0);
+    let offset = start;
+    const skipBlocks = () => {
+      while (offset < bytes.length) {
+        const size = bytes[offset++];
+        if (!size) return;
+        offset += size;
+      }
+      throw new Error("Truncated GIF");
+    };
+    while (offset < bytes.length) {
+      const block = bytes[offset++];
+      if (block === 0x3b) break;
+      if (block === 0x21) {
+        const label = bytes[offset++];
+        if (label === 0xff && bytes[offset] === 11) {
+          const app = String.fromCharCode(...bytes.subarray(offset + 1, offset + 12));
+          if (/^(NETSCAPE2\.0|ANIMEXTS1\.0)$/.test(app) && bytes[offset + 12] === 3 && bytes[offset + 13] === 1 && offset + 16 < bytes.length) {
+            bytes[offset + 14] = bytes[offset + 15] = 0;
+            return bytes;
+          }
+        }
+        skipBlocks();
+      } else if (block === 0x2c) {
+        const packed = bytes[offset + 8];
+        offset += 9 + ((packed & 128) ? 3 * (2 ** ((packed & 7) + 1)) : 0);
+        offset++; // LZW minimum code size.
+        skipBlocks();
+      } else throw new Error("Invalid GIF block");
+    }
+    if (offset > bytes.length || bytes[offset - 1] !== 0x3b) throw new Error("Truncated GIF");
+    const loop = new Uint8Array([0x21,0xff,11,...Array.from("NETSCAPE2.0", c => c.charCodeAt(0)),3,1,0,0,0]);
+    const result = new Uint8Array(bytes.length + loop.length);
+    result.set(bytes.subarray(0, start));
+    result.set(loop, start);
+    result.set(bytes.subarray(start), start + loop.length);
+    result[4] = 0x39; // Application extensions require GIF89a.
+    return result;
+  }
+
+  var loopingGifUrls;
+  function getLoopingGifUrl(imageUrl) {
+    if (!loopingGifUrls) {
+      loopingGifUrls = new Map();
+      ccr20RegisterTeardown(() => {
+        loopingGifUrls.forEach(promise => promise.then(url => { if (url) URL.revokeObjectURL(url); }));
+        loopingGifUrls.clear();
+      });
+    }
+    if (!loopingGifUrls.has(imageUrl)) {
+      const url = new URL(imageUrl, location.href);
+      if (url.hostname === "imgur.com" || url.hostname === "www.imgur.com") url.hostname = "i.imgur.com";
+      loopingGifUrls.set(imageUrl, fetch(url.href, { credentials: "omit", signal: ccr20Lifecycle.signal })
+        .then(response => { if (!response.ok) throw new Error("GIF fetch failed"); return response.arrayBuffer(); })
+        .then(buffer => URL.createObjectURL(new Blob([makeGifLoopForever(buffer)], { type: "image/gif" })))
+        .catch(() => null)); // CORS-blocked hosts retain their original image.
+    }
+    return loopingGifUrls.get(imageUrl);
   }
 
   function createLinkFragmentNode(frag) {
@@ -5869,7 +5938,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.83",
+    version: "0.3.84",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
