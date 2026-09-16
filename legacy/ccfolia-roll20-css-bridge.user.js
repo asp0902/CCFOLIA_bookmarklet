@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.80
+// @version      0.3.81
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.80"),
+    version: getUserscriptVersion("0.3.81"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -114,7 +114,7 @@
     "extraCss"
   ]);
 
-  const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)(?:\s+@[^\r\n]+)?\s*$/i;
+  const ROLL20_IMAGE_LINK_RE = /^\s*\[([^\]]*)\]\(([^)\s]+)\)(?:\s+(@[^\r\n]+))?\s*$/i;
   const ROLL20_DESC_RE = /^\s*\/desc\b\s*/i;
   const ROLL20_NEWLINE_TOKEN_RE = /^\s*%NEWLINE%\s*$/i;
   const ROLL20_MACRO_BASE_STYLE = Object.freeze({
@@ -2375,6 +2375,11 @@
     // 빈 runs로 덮여 유실된다. runs가 비어있는 외부 envelope(평문 나레이션 등)는 기존대로
     // 이 스크립트가 나레이션 blockStyle을 채워 재인코딩한다.
     const foreign = extractEnvelope(currentValue);
+    if (foreign?.envelope?.source === CCR20_ENVELOPE_SOURCE &&
+        foreign.envelope.roll20Macro && typeof foreign.envelope.standingSuffix === "string" &&
+        rawText === foreign.envelope.text + " " + foreign.envelope.standingSuffix) {
+      return true;
+    }
     if (
       foreign?.envelope &&
       foreign.envelope.source !== CCR20_ENVELOPE_SOURCE &&
@@ -2469,10 +2474,15 @@
     if (isRoll20Macro) {
       envelopePayload.roll20Macro = true;
       envelopePayload.roll20Background = macroBackground;
+      // Keep the native cut-in/standing trigger outside the rendered format payload.
+      const lastLine = normalizeEditorText(state.roll20Source).trimEnd().split("\n").pop() || "";
+      const suffix = lastLine.replace(ROLL20_DESC_RE, "").match(ROLL20_IMAGE_LINK_RE)?.[3]?.trim();
+      if (suffix) envelopePayload.standingSuffix = suffix;
     }
+    const visibleOutgoingText = outgoingText + (envelopePayload.standingSuffix ? " " + envelopePayload.standingSuffix : "");
     const outgoing = needsEnvelope
-      ? encodeEnvelopeToInvisible(envelopePayload) + outgoingText
-      : outgoingText;
+      ? encodeEnvelopeToInvisible(envelopePayload) + visibleOutgoingText
+      : visibleOutgoingText;
 
     if (getEditorText(editor) === outgoing) return true;
 
@@ -5859,7 +5869,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.80",
+    version: "0.3.81",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

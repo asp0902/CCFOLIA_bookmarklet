@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
     const page = await browser.newPage();
     await page.route('**/*', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><body></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
-    await page.addScriptTag({ content: source });
+    await page.addScriptTag({ content: source.replace('installDebugApi({ renderMacroHtml })', 'installDebugApi({ renderMacroHtml, preparePayloadForSend, extractEnvelope })') });
     const render = text => page.evaluate(value => window.__CCF_ROLL20_BRIDGE_DEBUG__.renderMacroHtml(value), text);
     const macro = '/desc [인트로 페이즈](https://imgur.com/95RxNez.gif)';
     const original = await render(macro);
@@ -24,6 +24,20 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-roll20-cs
     assert.equal(await render(email + ' @label'), preserved);
     assert.notEqual(await render(macro + ' ordinary text'), original, 'ordinary trailing text is not a standing label');
     assert.equal(await render(macro + ' @인트로\n' + macro + ' @다음'), await render(macro + '\n' + macro));
+    const sent = await page.evaluate(value => {
+      const editor = document.createElement('textarea');
+      document.body.appendChild(editor);
+      editor.value = value;
+      const api = window.__CCF_ROLL20_BRIDGE_DEBUG__;
+      api.preparePayloadForSend(editor);
+      const once = editor.value;
+      api.preparePayloadForSend(editor);
+      return { once, twice: editor.value, envelope: api.extractEnvelope(editor.value).envelope };
+    }, macro + ' @인트로');
+    assert(sent.once.endsWith(' @인트로'), 'native cut-in trigger survives transmission');
+    assert.equal(sent.once, sent.twice, 'Enter and click handlers must not strip the trigger');
+    assert.equal(sent.envelope.text, '인트로 페이즈', 'rendered content excludes the trigger');
+    assert.equal(sent.envelope.standingSuffix, '@인트로');
     console.log('PASS: image label rendering parity, multiline labels, preserved link content');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
