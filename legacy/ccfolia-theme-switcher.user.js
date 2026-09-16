@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.22
+// @version      0.2.23
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.22"),
+    version: getUserscriptVersion("0.2.23"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1895,7 +1895,7 @@
       ${scope} [data-ccf-roll20-emotion] > :not(.ccf-roll20-emotion-card) { display: none !important; }
       ${scope} .ccf-roll20-emotion-card {
         position: relative; display: block !important; box-sizing: border-box;
-        width: 100%; margin: 6px 0; padding: 22px 16px;
+        width: 100%; margin: 6px 0; padding: 21px 16px;
         border: 1px solid #aaa; border-radius: 0; background: #fff !important;
         color: #333 !important; font-size: 15px !important; line-height: 1.4 !important;
         font-weight: bold; font-style: normal; text-align: center;
@@ -1913,7 +1913,7 @@
         background-size: 4px 26px;
       }
       ${scope} .ccf-roll20-emotion-card > small {
-        display: block; margin-bottom: 8px; color: #999 !important;
+        display: block; margin-bottom: 7px; color: #999 !important;
         font-size: 11px; line-height: 1.4; font-weight: normal;
       }
     `;
