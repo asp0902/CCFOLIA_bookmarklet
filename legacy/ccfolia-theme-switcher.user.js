@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.19
+// @version      0.2.20
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -30,8 +30,7 @@
   });
 
   // 사용자가 "테마 커스텀" 카드의 드롭다운에서 선택 가능한 커스텀 시트 테마 목록.
-  // 각 테마는 CCFOLIA의 특정 다이스봇 이름과 매핑되며, 다이스봇이 일치 + 해당 테마가
-  // ON 상태일 때만 적용된다. (CSS는 buildDicebotStyleSheet에서 dicebot id로 스코프됨)
+  // 선택한 테마는 마스터 ON 상태에서 적용된다. CSS는 DICEBOT_ATTR로 스코프된다.
   // "none" 은 어떤 다이스봇과도 매칭되지 않는 sentinel — 선택 시 어떤 커스텀 시트도
   // 적용되지 않음 (= 사이트 기본 상태로 되돌림)
   const SHEET_THEME_NONE_ID = "none";
@@ -50,6 +49,11 @@
       id: "cree-grrr",
       name: "CREE-GRRR!",
       description: "CREE-GRRR! 시트용 / 팝업·채팅 다이스 결과(원형/깃발 이미지) 디자인"
+    }),
+    Object.freeze({
+      id: "insane-roll20",
+      name: "인세인(Roll20)",
+      description: "Roll20 인세인 다크 시트 색상 / 팝업·사이코로픽션 시트 디자인"
     })
   ]);
   // 신규 활성화 사용자의 커스텀 시트 테마 기본 선택값. 사용자가 드롭다운에서 명시적으로
@@ -216,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.19"),
+    version: getUserscriptVersion("0.2.20"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1817,6 +1821,73 @@
       }
 
       ${buildCreeGrrrStyleSheet()}
+      ${buildInsaneRoll20StyleSheet()}
+    `;
+  }
+
+  function buildInsaneRoll20StyleSheet() {
+    // Palette: Roll20/roll20-character-sheets, inSANe auto cal/inSANe.css (dark theme).
+    const scope = `html[${DICEBOT_ATTR}="insane-roll20"]`;
+    const dialog = `${scope} :is(.MuiDialog-paper, #ccf-character-sheet-root .ccf-cs-dialog)`;
+    const sheet = `${scope} #ccf-character-sheet-root`;
+    return `
+      ${dialog} {
+        background: #1f1f1f !important;
+        color: #f3f3f3 !important;
+        border-radius: 0 !important;
+      }
+      ${dialog} :is(.MuiDialogContent-root, .MuiPaper-root:not(.MuiAppBar-root)),
+      ${sheet} .ccf-cs-dialog > main {
+        background: #1f1f1f !important;
+        color: #f3f3f3 !important;
+      }
+      ${dialog} :is(.MuiAppBar-root, .MuiDialogTitle-root),
+      ${sheet} .ccf-cs-dialog > header,
+      ${sheet} .ccf-cs-dialog > footer,
+      ${sheet} .ccf-cs-tabs {
+        background: #212128 !important;
+        color: #f3f3f3 !important;
+      }
+      ${dialog} :is(.MuiTypography-root:not([style*="color:"]), .MuiFormLabel-root, .MuiFormControlLabel-label, .MuiInputBase-root, .MuiInputBase-input) {
+        color: #f3f3f3 !important;
+      }
+      ${dialog} :is(.MuiFormHelperText-root, .MuiTypography-caption, .MuiListItemText-secondary) {
+        color: #bdbdbd !important;
+      }
+      ${dialog} :is(.MuiInputBase-root, .MuiInputBase-input),
+      ${sheet} :is(input:not([type="checkbox"]), textarea, select) {
+        background-color: transparent !important;
+        color: #f3f3f3 !important;
+        border-radius: 0 !important;
+      }
+      ${dialog} :is(.MuiOutlinedInput-notchedOutline, .MuiDivider-root),
+      ${sheet} :is(.ccf-cs-skills h3, input:not([type="checkbox"]), textarea, select) {
+        border-color: #9c4a4c !important;
+      }
+      ${dialog} .Mui-focused .MuiOutlinedInput-notchedOutline {
+        border-color: #ff6168 !important;
+      }
+      ${dialog} :is(.MuiButton-textPrimary, .MuiTab-root.Mui-selected, .MuiCheckbox-root.Mui-checked, .MuiRadio-root.Mui-checked),
+      ${sheet} .ccf-cs-dialog main label:focus-within,
+      ${sheet} .ccf-cs-skill.is-fear button {
+        color: #ff6168 !important;
+      }
+      ${dialog} .MuiTabs-indicator,
+      ${sheet} .ccf-cs-skill input:checked {
+        background: #9c4a4c !important;
+      }
+      ${sheet} .ccf-cs-tabs button[aria-selected="true"] {
+        border-bottom-color: #ff6168 !important;
+      }
+      ${sheet} .ccf-cs-section-head h3 {
+        color: #f3f3f3 !important;
+        border-left: 3px solid #9c4a4c;
+        padding-left: 8px;
+      }
+      ${sheet} .ccf-cs-skill.is-selected {
+        background: rgba(156, 74, 76, .3) !important;
+      }
+      ${sheet} select option { background: #212128; color: #f3f3f3; }
     `;
   }
 
