@@ -10,23 +10,25 @@ const ORIGIN = 'https://ccfolia.com';
 const RELAY = 'https://relay.example.test';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, commands = [], pollOk = true } = {}) {
+function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, commands = [], pollOk = true, connectFailures = 0 } = {}) {
   const store = { relayEnabled: true, relayUrl: RELAY, relayGmToken: 'test-token', ...storage };
-  const state = { commands, pollOk, calls: [], posted: [], listeners: [], intervals: [], storeAtPost: [] };
+  const state = { commands, pollOk, connectFailures, calls: [], posted: [], listeners: [], intervals: [], timeouts: [], storeAtPost: [] };
   const sandbox = {
     console: { warn() {}, error() {}, log() {} },
-    URL, setInterval: fn => { state.intervals.push(fn); return state.intervals.length; }, clearInterval() {},
+    URL, setInterval: fn => { state.intervals.push(fn); return state.intervals.length; }, clearInterval() {}, setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; },
     location: { pathname, origin: ORIGIN },
     navigator: { userActivation: { isActive: active } },
     chrome: { storage: { local: {
       get: async keys => Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]])),
-      set: async value => { Object.assign(store, value); }
+      set: async value => { Object.assign(store, value); },
+      remove: async keys => { for (const key of [].concat(keys)) delete store[key]; }
     } } },
     fetch: async (url, options = {}) => {
       const call = { url, method: options.method || 'GET', headers: options.headers || {}, body: options.body ? JSON.parse(options.body) : undefined };
       state.calls.push(call);
       const route = url.replace(RELAY, '');
       const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
+      if (route === '/api/connect' && state.connectFailures-- > 0) return reply(500, { error: 'down' });
       if (route === '/api/connect' || route === '/api/share') return reply(200, { inviteUrl: `${RELAY}/r/R1` });
       if (/\/commands$/.test(route)) return pollOk ? reply(200, { commands: state.commands }) : reply(401, { error: 'GM 인증 실패' });
       return reply(200, { ok: true });
@@ -56,17 +58,52 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(h.state.calls.length, 0, 'no fetch without complete config');
   }
 
-  // ready -> /api/connect with bearer token, invite stored, polling started.
+  // Starts on its own (no dependence on the page's one-shot "ready"), then ready with a title reconnects once.
   {
     const h = createHarness();
-    await h.page('ready', { roomTitle: 'Test Room' });
-    const connect = h.callsTo(/\/api\/connect$/)[0];
-    assert.equal(connect.method, 'POST');
-    assert.equal(connect.headers.Authorization, 'Bearer test-token');
-    assert.deepEqual(connect.body, { roomId: 'R1', roomTitle: 'Test Room', capabilities: { chatRead: true, chatWrite: true, publicHandout: true } });
+    await flush();
+    const first = h.callsTo(/\/api\/connect$/);
+    assert.equal(first.length, 1, 'connects without any page message');
+    assert.equal(first[0].method, 'POST');
+    assert.equal(first[0].headers.Authorization, 'Bearer test-token');
+    assert.deepEqual(first[0].body, { roomId: 'R1', roomTitle: '', capabilities: { chatRead: true, chatWrite: true, publicHandout: true } });
     assert.equal(h.store.relayInviteUrl, `${RELAY}/r/R1`);
     assert.equal(h.state.intervals.length, 1, 'polling timer armed');
     assert(h.callsTo(/\/api\/admin\/rooms\/R1\/commands$/).length >= 1, 'initial poll');
+    await h.page('ready', { roomTitle: '' });
+    assert.equal(h.callsTo(/\/api\/connect$/).length, 1, 'ready without a new title does not reconnect');
+    await h.page('ready', { roomTitle: 'Test Room' });
+    const all = h.callsTo(/\/api\/connect$/);
+    assert.equal(all.length, 2);
+    assert.equal(all[1].body.roomTitle, 'Test Room');
+  }
+
+  // A failed start is retried later; a failed connect does not poison later connects.
+  {
+    const h = createHarness({ connectFailures: 1 });
+    await flush();
+    assert.equal(h.store.relayInviteUrl, undefined, 'not connected after failure');
+    assert.equal(h.state.timeouts.length, 1, 'retry scheduled');
+    await h.state.timeouts[0]();
+    await flush();
+    assert.equal(h.store.relayInviteUrl, `${RELAY}/r/R1`, 'retry connects');
+    const h2 = createHarness({ connectFailures: 1 });
+    await h2.page('ready', { roomTitle: 'T' });
+    assert.equal(h2.store.relayInviteUrl, `${RELAY}/r/R1`, 'later connect still works after an earlier failure');
+  }
+
+  // Stop: polling and the stored invite URL are cleared and nothing reconnects until the page is reloaded.
+  {
+    const h = createHarness();
+    await flush();
+    assert(h.store.relayInviteUrl);
+    await h.send({ source: HANDOUT_SOURCE, direction: 'request', requestId: 's1', action: 'stop' });
+    assert.equal(h.callsTo(/\/api\/share\/stop$/).length, 1);
+    assert.equal(h.store.relayInviteUrl, undefined, 'invite URL cleared on stop');
+    const before = h.callsTo(/\/api\/connect$/).length;
+    await h.page('ready', { roomTitle: 'Again' });
+    await h.page('title', { roomTitle: 'Again 2' });
+    assert.equal(h.callsTo(/\/api\/connect$/).length, before, 'no reconnect after stop');
   }
 
   // Commands: only chat.send forwarded; marked attempted BEFORE dispatch; replay -> ack only.
@@ -146,14 +183,13 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert(!posts[0].body.text.includes('\u0000'));
   }
 
-  // Late-resolved room title: reconnects with the new title only once connected; ignores empty titles.
+  // Late-resolved room title: reconnects with the new title; empty titles are ignored.
   {
     const h = createHarness();
-    await h.page('title', { roomTitle: 'Too Early' });
-    assert.equal(h.callsTo(/\/api\/connect$/).length, 0, 'title before ready does not connect');
-    await h.page('ready', { roomTitle: '' });
+    await flush();
     await h.page('title', { roomTitle: '실제 룸 이름' });
     await h.page('title', { roomTitle: '' });
+    await h.page('title', { roomTitle: '실제 룸 이름' });
     const connects = h.callsTo(/\/api\/connect$/);
     assert.equal(connects.length, 2);
     assert.equal(connects[1].body.roomTitle, '실제 룸 이름');
@@ -182,7 +218,7 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
   {
     const h = createHarness({ active: false });
     await h.send({ source: HANDOUT_SOURCE, direction: 'request', requestId: 'q1', action: 'share', handout: { id: 'h', title: 't', bodyText: 'b' } });
-    assert.equal(h.state.calls.length, 0, 'no activation -> no share');
+    assert.equal(h.callsTo(/\/api\/share/).length, 0, 'no activation -> no share');
     assert.equal(h.state.posted.length, 0);
   }
   {
