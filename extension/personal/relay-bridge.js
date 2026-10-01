@@ -44,8 +44,9 @@
       if (!response.ok) return;
       for (const command of (await response.json()).commands || []) {
         if (command.type !== "chat.send") continue;
-        if (config.delivered.has(command.id)) await ack(command.id, "delivered");
-        else window.postMessage({ source: ROOM_SOURCE, direction: "bridge", action: "command", roomId, command }, location.origin);
+        if (config.delivered.has(command.id)) { await ack(command.id, "delivered"); continue; }
+        await rememberDelivered(command.id);
+        window.postMessage({ source: ROOM_SOURCE, direction: "bridge", action: "command", roomId, command }, location.origin);
       }
     } catch (_) {}
   }
