@@ -15,6 +15,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const waitText = async (text, ms = 3000) => { const started = Date.now(); await page.getByText(text).first().waitFor({ timeout: ms }); return Date.now() - started; };
   const sockets = [];
   page.on('websocket', socket => sockets.push(socket.url()));
+  const cspErrors = [];
+  page.on('console', message => { if (/Content Security Policy/i.test(message.text())) cspErrors.push(message.text()); });
   try {
     await page.goto(inviteUrl);
     await page.getByLabel('표시 이름').fill('푸시 참가자');
@@ -60,6 +62,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(Date.now() - revokedAt < 1500);
     assert.equal(await page.locator('#room').isVisible(), false);
     assert.equal(await page.locator('#gate-status').isVisible(), true);
+    assert.deepEqual(cspErrors, [], 'the page works under its own Content-Security-Policy');
     console.log(`participant push: socket opened, message pushed in ${pushedMs}ms, handout/title/reconnect catch-up/echo, immediate revoke PASS`);
   } finally {
     await post('/api/share/stop', { roomId });

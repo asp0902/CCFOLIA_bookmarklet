@@ -43,6 +43,15 @@ const sockets = [];
 const track = socket => { sockets.push(socket); return socket; };
 
 try {
+  // The participant page itself must carry the security headers (static assets bypass the worker unless routed through it).
+  const page = await fetch(base + "/");
+  const csp = page.headers.get("content-security-policy") || "";
+  assert(csp.includes("default-src 'self'") && csp.includes(`connect-src 'self' ${wsBase}`), `page CSP allows its own websocket origin: ${csp}`);
+  assert.equal(page.headers.get("x-frame-options"), "DENY");
+  assert.equal(page.headers.get("cache-control"), "no-store");
+  assert.equal(page.headers.get("x-content-type-options"), "nosniff");
+  assert((await page.text()).includes("participant.js"), "page still served");
+
   const connect = await request("/api/connect", { auth: true, body: { roomId, roomTitle: "소켓 검사", capabilities: { chatRead: true, chatWrite: true, publicHandout: true } } });
   const inviteToken = new URLSearchParams((await connect.json()).inviteUrl.split("#")[1]).get("token");
 
