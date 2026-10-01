@@ -71,6 +71,7 @@
       config ||= await loadConfig();
       if (!config.enabled) return;
       if (request.action === "ready") await connect(clean(request.roomTitle, 200));
+      if (request.action === "title" && pollTimer) { const title = clean(request.roomTitle, 200); if (title) await connect(title); }
       if (request.action === "snapshot") {
         for (const message of Array.isArray(request.messages) ? request.messages : []) {
           const id = clean(message.id, 160);

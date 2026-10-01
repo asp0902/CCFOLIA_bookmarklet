@@ -146,6 +146,19 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert(!posts[0].body.text.includes('\u0000'));
   }
 
+  // Late-resolved room title: reconnects with the new title only once connected; ignores empty titles.
+  {
+    const h = createHarness();
+    await h.page('title', { roomTitle: 'Too Early' });
+    assert.equal(h.callsTo(/\/api\/connect$/).length, 0, 'title before ready does not connect');
+    await h.page('ready', { roomTitle: '' });
+    await h.page('title', { roomTitle: '실제 룸 이름' });
+    await h.page('title', { roomTitle: '' });
+    const connects = h.callsTo(/\/api\/connect$/);
+    assert.equal(connects.length, 2);
+    assert.equal(connects[1].body.roomTitle, '실제 룸 이름');
+  }
+
   // Untrusted messages are ignored: wrong room, wrong origin, wrong source, foreign window.
   {
     const h = createHarness();

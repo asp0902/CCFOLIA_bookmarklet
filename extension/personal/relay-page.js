@@ -6,6 +6,13 @@
 
   const clean = (value, max) => String(value || "").replace(/\u0000/g, "").slice(0, max);
   const emit = payload => window.postMessage({ source: SOURCE, direction: "page", roomId, ...payload }, location.origin);
+  const ownText = element => clean([...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(""), 200).trim();
+  const resolveRoomTitle = () => {
+    const heading = [...document.querySelectorAll('h6.MuiTypography-subtitle2, h6[class*="MuiTypography-subtitle2"]')].find(element => element.offsetParent !== null && ownText(element));
+    if (heading) return ownText(heading);
+    const title = clean(document.title, 200).trim();
+    return /^CCFOLIA\b/i.test(title) ? "" : title;
+  };
   const snapshot = () => {
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     if (typeof api?.relayMessages !== "function") return;
@@ -15,7 +22,7 @@
       text: clean(message.roll || message.text, 4000),
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
     })).filter(message => message.id && message.text);
-    emit({ action: "snapshot", roomTitle: clean(document.title, 200), messages });
+    emit({ action: "snapshot", messages });
   };
 
   window.addEventListener("message", async event => {
@@ -33,7 +40,12 @@
     }
   });
 
-  emit({ action: "ready", roomTitle: clean(document.title, 200) });
+  let lastTitle = resolveRoomTitle();
+  emit({ action: "ready", roomTitle: lastTitle });
   snapshot();
-  setInterval(snapshot, 1200);
+  setInterval(() => {
+    const title = resolveRoomTitle();
+    if (title && title !== lastTitle) { lastTitle = title; emit({ action: "title", roomTitle: title }); }
+    snapshot();
+  }, 1200);
 })();

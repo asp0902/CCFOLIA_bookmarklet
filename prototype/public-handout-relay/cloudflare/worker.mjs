@@ -44,11 +44,12 @@ export class RoomRelay {
   }
   limited(request, join = false) {
     const now = Date.now();
-    const key = `${request.headers.get("X-Client-IP") || "unknown"}:${join ? "join" : "request"}`;
+    const kind = join ? "join" : request.headers.get("X-Capybara-GM") === "1" ? "gm" : "request";
+    const key = `${request.headers.get("X-Client-IP") || "unknown"}:${kind}`;
     const current = this.rates.get(key);
     const rate = !current || now - current.startedAt >= 60_000 ? { startedAt: now, count: 0 } : current;
     rate.count += 1; this.rates.set(key, rate);
-    return rate.count > (join ? 10 : 120);
+    return rate.count > (join ? 10 : kind === "gm" ? 600 : 240);
   }
   send(memberId, event, data = {}) {
     const line = encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);

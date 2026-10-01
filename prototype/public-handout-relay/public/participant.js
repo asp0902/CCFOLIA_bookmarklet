@@ -7,7 +7,8 @@ const room = document.getElementById("room");
 const gateStatus = document.getElementById("gate-status");
 let pollTimer = 0;
 const setGate = (message, state = "") => { gateStatus.textContent = message; gateStatus.dataset.state = state; };
-const stop = message => { clearInterval(pollTimer); setGate(message, "error"); room.hidden = true; };
+const stop = message => { clearInterval(pollTimer); pollTimer = 0; gateStatus.hidden = false; setGate(message, "error"); room.hidden = true; };
+const transient = response => response.status === 429 || response.status >= 500;
 const renderState = data => {
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
   document.getElementById("gm-state").textContent = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
@@ -28,12 +29,21 @@ const renderState = data => {
 };
 async function refresh() {
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/state`);
-  if (response.status === 403) return;
+  if (response.status === 403) return verifyAccess();
+  if (transient(response)) return;
   if (!response.ok) return stop("접근이 취소되었거나 룸이 종료되었습니다.");
   renderState(await response.json());
 }
+async function verifyAccess() {
+  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status`);
+  if (transient(response)) return;
+  if (!response.ok) return stop("접근이 취소되었습니다.");
+  const data = await response.json();
+  if (data.status !== "approved") stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
+}
 async function checkStatus() {
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status`);
+  if (transient(response)) return;
   if (!response.ok) return stop("요청이 만료되었거나 룸이 종료되었습니다.");
   const data = await response.json();
   if (data.status === "approved") {
