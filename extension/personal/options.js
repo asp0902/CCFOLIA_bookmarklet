@@ -65,6 +65,23 @@ document.getElementById("save").addEventListener("click", async () => {
   setTimeout(() => { status.textContent = ""; }, 1500);
 });
 document.getElementById("refresh").addEventListener("click", refreshParticipants);
+const stopStatus = document.getElementById("stop-status");
+document.getElementById("stop").addEventListener("click", async () => {
+  if (!roomId) { stopStatus.textContent = "공유 중인 룸이 없습니다."; return; }
+  if (!confirm("공유를 중지하면 모든 참여자의 접근이 취소되고, 채팅 기록·참가 목록·초대 링크가 삭제됩니다. 계속할까요?")) return;
+  try {
+    const stoppedRoomId = roomId;
+    const response = await adminFetch("/api/share/stop", { method: "POST", body: JSON.stringify({ roomId: stoppedRoomId }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `중지 실패 (${response.status})`);
+    await chrome.storage.local.remove(["relayInviteUrl", "relayLastRoomId"]);
+    await chrome.storage.local.set({ relayStop: { roomId: stoppedRoomId, at: Date.now() } });
+    roomId = ""; invite.value = "";
+    stopStatus.textContent = "공유를 중지했습니다. 룸 탭을 새로고침하면 새 초대 URL로 다시 시작됩니다.";
+    await refreshParticipants();
+  } catch (error) {
+    stopStatus.textContent = error.message;
+  }
+});
 participants.addEventListener("click", async event => {
   const button = event.target.closest("button[data-decision]");
   if (!button || !roomId) return;

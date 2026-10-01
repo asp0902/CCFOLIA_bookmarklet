@@ -61,6 +61,8 @@
       }
     } catch (_) {}
   }
+  // The options page stops sharing from another page; it signals this tab through storage.
+  chrome.storage.onChanged?.addListener((changes, area) => { if (area === "local" && changes.relayStop?.newValue?.roomId === roomId) disconnect().catch(() => {}); });
   const autoStart = async () => {
     try { config ||= await loadConfig(); if (config.enabled && config.origin && config.token && roomId) await connect(connectedTitle ?? ""); }
     catch (error) { console.warn("[Capybara player relay]", error); if (!stopped) setTimeout(autoStart, 15000); }

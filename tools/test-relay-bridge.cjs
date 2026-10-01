@@ -12,13 +12,13 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, commands = [], pollOk = true, connectFailures = 0 } = {}) {
   const store = { relayEnabled: true, relayUrl: RELAY, relayGmToken: 'test-token', ...storage };
-  const state = { commands, pollOk, connectFailures, calls: [], posted: [], listeners: [], intervals: [], timeouts: [], storeAtPost: [] };
+  const state = { commands, pollOk, connectFailures, calls: [], posted: [], storageListeners: [], listeners: [], intervals: [], timeouts: [], storeAtPost: [] };
   const sandbox = {
     console: { warn() {}, error() {}, log() {} },
     URL, setInterval: fn => { state.intervals.push(fn); return state.intervals.length; }, clearInterval() {}, setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; },
     location: { pathname, origin: ORIGIN },
     navigator: { userActivation: { isActive: active } },
-    chrome: { storage: { local: {
+    chrome: { storage: { onChanged: { addListener: fn => { state.storageListeners.push(fn); } }, local: {
       get: async keys => Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]])),
       set: async value => { Object.assign(store, value); },
       remove: async keys => { for (const key of [].concat(keys)) delete store[key]; }
@@ -193,6 +193,24 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     const connects = h.callsTo(/\/api\/connect$/);
     assert.equal(connects.length, 2);
     assert.equal(connects[1].body.roomTitle, '실제 룸 이름');
+  }
+
+  // Stop signalled from the options page (via storage) disconnects only the matching room.
+  {
+    const h = createHarness();
+    await flush();
+    const before = h.callsTo(/\/api\/connect$/).length;
+    h.state.storageListeners.forEach(fn => fn({ relayStop: { newValue: { roomId: 'OTHER', at: 1 } } }, 'local'));
+    await flush();
+    assert(h.store.relayInviteUrl, 'stop for another room is ignored');
+    h.state.storageListeners.forEach(fn => fn({ relayStop: { newValue: { roomId: 'R1', at: 2 } } }, 'sync'));
+    await flush();
+    assert(h.store.relayInviteUrl, 'non-local storage area is ignored');
+    h.state.storageListeners.forEach(fn => fn({ relayStop: { newValue: { roomId: 'R1', at: 3 } } }, 'local'));
+    await flush();
+    assert.equal(h.store.relayInviteUrl, undefined, 'stop for this room clears the invite URL');
+    await h.page('ready', { roomTitle: 'Again' });
+    assert.equal(h.callsTo(/\/api\/connect$/).length, before, 'no reconnect after options stop');
   }
 
   // Untrusted messages are ignored: wrong room, wrong origin, wrong source, foreign window.
