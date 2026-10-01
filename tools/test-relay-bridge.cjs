@@ -10,12 +10,12 @@ const ORIGIN = 'https://ccfolia.com';
 const RELAY = 'https://relay.example.test';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, commands = [], pollOk = true, connectFailures = 0 } = {}) {
+function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, commands = [], pollOk = true, connectFailures = 0, webSocket = true, messageFailures = 0 } = {}) {
   const store = { relayEnabled: true, relayUrl: RELAY, relayGmToken: 'test-token', ...storage };
-  const state = { commands, pollOk, connectFailures, calls: [], posted: [], storageListeners: [], listeners: [], intervals: [], timeouts: [], storeAtPost: [] };
+  const state = { commands, pollOk, connectFailures, messageFailures, sockets: [], intervalDelays: [], calls: [], posted: [], storageListeners: [], listeners: [], intervals: [], timeouts: [], storeAtPost: [] };
   const sandbox = {
     console: { warn() {}, error() {}, log() {} },
-    URL, setInterval: fn => { state.intervals.push(fn); return state.intervals.length; }, clearInterval() {}, setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; },
+    URL, btoa, TextEncoder, setInterval: (fn, delay) => { state.intervals.push(fn); state.intervalDelays.push(delay); return state.intervals.length; }, clearInterval() {}, setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; }, clearTimeout() {},
     location: { pathname, origin: ORIGIN },
     navigator: { userActivation: { isActive: active } },
     chrome: { storage: { onChanged: { addListener: fn => { state.storageListeners.push(fn); } }, local: {
@@ -28,12 +28,14 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
       state.calls.push(call);
       const route = url.replace(RELAY, '');
       const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
+      if (/\/messages$/.test(route) && state.messageFailures-- > 0) return reply(500, { error: 'down' });
       if (route === '/api/connect' && state.connectFailures-- > 0) return reply(500, { error: 'down' });
       if (route === '/api/connect' || route === '/api/share') return reply(200, { inviteUrl: `${RELAY}/r/R1` });
       if (/\/commands$/.test(route)) return pollOk ? reply(200, { commands: state.commands }) : reply(401, { error: 'GM 인증 실패' });
       return reply(200, { ok: true });
     }
   };
+  if (webSocket) sandbox.WebSocket = class { constructor(url, protocols) { this.url = url; this.protocols = protocols; this.sent = []; this.closed = false; state.sockets.push(this); } send(data) { this.sent.push(data); } close() { this.closed = true; } };
   sandbox.window = sandbox;
   sandbox.addEventListener = (type, fn) => { if (type === 'message') state.listeners.push(fn); };
   sandbox.postMessage = message => { state.posted.push(message); state.storeAtPost.push([...(store.relayDeliveredCommandIds || [])]); };
@@ -116,8 +118,12 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert(h.state.storeAtPost[0].includes('c1'), 'delivered id persisted before dispatch');
     await h.poll();
     assert.equal(h.state.posted.length, 1, 'duplicate command is not re-dispatched');
+    assert.equal(h.callsTo(/\/commands\/c1\/ack$/).length, 0, 'a command still in flight is not acknowledged by a later poll');
+    await h.page('commandResult', { commandId: 'c1', status: 'delivered' });
+    await h.poll();
+    assert.equal(h.state.posted.length, 1, 'finished command is not re-dispatched');
     const acks = h.callsTo(/\/commands\/c1\/ack$/);
-    assert.equal(acks.length, 1);
+    assert.equal(acks.length, 2, 'result ack + idempotent re-ack on replay');
     assert.deepEqual(acks[0].body, { status: 'delivered', error: '' });
     assert.equal(h.callsTo(/\/commands\/c2\/ack$/).length, 0, 'unknown type never acked/dispatched');
   }
@@ -211,6 +217,70 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(h.store.relayInviteUrl, undefined, 'stop for this room clears the invite URL');
     await h.page('ready', { roomTitle: 'Again' });
     assert.equal(h.callsTo(/\/api\/connect$/).length, before, 'no reconnect after options stop');
+  }
+
+  // Push socket: opened after connect with the token as a subprotocol; commands arrive without polling.
+  {
+    const h = createHarness({ commands: [] });
+    await flush();
+    assert.equal(h.state.sockets.length, 1, 'push socket opened after connect');
+    const sock = h.state.sockets[0];
+    assert.equal(sock.url, 'wss://relay.example.test/api/admin/rooms/R1/ws');
+    assert.deepEqual([...sock.protocols], ['capybara-gm', Buffer.from('test-token').toString('base64url')]);
+    assert.equal(h.state.intervalDelays.at(-1), 1500, 'fast polling while the socket is not open');
+    sock.onopen();
+    assert.equal(h.state.intervalDelays.at(-1), 10000, 'slow safety-net polling once the socket is open');
+    const pollsBefore = h.callsTo(/\/commands$/).length;
+    sock.onmessage({ data: JSON.stringify({ type: 'command', command: { id: 'w1', type: 'chat.send', text: '소켓 명령', displayName: '참가자' } }) });
+    await flush();
+    assert.equal(h.state.posted.length, 1, 'pushed command is dispatched immediately');
+    assert.equal(h.state.posted[0].command.id, 'w1');
+    assert(h.state.storeAtPost[0].includes('w1'), 'persisted before dispatch');
+    sock.onmessage({ data: JSON.stringify({ type: 'command', command: { id: 'w1', type: 'chat.send', text: '소켓 명령' } }) });
+    sock.onmessage({ data: JSON.stringify({ type: 'command', command: { id: 'w2', type: 'other', text: 'x' } }) });
+    sock.onmessage({ data: 'pong' });
+    await flush();
+    assert.equal(h.state.posted.length, 1, 'duplicate / unknown pushes are ignored');
+    assert.equal(h.callsTo(/\/commands\/w1\/ack$/).length, 0, 'in-flight duplicate is not acknowledged');
+    assert.equal(h.callsTo(/\/commands$/).length, pollsBefore, 'no polling needed for the push');
+
+    // Socket lost: back to fast polling and a delayed reconnect.
+    sock.onclose();
+    assert.equal(h.state.intervalDelays.at(-1), 1500, 'fast polling again after the socket closed');
+    assert.equal(h.state.timeouts.length, 1, 'reconnect scheduled');
+    await h.state.timeouts[0]();
+    assert.equal(h.state.sockets.length, 2, 'reconnected');
+    // Server says the share was stopped: tear down for good.
+    h.state.sockets[1].onopen();
+    h.state.sockets[1].onmessage({ data: JSON.stringify({ type: 'closed', reason: 'stopped' }) });
+    await flush();
+    assert.equal(h.store.relayInviteUrl, undefined, 'invite URL cleared after a stopped notice');
+    assert(h.state.sockets[1].closed, 'socket closed');
+    const connectsBefore = h.callsTo(/\/api\/connect$/).length;
+    await h.page('ready', { roomTitle: 'Again' });
+    assert.equal(h.callsTo(/\/api\/connect$/).length, connectsBefore, 'no reconnect after the stopped notice');
+  }
+
+  // Without WebSocket support the bridge still works by polling alone.
+  {
+    const h = createHarness({ webSocket: false, commands: [{ id: 'p1', type: 'chat.send', text: 'hi' }] });
+    await flush();
+    assert.equal(h.state.sockets.length, 0);
+    await h.poll();
+    assert.equal(h.state.posted.length, 1);
+  }
+
+  // A failed message post is retried by the next snapshot instead of being lost.
+  {
+    const h = createHarness({ messageFailures: 1 });
+    await flush();
+    const snapshot = { messages: [{ id: 'm9', author: 'GM', text: '재시도', createdAt: '2025-01-01' }] };
+    await h.page('snapshot', snapshot);
+    assert.equal(h.callsTo(/\/messages$/).length, 1);
+    await h.page('snapshot', snapshot);
+    assert.equal(h.callsTo(/\/messages$/).length, 2, 'retried after the failure');
+    await h.page('snapshot', snapshot);
+    assert.equal(h.callsTo(/\/messages$/).length, 2, 'not re-sent once accepted');
   }
 
   // Untrusted messages are ignored: wrong room, wrong origin, wrong source, foreign window.

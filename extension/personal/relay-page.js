@@ -41,12 +41,28 @@
     }
   });
 
+  // Event-driven: re-read the chat as soon as CCFOLIA's message store changes. Polling remains as a slow safety net.
+  let unsubscribe = null;
+  let snapshotTimer = 0;
+  let ticks = 0;
+  const scheduleSnapshot = () => {
+    if (snapshotTimer) return;
+    snapshotTimer = setTimeout(() => { snapshotTimer = 0; snapshot(); }, 40);
+  };
+  const trySubscribe = () => {
+    if (unsubscribe) return;
+    const api = window.__CCF_SECOND_CHAT_PANEL__;
+    if (typeof api?.relaySubscribe !== "function") return;
+    try { unsubscribe = api.relaySubscribe(scheduleSnapshot) || null; } catch (_) { unsubscribe = null; }
+  };
   let lastTitle = resolveRoomTitle();
   emit({ action: "ready", roomTitle: lastTitle });
+  trySubscribe();
   snapshot();
   setInterval(() => {
     const title = resolveRoomTitle();
     if (title && title !== lastTitle) { lastTitle = title; emit({ action: "title", roomTitle: title }); }
-    snapshot();
+    trySubscribe();
+    if (!unsubscribe || ++ticks % 5 === 0) snapshot();
   }, 1200);
 })();

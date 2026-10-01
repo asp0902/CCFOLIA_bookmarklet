@@ -14,6 +14,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const inviteUrl = (await connect.json()).inviteUrl;
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  // Polling-only fallback: the push socket is not available (blocked network, old proxy, ...).
+  await page.addInitScript(() => { delete window.WebSocket; });
   try {
     await page.goto(inviteUrl);
     await page.getByLabel('표시 이름').fill('복원력 참가자');
@@ -50,7 +52,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('접근이 취소되었습니다.').waitFor({ timeout: 8000 });
     assert.equal(await page.locator('#room').isVisible(), false);
     assert.equal(await page.locator('#gate-status').isVisible(), true, 'error message is visible, not a blank page');
-    console.log('participant resilience: transient errors, GM rate-limit isolation, revoke display PASS');
+    console.log('participant resilience (polling fallback): transient errors, GM rate-limit isolation, revoke display PASS');
   } finally {
     await post('/api/share/stop', { roomId });
     await browser.close();
