@@ -3,6 +3,7 @@
   const SOURCE = "capybara-player-room-relay-v1";
   const roomId = location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
   if (!roomId || window.top !== window) return;
+  document.documentElement.dataset.capybaraPlayerRelay = "1";
 
   const clean = (value, max) => String(value || "").replace(/\u0000/g, "").slice(0, max);
   const emit = payload => window.postMessage({ source: SOURCE, direction: "page", roomId, ...payload }, location.origin);

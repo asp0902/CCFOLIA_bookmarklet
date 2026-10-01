@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.90
+// @version      0.1.91
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.90",
+    version: "0.1.91",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -337,8 +337,11 @@
     return String(template.content.textContent || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 50_000);
   }
 
+  // 참여자 웹 공유는 GM 전용 확장(relay-page.js)이 이 속성을 심어 둔 경우에만 노출한다. 북마클릿만 쓰는 사용자에게는 동작하지 않는 버튼을 보이지 않는다.
+  const hasPlayerRelay = () => document.documentElement.dataset.capybaraPlayerRelay === "1";
+
   function requestPublicRelay(action, handout) {
-    if (!isAdminMode() || (handout && !canManageHandout(handout))) return;
+    if (!hasPlayerRelay() || !isAdminMode() || (handout && !canManageHandout(handout))) return;
     const requestId = `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const message = { source: PUBLIC_RELAY_SOURCE, direction: "request", requestId, action, roomId: getCurrentRoomKey() };
     if (action === "share") {
@@ -3011,8 +3014,8 @@
           <div class="head">
             ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
-            ${manageable ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="참여자 웹에 공개 내용 공유" aria-label="참여자 웹에 공개 내용 공유">${WEB_SHARE_ICON}</button>` : ""}
-            ${manageable ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="참여자 웹 공유 중단" aria-label="참여자 웹 공유 중단">${WEB_STOP_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="참여자 웹에 공개 내용 공유" aria-label="참여자 웹에 공개 내용 공유">${WEB_SHARE_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="참여자 웹 공유 중단" aria-label="참여자 웹 공유 중단">${WEB_STOP_ICON}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
