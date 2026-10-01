@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><title>카피바라 참여자 웹 공유 설정</title>
+<style>body{max-width:620px;margin:36px auto;padding:0 20px;font:14px/1.6 system-ui,sans-serif;color:#222}label{display:block;margin:14px 0 5px;font-weight:700}input[type=text],input[type=password]{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bbb;border-radius:4px}button{padding:8px 14px;border:0;border-radius:4px;background:#111;color:#fff;cursor:pointer}.primary{margin-top:18px}#status{margin-left:10px;color:#167443}.check{display:flex;gap:8px;align-items:center;font-weight:400}h2{margin-top:34px;font-size:18px}.participant{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid #ddd}.participant span:first-child{flex:1}.participant button{padding:5px 9px}.muted{color:#666}.danger{margin-top:10px;background:#b3261e}#stop-status{margin-left:10px;color:#444}</style>
+<h1>참여자 웹 공유</h1>
+<label class="check"><input id="enabled" type="checkbox"> 로컬 릴레이 공유 사용</label>
+<label for="url">릴레이 주소</label><input id="url" type="text" value="http://127.0.0.1:8787">
+<label for="token">GM 토큰</label><input id="token" type="password" autocomplete="off">
+<button id="save" class="primary" type="button">저장</button><span id="status" role="status"></span>
+<label for="invite">참여자 초대 URL</label><input id="invite" type="text" readonly placeholder="CCFOLIA 룸 연결 후 생성됩니다.">
+<button id="stop" class="danger" type="button">공유 중지</button><span id="stop-status" role="status"></span>
+<h2>참가 승인</h2><p id="room" class="muted">공유한 룸 없음</p><button id="refresh" type="button">새로고침</button><div id="participants" aria-live="polite"></div>
+<script src="options.js"></script></html>

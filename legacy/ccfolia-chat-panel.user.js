@@ -885,7 +885,7 @@
     };
   }
 
-  async function sendMessage(text) {
+  async function sendMessage(text, channel = currentChannel) {
     const ctx = await getAuthContext();
     const template = await fetchTemplateFields(ctx);
     const fields = {};
@@ -910,7 +910,7 @@
       outText = cleanText + encodeEnvelopeToInvisible(payload);
     }
     fields.text = { stringValue: outText };
-    fields.channel = { stringValue: currentChannel };
+    fields.channel = { stringValue: channel };
     // 화자를 골랐으면 이름·아이콘·색을 그 캐릭터로 바꾼다(from 은 내 uid 유지).
     if (selectedChar) {
       fields.name = { stringValue: selectedChar.name };
@@ -2547,6 +2547,13 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
+      relayMessages: () => readMessages("main") || [],
+      relaySend: (displayName, text) => {
+        const name = String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
+        const body = String(text || "").trim().slice(0, 2000);
+        if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
+        return sendMessage(`[참여자 웹 · ${name}] ${body}`, "main");
+      },
       // 메시지를 못 읽을 때: 저장소가 실제로 어떤 모양인지 확인용.
       storeDiag() {
         const slice = getRoomMessagesSlice();

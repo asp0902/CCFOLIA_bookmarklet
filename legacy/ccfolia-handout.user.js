@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.89
+// @version      0.1.91
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -24,6 +24,10 @@
   // 사용자 제공 PNG(assets/handout-icon.png) 형태를 SVG로 재현.
   // 투명 배경, currentColor로 다크/라이트 자동 적응, MUI IconButton 표준 24px.
   const JOURNAL_ICON_HTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M16 4.2l.7 1.5 1.5.7-1.5.7L16 8.5l-.7-1.4-1.5-.7 1.5-.7z" fill="currentColor" stroke="none"/></svg>`;
+  const WEB_SHARE_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>`;
+  const WEB_STOP_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l16 16M9.5 4.5A9 9 0 0 1 19.5 14M14.5 19.5A9 9 0 0 1 4.5 10"/></svg>`;
+  const PUBLIC_RELAY_SOURCE = "capybara-public-handout-relay-v1";
+  const pendingPublicRelayRequests = new Set();
 
   const PANEL_TITLES_MY_CHARS = [
     "내 캐릭터 목록", "내 캐릭터 리스트",
@@ -48,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.89",
+    version: "0.1.91",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -325,6 +329,41 @@
     routeObserver: null,
     lastRoomKey: getCurrentRoomKey()
   };
+
+  function publicHandoutText(description) {
+    const template = document.createElement("template");
+    template.innerHTML = renderHandoutBody(description || "");
+    template.content.querySelectorAll("script,style,noscript,iframe,object,embed").forEach(node => node.remove());
+    return String(template.content.textContent || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 50_000);
+  }
+
+  // 참여자 웹 공유는 GM 전용 확장(relay-page.js)이 이 속성을 심어 둔 경우에만 노출한다. 북마클릿만 쓰는 사용자에게는 동작하지 않는 버튼을 보이지 않는다.
+  const hasPlayerRelay = () => document.documentElement.dataset.capybaraPlayerRelay === "1";
+
+  function requestPublicRelay(action, handout) {
+    if (!hasPlayerRelay() || !isAdminMode() || (handout && !canManageHandout(handout))) return;
+    const requestId = `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const message = { source: PUBLIC_RELAY_SOURCE, direction: "request", requestId, action, roomId: getCurrentRoomKey() };
+    if (action === "share") {
+      message.handout = {
+        id: String(handout?.id || ""),
+        title: String(handout?.title || "").slice(0, 500),
+        bodyText: publicHandoutText(handout?.description || "")
+      };
+    }
+    pendingPublicRelayRequests.add(requestId);
+    window.postMessage(message, location.origin);
+    toast(action === "share" ? "공개 핸드아웃을 릴레이로 전송 중입니다." : "참여자 웹 공유를 중단 중입니다.");
+  }
+
+  window.addEventListener("message", event => {
+    const result = event.data;
+    if (event.source !== window || event.origin !== location.origin || result?.source !== PUBLIC_RELAY_SOURCE || result?.direction !== "response") return;
+    if (!pendingPublicRelayRequests.delete(result.requestId)) return;
+    if (!result.ok) { toast(result.error || "참여자 웹 공유에 실패했습니다."); return; }
+    if (result.action === "stop") { toast("참여자 웹 공유를 중단했습니다."); return; }
+    if (result.inviteUrl) prompt("참여자에게 전달할 읽기 전용 링크입니다.", result.inviteUrl);
+  }, lifecycle.withSignal());
 
   // ===== util =====
   function uuid() {
@@ -2975,6 +3014,8 @@
           <div class="head">
             ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="참여자 웹에 공개 내용 공유" aria-label="참여자 웹에 공개 내용 공유">${WEB_SHARE_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="참여자 웹 공유 중단" aria-label="참여자 웹 공유 중단">${WEB_STOP_ICON}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
@@ -3576,6 +3617,12 @@
       }
       return;
     }
+    if (action === "web-share-handout") {
+      const h = findHandout(id);
+      if (h && canManageHandout(h)) requestPublicRelay("share", h);
+      return;
+    }
+    if (action === "web-stop-sharing") { requestPublicRelay("stop", findHandout(id)); return; }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "folder-new") {
       createFolderFromPrompt();
