@@ -7,10 +7,14 @@ const root = path.resolve(__dirname, '..');
 const extension = path.join(root, 'extension/personal');
 const bootstrap = fs.readFileSync(path.join(extension, 'bootstrap.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
-assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*']);
-assert.deepEqual(manifest.permissions, ['scripting']);
+assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*', 'http://127.0.0.1:8787/*', 'https://capybara-public-handout-relay.for-trpg.workers.dev/*']);
+assert.deepEqual(manifest.permissions, ['scripting', 'storage']);
 assert.equal(manifest.content_scripts[0].world, 'MAIN');
 assert.equal(manifest.content_scripts[0].all_frames, false);
+assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js']);
+assert.equal(manifest.content_scripts[1].world, 'ISOLATED');
+assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js']);
+assert.equal(manifest.options_page, 'options.html');
 
 async function checkAction() {
   let listener;
@@ -40,7 +44,7 @@ async function checkAction() {
 (async () => {
   await checkAction();
   const context = await chromium.launchPersistentContext('', {
-    channel: 'chromium', headless: true,
+    channel: 'chromium', headless: process.env.HEADED !== '1',
     ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}),
     args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
   });
