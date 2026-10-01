@@ -143,12 +143,12 @@ export class RoomRelay {
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/participants$/.test(url.pathname)) {
       return json({ participants: Object.values(room.participants).map(({ id, displayName, status, requestedAt }) => ({ id, displayName, status, requestedAt })) });
     }
-    if (request.method === "GET" && /\/commands$/.test(url.pathname)) {
+    if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/commands$/.test(url.pathname)) {
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
       return json({ commands: room.commands.filter(command => command.status === "pending").slice(0, 50) });
     }
-    const commandAckMatch = url.pathname.match(/\/commands\/([^/]+)\/ack$/);
+    const commandAckMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/commands\/([^/]+)\/ack$/);
     if (request.method === "POST" && commandAckMatch) {
       const command = room.commands.find(item => item.id === decodeURIComponent(commandAckMatch[1]));
       const body = await request.json();
