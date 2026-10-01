@@ -9,6 +9,9 @@ const bootstrap = fs.readFileSync(path.join(extension, 'bootstrap.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
 assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*', 'http://127.0.0.1:8787/*', 'https://capybara-public-handout-relay.for-trpg.workers.dev/*']);
 assert.deepEqual(manifest.permissions, ['scripting', 'storage']);
+// Pinned key: the extension id (and so chrome.storage) must not depend on the folder path.
+const derivedId = [...require('node:crypto').createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32)].map(char => String.fromCharCode(97 + parseInt(char, 16))).join('');
+assert.equal(derivedId, 'dhogfdgmikpinakhcofcddmcmoaenpjc');
 assert.equal(manifest.content_scripts[0].world, 'MAIN');
 assert.equal(manifest.content_scripts[0].all_frames, false);
 assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js']);
@@ -67,6 +70,7 @@ async function checkAction() {
       return route.fulfill({ status: 404, body: '' });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    assert.equal(new URL(worker.url()).hostname, derivedId, 'Chrome uses the pinned extension id');
     const page = await context.newPage();
     page.on('pageerror', error => console.error('Browser page error:', error.message));
     await page.goto('https://ccfolia.com/rooms/test');

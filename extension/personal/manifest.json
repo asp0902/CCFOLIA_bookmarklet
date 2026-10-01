@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "카피바라 3세 (개인용)",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "minimum_chrome_version": "111",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA48VnZnhv6AO/WNPsamCV/XEJkIiVQvlGA5M6tAL17l276kNYYdR9rFwCc8Pd0h5BLveQqzycMSD2oXamiLNSibACWYljldtuEBz+CqaXOyyNeLRtFOtkEtOofJvGDCluWSuNybE3fUY6/QZsVTRjXjzd9gsfvRmYOaCMCa2XVRtt2i7JFN1OaonLXxwMPpA8T4kAJJ4cEl3wjN6QA/ktTZQt3q4rNy3PjrGOpIwC+TI0QWOI72W4rkH32NMGjZf0l6NagPSMtUhTf6jwRom95hatDWs1DsZj6ntigZUokEDFmTUlG8WxCUz7359/lj8frSyLieB9KuOlLd7kaQO77wIDAQAB",
   "description": "기존 카피바라 북마클릿을 코코포리아에서 자동 실행합니다. 개인용 로컬 설치 전용입니다.",
   "permissions": ["scripting", "storage"],
   "host_permissions": ["https://ccfolia.com/*", "http://127.0.0.1:8787/*", "https://capybara-public-handout-relay.for-trpg.workers.dev/*"],
