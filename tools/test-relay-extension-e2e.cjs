@@ -71,6 +71,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const seen = await waitFor(event => event.type === 'message' && event.message.text === '확장 경유 글');
     const gmToPlayer = seen.at - t1;
 
+    const socketStatus = (await worker.evaluate(() => chrome.storage.local.get('relaySocket'))).relaySocket;
+    assert.equal(socketStatus?.state, 'open', `options page can show the push socket as open: ${JSON.stringify(socketStatus)}`);
+
     // Participant -> CCFOLIA: POST -> GM push -> bridge -> page relaySend -> ack -> echo.
     const t2 = Date.now();
     const send = await fetch(base + `/api/rooms/${roomId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ clientMessageId: 'x1', text: '참가자 발언' }) });

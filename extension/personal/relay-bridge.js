@@ -15,6 +15,8 @@
   let snapshotChain = Promise.resolve();
   let lastWarnAt = 0;
   const inFlight = new Set();
+  // Shown on the options page so the GM can see whether the push socket is up (otherwise only slow polling runs).
+  const setSocketStatus = (state, detail = {}) => { try { Promise.resolve(chrome.storage.local.set({ relaySocket: { state, roomId, at: Date.now(), ...detail } })).catch(() => {}); } catch (_) {} };
   const warn = error => { const now = Date.now(); if (now - lastWarnAt > 10_000) { lastWarnAt = now; console.warn("[Capybara player relay]", error); } };
   const b64url = value => btoa(String.fromCharCode(...new TextEncoder().encode(value))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const relayOrigin = value => { try { const url = new URL(String(value || "").trim()); return url.origin === "http://127.0.0.1:8787" || url.protocol === "https:" ? url.origin : ""; } catch (_) { return ""; } };
@@ -62,28 +64,33 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false;
     if (old) { try { old.close(); } catch (_) {} }
+    setSocketStatus("off");
     await chrome.storage.local.remove("relayInviteUrl");
   }
-  function dropSocket(own) {
+  function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
     socket = null; socketOpen = false;
+    setSocketStatus("closed", { code: event?.code ?? 0, reason: String(event?.reason || "").slice(0, 80) });
     clearInterval(socketPingTimer);
     try { own.close(); } catch (_) {}
     if (pollTimer) startPolling();
     if (!stopped) { socketRetries = Math.min(socketRetries + 1, 6); socketRetryTimer = setTimeout(openSocket, Math.min(1000 * 2 ** (socketRetries - 1), 30_000)); }
   }
   function openSocket() {
-    if (socket || stopped || !pollTimer || typeof WebSocket !== "function" || !config?.origin || !config.token) return;
+    if (socket || stopped || !pollTimer || !config?.origin || !config.token) return;
+    if (typeof WebSocket !== "function") { setSocketStatus("unsupported"); return; }
     let own;
     // Browsers cannot set an Authorization header on a WebSocket; the token travels as a subprotocol.
-    try { own = socket = new WebSocket(`${config.origin.replace(/^http/, "ws")}/api/admin/rooms/${encodeURIComponent(roomId)}/ws`, ["capybara-gm", b64url(config.token)]); } catch (_) { socket = null; return; }
+    try { own = socket = new WebSocket(`${config.origin.replace(/^http/, "ws")}/api/admin/rooms/${encodeURIComponent(roomId)}/ws`, ["capybara-gm", b64url(config.token)]); } catch (error) { socket = null; setSocketStatus("closed", { code: 0, reason: String(error?.message || error).slice(0, 80) }); return; }
+    setSocketStatus("connecting");
     let lastSeen = Date.now();
     own.onopen = () => {
       if (socket !== own) return;
       socketOpen = true; socketRetries = 0; lastSeen = Date.now();
+      setSocketStatus("open");
       clearInterval(socketPingTimer);
       socketPingTimer = setInterval(() => {
-        if (Date.now() - lastSeen > 55_000) return dropSocket(own); // no pong: the connection is dead
+        if (Date.now() - lastSeen > 55_000) return dropSocket(own, { code: 4000, reason: "no pong" }); // the connection is dead
         try { own.send("ping"); } catch (_) {}
       }, 20_000);
       startPolling();
@@ -97,7 +104,7 @@
       if (message.type === "command") handleCommand(message.command).catch(warn);
       else if (message.type === "closed") disconnect().catch(() => {});
     };
-    own.onclose = () => dropSocket(own);
+    own.onclose = event => dropSocket(own, event);
     own.onerror = () => {};
   }
   async function handleCommand(command) {

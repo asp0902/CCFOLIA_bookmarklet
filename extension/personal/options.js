@@ -37,6 +37,21 @@ function renderParticipants(items) {
     participants.append(row);
   });
 }
+const socketLine = document.getElementById("socket");
+function renderSocket(info) {
+  if (!roomId || !info || info.roomId !== roomId) { socketLine.textContent = "실시간 연결(웹소켓): 아직 연결 시도 없음 — 룸 탭을 새로고침하세요."; return; }
+  const ago = Math.max(0, Math.round((Date.now() - (info.at || 0)) / 1000));
+  const text = {
+    open: "연결됨 (메시지가 즉시 전달됩니다)",
+    connecting: "연결 중…",
+    off: "공유 중지됨",
+    unsupported: "이 환경은 웹소켓을 지원하지 않아 폴링으로 동작합니다",
+    closed: `끊김 (코드 ${info.code ?? "?"}${info.reason ? `, ${info.reason}` : ""}) — 폴링으로 동작 중이며 자동으로 재연결을 시도합니다`
+  }[info.state] || String(info.state);
+  socketLine.textContent = `실시간 연결(웹소켓): ${text} · ${ago}초 전`;
+}
+const loadSocketStatus = () => chrome.storage.local.get(["relaySocket"], value => renderSocket(value.relaySocket));
+chrome.storage.onChanged?.addListener((changes, area) => { if (area === "local" && changes.relaySocket) renderSocket(changes.relaySocket.newValue); });
 async function refreshParticipants() {
   if (!roomId) { room.textContent = "공유한 룸 없음"; participants.replaceChildren(); return; }
   room.textContent = `룸: ${roomId}`;
@@ -55,6 +70,7 @@ chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayLast
   roomId = value.relayLastRoomId || "";
   invite.value = value.relayInviteUrl || "";
   refreshParticipants();
+  loadSocketStatus();
 });
 document.getElementById("save").addEventListener("click", async () => {
   const origin = relayOrigin(url.value.trim());
@@ -94,4 +110,4 @@ participants.addEventListener("click", async event => {
   }
   await refreshParticipants();
 });
-setInterval(refreshParticipants, 3000);
+setInterval(() => { refreshParticipants(); loadSocketStatus(); }, 3000);

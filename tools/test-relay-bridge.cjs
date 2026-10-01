@@ -228,7 +228,10 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(sock.url, 'wss://relay.example.test/api/admin/rooms/R1/ws');
     assert.deepEqual([...sock.protocols], ['capybara-gm', Buffer.from('test-token').toString('base64url')]);
     assert.equal(h.state.intervalDelays.at(-1), 1500, 'fast polling while the socket is not open');
+    assert.equal(h.store.relaySocket.state, 'connecting', 'status: connecting');
     sock.onopen();
+    await flush();
+    assert.equal(h.store.relaySocket.state, 'open', 'status: open');
     assert.equal(h.state.intervalDelays.at(-1), 10000, 'slow safety-net polling once the socket is open');
     const pollsBefore = h.callsTo(/\/commands$/).length;
     sock.onmessage({ data: JSON.stringify({ type: 'command', command: { id: 'w1', type: 'chat.send', text: '소켓 명령', displayName: '참가자' } }) });
@@ -245,7 +248,9 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(h.callsTo(/\/commands$/).length, pollsBefore, 'no polling needed for the push');
 
     // Socket lost: back to fast polling and a delayed reconnect.
-    sock.onclose();
+    sock.onclose({ code: 1006, reason: '' });
+    await flush();
+    assert.deepEqual({ state: h.store.relaySocket.state, code: h.store.relaySocket.code }, { state: 'closed', code: 1006 }, 'status: closed with the close code');
     assert.equal(h.state.intervalDelays.at(-1), 1500, 'fast polling again after the socket closed');
     assert.equal(h.state.timeouts.length, 1, 'reconnect scheduled');
     await h.state.timeouts[0]();
@@ -255,6 +260,7 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     h.state.sockets[1].onmessage({ data: JSON.stringify({ type: 'closed', reason: 'stopped' }) });
     await flush();
     assert.equal(h.store.relayInviteUrl, undefined, 'invite URL cleared after a stopped notice');
+    assert.equal(h.store.relaySocket.state, 'off', 'status: off after a stopped notice');
     assert(h.state.sockets[1].closed, 'socket closed');
     const connectsBefore = h.callsTo(/\/api\/connect$/).length;
     await h.page('ready', { roomTitle: 'Again' });
@@ -266,6 +272,7 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     const h = createHarness({ webSocket: false, commands: [{ id: 'p1', type: 'chat.send', text: 'hi' }] });
     await flush();
     assert.equal(h.state.sockets.length, 0);
+    assert.equal(h.store.relaySocket.state, 'unsupported', 'status: unsupported');
     await h.poll();
     assert.equal(h.state.posted.length, 1);
   }
