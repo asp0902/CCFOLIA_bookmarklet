@@ -13,7 +13,7 @@ assert.doesNotMatch(handout.match(/function requestPublicRelay[\s\S]*?\n  }/)?.[
 assert.match(bridge, /chrome\.storage\.local\.get/);
 assert.match(bridge, /Authorization.*Bearer/);
 assert.doesNotMatch(bridge.match(/const body = action[\s\S]*?\n        const result/)?.[0] || "", /gmNotes|permissions|owner|image/);
-assert.match(bridge, /command\.type !== "chat\.send"/);
+assert.match(bridge, /command\?\.type !== "chat\.send"/);
 assert.match(bridge, /relayDeliveredCommandIds/);
 // The share/stop buttons and requests exist only when the extension marked the page.
 assert.equal((handout.match(/manageable && hasPlayerRelay\(\) \? `<button class="card-icon-btn" data-action="web-(?:share-handout|stop-sharing)"/g) || []).length, 2);

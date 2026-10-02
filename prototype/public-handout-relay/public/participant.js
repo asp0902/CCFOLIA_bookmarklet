@@ -5,34 +5,73 @@ const inviteToken = params.get("token") || "";
 const consent = document.getElementById("consent");
 const room = document.getElementById("room");
 const gateStatus = document.getElementById("gate-status");
-let pollTimer = 0;
+const POLL_MS = 1500;
+const LIVE_POLL_MS = 10000;
+const MAX_MESSAGES = 300;
+let mode = "";
+let timer = 0;
+let socket = null;
+let socketOpen = false;
+let socketRetries = 0;
+let retryTimer = 0;
+let pingTimer = 0;
+let pushSeq = 0;
+let current = { messages: [], handout: {} };
+let rendered = false;
 const setGate = (message, state = "") => { gateStatus.textContent = message; gateStatus.dataset.state = state; };
-const stop = message => { clearInterval(pollTimer); pollTimer = 0; gateStatus.hidden = false; setGate(message, "error"); room.hidden = true; };
+const clearTimers = () => {
+  clearTimeout(timer); timer = 0;
+  clearTimeout(retryTimer); retryTimer = 0;
+  clearInterval(pingTimer); pingTimer = 0;
+  const old = socket; socket = null; socketOpen = false;
+  if (old) { try { old.close(); } catch (_) {} }
+};
+const stop = message => { clearTimers(); mode = ""; gateStatus.hidden = false; setGate(message, "error"); room.hidden = true; };
 const transient = response => response.status === 429 || response.status >= 500;
 const renderState = data => {
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
   document.getElementById("gm-state").textContent = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   const list = document.getElementById("messages");
+  const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
   list.replaceChildren(...(data.messages || []).map(message => {
     const item = document.createElement("li");
     const author = document.createElement("strong"); author.textContent = message.author || "이름 없음";
     const body = document.createElement("p"); body.textContent = message.text || "";
     item.append(author, body); return item;
   }));
-  list.scrollTop = list.scrollHeight;
+  if (stickToBottom) list.scrollTop = list.scrollHeight;
+  rendered = true;
   const handout = data.handout || {};
   document.getElementById("handout").hidden = !handout.id;
   document.getElementById("title").textContent = handout.title || "";
   document.getElementById("body").textContent = handout.bodyText || "";
   document.getElementById("updated").textContent = handout.updatedAt ? `갱신 ${new Date(handout.updatedAt).toLocaleString()}` : "";
 };
+// Next tick: fast polling until the push socket is up, then only a slow safety-net poll.
+const schedule = () => {
+  clearTimeout(timer); timer = 0;
+  if (!mode) return;
+  timer = setTimeout(async () => {
+    try { await (mode === "live" ? refresh() : checkStatus()); } catch (_) { if (mode === "pending") setGate("상태 확인 지연", "error"); }
+    schedule();
+  }, mode === "live" && socketOpen ? LIVE_POLL_MS : POLL_MS);
+};
 async function refresh() {
+  const seen = pushSeq;
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/state`);
   if (response.status === 403) return verifyAccess();
   if (transient(response)) return;
   if (!response.ok) return stop("접근이 취소되었거나 룸이 종료되었습니다.");
-  renderState(await response.json());
+  const next = await response.json();
+  if (pushSeq !== seen) {
+    // Something was pushed while this request was in flight: never drop it.
+    const known = new Set((next.messages || []).map(message => message.id));
+    next.messages = [...(next.messages || []), ...current.messages.filter(message => !known.has(message.id))].slice(-MAX_MESSAGES);
+    if ((current.handout?.updatedAt || "") > (next.handout?.updatedAt || "")) next.handout = current.handout;
+  }
+  current = next;
+  renderState(current);
 }
 async function verifyAccess() {
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status`);
@@ -41,6 +80,56 @@ async function verifyAccess() {
   const data = await response.json();
   if (data.status !== "approved") stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
 }
+function onPush(event) {
+  let message;
+  try { message = JSON.parse(event.data); } catch (_) { return; }
+  pushSeq++;
+  if (message.type === "message" && message.message?.id) {
+    if (current.messages.some(item => item.id === message.message.id)) return;
+    current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
+    renderState(current);
+  } else if (message.type === "handout") {
+    current.handout = message.handout || {};
+    renderState(current);
+  } else if (message.type === "meta") {
+    current = { ...current, roomTitle: message.roomTitle ?? current.roomTitle, gmOnline: message.gmOnline ?? current.gmOnline };
+    renderState(current);
+  } else if (message.type === "closed") {
+    stop(message.reason === "stopped" ? "요청이 만료되었거나 룸이 종료되었습니다." : "접근이 취소되었습니다.");
+  }
+}
+function dropSocket(own) {
+  if (socket !== own) return; // replaced or stopped on purpose
+  socket = null; socketOpen = false;
+  clearInterval(pingTimer); pingTimer = 0;
+  try { own.close(); } catch (_) {}
+  schedule(); // back to fast polling until the socket is re-established
+  if (mode === "live") { socketRetries = Math.min(socketRetries + 1, 6); retryTimer = setTimeout(connectSocket, Math.min(1000 * 2 ** (socketRetries - 1), 15000)); }
+}
+function connectSocket() {
+  if (socket || mode !== "live" || typeof WebSocket !== "function") return;
+  const url = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/rooms/${encodeURIComponent(roomId)}/ws`;
+  let own;
+  try { own = socket = new WebSocket(url); } catch (_) { socket = null; return; }
+  let lastSeen = Date.now();
+  own.onopen = () => {
+    if (socket !== own) return;
+    socketOpen = true; socketRetries = 0; lastSeen = Date.now();
+    clearInterval(pingTimer);
+    pingTimer = setInterval(() => {
+      if (Date.now() - lastSeen > 55000) return dropSocket(own); // no pong: the connection is dead
+      try { own.send("ping"); } catch (_) {}
+    }, 20000);
+    refresh().catch(() => {}); // catch up on anything missed while the socket was down
+    schedule();
+  };
+  own.onmessage = event => { if (socket !== own) return; lastSeen = Date.now(); onPush(event); };
+  own.onclose = () => dropSocket(own);
+  own.onerror = () => {};
+}
+const wake = () => { if (mode !== "live") return; refresh().catch(() => {}); if (!socket) { clearTimeout(retryTimer); connectSocket(); } };
+window.addEventListener("online", wake);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
 async function checkStatus() {
   const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status`);
   if (transient(response)) return;
@@ -48,8 +137,7 @@ async function checkStatus() {
   const data = await response.json();
   if (data.status === "approved") {
     consent.hidden = true; gateStatus.hidden = true; room.hidden = false;
-    await refresh();
-    if (!pollTimer) pollTimer = setInterval(() => refresh().catch(() => {}), 1500);
+    if (mode !== "live") { mode = "live"; await refresh(); connectSocket(); }
   } else if (data.status === "pending") setGate("GM 승인 대기 중", "pending");
   else stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
 }
@@ -62,19 +150,37 @@ async function join() {
   if (!response.ok) return setGate("승인되지 않았거나 종료된 초대입니다.", "error");
   history.replaceState(null, "", `${location.pathname}#room=${encodeURIComponent(roomId)}`);
   consent.hidden = true; setGate("GM 승인 대기 중", "pending");
-  pollTimer = setInterval(() => checkStatus().catch(() => setGate("상태 확인 지연", "error")), 1500);
+  mode = "pending"; schedule();
 }
 document.getElementById("join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
-document.getElementById("chat-form").addEventListener("submit", async event => {
+const chatForm = document.getElementById("chat-form");
+const chatInput = document.getElementById("chat-input");
+const sendStatus = document.getElementById("send-status");
+let sendStatusTimer = 0;
+const showSendStatus = (message, ms = 0) => {
+  clearTimeout(sendStatusTimer);
+  sendStatus.textContent = message;
+  if (ms) sendStatusTimer = setTimeout(() => { sendStatus.textContent = ""; }, ms);
+};
+chatForm.addEventListener("submit", async event => {
   event.preventDefault();
-  const input = document.getElementById("chat-input");
-  const text = input.value.trim();
+  const text = chatInput.value.trim();
   if (!text) return;
+  chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
-  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text }) });
-  const status = document.getElementById("send-status");
-  if (!response.ok) { status.textContent = (await response.json().catch(() => ({}))).error || "전송 실패"; return; }
-  input.value = ""; status.textContent = "GM 브리지 전달 대기";
-  setTimeout(() => { status.textContent = ""; }, 2500);
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
+    showSendStatus("GM 브리지 전달 대기", 2500);
+  } catch (error) {
+    chatInput.value = chatInput.value ? `${text}\n${chatInput.value}` : text; // give the text back instead of losing it
+    showSendStatus(error?.message || "전송 실패");
+  }
 });
-if (roomId && !inviteToken) { consent.hidden = true; checkStatus(); pollTimer = setInterval(() => checkStatus().catch(() => {}), 1500); }
+// Enter sends, Shift+Enter inserts a newline. Enter that confirms an IME composition (Korean/Japanese) must not send.
+chatInput.addEventListener("keydown", event => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  chatForm.requestSubmit();
+});
+if (roomId && !inviteToken) { consent.hidden = true; mode = "pending"; checkStatus().catch(() => {}).finally(schedule); }

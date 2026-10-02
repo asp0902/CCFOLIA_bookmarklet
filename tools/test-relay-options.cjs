@@ -77,5 +77,16 @@ function createOptions({ confirmResult = true, stopStatus = 200, storage = {} } 
     assert.equal(o.calls.filter(call => /share\/stop/.test(call.url)).length, 0);
     assert.match(o.elements['stop-status'].textContent, /공유 중인 룸이 없습니다/);
   }
+  // Push-socket status line.
+  for (const [info, expected] of [
+    [{ state: 'open', roomId: 'R1', at: Date.now() }, /연결됨/],
+    [{ state: 'closed', roomId: 'R1', at: Date.now(), code: 1006, reason: '' }, /끊김 \(코드 1006\)/],
+    [{ state: 'closed', roomId: 'OTHER', at: Date.now(), code: 1006 }, /아직 연결 시도 없음/],
+    [undefined, /아직 연결 시도 없음/],
+  ]) {
+    const o = createOptions({ storage: { relaySocket: info } });
+    await flush();
+    assert.match(o.elements.socket.textContent, expected);
+  }
   console.log('relay options: stop button confirm, request, state cleanup and bridge signal passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

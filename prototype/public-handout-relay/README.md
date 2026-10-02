@@ -24,3 +24,14 @@ node server.mjs
 공개 테스트 배포: `https://capybara-public-handout-relay.for-trpg.workers.dev`
 
 배포판은 룸별 SQLite Durable Object로 승인·세션·자료를 보존합니다. GM 토큰은 Worker secret에만 저장됩니다. 무료 한도 초과, 배포 삭제 또는 Durable Object 저장소 삭제 시 서비스가 중단될 수 있습니다.
+
+## 실시간 푸시
+
+서버에서 클라이언트로의 전달은 WebSocket으로 즉시 밀어 줍니다(Durable Object Hibernation API, 유휴 시 과금되는 시간 없이 연결 유지). 전송(참여자 → 서버, GM → 서버)은 지금처럼 HTTP POST입니다.
+
+- 참여자 화면: `/api/rooms/{id}/ws` (HttpOnly 세션 쿠키로 인증). 새 메시지, 핸드아웃, 룸 정보 변경, 접근 취소·공유 중지 알림을 받습니다.
+- GM 확장: `/api/admin/rooms/{id}/ws`. 브라우저 WebSocket은 `Authorization` 헤더를 못 쓰므로 GM 토큰을 `Sec-WebSocket-Protocol`(`capybara-gm`, base64url 토큰)로 보냅니다. 새 참여자 명령을 즉시 받습니다. 서버는 응답에서 `capybara-gm`만 돌려주고 토큰은 되돌려 보내지 않습니다.
+- 20초마다 `ping`/`pong`(서버가 자동 응답)으로 연결을 유지하고, 응답이 없으면 끊고 재연결합니다.
+- **폴링은 안전망으로 남아 있습니다.** 연결이 열려 있으면 10초마다, 끊겨 있으면 1.5초마다 조회합니다. 웹소켓이 막힌 환경에서도 동작합니다.
+- 코코포리아 쪽 채팅 읽기도 폴링 대신 CCFOLIA 메시지 저장소 구독(`relaySubscribe`)으로 즉시 반응합니다.
+

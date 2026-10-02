@@ -1,11 +1,22 @@
 const encoder = new TextEncoder();
+const GM_SOCKET_PROTOCOL = "capybara-gm";
+const MAX_GM_SOCKETS = 5;
+const MAX_PARTICIPANT_SOCKETS = 100;
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers } });
 const token = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 const text = (value, max) => typeof value === "string" ? value.replace(/\u0000/g, "").slice(0, max) : "";
-const bearer = request => /^Bearer\s+(.+)$/i.exec(request.headers.get("Authorization") || "")?.[1] || "";
+const bearer = request => {
+  const header = /^Bearer\s+(.+)$/i.exec(request.headers.get("Authorization") || "")?.[1];
+  if (header) return header;
+  if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return "";
+  const protocols = (request.headers.get("Sec-WebSocket-Protocol") || "").split(",").map(item => item.trim());
+  const encoded = protocols[0] === GM_SOCKET_PROTOCOL ? protocols[1] || "" : "";
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) return "";
+  try { return new TextDecoder().decode(Uint8Array.from(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0))); } catch (_) { return ""; }
+};
 const safeEqual = async (left, right) => {
   const [a, b] = await Promise.all([crypto.subtle.digest("SHA-256", encoder.encode(String(left))), crypto.subtle.digest("SHA-256", encoder.encode(String(right)))]);
   const aa = new Uint8Array(a); const bb = new Uint8Array(b);
@@ -18,14 +29,14 @@ const roomFromPath = pathname => {
   const match = pathname.match(/^\/api\/(?:admin\/)?rooms\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 };
-const securityHeaders = {
+const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "X-Robots-Tag": "noindex, nofollow, noarchive"
-};
+});
 
 export class RoomRelay {
   constructor(state) {
@@ -33,7 +44,30 @@ export class RoomRelay {
     this.data = null;
     this.clients = new Map();
     this.rates = new Map();
+    // Keep-alive pings are answered without waking a hibernating object.
+    if (typeof WebSocketRequestResponsePair === "function") this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
+  sockets(tag) { try { return this.state.getWebSockets(tag); } catch (_) { return []; } }
+  push(tag, payload) {
+    const line = JSON.stringify(payload);
+    this.sockets(tag).forEach(socket => { try { socket.send(line); } catch (_) {} });
+  }
+  closeSockets(tag, code, reason) {
+    this.sockets(tag).forEach(socket => { try { socket.close(code, reason); } catch (_) {} });
+  }
+  acceptSocket(tags, protocol = "") {
+    const { 0: client, 1: server } = new WebSocketPair();
+    this.state.acceptWebSocket(server, tags);
+    try { server.send(JSON.stringify({ type: "hello" })); } catch (_) {}
+    return new Response(null, { status: 101, webSocket: client, headers: protocol ? { "Sec-WebSocket-Protocol": protocol } : {} });
+  }
+  pushMessage(room, message) {
+    if (room.capabilities?.chatRead) this.push("p", { type: "message", message });
+  }
+  // Clients only ever send "ping" (answered automatically); anything else is not part of the protocol.
+  async webSocketMessage(socket) { try { socket.close(1008, "unsupported"); } catch (_) {} }
+  async webSocketClose(socket, code, reason) { try { socket.close(code, reason); } catch (_) {} }
+  async webSocketError(socket) { try { socket.close(1011, "error"); } catch (_) {} }
   async room() {
     if (!this.data) this.data = await this.state.storage.get("room") || null;
     return this.data;
@@ -56,6 +90,8 @@ export class RoomRelay {
     this.clients.get(memberId)?.forEach(client => client.writer.write(line).catch(() => this.removeClient(memberId, client)));
   }
   close(memberId, event) {
+    this.push(`p:${memberId}`, { type: "closed", reason: event });
+    this.closeSockets(`p:${memberId}`, 4001, event);
     const writers = this.clients.get(memberId);
     if (!writers) return;
     const line = encoder.encode(`event: ${event}\ndata: {}\n\n`);
@@ -111,6 +147,7 @@ export class RoomRelay {
       };
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
+      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
       return json({ inviteUrl: `${request.headers.get("X-Public-Origin")}/#room=${encodeURIComponent(body.roomId)}&token=${encodeURIComponent(room.inviteToken)}` });
     }
     if (request.method === "POST" && url.pathname === "/api/share") {
@@ -123,6 +160,7 @@ export class RoomRelay {
       room.active = true; room.handout = handout;
       await this.save(room);
       Object.values(room.participants).forEach(member => { if (member.status === "approved") this.send(member.id, "handout", handout); });
+      if (room.capabilities.publicHandout) this.push("p", { type: "handout", handout });
       return json({ inviteUrl: `${request.headers.get("X-Public-Origin")}/#room=${encodeURIComponent(body.roomId)}&token=${encodeURIComponent(room.inviteToken)}` });
     }
     if (request.method === "POST" && url.pathname === "/api/share/stop") {
@@ -137,10 +175,21 @@ export class RoomRelay {
         room.commands = [];
         room.seenMessageIds = {};
         await this.save(room);
+        this.push("p", { type: "closed", reason: "stopped" });
+        this.push("gm", { type: "closed", reason: "stopped" });
+        this.closeSockets("p", 4003, "stopped");
+        this.closeSockets("gm", 4003, "stopped");
       }
       return json({ stopped: true });
     }
     if (!room?.active) return json({ error: "공유 중인 룸이 없습니다." }, 404);
+    if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/ws$/.test(url.pathname) && request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+      if (this.sockets("gm").length >= MAX_GM_SOCKETS) return json({ error: "연결이 너무 많습니다." }, 429);
+      room.gmHeartbeatAt = Date.now();
+      await this.save(room);
+      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
+      return this.acceptSocket(["gm"], GM_SOCKET_PROTOCOL);
+    }
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/participants$/.test(url.pathname)) {
       return json({ participants: Object.values(room.participants).map(({ id, displayName, status, requestedAt }) => ({ id, displayName, status, requestedAt })) });
     }
@@ -157,14 +206,19 @@ export class RoomRelay {
       command.status = body.status;
       command.acknowledgedAt = new Date().toISOString();
       command.error = text(body.error, 300);
-      if (body.status === "delivered") this.appendMessage(room, {
-        id: `external:${command.participantId}:${command.clientMessageId}`,
-        author: command.displayName,
-        text: command.text,
-        origin: "external",
-        createdAt: command.createdAt,
-      });
+      let appended = null;
+      if (body.status === "delivered") {
+        const message = {
+          id: `external:${command.participantId}:${command.clientMessageId}`,
+          author: command.displayName,
+          text: command.text,
+          origin: "external",
+          createdAt: command.createdAt,
+        };
+        if (this.appendMessage(room, message)) appended = message;
+      }
       await this.save(room);
+      if (appended) this.pushMessage(room, appended);
       return json({ id: command.id, status: command.status });
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
@@ -180,7 +234,7 @@ export class RoomRelay {
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const added = this.appendMessage(room, message);
       room.gmHeartbeatAt = Date.now();
-      if (added) await this.save(room);
+      if (added) { await this.save(room); this.pushMessage(room, message); }
       return json({ accepted: true, duplicate: !added });
     }
     const decisionMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/decision$/);
@@ -210,10 +264,14 @@ export class RoomRelay {
     if (!member) return json({ error: "접근 권한이 없습니다." }, 403);
     if (request.method === "GET" && /\/status$/.test(url.pathname)) return json({ status: member.status, displayName: member.displayName });
     if (member.status !== "approved") return json({ error: "GM 승인이 필요합니다." }, 403);
+    if (request.method === "GET" && /\/ws$/.test(url.pathname) && request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+      if (this.sockets("p").length >= MAX_PARTICIPANT_SOCKETS) return json({ error: "연결이 너무 많습니다." }, 429);
+      return this.acceptSocket(["p", `p:${member.id}`]);
+    }
     if (request.method === "GET" && /\/state$/.test(url.pathname)) return json({
       roomTitle: room.roomTitle || "플레이 룸",
       capabilities: room.capabilities,
-      gmOnline: Date.now() - Number(room.gmHeartbeatAt || 0) < 15_000,
+      gmOnline: Date.now() - Number(room.gmHeartbeatAt || 0) < 30_000,
       messages: room.capabilities.chatRead ? room.messages : [],
       handout: room.capabilities.publicHandout ? room.handout : {},
     });
@@ -230,6 +288,7 @@ export class RoomRelay {
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);
+      this.push("gm", { type: "command", command });
       return json({ accepted: true, commandId: command.id }, 202);
     }
     if (request.method === "GET" && /\/handout$/.test(url.pathname)) return json(room.handout);
@@ -253,7 +312,7 @@ export default {
     if (!url.pathname.startsWith("/api/")) {
       const response = await env.ASSETS.fetch(request);
       const headers = new Headers(response.headers);
-      Object.entries(securityHeaders).forEach(([key, value]) => headers.set(key, value));
+      Object.entries(securityHeadersFor(url)).forEach(([key, value]) => headers.set(key, value));
       return new Response(response.body, { status: response.status, headers });
     }
     const origin = request.headers.get("Origin") || "";
@@ -275,9 +334,11 @@ export default {
     headers.set("X-Capybara-GM", gmRoute ? "1" : "0");
     headers.set("X-Client-IP", request.headers.get("CF-Connecting-IP") || "unknown");
     headers.set("X-Public-Origin", url.origin);
+    if (headers.has("Sec-WebSocket-Protocol")) headers.set("Sec-WebSocket-Protocol", gmRoute ? GM_SOCKET_PROTOCOL : headers.get("Sec-WebSocket-Protocol"));
     const response = await env.ROOMS.getByName(roomId).fetch(new Request(request, { headers }));
+    if (response.status === 101) return response;
     const outputHeaders = new Headers(response.headers);
-    Object.entries(securityHeaders).forEach(([key, value]) => outputHeaders.set(key, value));
+    Object.entries(securityHeadersFor(url)).forEach(([key, value]) => outputHeaders.set(key, value));
     if (allowedOrigin) outputHeaders.set("Access-Control-Allow-Origin", allowedOrigin);
     return new Response(response.body, { status: response.status, headers: outputHeaders });
   }
