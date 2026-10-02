@@ -145,7 +145,8 @@ export function createRelay({ gmToken = token(), publicOrigin = "http://127.0.0.
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/participant.js" || url.pathname === "/style.css")) {
         const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
         const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
-        const body = fs.readFileSync(path.join(root, "public", file));
+        let body = fs.readFileSync(path.join(root, "public", file));
+        if (file === "index.html") body = Buffer.from(body.toString("utf8").replaceAll("__PUBLIC_ORIGIN__", publicOrigin));
         res.writeHead(200, { "Content-Type": types[path.extname(file)], "Content-Length": body.length, "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" });
         return res.end(body);
       }
