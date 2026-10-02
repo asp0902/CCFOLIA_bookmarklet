@@ -153,16 +153,34 @@ async function join() {
   mode = "pending"; schedule();
 }
 document.getElementById("join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
-document.getElementById("chat-form").addEventListener("submit", async event => {
+const chatForm = document.getElementById("chat-form");
+const chatInput = document.getElementById("chat-input");
+const sendStatus = document.getElementById("send-status");
+let sendStatusTimer = 0;
+const showSendStatus = (message, ms = 0) => {
+  clearTimeout(sendStatusTimer);
+  sendStatus.textContent = message;
+  if (ms) sendStatusTimer = setTimeout(() => { sendStatus.textContent = ""; }, ms);
+};
+chatForm.addEventListener("submit", async event => {
   event.preventDefault();
-  const input = document.getElementById("chat-input");
-  const text = input.value.trim();
+  const text = chatInput.value.trim();
   if (!text) return;
+  chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
-  const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text }) });
-  const status = document.getElementById("send-status");
-  if (!response.ok) { status.textContent = (await response.json().catch(() => ({}))).error || "전송 실패"; return; }
-  input.value = ""; status.textContent = "GM 브리지 전달 대기";
-  setTimeout(() => { status.textContent = ""; }, 2500);
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
+    showSendStatus("GM 브리지 전달 대기", 2500);
+  } catch (error) {
+    chatInput.value = chatInput.value ? `${text}\n${chatInput.value}` : text; // give the text back instead of losing it
+    showSendStatus(error?.message || "전송 실패");
+  }
+});
+// Enter sends, Shift+Enter inserts a newline. Enter that confirms an IME composition (Korean/Japanese) must not send.
+chatInput.addEventListener("keydown", event => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  chatForm.requestSubmit();
 });
 if (roomId && !inviteToken) { consent.hidden = true; mode = "pending"; checkStatus().catch(() => {}).finally(schedule); }
