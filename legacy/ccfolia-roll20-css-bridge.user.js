@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.86
+// @version      0.3.87
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.86"),
+    version: getUserscriptVersion("0.3.87"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5666,21 +5666,29 @@
       // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
       `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding: 0 16px 6px !important; margin: 0 !important; min-height: 0 !important; }`,
+      // 묶음 안 메시지 사이 간격은 5px. 묶음의 마지막 행은 아래 여백(li padding·본문 margin)을 건드리지 않아
+      // 네이티브 마지막 메시지와 같은 하단 여백을 유지한다.
+      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 0 !important; padding-left: 16px !important; padding-right: 16px !important; margin: 0 !important; min-height: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { padding-bottom: 5px !important; }`,
       // 연속 묶음 내부 선만 숨기고 마지막 행의 네이티브 하단선은 보존한다.
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { display: none !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { margin: 0 !important; padding-left: 56px !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) .MuiListItemText-root { margin: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"][${LAST}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
+      // 나레이션 묶음의 마지막 행은 위아래 대칭(16px) 규칙이 따로 있어 본문 아래 margin 을 두지 않는다.
+      `.MuiListItem-root[${CONT_ATTR}="1"][${LAST}="1"]:has(.ccf-render-root[data-ccf-narration="1"]) .MuiListItemText-root { margin-bottom: 0 !important; }`,
+      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { padding-left: 56px !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
       // === leader li === 자기 아래쪽 padding만 cont와 맞춤
-      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 6px !important; border-bottom: 0 !important; }`,
+      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 5px !important; border-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] .MuiListItemText-root { margin-bottom: 0 !important; }`,
       `.MuiListItem-root[${LEADER}="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
       // === leader 부모 wrapper === 아래쪽 padding/margin만 제거
       `[${LEADER_WRAP}="1"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }`,
       // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
-      `[${WRAP}="1"] { padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; min-height: 0 !important; }`
+      `[${WRAP}="1"] { padding-top: 0 !important; margin-top: 0 !important; min-height: 0 !important; }`,
+      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) { padding-bottom: 0 !important; margin-bottom: 0 !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -5982,7 +5990,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.86",
+    version: "0.3.87",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
