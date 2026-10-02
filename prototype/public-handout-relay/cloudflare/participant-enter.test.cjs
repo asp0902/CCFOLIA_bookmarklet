@@ -23,7 +23,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const participantId = (await (await admin(`/api/admin/rooms/${roomId}/participants`)).json()).participants[0].id;
     await post(`/api/admin/rooms/${roomId}/participants/${participantId}/decision`, { decision: 'approve' });
     await page.getByRole('heading', { name: '채팅' }).waitFor();
-    assert.match(await input.getAttribute('placeholder'), /Enter/);
+    assert.equal(await input.getAttribute('placeholder'), '메시지를 입력', 'placeholder matches the original CCFOLIA wording');
+    assert.match(await input.getAttribute('title'), /Enter.*Shift\+Enter/, 'the key hint stays available as a tooltip');
 
     // Enter sends and clears the box immediately.
     await input.fill('엔터로 보냄');
