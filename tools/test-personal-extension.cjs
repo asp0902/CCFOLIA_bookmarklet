@@ -17,30 +17,48 @@ assert.equal(manifest.content_scripts[0].all_frames, false);
 assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js']);
 assert.equal(manifest.content_scripts[1].world, 'ISOLATED');
 assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js']);
-assert.equal(manifest.options_page, 'options.html');
+assert.equal(manifest.options_page, undefined, 'settings live in the icon modal, not an options page');
+assert(fs.existsSync(path.join(extension, 'share-modal.js')));
 
 async function checkAction() {
-  let listener;
+  let clicked, messaged;
   const calls = [];
   const record = name => async value => { calls.push([name, value]); };
   const sandbox = {
     URL, console: { error() {} },
     chrome: {
-      action: { onClicked: { addListener: fn => { listener = fn; } }, setBadgeText: record('badge'), setBadgeBackgroundColor: record('color'), setTitle: record('title') },
+      action: { onClicked: { addListener: fn => { clicked = fn; } }, setBadgeText: record('badge'), setBadgeBackgroundColor: record('color'), setTitle: record('title') },
+      runtime: { onMessage: { addListener: fn => { messaged = fn; } } },
       scripting: { executeScript: async args => { calls.push(['inject', args]); return [{ result: true }]; } }
     }
   };
   vm.runInNewContext(fs.readFileSync(path.join(extension, 'background.js'), 'utf8'), sandbox);
-  await listener({ id: 1, url: 'https://example.org/' });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  // Icon click: the share modal is injected (isolated world) on room tabs only.
+  await clicked({ id: 1, url: 'https://example.org/' });
   assert.equal(calls.filter(([name]) => name === 'inject').length, 0);
   assert(calls.some(([name, value]) => name === 'badge' && value.text === '!'));
   calls.length = 0;
-  await listener({ id: 2, url: 'https://ccfolia.com/rooms/test' });
-  assert.equal(calls.filter(([name]) => name === 'inject').length, 2);
+  await clicked({ id: 2, url: 'https://ccfolia.com/rooms/test' });
+  const injects = calls.filter(([name]) => name === 'inject').map(([, args]) => args);
+  assert.equal(injects.length, 1);
+  assert.equal(JSON.stringify(injects[0]), JSON.stringify({ target: { tabId: 2 }, files: ['share-modal.js'] }));
   assert(calls.some(([name, value]) => name === 'badge' && value.text === ''));
+  // "툴킷 열기" in the modal: only a message from a room tab opens the panel (MAIN world).
+  calls.length = 0;
+  messaged({ type: 'capybara-open-toolkit' }, { tab: { id: 3, url: 'https://example.org/' } });
+  messaged({ type: 'other' }, { tab: { id: 3, url: 'https://ccfolia.com/rooms/x' } });
+  await flush();
+  assert.equal(calls.filter(([name]) => name === 'inject').length, 0);
+  messaged({ type: 'capybara-open-toolkit' }, { tab: { id: 3, url: 'https://ccfolia.com/rooms/x' } });
+  await flush();
+  const opened = calls.filter(([name]) => name === 'inject').map(([, args]) => args);
+  assert.equal(opened.length, 2);
+  assert(opened.every(args => args.world === 'MAIN' && args.target.tabId === 3));
   sandbox.chrome.scripting.executeScript = async () => [{ result: false }];
   calls.length = 0;
-  await listener({ id: 2, url: 'https://ccfolia.com/rooms/test' });
+  messaged({ type: 'capybara-open-toolkit' }, { tab: { id: 3, url: 'https://ccfolia.com/rooms/x' } });
+  await flush();
   assert(calls.some(([name, value]) => name === 'badge' && value.text === '!'));
 }
 
@@ -87,6 +105,24 @@ async function checkAction() {
     });
     assert.equal(injection, true);
     assert.equal(await page.locator('body').getAttribute('data-opened'), '1');
+    // Icon modal (isolated world): injecting once opens it, again closes it; the real chrome.storage backs the form.
+    const toggleModal = () => worker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({ url: 'https://ccfolia.com/*' });
+      await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, files: ['share-modal.js'] });
+    });
+    await toggleModal();
+    await page.waitForFunction(() => !!document.getElementById('capybara-share-modal-host'));
+    assert.equal(await page.locator('#capybara-share-modal-host #title').textContent(), '웹 공유');
+    await page.locator('#capybara-share-modal-host #url').fill('https://relay.example.test');
+    await page.locator('#capybara-share-modal-host #token').fill('tok');
+    await page.locator('#capybara-share-modal-host #enabled').evaluate(input => { input.checked = true; });
+    await page.locator('#capybara-share-modal-host #save').click();
+    await page.waitForFunction(() => document.getElementById('capybara-share-modal-host').shadowRoot.getElementById('toast').textContent.includes('저장'));
+    const saved = await worker.evaluate(() => chrome.storage.local.get(['relayEnabled', 'relayUrl', 'relayGmToken']));
+    assert.deepEqual(saved, { relayEnabled: true, relayUrl: 'https://relay.example.test', relayGmToken: 'tok' });
+    await toggleModal();
+    await page.waitForFunction(() => !document.getElementById('capybara-share-modal-host'));
+    await worker.evaluate(() => chrome.storage.local.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.__CAPYBARA_TOOLKIT__);
     assert.equal(requests, 2, 'reload auto-start');
