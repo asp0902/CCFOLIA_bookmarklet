@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.57
+// @version      0.1.58
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.57"),
+    version: getUserscriptVersion("0.1.58"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -577,6 +577,9 @@
     try { observeRenderDom(); } catch (error) {
       console.error("[CCF NAR] observeRenderDom threw — 메시지 수신 디코딩 불가", error);
     }
+    try { installTooltipLayer(); } catch (error) {
+      console.error("[CCF NAR] installTooltipLayer threw — 툴팁이 표시되지 않음", error);
+    }
   }
 
   function injectStyle() {
@@ -681,56 +684,32 @@
         transition: background-color 120ms ease, color 120ms ease;
       }
 
-      .ccf-render-root .ccf-tooltip-frag::before,
-      .ccf-render-root .ccf-tooltip-frag::after {
-        position: absolute;
-        left: calc(100% + 6px);
-        opacity: 0;
-        visibility: hidden;
-        transform: none;
-        transition: opacity 120ms ease;
-        pointer-events: none;
-        z-index: 2;
-      }
 
-      .ccf-render-root .ccf-tooltip-frag::before {
-        content: "";
-        left: calc(100% + 12px);
-        bottom: calc(100% + 2px);
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 6px solid rgba(18, 18, 18, 0.96);
-      }
-
-      .ccf-render-root .ccf-tooltip-frag::after {
-        content: attr(data-tooltip);
-        bottom: calc(100% + 8px);
-        min-width: 40px;
-        max-width: min(260px, calc(100vw - 32px));
+      /* 툴팁 본문은 말풍선 안의 ::after 가 아니라 body 에 붙는 화면 고정 레이어로 그린다.
+         ::after 는 조상의 overflow 에 잘리고(호버해도 안 보임), 숨겨둔 상태에서도 조상의
+         스크롤 가능 영역을 넓혀 룸 전체에 스크롤을 만들었다. position:fixed 는 둘 다 없다. */
+      .ccf-tooltip-layer {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: 2147483000;
+        display: none;
+        box-sizing: border-box;
+        width: max-content;
+        max-width: min(360px, calc(100vw - 16px));
         padding: 7px 10px;
-        border-radius: 0;
         background: rgba(18, 18, 18, 0.96);
         color: #ffffff;
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-        font-size: 12px;
-        line-height: 1.35;
+        font: 12px/1.35 "Noto Sans KR", "Malgun Gothic", sans-serif;
         text-align: left;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
+        pointer-events: none;
       }
 
-      .ccf-render-root .ccf-tooltip-frag[data-tooltip-multiline="0"]::after {
-        width: max-content;
-        max-width: min(360px, calc(100vw - 32px));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .ccf-render-root .ccf-tooltip-frag:hover::before,
-      .ccf-render-root .ccf-tooltip-frag:hover::after {
-        opacity: 1;
-        visibility: visible;
+      .ccf-tooltip-layer[data-open="1"] {
+        display: block;
       }
 
       .ccf-render-root .ccf-tooltip-frag:hover {
@@ -902,6 +881,75 @@
     document.documentElement.appendChild(style);
   }
 
+  function installTooltipLayer() {
+    let layer = null;
+    let current = null;
+
+    function ensureLayer() {
+      if (layer?.isConnected) return layer;
+      layer = document.createElement("div");
+      layer.className = "ccf-tooltip-layer";
+      layer.setAttribute("role", "tooltip");
+      // MutationObserver / 스캔 대상에서 제외
+      layer.setAttribute(CCF_SAFE_UI_ATTR, "1");
+      (document.body || document.documentElement).appendChild(layer);
+      return layer;
+    }
+
+    function hide() {
+      current = null;
+      layer?.removeAttribute("data-open");
+    }
+
+    function show(frag) {
+      const text = frag.dataset.tooltip || "";
+      if (!text) return;
+      const el = ensureLayer();
+      current = frag;
+      el.textContent = text;
+      el.style.left = "0px";
+      el.style.top = "0px";
+      el.setAttribute("data-open", "1");
+      const rect = frag.getBoundingClientRect();
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      const margin = 8;
+      let left = rect.left + rect.width / 2 - width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+      let top = rect.top - height - 8;
+      if (top < margin) top = rect.bottom + 8; // 위쪽 공간이 없으면 아래에 표시
+      el.style.left = `${Math.round(left)}px`;
+      el.style.top = `${Math.round(top)}px`;
+    }
+
+    const onOver = (event) => {
+      const frag = event.target instanceof Element ? event.target.closest(".ccf-tooltip-frag") : null;
+      if (!frag || frag === current) return;
+      show(frag);
+    };
+    const onOut = (event) => {
+      if (!current) return;
+      const to = event.relatedTarget;
+      if (to instanceof Node && current.contains(to)) return;
+      hide();
+    };
+    const onViewportChange = () => { if (current) hide(); };
+
+    document.addEventListener("mouseover", onOver, true);
+    document.addEventListener("mouseout", onOut, true);
+    window.addEventListener("scroll", onViewportChange, true);
+    window.addEventListener("resize", onViewportChange);
+    ccfFsRegisterTeardown(() => {
+      document.removeEventListener("mouseover", onOver, true);
+      document.removeEventListener("mouseout", onOut, true);
+      window.removeEventListener("scroll", onViewportChange, true);
+      window.removeEventListener("resize", onViewportChange);
+      layer?.remove();
+      layer = null;
+      current = null;
+    });
+  }
+
   function observeRenderDom() {
     const mo = new MutationObserver((mutations) => {
       if (shouldPauseChatRenderForHistoryLoad(mutations)) {
@@ -928,6 +976,7 @@
               if (hidden && overlay && node.parentNode === root) {
                 hidden.appendChild(node);
               }
+              if (releaseStaleRenderRoot(root)) continue;
               scanWithin(root);
             }
           }
@@ -940,7 +989,9 @@
             if (parent.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
             // 오버레이 렌더 이후엔 원본 text node가 .ccf-original-hidden 래퍼 안에 있으므로,
             // characterData가 갱신되면 래퍼가 아니라 그 바깥의 .ccf-render-root(el)부터 다시 스캔한다.
-            scanWithin(parent.closest?.(".ccf-render-root") || parent);
+            const target = parent.closest?.(".ccf-render-root") || parent;
+            if (releaseStaleRenderRoot(target)) continue;
+            scanWithin(target);
           }
         }
       }
@@ -952,6 +1003,25 @@
       characterData: true
     });
     ccfFsRegisterTeardown(() => mo.disconnect());
+  }
+
+  // 가상화 리스트(탭 전환 등)가 이미 렌더한 <p>를 엔벨롭 없는 일반 메시지에 재사용하면,
+  // 원본 text node만 일반 글로 바뀌고 이전 메시지의 오버레이가 그대로 남는다.
+  // 오버레이를 걷어내고 원본 노드를 제자리로 돌려놓아 해당 메시지가 그대로 보이게 한다.
+  function releaseStaleRenderRoot(el) {
+    if (!(el instanceof HTMLElement) || !el.classList.contains("ccf-render-root")) return false;
+    const hidden = el.querySelector(":scope > .ccf-original-hidden");
+    if (!hidden) return false;
+    const raw = hidden.textContent || "";
+    if (raw.includes(INVIS_START) && raw.includes(INVIS_END)) return false; // 여전히 엔벨롭 메시지 → 정상 재렌더
+    el.querySelectorAll(":scope > .ccf-render-overlay").forEach((overlay) => overlay.remove());
+    while (hidden.firstChild) el.insertBefore(hidden.firstChild, hidden);
+    hidden.remove();
+    el.classList.remove("ccf-render-root");
+    el.removeAttribute(CCF_RENDERED_ATTR);
+    el.removeAttribute(CCF_RAW_ATTR);
+    applyNarrationMessageLayout(el, false);
+    return true;
   }
 
   function shouldPauseChatRenderForHistoryLoad(mutations) {
@@ -1286,11 +1356,16 @@
     const scroller = state?.scroller;
     if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
     // 바닥 근처였으면 잔여 gap을 유지하지 않고 정확히 바닥으로 (잔여 gap 영구 보존 방지).
-    // scroll-behavior:smooth가 걸려 있으면 이동이 보이므로 일시적으로 auto 강제.
-    const prevBehavior = scroller.style.scrollBehavior;
-    scroller.style.scrollBehavior = "auto";
-    scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    scroller.style.scrollBehavior = prevBehavior;
+    // 렌더가 높이를 바꾸지 않아 이미 바닥이면 아무것도 쓰지 않는다(불필요한 스크롤 쓰기가
+    // 깜빡임과 CCFOLIA native 스크롤과의 충돌 원인). 이동이 필요할 때도 scroller 의 style 을
+    // 건드리지 않고 behavior:"instant" 로 smooth 스크롤을 무시한다.
+    const target = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    if (Math.abs(scroller.scrollTop - target) <= 1) return;
+    try {
+      scroller.scrollTo({ top: target, behavior: "instant" });
+    } catch (error) {
+      scroller.scrollTop = target;
+    }
   }
 
   function hideNarrationElements(item, messageEl) {
@@ -3113,57 +3188,6 @@
         transition: background-color 120ms ease, color 120ms ease;
       }
 
-      .ccf-tooltip-frag::before,
-      .ccf-tooltip-frag::after {
-        position: absolute;
-        left: calc(100% + 6px);
-        opacity: 0;
-        visibility: hidden;
-        transform: none;
-        transition: opacity 120ms ease;
-        pointer-events: none;
-        z-index: 2;
-      }
-
-      .ccf-tooltip-frag::before {
-        content: "";
-        left: calc(100% + 12px);
-        bottom: calc(100% + 2px);
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 6px solid rgba(18, 18, 18, 0.96);
-      }
-
-      .ccf-tooltip-frag::after {
-        content: attr(data-tooltip);
-        bottom: calc(100% + 8px);
-        min-width: 40px;
-        max-width: min(260px, calc(100vw - 32px));
-        padding: 7px 10px;
-        border-radius: 0;
-        background: rgba(18, 18, 18, 0.96);
-        color: #ffffff;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-        font-size: 12px;
-        line-height: 1.35;
-        text-align: left;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-
-      .ccf-tooltip-frag[data-tooltip-multiline="0"]::after {
-        width: max-content;
-        max-width: min(360px, calc(100vw - 32px));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .ccf-tooltip-frag:hover::before,
-      .ccf-tooltip-frag:hover::after {
-        opacity: 1;
-        visibility: visible;
-      }
 
       .ccf-tooltip-frag:hover {
         background: rgba(255, 255, 255, 0.96);
