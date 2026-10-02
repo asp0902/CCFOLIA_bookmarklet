@@ -34,7 +34,7 @@ vm.runInNewContext(prose, {
 });
 
 const css = styles[0]?.textContent || "";
-assert.ok(css.includes('[data-ccf-prose-cont-leader="1"] { padding-bottom: 6px !important; border-bottom: 0 !important; }'));
+assert.ok(css.includes('[data-ccf-prose-cont-leader="1"] { padding-bottom: 5px !important; border-bottom: 0 !important; }'));
 assert.ok(css.includes('[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) { border-bottom: 0 !important; }'));
 assert.ok(!css.includes("data-ccf-prose-cont-msg"));
 assert.ok(!css.includes("data-ccf-prose-cont-speaker-start"));
