@@ -21,7 +21,13 @@ node server.mjs
 - 서버 재시작 시 모든 공유와 세션이 사라집니다.
 - 이미 표시되거나 복사된 내용은 원격 회수할 수 없습니다.
 
-공개 테스트 배포: `https://capybara-public-handout-relay.for-trpg.workers.dev`
+공개 테스트 배포: `https://capybara-iv.for-trpg.workers.dev`
+
+> 이름을 `capybara-public-handout-relay` → `capybara-iv`로 바꾸면 Cloudflare에는 **새 Worker**가 만들어집니다. 저장된 룸 데이터(Durable Object)와 `GM_TOKEN` 시크릿은 옮겨지지 않고, 이전 초대 링크는 더 이상 열리지 않습니다.
+> 1. `cloudflare` 폴더에서 `npx wrangler deploy` (새 Worker 생성)
+> 2. `npx wrangler secret put GM_TOKEN` (새 값을 직접 입력, 어디에도 붙여넣지 않기)
+> 3. 확장(1.3.1 이상)을 다시 불러오고 웹 공유 창에서 릴레이 주소와 GM 토큰을 새로 저장, 룸 탭 새로고침
+> 4. 확인 후 Cloudflare 대시보드에서 이전 Worker를 삭제
 
 배포판은 룸별 SQLite Durable Object로 승인·세션·자료를 보존합니다. GM 토큰은 Worker secret에만 저장됩니다. 무료 한도 초과, 배포 삭제 또는 Durable Object 저장소 삭제 시 서비스가 중단될 수 있습니다.
 

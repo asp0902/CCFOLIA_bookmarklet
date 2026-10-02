@@ -2,7 +2,7 @@
 
 대상: PR #113 (GM 전용 설치 확장 + Cloudflare Worker 릴레이)
 테스트룸: `https://ccfolia.com/rooms/ChW_QP77I` (비민감 테스트 룸만 사용)
-릴레이: `https://capybara-public-handout-relay.for-trpg.workers.dev`
+릴레이: `https://capybara-iv.for-trpg.workers.dev`
 
 > GM 토큰은 본인만 입력합니다. 채팅, PR, 스크린샷, 이슈 어디에도 붙여넣지 마세요.
 > 참여자 초대 URL의 `#` 뒤 토큰도 접근 자격이므로 테스트 후에는 공유를 중지합니다.
@@ -42,7 +42,7 @@
 
 1. 코코포리아 룸 탭에서 툴바의 카피바라 확장 아이콘을 눌러 **웹 공유** 설정 창을 엽니다. (다시 누르거나 Esc, 바깥 클릭으로 닫습니다. 툴킷 패널은 창 왼쪽 아래 **툴킷 열기**)
 2. **웹 공유 사용** 스위치를 켭니다.
-3. **릴레이 주소**: `https://capybara-public-handout-relay.for-trpg.workers.dev` (기본값은 로컬 `127.0.0.1:8787` 이므로 반드시 바꿉니다)
+3. **릴레이 주소**: `https://capybara-iv.for-trpg.workers.dev` (기본값은 로컬 `127.0.0.1:8787` 이므로 반드시 바꿉니다)
 4. **GM 토큰**: 배포 때 설정한 `GM_TOKEN` 값을 직접 입력 → **저장**.
 5. 테스트룸 탭을 새로고침합니다.
 
