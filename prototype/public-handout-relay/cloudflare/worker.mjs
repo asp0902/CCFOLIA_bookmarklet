@@ -1,5 +1,7 @@
 const encoder = new TextEncoder();
 const GM_SOCKET_PROTOCOL = "capybara-gm";
+const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
+const htmlAttribute = value => String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const MAX_GM_SOCKETS = 5;
 const MAX_PARTICIPANT_SOCKETS = 100;
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers } });
@@ -313,6 +315,13 @@ export default {
       const response = await env.ASSETS.fetch(request);
       const headers = new Headers(response.headers);
       Object.entries(securityHeadersFor(url)).forEach(([key, value]) => headers.set(key, value));
+      if ((headers.get("Content-Type") || "").includes("text/html")) {
+        // Link previews (Discord, Slack, ...) need absolute og:url / og:image addresses, which depend on the host this is served from.
+        const html = (await response.text()).replaceAll(PUBLIC_ORIGIN_PLACEHOLDER, htmlAttribute(url.origin));
+        headers.delete("Content-Length");
+        headers.delete("ETag");
+        return new Response(html, { status: response.status, headers });
+      }
       return new Response(response.body, { status: response.status, headers });
     }
     const origin = request.headers.get("Origin") || "";

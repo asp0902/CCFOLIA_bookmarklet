@@ -50,7 +50,29 @@ try {
   assert.equal(page.headers.get("x-frame-options"), "DENY");
   assert.equal(page.headers.get("cache-control"), "no-store");
   assert.equal(page.headers.get("x-content-type-options"), "nosniff");
-  assert((await page.text()).includes("participant.js"), "page still served");
+  const html = await page.text();
+  assert(html.includes("participant.js"), "page still served");
+
+  // Link preview (Discord/Slack unfurl): absolute og:* addresses for the host that served the page, an image that exists.
+  const meta = name => new RegExp(`<meta (?:property|name)="${name}" content="([^"]*)"`).exec(html)?.[1];
+  assert(!html.includes("__PUBLIC_ORIGIN__"), "no placeholder left in the page");
+  assert.equal(meta("og:image"), `${base}/og-image.png`);
+  assert.equal(meta("og:url"), `${base}/`);
+  assert.equal(meta("twitter:image"), `${base}/og-image.png`);
+  assert.equal(meta("twitter:card"), "summary_large_image");
+  assert(meta("og:title") && meta("og:description"), "title and description are present");
+  assert.equal(meta("og:image:width"), "1200");
+  assert.equal(meta("og:image:height"), "630");
+  const image = await fetch(meta("og:image"));
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get("content-type"), "image/png");
+  const png = Buffer.from(await image.arrayBuffer());
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "valid PNG");
+  assert.equal(png.readUInt32BE(16), 1200);
+  assert.equal(png.readUInt32BE(20), 630);
+  assert(png.length < 1_000_000, "preview image stays small");
+  // Every URL in the metadata is exactly the expected one, so nothing from the request can leak into the markup.
+  for (const name of ["og:url", "og:image", "twitter:image"]) assert(!/["<>&]/.test(meta(name).replace("&amp;", "")), `${name} has no markup characters`);
 
   const connect = await request("/api/connect", { auth: true, body: { roomId, roomTitle: "소켓 검사", capabilities: { chatRead: true, chatWrite: true, publicHandout: true } } });
   const inviteToken = new URLSearchParams((await connect.json()).inviteUrl.split("#")[1]).get("token");
