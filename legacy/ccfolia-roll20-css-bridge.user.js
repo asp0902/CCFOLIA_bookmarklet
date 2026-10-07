@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.93
+// @version      0.3.94
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.93"),
+    version: getUserscriptVersion("0.3.94"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4554,6 +4554,24 @@
 
     applyExtraCss(el, style.extraCss);
     applyRenderedLayoutSafeguards(el, style);
+    centerBandShadow(el);
+  }
+
+  // 색 띠 기법(box-shadow: 0 8px 0 15px 색)은 상자 위(15-8)·아래(15+8)로 비대칭이라 글자가 띠 위쪽에 치우쳐 보인다.
+  // 그림자 y 오프셋을 0 으로 만들고, 같은 만큼 상자를 아래로(margin-top) 옮기되 흐름은 margin-bottom 으로 되돌린다.
+  // 띠가 차지하는 위치·두께와 다음 줄 위치는 그대로이고 글자만 띠 가운데로 온다. (단일 그림자, x 오프셋 0, blur 0 인 경우만)
+  function centerBandShadow(el) {
+    const match = /^(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]+|[a-z]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/i.exec(el.style.boxShadow || "");
+    if (!match) return;
+    const [, color, dx, dy, blur, spread] = match;
+    const offsetY = Number(dy);
+    if (Number(dx) !== 0 || Number(blur) !== 0 || Number(spread) <= 0 || !offsetY || /^inset$/i.test(color)) return;
+    const top = el.style.marginTop === "" ? 0 : parseFloat(el.style.marginTop);
+    const bottom = el.style.marginBottom === "" ? 0 : parseFloat(el.style.marginBottom);
+    if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+    el.style.boxShadow = `${color} 0px 0px 0px ${spread}px`;
+    el.style.marginTop = `${top + offsetY}px`;
+    el.style.marginBottom = `${bottom - offsetY}px`;
   }
 
   function applyExtraCss(el, extraCss) {
@@ -6031,7 +6049,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.93",
+    version: "0.3.94",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
