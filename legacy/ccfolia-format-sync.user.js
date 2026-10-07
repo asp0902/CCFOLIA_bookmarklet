@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.64
+// @version      0.1.65
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.64"),
+    version: getUserscriptVersion("0.1.65"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -12851,6 +12851,8 @@
     if (node.id === "ccf-preview") return null;
     if (node.closest && node.closest(`[${SAFE_UI_ATTR}="1"]`)) return null;
     if (node.closest && node.closest(`#${MODAL_ID}`)) return null;
+    // 툴킷의 추가 채팅 패널 입력칸은 자체 서식 줄을 갖고 있다. 여기에 서식 도구줄이 또 붙어 중복되지 않게 제외한다.
+    if (node.closest && node.closest("#ccf-second-chat-panel")) return null;
     const candidate = node.matches?.(EDITOR_SELECTOR) ? node : node.closest?.(EDITOR_SELECTOR);
     if (!(candidate instanceof HTMLElement)) return null;
     if (isCharacterNameInput(candidate)) return null;
@@ -14453,6 +14455,7 @@
     if (!(el instanceof HTMLElement)) return false;
     // MUI 다이얼로그 컨테이너는 채팅 컴포저가 아니다.
     if (el.closest('[role="dialog"], .MuiDialog-root') || el.getAttribute('role') === 'dialog') return false;
+    if (el.closest("#ccf-second-chat-panel")) return false;
     const submit = el.querySelector('button[type="submit"]');
     if (!submit) return false;
     if (findDiceButtons(el).length >= 1) return true;
@@ -14559,6 +14562,7 @@
 
   function findEditorFromComposer(bar) {
     if (!bar) return null;
+    if (bar instanceof Element && bar.closest("#ccf-second-chat-panel")) return null;
 
     if (bar instanceof HTMLElement
         && (bar.matches('[role="dialog"], .MuiDialog-root')
