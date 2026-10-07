@@ -332,7 +332,8 @@ export default {
     }
     if (origin && !allowedOrigin) return json({ error: "허용되지 않은 출처" }, 403);
     const gmRoute = url.pathname === "/api/connect" || url.pathname === "/api/share" || url.pathname === "/api/share/stop" || url.pathname.startsWith("/api/admin/");
-    if (gmRoute && !await safeEqual(bearer(request), env.GM_TOKEN || "")) return json({ error: "GM 인증 실패" }, 401);
+    // Fail closed: without a configured GM_TOKEN an empty bearer used to match the empty secret and open every GM route to anyone.
+    if (gmRoute && (!env.GM_TOKEN || !await safeEqual(bearer(request), env.GM_TOKEN))) return json({ error: "GM 인증 실패" }, 401);
     let roomId = roomFromPath(url.pathname);
     if (!roomId && request.method === "POST") {
       try { roomId = text((await request.clone().json()).roomId, 200).trim(); } catch (_) {}
