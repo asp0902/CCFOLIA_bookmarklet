@@ -55,8 +55,19 @@ function playBgm(bgm) {
 document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted = !bgmMuted; playBgm(bgmLast); });
 // Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
 let activeChannel = "main";
+const seenCount = {}, unread = new Set(); // per-channel message counts, to mark tabs that received something while another tab was open
 const DEFAULT_CHANNELS = [{ id: "main", label: "메인" }, { id: "info", label: "정보" }, { id: "other", label: "잡담" }];
+function trackUnread(data) {
+  const counts = {};
+  for (const message of data.messages || []) { const channel = message.channel || "main"; counts[channel] = (counts[channel] || 0) + 1; }
+  for (const channel of Object.keys(counts)) {
+    if (channel in seenCount && counts[channel] > seenCount[channel] && channel !== activeChannel) unread.add(channel);
+    seenCount[channel] = counts[channel];
+  }
+  unread.delete(activeChannel);
+}
 function renderTabs(data) {
+  trackUnread(data);
   if (data.dicebot) document.getElementById("dicebot-version").textContent = data.dicebot;
   const channels = data.channels?.length ? data.channels : DEFAULT_CHANNELS;
   if (!channels.some(item => item.id === activeChannel)) activeChannel = channels[0].id;
@@ -66,6 +77,7 @@ function renderTabs(data) {
     tab.type = "button"; tab.className = "chat-tab"; tab.setAttribute("role", "tab");
     tab.setAttribute("aria-selected", String(item.id === activeChannel));
     tab.textContent = item.label || item.id;
+    if (unread.has(item.id)) { const dot = document.createElement("i"); dot.className = "unread-dot"; tab.append(dot); }
     tab.addEventListener("click", () => { if (activeChannel === item.id) return; activeChannel = item.id; rendered = false; renderState(current); });
     return tab;
   }));
@@ -82,7 +94,9 @@ const renderState = data => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
     const name = message.author || "이름 없음";
-    const avatar = document.createElement("div"); avatar.className = "avatar"; avatar.textContent = [...name][0] || "?";
+    const avatar = document.createElement("div"); avatar.className = "avatar";
+    if (message.icon) { const img = document.createElement("img"); img.src = message.icon; img.alt = ""; img.referrerPolicy = "no-referrer"; img.addEventListener("error", () => { img.remove(); avatar.textContent = [...name][0] || "?"; }); avatar.append(img); }
+    else avatar.textContent = [...name][0] || "?";
     const text = document.createElement("div"); text.className = "msg-text";
     const head = document.createElement("h6");
     const author = document.createElement("strong"); author.textContent = name;
