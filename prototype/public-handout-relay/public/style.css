@@ -138,3 +138,14 @@ main{padding:0}
 .ext-note a{color:#2196f3}
 .web-join{margin:12px 0 0}
 .web-join button{padding:0;border:0;background:none;color:rgba(255,255,255,.5);font:inherit;font-size:.75rem;text-decoration:underline;cursor:pointer;font-weight:400}
+
+/* Stage camera controls and dice row. */
+.stage{touch-action:none;cursor:grab}
+.stage.panning{cursor:grabbing}
+#zoom-ctl{position:absolute;right:16px;bottom:24px;z-index:100;display:flex;flex-direction:column;gap:6px}
+#zoom-ctl button{width:32px;height:32px;padding:0;border:0;border-radius:2px;background:#fff;color:#212121;font-size:18px;font-weight:700;line-height:32px;box-shadow:0 2px 4px rgba(0,0,0,.3);cursor:pointer}
+#zoom-ctl button:hover{background:#e0e0e0}
+.dice-row{display:flex;gap:4px;padding:0 8px 8px 12px}
+#chat-form .dice-row button{width:30px;height:30px;padding:3px;border:0;border-radius:50%;background:none;box-shadow:none;align-self:auto;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#chat-form .dice-row button:hover{background:rgba(255,255,255,.08)}
+.dice-row svg{display:block}
