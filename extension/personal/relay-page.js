@@ -28,6 +28,18 @@
     const link = [...document.querySelectorAll('a[href*="bcdice"]')].find(a => /BCDice@[\w.\-]+/.test(a.textContent));
     return link ? clean(link.textContent.trim(), 40) : "";
   };
+  let lastSceneKey = "", sceneTimer = 0, sceneUnsub = null;
+  const sendScene = () => {
+    if (!roomId) return;
+    const api = window.__CCF_SECOND_CHAT_PANEL__;
+    const scene = typeof api?.relayScene === "function" ? api.relayScene() : null;
+    if (!scene) return;
+    const key = JSON.stringify(scene);
+    if (key === lastSceneKey) return;
+    lastSceneKey = key;
+    emit({ action: "scene", scene });
+  };
+  const scheduleScene = () => { if (!sceneTimer) sceneTimer = setTimeout(() => { sceneTimer = 0; sendScene(); }, 250); };
   const snapshot = () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
@@ -69,6 +81,12 @@
     if (snapshotTimer) return;
     snapshotTimer = setTimeout(() => { snapshotTimer = 0; snapshot(); }, 40);
   };
+  const trySceneSubscribe = () => {
+    if (sceneUnsub) return;
+    const api = window.__CCF_SECOND_CHAT_PANEL__;
+    if (typeof api?.relaySceneSubscribe !== "function") return;
+    try { sceneUnsub = api.relaySceneSubscribe(scheduleScene) || null; } catch (_) { sceneUnsub = null; }
+  };
   const trySubscribe = () => {
     if (unsubscribe) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
@@ -83,13 +101,15 @@
     const nextRoom = readRoomId();
     if (nextRoom !== roomId) {
       roomId = nextRoom; lastTitle = "";
-      lastBgm = null;
+      lastBgm = null; lastSceneKey = "";
       if (roomId) { emit({ action: "ready", roomTitle: resolveRoomTitle() }); snapshot(); }
     }
     if (!roomId) return;
     const title = resolveRoomTitle();
     if (title && title !== lastTitle) { lastTitle = title; emit({ action: "title", roomTitle: title }); }
     trySubscribe();
+    trySceneSubscribe();
+    if (!sceneUnsub || ticks % 5 === 0) sendScene();
     if (!unsubscribe || ++ticks % 5 === 0) snapshot();
   }, 1200);
 })();
