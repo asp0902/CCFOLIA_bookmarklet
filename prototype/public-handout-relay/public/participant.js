@@ -29,7 +29,7 @@ const clearTimers = () => {
   const old = socket; socket = null; socketOpen = false;
   if (old) { try { old.close(); } catch (_) {} }
 };
-const stop = message => { clearTimers(); mode = ""; gateStatus.hidden = false; setGate(message, "error"); room.hidden = true; };
+const stop = message => { clearTimers(); mode = ""; gateStatus.hidden = false; setGate(message, "error"); room.inert = true; room.setAttribute("aria-hidden", "true"); };
 const transient = response => response.status === 429 || response.status >= 500;
 const renderState = data => {
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
@@ -139,7 +139,7 @@ async function checkStatus() {
   if (!response.ok) return stop("요청이 만료되었거나 룸이 종료되었습니다.");
   const data = await response.json();
   if (data.status === "approved") {
-    consent.hidden = true; gateStatus.hidden = true; room.hidden = false;
+    consent.hidden = true; gateStatus.hidden = true; room.inert = false; room.removeAttribute("aria-hidden");
     if (mode !== "live") { mode = "live"; await refresh(); connectSocket(); }
   } else if (data.status === "pending") setGate("GM 승인 대기 중", "pending");
   else stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
