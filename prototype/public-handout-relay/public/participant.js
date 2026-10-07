@@ -3,6 +3,9 @@ const params = new URLSearchParams(location.hash.slice(1));
 const roomId = params.get("room") || "";
 const inviteToken = params.get("token") || "";
 const consent = document.getElementById("consent");
+// Remember the display name on this browser so a returning participant does not retype it.
+const NAME_KEY = "capybara-display-name";
+try { const saved = localStorage.getItem(NAME_KEY); if (saved) document.getElementById("display-name").value = saved; } catch (_) {}
 const room = document.getElementById("room");
 const gateStatus = document.getElementById("gate-status");
 const POLL_MS = 1500;
@@ -148,6 +151,7 @@ async function join() {
   if (!document.getElementById("agree").checked) return setGate("정보 처리 안내에 동의해주세요.", "error");
   const response = await fetch("/api/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, token: inviteToken, displayName }) });
   if (!response.ok) return setGate("승인되지 않았거나 종료된 초대입니다.", "error");
+  try { localStorage.setItem(NAME_KEY, displayName); } catch (_) {}
   history.replaceState(null, "", `${location.pathname}#room=${encodeURIComponent(roomId)}`);
   consent.hidden = true; setGate("GM 승인 대기 중", "pending");
   mode = "pending"; schedule();
