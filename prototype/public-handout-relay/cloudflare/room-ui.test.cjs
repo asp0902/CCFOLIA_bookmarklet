@@ -15,9 +15,8 @@ const { chromium } = require('C:/Users/asp92/.cache/codex-runtimes/codex-primary
   const output = path.join(__dirname, '.artifacts'); fs.mkdirSync(output, { recursive: true });
   try {
     await page.goto(inviteUrl);
-    await page.getByLabel('표시 이름').fill('UI 참가자');
-    await page.getByLabel(/정보 처리/).check();
-    await page.getByRole('button', { name: '참가 요청' }).click();
+    await page.getByLabel('희망자 이름').fill('UI 참가자');
+    await page.getByRole('button', { name: '동의' }).click();
     const list = await (await admin(`/api/admin/rooms/${roomId}/participants`)).json();
     await admin(`/api/admin/rooms/${roomId}/participants/${list.participants[0].id}/decision`, { method: 'POST', body: JSON.stringify({ decision: 'approve' }) });
     await admin(`/api/admin/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ id: 'ui-message', author: 'GM', text: '플레이 룸 연결 완료', createdAt: new Date().toISOString() }) });

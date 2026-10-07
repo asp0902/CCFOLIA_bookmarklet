@@ -147,8 +147,7 @@ async function checkStatus() {
 async function join() {
   const displayName = document.getElementById("display-name").value.trim();
   if (!roomId || !inviteToken) return setGate("초대 링크가 올바르지 않습니다.", "error");
-  if (!displayName) return setGate("표시 이름을 입력해주세요.", "error");
-  if (!document.getElementById("agree").checked) return setGate("정보 처리 안내에 동의해주세요.", "error");
+  if (!displayName) return setGate("희망자 이름을 입력해주세요.", "error");
   const response = await fetch("/api/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, token: inviteToken, displayName }) });
   if (!response.ok) return setGate("승인되지 않았거나 종료된 초대입니다.", "error");
   try { localStorage.setItem(NAME_KEY, displayName); } catch (_) {}
@@ -156,6 +155,7 @@ async function join() {
   consent.hidden = true; setGate("GM 승인 대기 중", "pending");
   mode = "pending"; schedule();
 }
+document.getElementById("cancel").addEventListener("click", () => { location.href = `https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`; });
 document.getElementById("join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
