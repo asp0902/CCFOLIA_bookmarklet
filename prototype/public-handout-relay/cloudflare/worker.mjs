@@ -33,7 +33,7 @@ const roomFromPath = pathname => {
 };
 const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
+  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src 'none'; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -223,6 +223,18 @@ export class RoomRelay {
       if (appended) this.pushMessage(room, appended);
       return json({ id: command.id, status: command.status });
     }
+    // The GM's YouTube BGM: only the video id and play/stop state are relayed; participants play it in their own browser.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/bgm$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      const playing = body.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(text(body.videoId, 20));
+      room.bgm = playing
+        ? { state: "playing", videoId: text(body.videoId, 20), title: text(body.title, 200), loop: body.loop !== false, startedAt: Date.now() }
+        : { state: "stopped", startedAt: Date.now() };
+      room.gmHeartbeatAt = Date.now();
+      await this.save(room);
+      this.push("p", { type: "bgm", bgm: room.bgm });
+      return json({ accepted: true });
+    }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();
       if (Object.keys(body).some(key => !["id", "author", "text", "createdAt"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
@@ -287,6 +299,7 @@ export class RoomRelay {
       gmOnline: Date.now() - Number(room.gmHeartbeatAt || 0) < 30_000,
       messages: room.capabilities.chatRead ? room.messages : [],
       handout: room.capabilities.publicHandout ? room.handout : {},
+      bgm: room.bgm || { state: "stopped" },
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);

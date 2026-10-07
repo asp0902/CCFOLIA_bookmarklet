@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.23
+// @version      0.3.24
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.23";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.24";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -9970,6 +9970,13 @@
 
   // 로컬 play/stop 호출에서 부를 헬퍼. 적용 중이면 송신을 건너뛴다(에코 방지).
   function ccfBgmFirestoreEmitPlayback(payload) {
+    // 웹 공유(릴레이) 참여자에게 전달할 수 있도록 확장 쪽에 재생/정지 신호를 알린다. 참여자 화면이 직접 재생한다.
+    try {
+      window.dispatchEvent(new CustomEvent("capybara-bgm-signal", { detail: {
+        state: payload?.state === "playing" ? "playing" : "stopped",
+        videoId: String(payload?.videoId || ""), title: String(payload?.title || payload?.displayName || ""), loop: payload?.loop !== false
+      } }));
+    } catch (_) {}
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED) return;
     if (ccfBgmFirestorePlaybackApplying) return;
     if (!chatNotifierLifecycle.isActive()) return;

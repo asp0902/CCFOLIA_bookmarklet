@@ -31,7 +31,29 @@ const clearTimers = () => {
 };
 const stop = message => { clearTimers(); mode = ""; gateStatus.hidden = false; setGate(message, "error"); room.inert = true; room.setAttribute("aria-hidden", "true"); };
 const transient = response => response.status === 429 || response.status >= 500;
+// GM's YouTube BGM: a plain embed (no API script needed). Started from a user gesture (the join click), so autoplay with sound is allowed.
+const bgmBox = document.getElementById("bgm");
+let bgmKey = "", bgmMuted = false, bgmLast = null;
+function playBgm(bgm) {
+  bgmLast = bgm || { state: "stopped" };
+  const wanted = !bgmMuted && bgmLast.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(bgmLast.videoId || "") ? `${bgmLast.videoId}:${bgmLast.startedAt}` : "";
+  bgmBox.hidden = bgmLast.state !== "playing";
+  document.getElementById("bgm-title").textContent = bgmLast.title || "BGM";
+  document.getElementById("bgm-toggle").textContent = bgmMuted ? "BGM 켜기" : "BGM 끄기";
+  if (wanted === bgmKey) return;
+  bgmKey = wanted;
+  document.getElementById("bgm-frame").replaceChildren();
+  if (!wanted) return;
+  const frame = document.createElement("iframe");
+  const id = bgmLast.videoId;
+  frame.src = `https://www.youtube.com/embed/${id}?autoplay=1&controls=0&rel=0${bgmLast.loop !== false ? `&loop=1&playlist=${id}` : ""}`;
+  frame.allow = "autoplay; encrypted-media";
+  frame.title = "BGM";
+  document.getElementById("bgm-frame").append(frame);
+}
+document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted = !bgmMuted; playBgm(bgmLast); });
 const renderState = data => {
+  if (data.bgm) playBgm(data.bgm);
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
   document.getElementById("gm-state").textContent = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
@@ -91,6 +113,8 @@ function onPush(event) {
     if (current.messages.some(item => item.id === message.message.id)) return;
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
     renderState(current);
+  } else if (message.type === "bgm") {
+    playBgm(message.bgm);
   } else if (message.type === "handout") {
     current.handout = message.handout || {};
     renderState(current);

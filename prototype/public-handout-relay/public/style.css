@@ -36,3 +36,8 @@ body{background:#202020;font-size:14px;line-height:1.43}
 #send-status{margin:0;padding:0 16px 8px;background:#212121;font-size:12px}
 @media(max-width:720px){#room>header{padding:0 16px}.chat{min-height:55vh}}
 main{padding:0}
+#bgm{position:fixed;left:16px;bottom:16px;z-index:5;display:flex;align-items:center;gap:8px;padding:6px 8px 6px 16px;max-width:calc(100vw - 32px);border-radius:4px;background:#2c2c2c;color:#fff;font-size:14px;box-shadow:0 3px 5px -1px rgba(0,0,0,.2),0 6px 10px 0 rgba(0,0,0,.14),0 1px 18px 0 rgba(0,0,0,.12)}
+#bgm[hidden]{display:none}
+#bgm-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+#bgm button{padding:6px 8px;background:none;color:#2196f3;font-family:inherit;font-size:.875rem;font-weight:700}
+#bgm-frame iframe{display:block;width:160px;height:90px;border:0;border-radius:4px;pointer-events:none}

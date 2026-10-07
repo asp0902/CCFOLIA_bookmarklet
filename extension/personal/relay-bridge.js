@@ -8,6 +8,7 @@
   const readRoomId = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
   let roomId = readRoomId();
   const sentMessages = new Set();
+  let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
   let config = null;
   let pollTimer = 0;
   let socket = null;
@@ -66,6 +67,7 @@
     if (id !== roomId) return; // the tab moved to another room while connecting; that room connects on its own
     connectedTitle = roomTitle;
     await rememberInvite(id, result.inviteUrl || "");
+    if (lastBgm) post(`/api/admin/rooms/${encodeURIComponent(id)}/bgm`, lastBgm).catch(() => {});
     startPolling();
     pollCommands();
     openSocket();
@@ -89,7 +91,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -186,6 +188,11 @@
       if (request.action === "ready" || request.action === "title") {
         const title = clean(request.roomTitle, 200);
         if (request.action === "ready" || title) await connect(title || connectedTitle || "");
+      }
+      if (request.action === "bgm") {
+        const bgm = request.bgm || {};
+        lastBgm = { state: bgm.state === "playing" ? "playing" : "stopped", videoId: clean(bgm.videoId, 20), title: clean(bgm.title, 200), loop: bgm.loop !== false };
+        await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/bgm`, lastBgm);
       }
       if (request.action === "snapshot") {
         const messages = Array.isArray(request.messages) ? request.messages : [];

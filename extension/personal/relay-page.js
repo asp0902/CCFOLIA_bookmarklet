@@ -16,6 +16,13 @@
     const title = clean(document.title, 200).trim();
     return /^CCFOLIA\b/i.test(title) ? "" : title;
   };
+  // YouTube BGM: the toolkit announces play/stop; the last signal is re-sent whenever the room (re)connects.
+  let lastBgm = null;
+  window.addEventListener("capybara-bgm-signal", event => {
+    const d = event.detail || {};
+    lastBgm = { state: d.state === "playing" ? "playing" : "stopped", videoId: clean(d.videoId, 20), title: clean(d.title, 200), loop: d.loop !== false };
+    if (roomId) emit({ action: "bgm", bgm: lastBgm });
+  });
   const snapshot = () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
@@ -66,6 +73,7 @@
     const nextRoom = readRoomId();
     if (nextRoom !== roomId) {
       roomId = nextRoom; lastTitle = "";
+      lastBgm = null;
       if (roomId) { emit({ action: "ready", roomTitle: resolveRoomTitle() }); snapshot(); }
     }
     if (!roomId) return;
