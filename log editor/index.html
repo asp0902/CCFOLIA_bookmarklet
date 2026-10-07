@@ -568,9 +568,8 @@
   .ccf-render-root.ccf-roll20-bubble {
     width: 100%;
     margin-inline: auto;
-    /* overflow: hidden 은 box-shadow 퍼짐(색 띠 매크로)을 잘라 얇게 만든다 → 가로만 자른다 */
-    overflow-x: clip;
-    overflow-y: visible;
+    /* overflow: hidden 은 box-shadow 퍼짐(색 띠 매크로)을 잘라 얇게 만든다 → 자르지 않는다(그림자는 스크롤 영역을 늘리지 않는다) */
+    overflow: visible;
   }
   .ccf-render-root.ccf-roll20-bubble:has(.ccf-image) {
     width: max-content;
@@ -1929,8 +1928,7 @@ ${fontImports}    .ccf-tistory-log {
     .ccf-tistory-log .ccf-render-root.ccf-roll20-bubble {
       width: 100%;
       margin-inline: auto;
-      overflow-x: clip;
-      overflow-y: visible;
+      overflow: visible;
     }
     .ccf-tistory-log .ccf-roll20-bubble:has(.ccf-image) {
       width: max-content;

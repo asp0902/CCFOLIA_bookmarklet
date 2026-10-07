@@ -45,12 +45,12 @@ const encode = value => {
         const out = [];
         for (let el = document.querySelector('#p0 [class*="frag"]').parentElement; el && el !== document.body; el = el.parentElement) {
           const style = getComputedStyle(el);
-          if (style.overflowY !== 'visible') out.push(`${el.className || el.tagName}: overflow-y ${style.overflowY}`);
+          if (style.overflowY !== 'visible' || style.overflowX !== 'visible') out.push(`${el.className || el.tagName}: overflow ${style.overflowX}/${style.overflowY}`);
         }
         return out;
       });
-      assert.deepEqual(clipped, [], `${label}: nothing clips the shadow vertically`);
-      // The colour band (0 8px 0 15px) must be centred on the text without moving the band or the following lines.
+      assert.deepEqual(clipped, [], `${label}: nothing clips the shadow (vertically or horizontally)`);
+      // The colour band (0 8px 0 15px) must sit inside its own message (so it cannot cover dividers or neighbours) with the text centred.
       const geometry = await page.evaluate(() => {
         const frag = document.querySelector('#p0 [class*="frag"]');
         const rect = frag.getBoundingClientRect(), host = document.querySelector('.MuiListItem-root').getBoundingClientRect(), padding = 30;
@@ -58,9 +58,9 @@ const encode = value => {
         return { bandTop: rect.top - spread - (host.top + padding), bandBottom: rect.bottom + spread - (host.top + padding), hostHeight: host.height - 2 * padding, boxHeight: rect.height, textCentre: (rect.top + rect.bottom) / 2, bandCentre: (rect.top - spread + rect.bottom + spread) / 2 };
       });
       assert.equal(geometry.textCentre, geometry.bandCentre, `${label}: text centred in the band`);
-      assert.equal(geometry.bandTop, -7, `${label}: band top unchanged (spread 15 - offset 8)`);
-      assert.equal(geometry.bandBottom, geometry.boxHeight + 23, `${label}: band bottom unchanged (spread 15 + offset 8)`);
-      assert.equal(geometry.hostHeight, geometry.boxHeight, `${label}: following lines are not pushed`);
+      assert.equal(geometry.bandTop, 0, `${label}: band starts at the message content top (it fills its own space)`);
+      assert.equal(geometry.bandBottom, geometry.boxHeight + 30, `${label}: band ends at the message content bottom`);
+      assert.equal(geometry.hostHeight, geometry.boxHeight + 30, `${label}: the band is part of the message height (does not overlap neighbours)`);
     }
     console.log('macro box-shadow spread is not clipped vertically (format-sync alone and with bridge) PASS');
   } finally { await browser.close(); }

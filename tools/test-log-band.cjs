@@ -45,9 +45,9 @@ const MACRO = `[내용](#" style="color: #ffffff; background-color:#9BCFC4; font
     }, { code: logPackage.slice(start, end), envelope, css: bubbleRules.join('\n') });
     assert.equal(result.overflowY, 'visible');
     assert.match(result.shadow, /0px 0px 0px 15px$/, 'y offset moved out of the shadow');
-    assert.equal(result.bandTop, -7, 'band top unchanged');
-    assert.equal(result.bandBottom, result.box + 23, 'band bottom unchanged');
-    assert.equal(result.flow, result.box, 'following content is not pushed');
+    assert.equal(result.bandTop, 0, 'band fills its own space (top)');
+    assert.equal(result.bandBottom, result.box + 30, 'band fills its own space (bottom)');
+    assert.equal(result.flow, result.box + 30, 'band is part of the message height');
     assert(result.centred, 'text centred in band');
     console.log('log editor: colour band shown like CCFOLIA (not clipped, text centred) PASS');
   } finally { await browser.close(); }
