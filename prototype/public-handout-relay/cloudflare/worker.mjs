@@ -33,7 +33,7 @@ const roomFromPath = pathname => {
 };
 const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src 'none'; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
+  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -251,7 +251,7 @@ export class RoomRelay {
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();
-      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color", "icon"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const message = {
         id: text(body.id, 160).trim(),
         author: text(body.author, 80).trim() || "CCFOLIA",
@@ -259,6 +259,7 @@ export class RoomRelay {
         origin: "ccfolia",
         channel: text(body.channel, 100) || "main",
         color: /^#[0-9a-fA-F]{3,8}$/.test(text(body.color, 20)) ? text(body.color, 20) : "",
+        icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(text(body.icon, 600)) ? text(body.icon, 600) : "",
         createdAt: text(body.createdAt, 40) || new Date().toISOString(),
       };
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);

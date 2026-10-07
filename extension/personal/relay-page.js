@@ -40,6 +40,7 @@
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
       channel: clean(message.channel, 100) || "main",
       color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
+      icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(message.icon || "") ? message.icon : "",
     })).filter(message => message.id && message.text);
     const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
     emit({ action: "snapshot", messages, channels, dicebot: readDicebot() });
