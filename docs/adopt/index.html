@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>카피바라 4세 입양 안내</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#202020;color:#fff;font:14px/1.6 "Noto Sans KR",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:640px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:1.25rem;font-weight:500;margin:0 0 4px}
+h2{font-size:1rem;margin:28px 0 8px}
+p,li{color:rgba(255,255,255,.8)}
+.card{background:#2c2c2c;border-radius:4px;padding:16px 20px;margin:12px 0;box-shadow:0 3px 5px -1px rgba(0,0,0,.2),0 6px 10px 0 rgba(0,0,0,.14),0 1px 18px 0 rgba(0,0,0,.12)}
+a{color:#2196f3}
+code{background:rgba(0,0,0,.35);padding:1px 6px;border-radius:3px}
+.btn{display:inline-block;padding:6px 16px;border-radius:4px;background:#2196f3;color:#fff;text-decoration:none;font-weight:500}
+ol{padding-left:20px;margin:8px 0}
+</style>
+<main>
+<h1>카피바라 4세 입양 안내</h1>
+<p>초대 링크의 <b>동의</b>를 누르면 코코포리아 룸으로 이동합니다. 주사위, 말 이동, 캐릭터 시트 같은 기본 기능은 모두 코코포리아가 처리하고, 카피바라 4세는 그 위에 확장 기능(서식 채팅, 추가 채팅 패널, 홈 즐겨찾기 등)을 얹습니다.</p>
+<p>코코포리아 계정 로그인과 룸 입장 권한은 코코포리아 규칙을 그대로 따릅니다.</p>
+
+<h2>방법 1. 확장 프로그램 (권장: 룸에 들어가면 자동 적용)</h2>
+<div class="card">
+<ol>
+<li><a href="https://github.com/asp0902/CCFOLIA_bookmarklet/archive/refs/heads/main.zip">저장소 압축 파일(zip)</a>을 받아 압축을 풉니다.</li>
+<li>Chrome에서 <code>chrome://extensions</code>를 열고 오른쪽 위 <b>개발자 모드</b>를 켭니다.</li>
+<li><b>압축해제된 확장 프로그램을 로드합니다</b>를 누르고, 압축 푼 폴더 안의 <code>extension/personal</code> 폴더를 선택합니다.</li>
+<li>초대 링크를 다시 열고 <b>동의</b>를 누르면 코코포리아 룸에 카피바라 기능이 켜진 상태로 입장합니다.</li>
+</ol>
+<p>설치 후에는 코코포리아 룸을 열 때마다 자동으로 켜집니다. 자세한 설명은 <a href="https://github.com/asp0902/CCFOLIA_bookmarklet/tree/main/extension/personal">확장 README</a>를 보세요.</p>
+</div>
+
+<h2>방법 2. 북마클릿 (설치 없이, 룸에 들어갈 때마다 한 번 클릭)</h2>
+<div class="card">
+<ol>
+<li>아래 버튼을 북마크 막대로 끌어다 놓습니다.</li>
+<li>코코포리아 룸에 들어간 뒤 그 북마크를 누르면 카피바라 기능이 켜집니다.</li>
+</ol>
+<p><a class="btn" id="bm" href="#">카피바라 4세 켜기</a> <span style="color:rgba(255,255,255,.5)">(끌어다 놓기)</span></p>
+</div>
+</main>
+<script>
+document.getElementById("bm").href = "javascript:(()=>{const u=\"https://asp0902.github.io/CCFOLIA_bookmarklet/src/capybara-toolkit-loader.js\",k=\"__CAPYBARA_TOOLKIT__\",id=\"capybara-toolkit-bookmarklet-status\";if(window[k]&&typeof window[k].closePanel===\"function\"){window[k].closePanel()}let box=document.getElementById(id);if(!box){box=document.createElement(\"div\");box.id=id;box.style.cssText=\"position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:10px 12px;border:1px solid #111;border-radius:8px;background:#fff;color:#111;font:13px system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.22)\";document.documentElement.appendChild(box)}box.textContent=\"\uce74\ud53c\ubc14\ub77c \ud234\ud0b7 \ubd88\ub7ec\uc624\ub294 \uc911...\";const s=document.createElement(\"script\");s.src=u+(u.includes(\"?\")?\"&\":\"?\")+\"t=\"+Date.now();s.dataset.capybaraToolkitLoader=\"1\";s.onload=()=>{setTimeout(()=>{if(!window[k])box.textContent=\"\ub85c\ub354\ub294 \ubc1b\uc558\uc9c0\ub9cc \uc2e4\ud589\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4. \ucf58\uc194 \uc624\ub958\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.\";else box.remove()},800)};s.onerror=()=>{box.textContent=\"\ub85c\ub354\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. \uc11c\ubc84 \ub610\ub294 CSP \ucc28\ub2e8\uc744 \ud655\uc778\ud574 \uc8fc\uc138\uc694.\"};(document.head||document.documentElement).appendChild(s);setTimeout(()=>{if(!window[k]&&box.isConnected)box.textContent=\"\uc544\uc9c1 \ud328\ub110\uc774 \uc548 \ub739\ub2c8\ub2e4. F12 \ucf58\uc194\uc5d0\uc11c CSP \ub610\ub294 Mixed Content \uc624\ub958\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.\"},3500);})();";
+document.getElementById("bm").addEventListener("click", function (e) { e.preventDefault(); alert("이 버튼은 북마크 막대로 끌어다 놓아 사용합니다."); });
+</script>
+</html>

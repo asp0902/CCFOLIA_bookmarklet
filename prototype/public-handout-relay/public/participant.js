@@ -330,6 +330,28 @@ async function checkStatus() {
   } else if (data.status === "pending") setGate("GM 승인 대기 중", "pending");
   else stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
 }
+// The invite link adopts the participant into the real CCFOLIA room (all room features are CCFOLIA's own) with the toolkit extension.
+// "동의" registers the name with the GM (best effort) and sends the participant to ccfolia.com/rooms/<id>.
+const GUIDE_URL = "https://asp0902.github.io/CCFOLIA_bookmarklet/docs/adopt/";
+const ccfoliaRoomUrl = () => `https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`;
+async function adopt() {
+  const displayName = document.getElementById("display-name").value.trim();
+  if (!roomId) return setGate("초대 링크가 올바르지 않습니다.", "error");
+  if (!displayName) return setGate("희망자 이름을 입력해주세요.", "error");
+  try { localStorage.setItem(NAME_KEY, displayName); } catch (_) {}
+  if (inviteToken) {
+    try { await fetch("/api/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, token: inviteToken, displayName }) }); } catch (_) {}
+  }
+  location.href = ccfoliaRoomUrl();
+}
+function showExtensionNote() {
+  const note = document.getElementById("ext-note");
+  if (document.documentElement.dataset.capybaraExtension) { note.textContent = "카피바라 4세 확장 프로그램이 확인되었습니다. 코코포리아 룸에서 카피바라 기능을 그대로 쓸 수 있습니다."; return; }
+  note.replaceChildren("카피바라 4세 확장 프로그램이 없으면 기본 코코포리아로 입장합니다. ");
+  const link = document.createElement("a"); link.href = GUIDE_URL; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = "설치 방법 보기";
+  note.append(link);
+}
+setTimeout(showExtensionNote, 500);
 async function join() {
   const displayName = document.getElementById("display-name").value.trim();
   if (!roomId || !inviteToken) return setGate("초대 링크가 올바르지 않습니다.", "error");
@@ -341,8 +363,9 @@ async function join() {
   consent.hidden = true; setGate("GM 승인 대기 중", "pending");
   mode = "pending"; schedule();
 }
-document.getElementById("cancel").addEventListener("click", () => { location.href = `https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`; });
-document.getElementById("join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
+document.getElementById("cancel").addEventListener("click", () => { location.href = ccfoliaRoomUrl(); });
+document.getElementById("join").addEventListener("click", () => adopt().catch(() => setGate("연결할 수 없습니다.", "error")));
+document.getElementById("web-join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const sendStatus = document.getElementById("send-status");
