@@ -263,6 +263,7 @@
     (enabled.checked ? close : enabled).focus?.();
   });
   timer = setInterval(() => {
+    if (!chrome.runtime?.id) { clearInterval(timer); return; }
     const room = currentRoom();
     if (room !== roomId) { roomId = room; invite.value = inviteFor(roomId); }
     refreshParticipants(); loadSocket();

@@ -213,5 +213,12 @@
     if (star) styleStar(star, !!rooms[star.dataset.id]?.pinned);
   });
 
-  load().then(() => { tick(); setInterval(tick, 1000); });
+  // After the extension is reloaded/updated, this orphaned script must go quiet instead of throwing "Extension context invalidated" every second.
+  load().then(() => {
+    const timer = setInterval(() => {
+      if (!chrome.runtime?.id) { clearInterval(timer); return; }
+      tick().catch(() => {});
+    }, 1000);
+    tick().catch(() => {});
+  }).catch(() => {});
 })();
