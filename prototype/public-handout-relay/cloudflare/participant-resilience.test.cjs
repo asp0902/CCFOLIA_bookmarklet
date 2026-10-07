@@ -18,9 +18,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.addInitScript(() => { delete window.WebSocket; });
   try {
     await page.goto(inviteUrl);
-    await page.getByLabel('표시 이름').fill('복원력 참가자');
-    await page.getByLabel(/정보 처리/).check();
-    await page.getByRole('button', { name: '참가 요청' }).click();
+    await page.getByLabel('희망자 이름').fill('복원력 참가자');
+    await page.getByRole('button', { name: '동의' }).click();
     await page.getByText('GM 승인 대기 중').waitFor();
     const participantId = (await (await admin(`/api/admin/rooms/${roomId}/participants`)).json()).participants[0].id;
     await post(`/api/admin/rooms/${roomId}/participants/${participantId}/decision`, { decision: 'approve' });
