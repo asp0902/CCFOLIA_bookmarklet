@@ -41,3 +41,12 @@ main{padding:0}
 #bgm-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
 #bgm button{padding:6px 8px;background:none;color:#2196f3;font-family:inherit;font-size:.875rem;font-weight:700}
 #bgm-frame iframe{display:block;width:160px;height:90px;border:0;border-radius:4px;pointer-events:none}
+/* Chat rows like CCFOLIA's (measured: item padding 8/16/5, avatar 40px square on rgba(0,0,0,.2), name 14px bold, caption 12px). */
+#messages{padding:0}
+#messages li{display:flex;align-items:flex-start;padding:8px 16px 5px;border-top:0;border-bottom:1px solid rgba(255,255,255,.08)}
+#messages .avatar{flex:none;width:40px;height:40px;margin-right:8px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.2);color:#fff;font-size:20px;line-height:1;overflow:hidden}
+#messages .msg-text{flex:1;min-width:0;margin-top:6px}
+#messages h6{margin:0;font-size:14px;font-weight:700;line-height:1.57;letter-spacing:.00714em}
+#messages h6 strong{font-size:14px;font-weight:700;color:#fff}
+#messages .msg-time{margin-left:4px;font-size:12px;font-weight:400;line-height:1.66;color:#eee}
+#messages p{margin:0 0 8px;font-size:14px;line-height:1.43;color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
