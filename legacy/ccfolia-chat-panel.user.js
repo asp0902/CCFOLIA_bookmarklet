@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.23
+// @version      0.2.24
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.23";
+  const VERSION = "0.2.24";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1453,7 +1453,7 @@
       .ccf-scp-charitem { display: flex; align-items: center; gap: 12px; width: 100%;
         padding: 8px 12px; border: 0; background: transparent; color: inherit; cursor: pointer;
         border-radius: 0; font: inherit; text-align: left; }
-      .ccf-scp-charitem:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+      .ccf-scp-charitem:hover, .ccf-scp-charitem.is-active { background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-charitem img, .ccf-scp-charitem-noicon { width: 40px; height: 40px;
         border-radius: 50%; object-fit: cover; flex: 0 0 auto;
         background: color-mix(in srgb, currentColor 12%, transparent); }
@@ -1851,12 +1851,42 @@
     nameGroup.appendChild(spAvatar);
     nameGroup.appendChild(field);
     nameGroup.appendChild(charList);
+    // 목록이 열리면 현재 화자(없으면 첫 항목)를 강조하고, 방향키·Home/End·Enter 로 고른다.
+    let charIdx = -1;
+    const charItems = () => [...charList.querySelectorAll(".ccf-scp-charitem")];
+    const highlightChar = (index) => {
+      const items = charItems();
+      if (!items.length) { charIdx = -1; return; }
+      charIdx = (index + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle("is-active", i === charIdx));
+      items[charIdx].scrollIntoView({ block: "nearest" });
+    };
+    const showCharList = () => {
+      buildCharList();
+      charList.hidden = false;
+      const items = charItems();
+      const current = selectedChar ? [...charList.querySelectorAll(".ccf-scp-charitem-name")].findIndex((el) => el.textContent === selectedChar.name) : -1;
+      highlightChar(current >= 0 ? current : 0);
+      void items;
+    };
     nameGroup.addEventListener("click", (e) => {
       if (e.target.closest(".ccf-scp-charlist")) return;
-      if (charList.hidden) { buildCharList(); charList.hidden = false; }
+      if (charList.hidden) showCharList();
       else charList.hidden = true;
     });
-    openCharListFn = () => { buildCharList(); charList.hidden = false; };
+    openCharListFn = showCharList;
+    panel.addEventListener("keydown", (e) => {
+      if (charList.hidden) return;
+      const k = e.key;
+      if (k === "ArrowDown" || k === "ArrowUp" || k === "Home" || k === "End" || k === "Enter") {
+        e.preventDefault(); e.stopPropagation();
+        if (k === "ArrowDown") highlightChar(charIdx + 1);
+        else if (k === "ArrowUp") highlightChar(charIdx - 1);
+        else if (k === "Home") highlightChar(0);
+        else if (k === "End") highlightChar(charItems().length - 1);
+        else charItems()[charIdx]?.click();
+      }
+    }, true);
     // Esc 로 닫기(목록이 열려 있을 때).
     panel.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !charList.hidden) { charList.hidden = true; inputEl?.focus(); }
