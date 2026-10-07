@@ -32,27 +32,71 @@ const clearTimers = () => {
 };
 const stop = message => { clearTimers(); mode = ""; gateStatus.hidden = false; setGate(message, "error"); room.inert = true; room.setAttribute("aria-hidden", "true"); };
 const transient = response => response.status === 429 || response.status >= 500;
-// GM's YouTube BGM: a plain embed (no API script needed). Started from a user gesture (the join click), so autoplay with sound is allowed.
-const bgmBox = document.getElementById("bgm");
-let bgmKey = "", bgmMuted = false, bgmLast = null;
+// GM's YouTube BGM, shown like CCFOLIA's BGM bar (volume, mute, stop, progress). Played with the YouTube IFrame API so volume and progress work.
+// It starts from a user gesture (the join click), so autoplay with sound is allowed.
+const bgmBar = document.getElementById("bgm-bar");
+let bgmKey = "", bgmStopped = false, bgmLast = null, ytPlayer = null, ytReady = false, ytWantId = "", ytApiRequested = false, bgmTimer = 0, bgmVolume = 100, bgmMuted = false;
+const fmtTime = seconds => { const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+const SPK_PATH = "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z", MUTE_PATH = "M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z";
+function ensureYouTubeApi() {
+  if (ytApiRequested) return;
+  ytApiRequested = true;
+  window.onYouTubeIframeAPIReady = () => { ytReady = true; if (ytWantId) startPlayer(ytWantId); };
+  const script = document.createElement("script"); script.src = "https://www.youtube.com/iframe_api"; document.head.append(script);
+}
+function startPlayer(id) {
+  if (!ytReady) return;
+  const loop = bgmLast?.loop !== false;
+  if (ytPlayer) { try { ytPlayer.destroy(); } catch (_) {} ytPlayer = null; }
+  const host = document.createElement("div"); document.getElementById("bgm-frame").replaceChildren(host);
+  ytPlayer = new YT.Player(host, {
+    width: "200", height: "113", videoId: id,
+    playerVars: { autoplay: 1, controls: 0, rel: 0, playsinline: 1, ...(loop ? { loop: 1, playlist: id } : {}) },
+    events: { onReady: event => { event.target.setVolume(bgmVolume); if (bgmMuted) event.target.mute(); event.target.playVideo(); } }
+  });
+  clearInterval(bgmTimer);
+  bgmTimer = setInterval(() => {
+    if (!ytPlayer?.getCurrentTime) return;
+    const dur = ytPlayer.getDuration?.() || 0, cur = ytPlayer.getCurrentTime() || 0;
+    document.getElementById("bgm-cur").textContent = fmtTime(cur); document.getElementById("bgm-dur").textContent = fmtTime(dur);
+    const seek = document.getElementById("bgm-seek");
+    if (!seek.dataset.dragging) { seek.value = dur ? String(Math.round((cur / dur) * 1000)) : "0"; seek.style.setProperty("--p", `${dur ? (cur / dur) * 100 : 0}%`); }
+  }, 500);
+}
+function stopPlayer() {
+  clearInterval(bgmTimer); bgmTimer = 0;
+  if (ytPlayer) { try { ytPlayer.destroy(); } catch (_) {} ytPlayer = null; }
+  document.getElementById("bgm-frame").replaceChildren();
+}
 function playBgm(bgm) {
   bgmLast = bgm || { state: "stopped" };
-  const wanted = !bgmMuted && bgmLast.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(bgmLast.videoId || "") ? `${bgmLast.videoId}:${bgmLast.startedAt}` : "";
-  bgmBox.hidden = bgmLast.state !== "playing";
-  document.getElementById("bgm-title").textContent = bgmLast.title || "BGM";
-  document.getElementById("bgm-toggle").textContent = bgmMuted ? "BGM 켜기" : "BGM 끄기";
-  if (wanted === bgmKey) return;
-  bgmKey = wanted;
-  document.getElementById("bgm-frame").replaceChildren();
-  if (!wanted) return;
-  const frame = document.createElement("iframe");
-  const id = bgmLast.videoId;
-  frame.src = `https://www.youtube.com/embed/${id}?autoplay=1&controls=0&rel=0${bgmLast.loop !== false ? `&loop=1&playlist=${id}` : ""}`;
-  frame.allow = "autoplay; encrypted-media";
-  frame.title = "BGM";
-  document.getElementById("bgm-frame").append(frame);
+  const playing = bgmLast.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(bgmLast.videoId || "");
+  bgmBar.hidden = !playing;
+  document.getElementById("bgm-name").textContent = bgmLast.title || "BGM";
+  if (bgmStopped && bgmStopped !== bgmLast.startedAt) bgmStopped = false; // a newer GM signal re-enables playback after a local stop
+  const key = playing && !bgmStopped ? `${bgmLast.videoId}:${bgmLast.startedAt}` : "";
+  if (key === bgmKey) return;
+  bgmKey = key;
+  stopPlayer();
+  if (!key) return;
+  ytWantId = bgmLast.videoId; ensureYouTubeApi();
+  if (ytReady) startPlayer(ytWantId);
 }
-document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted = !bgmMuted; playBgm(bgmLast); });
+const volInput = document.getElementById("bgm-vol");
+const syncVol = () => { volInput.style.setProperty("--p", `${volInput.value}%`); };
+volInput.addEventListener("input", () => { bgmVolume = Number(volInput.value); syncVol(); try { ytPlayer?.setVolume(bgmVolume); } catch (_) {} });
+syncVol();
+document.getElementById("bgm-mute").addEventListener("click", () => {
+  bgmMuted = !bgmMuted;
+  document.getElementById("bgm-mute-icon").setAttribute("d", bgmMuted ? MUTE_PATH : SPK_PATH);
+  try { bgmMuted ? ytPlayer?.mute() : ytPlayer?.unMute(); } catch (_) {}
+});
+document.getElementById("bgm-stop").addEventListener("click", () => { bgmStopped = bgmLast?.startedAt || true; bgmKey = ""; stopPlayer(); });
+const seekInput = document.getElementById("bgm-seek");
+seekInput.addEventListener("pointerdown", () => { seekInput.dataset.dragging = "1"; });
+seekInput.addEventListener("input", () => { seekInput.style.setProperty("--p", `${seekInput.value / 10}%`); });
+seekInput.addEventListener("change", () => { delete seekInput.dataset.dragging; try { const dur = ytPlayer?.getDuration?.() || 0; ytPlayer?.seekTo((seekInput.value / 1000) * dur, true); } catch (_) {} });
+seekInput.addEventListener("pointerup", () => { delete seekInput.dataset.dragging; });
 // Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
 // The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
 // the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
