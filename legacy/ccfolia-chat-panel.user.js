@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.21
+// @version      0.2.22
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.21";
+  const VERSION = "0.2.22";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2903,6 +2903,26 @@
     }
     if (typeof prefs.opaqueBg === "boolean") opaqueBg = prefs.opaqueBg;
     if (prefs.open) openPanel();
+
+    // 코코포리아 네이티브 채팅 입력칸에서도 백틱(`) 키로 "캐릭터 선택" 창을 연다. 네이티브 이름 줄의 "캐릭터 선택" 버튼을 대신 눌러 준다.
+    // 추가 채팅 패널 입력칸은 패널이 자체 목록으로 처리하고, 다른 스크립트(스탠딩 선택기 등)가 이미 처리한 키는 건너뛴다.
+    try { if (window.__CCF_SCP_BACKQUOTE_HANDLER__) window.removeEventListener("keydown", window.__CCF_SCP_BACKQUOTE_HANDLER__, true); } catch (e) { /* noop */ }
+    const nativeBackquoteHandler = (e) => {
+      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      if (e.code !== "Backquote" && e.key !== "`" && e.key !== "₩" && e.key !== "｀") return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target || target.closest(`#${PANEL_ID}`) || target.closest('[role="dialog"], .MuiDialog-root')) return;
+      if (target.tagName !== "TEXTAREA") return;
+      const form = target.closest("form");
+      if (!form || !form.querySelector('button[type="submit"]')) return; // 네이티브 채팅 입력창만
+      const pick = [...form.querySelectorAll("button")].find((b) => /캐릭터\s*선택/.test(b.getAttribute("aria-label") || ""));
+      if (!pick) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pick.click();
+    };
+    window.__CCF_SCP_BACKQUOTE_HANDLER__ = nativeBackquoteHandler;
+    window.addEventListener("keydown", nativeBackquoteHandler, true);
 
     // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
     const observer = new MutationObserver(() => { if (active) ensureMenuItem(); });
