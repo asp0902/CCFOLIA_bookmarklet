@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.22
+// @version      0.3.23
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.22";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.23";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3992,6 +3992,7 @@
     }
 
     ensureCcfBgmProgressBar(panel);
+    avoidCcfNativeTimerOverlap();
     if (ccfBgmPlayerVisible) {
       mountCcfYoutubeBgmPlayerFrame();
     }
@@ -5814,6 +5815,29 @@
     ccfBgmProgressRoot = root;
     syncCcfBgmProgressWidth(mountTarget, root);
     ensureCcfYoutubeBgmPlayerDock(root);
+  }
+
+  // 코코포리아 기본 타이머("타이머를 표시")는 BGM 컨트롤 바로 아래(top 102px)에 놓여 우리 진행바와 겹친다.
+  // 타이머는 드래그 시 inline transform 을 쓰므로 transform 대신 margin-top 으로 진행바 높이만큼 내린다.
+  function avoidCcfNativeTimerOverlap() {
+    const root = ccfBgmProgressRoot;
+    if (!(root instanceof HTMLElement) || !root.isConnected) {
+      return;
+    }
+    const height = Math.ceil(root.getBoundingClientRect().height);
+    for (const heading of document.querySelectorAll("h2.MuiTypography-h2")) {
+      if (!/^\d{2}:\d{2}:\d{2}$/.test((heading.textContent || "").trim())) {
+        continue;
+      }
+      const paper = heading.closest(".MuiPaper-root");
+      if (!(paper instanceof HTMLElement) || paper.contains(root)) {
+        continue;
+      }
+      const margin = height > 0 ? `${height}px` : "";
+      if (paper.style.getPropertyValue("margin-top") !== margin) {
+        paper.style.setProperty("margin-top", margin, "important");
+      }
+    }
   }
 
   function findCcfBgmProgressMountTarget(panel) {
