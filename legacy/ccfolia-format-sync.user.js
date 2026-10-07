@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.60
+// @version      0.1.61
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.60"),
+    version: getUserscriptVersion("0.1.61"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -871,6 +871,10 @@
       [${CCF_NARRATION_ATTR}="1"]:not(.ccf-render-root):not([data-ccf-prose-cont="1"]) .MuiListItemText-root {
         margin: 0 auto !important;
       }
+      /* 나레이터가 보낸 판정 명령 메시지(원문 그대로 전송됨, #117) */
+      [data-ccf-narration-dice="1"] .MuiListItemText-secondary {
+        font-style: italic;
+      }
 
       /* 미리보기 패널 등 */
       .MuiPaper-root[${CCF_NARRATION_PANEL_ATTR}="1"] > img {
@@ -1100,7 +1104,50 @@
       }
     }
 
+    markNarratorDiceMessages(root);
     syncNarrationPanelsWithin(root);
+  }
+
+  // 나레이터가 보낸 판정 명령(choice[..], 1D100 등)은 봉투 없이 원문으로 전송된다(코코포리아가 판정해야 하므로).
+  // 봉투가 없으면 나레이션 서식이 붙지 않아 결과가 일반 채팅으로 나온다 → 나레이터의 판정 메시지는
+  // 렌더 단계에서 나레이션 레이아웃(아바타·이름 숨김, 가운데, 이탤릭)을 입힌다. (#117)
+  function readNarratorNamesForScan() {
+    const roomId = (location.pathname.match(/^\/rooms\/([^/?#]+)/i) || [])[1];
+    if (!roomId) return new Set();
+    try {
+      const raw = JSON.parse(localStorage.getItem(`ccf-format-narrators-v1:${roomId}`) || "[]");
+      return new Set((Array.isArray(raw) ? raw : []).map((name) => String(name || "").replace(/[ \t\n\r\f\v]+/g, " ").trim()).filter(Boolean));
+    } catch (_) {
+      return new Set();
+    }
+  }
+  function markNarratorDiceMessages(root) {
+    if (!(root instanceof Element)) return;
+    // 초기화 중에도 불릴 수 있어 const 선언 순서(TDZ)에 기대지 않고 지역 상수를 쓴다.
+    const NARRATOR_DICE_ATTR = "data-ccf-narration-dice";
+    const NARRATOR_DICE_RE = /^S?(?:choice|CHOICE)\s*\[|^S?\d*[dD]\d+\b|^S?CCB?\s*<=|^S?(?:ST|FT|BET|RTT[1-6]?|TVT|TET|TPT|TST|TKT|TMT)\b|^SC\([1-6]\)/i;
+    // 변경이 메시지 안쪽(판정 결과 span 이 뒤늦게 붙는 경우 등)에서 일어나도 그 메시지 행을 다시 판단한다.
+    const own = root.closest?.(".MuiListItem-root");
+    const items = [...new Set([...(own ? [own] : []), ...(root.querySelectorAll?.(".MuiListItem-root") || [])])];
+    if (!items.length) return;
+    const narrators = readNarratorNamesForScan();
+    for (const item of items) {
+      const body = item.querySelector("p.MuiListItemText-secondary");
+      const nameNode = item.querySelector(".MuiListItemText-primary");
+      let mark = false;
+      if (body && nameNode && narrators.size && !body.querySelector(".ccf-render-root") && !body.classList.contains("ccf-render-root")) {
+        const raw = [...body.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent).join("").trim();
+        const name = [...nameNode.childNodes].find((node) => node.nodeType === 3 && node.textContent.trim())?.textContent.replace(/[ \t\n\r\f\v]+/g, " ").trim() || "";
+        mark = !!raw && narrators.has(name) && NARRATOR_DICE_RE.test(raw);
+      }
+      if (mark) {
+        item.setAttribute(CCF_NARRATION_ATTR, "1");
+        item.setAttribute(NARRATOR_DICE_ATTR, "1");
+      } else if (item.hasAttribute(NARRATOR_DICE_ATTR)) {
+        item.removeAttribute(NARRATOR_DICE_ATTR);
+        item.removeAttribute(CCF_NARRATION_ATTR);
+      }
+    }
   }
 
   function syncNarrationPanelsWithin(root) {
