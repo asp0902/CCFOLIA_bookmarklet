@@ -34,7 +34,7 @@
       background: #222; color: #fff; border-radius: 4px; overflow: hidden;
       box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); }
     header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 8px; }
-    h2 { flex: 1; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
+    h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
     .body { padding: 20px 24px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
     .field { margin-top: 16px; }
@@ -46,14 +46,19 @@
     input[readonly] { color: rgba(255,255,255,.85); }
     .row { display: flex; align-items: center; gap: 8px; }
     .row > input { flex: 1; min-width: 0; }
-    .switch { display: flex; align-items: center; gap: 12px; margin-top: 8px; cursor: pointer; user-select: none; }
+    /* Same switch as CCFOLIA's dialogs: 58x38 hit area, 34x14 track, 20px thumb; off = light grey thumb, on = blue thumb + 50% blue track, 150ms. */
+    .switch { position: relative; display: inline-flex; flex: none; cursor: pointer; user-select: none; }
     .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
-    .track { position: relative; width: 38px; height: 14px; border-radius: 7px; background: rgba(255,255,255,.3); flex: none; transition: background .15s; }
-    .thumb { position: absolute; top: -3px; left: 0; width: 20px; height: 20px; border-radius: 50%; background: #bdbdbd; transition: transform .15s, background .15s;
+    .sw { position: relative; display: inline-flex; width: 58px; height: 38px; padding: 12px; overflow: hidden; }
+    .track { width: 34px; height: 14px; border-radius: 7px; background-color: #fff; opacity: .3;
+      transition: opacity .15s cubic-bezier(.4,0,.2,1), background-color .15s cubic-bezier(.4,0,.2,1); }
+    .base { position: absolute; top: 0; left: 0; width: 38px; height: 38px; padding: 9px; color: #e0e0e0;
+      transition: left .15s cubic-bezier(.4,0,.2,1), transform .15s cubic-bezier(.4,0,.2,1), color .15s cubic-bezier(.4,0,.2,1); }
+    .thumb { display: block; width: 20px; height: 20px; border-radius: 50%; background-color: currentColor;
       box-shadow: 0 2px 1px -1px rgba(0,0,0,.2), 0 1px 1px 0 rgba(0,0,0,.14), 0 1px 3px 0 rgba(0,0,0,.12); }
-    .switch input:checked + .track { background: rgba(255,255,255,.5); }
-    .switch input:checked + .track .thumb { transform: translateX(18px); background: #fff; }
-    .switch input:focus-visible + .track .thumb { outline: 2px solid #fff; outline-offset: 2px; }
+    .switch input:checked + .sw .base { transform: translateX(20px); color: #2196f3; }
+    .switch input:checked + .sw .track { background-color: #2196f3; opacity: .5; }
+    .switch input:focus-visible + .sw { outline: 2px solid #fff; outline-offset: -4px; border-radius: 19px; }
     hr { border: 0; border-top: 1px solid rgba(255,255,255,.12); margin: 20px 0 0; }
     h3 { margin: 16px 0 4px; font-size: 1rem; font-weight: 500; }
     button { font: inherit; font-size: .875rem; font-weight: 500; letter-spacing: .02857em; min-width: 64px; height: 36px; padding: 6px 12px; border: 0; border-radius: 4px;
@@ -73,7 +78,7 @@
     .participant .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .participant .state { color: rgba(255,255,255,.7); font-size: .875rem; margin-right: 4px; }
     footer { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,.4); }
-    footer .spacer { flex: 1; }
+    footer .spacer, header .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
     .toast.error { color: #f44336; }
     @media (max-width: 480px) { .paper { width: calc(100vw - 32px); } header, .body { padding-left: 16px; padding-right: 16px; } }
@@ -103,7 +108,7 @@
   };
   host.__capybaraClose = closeModal;
 
-  const enabled = el("input", { type: "checkbox", id: "enabled" });
+  const enabled = el("input", { type: "checkbox", id: "enabled", "aria-label": "웹 공유 사용" });
   const url = el("input", { type: "text", id: "url", autocomplete: "off", spellcheck: "false" });
   const token = el("input", { type: "password", id: "token", autocomplete: "off" });
   const invite = el("input", { type: "text", id: "invite", readonly: "", placeholder: "코코포리아 룸 연결 후 생성됩니다." });
@@ -218,25 +223,23 @@
     await refreshParticipants();
   });
 
-  const toolkit = el("button", { type: "button", id: "toolkit", text: "툴킷 열기" });
-  toolkit.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "capybara-open-toolkit" }).catch?.(() => {}); closeModal(); });
   const close = el("button", { type: "button", id: "close", text: "닫기" });
   close.addEventListener("click", closeModal);
   const x = el("button", { type: "button", class: "icon", id: "x", "aria-label": "닫기", text: "✕" });
   x.addEventListener("click", closeModal);
 
   const paper = el("div", { class: "paper", role: "dialog", "aria-modal": "true", "aria-labelledby": "title" },
-    el("header", {}, el("h2", { id: "title", text: "웹 공유" }), x),
+    el("header", {}, el("h2", { id: "title", text: "웹 공유" }),
+      el("label", { class: "switch", title: "웹 공유 사용" }, enabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
+      el("span", { class: "spacer" }), x),
     el("div", { class: "body" },
-      el("label", { class: "switch" }, enabled, el("span", { class: "track" }, el("span", { class: "thumb" })), el("span", { text: "웹 공유 사용" })),
       el("div", { class: "field" }, el("label", { for: "url", text: "릴레이 주소" }), url),
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
-      el("div", { class: "field row" }, save, stop),
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
       toast,
       el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, participants),
-    el("footer", {}, toolkit, el("span", { class: "spacer" }), close));
+    el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);
   backdrop.addEventListener("mousedown", event => { if (event.target === backdrop) closeModal(); });
   shadow.append(backdrop);

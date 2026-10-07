@@ -200,10 +200,29 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(await page.evaluate(() => window.__keys), 0, 'keys stay inside the dialog');
       await q(page, '.paper').click({ position: { x: 20, y: 20 } });
       assert.equal(await page.locator('#capybara-share-modal-host').count(), 1);
-      // "툴킷 열기" asks the background to open the toolkit panel and closes the modal.
-      await q(page, '#toolkit').click();
-      assert.deepEqual(await page.evaluate(() => window.__messages), [{ type: 'capybara-open-toolkit' }]);
-      await page.waitForFunction(() => !document.getElementById('capybara-share-modal-host'));
+      // Layout: no toolkit button; the switch sits next to the title; save / stop live in the footer next to close.
+      assert.equal(await q(page, '#toolkit').count(), 0, 'the toolkit button is gone');
+      const places = await page.evaluate(() => {
+        const root = document.getElementById('capybara-share-modal-host').shadowRoot;
+        const inside = (selector, container) => !!root.querySelector(`${container} ${selector}`);
+        const rect = selector => root.querySelector(selector).getBoundingClientRect();
+        return { switchInHeader: inside('#enabled', 'header'), saveInFooter: inside('#save', 'footer'), stopInFooter: inside('#stop', 'footer'), closeInFooter: inside('#close', 'footer'), saveInBody: inside('#save', '.body'),
+          switchRightOfTitle: rect('.switch').left >= rect('#title').right - 1, switchSize: [Math.round(rect('.sw').width), Math.round(rect('.sw').height)] };
+      });
+      assert.deepEqual(places, { switchInHeader: true, saveInFooter: true, stopInFooter: true, closeInFooter: true, saveInBody: false, switchRightOfTitle: true, switchSize: [58, 38] });
+      // The switch looks and animates like CCFOLIA's: grey thumb off, blue thumb + 50% blue track on (150 ms).
+      const look = await page.evaluate(() => {
+        const root = document.getElementById('capybara-share-modal-host').shadowRoot;
+        const state = () => { const thumb = getComputedStyle(root.querySelector('.base')); const track = getComputedStyle(root.querySelector('.track')); return { thumb: thumb.color, shift: thumb.transform, track: track.backgroundColor, opacity: track.opacity }; };
+        return { transition: getComputedStyle(root.querySelector('.base')).transitionDuration, ...state() };
+      });
+      assert.equal(look.transition.split(',')[0].trim(), '0.15s');
+      const checked = await q(page, '#enabled').isChecked();
+      await q(page, '.sw').click(); await flush(page); await page.waitForTimeout(250);
+      const after = await page.evaluate(() => { const root = document.getElementById('capybara-share-modal-host').shadowRoot; const thumb = getComputedStyle(root.querySelector('.base')); const track = getComputedStyle(root.querySelector('.track')); return { thumb: thumb.color, shift: thumb.transform, track: track.backgroundColor, opacity: track.opacity }; });
+      const on = checked ? look : after, off = checked ? after : look;
+      assert.equal(off.thumb, 'rgb(224, 224, 224)'); assert.equal(off.opacity, '0.3');
+      assert.equal(on.thumb, 'rgb(33, 150, 243)'); assert.equal(on.opacity, '0.5'); assert.equal(on.track, 'rgb(33, 150, 243)'); assert.equal(on.shift, 'matrix(1, 0, 0, 1, 20, 0)');
       await page.close();
     }
     // Phone-width viewport: no horizontal overflow.
@@ -214,6 +233,6 @@ const flush = page => page.waitForTimeout(80);
       assert(box.x >= 0 && box.x + box.width <= 360 && box.y + box.height <= 640, 'fits a phone viewport');
       await page.close();
     }
-    console.log('share modal: form, save rules, participants, stop flows, socket status, live updates, closing, key isolation, toolkit button, small viewport PASS');
+    console.log('share modal: form, save rules, participants, stop flows, socket status, live updates, closing, key isolation, layout and switch, small viewport PASS');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
