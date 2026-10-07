@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.24
+// @version      0.2.25
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.24";
+  const VERSION = "0.2.25";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2938,6 +2938,37 @@
     // 코코포리아 네이티브 채팅 입력칸에서도 백틱(`) 키로 "캐릭터 선택" 창을 연다. 네이티브 이름 줄의 "캐릭터 선택" 버튼을 대신 눌러 준다.
     // 추가 채팅 패널 입력칸은 패널이 자체 목록으로 처리하고, 다른 스크립트(스탠딩 선택기 등)가 이미 처리한 키는 건너뛴다.
     try { if (window.__CCF_SCP_BACKQUOTE_HANDLER__) window.removeEventListener("keydown", window.__CCF_SCP_BACKQUOTE_HANDLER__, true); } catch (e) { /* noop */ }
+    // 네이티브 캐릭터 선택 목록은 방향키로 움직이지 않는다(항목이 MUI ListItemButton 이라 포커스도 목록 바깥). 열린 동안만
+    // 위/아래·Home/End 로 항목에 포커스를 옮기고, Enter(네이티브 버튼 동작)·Esc 는 그대로 둔다.
+    const armNativePickerKeys = () => {
+      let tries = 0;
+      const find = () => [...document.querySelectorAll(".MuiPopover-root .MuiList-root")]
+        .find((list) => list.querySelector('[role="button"]') && /활성화 상태/.test(list.textContent || ""));
+      const start = window.setInterval(() => {
+        tries += 1;
+        const list = find();
+        if (!list && tries < 20) return;
+        window.clearInterval(start);
+        if (!list) return;
+        const items = () => [...list.querySelectorAll('[role="button"]')];
+        const first = items().find((el) => el.classList.contains("Mui-selected")) || items()[0];
+        first?.focus();
+        const onKey = (ev) => {
+          if (!list.isConnected) { window.removeEventListener("keydown", onKey, true); return; }
+          const all = items();
+          const at = all.indexOf(document.activeElement);
+          let next = -2;
+          if (ev.key === "ArrowDown") next = at < 0 ? 0 : (at + 1) % all.length;
+          else if (ev.key === "ArrowUp") next = at < 0 ? all.length - 1 : (at - 1 + all.length) % all.length;
+          else if (ev.key === "Home") next = 0;
+          else if (ev.key === "End") next = all.length - 1;
+          if (next === -2) return;
+          ev.preventDefault(); ev.stopPropagation();
+          all[next]?.focus();
+        };
+        window.addEventListener("keydown", onKey, true);
+      }, 60);
+    };
     const nativeBackquoteHandler = (e) => {
       if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       if (e.code !== "Backquote" && e.key !== "`" && e.key !== "₩" && e.key !== "｀") return;
@@ -2951,6 +2982,7 @@
       e.preventDefault();
       e.stopPropagation();
       pick.click();
+      armNativePickerKeys();
     };
     window.__CCF_SCP_BACKQUOTE_HANDLER__ = nativeBackquoteHandler;
     window.addEventListener("keydown", nativeBackquoteHandler, true);
