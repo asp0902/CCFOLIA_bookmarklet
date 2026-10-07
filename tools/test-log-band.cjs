@@ -41,13 +41,13 @@ const MACRO = `[내용](#" style="color: #ffffff; background-color:#9BCFC4; font
       document.body.innerHTML = `<div class="wrap" id="wrap">${build({ text: envelope.text, formatRuns: envelope.formatRuns, alignRuns: envelope.alignRuns, blockStyle: {}, baseColor: '', roll20Macro: true, roll20Background: 'transparent' })}</div>`;
       const frag = document.querySelector('.ccf-frag'), rect = frag.getBoundingClientRect(), wrap = document.getElementById('wrap').getBoundingClientRect();
       const bubble = getComputedStyle(document.querySelector('.ccf-roll20-bubble'));
-      return { overflowY: bubble.overflowY, overflowX: bubble.overflowX, shadow: getComputedStyle(frag).boxShadow, bandTop: rect.top - 15 - (wrap.top + 30), bandBottom: rect.bottom + 15 - (wrap.top + 30), box: rect.height, flow: wrap.height - 60, centred: (rect.top + rect.bottom) / 2 === (rect.top - 15 + rect.bottom + 15) / 2 };
+      return { overflowY: bubble.overflowY, overflowX: bubble.overflowX, shadow: getComputedStyle(frag).boxShadow, bandTop: rect.top - 7.5 - (wrap.top + 30), bandBottom: rect.bottom + 7.5 - (wrap.top + 30), box: rect.height, flow: wrap.height - 60, centred: (rect.top + rect.bottom) / 2 === (rect.top - 15 + rect.bottom + 15) / 2 };
     }, { code: logPackage.slice(start, end), envelope, css: bubbleRules.join('\n') });
     assert.equal(result.overflowY, 'visible');
     assert.match(result.shadow, /0px 0px 0px 15px$/, 'y offset moved out of the shadow');
     assert.equal(result.bandTop, 0, 'band fills its own space (top)');
-    assert.equal(result.bandBottom, result.box + 30, 'band fills its own space (bottom)');
-    assert.equal(result.flow, result.box + 30, 'band is part of the message height');
+    assert.equal(result.bandBottom, result.box + 15, 'band fills its own space (bottom)');
+    assert.equal(result.flow, result.box + 15, 'band is part of the message height');
     assert(result.centred, 'text centred in band');
     console.log('log editor: colour band shown like CCFOLIA (not clipped, text centred) PASS');
   } finally { await browser.close(); }

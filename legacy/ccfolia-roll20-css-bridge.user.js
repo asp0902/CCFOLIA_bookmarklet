@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.96
+// @version      0.3.97
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.96"),
+    version: getUserscriptVersion("0.3.97"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -4552,9 +4552,9 @@
   }
 
   // 색 띠 기법(box-shadow: 0 8px 0 15px 색)의 띠는 상자 위·아래로 퍼져 이웃 메시지·구분선을 덮고(맨 아래 메시지는 스크롤 영역에서 잘리고),
-  // y 오프셋 때문에 위아래가 비대칭이라 글자가 띠 위쪽에 치우쳐 보인다. 롤20처럼 띠 전체가 자기 자리를 차지하게 한다:
-  // 그림자 y 오프셋을 0 으로 하고 퍼짐(spread)만큼 위·아래 여백을 줘서, 띠가 메시지 안에 들어가고 글자는 띠 가운데에 온다.
-  // (단일 그림자, x 오프셋 0, blur 0, spread > 0 인 경우만. 띠 두께는 그대로 상자 + 2*spread)
+  // y 오프셋 때문에 위아래가 비대칭이라 글자가 띠 위쪽에 치우쳐 보인다. 띠 전체가 자기 자리를 차지하고 글자가 가운데 오게 한다:
+  // 그림자 y 오프셋을 0 으로 하고, 위·아래로는 퍼짐의 절반(spread/2)만 보이게 잘라(clip-path) 그만큼만 위·아래 여백을 준다.
+  // 가로는 spread 만큼 그대로 퍼진다(롤20처럼 가로 전체). 띠 두께 = 상자 + spread. (단일 그림자, x 오프셋 0, blur 0, spread > 0 인 경우만)
   function centerBandShadow(el) {
     const match = /^(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]+|[a-z]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/i.exec(el.style.boxShadow || "");
     if (!match) return;
@@ -4564,9 +4564,12 @@
     const top = el.style.marginTop === "" ? 0 : parseFloat(el.style.marginTop);
     const bottom = el.style.marginBottom === "" ? 0 : parseFloat(el.style.marginBottom);
     if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+    const vertical = reach / 2;
     el.style.boxShadow = `${color} 0px 0px 0px ${reach}px`;
-    el.style.marginTop = `${top + reach}px`;
-    el.style.marginBottom = `${bottom + reach}px`;
+    el.style.clipPath = `inset(${-vertical}px ${-reach}px)`;
+    el.style.marginTop = `${top + vertical}px`;
+    el.style.marginBottom = `${bottom + vertical}px`;
+    el.setAttribute("data-ccr20-band", "1");
   }
 
   function applyExtraCss(el, extraCss) {
@@ -5731,6 +5734,9 @@
     const LAST = CONT_ATTR + "-last";
     const WRAP_LAST = WRAP + "-last";
     style.textContent = [
+      // 목록(가상 스크롤)은 행 높이를 띠가 그려지기 전에 재서 다시 재지 않는다 → 띠 메시지가 맨 아래면 마지막 구분선이 스크롤 영역 밖으로
+      // 밀린다. 띠 메시지가 보이는 동안 목록 아래에 여유를 둔다.
+      `ul.MuiList-root:has([data-ccr20-band="1"]) { padding-bottom: 24px !important; }`,
       // 메시지 행(li)은 네이티브가 position: relative 라 뒤따르는 구분선(hr) 위로 올라온다 → 매크로 box-shadow 가
       // 구분선을 덮는다. 구분선을 한 단계 위로 올려 선이 그림자 위에 보이게 한다.
       `.MuiListItem-root + .MuiDivider-root { position: relative; z-index: 1; }`,
@@ -6061,7 +6067,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.96",
+    version: "0.3.97",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.43
+// @version      0.0.44
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.43"),
+  version: getUserscriptVersion("0.0.44"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -5168,9 +5168,9 @@
   }
 
   // 색 띠 기법(box-shadow: 0 8px 0 15px 색)의 띠는 상자 위·아래로 퍼져 이웃 메시지·구분선을 덮고(맨 아래 메시지는 스크롤 영역에서 잘리고),
-  // y 오프셋 때문에 위아래가 비대칭이라 글자가 띠 위쪽에 치우쳐 보인다. 롤20처럼 띠 전체가 자기 자리를 차지하게 한다:
-  // 그림자 y 오프셋을 0 으로 하고 퍼짐(spread)만큼 위·아래 여백을 줘서, 띠가 메시지 안에 들어가고 글자는 띠 가운데에 온다.
-  // (단일 그림자, x 오프셋 0, blur 0, spread > 0 인 경우만. 띠 두께는 그대로 상자 + 2*spread)
+  // y 오프셋 때문에 위아래가 비대칭이라 글자가 띠 위쪽에 치우쳐 보인다. 띠 전체가 자기 자리를 차지하고 글자가 가운데 오게 한다:
+  // 그림자 y 오프셋을 0 으로 하고, 위·아래로는 퍼짐의 절반(spread/2)만 보이게 잘라(clip-path) 그만큼만 위·아래 여백을 준다.
+  // 가로는 spread 만큼 그대로 퍼진다(롤20처럼 가로 전체). 띠 두께 = 상자 + spread. (단일 그림자, x 오프셋 0, blur 0, spread > 0 인 경우만)
   function centerBandShadow(el) {
     const match = /^(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]+|[a-z]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/i.exec(el.style.boxShadow || "");
     if (!match) return;
@@ -5180,9 +5180,12 @@
     const top = el.style.marginTop === "" ? 0 : parseFloat(el.style.marginTop);
     const bottom = el.style.marginBottom === "" ? 0 : parseFloat(el.style.marginBottom);
     if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+    const vertical = reach / 2;
     el.style.boxShadow = `${color} 0px 0px 0px ${reach}px`;
-    el.style.marginTop = `${top + reach}px`;
-    el.style.marginBottom = `${bottom + reach}px`;
+    el.style.clipPath = `inset(${-vertical}px ${-reach}px)`;
+    el.style.marginTop = `${top + vertical}px`;
+    el.style.marginBottom = `${bottom + vertical}px`;
+    el.setAttribute("data-ccr20-band", "1");
   }
 
   function appendStyledFragment(container, frag) {
