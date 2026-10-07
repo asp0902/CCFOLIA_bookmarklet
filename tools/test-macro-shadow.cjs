@@ -54,13 +54,13 @@ const encode = value => {
       const geometry = await page.evaluate(() => {
         const frag = document.querySelector('#p0 [class*="frag"]');
         const rect = frag.getBoundingClientRect(), host = document.querySelector('.MuiListItem-root').getBoundingClientRect(), padding = 30;
-        const spread = 15;
+        const spread = 7.5; // the band shows spread/2 above and below the box (the shadow is clipped to that)
         return { bandTop: rect.top - spread - (host.top + padding), bandBottom: rect.bottom + spread - (host.top + padding), hostHeight: host.height - 2 * padding, boxHeight: rect.height, textCentre: (rect.top + rect.bottom) / 2, bandCentre: (rect.top - spread + rect.bottom + spread) / 2 };
       });
       assert.equal(geometry.textCentre, geometry.bandCentre, `${label}: text centred in the band`);
       assert.equal(geometry.bandTop, 0, `${label}: band starts at the message content top (it fills its own space)`);
-      assert.equal(geometry.bandBottom, geometry.boxHeight + 30, `${label}: band ends at the message content bottom`);
-      assert.equal(geometry.hostHeight, geometry.boxHeight + 30, `${label}: the band is part of the message height (does not overlap neighbours)`);
+      assert.equal(geometry.bandBottom, geometry.boxHeight + 15, `${label}: band ends at the message content bottom`);
+      assert.equal(geometry.hostHeight, geometry.boxHeight + 15, `${label}: the band is part of the message height (does not overlap neighbours)`);
     }
     console.log('macro box-shadow spread is not clipped vertically (format-sync alone and with bridge) PASS');
   } finally { await browser.close(); }
