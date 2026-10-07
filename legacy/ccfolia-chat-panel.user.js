@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.16
+// @version      0.2.17
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.16";
+  const VERSION = "0.2.17";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -184,31 +184,118 @@
     return [...base, ...rest];
   }
 
+  // 주사위 메시지는 결과가 text 가 아니라 extend.roll.result 에 있다(diceDiag 로 확인).
+  // 네이티브 CREE-GRRR 카드는 우리 패널을 처리하지 않으므로, 최소한 결과 문자열을
+  // 붙여 굴림이 보이게 한다.
+  function toPanelMessage(id, msg) {
+    return {
+      id,
+      name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
+      text: String(pick(msg, ["text", "message", "body"]) || ""),
+      roll: String(pick(msg, ["extend.roll.result"]) || ""),
+      color: String(pick(msg, ["color", "character.color"]) || ""),
+      icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
+      at: readCreatedAt(msg)
+    };
+  }
+
   function readMessages(channel) {
     const slice = getRoomMessagesSlice();
     if (!slice) return null;
     const entities = slice.entities || {};
     const ids = Array.isArray(slice.idsGroupBy?.[channel]) ? slice.idsGroupBy[channel] : [];
     const out = [];
+    const seen = new Set();
     for (const id of ids) {
       const msg = entities[id];
       if (!msg || msg.removed) continue;
-      // 주사위 메시지는 결과가 text 가 아니라 extend.roll.result 에 있다(diceDiag 로 확인).
-      // 네이티브 CREE-GRRR 카드는 우리 패널을 처리하지 않으므로, 최소한 결과 문자열을
-      // 붙여 굴림이 보이게 한다.
-      const rollResult = String(pick(msg, ["extend.roll.result"]) || "");
-      out.push({
-        id,
-        name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
-        text: String(pick(msg, ["text", "message", "body"]) || ""),
-        roll: rollResult,
-        color: String(pick(msg, ["color", "character.color"]) || ""),
-        icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
-        at: readCreatedAt(msg)
-      });
+      seen.add(id);
+      out.push(toPanelMessage(id, msg));
+    }
+    // 위로 스크롤해 따로 불러온 오래된 메시지(코코포리아 저장소가 아직 안 가진 것)를 합친다.
+    for (const old of olderMessages.values()) {
+      if (old.channel === channel && !seen.has(old.id)) out.push(old);
     }
     out.sort((a, b) => a.at - b.at);
-    return out.slice(-MAX_RENDER);
+    return out.slice(-(MAX_RENDER + olderMessages.size));
+  }
+
+  /* ---------------- 이전 대화 불러오기 ----------------
+     네이티브 패널은 위로 스크롤하면 더 오래된 대화를 불러온다. 우리 패널은 저장소를 읽기만 하므로,
+     맨 위에 닿으면 가진 것 중 가장 오래된 메시지보다 앞의 대화를 Firestore 에서 직접 가져온다. */
+  const olderMessages = new Map();
+  let olderExhausted = false;
+  let olderLoading = false;
+  const OLDER_PAGE = 100;
+
+  function decodeFsValue(v) {
+    if (!v || typeof v !== "object") return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return Number(v.integerValue);
+    if ("doubleValue" in v) return Number(v.doubleValue);
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("timestampValue" in v) return v.timestampValue;
+    if ("nullValue" in v) return null;
+    if ("mapValue" in v) return decodeFsFields(v.mapValue?.fields);
+    if ("arrayValue" in v) return (v.arrayValue?.values || []).map(decodeFsValue);
+    return null;
+  }
+  function decodeFsFields(fields) {
+    const out = {};
+    for (const [key, value] of Object.entries(fields || {})) out[key] = decodeFsValue(value);
+    return out;
+  }
+
+  async function loadOlderMessages() {
+    if (olderLoading || olderExhausted) return false;
+    const slice = getRoomMessagesSlice();
+    if (!slice) return false;
+    olderLoading = true;
+    try {
+      const ctx = await getAuthContext();
+      let oldest = null;
+      for (const msg of Object.values(slice.entities || {})) {
+        const at = readCreatedAt(msg);
+        if (at && (!oldest || at < oldest.at)) oldest = { at, raw: msg.createdAt };
+      }
+      for (const old of olderMessages.values()) if (old.at && (!oldest || old.at < oldest.at)) oldest = { at: old.at, raw: old.rawCreatedAt };
+      if (!oldest) { olderExhausted = true; return false; }
+      const cursorValue = typeof oldest.raw === "number" ? { integerValue: String(oldest.raw) } : { timestampValue: new Date(oldest.at).toISOString() };
+      const response = await fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}:runQuery`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: "messages" }],
+            orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
+            startAt: { values: [cursorValue], before: false },
+            limit: OLDER_PAGE
+          }
+        })
+      });
+      if (!response.ok) throw new Error(`이전 대화를 읽지 못했습니다 (${response.status})`);
+      const rows = (await response.json()).filter((row) => row && row.document);
+      const entities = slice.entities || {};
+      let added = 0;
+      for (const row of rows) {
+        const id = String(row.document.name || "").split("/").pop();
+        if (!id || entities[id] || olderMessages.has(id)) continue;
+        const data = decodeFsFields(row.document.fields);
+        if (data.removed) continue;
+        const message = toPanelMessage(id, data);
+        message.channel = String(data.channel || "main");
+        message.rawCreatedAt = data.createdAt;
+        olderMessages.set(id, message);
+        added += 1;
+      }
+      if (rows.length < OLDER_PAGE) olderExhausted = true;
+      return added > 0;
+    } catch (error) {
+      console.warn("[ccf-chat-panel] older messages failed", error);
+      return false;
+    } finally {
+      olderLoading = false;
+    }
   }
 
   /* ---------------- 렌더 ---------------- */
@@ -1448,6 +1535,20 @@
       tipEl.hidden = true;
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
+      if (listEl.scrollTop < 80 && !olderExhausted && !olderLoading) {
+        const list = listEl;
+        const heightBefore = list.scrollHeight;
+        const topBefore = list.scrollTop;
+        setStatus("이전 대화를 불러오는 중…");
+        loadOlderMessages().then((changed) => {
+          setStatus("");
+          if (!changed || listEl !== list) return;
+          lastSignature = ""; // 위쪽에 끼워 넣으므로 전체를 다시 그린다
+          renderList();
+          // 보던 자리가 그대로 보이도록, 늘어난 높이만큼 내려 둔다.
+          list.scrollTop = topBefore + (list.scrollHeight - heightBefore);
+        });
+      }
     });
     panel.appendChild(listEl);
 
@@ -2043,6 +2144,7 @@
   }
 
   function closePanel() {
+    olderMessages.clear(); olderExhausted = false; olderLoading = false;
     unsubscribeStore();
     window.removeEventListener("resize", safeLayout);
     if (onDocClickHandler) { document.removeEventListener("click", onDocClickHandler); onDocClickHandler = null; }
