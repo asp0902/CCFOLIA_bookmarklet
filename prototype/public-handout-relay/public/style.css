@@ -133,3 +133,8 @@ main{padding:0}
 #bgm-bar button:hover{background:rgba(255,255,255,.12)}
 #bgm-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:4px;color:#2196f3}
 #bgm-frame{position:fixed;left:-9999px;top:0;width:200px;height:113px;overflow:hidden}
+
+.ext-note{margin:12px 0 0;font-size:.875rem;line-height:1.5;color:rgba(255,255,255,.7)}
+.ext-note a{color:#2196f3}
+.web-join{margin:12px 0 0}
+.web-join button{padding:0;border:0;background:none;color:rgba(255,255,255,.5);font:inherit;font-size:.75rem;text-decoration:underline;cursor:pointer;font-weight:400}
