@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.58
+// @version      0.1.59
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.58"),
+    version: getUserscriptVersion("0.1.59"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -847,10 +847,14 @@
       }
 
       /* 본문 텍스트 자체 — 가운데 + 이탤릭 */
-      .ccf-render-root[${CCF_NARRATION_ATTR}="1"],
-      .ccf-render-root[${CCF_NARRATION_ATTR}="1"] .ccf-line {
+      .ccf-render-root[${CCF_NARRATION_ATTR}="1"]:not([data-ccf-macro="1"]),
+      .ccf-render-root[${CCF_NARRATION_ATTR}="1"]:not([data-ccf-macro="1"]) .ccf-line {
         text-align: center !important;
         font-style: italic !important;
+      }
+      /* Roll20 CSS 매크로는 나레이션 위에서도 자기 서식을 그대로 쓴다(왼쪽 기본, 줄별 정렬은 인라인으로) */
+      .ccf-render-root[${CCF_NARRATION_ATTR}="1"][data-ccf-macro="1"] {
+        text-align: left;
       }
 
       /* === 호환성: 구버전에서 LI에 직접 data-ccf-narration이 붙은 경우(있다면)도 처리 === */
@@ -1276,7 +1280,9 @@
 
     const renderText = envelope.text || visibleText || "";
     const runs = normalizeRuns(envelope.formatRuns, renderText.length);
-    const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, envelope.blockStyle);
+    // 나레이션 상태에서도 Roll20 CSS 매크로가 우선한다: 가운데 정렬·이탤릭을 강제하지 않고 매크로의 서식을 쓴다.
+    const macro = envelope.roll20Macro === true;
+    const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
 
     const bottomScrollState = isFirstRender ? captureBottomAnchoredMessageScroller(el) : null;
@@ -1285,6 +1291,8 @@
 
     const overlay = ensureRenderOverlay(el);
     applyNarrationMessageLayout(el, narration);
+    if (macro) el.setAttribute("data-ccf-macro", "1");
+    else el.removeAttribute("data-ccf-macro");
 
     if (!runs.length && !alignRuns.length && !narration) {
       overlay.textContent = renderText;
@@ -1735,7 +1743,37 @@
     if (textShadow) out.textShadow = textShadow;
     const opacity = Number(style.opacity);
     if (Number.isFinite(opacity)) out.opacity = clamp(opacity, 0, 1);
+    const extraCss = cleanupExtraCss(style.extraCss);
+    if (extraCss) out.extraCss = extraCss;
     return out;
+  }
+
+  // Roll20 매크로(ccr20 envelope)가 싣고 오는 추가 CSS(font-family, 테두리, 그림자 등). 이 렌더러가 무시하면
+  // 나레이션 상태에서 매크로의 테두리·글꼴이 사라진다. 다른 사용자가 보낸 값이므로 허용 속성과 값 모양을 제한한다.
+  // 초기화 중(const 선언 전)에도 불리므로 TDZ 를 피해 함수 속성에 캐시한다.
+  function extraCssKeys() { return extraCssKeys.list || (extraCssKeys.list = [
+    "fontStyle", "fontFamily", "boxShadow", "backgroundPosition", "backgroundRepeat", "backgroundSize",
+    "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
+    "borderTop", "borderRight", "borderBottom", "borderLeft", "textTransform", "verticalAlign",
+    "whiteSpace", "wordBreak", "overflowWrap", "overflow", "textOverflow", "width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight"
+  ]); }
+  function cleanupExtraCss(source) {
+    if (!source || typeof source !== "object") return null;
+    const out = {};
+    for (const key of extraCssKeys()) {
+      const value = typeof source[key] === "string" ? source[key].replace(/\s+/g, " ").trim() : "";
+      if (!value || value.length > 240) continue;
+      if (/[;{}<>]|url\(|expression|javascript:|@import/i.test(value)) continue;
+      if (key === "fontFamily" && !/^[\w\s,'"\-가-힣]+$/.test(value)) continue;
+      out[key] = value;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function applyExtraCssStyle(el, extraCss) {
+    if (!extraCss) return;
+    for (const key of extraCssKeys()) if (extraCss[key]) el.style[key] = extraCss[key];
+    // 나눔명조 같은 Google Fonts 는 roll20 브리지가 로드해 준다(없으면 기본 글꼴로 표시).
+    if (extraCss.fontFamily) window.__CCF_ENSURE_GOOGLE_FONTS__?.(extraCss.fontFamily);
   }
 
   function normalizeRubyText(value) {
@@ -2283,6 +2321,7 @@
     if (style.textShadow) el.style.textShadow = style.textShadow;
     if (style.blur) applySoftBlur(el, style.blur);
     if (style.opacity != null) el.style.opacity = String(style.opacity);
+    applyExtraCssStyle(el, style.extraCss);
   }
 
   function appendStyledFragment(container, frag) {
@@ -13266,7 +13305,37 @@
     if (textShadow) out.textShadow = textShadow;
     const opacity = Number(style.opacity);
     if (Number.isFinite(opacity)) out.opacity = clamp(opacity, 0, 1);
+    const extraCss = cleanupExtraCss(style.extraCss);
+    if (extraCss) out.extraCss = extraCss;
     return out;
+  }
+
+  // Roll20 매크로(ccr20 envelope)가 싣고 오는 추가 CSS(font-family, 테두리, 그림자 등). 이 렌더러가 무시하면
+  // 나레이션 상태에서 매크로의 테두리·글꼴이 사라진다. 다른 사용자가 보낸 값이므로 허용 속성과 값 모양을 제한한다.
+  // 초기화 중(const 선언 전)에도 불리므로 TDZ 를 피해 함수 속성에 캐시한다.
+  function extraCssKeys() { return extraCssKeys.list || (extraCssKeys.list = [
+    "fontStyle", "fontFamily", "boxShadow", "backgroundPosition", "backgroundRepeat", "backgroundSize",
+    "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft",
+    "borderTop", "borderRight", "borderBottom", "borderLeft", "textTransform", "verticalAlign",
+    "whiteSpace", "wordBreak", "overflowWrap", "overflow", "textOverflow", "width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight"
+  ]); }
+  function cleanupExtraCss(source) {
+    if (!source || typeof source !== "object") return null;
+    const out = {};
+    for (const key of extraCssKeys()) {
+      const value = typeof source[key] === "string" ? source[key].replace(/\s+/g, " ").trim() : "";
+      if (!value || value.length > 240) continue;
+      if (/[;{}<>]|url\(|expression|javascript:|@import/i.test(value)) continue;
+      if (key === "fontFamily" && !/^[\w\s,'"\-가-힣]+$/.test(value)) continue;
+      out[key] = value;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function applyExtraCssStyle(el, extraCss) {
+    if (!extraCss) return;
+    for (const key of extraCssKeys()) if (extraCss[key]) el.style[key] = extraCss[key];
+    // 나눔명조 같은 Google Fonts 는 roll20 브리지가 로드해 준다(없으면 기본 글꼴로 표시).
+    if (extraCss.fontFamily) window.__CCF_ENSURE_GOOGLE_FONTS__?.(extraCss.fontFamily);
   }
 
   function normalizeRubyText(value) {
@@ -14101,6 +14170,7 @@
     if (style.textShadow) el.style.textShadow = style.textShadow;
     if (style.blur) applySoftBlur(el, style.blur);
     if (style.opacity != null) el.style.opacity = String(style.opacity);
+    applyExtraCssStyle(el, style.extraCss);
   }
 
   function appendStyledFragment(container, frag) {
