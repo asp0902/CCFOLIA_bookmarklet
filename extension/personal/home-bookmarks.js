@@ -69,17 +69,7 @@
       prune();
       await save();
     }
-    let star = document.getElementById(STAR_ID);
-    if (!star) {
-      const titleBtn = document.querySelector("header.MuiAppBar-root h6")?.closest("button");
-      if (!titleBtn?.parentElement) return;
-      star = el("button", { id: STAR_ID, type: "button" });
-      star.style.cssText = "background:none;border:0;cursor:pointer;font-size:20px;line-height:1;padding:4px 6px;margin-left:4px;flex:none";
-      star.addEventListener("click", async e => { e.stopPropagation(); await togglePin(star.dataset.id); styleStar(star, !!rooms[star.dataset.id]?.pinned); });
-      titleBtn.after(star);
-    }
-    star.dataset.id = id;
-    styleStar(star, !!rooms[id]?.pinned);
+    document.getElementById(STAR_ID)?.remove(); // the room-header star was removed; clear it from tabs that still have the old one
   };
 
   // ── 홈 화면: 코코포리아 네이티브 룸 카드를 복제해 즐겨찾기/최근 방문 룸을 같은 모양으로 보여 준다 ──
