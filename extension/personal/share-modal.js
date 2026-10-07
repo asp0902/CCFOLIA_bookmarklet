@@ -128,6 +128,7 @@
       participants.append(el("div", { class: "participant" },
         el("span", { class: "name", text: item.displayName }),
         el("span", { class: "state", text: STATUS_LABEL[item.status] || item.status }),
+        item.status === "pending" || item.status === "approved" ? el("button", { type: "button", "data-rename": item.id, "data-name": item.displayName, text: "이름 변경" }) : null,
         item.status === "pending" ? [act("승인", "approve"), act("거절", "reject", true)] : null,
         item.status === "approved" ? act("접근 취소", "revoke", true) : null));
     }
@@ -194,6 +195,19 @@
     } catch (error) { say(error.message, true); }
   });
   participants.addEventListener("click", async event => {
+    const rename = event.target.closest?.("button[data-rename]");
+    if (rename && roomId) {
+      const next = (prompt("참여자 표시 이름", rename.dataset.name) || "").trim();
+      if (!next || next === rename.dataset.name) return;
+      rename.disabled = true;
+      try {
+        const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(rename.dataset.rename)}/rename`, { method: "POST", body: JSON.stringify({ displayName: next }) });
+        if (!response.ok) throw new Error(await errorOf(response, "이름 변경 실패"));
+        say("표시 이름을 바꿨습니다.");
+      } catch (error) { say(error.message, true); }
+      await refreshParticipants();
+      return;
+    }
     const button = event.target.closest?.("button[data-decision]");
     if (!button || !roomId) return;
     button.disabled = true;
