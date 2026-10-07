@@ -88,3 +88,7 @@ main{padding:0}
   .stage{padding-top:80px}
   .chat h2{height:64px;line-height:64px;box-shadow:0 2px 4px -1px rgba(0,0,0,.2),0 4px 5px 0 rgba(0,0,0,.14),0 1px 10px 0 rgba(0,0,0,.12)}
 }
+
+/* Footer line: measured on ccfolia.com — 37px high, padding 4/16/8, 12px text rgb(100,100,100), underlined link. */
+.dice-footer{box-sizing:border-box;min-height:37px;padding:4px 16px 8px;display:flex;align-items:flex-start;font-size:12px;line-height:1.25;color:rgb(100,100,100)}
+.dice-footer a{color:rgb(100,100,100);text-decoration:underline}
