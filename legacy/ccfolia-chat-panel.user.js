@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.10
+// @version      0.2.11
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.10";
+  const VERSION = "0.2.11";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1318,6 +1318,24 @@
       .ccf-scp-send:hover { filter: brightness(1.08); }
       .ccf-scp-status { font-size: 11px; margin-top: 4px; min-height: 14px; opacity: .7; }
       .ccf-scp-status.is-error { color: #ff8a8a; opacity: 1; }
+      /* 네이티브 입력 영역에서 잰 값(탭 48px, 서식 버튼 30×30 #282828, 입력창 우물 rgba(0,0,0,.2), 12px 안내 줄). */
+      #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
+      #${PANEL_ID} .ccf-scp-tab { box-sizing: border-box; min-width: 48px; height: 48px; padding: 12px 16px;
+        font-size: 14px; font-weight: 700; letter-spacing: .02857em; line-height: 1.75; }
+      #${PANEL_ID} .ccf-scp-fmt { gap: 4px 6px; margin: 0; padding: 6px; background: rgba(32,32,32,.94); }
+      #${PANEL_ID} .ccf-scp-fmt-btn { width: 30px; min-width: 30px; height: 30px; padding: 0; border-radius: 0;
+        background: rgb(40,40,40); border: 1px solid rgba(255,255,255,.12); font-size: 12px; font-weight: 400; }
+      #${PANEL_ID} .ccf-scp-fmt-btn:hover { background: rgb(55,55,55); }
+      #${PANEL_ID} .ccf-scp-inputwrap { margin: 0; padding: 4px 8px; background: rgba(0,0,0,.2); }
+      #${PANEL_ID} .ccf-scp-input { min-height: 72px; padding: 0; border: 0; border-radius: 0; background: transparent;
+        font-size: 16px; line-height: 1.5; resize: none; }
+      #${PANEL_ID} .ccf-scp-input:focus { border: 0; }
+      #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; }
+      #${PANEL_ID} .ccf-scp-hint { font-size: 12px; line-height: 1.25; opacity: 1; color: rgb(100,100,100); }
+      #${PANEL_ID} .ccf-scp-send { padding: 4px 12px; min-width: 64px; background: transparent; color: #eee;
+        font-size: 13px; font-weight: 700; line-height: 1.75; border-radius: 4px; }
+      #${PANEL_ID} .ccf-scp-send:hover { background: rgba(255,255,255,.08); filter: none; }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
