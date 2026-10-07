@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.25
+// @version      0.2.26
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -53,7 +53,7 @@
     Object.freeze({
       id: "insane-roll20",
       name: "Roll20",
-      description: "Roll20 인세인 다크 시트 색상 / 팝업·사이코로픽션 시트 디자인"
+      description: "Roll20 다이스 결과 이미지(감정·판정 카드)만 롤20처럼 표시 / 색상은 코코포리아 기본 유지"
     })
   ]);
   // 신규 활성화 사용자의 커스텀 시트 테마 기본 선택값. 사용자가 드롭다운에서 명시적으로
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.25"),
+    version: getUserscriptVersion("0.2.26"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1829,66 +1829,8 @@
   function buildInsaneRoll20StyleSheet() {
     // Palette: Roll20/roll20-character-sheets, inSANe auto cal/inSANe.css (dark theme).
     const scope = `html[${DICEBOT_ATTR}="insane-roll20"]`;
-    const dialog = `${scope} :is(.MuiDialog-paper, #ccf-character-sheet-root .ccf-cs-dialog)`;
-    const sheet = `${scope} #ccf-character-sheet-root`;
+    // Roll20 테마는 다이스 결과 카드(감정·판정 이미지)만 롤20처럼 보여 준다. 팝업·시트·테두리 색은 코코포리아 네이티브 그대로 둔다.
     return `
-      ${dialog} {
-        background: #1f1f1f !important;
-        color: #f3f3f3 !important;
-        border-radius: 0 !important;
-      }
-      ${dialog} :is(.MuiDialogContent-root, .MuiPaper-root:not(.MuiAppBar-root)),
-      ${sheet} .ccf-cs-dialog > main {
-        background: #1f1f1f !important;
-        color: #f3f3f3 !important;
-      }
-      ${dialog} :is(.MuiAppBar-root, .MuiDialogTitle-root),
-      ${sheet} .ccf-cs-dialog > header,
-      ${sheet} .ccf-cs-dialog > footer,
-      ${sheet} .ccf-cs-tabs {
-        background: #212128 !important;
-        color: #f3f3f3 !important;
-      }
-      ${dialog} :is(.MuiTypography-root:not([style*="color:"]), .MuiFormLabel-root, .MuiFormControlLabel-label, .MuiInputBase-root, .MuiInputBase-input) {
-        color: #f3f3f3 !important;
-      }
-      ${dialog} :is(.MuiFormHelperText-root, .MuiTypography-caption, .MuiListItemText-secondary) {
-        color: #bdbdbd !important;
-      }
-      ${dialog} :is(.MuiInputBase-root, .MuiInputBase-input),
-      ${sheet} :is(input:not([type="checkbox"]), textarea, select) {
-        background-color: transparent !important;
-        color: #f3f3f3 !important;
-        border-radius: 0 !important;
-      }
-      ${dialog} :is(.MuiOutlinedInput-notchedOutline, .MuiDivider-root),
-      ${sheet} :is(.ccf-cs-skills h3, input:not([type="checkbox"]), textarea, select) {
-        border-color: #9c4a4c !important;
-      }
-      ${dialog} .Mui-focused .MuiOutlinedInput-notchedOutline {
-        border-color: #ff6168 !important;
-      }
-      ${dialog} :is(.MuiButton-textPrimary, .MuiTab-root.Mui-selected, .MuiCheckbox-root.Mui-checked, .MuiRadio-root.Mui-checked),
-      ${sheet} .ccf-cs-dialog main label:focus-within,
-      ${sheet} .ccf-cs-skill.is-fear button {
-        color: #ff6168 !important;
-      }
-      ${dialog} .MuiTabs-indicator,
-      ${sheet} .ccf-cs-skill input:checked {
-        background: #9c4a4c !important;
-      }
-      ${sheet} .ccf-cs-tabs button[aria-selected="true"] {
-        border-bottom-color: #ff6168 !important;
-      }
-      ${sheet} .ccf-cs-section-head h3 {
-        color: #f3f3f3 !important;
-        border-left: 3px solid #9c4a4c;
-        padding-left: 8px;
-      }
-      ${sheet} .ccf-cs-skill.is-selected {
-        background: rgba(156, 74, 76, .3) !important;
-      }
-      ${sheet} select option { background: #212128; color: #f3f3f3; }
       ${scope} [data-ccf-roll20-emotion] {
         font-size: 0 !important; line-height: 0 !important;
       }
