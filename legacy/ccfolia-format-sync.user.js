@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.59
+// @version      0.1.60
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.59"),
+    version: getUserscriptVersion("0.1.60"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4893,7 +4893,7 @@
         <input type="color" value="#ffffff" data-inline-color="color" aria-label="Text color">
       </label>
       <label class="ccf-inline-tool ccf-color-tool" title="Background color" aria-label="Background color">
-        <input type="color" value="#000000" data-inline-color="backgroundColor" aria-label="Background color">
+        <input type="color" value="#010101" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
@@ -5662,7 +5662,7 @@
   function getStyleFromInlineToolbar(toolbar) {
     const color = toolbar.querySelector('input[data-inline-color="color"]')?.value || "#ffffff";
     const backgroundColor =
-      toolbar.querySelector('input[data-inline-color="backgroundColor"]')?.value || "#000000";
+      toolbar.querySelector('input[data-inline-color="backgroundColor"]')?.value || "#010101";
     const fontSize = normalizeFontSizeValue(toolbar.querySelector("[data-inline-size]")?.value || "");
 
     return {
@@ -5719,7 +5719,7 @@
 
     const backgroundColor = toolbar.querySelector('input[data-inline-color="backgroundColor"]');
     if (backgroundColor instanceof HTMLInputElement) {
-      backgroundColor.value = "#000000";
+      backgroundColor.value = "#010101";
     }
 
     const sizeInput = toolbar.querySelector("[data-inline-size]");
@@ -6221,7 +6221,7 @@
           <button type="button" class="ccf-toggle" data-style-builder-align="center" title="\uAC00\uC6B4\uB370 \uC815\uB82C">\u2BC8\u2BC7</button>
           <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
           <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="color" data-style-builder-color value="#ffffff"></label>
-          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="color" data-style-builder-bg value="#000000"></label>
+          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="color" data-style-builder-bg value="#010101"></label>
           <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="${(() => { try { return Math.round(parseFloat(getComputedStyle(context.editor).fontSize)) || 14; } catch (_) { return 14; } })()}" title="\uAE00\uC790 \uD06C\uAE30(px)">
         </div>
       </div>
@@ -6727,7 +6727,7 @@
             </div>
 
             <div class="ccf-inline-tool ccf-color-tool" title="\uBC30\uACBD\uC0C9">
-              <input id="ccf-bgcolor" type="color" value="#000000" aria-label="\uBC30\uACBD\uC0C9">
+              <input id="ccf-bgcolor" type="color" value="#010101" aria-label="\uBC30\uACBD\uC0C9">
             </div>
 
             <div class="ccf-inline-tool ccf-size-tool" title="\uAE00\uC790 \uD06C\uAE30">
@@ -6872,7 +6872,7 @@
           </div>
 
           <div class="ccf-inline-tool ccf-color-tool" title="배경색">
-            <input id="ccf-bgcolor" type="color" value="#000000" aria-label="배경색">
+            <input id="ccf-bgcolor" type="color" value="#010101" aria-label="배경색">
           </div>
 
           <div class="ccf-inline-tool ccf-size-tool" title="글자 크기">
@@ -9726,7 +9726,7 @@
     }
 
     if (bgTool && bg) {
-      bgTool.style.setProperty("--ccf-chip-color", bg.value || "#000000");
+      bgTool.style.setProperty("--ccf-chip-color", bg.value || "#010101");
     }
   }
 
@@ -9743,7 +9743,7 @@
     const bg = document.getElementById("ccf-bgcolor");
 
     if (color) color.value = "#ffffff";
-    if (bg) bg.value = "#000000";
+    if (bg) bg.value = "#010101";
     setFontSizeControls("");
 
     syncInlineToolVisuals();
@@ -9759,7 +9759,7 @@
 
   function getStyleFromModal() {
     const color = document.getElementById("ccf-color")?.value || "#ffffff";
-    const bg = document.getElementById("ccf-bgcolor")?.value || "#000000";
+    const bg = document.getElementById("ccf-bgcolor")?.value || "#010101";
     const size = getFontSizeFromControls();
 
     return {
@@ -11028,7 +11028,7 @@
     const bgInput = popover.querySelector("[data-style-builder-bg]");
     if (bgInput) {
       if (style.backgroundColor) { bgInput.value = style.backgroundColor; bgInput.setAttribute("data-touched", "1"); }
-      else { bgInput.value = "#000000"; bgInput.removeAttribute("data-touched"); }
+      else { bgInput.value = "#010101"; bgInput.removeAttribute("data-touched"); }
     }
     const sizeInput = popover.querySelector("[data-style-builder-size]");
     if (sizeInput) {
@@ -13277,7 +13277,8 @@
     const blur = normalizeBlurValue(style.blur);
     if (blur) out.blur = blur;
     if (style.color && style.color !== "#ffffff") out.color = style.color;
-    if (style.backgroundColor && style.backgroundColor !== "#000000") out.backgroundColor = style.backgroundColor;
+    // "#010101" 은 배경색 "지정 안 함" 기본값(눈으로는 검정). 검정을 고르면 "#000000" 으로 값이 바뀌어 이벤트가 발생하고 그대로 보존된다.
+    if (style.backgroundColor && style.backgroundColor !== "#010101") out.backgroundColor = style.backgroundColor;
     const imageUrl = normalizeImageUrl(style.imageUrl);
     if (imageUrl) out.imageUrl = imageUrl;
     const imageAlt = normalizeImageAlt(style.imageAlt);
