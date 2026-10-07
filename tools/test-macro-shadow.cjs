@@ -50,6 +50,17 @@ const encode = value => {
         return out;
       });
       assert.deepEqual(clipped, [], `${label}: nothing clips the shadow vertically`);
+      // The colour band (0 8px 0 15px) must be centred on the text without moving the band or the following lines.
+      const geometry = await page.evaluate(() => {
+        const frag = document.querySelector('#p0 [class*="frag"]');
+        const rect = frag.getBoundingClientRect(), host = document.querySelector('.MuiListItem-root').getBoundingClientRect(), padding = 30;
+        const spread = 15;
+        return { bandTop: rect.top - spread - (host.top + padding), bandBottom: rect.bottom + spread - (host.top + padding), hostHeight: host.height - 2 * padding, boxHeight: rect.height, textCentre: (rect.top + rect.bottom) / 2, bandCentre: (rect.top - spread + rect.bottom + spread) / 2 };
+      });
+      assert.equal(geometry.textCentre, geometry.bandCentre, `${label}: text centred in the band`);
+      assert.equal(geometry.bandTop, -7, `${label}: band top unchanged (spread 15 - offset 8)`);
+      assert.equal(geometry.bandBottom, geometry.boxHeight + 23, `${label}: band bottom unchanged (spread 15 + offset 8)`);
+      assert.equal(geometry.hostHeight, geometry.boxHeight, `${label}: following lines are not pushed`);
     }
     console.log('macro box-shadow spread is not clipped vertically (format-sync alone and with bridge) PASS');
   } finally { await browser.close(); }
