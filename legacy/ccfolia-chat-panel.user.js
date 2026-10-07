@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.18
+// @version      0.2.19
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.18";
+  const VERSION = "0.2.19";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -50,6 +50,7 @@
   // 처음 열었을 때 그릴 게 없다고 판단해 안내문조차 없이 빠져나간다(빈 패널).
   let lastSignature = null;
   let pinnedToBottom = true;
+  let openCharListFn = null; // 화자(캐릭터) 선택 목록을 여는 함수 — ` 키로 부른다
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
   let speakerPaletteBtn = null; // 팔레트·색상·도움말 아이콘 늦은 복제 재시도용
   let speakerColorBtn = null;
@@ -1854,6 +1855,11 @@
       if (charList.hidden) { buildCharList(); charList.hidden = false; }
       else charList.hidden = true;
     });
+    openCharListFn = () => { buildCharList(); charList.hidden = false; };
+    // Esc 로 닫기(목록이 열려 있을 때).
+    panel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !charList.hidden) { charList.hidden = true; inputEl?.focus(); }
+    });
     speaker.appendChild(nameGroup);
     speaker.appendChild(spTools);
     renderSpeaker();
@@ -2081,6 +2087,13 @@
     inputEl.placeholder = "메시지를 입력";
     // 다른 스크립트가 이 입력창을 채팅 입력창으로 오인해 가공하지 않도록 표시.
     inputEl.setAttribute(SAFE_ATTR, "1");
+    // ` 키: 글자를 넣지 않고 캐릭터 선택 목록을 연다(코코포리아의 단축키와 같은 동작).
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key !== "`" || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (typeof openCharListFn !== "function") return;
+      e.preventDefault();
+      openCharListFn();
+    });
 
     let suggestActive = -1;
     const buildSuggest = () => {
