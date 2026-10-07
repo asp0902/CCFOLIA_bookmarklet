@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.14
+// @version      0.2.15
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.14";
+  const VERSION = "0.2.15";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1332,8 +1332,15 @@
         font-size: 16px; line-height: 1.5; resize: none; }
       #${PANEL_ID} .ccf-scp-input:focus { border: 0; }
       #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); }
-      #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; }
-      #${PANEL_ID} .ccf-scp-actions { min-height: 37px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
+      /* 높이를 네이티브 입력 영역(탭 48 + 이름 56 + 주사위 39 + 서식 81 + 입력 100 + 구분선 1 + 하단 37)에 맞춘다. */
+      #${PANEL_ID} .ccf-scp-compose { padding-bottom: 0; }
+      #${PANEL_ID} .ccf-scp-fmt { box-sizing: border-box; min-height: 81px; margin-bottom: 6px; align-content: flex-start;
+        border-top: .67px solid rgba(255,255,255,.12); border-bottom: .67px solid rgba(255,255,255,.12); }
+      #${PANEL_ID} .ccf-scp-inputwrap { box-sizing: border-box; min-height: 100px; }
+      #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; border-top: 1px solid rgba(255,255,255,.12); box-sizing: border-box; }
+      #${PANEL_ID} .ccf-scp-status { min-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
+      #${PANEL_ID} .ccf-scp-status:empty { display: none; }
+      #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
       #${PANEL_ID} .ccf-scp-hint { font-size: 12px; line-height: 1.25; opacity: 1; color: rgb(100,100,100); }
       #${PANEL_ID} .ccf-scp-hint a { color: rgb(100,100,100); text-decoration: underline; }
       #${PANEL_ID} .ccf-scp-send { padding: 4px 12px; min-width: 64px; background: transparent; color: #eee;
@@ -1774,7 +1781,7 @@
     suggestEl.hidden = true;
     inputEl = document.createElement("textarea");
     inputEl.className = "ccf-scp-input";
-    inputEl.placeholder = "메시지 입력 (Enter 전송 / Shift+Enter 줄바꿈)";
+    inputEl.placeholder = "메시지를 입력";
     // 다른 스크립트가 이 입력창을 채팅 입력창으로 오인해 가공하지 않도록 표시.
     inputEl.setAttribute(SAFE_ATTR, "1");
 
