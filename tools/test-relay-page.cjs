@@ -6,14 +6,14 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'extension/personal/relay-page.js'), 'utf8');
 const SOURCE = 'capybara-player-room-relay-v1';
 
-function createPage({ api } = {}) {
+function createPage({ api, pathname = '/rooms/R1' } = {}) {
   const state = { posted: [], intervals: [], timeouts: [], listeners: [] };
   const sandbox = {
     console, URL, Node: { TEXT_NODE: 3 }, Date,
     setInterval: fn => { state.intervals.push(fn); return state.intervals.length; },
     setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; },
     document: { documentElement: { dataset: {} }, title: 'CCFOLIA 1.0 - tool', querySelectorAll: () => [] },
-    location: { pathname: '/rooms/R1', origin: 'https://ccfolia.com' },
+    location: { pathname, origin: 'https://ccfolia.com' },
     addEventListener: (type, fn) => state.listeners.push([type, fn]),
     postMessage: message => state.posted.push(message),
     __CCF_SECOND_CHAT_PANEL__: api,
@@ -84,4 +84,23 @@ const panel = (messages, subscribers) => ({
   page.state.intervals[0]();
   assert.equal(page.sandbox.document.documentElement.dataset.capybaraPlayerRelay, '1');
 }
-console.log('relay-page: store-driven snapshots (debounced), late subscription, polling fallback passed');
+// CCFOLIA is a single-page app: the room can change without a page load. The page script follows the URL, tags messages with the
+// current room, and relays nothing while no room is open.
+{
+  const messages = [{ id: 'a', name: 'GM', text: '첫 글', at: 1 }];
+  const page = createPage({ api: panel(messages, []), pathname: '/home' });
+  assert.equal(page.state.posted.length, 0, 'nothing is emitted on the home screen');
+  page.state.intervals[0]();
+  assert.equal(page.state.posted.length, 0, 'still nothing without a room');
+  page.sandbox.location.pathname = '/rooms/R7';
+  page.state.intervals[0]();
+  const ready = page.state.posted.filter(message => message.action === 'ready');
+  assert.equal(ready.length, 1, 'entering a room announces it');
+  assert.equal(ready[0].roomId, 'R7');
+  assert.equal(page.snapshots().at(-1).roomId, 'R7', 'snapshots carry the current room');
+  page.sandbox.location.pathname = '/rooms/R8';
+  page.state.intervals[0]();
+  assert.equal(page.state.posted.filter(message => message.action === 'ready').at(-1).roomId, 'R8', 'moving to another room announces the new one');
+  assert.equal(page.snapshots().at(-1).roomId, 'R8');
+}
+console.log('relay-page: store-driven snapshots (debounced), late subscription, polling fallback, room changes passed');

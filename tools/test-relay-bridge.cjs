@@ -30,7 +30,8 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
       const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
       if (/\/messages$/.test(route) && state.messageFailures-- > 0) return reply(500, { error: 'down' });
       if (route === '/api/connect' && state.connectFailures-- > 0) return reply(500, { error: 'down' });
-      if (route === '/api/connect' || route === '/api/share') return reply(200, { inviteUrl: `${RELAY}/r/R1` });
+      if (route === '/api/connect') return reply(200, { inviteUrl: `${RELAY}/r/${call.body.roomId}` });
+      if (route === '/api/share') return reply(200, { inviteUrl: `${RELAY}/r/R1` });
       if (/\/commands$/.test(route)) return pollOk ? reply(200, { commands: state.commands }) : reply(401, { error: 'GM 인증 실패' });
       return reply(200, { ok: true });
     }
@@ -49,7 +50,10 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
   const page = (action, extra = {}) => send({ source: ROOM_SOURCE, direction: 'page', roomId: 'R1', action, ...extra });
   const poll = async () => { await state.intervals.at(-1)(); await flush(); };
   const callsTo = pattern => state.calls.filter(call => pattern.test(call.url));
-  return { state, store, send, page, poll, callsTo };
+  // In-app navigation: change the URL, then let the bridge's room watcher (the 1000 ms interval) notice it.
+  const navigate = async path => { sandbox.location.pathname = path; await state.intervals[state.intervalDelays.indexOf(1000)](); await flush(); await flush(); };
+  const pageFor = (roomId, action, extra = {}) => send({ source: ROOM_SOURCE, direction: 'page', roomId, action, ...extra });
+  return { state, store, send, page, poll, callsTo, navigate, pageFor };
 }
 
 (async () => {
@@ -70,7 +74,7 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(first[0].headers.Authorization, 'Bearer test-token');
     assert.deepEqual(first[0].body, { roomId: 'R1', roomTitle: '', capabilities: { chatRead: true, chatWrite: true, publicHandout: true } });
     assert.equal(h.store.relayInviteUrl, `${RELAY}/r/R1`);
-    assert.equal(h.state.intervals.length, 1, 'polling timer armed');
+    assert.equal(h.state.intervalDelays.filter(delay => delay !== 1000).length, 1, 'polling timer armed (the 1000 ms interval is the room watcher)');
     assert(h.callsTo(/\/api\/admin\/rooms\/R1\/commands$/).length >= 1, 'initial poll');
     await h.page('ready', { roomTitle: '' });
     assert.equal(h.callsTo(/\/api\/connect$/).length, 1, 'ready without a new title does not reconnect');
@@ -334,6 +338,45 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     const h = createHarness({ storage: { relayUrl: 'http://example.com' } });
     await h.page('ready');
     assert.equal(h.state.calls.length, 0);
+  }
+
+  // Each CCFOLIA room gets its own relay room and invite URL, also when the room changes without a page load.
+  {
+    const h = createHarness({ pathname: '/rooms/R1' });
+    await h.navigate('/rooms/R1'); // same room: nothing happens
+    await flush();
+    assert.equal(h.callsTo(/\/api\/connect$/).length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(h.store.relayInvites)), { R1: `${RELAY}/r/R1` });
+    const firstSocket = h.state.sockets[0];
+    await h.navigate('/rooms/R2');
+    const connects = h.callsTo(/\/api\/connect$/);
+    assert.equal(connects.length, 2, 'the new room connects');
+    assert.equal(connects[1].body.roomId, 'R2');
+    assert.deepEqual(JSON.parse(JSON.stringify(h.store.relayInvites)), { R1: `${RELAY}/r/R1`, R2: `${RELAY}/r/R2` }, 'invite URLs are kept per room');
+    assert.equal(h.store.relayLastRoomId, 'R2');
+    assert.equal(h.store.relayInviteUrl, `${RELAY}/r/R2`);
+    assert(firstSocket.closed, 'the previous room socket is closed');
+    assert(h.state.sockets.at(-1).url.includes('/rooms/R2/ws'), 'the new socket belongs to the new room');
+    await h.poll();
+    assert(h.callsTo(/\/api\/admin\/rooms\/R2\/commands$/).length >= 1, 'commands are polled for the new room');
+    // Messages tagged with the old room are ignored; the new room's are accepted.
+    await h.pageFor('R1', 'snapshot', { messages: [{ id: 'old', author: 'A', text: 'x', createdAt: '2026-01-01T00:00:00Z' }] });
+    assert.equal(h.callsTo(/\/rooms\/R1\/messages$/).length, 0, 'old room messages are dropped');
+    await h.pageFor('R2', 'snapshot', { messages: [{ id: 'new', author: 'A', text: 'y', createdAt: '2026-01-01T00:00:00Z' }] });
+    assert.equal(h.callsTo(/\/rooms\/R2\/messages$/).length, 1, 'new room messages are relayed');
+    // Back to the home screen: nothing is relayed.
+    await h.navigate('/home');
+    await h.send({ source: ROOM_SOURCE, direction: 'page', roomId: '', action: 'snapshot', messages: [{ id: 'z', author: 'A', text: 'z', createdAt: '2026-01-01T00:00:00Z' }] });
+    assert.equal(h.callsTo(/\/rooms\/\/messages$/).length, 0, 'no request without a room id');
+  }
+  // Loaded on the home screen (no room yet): connects once the user enters a room.
+  {
+    const h = createHarness({ pathname: '/home' });
+    await flush();
+    assert.equal(h.callsTo(/\/api\/connect$/).length, 0, 'no room, no connection');
+    await h.navigate('/rooms/R9');
+    assert.equal(h.callsTo(/\/api\/connect$/).length, 1);
+    assert.equal(h.callsTo(/\/api\/connect$/)[0].body.roomId, 'R9');
   }
 
   console.log('relay-bridge: connect, auth header, command queue (idempotency, ordering, restart), snapshot dedup, ack, origin checks, share and URL guard passed');

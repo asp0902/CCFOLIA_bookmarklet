@@ -15,7 +15,7 @@ const stub = ({ storage, stopStatus = 200, participants = [] }) => `(() => {
     storage: {
       onChanged: { addListener: fn => listeners.push(fn), removeListener: fn => listeners.splice(listeners.indexOf(fn), 1) },
       local: {
-        get: (keys, callback) => callback(Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]]))),
+        get: (keys, callback) => { const result = Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]])); if (callback) { callback(result); return undefined; } return Promise.resolve(result); },
         set: async value => { const changes = {}; for (const [k, v] of Object.entries(value)) { changes[k] = { newValue: v }; } Object.assign(store, value); listeners.forEach(fn => fn(changes, 'local')); },
         remove: async keys => { for (const key of [].concat(keys)) delete store[key]; }
       }
@@ -30,14 +30,16 @@ const stub = ({ storage, stopStatus = 200, participants = [] }) => `(() => {
     return { ok: true, status: 200, json: async () => ({}) };
   };
 })();`;
-const base = { relayEnabled: true, relayUrl: 'https://relay.example.test', relayGmToken: 'tok', relayLastRoomId: 'R1', relayInviteUrl: 'https://relay.example.test/#room=R1&token=t' };
+const base = { relayEnabled: true, relayUrl: 'https://relay.example.test', relayGmToken: 'tok', relayInvites: { R1: 'https://relay.example.test/#room=R1&token=t' } };
 const flush = page => page.waitForTimeout(80);
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   const open = async options => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.setContent('<body style="background:#282828;color:#fff"><input id="chat"><main>room</main></body>');
+    // The modal follows the room in the page URL (each CCFOLIA room has its own invite URL).
+    await page.route('https://ccfolia.com/**', route => route.fulfill({ contentType: 'text/html', body: '<body style="background:#282828;color:#fff"><input id="chat"><main>room</main></body>' }));
+    await page.goto(`https://ccfolia.com${options.path || '/rooms/R1'}`);
     await page.evaluate(stub(options));
     await page.addScriptTag({ content: source });
     await page.waitForSelector('#capybara-share-modal-host', { state: 'attached' });
@@ -53,7 +55,7 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(await q(page, '#title').textContent(), '웹 공유');
       assert.equal(await q(page, '#url').inputValue(), 'https://relay.example.test');
       assert.equal(await q(page, '#token').inputValue(), 'tok');
-      assert.equal(await q(page, '#invite').inputValue(), base.relayInviteUrl);
+      assert.equal(await q(page, '#invite').inputValue(), base.relayInvites.R1);
       assert.equal(await q(page, '#enabled').isChecked(), true);
       assert.match(await q(page, '#socket').textContent(), /연결됨/);
       assert.match(await q(page, '#room').textContent(), /R1/);
@@ -93,7 +95,7 @@ const flush = page => page.waitForTimeout(80);
       const stop = (await page.evaluate(() => window.__calls)).find(c => /\/api\/share\/stop$/.test(c.url));
       assert.equal(stop.method, 'POST'); assert.equal(stop.auth, 'Bearer tok'); assert.deepEqual(stop.body, { roomId: 'R1' });
       const store = await page.evaluate(() => window.__store);
-      assert.equal(store.relayInviteUrl, undefined); assert.equal(store.relayLastRoomId, undefined); assert.equal(store.relayStop.roomId, 'R1');
+      assert.equal(store.relayInvites.R1, undefined); assert.equal(store.relayLastRoomId, undefined); assert.equal(store.relayStop.roomId, 'R1');
       assert.equal(await q(page, '#invite').inputValue(), '');
       assert.match(await q(page, '#toast').textContent(), /중지했습니다/);
       await page.close();
@@ -103,19 +105,19 @@ const flush = page => page.waitForTimeout(80);
       await page.evaluate(() => { window.__confirm = false; });
       await q(page, '#stop').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__calls)).filter(c => /share\/stop/.test(c.url)).length, 0);
-      assert(await page.evaluate(() => !!window.__store.relayInviteUrl && !window.__store.relayStop));
+      assert(await page.evaluate(() => !!window.__store.relayInvites.R1 && !window.__store.relayStop));
       await page.close();
     }
     {
       const page = await open({ storage: { ...base }, stopStatus: 401 });
       await q(page, '#stop').click(); await flush(page);
-      assert(await page.evaluate(() => !!window.__store.relayInviteUrl && !window.__store.relayStop));
+      assert(await page.evaluate(() => !!window.__store.relayInvites.R1 && !window.__store.relayStop));
       assert.match(await q(page, '#toast').textContent(), /GM 인증 실패/);
       assert.equal(await q(page, '#toast.error').count(), 1);
       await page.close();
     }
     {
-      const page = await open({ storage: { ...base, relayLastRoomId: '' } });
+      const page = await open({ storage: { ...base }, path: '/home' });
       await q(page, '#stop').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__calls)).filter(c => /share\/stop/.test(c.url)).length, 0);
       assert.match(await q(page, '#toast').textContent(), /공유 중인 룸이 없습니다/);
@@ -133,10 +135,25 @@ const flush = page => page.waitForTimeout(80);
     }
     // Live updates from storage while open (the bridge writes the invite URL after connecting).
     {
-      const page = await open({ storage: { ...base, relayInviteUrl: '' } });
+      const page = await open({ storage: { ...base, relayInvites: {} } });
       assert.equal(await q(page, '#invite').inputValue(), '');
-      await page.evaluate(() => chrome.storage.local.set({ relayInviteUrl: 'https://relay.example.test/#room=R1&token=new' }));
+      await page.evaluate(() => chrome.storage.local.set({ relayInvites: { R1: 'https://relay.example.test/#room=R1&token=new' } }));
       assert.match(await q(page, '#invite').inputValue(), /token=new/);
+      await page.close();
+    }
+    // Each room has its own invite URL: the modal shows the one of the room the tab is in, also after in-app navigation.
+    {
+      const invites = { R1: 'https://relay.example.test/#room=R1&token=one', R2: 'https://relay.example.test/#room=R2&token=two' };
+      const page = await open({ storage: { ...base, relayInvites: invites }, path: '/rooms/R2' });
+      assert.equal(await q(page, '#invite').inputValue(), invites.R2);
+      assert.match(await q(page, '#room').textContent(), /R2/);
+      await page.evaluate(() => history.pushState({}, '', '/rooms/R1'));
+      await page.waitForTimeout(3300);
+      assert.equal(await q(page, '#invite').inputValue(), invites.R1);
+      assert.match(await q(page, '#room').textContent(), /R1/);
+      await page.evaluate(() => history.pushState({}, '', '/home'));
+      await page.waitForTimeout(3300);
+      assert.equal(await q(page, '#invite').inputValue(), '');
       await page.close();
     }
     // Closing: X, 닫기, Escape, backdrop, toggling by a second injection; listeners are released.

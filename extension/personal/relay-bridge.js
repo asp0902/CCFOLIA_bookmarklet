@@ -3,7 +3,10 @@
   const HANDOUT_SOURCE = "capybara-public-handout-relay-v1";
   const ROOM_SOURCE = "capybara-player-room-relay-v1";
   const clean = (value, max) => String(value || "").replace(/\u0000/g, "").slice(0, max);
-  const roomId = location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
+  // CCFOLIA is a single-page app: the room changes without a page load (home -> room, room -> room). The room id is read from the URL
+  // every time it is needed, and a watcher below re-connects when it changes, so each room gets its own relay room and invite URL.
+  const readRoomId = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
+  let roomId = readRoomId();
   const sentMessages = new Set();
   let config = null;
   let pollTimer = 0;
@@ -45,12 +48,24 @@
   let connectedTitle = null;
   let stopped = false;
   let connectChain = Promise.resolve();
+  // Invite URLs are kept per room (relayInvites); relayInviteUrl / relayLastRoomId mirror the room this tab is in.
+  async function rememberInvite(id, inviteUrl) {
+    const { relayInvites } = await chrome.storage.local.get(["relayInvites"]);
+    await chrome.storage.local.set({ relayInvites: { ...(relayInvites || {}), [id]: inviteUrl }, relayLastRoomId: id, relayInviteUrl: inviteUrl });
+  }
+  async function forgetInvite(id) {
+    const { relayInvites } = await chrome.storage.local.get(["relayInvites"]);
+    if (relayInvites && id in relayInvites) { const rest = { ...relayInvites }; delete rest[id]; await chrome.storage.local.set({ relayInvites: rest }); }
+    await chrome.storage.local.remove("relayInviteUrl");
+  }
   async function doConnect(roomTitle) {
-    if (!roomId || stopped) return;
+    const id = roomId;
+    if (!id || stopped) return;
     if (pollTimer && connectedTitle === roomTitle) return;
-    const result = await post("/api/connect", { roomId, roomTitle, capabilities: { chatRead: true, chatWrite: true, publicHandout: true } });
+    const result = await post("/api/connect", { roomId: id, roomTitle, capabilities: { chatRead: true, chatWrite: true, publicHandout: true } });
+    if (id !== roomId) return; // the tab moved to another room while connecting; that room connects on its own
     connectedTitle = roomTitle;
-    await chrome.storage.local.set({ relayLastRoomId: roomId, relayInviteUrl: result.inviteUrl || "" });
+    await rememberInvite(id, result.inviteUrl || "");
     startPolling();
     pollCommands();
     openSocket();
@@ -65,7 +80,16 @@
     const old = socket; socket = null; socketOpen = false;
     if (old) { try { old.close(); } catch (_) {} }
     setSocketStatus("off");
-    await chrome.storage.local.remove("relayInviteUrl");
+    await forgetInvite(roomId);
+  }
+  // Drop everything that belongs to the previous room (socket, polling, queued commands, delivered-message memory).
+  function resetConnection() {
+    stopped = false; connectedTitle = null;
+    clearInterval(pollTimer); pollTimer = 0;
+    clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
+    const old = socket; socket = null; socketOpen = false; socketRetries = 0;
+    if (old) { try { old.close(); } catch (_) {} }
+    inFlight.clear(); sentMessages.clear(); snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -129,6 +153,15 @@
     catch (error) { warn(error); if (!stopped) setTimeout(autoStart, 15000); }
   };
   autoStart();
+  // Follow in-app navigation between rooms.
+  setInterval(() => {
+    const next = readRoomId();
+    if (next === roomId) return;
+    roomId = next;
+    resetConnection();
+    setSocketStatus("off");
+    if (roomId) autoStart();
+  }, 1000);
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin) return;
@@ -146,7 +179,7 @@
       }
       return;
     }
-    if (request?.source !== ROOM_SOURCE || request?.direction !== "page" || request.roomId !== roomId) return;
+    if (request?.source !== ROOM_SOURCE || request?.direction !== "page" || !roomId || request.roomId !== roomId) return;
     try {
       config ||= await loadConfig();
       if (!config.enabled) return;
