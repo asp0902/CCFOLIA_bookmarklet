@@ -215,6 +215,7 @@ export class RoomRelay {
           author: command.displayName,
           text: command.text,
           origin: "external",
+          channel: command.channel || "main",
           createdAt: command.createdAt,
         };
         if (this.appendMessage(room, message)) appended = message;
@@ -222,6 +223,17 @@ export class RoomRelay {
       await this.save(room);
       if (appended) this.pushMessage(room, appended);
       return json({ id: command.id, status: command.status });
+    }
+    // The CCFOLIA chat tabs (channel id + label), shown as tabs on the participant page.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/channels$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      const channels = (Array.isArray(body.channels) ? body.channels : []).slice(0, 12)
+        .map(item => ({ id: text(item?.id, 100).trim(), label: text(item?.label, 20).trim() })).filter(item => item.id);
+      if (!channels.length) return json({ error: "탭 목록이 필요합니다." }, 400);
+      room.channels = channels;
+      await this.save(room);
+      this.push("p", { type: "channels", channels });
+      return json({ accepted: true });
     }
     // The GM's YouTube BGM: only the video id and play/stop state are relayed; participants play it in their own browser.
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/bgm$/.test(url.pathname)) {
@@ -237,12 +249,14 @@ export class RoomRelay {
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();
-      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const message = {
         id: text(body.id, 160).trim(),
         author: text(body.author, 80).trim() || "CCFOLIA",
         text: text(body.text, 4_000).trim(),
         origin: "ccfolia",
+        channel: text(body.channel, 100) || "main",
+        color: /^#[0-9a-fA-F]{3,8}$/.test(text(body.color, 20)) ? text(body.color, 20) : "",
         createdAt: text(body.createdAt, 40) || new Date().toISOString(),
       };
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
@@ -300,17 +314,19 @@ export class RoomRelay {
       messages: room.capabilities.chatRead ? room.messages : [],
       handout: room.capabilities.publicHandout ? room.handout : {},
       bgm: room.bgm || { state: "stopped" },
+      channels: room.channels || [],
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);
       const body = await request.json();
-      if (Object.keys(body).some(key => !["clientMessageId", "text"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["clientMessageId", "text", "channel"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const clientMessageId = text(body.clientMessageId, 100).trim();
       const messageText = text(body.text, 2_000).trim();
       if (!clientMessageId || !messageText) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const existing = room.commands.find(command => command.participantId === member.id && command.clientMessageId === clientMessageId);
       if (existing) return json({ accepted: true, commandId: existing.id, duplicate: true }, 202);
-      const command = { id: token(), type: "chat.send", participantId: member.id, displayName: member.displayName, clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
+      const channel = (room.channels || []).some(item => item.id === body.channel) ? body.channel : "main";
+      const command = { id: token(), type: "chat.send", channel, participantId: member.id, displayName: member.displayName, clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);

@@ -53,14 +53,31 @@ function playBgm(bgm) {
   document.getElementById("bgm-frame").append(frame);
 }
 document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted = !bgmMuted; playBgm(bgmLast); });
+// Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
+let activeChannel = "main";
+const DEFAULT_CHANNELS = [{ id: "main", label: "메인" }, { id: "info", label: "정보" }, { id: "other", label: "잡담" }];
+function renderTabs(data) {
+  const channels = data.channels?.length ? data.channels : DEFAULT_CHANNELS;
+  if (!channels.some(item => item.id === activeChannel)) activeChannel = channels[0].id;
+  const bar = document.getElementById("chat-tabs");
+  bar.replaceChildren(...channels.map(item => {
+    const tab = document.createElement("button");
+    tab.type = "button"; tab.className = "chat-tab"; tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(item.id === activeChannel));
+    tab.textContent = item.label || item.id;
+    tab.addEventListener("click", () => { if (activeChannel === item.id) return; activeChannel = item.id; rendered = false; renderState(current); });
+    return tab;
+  }));
+}
 const renderState = data => {
+  renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
   document.getElementById("gm-state").textContent = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   const list = document.getElementById("messages");
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
-  list.replaceChildren(...(data.messages || []).map(message => {
+  list.replaceChildren(...(data.messages || []).filter(message => (message.channel || "main") === activeChannel).map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
     const name = message.author || "이름 없음";
@@ -68,6 +85,7 @@ const renderState = data => {
     const text = document.createElement("div"); text.className = "msg-text";
     const head = document.createElement("h6");
     const author = document.createElement("strong"); author.textContent = name;
+    if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) author.style.color = message.color;
     const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
     head.append(author, " ", time);
     const body = document.createElement("p"); body.textContent = message.text || "";
@@ -126,6 +144,9 @@ function onPush(event) {
   if (message.type === "message" && message.message?.id) {
     if (current.messages.some(item => item.id === message.message.id)) return;
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
+    renderState(current);
+  } else if (message.type === "channels") {
+    current = { ...current, channels: message.channels || [] };
     renderState(current);
   } else if (message.type === "bgm") {
     playBgm(message.bgm);
@@ -212,7 +233,7 @@ chatForm.addEventListener("submit", async event => {
   chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text }) });
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel }) });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
     showSendStatus("GM 브리지 전달 대기", 2500);
   } catch (error) {

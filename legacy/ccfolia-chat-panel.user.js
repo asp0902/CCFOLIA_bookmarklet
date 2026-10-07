@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.8
+// @version      0.2.9
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.8";
+  const VERSION = "0.2.9";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2562,7 +2562,9 @@
       toggle: togglePanel,
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
-      relayMessages: () => readMessages("main") || [],
+      // 웹 공유(릴레이): 모든 탭의 메시지를 channel 과 함께, 탭 목록은 relayChannels 로 넘긴다.
+      relayMessages: () => listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => ({ ...message, channel }))),
+      relayChannels: () => listChannels().map((channel) => ({ id: channel, label: channelLabel(channel) })),
       // 참여자 웹 중계용: 메시지 저장소가 바뀔 때마다 callback 을 부른다(폴링 없이 즉시 반영). 반환값은 구독 해제 함수.
       relaySubscribe: (callback) => {
         const store = findStore();
@@ -2575,11 +2577,12 @@
           try { callback(); } catch (error) { /* 구독자 오류가 코코포리아 저장소를 막지 않게 한다 */ }
         });
       },
-      relaySend: (displayName, text) => {
+      relaySend: (displayName, text, channel) => {
         const name = String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
         const body = String(text || "").trim().slice(0, 2000);
         if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
-        return sendMessage(`[참여자 웹 · ${name}] ${body}`, "main");
+        const target = listChannels().includes(channel) ? channel : "main";
+        return sendMessage(`[참여자 웹 · ${name}] ${body}`, target);
       },
       // 메시지를 못 읽을 때: 저장소가 실제로 어떤 모양인지 확인용.
       storeDiag() {

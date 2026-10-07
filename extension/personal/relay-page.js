@@ -27,13 +27,17 @@
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     if (typeof api?.relayMessages !== "function") return;
-    const messages = api.relayMessages().slice(-100).map(message => ({
+    const all = api.relayMessages();
+    const messages = [].concat(...[...new Set(all.map(message => message.channel))].map(channel => all.filter(message => message.channel === channel).slice(-100))).map(message => ({
       id: clean(message.id, 160),
       author: clean(message.name, 80) || "CCFOLIA",
       text: clean(message.roll || message.text, 4000),
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
+      channel: clean(message.channel, 100) || "main",
+      color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
     })).filter(message => message.id && message.text);
-    emit({ action: "snapshot", messages });
+    const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
+    emit({ action: "snapshot", messages, channels });
   };
 
   window.addEventListener("message", async event => {
@@ -44,7 +48,7 @@
     try {
       const api = window.__CCF_SECOND_CHAT_PANEL__;
       if (typeof api?.relaySend !== "function") throw new Error("채팅 전송 기능이 아직 준비되지 않았습니다.");
-      await api.relaySend(clean(request.command.displayName, 40), clean(request.command.text, 2000));
+      await api.relaySend(clean(request.command.displayName, 40), clean(request.command.text, 2000), clean(request.command.channel, 100));
       emit({ action: "commandResult", commandId, status: "delivered" });
     } catch (error) {
       emit({ action: "commandResult", commandId, status: "failed", error: clean(error?.message || "전송 실패", 300) });

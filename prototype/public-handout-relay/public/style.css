@@ -72,3 +72,8 @@ main{padding:0}
 .chat-tab::after{display:none}
 .chat-tab[aria-selected="true"]::after{display:block}
 .chat-tab{letter-spacing:.02857em;line-height:1.75}
+
+/* Tabs are real buttons now. */
+#chat-form button.chat-tab{align-self:auto;box-shadow:none;border:0;padding:12px 16px;border-radius:0;background:none;color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;opacity:.7}
+#chat-form button.chat-tab[aria-selected="true"]{opacity:1}
+#chat-form button.chat-tab:hover{background:rgba(255,255,255,.08)}

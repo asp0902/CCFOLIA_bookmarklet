@@ -8,6 +8,7 @@
   const readRoomId = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
   let roomId = readRoomId();
   const sentMessages = new Set();
+  let lastChannelKey = "";
   let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
   let config = null;
   let pollTimer = 0;
@@ -91,7 +92,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); lastBgm = null; snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastChannelKey = ""; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -196,12 +197,18 @@
       }
       if (request.action === "snapshot") {
         const messages = Array.isArray(request.messages) ? request.messages : [];
+        const channels = Array.isArray(request.channels) ? request.channels.slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
+        const channelKey = JSON.stringify(channels);
+        if (channels.length && channelKey !== lastChannelKey) {
+          lastChannelKey = channelKey;
+          post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels }).catch(() => { lastChannelKey = ""; });
+        }
         const run = snapshotChain.catch(() => {}).then(async () => {
           for (const message of messages) {
             const id = clean(message.id, 160);
             if (!id || sentMessages.has(id)) continue;
             sentMessages.add(id);
-            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40) }); }
+            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20) }); }
             catch (error) { sentMessages.delete(id); throw error; }
           }
         });
