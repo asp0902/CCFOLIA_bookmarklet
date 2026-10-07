@@ -89,6 +89,32 @@ function renderScene(scene) {
     img.style.objectFit = "fill"; nodes.push(img);
   }
   field.replaceChildren(...nodes);
+  renderStatusPanel(s.characters || []);
+}
+// Top-left status panel, like CCFOLIA's: avatar (+ initiative badge) and a 2-column grid of 96x16 bars (label left, value/max right).
+function renderStatusPanel(characters) {
+  const box = document.getElementById("scene-status");
+  const rows = characters.filter(c => !c.hideStatus && c.status && c.status.length).sort((a, b) => (a.initiative || 0) - (b.initiative || 0)).reverse();
+  box.replaceChildren(...rows.map(c => {
+    const row = document.createElement("div"); row.className = "st-char";
+    const avatar = document.createElement("div"); avatar.className = "st-avatar";
+    const img = document.createElement("img"); img.src = c.iconUrl; img.alt = c.name || ""; img.referrerPolicy = "no-referrer"; avatar.append(img);
+    if (c.initiative) { const badge = document.createElement("span"); badge.className = "st-badge"; badge.textContent = String(c.initiative); avatar.append(badge); }
+    const bars = document.createElement("div"); bars.className = "st-bars";
+    for (const st of c.status) {
+      const bar = document.createElement("div"); bar.className = "st-bar";
+      const track = document.createElement("i"); track.className = "st-track";
+      const fill = document.createElement("i"); fill.className = "st-fill";
+      fill.style.width = `${st.max > 0 ? Math.max(0, Math.min(100, (st.value / st.max) * 100)) : 100}%`;
+      const label = document.createElement("b"); label.textContent = st.label;
+      const value = document.createElement("b"); value.className = "st-value";
+      const cur = document.createElement("span"); cur.textContent = String(st.value);
+      if (st.max > 0 && st.value / st.max <= 0.7) cur.style.color = "#9a0036";
+      value.append(cur); if (st.max > 0) value.append(`/${st.max}`);
+      bar.append(track, fill, label, value); bars.append(bar);
+    }
+    row.append(avatar, bars); return row;
+  }));
 }
 window.addEventListener("resize", () => renderScene());
 let activeChannel = "main";
