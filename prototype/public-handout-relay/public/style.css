@@ -149,3 +149,17 @@ main{padding:0}
 #chat-form .dice-row button{width:30px;height:30px;padding:3px;border:0;border-radius:50%;background:none;box-shadow:none;align-self:auto;display:flex;align-items:center;justify-content:center;cursor:pointer}
 #chat-form .dice-row button:hover{background:rgba(255,255,255,.08)}
 .dice-row svg{display:block}
+
+/* Handout popup (centred dialog like CCFOLIA's) and header actions / floating-window mode. */
+.head-actions{display:flex;gap:8px;margin-left:auto;margin-right:12px}
+.head-actions button{padding:4px 12px;border:0;border-radius:4px;background:none;color:#2196f3;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer}
+.head-actions button:hover{background:rgba(33,150,243,.08)}
+#handout-backdrop{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55)}
+#handout-backdrop[hidden]{display:none}
+#handout{display:none}
+.stage>#handout.open,#handout.open{display:block;position:fixed;z-index:61;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;margin:0;padding:24px;background:#222;color:#fff;border-radius:4px}
+#handout[hidden]{display:none}
+#handout-close{display:block;margin:16px 0 0 auto;padding:6px 8px;border:0;background:none;color:#2196f3;font:inherit;font-size:.875rem;font-weight:700;cursor:pointer}
+#body{white-space:pre-wrap}
+html.pip,body.pip{height:100%;margin:0;background:#202020}
+body.pip .chat{position:static;width:100%;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
