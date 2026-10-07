@@ -1,0 +1,11 @@
+const fs=require('fs');const s=fs.readFileSync('legacy/ccfolia-chat-panel.user.js','utf8');
+const a=s.indexOf('const CCF_MD_MARKERS');const b=s.indexOf('// 크툴루(CoC 7판)');
+const code=s.slice(a,b)+';module.exports={parseFormatMarkers};';
+const m={exports:{}};new Function('module',code)(m);const {parseFormatMarkers}=m.exports;
+const r=parseFormatMarkers('앞 {c:#ff0000|빨강 **굵게**|} 뒤\n{a:center|가운데줄|}\n{s:30|큰|} {b:#00ff00|배경|}');
+const assert=require('assert');
+assert.equal(r.text,'앞 빨강 굵게 뒤\n가운데줄\n큰 배경');
+assert.deepEqual(r.alignRuns,[{start:1,end:2,align:'center'}]);
+assert(r.runs.some(x=>x.style.color==='#ff0000'&&x.start===2&&x.end===7));
+assert(r.runs.some(x=>x.style.fontSize===30));assert(r.runs.some(x=>x.style.backgroundColor==='#00ff00'));
+console.log('chat panel format spans (colour, background, size, align) parse PASS');

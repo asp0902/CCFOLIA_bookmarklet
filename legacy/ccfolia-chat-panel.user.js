@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.17
+// @version      0.2.18
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.17";
+  const VERSION = "0.2.18";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -644,7 +644,30 @@
     });
   }
 
+  // 새로고침 직후 코코포리아 저장소는 최근 메시지만 갖고 있어, 오래된 탭(예: 잡담)은 비어 보이고 스크롤바도 없다.
+  // 탭이 비었거나 스크롤이 생길 만큼 차지 않았으면, 채워질 때까지(또는 더 없을 때까지) 이전 대화를 이어서 가져온다.
+  let fillRounds = 0;
+  let fillChannel = "";
+  function fillIfShort() {
+    if (!listEl || olderLoading || olderExhausted) return;
+    if (fillChannel !== currentChannel) { fillChannel = currentChannel; fillRounds = 0; }
+    const short = listEl.scrollHeight <= listEl.clientHeight + 40;
+    if (!short || fillRounds >= 15) return;
+    fillRounds += 1;
+    const list = listEl;
+    loadOlderMessages().then((changed) => {
+      if (!changed || listEl !== list) { if (listEl === list) window.setTimeout(fillIfShort, 50); return; }
+      lastSignature = "";
+      renderList();
+    });
+  }
+
   function renderList() {
+    renderListInner();
+    window.requestAnimationFrame(() => window.setTimeout(fillIfShort, 120));
+  }
+
+  function renderListInner() {
     if (!listEl) return;
     const messages = readMessages(currentChannel);
     if (messages == null) {
@@ -866,8 +889,25 @@
     let text = "";
     const open = new Map(); // style -> 시작 위치(클린 텍스트 기준)
     const runs = [];
+    const spans = []; // {c|b|s|a:값|…|} 선택 구간 서식(글자색·배경색·크기·정렬) 열린 목록
+    const alignSpans = [];
     let i = 0;
     while (i < input.length) {
+      if (input[i] === "{") {
+        const head = /^\{([cbsa]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
+        if (head) { spans.push({ key: head[1], value: head[2], start: text.length }); i += head[0].length; continue; }
+      }
+      if (spans.length && input.startsWith("|}", i)) {
+        const span = spans.pop();
+        if (text.length > span.start) {
+          if (span.key === "c" && /^#[0-9a-f]{3,8}$/i.test(span.value)) runs.push({ start: span.start, end: text.length, style: { color: span.value } });
+          else if (span.key === "b" && /^#[0-9a-f]{3,8}$/i.test(span.value)) runs.push({ start: span.start, end: text.length, style: { backgroundColor: span.value } });
+          else if (span.key === "s" && /^\d{1,2}$/.test(span.value)) runs.push({ start: span.start, end: text.length, style: { fontSize: Math.max(8, Math.min(72, Number(span.value))) } });
+          else if (span.key === "a" && ["left", "center", "right"].includes(span.value)) alignSpans.push({ start: span.start, end: text.length, align: span.value });
+        }
+        i += 2;
+        continue;
+      }
       // 루비 [base|읽기] / 툴팁 [base^툴팁] → base 는 보이는 텍스트, 나머지는 스타일 run.
       if (input[i] === "[") {
         const close = input.indexOf("]", i);
@@ -907,7 +947,9 @@
         i += 1;
       }
     }
-    return { text, runs };
+    const lineAt = (pos) => (text.slice(0, pos).match(/\n/g) || []).length;
+    const alignRuns = alignSpans.map((sp) => ({ start: lineAt(sp.start), end: lineAt(Math.max(sp.end - 1, sp.start)) + 1, align: sp.align }));
+    return { text, runs, alignRuns };
   }
 
   // 크툴루(CoC 7판) CC<=X 판정. 네이티브 형식(diceDiag)을 그대로 재현한다:
@@ -994,10 +1036,11 @@
     const rolled = evaluateDiceCommand(cleanText);
     let outText = cleanText;
     const extra = rolled ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
-    if (!rolled && (parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || extra.alignRuns.length > 0)) {
+    const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
+    if (!rolled && (parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
-        formatRuns: [...parsed.runs, ...extra.runs], alignRuns: extra.alignRuns,
+        formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
         blockStyle: narrationOn ? { narration: true } : {}
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
@@ -1137,12 +1180,10 @@
     const text = inputEl.value.trim();
     if (!text) return;
     sending = true;
-    setStatus("전송 중…");
     try {
       await sendMessage(text);
       resetFmtStateAfterSend();
       inputEl.value = "";
-      setStatus("");
       pinnedToBottom = true;
     } catch (error) {
       console.error("[ccf-chat-panel] send failed", error);
@@ -1154,11 +1195,22 @@
 
   /* ---------------- 설정 저장 ---------------- */
 
+  // 마지막으로 고른 화자는 룸별로 기억한다. 저장소가 늦게 로드돼 아직 복원 전일 때 savePrefs 가 돌아도 지워지지 않게,
+  // 사용자가 직접 고를 때만 이 맵을 바꾼다.
+  let charByRoom = null;
+  function getCharByRoom() {
+    if (!charByRoom) {
+      const prefs = readPrefs();
+      charByRoom = prefs.selectedCharByRoom && typeof prefs.selectedCharByRoom === "object" ? { ...prefs.selectedCharByRoom } : {};
+      if (prefs.selectedCharId && !Object.keys(charByRoom).length) charByRoom[getRoomId()] = prefs.selectedCharId; // 옛 저장 형식 이어받기
+    }
+    return charByRoom;
+  }
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg,
-        selectedCharId: selectedChar?.id || ""
+        selectedCharByRoom: getCharByRoom()
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
   }
@@ -1450,7 +1502,7 @@
       #${PANEL_ID} .ccf-scp-input { min-height: 72px; padding: 0; border: 0; border-radius: 0; background: transparent;
         font-size: 16px; line-height: 1.5; resize: none; }
       #${PANEL_ID} .ccf-scp-input:focus { border: 0; }
-      #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); font-size: 14px; }
       /* 높이를 네이티브 입력 영역(탭 48 + 이름 56 + 주사위 39 + 서식 81 + 입력 100 + 구분선 1 + 하단 37)에 맞춘다. */
       #${PANEL_ID} .ccf-scp-compose { padding-bottom: 0; }
       #${PANEL_ID} .ccf-scp-fmt { box-sizing: border-box; min-height: 81px; margin-bottom: 6px; align-content: flex-start;
@@ -1474,6 +1526,9 @@
       #${PANEL_ID} .ccf-scp-send { padding: 4px 12px; min-width: 64px; background: transparent; color: #eee;
         font-size: 13px; font-weight: 700; line-height: 1.75; border-radius: 4px; }
       #${PANEL_ID} .ccf-scp-send:hover { background: rgba(255,255,255,.08); filter: none; }
+      #${PANEL_ID} .ccf-scp-dice { gap: 4px; padding-left: 12px; padding-right: 8px; }
+      #${PANEL_ID} .ccf-scp-die-icon { width: 30px; height: 30px; padding: 3px; opacity: 1; }
+      #${PANEL_ID} .ccf-scp-die-icon svg { width: 24px; height: 24px; }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -1776,6 +1831,7 @@
         item.appendChild(col);
         item.addEventListener("click", () => {
           selectedChar = c;
+          getCharByRoom()[getRoomId()] = c.id;
           charList.hidden = true;
           renderSpeaker();
           savePrefs(); // 마지막 화자를 기억한다(재열기·새로고침 시 복원).
@@ -1805,13 +1861,13 @@
     // 저장소가 늦게 로드될 수 있어 몇 차례 재시도.
     const restoreSpeaker = () => {
       if (selectedChar) return;
-      const savedId = readPrefs().selectedCharId;
+      const savedId = getCharByRoom()[getRoomId()];
       if (!savedId) return;
       const c = readCharacters().find((x) => x.id === savedId);
       if (c) { selectedChar = c; renderSpeaker(); }
     };
     restoreSpeaker();
-    [300, 800, 1500].forEach((ms) => window.setTimeout(() => { if (panelEl) restoreSpeaker(); }, ms));
+    [300, 800, 1500, 3000, 6000, 12000].forEach((ms) => window.setTimeout(() => { if (panelEl) restoreSpeaker(); }, ms));
     compose.appendChild(speaker);
     // 팔레트·색상 팝업은 패널 최상위에 붙인다(버튼 중첩 방지 + 겹침 관리).
     panel.appendChild(paletteList);
@@ -1822,23 +1878,41 @@
     // 주사위 버튼에서 복제해 쓰고, 못 찾으면 텍스트로 대체한다.
     const diceRow = document.createElement("div");
     diceRow.className = "ccf-scp-dice";
-    const nativeIcons = captureNativeDiceIcons();
     const dice = [4, 6, 8, 10, 12, 20, 100];
+    const dieButtons = [];
     for (const faces of dice) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "ccf-scp-die";
-      const icon = nativeIcons.get(faces);
-      if (icon) {
+      b.dataset.faces = String(faces);
+      b.textContent = `1d${faces}`;
+      b.addEventListener("click", () => insertAtCursor(`1d${faces}`));
+      diceRow.appendChild(b);
+      dieButtons.push(b);
+    }
+    // 네이티브 주사위 아이콘은 패널보다 늦게 그려질 수 있어, 찾을 때까지 다시 시도해 아이콘으로 바꾼다.
+    const upgradeDiceIcons = () => {
+      const nativeIcons = captureNativeDiceIcons();
+      let remaining = 0;
+      for (const b of dieButtons) {
+        if (b.classList.contains("ccf-scp-die-icon")) continue;
+        const faces = Number(b.dataset.faces);
+        const icon = nativeIcons.get(faces);
+        if (!icon) { remaining += 1; continue; }
         b.classList.add("ccf-scp-die-icon");
+        b.textContent = "";
         b.appendChild(icon.cloneNode(true));
         b.title = `1d${faces}`;
         b.setAttribute("aria-label", `1d${faces}`);
-      } else {
-        b.textContent = `1d${faces}`;
       }
-      b.addEventListener("click", () => insertAtCursor(`1d${faces}`));
-      diceRow.appendChild(b);
+      return remaining;
+    };
+    if (upgradeDiceIcons() > 0) {
+      let tries = 0;
+      const timer = window.setInterval(() => {
+        tries += 1;
+        if (!panelEl || upgradeDiceIcons() === 0 || tries > 40) window.clearInterval(timer);
+      }, 500);
     }
     // 전송 버튼 — 네이티브처럼 주사위 바 오른쪽 끝에 둔다.
     const send = document.createElement("button");
@@ -1918,6 +1992,18 @@
     const rowBreak = document.createElement("span");
     rowBreak.className = "ccf-scp-fmt-break";
     fmtRow.appendChild(rowBreak);
+    // 선택 구간이 있으면 그 구간만 {키:값|글|} 로 감싼다(전송 때 서식으로 바뀌고 마커는 사라진다). 없으면 false.
+    const wrapSpan = (key, value) => {
+      const a = inputEl.selectionStart ?? 0;
+      const b = inputEl.selectionEnd ?? 0;
+      if (b <= a) return false;
+      const v = inputEl.value;
+      const open = `{${key}:${value}|`;
+      inputEl.value = `${v.slice(0, a)}${open}${v.slice(a, b)}|}${v.slice(b)}`;
+      inputEl.focus();
+      inputEl.setSelectionRange(a + open.length, b + open.length);
+      return true;
+    };
     const mkBtn = (label, title, onClick, extraClass = "") => {
       const b = document.createElement("button");
       b.type = "button"; b.className = `ccf-scp-fmt-btn ${extraClass}`.trim(); b.title = title; b.setAttribute("aria-label", title);
@@ -1931,7 +2017,7 @@
       ["center", "가운데 정렬", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"],
       ["right", "오른쪽 정렬", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"]
     ].map(([value, title, d]) => {
-      const b = mkBtn(svgIcon(d), title, () => { fmtState.align = value; syncFmtUi(); }, "ccf-scp-fmt-align");
+      const b = mkBtn(svgIcon(d), title, () => { if (wrapSpan("a", value)) return; fmtState.align = value; syncFmtUi(); }, "ccf-scp-fmt-align");
       b.dataset.align = value; fmtRow.appendChild(b); return b;
     });
     const mkColor = (title, defaultValue, key) => {
@@ -1939,7 +2025,10 @@
       label.className = "ccf-scp-fmt-btn ccf-scp-fmt-color"; label.title = title;
       const input = document.createElement("input");
       input.type = "color"; input.value = defaultValue; input.setAttribute("aria-label", title);
-      input.addEventListener("input", () => { fmtState[key] = input.value; syncFmtUi(); });
+      input.addEventListener("change", () => {
+        if (wrapSpan(key === "color" ? "c" : "b", input.value)) { syncFmtUi(); return; }
+        fmtState[key] = input.value; syncFmtUi();
+      });
       label.append(input); fmtRow.appendChild(label); return input;
     };
     const colorInput = mkColor("글자색", "#ffffff", "color");
@@ -1947,7 +2036,13 @@
     const sizeInput = document.createElement("input");
     sizeInput.type = "text"; sizeInput.inputMode = "numeric"; sizeInput.placeholder = "크기"; sizeInput.title = "글자 크기"; sizeInput.setAttribute("aria-label", "글자 크기");
     sizeInput.className = "ccf-scp-fmt-btn ccf-scp-fmt-size";
-    sizeInput.addEventListener("input", () => { sizeInput.value = sizeInput.value.replace(/[^0-9]/g, "").slice(0, 2); fmtState.size = sizeInput.value; });
+    sizeInput.addEventListener("input", () => { sizeInput.value = sizeInput.value.replace(/[^0-9]/g, "").slice(0, 2); });
+    sizeInput.addEventListener("change", () => {
+      const n = Math.round(Number(sizeInput.value));
+      if (!(n > 0)) { fmtState.size = ""; return; }
+      if (wrapSpan("s", String(Math.max(8, Math.min(72, n))))) { sizeInput.value = ""; fmtState.size = ""; return; }
+      fmtState.size = sizeInput.value;
+    });
     fmtRow.appendChild(sizeInput);
     const keepBtn = mkBtn("유지", "이전 서식 유지", () => { fmtState.keep = !fmtState.keep; syncFmtUi(); }, "ccf-scp-fmt-toggle");
     const saveBtn = mkBtn("Sv", "서식 저장", () => {
