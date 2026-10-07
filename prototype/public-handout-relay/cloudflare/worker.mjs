@@ -33,7 +33,7 @@ const roomFromPath = pathname => {
 };
 const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
+  "Content-Security-Policy": `default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",

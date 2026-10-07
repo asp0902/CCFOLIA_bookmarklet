@@ -118,3 +118,18 @@ main{padding:0}
 .st-bar b{position:relative;z-index:1;font-weight:800}
 .st-track,.st-fill{position:absolute;left:0;top:0;height:16px;background:#f5f5f5}
 .st-track{width:100%;opacity:.38}
+
+/* BGM bar (top-right of the stage): measured on ccfolia.com — 300px wide at top 64px; 80px blue volume slider, icon buttons, 28px progress row. */
+#bgm-bar{position:absolute;top:64px;right:0;z-index:100;width:300px}
+#bgm-bar[hidden]{display:none}
+.bgm-row1{display:flex;align-items:center;height:39px;padding:0 8px 0 16px;gap:4px;color:#fff;font-size:12px;font-weight:700}
+.bgm-row2{display:flex;align-items:center;height:28px;padding:0 8px;gap:8px;color:rgba(255,255,255,.88);font-size:10px;font-variant-numeric:tabular-nums}
+#bgm-bar input[type=range]{-webkit-appearance:none;appearance:none;height:12px;background:transparent;margin:0;padding:0;border:0;cursor:pointer}
+#bgm-bar input[type=range]::-webkit-slider-runnable-track{height:2px;border-radius:1px;background:linear-gradient(to right,#2196f3 var(--p,0%),rgba(33,150,243,.38) var(--p,0%))}
+#bgm-bar input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-5px;border-radius:50%;background:#2196f3}
+#bgm-vol{width:80px;flex:none;margin-right:10px}
+.bgm-row2 input[type=range]{flex:1;min-width:0}
+#bgm-bar button{display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer}
+#bgm-bar button:hover{background:rgba(255,255,255,.12)}
+#bgm-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:4px;color:#2196f3}
+#bgm-frame{position:fixed;left:-9999px;top:0;width:200px;height:113px;overflow:hidden}
