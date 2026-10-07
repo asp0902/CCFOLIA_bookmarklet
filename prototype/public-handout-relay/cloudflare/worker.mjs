@@ -333,12 +333,14 @@ export default {
     if (origin && !allowedOrigin) return json({ error: "허용되지 않은 출처" }, 403);
     const gmRoute = url.pathname === "/api/connect" || url.pathname === "/api/share" || url.pathname === "/api/share/stop" || url.pathname.startsWith("/api/admin/");
     // Fail closed: without a configured GM_TOKEN an empty bearer used to match the empty secret and open every GM route to anyone.
-    if (gmRoute && (!env.GM_TOKEN || !await safeEqual(bearer(request), env.GM_TOKEN))) return json({ error: "GM 인증 실패" }, 401);
+    // Errors need the CORS header too, otherwise the browser hides a 401/400 behind a bare "Failed to fetch".
+    const fail = (value, status) => json(value, status, allowedOrigin ? { "Access-Control-Allow-Origin": allowedOrigin } : {});
+    if (gmRoute && (!env.GM_TOKEN || !await safeEqual(bearer(request), env.GM_TOKEN))) return fail({ error: "GM 인증 실패" }, 401);
     let roomId = roomFromPath(url.pathname);
     if (!roomId && request.method === "POST") {
       try { roomId = text((await request.clone().json()).roomId, 200).trim(); } catch (_) {}
     }
-    if (!roomId) return json({ error: "roomId가 필요합니다." }, 400);
+    if (!roomId) return fail({ error: "roomId가 필요합니다." }, 400);
     const headers = new Headers(request.headers);
     headers.delete("Authorization"); headers.delete("X-Capybara-GM"); headers.delete("X-Client-IP"); headers.delete("X-Public-Origin");
     headers.set("X-Capybara-GM", gmRoute ? "1" : "0");
