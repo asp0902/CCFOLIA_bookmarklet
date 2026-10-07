@@ -9,6 +9,7 @@
   let roomId = readRoomId();
   const sentMessages = new Set();
   let lastChannelKey = "";
+  let lastScene = null; // latest room scene from the page, sent again after (re)connecting
   let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
   let config = null;
   let pollTimer = 0;
@@ -68,6 +69,7 @@
     if (id !== roomId) return; // the tab moved to another room while connecting; that room connects on its own
     connectedTitle = roomTitle;
     await rememberInvite(id, result.inviteUrl || "");
+    if (lastScene) post(`/api/admin/rooms/${encodeURIComponent(id)}/scene`, lastScene).catch(() => {});
     if (lastBgm) post(`/api/admin/rooms/${encodeURIComponent(id)}/bgm`, lastBgm).catch(() => {});
     startPolling();
     pollCommands();
@@ -92,7 +94,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastChannelKey = ""; snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -189,6 +191,10 @@
       if (request.action === "ready" || request.action === "title") {
         const title = clean(request.roomTitle, 200);
         if (request.action === "ready" || title) await connect(title || connectedTitle || "");
+      }
+      if (request.action === "scene") {
+        lastScene = request.scene && typeof request.scene === "object" ? request.scene : null;
+        if (lastScene) await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/scene`, lastScene);
       }
       if (request.action === "bgm") {
         const bgm = request.bgm || {};

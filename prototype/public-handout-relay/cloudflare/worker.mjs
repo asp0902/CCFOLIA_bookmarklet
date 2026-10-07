@@ -224,6 +224,26 @@ export class RoomRelay {
       if (appended) this.pushMessage(room, appended);
       return json({ id: command.id, status: command.status });
     }
+    // The room scene (background, field image, pieces, characters) as the GM sees it. Everything is validated field by field; only images on CCFOLIA's own CDN are kept.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/scene$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      const cdn = value => typeof value === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(value) ? value : "";
+      const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(-100000, Math.min(100000, Number(value))) : fallback;
+      const color = value => /^#[0-9a-fA-F]{3,8}$/.test(String(value || "")) ? String(value) : "";
+      room.scene = {
+        backgroundUrl: cdn(body.backgroundUrl), foregroundUrl: cdn(body.foregroundUrl), backgroundColor: color(body.backgroundColor),
+        fieldWidth: num(body.fieldWidth, 40), fieldHeight: num(body.fieldHeight, 20),
+        fieldObjectFit: ["fill", "contain", "cover"].includes(body.fieldObjectFit) ? body.fieldObjectFit : "fill",
+        items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+        characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
+          .map(item => ({ id: text(item.id, 60), name: text(item.name, 40), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color) })),
+      };
+      room.gmHeartbeatAt = Date.now();
+      await this.save(room);
+      this.push("p", { type: "scene", scene: room.scene });
+      return json({ accepted: true });
+    }
     // The CCFOLIA chat tabs (channel id + label), shown as tabs on the participant page.
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/channels$/.test(url.pathname)) {
       const body = await request.json().catch(() => ({}));
@@ -319,6 +339,7 @@ export class RoomRelay {
       bgm: room.bgm || { state: "stopped" },
       channels: room.channels || [],
       dicebot: room.dicebot || "",
+      scene: room.scene || null,
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);

@@ -97,3 +97,12 @@ main{padding:0}
 #messages .avatar img{display:block;width:40px;height:40px;object-fit:cover}
 .chat-tab{position:relative}
 .unread-dot{position:absolute;top:10px;right:6px;width:6px;height:6px;border-radius:50%;background:#f50057}
+
+/* Room scene (left side): same layers as CCFOLIA — blurred background, field image, pieces. */
+.stage{position:relative;overflow:hidden;padding:0}
+#scene{position:absolute;inset:0}
+#scene[hidden]{display:none}
+#scene-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(8px)}
+#scene-field{position:absolute;inset:0}
+#scene-field img{user-select:none;pointer-events:none}
+.stage>#handout{position:relative;z-index:50}

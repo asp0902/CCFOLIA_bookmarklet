@@ -54,6 +54,43 @@ function playBgm(bgm) {
 }
 document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted = !bgmMuted; playBgm(bgmLast); });
 // Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
+// The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
+// the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
+let sceneData = null;
+function renderScene(scene) {
+  if (scene !== undefined) sceneData = scene;
+  const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
+  const stage = box.parentElement;
+  if (!sceneData) { box.hidden = true; return; }
+  box.hidden = false;
+  const s = sceneData;
+  bg.style.backgroundColor = s.backgroundColor || "";
+  bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight);
+  const place = (el, x, y, width, height, angle, z) => {
+    el.style.position = "absolute";
+    el.style.left = `${(w / 2) + x * unit}px`; el.style.top = `${(h / 2) + y * unit}px`;
+    el.style.width = `${width * unit}px`; el.style.height = `${height * unit}px`;
+    el.style.transform = angle ? `rotate(${angle}deg)` : "";
+    el.style.zIndex = String(Math.round(z || 0) + 10);
+  };
+  const nodes = [];
+  if (s.foregroundUrl) {
+    const img = document.createElement("img"); img.src = s.foregroundUrl; img.alt = ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
+    place(img, -s.fieldWidth / 2, -s.fieldHeight / 2, s.fieldWidth, s.fieldHeight, 0, 0);
+    img.style.objectFit = s.fieldObjectFit; img.style.zIndex = "1"; nodes.push(img);
+  }
+  // Pieces store x/y in grid units, characters in pixels at zoom 1 (24px = 1 unit); sizes are in grid units for both.
+  const all = [...(s.items || []).map(item => ({ ...item, unitsXY: true })), ...(s.characters || [])];
+  for (const item of all.sort((a, b) => a.z - b.z)) {
+    const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
+    place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, item.z);
+    img.style.objectFit = "fill"; nodes.push(img);
+  }
+  field.replaceChildren(...nodes);
+}
+window.addEventListener("resize", () => renderScene());
 let activeChannel = "main";
 const seenCount = {}, unread = new Set(); // per-channel message counts, to mark tabs that received something while another tab was open
 const DEFAULT_CHANNELS = [{ id: "main", label: "메인" }, { id: "info", label: "정보" }, { id: "other", label: "잡담" }];
@@ -67,6 +104,7 @@ function trackUnread(data) {
   unread.delete(activeChannel);
 }
 function renderTabs(data) {
+  if ("scene" in data) renderScene(data.scene);
   trackUnread(data);
   if (data.dicebot) document.getElementById("dicebot-version").textContent = data.dicebot;
   const channels = data.channels?.length ? data.channels : DEFAULT_CHANNELS;
@@ -160,6 +198,9 @@ function onPush(event) {
     if (current.messages.some(item => item.id === message.message.id)) return;
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
     renderState(current);
+  } else if (message.type === "scene") {
+    current = { ...current, scene: message.scene };
+    renderScene(message.scene);
   } else if (message.type === "channels") {
     current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
     renderState(current);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.9
+// @version      0.2.10
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.9";
+  const VERSION = "0.2.10";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2564,6 +2564,40 @@
       peek: () => readMessages(currentChannel)?.slice(-3),
       // 웹 공유(릴레이): 모든 탭의 메시지를 channel 과 함께, 탭 목록은 relayChannels 로 넘긴다.
       relayMessages: () => listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => ({ ...message, channel }))),
+      // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
+      relayScene: () => {
+        try {
+          const ent = findStore()?.getState()?.entities;
+          if (!ent) return null;
+          const room = Object.values(ent.rooms?.entities || {})[0];
+          if (!room) return null;
+          const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+          const url = (v) => (typeof v === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\//.test(v) ? v : "");
+          const items = Object.values(ent.roomItems?.entities || {})
+            .filter((item) => item && item.visible !== false && !item.closed && url(item.imageUrl))
+            .map((item) => ({ id: String(item._id || ""), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: url(item.imageUrl) }));
+          const characters = Object.values(ent.roomCharacters?.entities || {})
+            .filter((c) => c && !c.secret && !c.invisible && c.active !== false && url(c.iconUrl))
+            .map((c) => ({ id: String(c._id || ""), name: String(c.name || "").slice(0, 40), x: num(c.x), y: num(c.y), z: num(c.z), angle: num(c.angle), width: num(c.width, 4), height: num(c.height, 4), iconUrl: url(c.iconUrl), color: /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "" }));
+          return {
+            backgroundUrl: url(room.backgroundUrl), foregroundUrl: url(room.foregroundUrl), backgroundColor: /^#[0-9a-f]{3,8}$/i.test(room.backgroundColor || "") ? room.backgroundColor : "",
+            fieldWidth: num(room.fieldWidth, 40), fieldHeight: num(room.fieldHeight, 20), fieldObjectFit: ["fill", "contain", "cover"].includes(room.fieldObjectFit) ? room.fieldObjectFit : "fill",
+            items: items.slice(0, 200), characters: characters.slice(0, 100)
+          };
+        } catch (error) { return null; }
+      },
+      relaySceneSubscribe: (callback) => {
+        const store = findStore();
+        if (!store || typeof callback !== "function") return null;
+        let last = null;
+        return store.subscribe(() => {
+          const ent = store.getState()?.entities;
+          const sig = [ent?.rooms, ent?.roomItems, ent?.roomCharacters];
+          if (last && sig.every((value, index) => value === last[index])) return;
+          last = sig;
+          try { callback(); } catch (error) { /* 구독자 오류가 코코포리아 저장소를 막지 않게 한다 */ }
+        });
+      },
       relayChannels: () => listChannels().map((channel) => ({ id: channel, label: channelLabel(channel) })),
       // 참여자 웹 중계용: 메시지 저장소가 바뀔 때마다 callback 을 부른다(폴링 없이 즉시 반영). 반환값은 구독 해제 함수.
       relaySubscribe: (callback) => {
