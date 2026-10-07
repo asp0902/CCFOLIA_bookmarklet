@@ -97,6 +97,43 @@ seekInput.addEventListener("pointerdown", () => { seekInput.dataset.dragging = "
 seekInput.addEventListener("input", () => { seekInput.style.setProperty("--p", `${seekInput.value / 10}%`); });
 seekInput.addEventListener("change", () => { delete seekInput.dataset.dragging; try { const dur = ytPlayer?.getDuration?.() || 0; ytPlayer?.seekTo((seekInput.value / 1000) * dur, true); } catch (_) {} });
 seekInput.addEventListener("pointerup", () => { delete seekInput.dataset.dragging; });
+// Handout popup: when the GM shares (or updates) a handout it pops up over the page like a CCFOLIA dialog; "핸드아웃" in the header reopens it.
+const handoutEl = document.getElementById("handout");
+let handoutSeen = "", handoutClosed = "";
+{
+  const backdrop = document.createElement("div"); backdrop.id = "handout-backdrop"; backdrop.hidden = true;
+  const close = document.createElement("button"); close.type = "button"; close.id = "handout-close"; close.textContent = "닫기";
+  handoutEl.append(close);
+  document.body.append(backdrop);
+  const hide = () => { handoutEl.classList.remove("open"); backdrop.hidden = true; handoutClosed = handoutSeen; };
+  close.addEventListener("click", hide); backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && handoutEl.classList.contains("open")) hide(); });
+  document.getElementById("handout-open").addEventListener("click", () => { handoutEl.hidden = false; handoutEl.classList.add("open"); backdrop.hidden = false; });
+  window.syncHandoutPopup = handout => {
+    const has = !!handout.id;
+    document.getElementById("handout-open").hidden = !has;
+    if (!has) { handoutEl.hidden = true; handoutEl.classList.remove("open"); backdrop.hidden = true; handoutSeen = ""; return; }
+    const key = `${handout.id}:${handout.updatedAt || ""}`;
+    handoutEl.hidden = false;
+    if (key !== handoutSeen) { handoutSeen = key; handoutEl.classList.add("open"); backdrop.hidden = false; }
+  };
+}
+// Floating window: Document Picture-in-Picture (Chrome/Edge 116+) keeps the chat panel in an always-on-top window next to CCFOLIA, no install needed.
+{
+  const button = document.getElementById("pip-open");
+  if ("documentPictureInPicture" in window) {
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      if (window.documentPictureInPicture.window) { window.documentPictureInPicture.window.close(); return; }
+      const chat = document.querySelector(".chat"), parent = chat.parentElement, next = chat.nextSibling;
+      const pip = await window.documentPictureInPicture.requestWindow({ width: 380, height: 640 });
+      for (const link of document.querySelectorAll('link[rel="stylesheet"]')) pip.document.head.append(link.cloneNode(true));
+      pip.document.documentElement.className = "pip"; pip.document.body.className = "pip"; pip.document.body.append(chat);
+      button.textContent = "플로팅 창 닫기";
+      pip.addEventListener("pagehide", () => { parent.insertBefore(chat, next); button.textContent = "플로팅 창"; });
+    });
+  }
+}
 // Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
 // The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
 // the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
@@ -259,7 +296,7 @@ const renderState = data => {
   if (stickToBottom) list.scrollTop = list.scrollHeight;
   rendered = true;
   const handout = data.handout || {};
-  document.getElementById("handout").hidden = !handout.id;
+  syncHandoutPopup(handout);
   document.getElementById("title").textContent = handout.title || "";
   document.getElementById("body").textContent = handout.bodyText || "";
   document.getElementById("updated").textContent = handout.updatedAt ? `갱신 ${new Date(handout.updatedAt).toLocaleString()}` : "";
