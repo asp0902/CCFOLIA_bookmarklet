@@ -1,8 +1,10 @@
 (() => {
   "use strict";
   const SOURCE = "capybara-player-room-relay-v1";
-  const roomId = location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
-  if (!roomId || window.top !== window) return;
+  // The room can change without a page load (single-page app), so it is re-read from the URL by the loop below.
+  const readRoomId = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
+  let roomId = readRoomId();
+  if (window.top !== window) return;
   document.documentElement.dataset.capybaraPlayerRelay = "1";
 
   const clean = (value, max) => String(value || "").replace(/\u0000/g, "").slice(0, max);
@@ -15,6 +17,7 @@
     return /^CCFOLIA\b/i.test(title) ? "" : title;
   };
   const snapshot = () => {
+    if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     if (typeof api?.relayMessages !== "function") return;
     const messages = api.relayMessages().slice(-100).map(message => ({
@@ -55,11 +58,17 @@
     if (typeof api?.relaySubscribe !== "function") return;
     try { unsubscribe = api.relaySubscribe(scheduleSnapshot) || null; } catch (_) { unsubscribe = null; }
   };
-  let lastTitle = resolveRoomTitle();
-  emit({ action: "ready", roomTitle: lastTitle });
+  let lastTitle = roomId ? resolveRoomTitle() : "";
+  if (roomId) emit({ action: "ready", roomTitle: lastTitle });
   trySubscribe();
   snapshot();
   setInterval(() => {
+    const nextRoom = readRoomId();
+    if (nextRoom !== roomId) {
+      roomId = nextRoom; lastTitle = "";
+      if (roomId) { emit({ action: "ready", roomTitle: resolveRoomTitle() }); snapshot(); }
+    }
+    if (!roomId) return;
     const title = resolveRoomTitle();
     if (title && title !== lastTitle) { lastTitle = title; emit({ action: "title", roomTitle: title }); }
     trySubscribe();

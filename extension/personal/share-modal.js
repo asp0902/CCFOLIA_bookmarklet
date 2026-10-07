@@ -82,7 +82,10 @@
   const shadow = host.attachShadow({ mode: "open" });
   shadow.append(el("style", { text: css }));
 
-  let roomId = "";
+  // The modal shows the room this tab is in (each CCFOLIA room has its own invite URL), not whichever room connected last.
+  const currentRoom = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
+  let roomId = currentRoom();
+  let invites = {};
   let timer = 0;
   const closeModal = () => {
     clearInterval(timer);
@@ -122,7 +125,7 @@
     }
   };
   async function refreshParticipants() {
-    if (!roomId) { roomLine.textContent = "공유한 룸 없음"; participants.replaceChildren(); return; }
+    if (!roomId) { roomLine.textContent = "코코포리아 룸 화면에서 열면 그 룸의 초대 URL이 표시됩니다."; participants.replaceChildren(); return; }
     roomLine.textContent = `룸: ${roomId}`;
     try {
       const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants`);
@@ -146,8 +149,7 @@
   const onStorageChanged = (changes, area) => {
     if (area !== "local") return;
     if (changes.relaySocket) renderSocket(changes.relaySocket.newValue);
-    if (changes.relayInviteUrl) invite.value = changes.relayInviteUrl.newValue || "";
-    if (changes.relayLastRoomId) { roomId = changes.relayLastRoomId.newValue || ""; refreshParticipants(); }
+    if (changes.relayInvites) { invites = changes.relayInvites.newValue || {}; invite.value = invites[roomId] || ""; }
   };
   chrome.storage.onChanged?.addListener(onStorageChanged);
 
@@ -173,9 +175,11 @@
       const stoppedRoomId = roomId;
       const response = await adminFetch("/api/share/stop", { method: "POST", body: JSON.stringify({ roomId: stoppedRoomId }) });
       if (!response.ok) throw new Error(await errorOf(response, "중지 실패"));
+      const { relayInvites } = await chrome.storage.local.get(["relayInvites"]);
+      const rest = { ...(relayInvites || {}) }; delete rest[stoppedRoomId];
       await chrome.storage.local.remove(["relayInviteUrl", "relayLastRoomId"]);
-      await chrome.storage.local.set({ relayStop: { roomId: stoppedRoomId, at: Date.now() } });
-      roomId = ""; invite.value = "";
+      await chrome.storage.local.set({ relayInvites: rest, relayStop: { roomId: stoppedRoomId, at: Date.now() } });
+      invites = rest; invite.value = "";
       say("공유를 중지했습니다. 룸 탭을 새로고침하면 새 초대 URL로 다시 시작됩니다.");
       await refreshParticipants();
     } catch (error) { say(error.message, true); }
@@ -223,15 +227,19 @@
   document.addEventListener("keydown", onKey, true);
   document.documentElement.append(host);
 
-  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayLastRoomId", "relayInviteUrl"], value => {
+  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites"], value => {
     enabled.checked = value.relayEnabled === true;
     url.value = value.relayUrl || "http://127.0.0.1:8787";
     token.value = value.relayGmToken || "";
-    roomId = value.relayLastRoomId || "";
-    invite.value = value.relayInviteUrl || "";
+    invites = value.relayInvites || {};
+    invite.value = invites[roomId] || "";
     refreshParticipants();
     loadSocket();
     (enabled.checked ? close : enabled).focus?.();
   });
-  timer = setInterval(() => { refreshParticipants(); loadSocket(); }, 3000);
+  timer = setInterval(() => {
+    const room = currentRoom();
+    if (room !== roomId) { roomId = room; invite.value = invites[roomId] || ""; }
+    refreshParticipants(); loadSocket();
+  }, 3000);
 })();
