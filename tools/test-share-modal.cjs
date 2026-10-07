@@ -88,6 +88,20 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(store.relayUrl, 'https://other.example.test'); assert.equal(store.relayGmToken, 'new');
       await page.close();
     }
+    // The GM can rename a pending or approved participant (the name is used for their messages from then on).
+    {
+      const page = await open({ storage: { ...base }, participants: [{ id: 'p1', displayName: '원래 이름', status: 'approved' }, { id: 'p2', displayName: '거절된 사람', status: 'rejected' }] });
+      assert.deepEqual(await q(page, 'button[data-rename]').evaluateAll(b => b.map(x => x.dataset.rename)), ['p1'], 'only pending/approved participants can be renamed');
+      await page.evaluate(() => { window.prompt = (message, current) => { window.__promptArgs = [message, current]; return '  GM이 정한 이름  '; }; });
+      await q(page, 'button[data-rename]').click(); await flush(page);
+      assert.deepEqual(await page.evaluate(() => window.__promptArgs), ['참여자 표시 이름', '원래 이름']);
+      const rename = (await page.evaluate(() => window.__calls)).find(c => /\/rename$/.test(c.url));
+      assert(rename.url.endsWith('/api/admin/rooms/R1/participants/p1/rename')); assert.equal(rename.method, 'POST'); assert.equal(rename.auth, 'Bearer tok'); assert.deepEqual(rename.body, { displayName: 'GM이 정한 이름' });
+      await page.evaluate(() => { window.__calls.length = 0; window.prompt = () => null; });
+      await q(page, 'button[data-rename]').click(); await flush(page);
+      assert.equal((await page.evaluate(() => window.__calls)).filter(c => /rename/.test(c.url)).length, 0, 'cancelling the prompt changes nothing');
+      await page.close();
+    }
     // Stop: confirmed / declined / rejected / nothing shared.
     {
       const page = await open({ storage: { ...base } });

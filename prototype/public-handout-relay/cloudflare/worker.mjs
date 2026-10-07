@@ -239,6 +239,17 @@ export class RoomRelay {
       if (added) { await this.save(room); this.pushMessage(room, message); }
       return json({ accepted: true, duplicate: !added });
     }
+    // The GM can change a participant's display name (it is used for their chat messages from then on).
+    const renameMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/rename$/);
+    if (request.method === "POST" && renameMatch) {
+      const member = room.participants[decodeURIComponent(renameMatch[1])];
+      if (!member) return json({ error: "참가 요청을 찾을 수 없습니다." }, 404);
+      const displayName = text((await request.json().catch(() => ({}))).displayName, 40).trim();
+      if (!displayName) return json({ error: "표시 이름을 입력해주세요." }, 400);
+      member.displayName = displayName;
+      await this.save(room);
+      return json({ id: member.id, displayName: member.displayName });
+    }
     const decisionMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/decision$/);
     if (request.method === "POST" && decisionMatch) {
       const member = room.participants[decodeURIComponent(decisionMatch[1])];
