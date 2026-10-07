@@ -141,6 +141,15 @@ const flush = page => page.waitForTimeout(80);
       assert.match(await q(page, '#invite').inputValue(), /token=new/);
       await page.close();
     }
+    // An invite URL stored for another relay (the relay address changed / the old server is gone) is not shown.
+    {
+      const page = await open({ storage: { ...base, relayInvites: { R1: 'https://old-relay.example.test/#room=R1&token=stale' } } });
+      assert.equal(await q(page, '#invite').inputValue(), '');
+      await q(page, '#url').fill('https://old-relay.example.test');
+      await q(page, '#save').click(); await flush(page);
+      assert.match(await q(page, '#invite').inputValue(), /stale/, 'shown again when the relay address matches');
+      await page.close();
+    }
     // Each room has its own invite URL: the modal shows the one of the room the tab is in, also after in-app navigation.
     {
       const invites = { R1: 'https://relay.example.test/#room=R1&token=one', R2: 'https://relay.example.test/#room=R2&token=two' };

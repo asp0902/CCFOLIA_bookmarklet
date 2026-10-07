@@ -86,6 +86,12 @@
   const currentRoom = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
   let roomId = currentRoom();
   let invites = {};
+  // An invite URL is only meaningful for the relay it was created on. After the relay address changes (or the old server is gone) the
+  // stored URL still points at the old host, so it is hidden until the room reconnects and the bridge stores a fresh one.
+  const inviteFor = id => {
+    const value = invites[id] || "";
+    try { return value && new URL(value).origin === relayOrigin(url.value) ? value : ""; } catch (_) { return ""; }
+  };
   let timer = 0;
   const closeModal = () => {
     clearInterval(timer);
@@ -149,7 +155,7 @@
   const onStorageChanged = (changes, area) => {
     if (area !== "local") return;
     if (changes.relaySocket) renderSocket(changes.relaySocket.newValue);
-    if (changes.relayInvites) { invites = changes.relayInvites.newValue || {}; invite.value = invites[roomId] || ""; }
+    if (changes.relayInvites) { invites = changes.relayInvites.newValue || {}; invite.value = inviteFor(roomId); }
   };
   chrome.storage.onChanged?.addListener(onStorageChanged);
 
@@ -159,6 +165,7 @@
     if (!origin) { say("HTTPS 또는 로컬 릴레이 주소만 사용할 수 있습니다.", true); return; }
     await chrome.storage.local.set({ relayEnabled: enabled.checked, relayUrl: origin, relayGmToken: token.value.trim() });
     url.value = origin;
+    invite.value = inviteFor(roomId);
     say("저장했습니다. 룸 탭을 새로고침하면 적용됩니다.");
   });
   const copy = el("button", { type: "button", id: "copy", text: "복사" });
@@ -232,14 +239,14 @@
     url.value = value.relayUrl || "http://127.0.0.1:8787";
     token.value = value.relayGmToken || "";
     invites = value.relayInvites || {};
-    invite.value = invites[roomId] || "";
+    invite.value = inviteFor(roomId);
     refreshParticipants();
     loadSocket();
     (enabled.checked ? close : enabled).focus?.();
   });
   timer = setInterval(() => {
     const room = currentRoom();
-    if (room !== roomId) { roomId = room; invite.value = invites[roomId] || ""; }
+    if (room !== roomId) { roomId = room; invite.value = inviteFor(roomId); }
     refreshParticipants(); loadSocket();
   }, 3000);
 })();
