@@ -229,10 +229,12 @@ export class RoomRelay {
       const body = await request.json().catch(() => ({}));
       const channels = (Array.isArray(body.channels) ? body.channels : []).slice(0, 12)
         .map(item => ({ id: text(item?.id, 100).trim(), label: text(item?.label, 20).trim() })).filter(item => item.id);
-      if (!channels.length) return json({ error: "탭 목록이 필요합니다." }, 400);
-      room.channels = channels;
+      const dicebot = /^BCDice@[\w.\-]+$/.test(text(body.dicebot, 40)) ? text(body.dicebot, 40) : "";
+      if (!channels.length && !dicebot) return json({ error: "탭 목록이 필요합니다." }, 400);
+      if (channels.length) room.channels = channels;
+      if (dicebot) room.dicebot = dicebot;
       await this.save(room);
-      this.push("p", { type: "channels", channels });
+      this.push("p", { type: "channels", channels: room.channels || [], dicebot: room.dicebot || "" });
       return json({ accepted: true });
     }
     // The GM's YouTube BGM: only the video id and play/stop state are relayed; participants play it in their own browser.
@@ -315,6 +317,7 @@ export class RoomRelay {
       handout: room.capabilities.publicHandout ? room.handout : {},
       bgm: room.bgm || { state: "stopped" },
       channels: room.channels || [],
+      dicebot: room.dicebot || "",
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);

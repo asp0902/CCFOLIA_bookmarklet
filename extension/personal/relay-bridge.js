@@ -198,10 +198,11 @@
       if (request.action === "snapshot") {
         const messages = Array.isArray(request.messages) ? request.messages : [];
         const channels = Array.isArray(request.channels) ? request.channels.slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
-        const channelKey = JSON.stringify(channels);
-        if (channels.length && channelKey !== lastChannelKey) {
+        const dicebot = /^BCDice@[\w.\-]+$/.test(clean(request.dicebot, 40)) ? clean(request.dicebot, 40) : "";
+        const channelKey = JSON.stringify({ channels, dicebot });
+        if ((channels.length || dicebot) && channelKey !== lastChannelKey) {
           lastChannelKey = channelKey;
-          post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels }).catch(() => { lastChannelKey = ""; });
+          post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels, dicebot }).catch(() => { lastChannelKey = ""; });
         }
         const run = snapshotChain.catch(() => {}).then(async () => {
           for (const message of messages) {
