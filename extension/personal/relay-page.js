@@ -23,6 +23,11 @@
     lastBgm = { state: d.state === "playing" ? "playing" : "stopped", videoId: clean(d.videoId, 20), title: clean(d.title, 200), loop: d.loop !== false };
     if (roomId) emit({ action: "bgm", bgm: lastBgm });
   });
+  // "Dicebot engine : BCDice@x.y.z" in CCFOLIA's chat footer; the participant page shows the same version.
+  const readDicebot = () => {
+    const link = [...document.querySelectorAll('a[href*="bcdice"]')].find(a => /BCDice@[\w.\-]+/.test(a.textContent));
+    return link ? clean(link.textContent.trim(), 40) : "";
+  };
   const snapshot = () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
@@ -37,7 +42,7 @@
       color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
     })).filter(message => message.id && message.text);
     const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
-    emit({ action: "snapshot", messages, channels });
+    emit({ action: "snapshot", messages, channels, dicebot: readDicebot() });
   };
 
   window.addEventListener("message", async event => {

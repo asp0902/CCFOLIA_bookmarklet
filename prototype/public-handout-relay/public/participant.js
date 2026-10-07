@@ -57,6 +57,7 @@ document.getElementById("bgm-toggle").addEventListener("click", () => { bgmMuted
 let activeChannel = "main";
 const DEFAULT_CHANNELS = [{ id: "main", label: "메인" }, { id: "info", label: "정보" }, { id: "other", label: "잡담" }];
 function renderTabs(data) {
+  if (data.dicebot) document.getElementById("dicebot-version").textContent = data.dicebot;
   const channels = data.channels?.length ? data.channels : DEFAULT_CHANNELS;
   if (!channels.some(item => item.id === activeChannel)) activeChannel = channels[0].id;
   const bar = document.getElementById("chat-tabs");
@@ -146,7 +147,7 @@ function onPush(event) {
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
     renderState(current);
   } else if (message.type === "channels") {
-    current = { ...current, channels: message.channels || [] };
+    current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
     renderState(current);
   } else if (message.type === "bgm") {
     playBgm(message.bgm);
