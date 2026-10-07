@@ -60,7 +60,7 @@ assert.match(editor, /overflow-wrap: anywhere/);
 assert.match(editor, /\.ccf-tistory-roll20 \{/);
 assert.match(editor, /\.ccf-tistory-log \.ccf-render-root\.ccf-roll20-bubble\[data-ccr20-macro-background="black"\]/);
 
-const tistoryStart = editor.indexOf("  function buildEditorTistoryHtml(");
+const tistoryStart = editor.indexOf("  const GOOGLE_FONT_WEIGHTS");
 const tistoryEnd = editor.indexOf("\n\n  function exportEditorHtml(", tistoryStart);
 assert(tistoryStart >= 0 && tistoryEnd > tistoryStart, "buildEditorTistoryHtml not found");
 const tistorySandbox = {
@@ -117,6 +117,20 @@ const merged = mergeSandbox.mergeConsecutiveSpeakerEntries([
 assert.strictEqual(merged.length, 2);
 assert.strictEqual((merged[0].bodyHtml.match(/padding-top:8px/g) || []).length, 2);
 assert(merged[0].bodyHtml.includes('<br><img src="b.png">'));
+// Roll20 CSS macro boxes stay attached when same-speaker messages merge (CCFOLIA shows them attached; <br> would add a blank line).
+const box = text => `<div class="ccf-render-root ccf-roll20-bubble"><span class="ccf-line"><span class="ccf-frag" style="display: block;">${text}</span></span></div>`;
+const mergedBoxes = mergeSandbox.mergeConsecutiveSpeakerEntries([
+  { sender: "A", tabId: "main", bodyHtml: box("one") },
+  { sender: "A", tabId: "main", bodyHtml: box("two") },
+  { sender: "A", tabId: "main", bodyHtml: "plain text" }
+]);
+assert(!mergedBoxes[0].bodyHtml.includes(box("one") + "<br>"), "no <br> between two macro boxes");
+assert(mergedBoxes[0].bodyHtml.includes(box("one") + box("two")), "macro boxes are adjacent");
+assert(mergedBoxes[0].bodyHtml.endsWith(box("two") + "<br>plain text"), "plain text still separated by <br>");
+const fontSandbox = { ...tistorySandbox, getSelectedTabEntries: () => [{ sender: "speaker", bodyHtml: '<span style="font-family: &quot;Nanum Myeongjo&quot;">x</span>' }] };
+vm.runInNewContext(editor.slice(tistoryStart, tistoryEnd), fontSandbox);
+assert.match(fontSandbox.buildEditorTistoryHtml({ payload: { assets: [] } }), /@import url\("https:\/\/fonts\.googleapis\.com\/css2\?family=Nanum\+Myeongjo:wght@400;700;800&display=swap"\)/);
+assert.doesNotMatch(tistoryHtml, /@import/, "no font import when no known font is used");
 const edgeImages = [{ style: {} }, { style: {} }];
 const rewriteStart = editor.indexOf("  function rewriteEntryHtml(");
 const rewriteEnd = editor.indexOf("\n\n  function resolveAvatarUrl(", rewriteStart);
