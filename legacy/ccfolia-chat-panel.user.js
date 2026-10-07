@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.7
+// @version      0.2.8
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.7";
+  const VERSION = "0.2.8";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -974,13 +974,28 @@
       c instanceof HTMLElement && c.querySelector(".MuiInputBase-root, input") && c.querySelector("button svg"));
     if (!bar) return {};
     const iconButtons = [...bar.querySelectorAll("button")].filter((b) => b.querySelector("svg"));
+    // 위치(0·1·2번째)로 고르면 이름 바에 다른 버튼이 끼어 있을 때(예: 캐릭터 선택 아이콘) 한 칸씩 밀려
+    // 팔레트·색상·도움말 아이콘이 엉뚱한 것으로 복제된다. 아이콘 모양(path)으로 찾고, 못 찾으면 뒤에서 3개를 쓴다.
+    const byPath = (prefix) => iconButtons.find((b) => (b.querySelector("path")?.getAttribute("d") || "").startsWith(prefix));
+    const tail = iconButtons.slice(-3);
+    const paletteBtnEl = byPath("M19 5v14H5V5h14") || tail[0] || null;
+    const colorBtnEl = byPath("M12 3c-4.97 0-9 4.03-9 9") || tail[1] || null;
+    const helpBtn = iconButtons.find((b) => /커맨드|command/i.test(b.getAttribute("aria-label") || "")) || byPath("M12 2C6.48 2 2 6.48 2 12") || tail[2] || null;
     return {
-      palette: iconButtons[0]?.querySelector("svg") || null,
-      color: iconButtons[1]?.querySelector("svg") || null,
-      help: iconButtons[2]?.querySelector("svg") || null,
-      paletteBtnEl: iconButtons[0] || null,
-      helpBtn: iconButtons[2] || null
+      palette: paletteBtnEl?.querySelector("svg") || null,
+      color: colorBtnEl?.querySelector("svg") || null,
+      help: helpBtn?.querySelector("svg") || null,
+      paletteBtnEl,
+      helpBtn
     };
+  }
+
+  // 네이티브 아이콘 복제. 네이티브 색상 아이콘 svg 는 복제 시점의 캐릭터 색을 inline color 로 갖고 있어
+  // 버튼에 칠하는 현재 색(캐릭터 변경·색 지정)이 가려지므로 지운다.
+  function cloneNativeIcon(svg) {
+    const clone = svg.cloneNode(true);
+    if (clone instanceof SVGElement || clone instanceof HTMLElement) clone.style.color = "";
+    return clone;
   }
 
   // 입력창 커서 위치에 텍스트를 넣는다(선택 영역이 있으면 대체). 주사위·서식 버튼 공용.
@@ -1397,7 +1412,7 @@
     // 아이콘은 네이티브에서 복제(이름 바의 1번째 아이콘 = 채팅 팔레트). MUI Palette 는
     // 사실 색상 버튼 아이콘이라, 이전엔 팔레트에 잘못 썼다. 늦게 준비되면 tick 에서 재시도.
     const spIcons = captureNativeSpeakerIcons();
-    if (spIcons.palette) { paletteBtn.appendChild(spIcons.palette.cloneNode(true)); paletteBtn.dataset.cloned = "1"; }
+    if (spIcons.palette) { paletteBtn.appendChild(cloneNativeIcon(spIcons.palette)); paletteBtn.dataset.cloned = "1"; }
     else paletteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="4" cy="6" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="4" cy="18" r="1.6"/><rect x="8" y="5" width="12" height="2"/><rect x="8" y="11" width="12" height="2"/><rect x="8" y="17" width="12" height="2"/></svg>';
     speakerPaletteBtn = paletteBtn;
     const paletteList = document.createElement("div");
@@ -1411,7 +1426,7 @@
     colorBtn.type = "button";
     colorBtn.className = "ccf-scp-sp-tool ccf-scp-color-btn";
     colorBtn.dataset.tip = "캐릭터 색상 변경";
-    if (spIcons.color) { colorBtn.appendChild(spIcons.color.cloneNode(true)); colorBtn.dataset.cloned = "1"; }
+    if (spIcons.color) { colorBtn.appendChild(cloneNativeIcon(spIcons.color)); colorBtn.dataset.cloned = "1"; }
     else colorBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>';
     speakerColorBtn = colorBtn;
     const colorPop = document.createElement("div");
@@ -1467,7 +1482,7 @@
     helpBtn.type = "button";
     helpBtn.className = "ccf-scp-sp-tool";
     helpBtn.dataset.tip = "채팅 커맨드에 대해";
-    if (spIcons.help) { helpBtn.appendChild(spIcons.help.cloneNode(true)); helpBtn.dataset.cloned = "1"; }
+    if (spIcons.help) { helpBtn.appendChild(cloneNativeIcon(spIcons.help)); helpBtn.dataset.cloned = "1"; }
     else helpBtn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>';
     speakerHelpBtn = helpBtn;
     helpBtn.addEventListener("click", (e) => {
@@ -1865,7 +1880,7 @@
         const ic = captureNativeSpeakerIcons();
         const put = (btn, svg) => {
           if (svg && btn && !btn.dataset.cloned) {
-            btn.textContent = ""; btn.appendChild(svg.cloneNode(true)); btn.dataset.cloned = "1";
+            btn.textContent = ""; btn.appendChild(cloneNativeIcon(svg)); btn.dataset.cloned = "1";
           }
         };
         put(speakerPaletteBtn, ic.palette);
