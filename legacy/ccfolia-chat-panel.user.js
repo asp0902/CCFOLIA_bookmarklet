@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.15
+// @version      0.2.16
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.15";
+  const VERSION = "0.2.16";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -59,6 +59,11 @@
   let onDocDragUp = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let narrationOn = false; // 나레이션(Nr) 토글
+  // 서식 두 번째 줄(정렬·글자색·배경색·크기·유지·()) 상태. 메시지 전체에 적용된다. 유지(keep)가 꺼져 있으면 전송 뒤 초기화.
+  const FMT_SAVED_KEY = "ccf-scp-fmt-saved";
+  const FMT_PAREN_GRAY = "#878787";
+  const fmtState = { align: "left", color: "", bg: "", size: "", keep: false, paren: false };
+  let fmtUiSync = null; // 입력 UI 를 fmtState 에 맞춰 다시 그리는 함수(패널이 열려 있을 때만)
   let suppressScrollEval = false;
   let suppressScrollTimer = 0;
   // 바닥으로 내리되, 그로 인한 scroll 이벤트가 고정을 풀지 않게 잠시 평가를 막는다.
@@ -901,10 +906,11 @@
     const cleanText = parsed.text;
     const rolled = evaluateDiceCommand(cleanText);
     let outText = cleanText;
-    if (!rolled && (parsed.runs.length > 0 || narrationOn)) {
+    const extra = rolled ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
+    if (!rolled && (parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || extra.alignRuns.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
-        formatRuns: parsed.runs, alignRuns: [],
+        formatRuns: [...parsed.runs, ...extra.runs], alignRuns: extra.alignRuns,
         blockStyle: narrationOn ? { narration: true } : {}
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
@@ -1014,6 +1020,31 @@
     inputEl.setSelectionRange(caret, caret);
   }
 
+  // fmtState → format-sync 봉투의 formatRuns / alignRuns. 색·크기는 글 전체, 정렬은 모든 줄, ()는 괄호 구간만 회색.
+  function buildFmtStateRuns(text) {
+    const runs = [];
+    const len = text.length;
+    const style = {};
+    if (fmtState.color) style.color = fmtState.color;
+    if (fmtState.bg) style.backgroundColor = fmtState.bg;
+    const size = Math.round(Number(fmtState.size));
+    if (Number.isFinite(size) && size > 0) style.fontSize = Math.max(8, Math.min(72, size));
+    if (len > 0 && Object.keys(style).length) runs.push({ start: 0, end: len, style });
+    if (fmtState.paren) {
+      const re = /[(（][^()（）]*[)）]/g;
+      let m;
+      while ((m = re.exec(text))) runs.push({ start: m.index, end: m.index + m[0].length, style: { color: FMT_PAREN_GRAY } });
+    }
+    const lines = text.split("\n").length;
+    const alignRuns = fmtState.align && fmtState.align !== "left" ? [{ start: 0, end: lines, align: fmtState.align }] : [];
+    return { runs, alignRuns };
+  }
+  function resetFmtStateAfterSend() {
+    if (fmtState.keep) return;
+    fmtState.align = "left"; fmtState.color = ""; fmtState.bg = ""; fmtState.size = ""; fmtState.paren = false;
+    if (typeof fmtUiSync === "function") fmtUiSync();
+  }
+
   async function handleSend() {
     if (sending || !inputEl) return;
     const text = inputEl.value.trim();
@@ -1022,6 +1053,7 @@
     setStatus("전송 중…");
     try {
       await sendMessage(text);
+      resetFmtStateAfterSend();
       inputEl.value = "";
       setStatus("");
       pinnedToBottom = true;
@@ -1340,6 +1372,15 @@
       #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; border-top: 1px solid rgba(255,255,255,.12); box-sizing: border-box; }
       #${PANEL_ID} .ccf-scp-status { min-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
       #${PANEL_ID} .ccf-scp-status:empty { display: none; }
+      #${PANEL_ID} .ccf-scp-fmt-break { flex-basis: 100%; height: 0; }
+      #${PANEL_ID} .ccf-scp-fmt-btn.is-active { background: rgb(66,66,66); border-color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-fmt-align svg { display: block; margin: auto; }
+      #${PANEL_ID} .ccf-scp-fmt-color { position: relative; display: block; padding: 4px; box-sizing: border-box; cursor: pointer; }
+      #${PANEL_ID} .ccf-scp-fmt-color input { width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+      #${PANEL_ID} .ccf-scp-fmt-color.is-set { border-color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 56px; min-width: 56px; padding: 0 6px; text-align: center; color: inherit; font-size: 13px; }
+      #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-fmt-toggle { font-weight: 700; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
       #${PANEL_ID} .ccf-scp-hint { font-size: 12px; line-height: 1.25; opacity: 1; color: rgb(100,100,100); }
       #${PANEL_ID} .ccf-scp-hint a { color: rgb(100,100,100); text-decoration: underline; }
@@ -1771,6 +1812,66 @@
       inputEl?.focus();
     });
     fmtRow.appendChild(nrBtn);
+
+    // 두 번째 줄: 정렬 · 글자색 · 배경색 · 크기 · 유지 · Sv · ().
+    const rowBreak = document.createElement("span");
+    rowBreak.className = "ccf-scp-fmt-break";
+    fmtRow.appendChild(rowBreak);
+    const mkBtn = (label, title, onClick, extraClass = "") => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = `ccf-scp-fmt-btn ${extraClass}`.trim(); b.title = title; b.setAttribute("aria-label", title);
+      if (typeof label === "string") b.textContent = label; else b.append(label);
+      b.addEventListener("click", (ev) => { ev.preventDefault(); onClick(b); inputEl?.focus(); });
+      return b;
+    };
+    const svgIcon = (d) => { const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("width", "16"); svg.setAttribute("height", "16"); const path = document.createElementNS(ns, "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); return svg; };
+    const alignBtns = [
+      ["left", "왼쪽 정렬", "M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"],
+      ["center", "가운데 정렬", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"],
+      ["right", "오른쪽 정렬", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"]
+    ].map(([value, title, d]) => {
+      const b = mkBtn(svgIcon(d), title, () => { fmtState.align = value; syncFmtUi(); }, "ccf-scp-fmt-align");
+      b.dataset.align = value; fmtRow.appendChild(b); return b;
+    });
+    const mkColor = (title, defaultValue, key) => {
+      const label = document.createElement("label");
+      label.className = "ccf-scp-fmt-btn ccf-scp-fmt-color"; label.title = title;
+      const input = document.createElement("input");
+      input.type = "color"; input.value = defaultValue; input.setAttribute("aria-label", title);
+      input.addEventListener("input", () => { fmtState[key] = input.value; syncFmtUi(); });
+      label.append(input); fmtRow.appendChild(label); return input;
+    };
+    const colorInput = mkColor("글자색", "#ffffff", "color");
+    const bgInput = mkColor("배경색", "#010101", "bg");
+    const sizeInput = document.createElement("input");
+    sizeInput.type = "text"; sizeInput.inputMode = "numeric"; sizeInput.placeholder = "크기"; sizeInput.title = "글자 크기"; sizeInput.setAttribute("aria-label", "글자 크기");
+    sizeInput.className = "ccf-scp-fmt-btn ccf-scp-fmt-size";
+    sizeInput.addEventListener("input", () => { sizeInput.value = sizeInput.value.replace(/[^0-9]/g, "").slice(0, 2); fmtState.size = sizeInput.value; });
+    fmtRow.appendChild(sizeInput);
+    const keepBtn = mkBtn("유지", "이전 서식 유지", () => { fmtState.keep = !fmtState.keep; syncFmtUi(); }, "ccf-scp-fmt-toggle");
+    const saveBtn = mkBtn("Sv", "서식 저장", () => {
+      try { window.localStorage.setItem(FMT_SAVED_KEY, JSON.stringify({ align: fmtState.align, color: fmtState.color, bg: fmtState.bg, size: fmtState.size, paren: fmtState.paren, keep: fmtState.keep })); } catch (e) { /* noop */ }
+      setStatus("서식을 저장했습니다. 다음에 패널을 열면 이 서식으로 시작합니다.");
+      window.setTimeout(() => setStatus(""), 2200);
+    });
+    const parenBtn = mkBtn("()", "괄호 안 회색", () => { fmtState.paren = !fmtState.paren; syncFmtUi(); }, "ccf-scp-fmt-toggle");
+    fmtRow.append(keepBtn, saveBtn, parenBtn);
+    const syncFmtUi = () => {
+      for (const b of alignBtns) b.classList.toggle("is-active", b.dataset.align === fmtState.align);
+      colorInput.value = fmtState.color || "#ffffff"; bgInput.value = fmtState.bg || "#010101";
+      colorInput.parentElement.classList.toggle("is-set", !!fmtState.color); bgInput.parentElement.classList.toggle("is-set", !!fmtState.bg);
+      sizeInput.value = fmtState.size;
+      keepBtn.classList.toggle("is-active", fmtState.keep); parenBtn.classList.toggle("is-active", fmtState.paren);
+    };
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(FMT_SAVED_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        const hex = (v) => (/^#[0-9a-f]{6}$/i.test(v || "") ? v : "");
+        Object.assign(fmtState, { align: ["left", "center", "right"].includes(saved.align) ? saved.align : "left", color: hex(saved.color), bg: hex(saved.bg), size: String(saved.size || "").replace(/[^0-9]/g, "").slice(0, 2), paren: !!saved.paren, keep: !!saved.keep });
+      }
+    } catch (e) { /* noop */ }
+    fmtUiSync = syncFmtUi;
+    syncFmtUi();
     compose.appendChild(fmtRow);
 
     // 입력창 + 매크로 자동완성 드롭업(입력 단어가 화자 팔레트 커맨드에 걸리면 추천).
