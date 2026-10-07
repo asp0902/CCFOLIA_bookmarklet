@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.20
+// @version      0.2.21
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.20";
+  const VERSION = "0.2.21";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2089,7 +2089,8 @@
     inputEl.setAttribute(SAFE_ATTR, "1");
     // ` 키: 글자를 넣지 않고 캐릭터 선택 목록을 연다(코코포리아의 단축키와 같은 동작).
     inputEl.addEventListener("keydown", (e) => {
-      if (e.key !== "`" || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      // 한글 입력 상태에서는 e.key 가 "Process"/"ㅂ" 등으로 오므로 물리 키(code)로 판단한다.
+      if ((e.code !== "Backquote" && e.key !== "`") || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       if (typeof openCharListFn !== "function") return;
       e.preventDefault();
       openCharListFn();
