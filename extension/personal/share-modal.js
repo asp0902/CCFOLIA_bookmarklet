@@ -65,6 +65,8 @@
     button.contained:hover { background: #fff; }
     button.danger { color: #f44336; }
     button.danger:hover { background: rgba(244,67,54,.08); }
+    button.stop { background: #d32f2f; color: #fff; font-weight: 700; border-radius: 0; }
+    button.stop:hover { background: #b71c1c; }
     button.icon { min-width: 0; width: 36px; padding: 0; border-radius: 50%; font-size: 1.25rem; line-height: 1; }
     .participants { margin-top: 4px; }
     .participant { display: flex; align-items: center; gap: 4px; min-height: 48px; border-top: 1px solid rgba(255,255,255,.12); }
@@ -174,7 +176,7 @@
     try { await navigator.clipboard.writeText(invite.value); say("초대 URL을 복사했습니다."); }
     catch (_) { invite.select(); say("복사하지 못했습니다. 선택된 주소를 직접 복사하세요.", true); }
   });
-  const stop = el("button", { type: "button", class: "danger", id: "stop", text: "공유 중지" });
+  const stop = el("button", { type: "button", class: "danger stop", id: "stop", text: "공유 중지" });
   stop.addEventListener("click", async () => {
     if (!roomId) { say("공유 중인 룸이 없습니다.", true); return; }
     if (!confirm("공유를 중지하면 모든 참여자의 접근이 취소되고, 채팅 기록·참가 목록·초대 링크가 삭제됩니다. 계속할까요?")) return;
@@ -212,7 +214,6 @@
   const paper = el("div", { class: "paper", role: "dialog", "aria-modal": "true", "aria-labelledby": "title" },
     el("header", {}, el("h2", { id: "title", text: "웹 공유" }), x),
     el("div", { class: "body" },
-      el("p", { class: "muted", text: "참여자가 웹 브라우저로 이 룸의 채팅과 공개 핸드아웃을 볼 수 있게 합니다. GM이 승인한 사람만 들어올 수 있어요." }),
       el("label", { class: "switch" }, enabled, el("span", { class: "track" }, el("span", { class: "thumb" })), el("span", { text: "웹 공유 사용" })),
       el("div", { class: "field" }, el("label", { for: "url", text: "릴레이 주소" }), url),
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
