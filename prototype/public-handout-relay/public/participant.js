@@ -60,10 +60,17 @@ const renderState = data => {
   const list = document.getElementById("messages");
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
   list.replaceChildren(...(data.messages || []).map(message => {
+    // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
-    const author = document.createElement("strong"); author.textContent = message.author || "이름 없음";
+    const name = message.author || "이름 없음";
+    const avatar = document.createElement("div"); avatar.className = "avatar"; avatar.textContent = [...name][0] || "?";
+    const text = document.createElement("div"); text.className = "msg-text";
+    const head = document.createElement("h6");
+    const author = document.createElement("strong"); author.textContent = name;
+    const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
+    head.append(author, " ", time);
     const body = document.createElement("p"); body.textContent = message.text || "";
-    item.append(author, body); return item;
+    text.append(head, body); item.append(avatar, text); return item;
   }));
   if (stickToBottom) list.scrollTop = list.scrollHeight;
   rendered = true;
@@ -104,6 +111,12 @@ async function verifyAccess() {
   if (!response.ok) return stop("접근이 취소되었습니다.");
   const data = await response.json();
   if (data.status !== "approved") stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
+}
+function messageTime(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = n => String(n).padStart(2, "0");
+  return d.toDateString() === new Date().toDateString() ? `今日 ${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function onPush(event) {
   let message;
