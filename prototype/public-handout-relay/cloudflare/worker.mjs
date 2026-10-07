@@ -237,7 +237,10 @@ export class RoomRelay {
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
-          .map(item => ({ id: text(item.id, 60), name: text(item.name, 40), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color) })),
+          .map(item => ({ id: text(item.id, 60), name: text(item.name, 40), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color),
+            hideStatus: !!item.hideStatus, initiative: num(item.initiative),
+            status: (Array.isArray(item.status) ? item.status : []).slice(0, 8).filter(st => text(st?.label, 20).trim())
+              .map(st => ({ label: text(st.label, 20), value: num(st.value), max: num(st.max) })) })),
       };
       room.gmHeartbeatAt = Date.now();
       await this.save(room);

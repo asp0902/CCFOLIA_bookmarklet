@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.19
+// @version      0.2.20
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.19";
+  const VERSION = "0.2.20";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2933,7 +2933,11 @@
             .map((item) => ({ id: String(item._id || ""), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: url(item.imageUrl) }));
           const characters = Object.values(ent.roomCharacters?.entities || {})
             .filter((c) => c && !c.secret && !c.invisible && c.active !== false && url(c.iconUrl))
-            .map((c) => ({ id: String(c._id || ""), name: String(c.name || "").slice(0, 40), x: num(c.x), y: num(c.y), z: num(c.z), angle: num(c.angle), width: num(c.width, 4), height: num(c.height, 4), iconUrl: url(c.iconUrl), color: /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "" }));
+            .map((c) => ({
+              hideStatus: !!c.hideStatus, initiative: num(c.initiative),
+              status: (Array.isArray(c.status) ? c.status : []).slice(0, 8).filter((st) => st && String(st.label || "").trim())
+                .map((st) => ({ label: String(st.label).slice(0, 20), value: num(st.value), max: num(st.max) })),
+              id: String(c._id || ""), name: String(c.name || "").slice(0, 40), x: num(c.x), y: num(c.y), z: num(c.z), angle: num(c.angle), width: num(c.width, 4), height: num(c.height, 4), iconUrl: url(c.iconUrl), color: /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "" }));
           return {
             backgroundUrl: url(room.backgroundUrl), foregroundUrl: url(room.foregroundUrl), backgroundColor: /^#[0-9a-f]{3,8}$/i.test(room.backgroundColor || "") ? room.backgroundColor : "",
             fieldWidth: num(room.fieldWidth, 40), fieldHeight: num(room.fieldHeight, 20), fieldObjectFit: ["fill", "contain", "cover"].includes(room.fieldObjectFit) ? room.fieldObjectFit : "fill",
