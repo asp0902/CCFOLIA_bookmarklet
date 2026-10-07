@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.21
+// @version      0.3.22
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.21";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.22";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -5393,6 +5393,16 @@
       const next = loopButton.dataset.loop !== "1";
       loopButton.dataset.loop = next ? "1" : "0";
       loopButton.setAttribute("aria-pressed", next ? "true" : "false");
+      // 반복재생 토글은 저장 버튼 없이 곧바로 곡 설정에 저장한다. 저장하지 않으면 재생 중인 곡에 잠깐 반영해도
+      // 주기 동기화(syncCcfActiveBgmState)가 저장된 값(loop)으로 되돌려, 화면엔 반복이 켜져 있는데
+      // 곡이 끝나면 멈추거나(켠 경우) 계속 반복하는(끈 경우) 불일치가 생겼다. (#116)
+      const stored = ccfBgmSlotMap.get(entryKey);
+      if (stored) {
+        stored.loop = next;
+        stored.updatedAt = Date.now();
+        ccfBgmSlotMap.set(entryKey, stored);
+        persistCcfBgmSlotMap();
+      }
       applyLivePlaybackSettings(clampCcfBgmVolume(volumeInput?.value, initialVolume));
     });
 
