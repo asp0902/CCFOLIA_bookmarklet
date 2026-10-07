@@ -5,7 +5,8 @@ const inviteToken = params.get("token") || "";
 const consent = document.getElementById("consent");
 // Remember the display name on this browser so a returning participant does not retype it.
 const NAME_KEY = "capybara-display-name";
-try { const saved = localStorage.getItem(NAME_KEY); if (saved) document.getElementById("display-name").value = saved; } catch (_) {}
+const chatName = document.getElementById("chat-name");
+try { const saved = localStorage.getItem(NAME_KEY); if (saved) { document.getElementById("display-name").value = saved; chatName.value = saved; } } catch (_) {}
 const room = document.getElementById("room");
 const gateStatus = document.getElementById("gate-status");
 const POLL_MS = 1500;
@@ -175,6 +176,7 @@ async function checkStatus() {
   if (transient(response)) return;
   if (!response.ok) return stop("요청이 만료되었거나 룸이 종료되었습니다.");
   const data = await response.json();
+  if (data.displayName) chatName.value = data.displayName;
   if (data.status === "approved") {
     consent.hidden = true; gateStatus.hidden = true; room.inert = false; room.removeAttribute("aria-hidden");
     if (mode !== "live") { mode = "live"; await refresh(); connectSocket(); }
