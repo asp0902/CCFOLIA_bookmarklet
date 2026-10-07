@@ -163,3 +163,6 @@ main{padding:0}
 #body{white-space:pre-wrap}
 html.pip,body.pip{height:100%;margin:0;background:#202020}
 body.pip .chat{position:static;width:100%;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
+
+#messages p>div{white-space:pre-wrap}
+#messages ruby rt{font-size:.6em}

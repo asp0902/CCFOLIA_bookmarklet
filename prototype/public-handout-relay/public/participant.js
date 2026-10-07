@@ -290,7 +290,7 @@ const renderState = data => {
     author.style.color = /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "#888";
     const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
     head.append(author, " - ", time);
-    const body = document.createElement("p"); body.textContent = message.text || "";
+    const body = document.createElement("p"); renderRich(body, message.text || "");
     text.append(head, body); item.append(avatar, text); return item;
   }));
   if (stickToBottom) list.scrollTop = list.scrollHeight;
@@ -332,6 +332,71 @@ async function verifyAccess() {
   if (!response.ok) return stop("접근이 취소되었습니다.");
   const data = await response.json();
   if (data.status !== "approved") stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
+}
+// Messages written with the toolkit's format tools carry an invisible envelope (formatRuns / alignRuns / blockStyle) after the visible text.
+// This decodes it and renders bold/italic/underline/strike, colour, background, size, blur, code, ruby, tooltip, alignment and narration.
+const INVIS_START = "\u2063\u2063\u2063", INVIS_END = "\u2062\u2062\u2062", INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
+function decodeEnvelope(full) {
+  const a = full.indexOf(INVIS_START);
+  if (a < 0) return { text: full, env: null };
+  const b = full.indexOf(INVIS_END, a + INVIS_START.length);
+  if (b < 0) return { text: full, env: null };
+  try {
+    let bits = "";
+    for (const ch of full.slice(a + INVIS_START.length, b)) { const i = INVIS_MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, "0"); }
+    let raw = "";
+    for (let i = 0; i + 8 <= bits.length; i += 8) raw += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2));
+    const env = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/\0+$/g, "")))));
+    return { text: full.slice(0, a), env };
+  } catch (_) { return { text: full.slice(0, a), env: null }; }
+}
+const safeColor = value => (typeof value === "string" && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(value.trim())) ? value.trim() : "";
+function styleSegment(span, style) {
+  if (style.bold) span.style.fontWeight = "700";
+  if (style.italic) span.style.fontStyle = "italic";
+  const deco = []; if (style.underline) deco.push("underline"); if (style.strike) deco.push("line-through");
+  if (deco.length) span.style.textDecoration = deco.join(" ");
+  const color = safeColor(style.color); if (color) span.style.color = color;
+  const bg = safeColor(style.backgroundColor); if (bg) span.style.backgroundColor = bg;
+  const size = Math.round(Number(style.fontSize)); if (size >= 6 && size <= 120) span.style.fontSize = `${size}px`;
+  if (style.blur) { span.style.webkitTextFillColor = "transparent"; span.style.textShadow = "0 0 6px #fff"; span.title = "클릭하면 보입니다"; span.addEventListener("click", () => { span.style.webkitTextFillColor = ""; span.style.textShadow = ""; }, { once: true }); }
+  if (style.codeMode) { span.style.fontFamily = "monospace"; span.style.background = "rgba(255,255,255,.12)"; span.style.padding = "0 4px"; span.style.borderRadius = "3px"; }
+  if (style.tooltipText) { span.title = String(style.tooltipText).slice(0, 200); span.style.borderBottom = "1px dotted currentColor"; }
+}
+function renderRich(container, full) {
+  const { text, env } = decodeEnvelope(full);
+  if (!env || typeof env !== "object") { container.textContent = text; return; }
+  const runs = (Array.isArray(env.formatRuns) ? env.formatRuns : []).map(r => ({ start: Math.max(0, Number(r.start) || 0), end: Math.min(text.length, Number(r.end) || 0), style: r.style && typeof r.style === "object" ? r.style : {} })).filter(r => r.end > r.start);
+  const align = Array.isArray(env.alignRuns) ? env.alignRuns : [];
+  const narration = !!env.blockStyle?.narration;
+  const lines = text.split("\n");
+  let offset = 0;
+  lines.forEach((line, index) => {
+    const lineEl = document.createElement("div");
+    lineEl.style.minHeight = "1.43em";
+    const run = align.find(a => a.start <= index && a.end > index);
+    const alignment = narration ? "center" : (run && ["left", "center", "right"].includes(run.align) ? run.align : "");
+    if (alignment) lineEl.style.textAlign = alignment;
+    if (narration) lineEl.style.fontStyle = "italic";
+    const lineStart = offset, lineEnd = offset + line.length;
+    const cuts = new Set([lineStart, lineEnd]);
+    for (const r of runs) { if (r.start > lineStart && r.start < lineEnd) cuts.add(r.start); if (r.end > lineStart && r.end < lineEnd) cuts.add(r.end); }
+    const points = [...cuts].sort((a, b) => a - b);
+    for (let i = 0; i + 1 < points.length; i += 1) {
+      const from = points[i], to = points[i + 1];
+      const piece = text.slice(from, to);
+      const active = runs.filter(r => r.start <= from && r.end >= to);
+      const ruby = active.find(r => r.style.rubyText);
+      if (!active.length) { lineEl.append(piece); continue; }
+      const span = document.createElement(ruby ? "ruby" : "span");
+      for (const r of active) styleSegment(span, r.style);
+      span.append(piece);
+      if (ruby) { const rt = document.createElement("rt"); rt.textContent = String(ruby.style.rubyText).slice(0, 60); span.append(rt); }
+      lineEl.append(span);
+    }
+    container.append(lineEl);
+    offset = lineEnd + 1;
+  });
 }
 function messageTime(value) {
   const d = new Date(value);
