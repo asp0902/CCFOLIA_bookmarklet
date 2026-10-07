@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.12
+// @version      0.2.13
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.12";
+  const VERSION = "0.2.13";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1332,7 +1332,7 @@
       #${PANEL_ID} .ccf-scp-input:focus { border: 0; }
       #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); }
       #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; }
-      #${PANEL_ID} .ccf-scp-actions:empty { display: none; }
+      #${PANEL_ID} .ccf-scp-actions { min-height: 37px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
       #${PANEL_ID} .ccf-scp-hint { font-size: 12px; line-height: 1.25; opacity: 1; color: rgb(100,100,100); }
       #${PANEL_ID} .ccf-scp-send { padding: 4px 12px; min-width: 64px; background: transparent; color: #eee;
         font-size: 13px; font-weight: 700; line-height: 1.75; border-radius: 4px; }
