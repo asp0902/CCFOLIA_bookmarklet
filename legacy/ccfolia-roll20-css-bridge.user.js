@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.90
+// @version      0.3.91
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.90"),
+    version: getUserscriptVersion("0.3.91"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -804,13 +804,15 @@
         background: rgba(245, 0, 87, 0.08);
       }
 
+      /* overflow: hidden 은 box-shadow(spread)가 위·아래로 퍼지는 Roll20 매크로를 잘라 얇게 보이게 한다 → 가로만 자른다 */
       .ccr20-render-root {
         display: block;
         width: auto;
         max-width: 100%;
         min-width: 0;
         box-sizing: border-box;
-        overflow: hidden;
+        overflow-x: clip;
+        overflow-y: visible;
         white-space: pre-wrap;
         word-break: break-word;
         overflow-wrap: anywhere;
@@ -835,7 +837,8 @@
         box-sizing: border-box;
         padding: 0;
         position: relative;
-        overflow: hidden;
+        overflow-x: clip;
+        overflow-y: visible;
       }
 
       .ccr20-render-root.ccr20-roll20-bubble:has(.ccr20-image-frag) .ccr20-line:not(:has(.ccr20-image-frag)) {
@@ -1054,7 +1057,8 @@
         max-width: 100% !important;
         min-width: 0 !important;
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        overflow-x: clip !important;
+        overflow-y: visible !important;
         white-space: pre-wrap !important;
         word-break: break-word !important;
         overflow-wrap: anywhere !important;
@@ -1068,7 +1072,8 @@
         box-sizing: border-box !important;
         padding: 0 !important;
         position: relative !important;
-        overflow: hidden !important;
+        overflow-x: clip !important;
+        overflow-y: visible !important;
         white-space: pre-wrap !important;
         word-break: break-word !important;
         overflow-wrap: anywhere !important;
@@ -3073,7 +3078,8 @@
     root.style.maxWidth = "100%";
     root.style.minWidth = "0px";
     root.style.boxSizing = "border-box";
-    root.style.overflow = "hidden";
+    root.style.overflowX = "clip";
+    root.style.overflowY = "visible";
     root.style.wordBreak = "break-word";
     root.style.overflowWrap = "anywhere";
 
@@ -3105,7 +3111,8 @@
       el.style.paddingLeft = "0px";
       el.style.paddingRight = "0px";
       el.style.position = "relative";
-      el.style.overflow = "hidden";
+      el.style.overflowX = "clip";
+      el.style.overflowY = "visible";
       el.style.wordBreak = "break-word";
       el.style.overflowWrap = "anywhere";
     }
@@ -6021,7 +6028,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.90",
+    version: "0.3.91",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
