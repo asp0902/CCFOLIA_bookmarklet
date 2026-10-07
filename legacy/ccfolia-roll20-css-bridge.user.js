@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.95
+// @version      0.3.96
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.95"),
+    version: getUserscriptVersion("0.3.96"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5519,18 +5519,35 @@
     "gowun batang": "400;700", "gowun dodum": "400", "nanum pen script": "400", "nanum brush script": "400",
     "black han sans": "400", "do hyeon": "400", "jua": "400", "gamja flower": "400", "hi melody": "400", "song myung": "400",
     "sunflower": "300;500;700", "east sea dokdo": "400", "gaegu": "400;700", "poor story": "400", "single day": "400",
-    "yeon sung": "400", "stylish": "400", "dokdo": "400", "gugi": "400", "cute font": "400"
-  }, loaded: new Set() }); }
+    "yeon sung": "400", "stylish": "400", "dokdo": "400", "gugi": "400", "cute font": "400",
+    "hahmlet": "400;700", "gothic a1": "400;700", "ibm plex sans kr": "400;700", "diphylleia": "400", "dongle": "400;700",
+    "orbit": "400", "bagel fat one": "400", "kirang haerang": "400", "gasoek one": "400", "jua": "400"
+  }, loaded: new Set(),
+  // 목록에 없는 이름은 Google Fonts 에 있는 글꼴일 수 있으니 한 번 시도한다(없는 이름이면 요청이 실패할 뿐 해가 없다).
+  // 흔한 시스템·제네릭 글꼴은 건너뛴다.
+  system: new Set(["arial", "arial black", "helvetica", "helvetica neue", "times", "times new roman", "georgia", "verdana", "tahoma", "courier", "courier new",
+    "consolas", "monaco", "menlo", "impact", "comic sans ms", "trebuchet ms", "segoe ui", "lucida console", "palatino", "roboto", "sans-serif", "serif",
+    "monospace", "cursive", "fantasy", "system-ui", "inherit", "initial", "unset"]) }); }
   function ensureGoogleFonts(familyValue) {
     const { weights: GOOGLE_FONT_WEIGHTS, loaded: loadedGoogleFonts } = googleFontState();
     for (const part of String(familyValue).split(",")) {
       const name = part.trim().replace(/^['"]|['"]$/g, "").trim();
-      const weights = GOOGLE_FONT_WEIGHTS[name.toLowerCase()];
-      if (!weights || loadedGoogleFonts.has(name.toLowerCase())) continue;
-      loadedGoogleFonts.add(name.toLowerCase());
+      const key = name.toLowerCase();
+      const known = GOOGLE_FONT_WEIGHTS[key];
+      const guess = !known && /^[A-Za-z][A-Za-z0-9 ]{1,38}$/.test(name) && !googleFontState().system.has(key);
+      if ((!known && !guess) || loadedGoogleFonts.has(key)) continue;
+      loadedGoogleFonts.add(key);
+      const family = name.replace(/ /g, "+");
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, "+")}:wght@${weights}&display=swap`;
+      link.href = `https://fonts.googleapis.com/css2?family=${family}:wght@${known || "400;700"}&display=swap`;
+      // 추측한 이름은 굵기 지정(400;700)을 지원하지 않는 글꼴일 수 있으니, 실패하면 기본 굵기만으로 다시 시도한다.
+      if (guess) link.addEventListener("error", () => {
+        const retry = document.createElement("link");
+        retry.rel = "stylesheet";
+        retry.href = `https://fonts.googleapis.com/css2?family=${family}&display=swap`;
+        (document.head || document.documentElement).appendChild(retry);
+      }, { once: true });
       (document.head || document.documentElement).appendChild(link);
     }
   }
@@ -6044,7 +6061,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.95",
+    version: "0.3.96",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
