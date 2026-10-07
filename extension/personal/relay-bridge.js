@@ -159,7 +159,8 @@
   };
   autoStart();
   // Follow in-app navigation between rooms.
-  setInterval(() => {
+  const routeTimer = setInterval(() => {
+    if (!chrome.runtime?.id) { clearInterval(routeTimer); stopped = true; resetConnection(); return; } // orphaned after an extension reload
     const next = readRoomId();
     if (next === roomId) return;
     roomId = next;

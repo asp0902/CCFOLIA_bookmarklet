@@ -11,7 +11,7 @@ const stub = ({ storage, stopStatus = 200, participants = [] }) => `(() => {
   const listeners = [];
   window.__calls = []; window.__messages = []; window.__confirm = true; window.__stopStatus = ${stopStatus}; window.__participants = ${JSON.stringify(participants)};
   window.chrome = {
-    runtime: { sendMessage: async message => { window.__messages.push(message); } },
+    runtime: { id: "test-extension", sendMessage: async message => { window.__messages.push(message); } },
     storage: {
       onChanged: { addListener: fn => listeners.push(fn), removeListener: fn => listeners.splice(listeners.indexOf(fn), 1) },
       local: {
