@@ -1326,9 +1326,12 @@
       const previousEdge = getHtmlEdgeType(previousEntry.packageHtml || previousEntry.bodyHtml || "", true);
       const nextEdge = getHtmlEdgeType(nextHtml);
       const needsImageGap = previousEdge && nextEdge && previousEdge !== nextEdge;
+      // Roll20 CSS 매크로 박스(ccf-roll20-bubble, 블록 요소)끼리는 <br> 없이 붙인다. 코코포리아에서도 붙어 보이며,
+      // <br> 을 넣으면 박스 사이에 빈 줄이 생긴다.
+      const bothBubbles = prevHtml.includes("ccf-roll20-bubble") && nextHtml.includes("ccf-roll20-bubble");
       const mergedHtml = needsImageGap
         ? `${prevHtml}<div style="padding-top:8px">${nextHtml}</div>`
-        : [prevHtml, nextHtml].filter(Boolean).join("<br>");
+        : [prevHtml, nextHtml].filter(Boolean).join(bothBubbles ? "" : "<br>");
       prev.packageHtml = mergedHtml;
       prev.bodyHtml = mergedHtml;
 
@@ -1398,6 +1401,14 @@
       </li>`;
     }).join("");
     listEl.innerHTML = html;
+    collectGoogleFontUrls(html).forEach((url) => {
+      if (document.querySelector(`link[data-capybara-font="${url}"]`)) return;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = url;
+      link.dataset.capybaraFont = url;
+      document.head.appendChild(link);
+    });
 
     listEl.querySelectorAll(".js-edit-entry").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1767,6 +1778,26 @@
     selection.addRange(range);
   }
 
+  // 매크로가 쓰는 Google Fonts(나눔명조 등). 코코포리아 밖(편집기·티스토리)에서는 글꼴을 직접 불러와야 한다.
+  const GOOGLE_FONT_WEIGHTS = {
+    "nanum myeongjo": "400;700;800", "nanum gothic": "400;700;800", "noto serif kr": "400;700", "noto sans kr": "400;700",
+    "gowun batang": "400;700", "gowun dodum": "400", "nanum pen script": "400", "nanum brush script": "400",
+    "black han sans": "400", "do hyeon": "400", "jua": "400", "gamja flower": "400", "hi melody": "400", "song myung": "400",
+    "sunflower": "300;500;700", "east sea dokdo": "400", "gaegu": "400;700", "poor story": "400", "single day": "400",
+    "yeon sung": "400", "stylish": "400", "dokdo": "400", "gugi": "400", "cute font": "400"
+  };
+  function collectGoogleFontUrls(html) {
+    const urls = new Set();
+    for (const match of String(html || "").matchAll(/font-family:\s*((?:&quot;|[^;"])+)/gi)) {
+      for (const part of match[1].split(",")) {
+        const name = part.trim().replace(/^(?:&quot;|['"])|(?:&quot;|['"])$/g, "").trim();
+        const weights = GOOGLE_FONT_WEIGHTS[name.toLowerCase()];
+        if (weights) urls.add(`https://fonts.googleapis.com/css2?family=${name.replace(/ /g, "+")}:wght@${weights}&display=swap`);
+      }
+    }
+    return [...urls];
+  }
+
   function buildEditorTistoryHtml(room) {
     const payload = room?.payload || {};
     const roomTitle = room?.roomTitle || payload.roomTitle || "(제목 없음)";
@@ -1811,10 +1842,13 @@
         </div>`;
     }).join("\n");
 
+    const fontImports = collectGoogleFontUrls(htmlEntries).map((url) => `    @import url("${url}");
+`).join("");
+
     return `<!-- Capybara Log: Tistory HTML -->
 <div class="ccf-tistory-log">
   <style>
-    .ccf-tistory-log {
+${fontImports}    .ccf-tistory-log {
       max-width: 760px;
       margin: 0 auto;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
