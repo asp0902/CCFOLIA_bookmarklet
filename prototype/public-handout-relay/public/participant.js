@@ -101,6 +101,7 @@ seekInput.addEventListener("pointerup", () => { delete seekInput.dataset.draggin
 // The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
 // the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
 let sceneData = null;
+const view = { zoom: 1, x: 0, y: 0 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
 function renderScene(scene) {
   if (scene !== undefined) sceneData = scene;
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
@@ -111,10 +112,10 @@ function renderScene(scene) {
   bg.style.backgroundColor = s.backgroundColor || "";
   bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
   const w = stage.clientWidth, h = stage.clientHeight;
-  const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight);
+  const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight) * view.zoom;
   const place = (el, x, y, width, height, angle, z) => {
     el.style.position = "absolute";
-    el.style.left = `${(w / 2) + x * unit}px`; el.style.top = `${(h / 2) + y * unit}px`;
+    el.style.left = `${(w / 2) + view.x + x * unit}px`; el.style.top = `${(h / 2) + view.y + y * unit}px`;
     el.style.width = `${width * unit}px`; el.style.height = `${height * unit}px`;
     el.style.transform = angle ? `rotate(${angle}deg)` : "";
     el.style.zIndex = String(Math.round(z || 0) + 10);
@@ -161,6 +162,47 @@ function renderStatusPanel(characters) {
   }));
 }
 window.addEventListener("resize", () => renderScene());
+// Zoom (wheel or +/- buttons) and pan (drag) of the stage.
+{
+  const stage = document.querySelector(".stage");
+  let raf = 0;
+  const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderScene(); }); };
+  const zoomAt = (factor, cx, cy) => {
+    const next = Math.max(0.2, Math.min(6, view.zoom * factor));
+    const k = next / view.zoom;
+    view.x = cx - (cx - view.x) * k; view.y = cy - (cy - view.y) * k; view.zoom = next;
+    redraw();
+  };
+  const centre = () => [stage.clientWidth / 2 - stage.clientWidth / 2, 0];
+  const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #handout, #room > header");
+  stage.addEventListener("wheel", event => {
+    if (interactive(event.target)) return;
+    event.preventDefault();
+    const rect = stage.getBoundingClientRect();
+    zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX - rect.left - rect.width / 2, event.clientY - rect.top - rect.height / 2);
+  }, { passive: false });
+  let drag = null;
+  stage.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || interactive(event.target)) return;
+    drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+    stage.setPointerCapture?.(event.pointerId); stage.classList.add("panning");
+  });
+  stage.addEventListener("pointermove", event => {
+    if (!drag) return;
+    view.x = drag.vx + event.clientX - drag.x; view.y = drag.vy + event.clientY - drag.y; redraw();
+  });
+  const endDrag = () => { drag = null; stage.classList.remove("panning"); };
+  stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
+  stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
+  const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
+  const mk = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", fn); return b; };
+  ctl.append(
+    mk("+", "확대", () => zoomAt(1.25, 0, 0)),
+    mk("−", "축소", () => zoomAt(1 / 1.25, 0, 0)),
+    mk("⌂", "화면 맞춤", () => { view.zoom = 1; view.x = 0; view.y = 0; redraw(); }));
+  stage.append(ctl);
+  void centre;
+}
 let activeChannel = "main";
 const seenCount = {}, unread = new Set(); // per-channel message counts, to mark tabs that received something while another tab was open
 const DEFAULT_CHANNELS = [{ id: "main", label: "메인" }, { id: "info", label: "정보" }, { id: "other", label: "잡담" }];
@@ -366,6 +408,30 @@ async function join() {
 document.getElementById("cancel").addEventListener("click", () => { location.href = ccfoliaRoomUrl(); });
 document.getElementById("join").addEventListener("click", () => adopt().catch(() => setGate("연결할 수 없습니다.", "error")));
 document.getElementById("web-join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
+// Dice row (like CCFOLIA's): each button puts its roll at the cursor of the message box.
+{
+  const NS = "http://www.w3.org/2000/svg";
+  const SHAPES = [
+    [4, ["M12 3 22 20H2z"]], [6, ["M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"]],
+    [8, ["M12 2 21 12 12 22 3 12z", "M3 12h18"]], [10, ["M12 2 21 10 12 22 3 10z", "M12 2v20"]],
+    [12, ["M12 2 22 9.5 18.2 21H5.8L2 9.5z", "M12 2v5M2 9.5l4.5 2.3M22 9.5l-4.5 2.3M5.8 21l3-6.5M18.2 21l-3-6.5"]],
+    [20, ["M12 2 21 7v10l-9 5-9-5V7z", "M12 8l5.5 9h-11z"]],
+    [100, ["M9 3 16 7v8l-7 4-7-4V7z", "M15 6l7 4v8l-7 4-4-2.3"]]
+  ];
+  const row = document.createElement("div"); row.className = "dice-row";
+  for (const [faces, paths] of SHAPES) {
+    const b = document.createElement("button"); b.type = "button"; b.title = `1d${faces}`; b.setAttribute("aria-label", `D${faces}`);
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "24"); svg.setAttribute("height", "24");
+    for (const d of paths) { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("fill", "none"); p.setAttribute("stroke", "#acacac"); p.setAttribute("stroke-width", "1"); p.setAttribute("stroke-linejoin", "round"); svg.append(p); }
+    b.append(svg);
+    b.addEventListener("click", () => {
+      const input = document.getElementById("chat-input"); const a = input.selectionStart ?? input.value.length, z = input.selectionEnd ?? a;
+      const text = `1d${faces}`; input.value = input.value.slice(0, a) + text + input.value.slice(z); input.focus(); input.setSelectionRange(a + text.length, a + text.length);
+    });
+    row.append(b);
+  }
+  document.querySelector("#chat-form .name-row").after(row);
+}
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const sendStatus = document.getElementById("send-status");
