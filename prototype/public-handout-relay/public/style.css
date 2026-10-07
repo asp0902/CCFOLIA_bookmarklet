@@ -77,3 +77,14 @@ main{padding:0}
 #chat-form button.chat-tab{align-self:auto;box-shadow:none;border:0;padding:12px 16px;border-radius:0;background:none;color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;opacity:.7}
 #chat-form button.chat-tab[aria-selected="true"]{opacity:1}
 #chat-form button.chat-tab:hover{background:rgba(255,255,255,.08)}
+
+/* Step 2: the chat panel runs the full height of the window (title bar included) like CCFOLIA's drawer; the room title stays over the stage. */
+#messages li{margin:0 16px;padding:8px 0 5px}
+#messages h6 strong{color:#888}
+#messages .msg-time{margin-left:0;color:#eee}
+@media(min-width:721px){
+  #room>header{position:relative;z-index:1;width:calc(100% - 376px)}
+  .play-layout{margin-top:-64px;min-height:100vh;position:relative}
+  .stage{padding-top:80px}
+  .chat h2{height:64px;line-height:64px;box-shadow:0 2px 4px -1px rgba(0,0,0,.2),0 4px 5px 0 rgba(0,0,0,.14),0 1px 10px 0 rgba(0,0,0,.12)}
+}

@@ -85,9 +85,9 @@ const renderState = data => {
     const text = document.createElement("div"); text.className = "msg-text";
     const head = document.createElement("h6");
     const author = document.createElement("strong"); author.textContent = name;
-    if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) author.style.color = message.color;
+    author.style.color = /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "#888";
     const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
-    head.append(author, " ", time);
+    head.append(author, " - ", time);
     const body = document.createElement("p"); body.textContent = message.text || "";
     text.append(head, body); item.append(avatar, text); return item;
   }));
