@@ -29,13 +29,13 @@
     :host { all: initial; }
     *, *::before, *::after { box-sizing: border-box; }
     .backdrop { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
-      background: rgba(0, 0, 0, 0.5); font-family: Roboto, "Noto Sans KR", "Helvetica Neue", Arial, sans-serif; }
+      background: rgba(0, 0, 0, 0.5); font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
     .paper { width: min(560px, calc(100vw - 64px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column;
-      background: #303030; color: #fff; border-radius: 4px; overflow: hidden;
+      background: #222; color: #fff; border-radius: 4px; overflow: hidden;
       box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); }
     header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 8px; }
     h2 { flex: 1; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
-    .body { padding: 8px 24px 16px; overflow: auto; font-size: 1rem; line-height: 1.5; }
+    .body { padding: 20px 24px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
     .field { margin-top: 16px; }
     .field > label { display: block; margin-bottom: 4px; color: rgba(255,255,255,.7); font-size: .75rem; }
@@ -61,8 +61,8 @@
     button:hover { background: rgba(255,255,255,.08); }
     button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
     button:disabled { color: rgba(255,255,255,.3); cursor: default; background: transparent; }
-    button.contained { background: #fff; color: #212121; padding: 6px 16px; box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12); }
-    button.contained:hover { background: #e0e0e0; }
+    button.contained { background: #eee; color: #111; font-weight: 700; border-radius: 0; padding: 6px 16px; box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12); }
+    button.contained:hover { background: #fff; }
     button.danger { color: #f44336; }
     button.danger:hover { background: rgba(244,67,54,.08); }
     button.icon { min-width: 0; width: 36px; padding: 0; border-radius: 50%; font-size: 1.25rem; line-height: 1; }
@@ -70,7 +70,7 @@
     .participant { display: flex; align-items: center; gap: 4px; min-height: 48px; border-top: 1px solid rgba(255,255,255,.12); }
     .participant .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .participant .state { color: rgba(255,255,255,.7); font-size: .875rem; margin-right: 4px; }
-    footer { display: flex; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid rgba(255,255,255,.12); }
+    footer { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,.4); }
     footer .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
     .toast.error { color: #f44336; }
