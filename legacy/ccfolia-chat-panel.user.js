@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.13
+// @version      0.2.14
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.13";
+  const VERSION = "0.2.14";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -71,6 +71,7 @@
   }
   let sending = false;
   let layoutTimer = 0;
+  let dicebotTimer = 0;
   // "left"  = 룸 채팅을 그대로 두고 그 왼쪽 옆에 붙는다 (기본값).
   // "right" = 룸 채팅을 왼쪽으로 밀고 오른쪽 끝을 쓴다.
   //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
@@ -1334,6 +1335,7 @@
       #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 37px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
       #${PANEL_ID} .ccf-scp-hint { font-size: 12px; line-height: 1.25; opacity: 1; color: rgb(100,100,100); }
+      #${PANEL_ID} .ccf-scp-hint a { color: rgb(100,100,100); text-decoration: underline; }
       #${PANEL_ID} .ccf-scp-send { padding: 4px 12px; min-width: 64px; background: transparent; color: #eee;
         font-size: 13px; font-weight: 700; line-height: 1.75; border-radius: 4px; }
       #${PANEL_ID} .ccf-scp-send:hover { background: rgba(255,255,255,.08); filter: none; }
@@ -1835,6 +1837,25 @@
 
     const actions = document.createElement("div");
     actions.className = "ccf-scp-actions";
+    // 하단 줄: 코코포리아 네이티브 "Dicebot engine : BCDice@버전" 표기를 그대로 따라간다(네이티브 푸터를 읽어 갱신).
+    const dicebotLine = document.createElement("span");
+    dicebotLine.className = "ccf-scp-hint";
+    actions.appendChild(dicebotLine);
+    const syncDicebot = () => {
+      const link = [...document.querySelectorAll('a[href*="bcdice"]')].find((a) => !a.closest(`#${PANEL_ID}`) && /BCDice@[\w.\-]+/.test(a.textContent));
+      const text = link ? link.textContent.trim() : "";
+      if (dicebotLine.dataset.v === text) return;
+      dicebotLine.dataset.v = text;
+      dicebotLine.replaceChildren();
+      if (!text) return;
+      dicebotLine.append("Dicebot engine : ");
+      const anchor = document.createElement("a");
+      anchor.href = link.href; anchor.target = "_blank"; anchor.rel = "noopener noreferrer"; anchor.textContent = text;
+      dicebotLine.append(anchor);
+    };
+    syncDicebot();
+    if (dicebotTimer) window.clearInterval(dicebotTimer);
+    dicebotTimer = window.setInterval(syncDicebot, 2000);
     compose.appendChild(actions);
 
     statusEl = document.createElement("div");
@@ -1920,6 +1941,7 @@
     if (onDocDragMove) { document.removeEventListener("mousemove", onDocDragMove); onDocDragMove = null; }
     if (onDocDragUp) { document.removeEventListener("mouseup", onDocDragUp); onDocDragUp = null; }
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
+    if (dicebotTimer) { window.clearInterval(dicebotTimer); dicebotTimer = 0; }
     clearNativeShift();
     // 밀어낸 화면은 반드시 되돌린다. 남으면 패널이 없는데 지도만 좁아진 채로 남는다.
     clearSqueeze();
