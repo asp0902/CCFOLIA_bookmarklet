@@ -7,6 +7,9 @@
   const seen = new Set();
   let lastName = "";
   const startedAt = Date.now(); // the chat history fills in shortly after load; anything seen in the first seconds is history and never sent
+  // The editor URL is the same for every campaign; the campaign id is in an inline script of the page (campaign_id = 123).
+  let campaignId = "";
+  const findCampaignId = () => campaignId ||= [...document.scripts].map(s => s.textContent.match(/campaign_id\s*=\s*(\d+)/)?.[1]).find(Boolean) || "";
   const read = el => {
     const by = el.querySelector(".by");
     const name = by ? clean(by.textContent, 80).replace(/:$/, "").trim() : "";
@@ -21,7 +24,7 @@
       body.querySelectorAll(".by, .tstamp, .avatar").forEach(node => node.remove());
       text = clean(body.innerText, 2000); // roll templates keep their line breaks
     }
-    return { id: clean(el.dataset.messageid, 160), name: name || lastName, text, kind, source: "roll20" };
+    return { id: clean(el.dataset.messageid, 160), name: name || lastName, text, kind, source: "roll20", campaignId };
   };
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
@@ -30,6 +33,8 @@
       if (seen.has(id)) continue;
       seen.add(id);
       const message = read(el);
+      if (!findCampaignId()) continue; // without the campaign id the line cannot be routed to a room
+      message.campaignId = campaignId;
       if (Date.now() - startedAt < 3000 || el.matches(SKIP) || !message.text) continue;
       chrome.runtime.sendMessage({ type: "r20-message", message }).catch(() => {});
     }
