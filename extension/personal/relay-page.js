@@ -45,6 +45,7 @@
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     if (typeof api?.relayMessages !== "function") return;
     const all = api.relayMessages();
+    if (!all) return; // the store is not ready yet: an empty list here would look like "everything was deleted"
     const messages = [].concat(...[...new Set(all.map(message => message.channel))].map(channel => all.filter(message => message.channel === channel).slice(-100))).map(message => ({
       id: clean(message.id, 160),
       author: clean(message.name, 80) || "CCFOLIA",
@@ -56,7 +57,13 @@
       roll: message.rollInfo ? { success: !!message.rollInfo.success, failure: !!message.rollInfo.failure, critical: !!message.rollInfo.critical, fumble: !!message.rollInfo.fumble, secret: !!message.rollInfo.secret } : undefined,
     })).filter(message => message.id && message.text);
     const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
-    emit({ action: "snapshot", messages, channels, dicebot: readDicebot() });
+    // What the GM still has, per tab, so the relay can drop messages that were deleted in CCFOLIA (only newer than the oldest one sent).
+    const present = {};
+    for (const id of new Set([...channels.map(item => item.id), ...messages.map(message => message.channel)])) {
+      const own = messages.filter(message => message.channel === id);
+      present[id] = { ids: own.map(message => message.id), since: own.map(message => message.createdAt).sort()[0] || null };
+    }
+    emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), present });
   };
 
   window.addEventListener("message", async event => {

@@ -9,6 +9,7 @@
   let roomId = readRoomId();
   const sentMessages = new Set();
   let lastChannelKey = "";
+  let lastPresentKey = "";
   let lastScene = null; // latest room scene from the page, sent again after (re)connecting
   let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
   let config = null;
@@ -94,7 +95,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; lastPresentKey = ""; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -224,6 +225,17 @@
             sentMessages.add(id);
             try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600), roll: message.roll && typeof message.roll === "object" ? message.roll : undefined }); }
             catch (error) { sentMessages.delete(id); throw error; }
+          }
+          // After the upload: tell the relay what the GM still has so deleted messages disappear for participants too.
+          const present = {};
+          for (const [channel, info] of Object.entries(request.present && typeof request.present === "object" ? request.present : {}).slice(0, 20)) {
+            if (!Array.isArray(info?.ids)) continue;
+            present[clean(channel, 100)] = { ids: info.ids.slice(0, 200).map(id => clean(id, 160)).filter(Boolean), since: typeof info.since === "string" ? clean(info.since, 40) : null };
+          }
+          const presentKey = JSON.stringify(present);
+          if (request.present && presentKey !== lastPresentKey) {
+            await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages/sync`, { present });
+            lastPresentKey = presentKey;
           }
         });
         snapshotChain = run;

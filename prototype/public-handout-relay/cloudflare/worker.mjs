@@ -40,6 +40,19 @@ const securityHeadersFor = url => ({
   "X-Robots-Tag": "noindex, nofollow, noarchive"
 });
 
+// Drops CCFOLIA messages the GM no longer has. Per tab, only messages newer than the oldest one the GM sent are compared (older ones are unknown to the GM);
+// since === null means the tab is empty. Participant-sent (external) messages are never touched. Returns the removed ids.
+export function applyMessageSync(room, present) {
+  const removed = new Set();
+  for (const message of room.messages) {
+    const info = present[message.channel || "main"];
+    if (!info || message.origin !== "ccfolia") continue;
+    if (info.since === null || (Date.parse(message.createdAt) >= Date.parse(info.since) && !info.ids.includes(message.id))) removed.add(message.id);
+  }
+  room.messages = room.messages.filter(message => !removed.has(message.id));
+  for (const id of removed) delete room.seenMessageIds[id];
+  return [...removed];
+}
 export class RoomRelay {
   constructor(state) {
     this.state = state;
@@ -271,6 +284,22 @@ export class RoomRelay {
       await this.save(room);
       this.push("p", { type: "bgm", bgm: room.bgm });
       return json({ accepted: true });
+    }
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages\/sync$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      const entries = Object.entries(body.present && typeof body.present === "object" ? body.present : {});
+      const present = {};
+      if (entries.length > 20) return json({ error: "탭이 너무 많습니다." }, 400);
+      for (const [channel, info] of entries) {
+        if (!Array.isArray(info?.ids) || info.ids.length > 200 || info.ids.some(id => typeof id !== "string" || id.length > 160)) return json({ error: "올바르지 않은 목록" }, 400);
+        if (info.since !== null && !(typeof info.since === "string" && Number.isFinite(Date.parse(info.since)))) return json({ error: "올바르지 않은 시각" }, 400);
+        present[text(channel, 100)] = { ids: info.ids, since: info.since };
+      }
+      const removed = applyMessageSync(room, present);
+      room.gmHeartbeatAt = Date.now();
+      await this.save(room);
+      if (removed.length) this.push("p", { type: "messages-removed", ids: removed });
+      return json({ removed: removed.length });
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();

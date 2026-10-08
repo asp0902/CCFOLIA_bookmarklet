@@ -466,6 +466,10 @@ function onPush(event) {
     if (current.messages.some(item => item.id === message.message.id)) return;
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
     renderState(current);
+  } else if (message.type === "messages-removed") {
+    const gone = new Set(Array.isArray(message.ids) ? message.ids : []);
+    current.messages = current.messages.filter(item => !gone.has(item.id));
+    renderState(current);
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);
