@@ -143,14 +143,24 @@ export class RoomRelay {
     room.capabilities ||= { chatRead: true, chatWrite: true, publicHandout: true };
     return room;
   }
+  // Returns "added", "updated" (same id, different content: the message was edited in CCFOLIA) or "" (unchanged / not usable).
   appendMessage(room, message) {
-    if (!message.id || room.seenMessageIds[message.id]) return false;
+    if (!message.id) return "";
+    if (room.seenMessageIds[message.id]) {
+      const existing = room.messages.find(item => item.id === message.id);
+      if (!existing || existing.origin !== "ccfolia") return "";
+      // stored messages from before the edited flag existed have none: that counts as false
+      if (["text", "color", "icon"].every(key => existing[key] === message[key]) && !existing.edited === !message.edited && JSON.stringify(existing.roll) === JSON.stringify(message.roll)) return "";
+      Object.assign(existing, { text: message.text, color: message.color, icon: message.icon, edited: message.edited });
+      if (message.roll) existing.roll = message.roll; else delete existing.roll;
+      return "updated";
+    }
     room.seenMessageIds[message.id] = Date.now();
     room.messages.push(message);
     if (room.messages.length > 300) room.messages.splice(0, room.messages.length - 300);
     const keep = new Set(room.messages.map(item => item.id));
     Object.keys(room.seenMessageIds).forEach(id => { if (!keep.has(id)) delete room.seenMessageIds[id]; });
-    return true;
+    return "added";
   }
   async fetch(request) {
     if (this.limited(request, new URL(request.url).pathname === "/api/join")) return json({ error: "요청이 너무 많습니다." }, 429);
@@ -321,7 +331,7 @@ export class RoomRelay {
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();
-      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color", "icon", "roll"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color", "icon", "roll", "edited"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const message = {
         id: text(body.id, 160).trim(),
         author: text(body.author, 80).trim() || "CCFOLIA",
@@ -331,14 +341,19 @@ export class RoomRelay {
         color: /^#[0-9a-fA-F]{3,8}$/.test(text(body.color, 20)) ? text(body.color, 20) : "",
         icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(text(body.icon, 600)) ? text(body.icon, 600) : "",
         createdAt: text(body.createdAt, 40) || new Date().toISOString(),
+        edited: body.edited === true,
       };
       // Dice result text (the message text is what was typed, e.g. 1d6) plus outcome flags (booleans).
       if (body.roll && typeof body.roll === "object") message.roll = { result: text(body.roll.result, 400), ...Object.fromEntries(["success", "failure", "critical", "fumble", "secret"].map(key => [key, body.roll[key] === true])) };
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
-      const added = this.appendMessage(room, message);
+      const result = this.appendMessage(room, message);
       room.gmHeartbeatAt = Date.now();
-      if (added) { await this.save(room); this.pushMessage(room, message); }
-      return json({ accepted: true, duplicate: !added });
+      if (result) {
+        await this.save(room);
+        if (result === "added") this.pushMessage(room, message);
+        else if (room.capabilities?.chatRead) this.push("p", { type: "message-updated", message: room.messages.find(item => item.id === message.id) });
+      }
+      return json({ accepted: true, duplicate: !result, updated: result === "updated" });
     }
     // The GM can change a participant's display name (it is used for their chat messages from then on).
     const renameMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/rename$/);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.36
+// @version      0.2.37
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.36";
+  const VERSION = "0.2.37";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -194,6 +194,7 @@
     return {
       // 참여자 웹 중계용: 귓속말 여부와 굴림 결과(성공·실패·시크릿). 패널 자신의 표시에는 쓰지 않는다.
       whisper: Array.isArray(to) ? to.length > 0 : !!to,
+      edited: !!msg?.edited,
       rollInfo: { result: String(roll.result || "").slice(0, 400), success: !!roll.success, failure: !!roll.failure, critical: !!roll.critical, fumble: !!roll.fumble, secret: !!roll.secret },
       id,
       name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
