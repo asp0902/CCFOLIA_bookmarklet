@@ -40,7 +40,7 @@ const roomFromPath = pathname => {
 };
 const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": `default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
+  "Content-Security-Policy": `default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; media-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -250,10 +250,13 @@ export class RoomRelay {
       const cdn = value => typeof value === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(value) ? value : "";
       const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(-100000, Math.min(100000, Number(value))) : fallback;
       const color = value => /^#[0-9a-fA-F]{3,8}$/.test(String(value || "")) ? String(value) : "";
+      const audio = value => cdn(value?.url) ? { url: cdn(value.url), name: text(value.name, 100), volume: Math.max(0, Math.min(1, Number.isFinite(Number(value.volume)) ? Number(value.volume) : 1)), repeat: value.repeat !== false } : null;
       room.scene = {
         backgroundUrl: cdn(body.backgroundUrl), foregroundUrl: cdn(body.foregroundUrl), backgroundColor: color(body.backgroundColor),
         fieldWidth: num(body.fieldWidth, 40), fieldHeight: num(body.fieldHeight, 20),
         fieldObjectFit: ["fill", "contain", "cover"].includes(body.fieldObjectFit) ? body.fieldObjectFit : "fill",
+        // CCFOLIA's own audio (BGM file and sound effect): CDN address only, volume 0..1.
+        media: audio(body.media), sound: audio(body.sound),
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))

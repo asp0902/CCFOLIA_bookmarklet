@@ -72,7 +72,8 @@ function stopPlayer() {
 function playBgm(bgm) {
   bgmLast = bgm || { state: "stopped" };
   const playing = bgmLast.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(bgmLast.videoId || "");
-  bgmBar.hidden = !playing;
+  refreshBgmBar();
+  ytPlaying = playing;
   document.getElementById("bgm-name").textContent = bgmLast.title || "BGM";
   if (bgmStopped && bgmStopped !== bgmLast.startedAt) bgmStopped = false; // a newer GM signal re-enables playback after a local stop
   const key = playing && !bgmStopped ? `${bgmLast.videoId}:${bgmLast.startedAt}` : "";
@@ -85,14 +86,53 @@ function playBgm(bgm) {
 }
 const volInput = document.getElementById("bgm-vol");
 const syncVol = () => { volInput.style.setProperty("--p", `${volInput.value}%`); };
-volInput.addEventListener("input", () => { bgmVolume = Number(volInput.value); syncVol(); try { ytPlayer?.setVolume(bgmVolume); } catch (_) {} });
+volInput.addEventListener("input", () => { bgmVolume = Number(volInput.value); syncVol(); applyRoomAudioVolume(); try { ytPlayer?.setVolume(bgmVolume); } catch (_) {} });
 syncVol();
 document.getElementById("bgm-mute").addEventListener("click", () => {
   bgmMuted = !bgmMuted;
   document.getElementById("bgm-mute-icon").setAttribute("d", bgmMuted ? MUTE_PATH : SPK_PATH);
+  applyRoomAudioVolume();
   try { bgmMuted ? ytPlayer?.mute() : ytPlayer?.unMute(); } catch (_) {}
 });
-document.getElementById("bgm-stop").addEventListener("click", () => { bgmStopped = bgmLast?.startedAt || true; bgmKey = ""; stopPlayer(); });
+document.getElementById("bgm-stop").addEventListener("click", () => {
+  bgmStopped = bgmLast?.startedAt || true; bgmKey = ""; stopPlayer();
+  for (const slot of Object.values(roomAudio)) if (slot.url) halted.add(slot.url); // the room's own audio stops too, until the GM sets a different file
+  syncRoomAudio(sceneData);
+});
+// Room audio: CCFOLIA's own BGM file (media) and effect / ambient sound (sound), played in two <audio> elements next to the YouTube BGM.
+// Volume = the room's volume x this bar's slider; mute and stop apply to both. A changed address starts from the beginning, none stops it.
+let ytPlaying = false;
+const roomAudio = { media: { el: null, url: "", cfg: null }, sound: { el: null, url: "", cfg: null } };
+const halted = new Set();
+const roomAudioOn = () => Object.values(roomAudio).some(slot => slot.url);
+function refreshBgmBar() {
+  bgmBar.hidden = !(ytPlaying || roomAudioOn());
+  if (!ytPlaying) document.getElementById("bgm-name").textContent = roomAudio.media.cfg?.name || roomAudio.sound.cfg?.name || "BGM";
+  playBtn.hidden = !blockedAudio;
+}
+let blockedAudio = false;
+const playBtn = document.createElement("button"); playBtn.type = "button"; playBtn.id = "bgm-play"; playBtn.hidden = true; playBtn.setAttribute("aria-label", "BGM 재생"); playBtn.title = "BGM 재생";
+playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+document.querySelector("#bgm-bar .bgm-row1").append(playBtn);
+playBtn.addEventListener("click", () => { blockedAudio = false; refreshBgmBar(); for (const slot of Object.values(roomAudio)) slot.el?.play().catch(() => { blockedAudio = true; refreshBgmBar(); }); });
+function applyRoomAudioVolume() {
+  for (const slot of Object.values(roomAudio)) if (slot.el && slot.cfg) { slot.el.volume = Math.max(0, Math.min(1, slot.cfg.volume * (bgmVolume / 100))); slot.el.muted = bgmMuted; }
+}
+function syncRoomAudio(scene) {
+  for (const kind of ["media", "sound"]) {
+    const slot = roomAudio[kind], cfg = scene?.[kind] || null;
+    if (!cfg || halted.has(cfg.url)) {
+      if (slot.el) { slot.el.pause(); slot.el.removeAttribute("src"); }
+      slot.url = ""; slot.cfg = null; continue;
+    }
+    slot.cfg = cfg; slot.el ||= new Audio(); slot.el.loop = cfg.repeat; applyRoomAudioVolume();
+    if (slot.url !== cfg.url) {
+      slot.url = cfg.url; slot.el.src = cfg.url; slot.el.currentTime = 0;
+      slot.el.play().catch(() => { blockedAudio = true; refreshBgmBar(); }); // autoplay blocked: the bar shows one play button
+    }
+  }
+  refreshBgmBar();
+}
 const seekInput = document.getElementById("bgm-seek");
 seekInput.addEventListener("pointerdown", () => { seekInput.dataset.dragging = "1"; });
 seekInput.addEventListener("input", () => { seekInput.style.setProperty("--p", `${seekInput.value / 10}%`); });
@@ -142,7 +182,7 @@ let sceneData = null;
 const moved = new Map(); // id -> { x, y, at }: a piece the participant just dropped, shown there until the GM's scene catches up
 const view = { zoom: 1, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
 function renderScene(scene) {
-  if (scene !== undefined) sceneData = scene;
+  if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); }
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
   const stage = box.parentElement;
   if (!sceneData) { box.hidden = true; return; }
