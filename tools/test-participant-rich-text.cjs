@@ -50,6 +50,12 @@ function encode(obj) {
   assert.equal(css.badShadow, '');
   assert.equal(css.badFamily, '');
   assert.equal(css.badDisplay, '');
+  // dice outcome flags become classes on the message row; secret dice show only their placeholder text
+  const rows = await page.evaluate(() => { renderState({ messages: [
+    { id: 'a', author: 'A', text: '1D100<=50 > 3 > 성공', channel: 'main', roll: { success: true } },
+    { id: 'b', author: 'A', text: '1D100<=50 > 100 > 펌블', channel: 'main', roll: { fumble: true, failure: true } },
+    { id: 'c', author: 'A', text: '시크릿 다이스', channel: 'main', roll: { secret: true } }], channels: [] }); return [...document.querySelectorAll('#messages li')].map(li => [li.className, li.querySelector('p').textContent]); });
+  assert.deepEqual(rows, [['roll-success', '1D100<=50 > 3 > 성공'], ['roll-fumble roll-failure', '1D100<=50 > 100 > 펌블'], ['roll-secret', '시크릿 다이스']]);
   await browser.close();
   console.log('participant rich text (envelope: bold, colour, size, align, extraCss) PASS');
 })().catch(error => { console.error(error); process.exit(1); });
