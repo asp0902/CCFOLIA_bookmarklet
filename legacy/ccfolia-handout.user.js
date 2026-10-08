@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.92
+// @version      0.1.93
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.92",
+    version: "0.1.93",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -673,6 +673,59 @@
     return (visible?.value || "").trim();
   }
 
+  // ===== 코코포리아 방장 판별 =====
+  // GM = 코코포리아의 방장. 저장소의 현재 룸 owner 가 로그인한 계정(IndexedDB firebaseLocalStorageDb) 중 하나의 uid 와 같으면 방장이다.
+  // (이 DB 에는 확장 자신의 익명 계정 기록도 같이 들어 있어서 "하나를 골라" 비교하지 않고 전부와 비교한다. roomMembers 의 role 은 실측상 전부 null.)
+  let ccfRole = { known: false, isOwner: false, reason: "확인 전" };
+  function computeCcfRole(room, uids) {
+    if (!room || !room.owner) return { known: false, isOwner: false, reason: "코코포리아 저장소에서 방 정보를 읽지 못함" };
+    if (!Array.isArray(uids) || !uids.length) return { known: false, isOwner: false, reason: "코코포리아 로그인 정보를 읽지 못함" };
+    return { known: true, isOwner: uids.includes(String(room.owner)), reason: "" };
+  }
+  function findCcfoliaStore() {
+    const root = document.getElementById("root") || document.body?.firstElementChild;
+    const containerKey = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+    const fiber = containerKey ? root[containerKey]?.stateNode?.current : null;
+    if (!fiber) return null;
+    const isStore = (v) => v && typeof v === "object" && typeof v.dispatch === "function" && typeof v.getState === "function" && typeof v.subscribe === "function";
+    const seen = new WeakSet();
+    let found = null;
+    const visit = (v) => { if (found || !v || typeof v !== "object" || seen.has(v)) return; seen.add(v); if (isStore(v)) found = v; };
+    const walk = (node, depth = 0) => {
+      if (found || !node || depth > 50) return;
+      visit(node.memoizedProps); visit(node.memoizedState); visit(node.stateNode);
+      if (node.memoizedProps?.store) visit(node.memoizedProps.store);
+      if (node.memoizedProps?.value) visit(node.memoizedProps.value);
+      walk(node.child, depth + 1); walk(node.sibling, depth + 1);
+    };
+    walk(fiber);
+    return found;
+  }
+  function readFirebaseAuthUids() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open("firebaseLocalStorageDb"); } catch (error) { resolve([]); return; }
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        try {
+          const all = req.result.transaction("firebaseLocalStorage", "readonly").objectStore("firebaseLocalStorage").getAll();
+          all.onsuccess = () => resolve((all.result || []).map((row) => String(row?.value?.uid || "")).filter(Boolean));
+          all.onerror = () => resolve([]);
+        } catch (error) { resolve([]); }
+      };
+    });
+  }
+  async function refreshCcfoliaRole() {
+    try {
+      const room = Object.values(findCcfoliaStore()?.getState()?.entities?.rooms?.entities || {})[0];
+      ccfRole = computeCcfRole(room, room ? await readFirebaseAuthUids() : []);
+    } catch (error) {
+      ccfRole = { known: false, isOwner: false, reason: "방장 확인 중 오류" };
+    }
+    if (!ccfRole.known) setTimeout(() => { if (!ccfRole.known && isActive()) refreshCcfoliaRole(); }, 3000); // 저장소가 늦게 채워질 수 있다
+    return ccfRole;
+  }
+
   function isAdminCharacter(name = getVisibleCharacterName()) {
     const admin = removeSpaces(state.data.myCharacter || "");
     if (!admin) return true;
@@ -680,6 +733,8 @@
   }
 
   function isAdminMode() {
+    // 코코포리아 방장을 알 수 있으면 그 결과가 진실이다(방장만 GM). 못 읽을 때만 아래의 예전 판별로 내려간다.
+    if (ccfRole.known) return ccfRole.isOwner;
     // 룸 GM 동기화 중이면 uid가 진실 — GM 본인은 발화 캐릭터와 무관하게 항상 admin (#84)
     if (remoteGmInfo?.gmUid && fbState?.uid) {
       return remoteGmInfo.gmUid === fbState.uid;
@@ -2294,6 +2349,29 @@
     catch (error) { /* quota */ }
   }
 
+  // 동기화 시작: Firebase 연결 + 구독 3종 + 방장 확인. 인사 팝업의 "확인"과 자동 연결(이미 동의한 룸)이 같은 함수를 쓴다.
+  let syncInfo = { reason: "시작 전" };
+  let syncStarting = null;
+  function startSync() {
+    if (syncStarting) return syncStarting;
+    refreshCcfoliaRole();
+    syncStarting = initFirebase().then((fb) => {
+      syncInfo = { reason: "" };
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]).then(() => fb);
+    }).catch((error) => {
+      syncInfo = { reason: String(error?.message || error).slice(0, 80) };
+      throw error;
+    }).finally(() => { syncStarting = null; });
+    return syncStarting;
+  }
+  // 이미 동의한 룸이면 팝업 없이 바로 연결한다(새로고침 후에도 동기화가 켜지도록).
+  function autoConnectSync() {
+    const room = getCurrentRoomKey();
+    if (room === "global") { syncInfo = { reason: "룸 밖" }; return Promise.resolve(null); }
+    if (!isGreeted(room) && !fbState) { syncInfo = { reason: "인사 팝업에서 확인을 누르지 않음" }; return Promise.resolve(null); }
+    return startSync().catch((error) => { console.warn("[ccf-handout] 자동 연결 실패:", error); return null; });
+  }
+
   function maybeShowGreeting() {
     const room = getCurrentRoomKey();
     const skipped = isSkippedToday();
@@ -2387,9 +2465,8 @@
       autoDetectMyCharacter().catch(() => {});
       toast("카피바라 툴킷이 활성화되었습니다.");
       // Firebase 연결 + 실시간 구독 (사용자 동의 후 자동)
-      initFirebase().then((fb) => {
+      startSync().then((fb) => {
         toast(`송신 채널 연결됨 (uid: ${fb.uid.slice(0, 8)}...)`);
-        return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]);
       }).catch((error) => {
         toast("송신 채널 연결 실패 — 콘솔 확인");
         console.error(error);
@@ -3434,8 +3511,11 @@
       const label = (c === current && !myChars.includes(c)) ? `${c} (저장됨)` : c;
       return `<option value="${escapeAttr(c)}" ${c === current ? "selected" : ""}>${escapeHtml(label)}</option>`;
     }).join("");
+    const syncLabel = fbState ? "연결됨" : `꺼짐(${syncInfo.reason || "이유 불명"})`;
+    const roleLabel = ccfRole.known ? (ccfRole.isOwner ? "GM(방장)" : "플레이어") : `확인 못 함(${ccfRole.reason}) — 예전 방식으로 판별 중`;
     return `
       <div class="field">
+        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)}</div>
         <label>GM 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
@@ -4021,7 +4101,8 @@
     if (me) {
       const gmUid = remoteGmInfo?.gmUid || "";
       const iAmGm = !!gmUid && !!fbState?.uid && gmUid === fbState.uid;
-      if (!gmUid || iAmGm) {
+      const allowGmPush = ccfRole.known ? ccfRole.isOwner : (!gmUid || iAmGm);
+      if (allowGmPush) {
         pushGmToFirestore(me).catch((error) => {
           console.warn("[ccf-handout] GM push 실패:", error);
         });
@@ -4766,11 +4847,8 @@
           state.myCharacterOptions = Array.isArray(d.myCharacterOptions) ? d.myCharacterOptions : [];
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
-          if (fbState) {
-            subscribeToRoomHandouts().catch(() => {});
-            subscribeToRoomShows().catch(() => {});
-            subscribeToRoomGm().catch(() => {});
-          }
+          autoConnectSync();
+          refreshCcfoliaRole();
         }).catch(() => {});
       }
     });
@@ -4792,11 +4870,8 @@
           state.myCharacterOptions = Array.isArray(d.myCharacterOptions) ? d.myCharacterOptions : [];
           resetChatSeenAuthorsForRoom(room);
           if (state.isOpen) render();
-          if (fbState) {
-            subscribeToRoomHandouts().catch(() => {});
-            subscribeToRoomShows().catch(() => {});
-            subscribeToRoomGm().catch(() => {});
-          }
+          autoConnectSync();
+          refreshCcfoliaRole();
         }).catch(() => {});
         }
       }, 50);
@@ -4908,6 +4983,7 @@
         setTimeout(() => autoDetectMyCharacter().catch(() => {}), 1000);
       }
       setTimeout(() => maybeShowGreeting(), 800);
+      autoConnectSync();
     }).catch(reportError);
   }
 
