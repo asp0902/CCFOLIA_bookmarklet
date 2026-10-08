@@ -49,12 +49,12 @@
     const messages = [].concat(...[...new Set(all.map(message => message.channel))].map(channel => all.filter(message => message.channel === channel).slice(-100))).map(message => ({
       id: clean(message.id, 160),
       author: clean(message.name, 80) || "CCFOLIA",
-      text: clean(message.roll || message.text, 4000),
+      text: clean(message.text || message.roll, 4000),
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
       channel: clean(message.channel, 100) || "main",
       color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
       icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(message.icon || "") ? message.icon : "",
-      roll: message.rollInfo ? { success: !!message.rollInfo.success, failure: !!message.rollInfo.failure, critical: !!message.rollInfo.critical, fumble: !!message.rollInfo.fumble, secret: !!message.rollInfo.secret } : undefined,
+      roll: message.rollInfo && (message.roll || message.rollInfo.secret) ? { result: clean(message.roll, 400), success: !!message.rollInfo.success, failure: !!message.rollInfo.failure, critical: !!message.rollInfo.critical, fumble: !!message.rollInfo.fumble, secret: !!message.rollInfo.secret } : undefined,
     })).filter(message => message.id && message.text);
     const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
     // What the GM still has, per tab, so the relay can drop messages that were deleted in CCFOLIA (only newer than the oldest one sent).

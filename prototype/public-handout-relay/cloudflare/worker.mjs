@@ -314,8 +314,8 @@ export class RoomRelay {
         icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(text(body.icon, 600)) ? text(body.icon, 600) : "",
         createdAt: text(body.createdAt, 40) || new Date().toISOString(),
       };
-      // Dice outcome flags only (booleans); the result text itself travels as the message text.
-      if (body.roll && typeof body.roll === "object") message.roll = Object.fromEntries(["success", "failure", "critical", "fumble", "secret"].map(key => [key, body.roll[key] === true]));
+      // Dice result text (the message text is what was typed, e.g. 1d6) plus outcome flags (booleans).
+      if (body.roll && typeof body.roll === "object") message.roll = { result: text(body.roll.result, 400), ...Object.fromEntries(["success", "failure", "critical", "fumble", "secret"].map(key => [key, body.roll[key] === true])) };
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const added = this.appendMessage(room, message);
       room.gmHeartbeatAt = Date.now();
