@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.65
+// @version      0.1.66
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.65"),
+    version: getUserscriptVersion("0.1.66"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1332,6 +1332,15 @@
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
 
+    // 서식이 하나도 없는 봉투(예: 롤20에서 넘어온 메시지의 출처 표시만 담은 것)는 오버레이도 바닥 고정도 하지 않는다.
+    // 네이티브 텍스트에 보이지 않는 문자만 붙어 있어 화면은 같고, 오버레이를 만들면 줄 높이가 바뀌어 네이티브 가상 리스트가 깜박이거나 스크롤이 중간에 멈춘다.
+    if (!runs.length && !alignRuns.length && !narration && !macro) {
+      removeRenderOverlay(el); // 가상 리스트가 서식 있던 노드를 재사용한 경우 이전 오버레이를 걷어낸다
+      el.setAttribute(CCF_RAW_ATTR, text);
+      el.setAttribute(CCF_RENDERED_ATTR, "1");
+      return;
+    }
+
     const bottomScrollState = isFirstRender ? captureBottomAnchoredMessageScroller(el) : null;
 
     el.setAttribute(CCF_RAW_ATTR, text);
@@ -1360,6 +1369,20 @@
   // (detached node가 아니라 여전히 라이브 DOM에 붙어있는 노드이므로) 정상적으로
   // characterData mutation이 발생하고, 기존 전역 MutationObserver가 이를 감지해
   // 재스캔(scanWithin) → 재렌더로 이어진다.
+  function removeRenderOverlay(el) {
+    const overlay = el.querySelector(":scope > .ccf-render-overlay");
+    if (!overlay) return;
+    const hidden = el.querySelector(":scope > .ccf-original-hidden");
+    overlay.remove();
+    if (hidden) {
+      while (hidden.firstChild) el.insertBefore(hidden.firstChild, hidden);
+      hidden.remove();
+    }
+    el.classList.remove("ccf-render-root");
+    el.removeAttribute("data-ccf-macro");
+    applyNarrationMessageLayout(el, false);
+  }
+
   function ensureRenderOverlay(el) {
     el.classList.add("ccf-render-root");
 

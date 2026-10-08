@@ -141,6 +141,23 @@ const tooltipMessage = (text, tooltipText) => message(text, [{ start: 0, end: te
     assert.equal(await page.evaluate(() => { const list = document.getElementById('list'); return Math.abs(list.scrollHeight - list.scrollTop - list.clientHeight) <= 1; }), true, 'still pinned to the bottom');
     assert.equal(await page.evaluate(() => document.getElementById('list').style.scrollBehavior), '', 'the scroller style is left untouched');
 
+    // ---- an envelope without any formatting (e.g. only the Roll20 source marker) gets no overlay and no scroll handling ----------
+    await build({ tooltips: [] });
+    await page.evaluate(([plain, styled]) => { document.getElementById('p1').textContent = plain; document.getElementById('p2').textContent = styled; }, [message('롤20에서 온 글', [], { source: 'roll20', sourceId: 'x' }), message('굵게 보통', [{ start: 0, end: 2, style: { bold: true } }])]);
+    await page.evaluate(() => { window.__scrollWrites = 0; });
+    await page.addScriptTag({ content: source });
+    await page.waitForFunction(() => document.getElementById('p2').classList.contains('ccf-render-root'), null, { timeout: 5000 });
+    const plainState = await state('p1');
+    const visible = value => value.replace(/[​-‍⁠-⁤]/g, ''); // the envelope's invisible characters are part of innerText but not of what is seen
+    assert.deepEqual([plainState.overlays, plainState.root, visible(plainState.shown)], [0, false, '롤20에서 온 글'], 'a formatting-free envelope is left as plain native text');
+    assert.equal((await state('p2')).overlays, 1, 'a message with formatting still gets its overlay');
+    // a node that showed a styled message and is reused for a formatting-free one loses its overlay
+    await setNode('p2', message('이제 일반', [], { source: 'roll20' }));
+    await page.waitForFunction(() => !document.getElementById('p2').classList.contains('ccf-render-root'), null, { timeout: 3000 });
+    const reused = await state('p2');
+    assert.deepEqual([reused.overlays, reused.root, visible(reused.shown)], [0, false, '이제 일반']);
+    assert.equal(await page.evaluate(() => document.getElementById('p2').querySelectorAll('.ccf-original-hidden').length), 0);
+
     console.log('format-sync lifecycle: stale overlay removed on element reuse (3 rounds), tooltips visible/unclipped/no scroll growth, no needless scroll writes PASS');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
