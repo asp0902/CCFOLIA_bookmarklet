@@ -347,14 +347,14 @@ export class RoomRelay {
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);
       const body = await request.json();
-      if (Object.keys(body).some(key => !["clientMessageId", "text", "channel"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["clientMessageId", "text", "channel", "characterId"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const clientMessageId = text(body.clientMessageId, 100).trim();
       const messageText = text(body.text, 2_000).trim();
       if (!clientMessageId || !messageText) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const existing = room.commands.find(command => command.participantId === member.id && command.clientMessageId === clientMessageId);
       if (existing) return json({ accepted: true, commandId: existing.id, duplicate: true }, 202);
       const channel = (room.channels || []).some(item => item.id === body.channel) ? body.channel : "main";
-      const command = { id: token(), type: "chat.send", channel, participantId: member.id, displayName: member.displayName, clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
+      const command = { id: token(), type: "chat.send", channel, participantId: member.id, displayName: member.displayName, characterId: /^[\w-]{1,100}$/.test(String(body.characterId)) ? String(body.characterId) : "", clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);
@@ -367,6 +367,18 @@ export class RoomRelay {
       const x = Number(body.x), y = Number(body.y);
       if (!["character", "item"].includes(body.kind) || !/^[\w-]{1,100}$/.test(String(body.id)) || !(Math.abs(x) <= 10_000) || !(Math.abs(y) <= 10_000)) return json({ error: "올바르지 않은 이동 요청" }, 400);
       const command = { id: token(), type: "piece.move", kind: body.kind, pieceId: String(body.id), x, y, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
+      room.commands.push(command);
+      if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
+      await this.save(room);
+      this.push("gm", { type: "command", command });
+      return json({ accepted: true, commandId: command.id }, 202);
+    }
+    if (request.method === "POST" && /\/status\/set$/.test(url.pathname)) {
+      if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
+      const body = await request.json();
+      const index = Number(body.index), value = Number(body.value);
+      if (!/^[\w-]{1,100}$/.test(String(body.characterId)) || !Number.isInteger(index) || index < 0 || index > 7 || !(Math.abs(value) <= 1_000_000)) return json({ error: "올바르지 않은 상태값 요청" }, 400);
+      const command = { id: token(), type: "status.set", characterId: String(body.characterId), index, value, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);

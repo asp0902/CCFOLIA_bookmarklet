@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.26
+// @version      0.2.27
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.26";
+  const VERSION = "0.2.27";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1021,7 +1021,7 @@
     };
   }
 
-  async function sendMessage(text, channel = currentChannel) {
+  async function sendMessage(text, channel = currentChannel, speaker = null) {
     const ctx = await getAuthContext();
     const template = await fetchTemplateFields(ctx);
     const fields = {};
@@ -1050,11 +1050,13 @@
     fields.text = { stringValue: outText };
     fields.channel = { stringValue: channel };
     // 화자를 골랐으면 이름·아이콘·색을 그 캐릭터로 바꾼다(from 은 내 uid 유지).
-    if (selectedChar) {
-      fields.name = { stringValue: selectedChar.name };
-      fields.iconUrl = { stringValue: selectedChar.icon };
-      fields.imageUrl = { stringValue: selectedChar.icon };
-      fields.color = { stringValue: colorOverride || selectedChar.color || "#888888" };
+    // speaker(참여자 웹 중계)가 있으면 패널의 화자 선택 대신 그 값을 쓴다(아이콘 없으면 GM 아이콘이 새지 않게 비운다).
+    const who = speaker || selectedChar;
+    if (who) {
+      fields.name = { stringValue: who.name };
+      fields.iconUrl = { stringValue: who.icon || "" };
+      fields.imageUrl = { stringValue: who.icon || "" };
+      fields.color = { stringValue: (speaker ? "" : colorOverride) || who.color || "#888888" };
     } else if (colorOverride) {
       fields.color = { stringValue: colorOverride };
     }
@@ -3072,12 +3074,30 @@
         });
         if (!response.ok) throw new Error(`이동 실패 (${response.status})`);
       },
-      relaySend: (displayName, text, channel) => {
-        const name = String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
+      // characterId 가 있으면 그 캐릭터의 이름·아이콘·색으로, 없으면 참여자 이름만 달아 보낸다.
+      relaySend: (displayName, text, channel, characterId) => {
         const body = String(text || "").trim().slice(0, 2000);
         if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
         const target = listChannels().includes(channel) ? channel : "main";
-        return sendMessage(`[참여자 웹 · ${name}] ${body}`, target);
+        const c = characterId ? findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId] : null;
+        if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
+        const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
+        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : "", color: c ? c.color : "" });
+      },
+      // 참여자가 고친 캐릭터 상태값(index 번째 칸의 value)을 코코포리아에 반영한다. 배열째 다시 쓴다.
+      relaySetStatus: async (characterId, index, value) => {
+        const c = findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId];
+        const list = Array.isArray(c?.status) ? c.status : [];
+        if (!c || c.secret || c.invisible || c.locked || c.freezed || !list[index] || !Number.isFinite(value)) throw new Error("바꿀 수 없는 상태값입니다.");
+        const status = list.map((st, i) => (i === index ? { ...st, value } : st));
+        const ctx = await getAuthContext();
+        const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/characters/${encodeURIComponent(characterId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt`;
+        const response = await fetch(url, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ fields: { status: toFirestoreValue(status), updatedAt: { timestampValue: new Date().toISOString() } } })
+        });
+        if (!response.ok) throw new Error(`상태값 변경 실패 (${response.status})`);
       },
       // 메시지를 못 읽을 때: 저장소가 실제로 어떤 모양인지 확인용.
       storeDiag() {
