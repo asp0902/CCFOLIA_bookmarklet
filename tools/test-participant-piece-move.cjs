@@ -57,6 +57,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.mouse.move(flippedBox.x + 10, flippedBox.y + 10); await page.mouse.down(); await page.mouse.move(flippedBox.x + 60, flippedBox.y + 40); await page.mouse.up();
   await page.waitForTimeout(300);
   assert.equal(sent.length, before, 'dragging a flipped card sends no move');
+  // layers: a character (stored z 0) is above an item and a marker (stored z 1), like in CCFOLIA (character 100 + z, others z)
+  await page.evaluate(img => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill',
+    items: [{ id: 'it', x: 0, y: 0, z: 1, angle: 0, width: 4, height: 4, imageUrl: img }],
+    markers: [{ id: 'mk', x: 0, y: 0, z: 1, angle: 0, width: 4, height: 4, imageUrl: img }],
+    characters: [{ id: 'ch', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: img, status: [] }] }), img);
+  const order = await page.evaluate(() => [...document.querySelectorAll('#scene-field img')].map(i => ({ id: i.dataset.id || 'marker', z: Number(i.style.zIndex) })).sort((a, b) => a.z - b.z).map(x => x.id));
+  assert.deepEqual(order, ['it', 'marker', 'ch'], 'item, then marker, then the character on top');
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });
