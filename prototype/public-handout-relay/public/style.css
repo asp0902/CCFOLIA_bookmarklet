@@ -104,7 +104,7 @@ main{padding:0}
 #scene[hidden]{display:none}
 #scene-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(8px)}
 #scene-field{position:absolute;inset:0}
-#scene-field img{user-select:none;pointer-events:none}
+#scene-field img{user-select:none;pointer-events:none}#scene-field img[data-id]{pointer-events:auto;cursor:move}
 .stage>#handout{position:relative;z-index:50}
 
 /* Status panel (top-left of the stage): measured on ccfolia.com — avatar 40px, bars 96x16 (track opacity .38 + fill), 14px 800 #424242. */

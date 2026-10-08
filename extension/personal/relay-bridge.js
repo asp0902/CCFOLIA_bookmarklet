@@ -137,7 +137,7 @@
     own.onerror = () => {};
   }
   async function handleCommand(command) {
-    if (command?.type !== "chat.send" || !command.id) return;
+    if (!["chat.send", "piece.move"].includes(command?.type) || !command.id) return;
     if (inFlight.has(command.id)) return; // already handed to the page; its result will acknowledge it
     if (config.delivered.has(command.id)) { await ack(command.id, "delivered"); return; }
     inFlight.add(command.id);
