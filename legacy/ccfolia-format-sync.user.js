@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.66
+// @version      0.1.67
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.66"),
+    version: getUserscriptVersion("0.1.67"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4514,9 +4514,14 @@
     for (const composer of composers) {
       ensureInlineToolbarForComposer(composer);
     }
-    for (const dialog of findEditMessageDialogBars()) {
+    const editDialogs = findEditMessageDialogBars();
+    for (const dialog of editDialogs) {
       ensureInlineToolbarForEditDialog(dialog);
     }
+    document.querySelectorAll('[data-ccf-edit-dialog="1"]').forEach((el) => {
+      const root = el.closest('[role="dialog"], .MuiDialog-root') || el;
+      if (!editDialogs.some((dialog) => dialog === root || dialog.contains(root) || root.contains(dialog))) unmarkEditDialog(root);
+    });
   }
 
   function ensureInlineToolbarForEditDialog(dialog) {
@@ -4815,11 +4820,27 @@
     }
   }
 
+  // 덮어쓰기 전의 인라인 값을 기억해 두어 편집 팝업이 아니었다고 판명되면 되돌릴 수 있게 한다.
+  const FORCED_STYLES = new Map();
   function forceStyle(el, styleMap) {
     if (!(el instanceof HTMLElement)) return;
+    let saved = FORCED_STYLES.get(el);
+    if (!saved) { saved = new Map(); FORCED_STYLES.set(el, saved); }
     Object.keys(styleMap).forEach((prop) => {
+      if (!saved.has(prop)) saved.set(prop, [el.style.getPropertyValue(prop), el.style.getPropertyPriority(prop)]);
       el.style.setProperty(prop, styleMap[prop], "important");
     });
+  }
+
+  function restoreForcedStyles(root, paper) {
+    for (const [el, saved] of FORCED_STYLES) {
+      if (!el.isConnected) { FORCED_STYLES.delete(el); continue; }
+      if (!(root.contains(el) || el === paper)) continue;
+      saved.forEach(([value, priority], prop) => {
+        if (value) el.style.setProperty(prop, value, priority); else el.style.removeProperty(prop);
+      });
+      FORCED_STYLES.delete(el);
+    }
   }
 
   function hydrateEditDialogStateFromEnvelope(editor) {
@@ -4872,11 +4893,31 @@
       if (dialog.id === MODAL_ID || dialog.querySelector(`#${MODAL_ID}`)) return;
       if (!isVisible(dialog)) return;
       const textarea = dialog.querySelector('textarea[name="text"]');
-      if (textarea instanceof HTMLElement && isVisible(textarea)) {
+      if (textarea instanceof HTMLElement && isVisible(textarea) && isMessageEditDialog(dialog)) {
         result.push(dialog);
       }
     });
     return result;
+  }
+
+  // 채팅 메시지 편집 팝업만 대상이다. 실측(ccfolia 1.37.5): 이 팝업의 입력 요소는 본문 textarea[name="text"] 하나와 이름 없는 자동 높이용 숨은 textarea 뿐이고
+  // input·select 가 없다. 마커/스크린 패널 설정 팝업은 폭·높이·겹침 우선도 같은 input 이 함께 있으면서 메모 칸도 textarea[name="text"] 라서 이전 판정에 걸렸다.
+  // 우리가 넣은 서식 툴바의 input(색·크기)은 세지 않는다.
+  function isMessageEditDialog(dialog) {
+    const controls = [...dialog.querySelectorAll("input, select, textarea")].filter((control) => !control.closest(INLINE_TOOLBAR_SELECTOR));
+    if (controls.some((control) => control.tagName !== "TEXTAREA")) return false;
+    const named = controls.filter((control) => control.getAttribute("name"));
+    return named.length === 1 && named[0].getAttribute("name") === "text";
+  }
+
+  // 편집 팝업으로 잘못 표시됐거나 더 이상 편집 팝업이 아니게 된 팝업을 네이티브 상태로 되돌린다(툴바·속성·우리가 덮어쓴 인라인 스타일 제거).
+  function unmarkEditDialog(root) {
+    root.querySelectorAll('[data-ccf-dialog-toolbar]').forEach((toolbar) => toolbar.remove());
+    const marked = [root, ...root.querySelectorAll('[data-ccf-edit-dialog="1"]')];
+    const paper = root.closest('.MuiDialog-paper');
+    if (paper) marked.push(paper);
+    marked.forEach((el) => el.removeAttribute("data-ccf-edit-dialog"));
+    restoreForcedStyles(root, paper);
   }
 
   function cleanupOrphanInlineToolbars() {
