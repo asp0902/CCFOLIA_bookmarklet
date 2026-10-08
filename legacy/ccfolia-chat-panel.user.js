@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.32
+// @version      0.2.33
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.32";
+  const VERSION = "0.2.33";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3018,6 +3018,12 @@
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
       // 웹 공유(릴레이): 모든 탭의 메시지를 channel 과 함께, 탭 목록은 relayChannels 로 넘긴다.
+      // 로그 내보내기용(카피바라 로그): 이전 대화를 끝까지(또는 maxPages 쪽) 불러온 뒤 모든 탭의 메시지를 channel 과 함께 돌려준다.
+      // 실패해도 예외 없이 저장소에 있는 것만 돌려준다. 귓속말 등은 거르지 않는다(저장소에 있다 = 본인이 볼 수 있는 메시지).
+      relayLoadAllMessages: async (maxPages = 50) => {
+        try { for (let page = 0; page < maxPages; page += 1) { if (!(await loadOlderMessages())) break; } } catch (error) { /* 있는 것만 */ }
+        return listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => ({ ...message, channel })));
+      },
       // 저장소가 아직 없으면 null(로딩 중에 빈 목록으로 오해해 참여자 쪽 로그를 지우지 않게).
       relayMessages: () => !getRoomMessagesSlice() ? null : listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => relayView(message, channel)).filter(Boolean)),
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
