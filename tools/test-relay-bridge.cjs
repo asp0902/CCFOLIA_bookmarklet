@@ -114,18 +114,18 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
 
   // Commands: only chat.send forwarded; marked attempted BEFORE dispatch; replay -> ack only.
   {
-    const h = createHarness({ commands: [{ id: 'c1', type: 'chat.send', text: 'hi' }, { id: 'c2', type: 'other.thing' }] });
+    const h = createHarness({ commands: [{ id: 'c1', type: 'chat.send', text: 'hi' }, { id: 'c2', type: 'other.thing' }, { id: 'c3', type: 'piece.move', kind: 'item', pieceId: 'p1', x: 1, y: 2 }] });
     await h.page('ready');
-    assert.equal(h.state.posted.length, 1, 'only chat.send dispatched');
+    assert.deepEqual(h.state.posted.map(p => p.command.id), ['c1', 'c3'], 'only chat.send and piece.move dispatched');
     assert.equal(h.state.posted[0].command.id, 'c1');
     assert.equal(h.state.posted[0].action, 'command');
     assert(h.state.storeAtPost[0].includes('c1'), 'delivered id persisted before dispatch');
     await h.poll();
-    assert.equal(h.state.posted.length, 1, 'duplicate command is not re-dispatched');
+    assert.equal(h.state.posted.length, 2, 'duplicate command is not re-dispatched');
     assert.equal(h.callsTo(/\/commands\/c1\/ack$/).length, 0, 'a command still in flight is not acknowledged by a later poll');
     await h.page('commandResult', { commandId: 'c1', status: 'delivered' });
     await h.poll();
-    assert.equal(h.state.posted.length, 1, 'finished command is not re-dispatched');
+    assert.equal(h.state.posted.length, 2, 'finished command is not re-dispatched');
     const acks = h.callsTo(/\/commands\/c1\/ack$/);
     assert.equal(acks.length, 2, 'result ack + idempotent re-ack on replay');
     assert.deepEqual(acks[0].body, { status: 'delivered', error: '' });

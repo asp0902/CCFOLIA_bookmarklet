@@ -138,7 +138,8 @@ let handoutSeen = "", handoutClosed = "";
 // The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
 // the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
 let sceneData = null;
-const view = { zoom: 1, x: 0, y: 0 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
+const moved = new Map(); // id -> { x, y, at }: a piece the participant just dropped, shown there until the GM's scene catches up
+const view = { zoom: 1, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
 function renderScene(scene) {
   if (scene !== undefined) sceneData = scene;
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
@@ -150,6 +151,7 @@ function renderScene(scene) {
   bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
   const w = stage.clientWidth, h = stage.clientHeight;
   const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight) * view.zoom;
+  view.unit = unit;
   const place = (el, x, y, width, height, angle, z) => {
     el.style.position = "absolute";
     el.style.left = `${(w / 2) + view.x + x * unit}px`; el.style.top = `${(h / 2) + view.y + y * unit}px`;
@@ -164,9 +166,12 @@ function renderScene(scene) {
     img.style.objectFit = s.fieldObjectFit; img.style.zIndex = "1"; nodes.push(img);
   }
   // Pieces store x/y in grid units, characters in pixels at zoom 1 (24px = 1 unit); sizes are in grid units for both.
-  const all = [...(s.items || []).map(item => ({ ...item, unitsXY: true })), ...(s.characters || [])];
+  const all = [...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
   for (const item of all.sort((a, b) => a.z - b.z)) {
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
+    const drop = moved.get(item.id);
+    if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
+    if (item.id && !item.locked) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, item.z);
     img.style.objectFit = "fill"; nodes.push(img);
   }
@@ -219,16 +224,33 @@ window.addEventListener("resize", () => renderScene());
     zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX - rect.left - rect.width / 2, event.clientY - rect.top - rect.height / 2);
   }, { passive: false });
   let drag = null;
+  let piece = null; // a movable piece being dragged (drawn only until drop; one command is sent on release)
   stage.addEventListener("pointerdown", event => {
     if (event.button !== 0 || interactive(event.target)) return;
+    if (event.target.dataset?.id) { piece = { el: event.target, x: event.clientX, y: event.clientY, dx: 0, dy: 0 }; stage.setPointerCapture?.(event.pointerId); return; }
     drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
     stage.setPointerCapture?.(event.pointerId); stage.classList.add("panning");
   });
   stage.addEventListener("pointermove", event => {
+    if (piece) { piece.dx = event.clientX - piece.x; piece.dy = event.clientY - piece.y; piece.el.style.translate = `${piece.dx}px ${piece.dy}px`; return; }
     if (!drag) return;
     view.x = drag.vx + event.clientX - drag.x; view.y = drag.vy + event.clientY - drag.y; redraw();
   });
-  const endDrag = () => { drag = null; stage.classList.remove("panning"); };
+  const dropPiece = async () => {
+    const { el, dx, dy } = piece; piece = null;
+    if (Math.abs(dx) + Math.abs(dy) < 4) { el.style.translate = ""; return; } // a click, not a move
+    const { kind, id } = el.dataset, isChar = kind === "character";
+    const k = (isChar ? 24 : 1) / view.unit; // screen px -> the piece's own unit (characters: px at zoom 1, items: grid cells)
+    const round = v => isChar ? Math.round(v) : Math.round(v * 100) / 100;
+    const x = round(Number(el.dataset.x) + dx * k), y = round(Number(el.dataset.y) + dy * k);
+    moved.set(id, { x, y, at: Date.now() });
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/pieces/move`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, x, y }) });
+      if (!response.ok) throw new Error("이동 요청 실패");
+    } catch (_) { moved.delete(id); }
+    renderScene();
+  };
+  const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
   stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
