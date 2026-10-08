@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.41
+// @version      0.2.42
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.41";
+  const VERSION = "0.2.42";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -269,7 +269,8 @@
   // 참여자에게 내보내는 스크린 패널(아이템). 뒤집힌 카드(closed)는 뒷면(coverImageUrl)만 내보내고 앞면 주소는 절대 보내지 않는다. 뒷면이 없으면 제외.
   // 실측(ccfolia 1.37.5): 뒤집힌 카드는 화면에 뒷면 이미지만 그려진다. url·num 은 relayScene 의 검사 함수(CDN 주소만 통과 / 숫자 정리).
   function relayItemView(item, url, num) {
-    if (!item || item.visible === false) return null;
+    // 숨긴 패널은 보내지 않는다. 실측(ccfolia 1.37.5): 필드에 그려지는 패널은 active 가 true 인 것뿐이고(10개 중 active true 2개만 그려짐), active 가 false 인 것은 visible 이 true 여도 그려지지 않는다.
+    if (!item || item.visible === false || item.active === false) return null;
     const image = item.closed ? url(item.coverImageUrl) : url(item.imageUrl);
     if (!image) return null;
     return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image };
@@ -3200,7 +3201,7 @@
         const isChar = kind === "character";
         const doc = (isChar ? ent?.roomCharacters : ent?.roomItems)?.entities?.[id];
         if (!doc) throw new Error("대상을 찾지 못했습니다.");
-        if (doc.locked || doc.freezed || (isChar ? doc.secret || doc.invisible : doc.visible === false || doc.closed)) throw new Error("옮길 수 없는 말입니다.");
+        if (doc.locked || doc.freezed || (isChar ? doc.secret || doc.invisible : doc.visible === false || doc.active === false || doc.closed)) throw new Error("옮길 수 없는 말입니다.");
         const num = (v) => (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v });
         const ctx = await getAuthContext();
         const mask = ["x", "y", "updatedAt"].map((f) => `updateMask.fieldPaths=${f}`).join("&");

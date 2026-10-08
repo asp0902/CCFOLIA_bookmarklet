@@ -12,10 +12,15 @@ const CDN = 'https://storage.ccfolia-cdn.net/';
 const url = v => (typeof v === 'string' && v.startsWith(CDN) ? v : '');
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const plain = x => JSON.parse(JSON.stringify(x));
-const base = { _id: 'i1', x: -6, y: -8, z: 1, angle: 0, width: 17, height: 17, imageUrl: `${CDN}front.png`, coverImageUrl: null, visible: true, closed: false, locked: false, freezed: false };
+const base = { _id: 'i1', x: -6, y: -8, z: 1, angle: 0, width: 17, height: 17, imageUrl: `${CDN}front.png`, coverImageUrl: null, visible: true, active: true, closed: false, locked: false, freezed: false };
 // an open card shows its front
 assert.equal(relayItemView(base, url, num).imageUrl, `${CDN}front.png`);
 assert.equal(relayItemView(base, url, num).closed, false);
+// a hidden panel (active false: not on the field, even though visible is true) is never sent; active true is
+assert.equal(relayItemView({ ...base, active: false }, url, num), null, 'a panel the GM did not put on the field is not sent');
+assert.equal(relayItemView({ ...base, active: false, closed: true, coverImageUrl: `${CDN}back.png` }, url, num), null, 'nor its back');
+assert.equal(relayItemView({ ...base, active: true }, url, num).imageUrl, `${CDN}front.png`);
+assert.notEqual(relayItemView({ ...base, active: undefined }, url, num), null, 'a record without the field is treated as on the field');
 // a flipped card: the back only, and the front address appears nowhere in what is sent
 const flipped = plain(relayItemView({ ...base, closed: true, coverImageUrl: `${CDN}back.png` }, url, num));
 assert.equal(flipped.imageUrl, `${CDN}back.png`); assert.equal(flipped.closed, true); assert.equal(flipped.locked, true, 'a flipped card cannot be moved by a participant');
