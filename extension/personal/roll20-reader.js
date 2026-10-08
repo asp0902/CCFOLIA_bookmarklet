@@ -2,6 +2,12 @@
 // linked CCFOLIA room tab (storage r20Link). One direction only (Roll20 -> CCFOLIA). Whispers, GM-only and system lines are never sent.
 (() => {
   "use strict";
+  // The campaign page remembers its number in this tab's sessionStorage; the game screen of the same tab reads it back. It survives page and extension
+  // reloads, disappears with the tab and is never shared with other tabs.
+  const STORE_KEY = "capybaraR20Campaign";
+  const onCampaignPage = /^\/campaigns\/(?:details|join)\/(\d+)/.exec(location.pathname);
+  if (onCampaignPage) { try { sessionStorage.setItem(STORE_KEY, onCampaignPage[1]); } catch (_) {} return; }
+  const storedCampaign = () => { try { return sessionStorage.getItem(STORE_KEY) || ""; } catch (_) { return ""; } };
   const clean = (value, max) => String(value || "").replace(/\u0000/g, "").trim().slice(0, max);
   const SKIP = ".whisper, .private, .system";
   const seen = new Set();
@@ -9,7 +15,7 @@
   const startedAt = Date.now(); // the chat history fills in shortly after load; anything seen in the first seconds is history and never sent
   // The editor URL is the same for every campaign; the campaign id is in an inline script of the page (campaign_id = 123).
   let campaignId = "";
-  const findCampaignId = () => campaignId ||= [...document.scripts].map(s => s.textContent.match(/campaign_id\s*=\s*(\d+)/)?.[1]).find(Boolean) || "";
+  const findCampaignId = () => campaignId ||= [...document.scripts].map(s => s.textContent.match(/campaign_id\s*=\s*(\d+)/)?.[1]).find(Boolean) || storedCampaign();
   // The speaker's picture (https only, 500 chars). It is read before the avatar node is removed from the text below.
   let lastAvatar = "";
   const avatarOf = el => {
