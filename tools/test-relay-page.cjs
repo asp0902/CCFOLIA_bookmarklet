@@ -103,4 +103,15 @@ const panel = (messages, subscribers) => ({
   assert.equal(page.state.posted.filter(message => message.action === 'ready').at(-1).roomId, 'R8', 'moving to another room announces the new one');
   assert.equal(page.snapshots().at(-1).roomId, 'R8');
 }
+// Store not ready (relayMessages returns null) -> nothing is sent; otherwise the snapshot says what the GM still has per tab.
+{
+  let ready = false;
+  const page = createPage({ api: { relayMessages: () => ready ? [{ id: 'p', name: 'GM', text: 'hi', at: Date.parse('2026-01-01T00:00:05Z'), channel: 'main' }, { id: 'q', name: 'GM', text: 'yo', at: Date.parse('2026-01-01T00:00:02Z'), channel: 'main' }] : null, relayChannels: () => [{ id: 'main', label: '메인' }, { id: 'info', label: '정보' }] } });
+  const before = page.snapshots().length;
+  page.state.intervals[0]();
+  assert.equal(page.snapshots().length, before, 'store not ready -> no snapshot (an empty list would delete everything)');
+  ready = true;
+  page.state.intervals[0]();
+  assert.deepEqual(JSON.parse(JSON.stringify(page.snapshots().at(-1).present)), { main: { ids: ['p', 'q'], since: '2026-01-01T00:00:02.000Z' }, info: { ids: [], since: null } });
+}
 console.log('relay-page: store-driven snapshots (debounced), late subscription, polling fallback, room changes passed');
