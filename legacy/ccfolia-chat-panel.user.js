@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.40
+// @version      0.2.41
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.40";
+  const VERSION = "0.2.41";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -52,6 +52,23 @@
   let pinnedToBottom = true;
   let openCharListFn = null; // 화자(캐릭터) 선택 목록을 여는 함수 — ` 키로 부른다
   let selectedChar = null; // 화자로 고른 캐릭터 {name, icon, color, commands} 또는 null
+  let renderSpeakerHook = null; // 화자 바를 다시 그리는 함수(저장소가 바뀔 때 refreshSelectedChar 와 함께 부른다)
+  // 화자 미선택으로 보낼 때의 이름 색. 실측(ccfolia 1.37.5): 네이티브 입력창의 색 버튼 기본값(#cce5df)이고, 캐릭터 없이 이름만 쳐서 보낸 메시지도 이 색이다.
+  const NATIVE_DEFAULT_NAME_COLOR = "#cce5df";
+  // 전송 색: 화자(캐릭터)가 있으면 색상 버튼 덮어쓰기 > 그 캐릭터 색 > #888888(색 없는 캐릭터의 네이티브 값), 없으면 덮어쓰기 > 네이티브 기본값.
+  // 이전에는 화자가 없으면 본뜬 템플릿(내 최근 메시지)의 색, 곧 다른 캐릭터의 색이 그대로 나갔다.
+  function sendColor(who, speaker, colorOverride) {
+    if (who) return (speaker ? "" : colorOverride) || who.color || "#888888";
+    return colorOverride || NATIVE_DEFAULT_NAME_COLOR;
+  }
+  // 화자로 고른 캐릭터는 고를 때의 스냅샷이다. 코코포리아에서 이름·아이콘·색·팔레트를 바꿨으면 저장소의 최신 값으로 갱신한다(없어졌으면 스냅샷 유지). 바뀌면 true.
+  function refreshSelectedChar() {
+    if (!selectedChar?.id) return false;
+    const fresh = readCharacters().find((c) => c.id === selectedChar.id);
+    if (!fresh || ["name", "icon", "color", "commands"].every((key) => fresh[key] === selectedChar[key])) return false;
+    selectedChar = fresh;
+    return true;
+  }
   let speakerPaletteBtn = null; // 팔레트·색상·도움말 아이콘 늦은 복제 재시도용
   let speakerColorBtn = null;
   let speakerHelpBtn = null;
@@ -1150,15 +1167,14 @@
     fields.channel = { stringValue: channel };
     // 화자를 골랐으면 이름·아이콘·색을 그 캐릭터로 바꾼다(from 은 내 uid 유지).
     // speaker(참여자 웹 중계)가 있으면 패널의 화자 선택 대신 그 값을 쓴다(아이콘 없으면 GM 아이콘이 새지 않게 비운다).
+    if (!speaker) refreshSelectedChar(); // 전송 순간의 최신 캐릭터 값
     const who = speaker || selectedChar;
     if (who) {
       fields.name = { stringValue: who.name };
       fields.iconUrl = { stringValue: who.icon || "" };
       fields.imageUrl = { stringValue: who.icon || "" };
-      fields.color = { stringValue: (speaker ? "" : colorOverride) || who.color || "#888888" };
-    } else if (colorOverride) {
-      fields.color = { stringValue: colorOverride };
     }
+    fields.color = { stringValue: sendColor(who, speaker, colorOverride) };
     // 순수 주사위/CC 판정이면 위에서 계산한 rolled 를 extend.roll 로. 아니면 빈 extend
     // (템플릿이 판정 메시지였을 때 직전 판정이 반복돼 나가는 것 방지).
     fields.extend = toFirestoreValue(rolled || {});
@@ -1895,6 +1911,11 @@
       colorOverride = "";
       colorBtn.style.color = /^#[0-9a-f]{6}$/i.test(selectedChar?.color || "") ? selectedChar.color : "";
     };
+    renderSpeakerHook = () => { // 색상 버튼 덮어쓰기는 화자를 바꿀 때만 지우므로, 저장소 갱신으로 다시 그릴 때는 보존한다
+      const keep = colorOverride;
+      renderSpeaker();
+      if (keep) { colorOverride = keep; colorBtn.style.color = keep; }
+    };
     let charListSig = ""; // 열린 목록의 캐릭터 구성 서명(변화 감지용)
     const buildCharList = () => {
       charList.textContent = "";
@@ -2437,7 +2458,7 @@
       window.setTimeout(() => { if (panelEl) subscribeStore(); }, 800);
       return;
     }
-    unsubscribe = store.subscribe(queueRender);
+    unsubscribe = store.subscribe(() => { if (refreshSelectedChar()) renderSpeakerHook?.(); queueRender(); });
   }
 
   function unsubscribeStore() {
