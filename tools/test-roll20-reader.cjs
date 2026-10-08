@@ -7,7 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const code = fs.readFileSync(path.join(__dirname, '..', 'extension', 'personal', 'roll20-reader.js'), 'utf8');
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   const page = await browser.newPage();
-  await page.setContent('<div id="textchat"><div class="content"><div class="message general" data-messageid="old"><span class="by">GM:</span>history</div></div></div>');
+  await page.setContent('<script>var campaign_id = 22089717;</script><div id="textchat"><div class="content"><div class="message general" data-messageid="old"><span class="by">GM:</span>history</div></div></div>');
   await page.evaluate(() => { window.sent = []; window.chrome = { runtime: { id: 'x', sendMessage: async m => { window.sent.push(m); } } }; });
   await page.evaluate(code);
   await page.waitForTimeout(3300);
@@ -21,10 +21,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   });
   await page.waitForTimeout(1300);
   const sent = (await page.evaluate(() => window.sent)).map(m => m.message);
-  assert.deepEqual(sent.map(m => [m.id, m.name, m.text, m.kind, m.source]), [
-    ['m1', 'Alice', '안녕하세요', 'general', 'roll20'],
-    ['m2', 'Alice', '이어서 말함', 'general', 'roll20'],
-    ['m3', 'Bob', '1d20+3 → 17', 'rollresult', 'roll20'],
+  assert.deepEqual(sent.map(m => [m.id, m.name, m.text, m.kind, m.source, m.campaignId]), [
+    ['m1', 'Alice', '안녕하세요', 'general', 'roll20', '22089717'],
+    ['m2', 'Alice', '이어서 말함', 'general', 'roll20', '22089717'],
+    ['m3', 'Bob', '1d20+3 → 17', 'rollresult', 'roll20', '22089717'],
   ]);
   await page.waitForTimeout(1300);
   assert.equal((await page.evaluate(() => window.sent)).length, 3, 'nothing is sent twice');

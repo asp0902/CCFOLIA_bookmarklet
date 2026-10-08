@@ -109,12 +109,19 @@
   host.__capybaraClose = closeModal;
 
   const enabled = el("input", { type: "checkbox", id: "enabled", "aria-label": "웹 공유 사용" });
-  const r20 = el("input", { type: "checkbox", id: "r20", "aria-label": "롤20 채팅 받기" });
-  r20.addEventListener("change", () => {
-    if (r20.checked && !roomId) { r20.checked = false; say("코코포리아 룸 화면에서 켜주세요.", true); return; }
+  // Roll20 campaign link: the campaign page URL pasted here is reduced to its id; r20Links maps campaign id -> this room. Empty = unlink.
+  const r20 = el("input", { type: "text", id: "r20", autocomplete: "off", spellcheck: "false", placeholder: "https://app.roll20.net/campaigns/details/123456/…" });
+  r20.addEventListener("change", async () => {
+    if (!roomId) { say("코코포리아 룸 화면에서 설정해주세요.", true); return; }
+    const id = r20.value.match(/\/campaigns\/(?:details|join)\/(\d+)/)?.[1];
+    if (r20.value.trim() && !id) { say("롤20 캠페인 주소에서 번호를 찾지 못했습니다.", true); return; }
+    const { r20Links } = await chrome.storage.local.get(["r20Links"]);
+    const next = Object.fromEntries(Object.entries(r20Links || {}).filter(([, link]) => link.roomId !== roomId));
     // direction is fixed to "in" for now (Roll20 -> CCFOLIA); the field is kept so a reverse link can reuse the same setting.
-    if (r20.checked) chrome.storage.local.set({ r20Link: { roomId, channel: "main", direction: "in" } });
-    else chrome.storage.local.remove("r20Link");
+    if (id) next[id] = { roomId, channel: "main", direction: "in" };
+    await chrome.storage.local.set({ r20Links: next });
+    r20.value = id ? `캠페인 ${id}` : "";
+    say(id ? "롤20 캠페인을 이 룸에 연결했습니다." : "롤20 연결을 해제했습니다.");
   });
   const url = el("input", { type: "text", id: "url", autocomplete: "off", spellcheck: "false" });
   const token = el("input", { type: "password", id: "token", autocomplete: "off" });
@@ -243,8 +250,7 @@
       el("div", { class: "field" }, el("label", { for: "url", text: "릴레이 주소" }), url),
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
-      el("div", { class: "field row" }, el("label", { for: "r20", text: "롤20 채팅 받기 (이 룸으로)" }),
-        el("label", { class: "switch", title: "롤20 채팅 받기" }, r20, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" }))))),
+      el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
       toast,
       el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, participants),
@@ -261,8 +267,9 @@
   document.addEventListener("keydown", onKey, true);
   document.documentElement.append(host);
 
-  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Link"], value => {
-    r20.checked = !!value.r20Link && value.r20Link.roomId === roomId;
+  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Links"], value => {
+    const linked = Object.entries(value.r20Links || {}).find(([, link]) => link.roomId === roomId)?.[0];
+    r20.value = linked ? `캠페인 ${linked}` : "";
     enabled.checked = value.relayEnabled === true;
     url.value = value.relayUrl || "http://127.0.0.1:8787";
     token.value = value.relayGmToken || "";
