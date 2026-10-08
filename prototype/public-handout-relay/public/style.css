@@ -244,3 +244,5 @@ html.pip .chat-toggle{display:none}
 #chat-form .dice-row button[type=submit]:hover{background:rgba(255,255,255,.08)}
 #chat-form .fmt-row button{min-width:0;width:30px;height:30px;padding:0;border-radius:0;background:#282828;box-shadow:none;color:#fff;font-size:12px;font-weight:700;align-self:auto}
 #chat-form .fmt-row button:hover{background:#383838}
+#health-note{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:90;padding:3px 12px;border-radius:0 0 4px 4px;background:rgba(33,33,33,.95);color:#ffcc80;font-size:12px}
+#health-note[hidden]{display:none}

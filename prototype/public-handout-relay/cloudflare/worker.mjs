@@ -321,6 +321,14 @@ export class RoomRelay {
       this.push("p", { type: "bgm", bgm: room.bgm });
       return json({ accepted: true });
     }
+    // Result of the GM side check of CCFOLIA's store shape (missing keys and the CCFOLIA version); participants only learn whether it is fine.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/health$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      room.health = { ok: body.ok === true, ccfoliaVersion: text(body.ccfoliaVersion, 20), missing: (Array.isArray(body.missing) ? body.missing : []).slice(0, 30).map(item => text(item, 80)), at: Date.now() };
+      await this.save(room);
+      this.push("p", { type: "health", health: { ok: room.health.ok } });
+      return json({ accepted: true });
+    }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages\/sync$/.test(url.pathname)) {
       const body = await request.json().catch(() => ({}));
       const entries = Object.entries(body.present && typeof body.present === "object" ? body.present : {});
@@ -416,6 +424,7 @@ export class RoomRelay {
       bgm: room.bgm || { state: "stopped" },
       channels: room.channels || [],
       dicebot: room.dicebot || "",
+      health: room.health ? { ok: room.health.ok } : null,
       scene: room.scene || null,
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
