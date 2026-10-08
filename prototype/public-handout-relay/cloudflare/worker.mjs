@@ -10,6 +10,7 @@ const token = () => {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 // Invite links are short: a 9-byte (72 bit) token as 12 base64url characters, and /j/<room>/<token> redirects to the page that reads the old #room=..&token=.. form.
+export const pendingCount = room => Object.values(room?.participants || {}).filter(member => member.status === "pending").length;
 export const newInviteToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(9)))).replace(/\+/g, "-").replace(/\//g, "_");
 export const inviteUrl = (origin, roomId, inviteToken) => `${origin}/j/${encodeURIComponent(roomId)}/${encodeURIComponent(inviteToken)}`;
 export const shortInviteLocation = pathname => {
@@ -83,6 +84,8 @@ export class RoomRelay {
     try { server.send(JSON.stringify({ type: "hello" })); } catch (_) {}
     return new Response(null, { status: 101, webSocket: client, headers: protocol ? { "Sec-WebSocket-Protocol": protocol } : {} });
   }
+  // The GM's browser shows the number of waiting join requests on the extension icon.
+  notifyPending(room) { this.push("gm", { type: "pending", count: pendingCount(room) }); }
   pushMessage(room, message) {
     if (room.capabilities?.chatRead) this.push("p", { type: "message", message });
   }
@@ -208,6 +211,7 @@ export class RoomRelay {
         room.seenMessageIds = {};
         await this.save(room);
         this.push("p", { type: "closed", reason: "stopped" });
+        this.push("gm", { type: "pending", count: 0 });
         this.push("gm", { type: "closed", reason: "stopped" });
         this.closeSockets("p", 4003, "stopped");
         this.closeSockets("gm", 4003, "stopped");
@@ -220,7 +224,9 @@ export class RoomRelay {
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
       this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
-      return this.acceptSocket(["gm"], GM_SOCKET_PROTOCOL);
+      const gmSocket = this.acceptSocket(["gm"], GM_SOCKET_PROTOCOL);
+      this.notifyPending(room); // the current number, once, right after connecting
+      return gmSocket;
     }
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/participants$/.test(url.pathname)) {
       return json({ participants: Object.values(room.participants).map(({ id, displayName, status, requestedAt }) => ({ id, displayName, status, requestedAt })) });
@@ -376,6 +382,7 @@ export class RoomRelay {
       else if (decision === "revoke" && member.status === "approved") { member.status = "revoked"; this.close(member.id, "revoked"); }
       else return json({ error: "현재 상태에서 처리할 수 없습니다." }, 409);
       await this.save(room);
+      this.notifyPending(room);
       return json({ id: member.id, status: member.status });
     }
     if (request.method === "POST" && url.pathname === "/api/join") {
@@ -387,6 +394,7 @@ export class RoomRelay {
       room.participants[id] = { id, displayName, status: "pending", requestedAt: new Date().toISOString(), sessionId };
       room.sessions[sessionId] = id;
       await this.save(room);
+      this.notifyPending(room);
       return json({ status: "pending" }, 202, { "Set-Cookie": `capybara_session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Path=/` });
     }
     const member = this.access(request, room);
