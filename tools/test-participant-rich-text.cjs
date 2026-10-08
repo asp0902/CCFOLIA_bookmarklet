@@ -38,6 +38,18 @@ function encode(obj) {
   assert.equal(result.align, 'center');
   assert.equal(result.plain, '그냥 글');
   assert.equal(result.plainChildren, 0);
+  const css = await page.evaluate(({ plain }) => {
+    const mk = extraCss => { const el = document.createElement('p'); const env = null; const span = document.createElement('span'); styleSegment(span, { extraCss }); return span.style; };
+    const good = mk({ boxShadow: '0 8px 0 15px #c33', fontFamily: 'Georgia', position: 'fixed' });
+    const bad = mk({ boxShadow: 'url(javascript:alert(1))', fontFamily: 'a\\b', display: 'flex' });
+    return { shadow: good.boxShadow, family: good.fontFamily, position: good.position, badShadow: bad.boxShadow, badFamily: bad.fontFamily, badDisplay: bad.display };
+  }, { plain: '' });
+  assert.ok(css.shadow.includes('15px'));
+  assert.equal(css.family, 'Georgia');
+  assert.equal(css.position, '');
+  assert.equal(css.badShadow, '');
+  assert.equal(css.badFamily, '');
+  assert.equal(css.badDisplay, '');
   await browser.close();
-  console.log('participant rich text (envelope: bold, colour, size, align) PASS');
+  console.log('participant rich text (envelope: bold, colour, size, align, extraCss) PASS');
 })().catch(error => { console.error(error); process.exit(1); });
