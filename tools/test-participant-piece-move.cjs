@@ -44,6 +44,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.locator('#scene-status .st-bar').click();
   await page.waitForTimeout(200);
   assert.deepEqual(statusSent, [{ characterId: 'c1', index: 0, value: 9 }]);
+  // markers and flipped cards are drawn and cannot be moved
+  await page.evaluate(img => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill',
+    items: [{ id: 'k1', closed: true, locked: true, x: 2, y: 2, z: 1, angle: 0, width: 4, height: 4, imageUrl: img }],
+    markers: [{ id: 'mk1', x: 6, y: 2, z: 1, angle: 0, width: 3, height: 3, imageUrl: img }], characters: [] }), img);
+  const drawn = await page.evaluate(() => [...document.querySelectorAll('#scene-field img')].map(i => ({ id: i.dataset.id || '', locked: i.dataset.locked || '', w: Math.round(parseFloat(i.style.width)) })));
+  assert.equal(drawn.length, 2, 'the marker and the flipped card are both drawn');
+  assert(drawn.some(d => d.id === 'k1' && d.locked === '1'), 'a flipped card is locked');
+  assert(drawn.some(d => d.id === '' && d.locked === ''), 'a marker has no id and no drag handle');
+  const before = sent.length;
+  const flippedBox = await page.locator('img[data-id="k1"]').boundingBox();
+  await page.mouse.move(flippedBox.x + 10, flippedBox.y + 10); await page.mouse.down(); await page.mouse.move(flippedBox.x + 60, flippedBox.y + 40); await page.mouse.up();
+  await page.waitForTimeout(300);
+  assert.equal(sent.length, before, 'dragging a flipped card sends no move');
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });
