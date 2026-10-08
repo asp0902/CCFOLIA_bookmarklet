@@ -248,13 +248,18 @@ export class RoomRelay {
         fieldWidth: num(body.fieldWidth, 40), fieldHeight: num(body.fieldHeight, 20),
         fieldObjectFit: ["fill", "contain", "cover"].includes(body.fieldObjectFit) ? body.fieldObjectFit : "fill",
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
-          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
-          .map(item => ({ id: text(item.id, 60), name: text(item.name, 40), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color),
+          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, name: text(item.name, 40),
+            params: (Array.isArray(item.params) ? item.params : []).slice(0, 30).map(p => ({ label: text(p?.label, 20), value: text(String(p?.value ?? ""), 60) })).filter(p => p.label || p.value),
+            memo: text(item.memo, 2000), externalUrl: /^https:\/\/[^\s<>"]{1,490}$/.test(String(item.externalUrl || "")) ? String(item.externalUrl) : "", x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color),
             hideStatus: !!item.hideStatus, initiative: num(item.initiative),
             status: (Array.isArray(item.status) ? item.status : []).slice(0, 8).filter(st => text(st?.label, 20).trim())
               .map(st => ({ label: text(st.label, 20), value: num(st.value), max: num(st.max) })) })),
       };
+      // The whole room is one stored value (128 KiB cap): keep the memos within a shared budget.
+      let memoBudget = 30_000;
+      for (const character of room.scene.characters) { if (character.memo.length > memoBudget) character.memo = ""; memoBudget -= character.memo.length; }
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
       this.push("p", { type: "scene", scene: room.scene });
