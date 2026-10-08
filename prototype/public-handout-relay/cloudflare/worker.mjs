@@ -274,7 +274,9 @@ export class RoomRelay {
         // CCFOLIA's own audio (BGM file and sound effect): CDN address only, volume 0..1.
         media: audio(body.media), sound: audio(body.sound),
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
-          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+        markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, name: text(item.name, 40),
             params: (Array.isArray(item.params) ? item.params : []).slice(0, 30).map(p => ({ label: text(p?.label, 20), value: text(String(p?.value ?? ""), 60) })).filter(p => p.label || p.value),

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.38
+// @version      0.2.39
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.38";
+  const VERSION = "0.2.39";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -211,6 +211,22 @@
     if (message.whisper) return null;
     if (message.rollInfo?.secret) return { ...message, text: "시크릿 다이스", roll: "", rollInfo: { secret: true }, channel };
     return { ...message, channel };
+  }
+
+  // 참여자에게 내보내는 스크린 패널(아이템). 뒤집힌 카드(closed)는 뒷면(coverImageUrl)만 내보내고 앞면 주소는 절대 보내지 않는다. 뒷면이 없으면 제외.
+  // 실측(ccfolia 1.37.5): 뒤집힌 카드는 화면에 뒷면 이미지만 그려진다. url·num 은 relayScene 의 검사 함수(CDN 주소만 통과 / 숫자 정리).
+  function relayItemView(item, url, num) {
+    if (!item || item.visible === false) return null;
+    const image = item.closed ? url(item.coverImageUrl) : url(item.imageUrl);
+    if (!image) return null;
+    return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image };
+  }
+  // 마커 패널(room.markers: id -> {x,y,z,angle,width,height,locked,freezed,text,imageUrl,clickAction}). 좌표·크기는 아이템과 같은 칸 단위(실측: translate = x*24px). 메모(text)는 보내지 않는다.
+  function relayMarkerViews(markers, url, num) {
+    return Object.entries(markers && typeof markers === "object" ? markers : {})
+      .filter(([, marker]) => marker && url(marker.imageUrl))
+      .slice(0, 100)
+      .map(([id, marker]) => ({ id: String(id).slice(0, 60), x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl) }));
   }
 
   // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소: https 만, 캐릭터를 쓰지 않을 때만 쓴다.
@@ -3069,9 +3085,7 @@
           const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
           const url = (v) => (typeof v === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\//.test(v) ? v : "");
           const roomAudio = (src, name, volume, repeat) => (url(src) ? { url: url(src), name: String(name || "").slice(0, 100), volume: Math.max(0, Math.min(1, num(volume, 1))), repeat: repeat !== false } : null);
-          const items = Object.values(ent.roomItems?.entities || {})
-            .filter((item) => item && item.visible !== false && !item.closed && url(item.imageUrl))
-            .map((item) => ({ id: String(item._id || ""), locked: !!(item.locked || item.freezed), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: url(item.imageUrl) }));
+          const items = Object.values(ent.roomItems?.entities || {}).map((item) => relayItemView(item, url, num)).filter(Boolean);
           const characters = Object.values(ent.roomCharacters?.entities || {})
             .filter((c) => c && !c.secret && !c.invisible && c.active !== false && url(c.iconUrl))
             .map((c) => ({
@@ -3084,7 +3098,7 @@
           return {
             backgroundUrl: url(room.backgroundUrl), foregroundUrl: url(room.foregroundUrl), backgroundColor: /^#[0-9a-f]{3,8}$/i.test(room.backgroundColor || "") ? room.backgroundColor : "",
             fieldWidth: num(room.fieldWidth, 40), fieldHeight: num(room.fieldHeight, 20), fieldObjectFit: ["fill", "contain", "cover"].includes(room.fieldObjectFit) ? room.fieldObjectFit : "fill",
-            items: items.slice(0, 200), characters: characters.slice(0, 100),
+            items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)
           };
