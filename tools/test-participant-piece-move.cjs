@@ -7,10 +7,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const dir = path.join(__dirname, '..', 'prototype', 'public-handout-relay', 'public');
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
-  const sent = [];
+  const sent = [], statusSent = [];
   await page.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.hostname !== 'relay.test') return route.abort();
+    if (u.pathname.endsWith('/status/set')) { statusSent.push(JSON.parse(route.request().postData())); return route.fulfill({ status: 202, contentType: 'application/json', body: '{}' }); }
     if (u.pathname.endsWith('/pieces/move')) { sent.push(JSON.parse(route.request().postData())); return route.fulfill({ status: 202, contentType: 'application/json', body: '{}' }); }
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
@@ -22,7 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(img => {
     document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none';
     renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [{ id: 'i1', x: 0, y: 0, z: 1, angle: 0, width: 2, height: 2, imageUrl: img }, { id: 'i2', locked: true, x: 5, y: 5, z: 1, angle: 0, width: 2, height: 2, imageUrl: img }],
-      characters: [{ id: 'c1', name: 'A', x: 48, y: 24, z: 2, angle: 0, width: 4, height: 4, iconUrl: img, status: [] }] });
+      characters: [{ id: 'c1', name: 'A', x: 48, y: 24, z: 2, angle: 0, width: 4, height: 4, iconUrl: img, status: [{ label: 'HP', value: 7, max: 10 }] }] });
   }, img);
   const drag = async (sel, dx, dy) => {
     const b = await page.locator(sel).boundingBox();
@@ -37,6 +38,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(sent.length, 2);
   assert.deepEqual(sent[0], { kind: 'item', id: 'i1', x: 3, y: 2 });
   assert.deepEqual(sent[1], { kind: 'character', id: 'c1', x: 96, y: 24 }); // characters: px at zoom 1, 24px = 1 cell
+  // speaker select lists the character; clicking a status bar sends status.set
+  assert.deepEqual(await page.locator('#speaker option').allTextContents(), ['내 이름', 'A']);
+  page.on('dialog', d => d.accept('9'));
+  await page.locator('#scene-status .st-bar').click();
+  await page.waitForTimeout(200);
+  assert.deepEqual(statusSent, [{ characterId: 'c1', index: 0, value: 9 }]);
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });

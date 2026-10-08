@@ -177,6 +177,7 @@ function renderScene(scene) {
   }
   field.replaceChildren(...nodes);
   renderStatusPanel(s.characters || []);
+  renderSpeakers(s.characters || []);
 }
 // Top-left status panel, like CCFOLIA's: avatar (+ initiative badge) and a 2-column grid of 96x16 bars (label left, value/max right).
 function renderStatusPanel(characters) {
@@ -198,11 +199,28 @@ function renderStatusPanel(characters) {
       const cur = document.createElement("span"); cur.textContent = String(st.value);
       if (st.max > 0 && st.value / st.max <= 0.7) cur.style.color = "#9a0036";
       value.append(cur); if (st.max > 0) value.append(`/${st.max}`);
+      bar.dataset.char = c.id; bar.dataset.index = String(c.status.indexOf(st)); bar.dataset.value = String(st.value); bar.title = "클릭해서 값 바꾸기";
       bar.append(track, fill, label, value); bars.append(bar);
     }
     row.append(avatar, bars); return row;
   }));
 }
+// Speaker: the participant's own name, or any visible character (the GM side checks again before sending).
+const SPEAKER_KEY = "capybara-speaker";
+const speaker = document.createElement("select"); speaker.id = "speaker"; speaker.setAttribute("aria-label", "화자"); speaker.title = "화자";
+document.querySelector("#chat-form .name-row button").before(speaker);
+function renderSpeakers(characters) {
+  let want = speaker.value; try { want ||= localStorage.getItem(SPEAKER_KEY) || ""; } catch (_) {}
+  speaker.replaceChildren(new Option("내 이름", ""), ...characters.map(c => new Option(c.name || "(이름 없음)", c.id)));
+  speaker.value = characters.some(c => c.id === want) ? want : "";
+}
+speaker.addEventListener("change", () => { try { localStorage.setItem(SPEAKER_KEY, speaker.value); } catch (_) {} });
+// Click a status bar to set its value; one command, the GM side applies it.
+document.getElementById("scene-status").addEventListener("click", async event => {
+  const bar = event.target.closest(".st-bar"); if (!bar) return;
+  const answer = prompt("새 값", bar.dataset.value); if (answer === null || answer.trim() === "" || !Number.isFinite(Number(answer))) return;
+  try { await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status/set`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ characterId: bar.dataset.char, index: Number(bar.dataset.index), value: Number(answer) }) }); } catch (_) {}
+});
 window.addEventListener("resize", () => renderScene());
 // Zoom (wheel or +/- buttons) and pan (drag) of the stage.
 {
@@ -562,7 +580,7 @@ chatForm.addEventListener("submit", async event => {
   chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel }) });
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel, characterId: speaker.value }) });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
     showSendStatus("GM 브리지 전달 대기", 2500);
   } catch (error) {

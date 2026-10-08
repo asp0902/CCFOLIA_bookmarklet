@@ -61,10 +61,16 @@
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin || request?.source !== SOURCE || request?.direction !== "bridge") return;
-    if (request.action !== "command" || !["chat.send", "piece.move"].includes(request.command?.type) || request.roomId !== roomId) return;
+    if (request.action !== "command" || !["chat.send", "piece.move", "status.set"].includes(request.command?.type) || request.roomId !== roomId) return;
     const commandId = clean(request.command.id, 100);
     try {
       const api = window.__CCF_SECOND_CHAT_PANEL__;
+      if (request.command.type === "status.set") {
+        if (typeof api?.relaySetStatus !== "function") throw new Error("상태값 변경 기능이 아직 준비되지 않았습니다.");
+        await api.relaySetStatus(clean(request.command.characterId, 100), Number(request.command.index), Number(request.command.value));
+        emit({ action: "commandResult", commandId, status: "delivered" });
+        return;
+      }
       if (request.command.type === "piece.move") {
         if (typeof api?.relayMovePiece !== "function") throw new Error("말 이동 기능이 아직 준비되지 않았습니다.");
         const { kind, pieceId, x, y } = request.command;
@@ -73,7 +79,7 @@
         return;
       }
       if (typeof api?.relaySend !== "function") throw new Error("채팅 전송 기능이 아직 준비되지 않았습니다.");
-      await api.relaySend(clean(request.command.displayName, 40), clean(request.command.text, 2000), clean(request.command.channel, 100));
+      await api.relaySend(clean(request.command.displayName, 40), clean(request.command.text, 2000), clean(request.command.channel, 100), clean(request.command.characterId, 100));
       emit({ action: "commandResult", commandId, status: "delivered" });
     } catch (error) {
       emit({ action: "commandResult", commandId, status: "failed", error: clean(error?.message || "전송 실패", 300) });
