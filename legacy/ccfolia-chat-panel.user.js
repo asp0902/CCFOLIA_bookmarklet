@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.33
+// @version      0.2.34
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.33";
+  const VERSION = "0.2.34";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -809,6 +809,15 @@
     return { roomId, token, uid: record?.uid || "" };
   }
 
+  // 룸에 메시지가 하나도 없을 때만 쓰는 기본 틀. 실제 룸(ccfolia 1.37.5)의 네이티브 메시지 문서에서 Firestore REST 로 읽은 필드 이름과 타입 그대로다
+  // (값은 보낼 때 덮어쓰거나 빈 값): type "text", to null, toName "", edited false, extend 빈 맵, imageUrl null(캐릭터를 쓰면 문자열), 시각은 timestampValue.
+  const DEFAULT_MESSAGE_TEMPLATE = Object.freeze({
+    type: { stringValue: "text" }, text: { stringValue: "" }, name: { stringValue: "" }, color: { stringValue: "#888888" },
+    iconUrl: { stringValue: "" }, imageUrl: { nullValue: null }, channel: { stringValue: "main" }, channelName: { stringValue: "main" },
+    from: { stringValue: "" }, to: { nullValue: null }, toName: { stringValue: "" }, edited: { booleanValue: false },
+    extend: { mapValue: {} }, createdAt: { timestampValue: "1970-01-01T00:00:00Z" }, updatedAt: { timestampValue: "1970-01-01T00:00:00Z" }
+  });
+
   // 보낼 메시지의 형식은 추측하지 않는다. 룸에 실제로 저장된 최근 메시지를
   // 그대로 본떠서(같은 필드·같은 타입) 본문과 탭만 바꿔 넣는다.
   // 이러면 코코포리아가 형식을 바꾸더라도 따라간다.
@@ -830,7 +839,7 @@
     const docs = (Array.isArray(rows) ? rows : [])
       .map((row) => row?.document?.fields)
       .filter((fields) => fields && fields.text);
-    if (!docs.length) throw new Error("본뜰 메시지가 없습니다. 이 룸에서 채팅을 한 번 보낸 뒤 다시 시도해 주세요.");
+    if (!docs.length) return { ...DEFAULT_MESSAGE_TEMPLATE }; // 새 룸: 본뜰 메시지가 없으니 측정한 기본 틀
     // 내가 보낸 메시지를 우선 — 이름/아이콘/색이 내 것으로 유지된다.
     const mine = ctx.uid ? docs.find((f) => f.from?.stringValue === ctx.uid) : null;
     return mine || docs[0];

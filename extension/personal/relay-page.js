@@ -66,12 +66,26 @@
     emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), present });
   };
 
+  // A failed Roll20 line used to vanish silently: log it and show one short toast per distinct reason.
+  const warned = new Set();
+  const warnOnce = reason => {
+    console.warn("[capybara roll20]", reason);
+    if (warned.has(reason)) return;
+    warned.add(reason);
+    const note = document.createElement("div");
+    note.textContent = `롤20 채팅을 보내지 못했습니다: ${reason}`;
+    note.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;padding:8px 16px;border-radius:4px;background:rgba(44,44,44,.95);color:#fff;font:14px sans-serif;box-shadow:0 3px 5px rgba(0,0,0,.3)";
+    document.documentElement.append(note);
+    setTimeout(() => note.remove(), 6000);
+  };
+
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin || request?.source !== SOURCE || request?.direction !== "bridge") return;
     if (request.action === "external" && request.roomId === roomId) {
       const m = request.message || {};
-      try { await window.__CCF_SECOND_CHAT_PANEL__?.relaySend?.(clean(m.name, 40) || "롤20", clean(m.text, 2000), clean(m.channel, 100), "", { source: "roll20", sourceId: clean(m.id, 160) }); } catch (_) {}
+      try { await window.__CCF_SECOND_CHAT_PANEL__?.relaySend?.(clean(m.name, 40) || "롤20", clean(m.text, 2000), clean(m.channel, 100), "", { source: "roll20", sourceId: clean(m.id, 160) }); }
+      catch (error) { warnOnce(clean(error?.message || "전송 실패", 200)); }
       return;
     }
     if (request.action !== "command" || !["chat.send", "piece.move", "status.set"].includes(request.command?.type) || request.roomId !== roomId) return;
