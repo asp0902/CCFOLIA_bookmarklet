@@ -214,3 +214,33 @@ html.pip .chat-toggle{display:none}
 #scene-field img[data-id]{pointer-events:auto;cursor:move}
 #scene-field img[data-locked]{cursor:pointer}
 #speaker{height:32px;max-width:120px;border:0;border-radius:4px;background:#212121;color:#fff;font:inherit;font-size:13px}
+
+/* Chat input rows (measured on ccfolia.com): avatar button 40x40, name input, 34x34 palette / colour buttons, 30x30 dice buttons 4px apart, send 64x31. */
+.name-row{display:flex;align-items:center;gap:0}
+.face-btn{display:flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;padding:0;border:0;border-radius:0;background:none;color:#fff;cursor:pointer}
+.face-btn img{width:32px;height:32px;object-fit:cover;border-radius:50%}
+#chat-name{flex:1;min-width:0;height:32px;padding:0 8px;border:0;border-radius:0;background:transparent;color:#fff;font-size:16px}
+#chat-name:focus{outline:none;background:rgba(255,255,255,.06)}
+.mini-btn{display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer}
+.mini-btn:hover:not(:disabled){background:rgba(255,255,255,.08)}
+.mini-btn:disabled{color:rgba(255,255,255,.3);cursor:default}
+#color-input{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.dice-row{display:flex;align-items:center;gap:4px;padding:4px 0 4px 4px}
+.dice-row button[aria-label^="D"]{display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer}
+.dice-row button[aria-label^="D"]:hover{background:rgba(255,255,255,.08)}
+.dice-row button[type=submit]{margin-left:auto;width:64px;height:31px;padding:0;border:0;border-radius:4px;background:none;color:#eee;font-size:14px;font-weight:700;letter-spacing:.4px;cursor:pointer}
+.dice-row button[type=submit]:hover{background:rgba(255,255,255,.08)}
+.fmt-row{display:flex;gap:6px;padding:3px 0 3px 4px}
+.fmt-row button{display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:0;background:#282828;color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.fmt-row button:hover{background:#383838}
+.menu-item:focus-visible{background:rgba(255,255,255,.12);outline:none}
+/* The form's generic button style is an id selector; the new rows need to win over it. */
+#chat-form .face-btn{min-width:0;width:40px;height:40px;padding:0;border-radius:0;background:none;box-shadow:none;color:#fff;align-self:auto}
+#chat-form .mini-btn{min-width:0;width:34px;height:34px;padding:0;border-radius:50%;background:none;box-shadow:none;color:#fff;align-self:auto}
+#chat-form .mini-btn:disabled{color:rgba(255,255,255,.3)}
+#chat-form .mini-btn:hover:not(:disabled){background:rgba(255,255,255,.08)}
+#chat-form .dice-row button[aria-label^="D"]{padding:0}
+#chat-form .dice-row button[type=submit]{flex:none;min-width:64px;width:64px;height:31px;margin-left:auto;padding:0;border-radius:4px;background:none;box-shadow:none;color:#eee;font-size:14px;font-weight:700;white-space:nowrap;align-self:auto}
+#chat-form .dice-row button[type=submit]:hover{background:rgba(255,255,255,.08)}
+#chat-form .fmt-row button{min-width:0;width:30px;height:30px;padding:0;border-radius:0;background:#282828;box-shadow:none;color:#fff;font-size:12px;font-weight:700;align-self:auto}
+#chat-form .fmt-row button:hover{background:#383838}

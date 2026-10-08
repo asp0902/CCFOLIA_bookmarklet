@@ -259,14 +259,17 @@ export class RoomRelay {
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, name: text(item.name, 40),
             params: (Array.isArray(item.params) ? item.params : []).slice(0, 30).map(p => ({ label: text(p?.label, 20), value: text(String(p?.value ?? ""), 60) })).filter(p => p.label || p.value),
-            memo: text(item.memo, 2000), externalUrl: /^https:\/\/[^\s<>"]{1,490}$/.test(String(item.externalUrl || "")) ? String(item.externalUrl) : "", x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color),
+            memo: text(item.memo, 2000), commands: text(item.commands, 4000), externalUrl: /^https:\/\/[^\s<>"]{1,490}$/.test(String(item.externalUrl || "")) ? String(item.externalUrl) : "", x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 4), height: num(item.height, 4), iconUrl: cdn(item.iconUrl), color: color(item.color),
             hideStatus: !!item.hideStatus, initiative: num(item.initiative),
             status: (Array.isArray(item.status) ? item.status : []).slice(0, 8).filter(st => text(st?.label, 20).trim())
               .map(st => ({ label: text(st.label, 20), value: num(st.value), max: num(st.max) })) })),
       };
       // The whole room is one stored value (128 KiB cap): keep the memos within a shared budget.
-      let memoBudget = 30_000;
-      for (const character of room.scene.characters) { if (character.memo.length > memoBudget) character.memo = ""; memoBudget -= character.memo.length; }
+      let memoBudget = 40_000;
+      for (const character of room.scene.characters) {
+        if (character.memo.length > memoBudget) character.memo = ""; memoBudget -= character.memo.length;
+        if (character.commands.length > memoBudget) character.commands = ""; memoBudget -= character.commands.length;
+      }
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
       this.push("p", { type: "scene", scene: room.scene });
@@ -390,14 +393,14 @@ export class RoomRelay {
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 채팅 전송을 허용하지 않았습니다." }, 403);
       const body = await request.json();
-      if (Object.keys(body).some(key => !["clientMessageId", "text", "channel", "characterId"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["clientMessageId", "text", "channel", "characterId", "name", "color"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const clientMessageId = text(body.clientMessageId, 100).trim();
       const messageText = text(body.text, 2_000).trim();
       if (!clientMessageId || !messageText) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const existing = room.commands.find(command => command.participantId === member.id && command.clientMessageId === clientMessageId);
       if (existing) return json({ accepted: true, commandId: existing.id, duplicate: true }, 202);
       const channel = (room.channels || []).some(item => item.id === body.channel) ? body.channel : "main";
-      const command = { id: token(), type: "chat.send", channel, participantId: member.id, displayName: member.displayName, characterId: /^[\w-]{1,100}$/.test(String(body.characterId)) ? String(body.characterId) : "", clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
+      const command = { id: token(), type: "chat.send", channel, participantId: member.id, displayName: member.displayName, name: text(body.name, 40).replace(/[\r\n]/g, " ").trim(), color: /^#[0-9a-fA-F]{6}$/.test(String(body.color)) ? String(body.color) : "", characterId: /^[\w-]{1,100}$/.test(String(body.characterId)) ? String(body.characterId) : "", clientMessageId, text: messageText, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);
