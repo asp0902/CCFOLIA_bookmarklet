@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.27
+// @version      0.3.28
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.27";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.28";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3842,7 +3842,8 @@
     const activeEntry = ccfBgmSlotMap.get(ccfBgmActiveEntryKey)
       || findCcfReadyYoutubeEntryForSlot(ccfBgmActiveSlotKey)?.[1];
     const state = readCcfYoutubeBgmPlaybackState(ccfBgmActiveSlotKey, activeEntry, button);
-    ccfBgmActiveLoop = state.loop;
+    // 저장된 반복 설정은 곡이 재생 중일 때만 현재 반복에 옮긴다. 끝나서 멈춘 곡에서 설정만 바꿨는데 반복으로 되살아나지 않게(#239).
+    if (isCcfYoutubeBgmPlayingNow()) ccfBgmActiveLoop = state.loop;
     applyCcfBgmPlayerVolume(state);
   }
 
@@ -5326,7 +5327,8 @@
       // 재생 중인 곡에 바로 밀어 넣으면 저장값을 적용하는 주기 동기화와 충돌해
       // 볼륨이 바뀌었다가 되돌아가는 것처럼 보인다.
       // 반복재생 토글만은 재생 중인 곡에 그대로 반영한다(소리 크기와 무관).
-      if (loopButton && ccfBgmActiveEntryKey === entryKey) {
+      // 멈춘 곡에는 저장만 하고(다음에 재생할 때 적용) 재생 중일 때만 바로 반영한다(#239).
+      if (loopButton && ccfBgmActiveEntryKey === entryKey && isCcfYoutubeBgmPlayingNow()) {
         ccfBgmActiveLoop = loopButton.dataset.loop === "1";
       }
     };
@@ -5478,7 +5480,7 @@
       renderCcfYoutubeBgmLibraryItems();
       markCcfYoutubeBgmSlotButtons();
 
-      if (ccfBgmActiveEntryKey === entryKey) {
+      if (ccfBgmActiveEntryKey === entryKey && isCcfYoutubeBgmPlayingNow()) {
         ccfBgmActiveLoop = current.loop;
         applyCcfBgmPlayerVolume({
           volume: current.volume,
@@ -6190,6 +6192,17 @@
     ccfBgmProgressTimer = window.setTimeout(tick, BGM_PROGRESS_UPDATE_MS);
   }
 
+  // 활성 곡이 지금 재생 중(1)이거나 버퍼링 중(3)인가. 끝나서 멈춘 곡에는 진행바 백업이나 반복 설정 변경이 재생을 일으키면 안 된다(#239).
+  function isCcfYoutubeBgmPlayingNow() {
+    if (!ccfBgmPlayer || !ccfBgmActiveSlotKey) return false;
+    try {
+      const state = ccfBgmPlayer.getPlayerState?.();
+      return state === 1 || state === 3;
+    } catch (error) {
+      return false;
+    }
+  }
+
   let ccfBgmLoopNudgeAt = 0;
   let ccfBgmLoopNudgeFromTotal = 0; // 직전 루프 시점의 트랙 총 길이 — stale getCurrentTime 식별용
   function updateCcfBgmProgressBar() {
@@ -6223,7 +6236,7 @@
       // staleAfterLoop 분기가 자연스럽게 0 으로 reset 함. 이렇게 안 하면
       // 0.5s 갱신 주기 탓에 슬라이더가 ~98% 에서 0% 로 점프하여 사용자가
       // 끝 도달 시각을 못 봄.
-      if (sinceLoopNudge > 2000 && ccfBgmPlayer) {
+      if (sinceLoopNudge > 2000 && ccfBgmPlayer && isCcfYoutubeBgmPlayingNow()) {
         ccfBgmLoopNudgeAt = nowMs;
         ccfBgmLoopNudgeFromTotal = playback.total;
         try {
