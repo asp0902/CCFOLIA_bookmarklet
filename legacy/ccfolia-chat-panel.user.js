@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.39
+// @version      0.2.40
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.39";
+  const VERSION = "0.2.40";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -204,6 +204,42 @@
       icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
       at: readCreatedAt(msg)
     };
+  }
+
+  // 코코포리아 업데이트로 저장소 모양이 바뀌면 웹 공유가 조용히 깨진다(빈 채팅, 안 보이는 말, 전송 실패). 이 코드가 실제로 읽는 키와 그 타입만 점검한다.
+  // 값이 비어 있는 것은 정상(빈 룸)이고, 표본(종류마다 처음 3개)에서 키가 없거나 타입이 바뀐 것만 문제로 본다. 목록은 relayScene·toPanelMessage·sendMessage 가 읽는 키에서 뽑았다.
+  const RELAY_SHAPE_SPEC = Object.freeze({
+    entities: ["rooms", "roomCharacters", "roomItems", "roomMessages", "roomMembers"],
+    messageSlice: { entities: ["object"], idsGroupBy: ["object"] },
+    message: { text: ["string"], name: ["string"], channel: ["string"], color: ["string"], iconUrl: ["null", "string"], createdAt: ["object", "number"], to: ["null", "string", "array"], extend: ["object"], edited: ["boolean"] },
+    character: { name: ["string"], iconUrl: ["null", "string"], x: ["number"], y: ["number"], z: ["number"], angle: ["number"], width: ["number"], height: ["number"], status: ["array"], params: ["array"], memo: ["string"], externalUrl: ["string"], commands: ["string"], initiative: ["number"], hideStatus: ["boolean"], active: ["boolean"], secret: ["boolean"], invisible: ["boolean"], color: ["string"] },
+    item: { x: ["number"], y: ["number"], z: ["number"], angle: ["number"], width: ["number"], height: ["number"], imageUrl: ["null", "string"], coverImageUrl: ["null", "string"], visible: ["boolean"], closed: ["boolean"], locked: ["boolean"], freezed: ["boolean"] },
+    room: { owner: ["string"], backgroundUrl: ["null", "string"], foregroundUrl: ["null", "string"], backgroundColor: ["string"], fieldWidth: ["number"], fieldHeight: ["number"], fieldObjectFit: ["string"], markers: ["object"], mediaUrl: ["null", "string"], mediaName: ["string"], mediaVolume: ["number"], mediaRepeat: ["boolean"], soundUrl: ["null", "string"], soundName: ["string"], soundVolume: ["number"], soundRepeat: ["boolean"] }
+  });
+  const shapeType = (value) => (value === null ? "null" : Array.isArray(value) ? "array" : typeof value);
+  function checkRelayShape(state, spec) {
+    const missing = [];
+    const entities = state?.entities;
+    const kinds = { message: "roomMessages", character: "roomCharacters", item: "roomItems" };
+    for (const kind of spec.entities) if (!entities || typeof entities[kind] !== "object" || entities[kind] === null) missing.push(`entities.${kind}`);
+    const slice = entities?.roomMessages;
+    for (const [key, types] of Object.entries(spec.messageSlice)) if (slice && !types.includes(shapeType(slice[key]))) missing.push(`roomMessages.${key}`);
+    const samples = {
+      message: Object.values(slice?.entities || {}).slice(0, 3),
+      character: Object.values(entities?.roomCharacters?.entities || {}).slice(0, 3),
+      item: Object.values(entities?.roomItems?.entities || {}).slice(0, 3),
+      room: Object.values(entities?.rooms?.entities || {}).slice(0, 1)
+    };
+    for (const kind of ["message", "character", "item", "room"]) {
+      for (const sample of samples[kind]) {
+        for (const [key, types] of Object.entries(spec[kind])) {
+          const label = `${kind}.${key}`;
+          if (!sample || !(key in sample)) { if (!missing.includes(label)) missing.push(label); }
+          else if (!types.includes(shapeType(sample[key])) && !missing.includes(`${label}(${shapeType(sample[key])})`)) missing.push(`${label}(${shapeType(sample[key])})`);
+        }
+      }
+    }
+    return missing;
   }
 
   // 참여자에게 내보내는 모양: GM에게 온 귓속말은 빼고, 시크릿 다이스는 결과를 지운다(네이티브도 다른 사람에게는 숨김).
@@ -3115,6 +3151,14 @@
           last = sig;
           try { callback(); } catch (error) { /* 구독자 오류가 코코포리아 저장소를 막지 않게 한다 */ }
         });
+      },
+      // 코코포리아 저장소 모양 점검. 방 정보가 아직 없으면(로딩 중) null.
+      relayHealth: () => {
+        const store = findStore();
+        const state = store?.getState();
+        if (!state || !Object.keys(state.entities?.rooms?.entities || {}).length) return null;
+        const missing = checkRelayShape(state, RELAY_SHAPE_SPEC);
+        return { ok: missing.length === 0, ccfoliaVersion: (document.title.match(/CCFOLIA\s+(\d+\.\d+\.\d+)/) || [])[1] || "", missing: missing.slice(0, 30) };
       },
       relayChannels: () => listChannels().map((channel) => ({ id: channel, label: channelLabel(channel) })),
       // 참여자 웹 중계용: 메시지 저장소가 바뀔 때마다 callback 을 부른다(폴링 없이 즉시 반영). 반환값은 구독 해제 함수.

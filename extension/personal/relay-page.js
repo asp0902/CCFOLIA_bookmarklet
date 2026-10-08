@@ -40,6 +40,7 @@
     emit({ action: "scene", scene });
   };
   const scheduleScene = () => { if (!sceneTimer) sceneTimer = setTimeout(() => { sceneTimer = 0; sendScene(); }, 250); };
+  let lastHealthKey = "";
   const snapshot = () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
@@ -64,17 +65,30 @@
       const own = messages.filter(message => message.channel === id);
       present[id] = { ids: own.map(message => message.id), since: own.map(message => message.createdAt).sort()[0] || null };
     }
-    emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), present });
+    // Structure check of CCFOLIA's store: once when sharing connects and again whenever the CCFOLIA version or the result changes.
+    let health;
+    try {
+      const result = typeof api.relayHealth === "function" ? api.relayHealth() : null;
+      if (result) {
+        const key = JSON.stringify([roomId, result.ok, result.ccfoliaVersion, result.missing]);
+        if (key !== lastHealthKey) {
+          lastHealthKey = key; health = result;
+          if (!result.ok) showToastOnce("[capybara health]", key, `코코포리아 업데이트로 일부 공유 기능이 동작하지 않을 수 있습니다: ${result.missing.slice(0, 3).join(", ")}`);
+        }
+      }
+    } catch (_) { /* a failed check must never stop the chat relay */ }
+    emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), present, health });
   };
 
   // A failed Roll20 line used to vanish silently: log it and show one short toast per distinct reason.
   const warned = new Set();
-  const warnOnce = reason => {
-    console.warn("[capybara roll20]", reason);
-    if (warned.has(reason)) return;
-    warned.add(reason);
+  const warnOnce = reason => showToastOnce("[capybara roll20]", reason, `롤20 채팅을 보내지 못했습니다: ${reason}`);
+  const showToastOnce = (tag, key, text) => {
+    console.warn(tag, key);
+    if (warned.has(key)) return;
+    warned.add(key);
     const note = document.createElement("div");
-    note.textContent = `롤20 채팅을 보내지 못했습니다: ${reason}`;
+    note.textContent = text;
     note.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;padding:8px 16px;border-radius:4px;background:rgba(44,44,44,.95);color:#fff;font:14px sans-serif;box-shadow:0 3px 5px rgba(0,0,0,.3)";
     document.documentElement.append(note);
     setTimeout(() => note.remove(), 6000);

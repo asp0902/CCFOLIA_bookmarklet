@@ -53,6 +53,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert(await page.locator('#room').evaluate(r => r.classList.contains('chat-collapsed')), 'collapse is remembered');
   await page.click('#chat-open');
   assert.equal(await page.locator('#room').evaluate(r => r.classList.contains('chat-collapsed')), false);
+  // the GM side structure check: participants see a thin notice only when it failed
+  assert.equal(await page.locator('#health-note').isVisible(), false);
+  await page.evaluate(() => renderState({ roomTitle: 'r', gmOnline: true, messages: [], channels: [], health: { ok: false } }));
+  assert.equal(await page.locator('#health-note').isVisible(), true);
+  await page.evaluate(() => onPush({ data: JSON.stringify({ type: 'health', health: { ok: true } }) }));
+  assert.equal(await page.locator('#health-note').isVisible(), false);
   await browser.close();
   console.log('participant toolbar PASS');
 })().catch(error => { console.error(error); process.exit(1); });

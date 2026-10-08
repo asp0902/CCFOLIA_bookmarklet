@@ -9,6 +9,7 @@
   let roomId = readRoomId();
   const sentMessages = new Map(); // id -> what was sent (a message edited in CCFOLIA has the same id and a different body, and is sent again)
   let lastChannelKey = "";
+  let lastHealthKey = "";
   let lastPresentKey = "";
   let lastScene = null; // latest room scene from the page, sent again after (re)connecting
   let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
@@ -99,7 +100,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; lastPresentKey = ""; snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; lastHealthKey = ""; lastPresentKey = ""; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -223,6 +224,16 @@
         if ((channels.length || dicebot) && channelKey !== lastChannelKey) {
           lastChannelKey = channelKey;
           post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels, dicebot }).catch(() => { lastChannelKey = ""; });
+        }
+        // The structure check result: sent to the relay (participants see a notice) and kept for the share settings window.
+        if (request.health && typeof request.health === "object") {
+          const health = { ok: request.health.ok === true, ccfoliaVersion: clean(request.health.ccfoliaVersion, 20), missing: (Array.isArray(request.health.missing) ? request.health.missing : []).slice(0, 30).map(item => clean(item, 80)) };
+          const key = JSON.stringify(health);
+          if (key !== lastHealthKey) {
+            lastHealthKey = key;
+            post(`/api/admin/rooms/${encodeURIComponent(roomId)}/health`, health).catch(() => { lastHealthKey = ""; });
+            try { Promise.resolve(chrome.storage.local.set({ relayHealth: { roomId, ...health, at: Date.now() } })).catch(() => {}); } catch (_) {}
+          }
         }
         const run = snapshotChain.catch(() => {}).then(async () => {
           for (const message of messages) {

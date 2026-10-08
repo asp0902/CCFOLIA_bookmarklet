@@ -353,7 +353,12 @@ function renderTabs(data) {
     return tab;
   }));
 }
+// Thin notice at the top when the GM side found that a CCFOLIA update changed what the share reads.
+const healthNote = document.createElement("div"); healthNote.id = "health-note"; healthNote.hidden = true; healthNote.textContent = "GM 쪽 코코포리아 업데이트로 일부 기능 점검 중";
+document.body.append(healthNote);
+function showHealth(health) { healthNote.hidden = !(health && health.ok === false); }
 const renderState = data => {
+  showHealth(data.health);
   renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
@@ -512,6 +517,9 @@ function onPush(event) {
     if (current.messages.some(item => item.id === message.message.id)) return;
     current.messages = [...current.messages, message.message].slice(-MAX_MESSAGES);
     renderState(current);
+  } else if (message.type === "health") {
+    current = { ...current, health: message.health };
+    showHealth(message.health);
   } else if (message.type === "message-updated" && message.message?.id) {
     // edited in CCFOLIA: replace the row in place
     current.messages = current.messages.map(item => item.id === message.message.id ? message.message : item);

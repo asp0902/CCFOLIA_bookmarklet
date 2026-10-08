@@ -130,6 +130,7 @@
   const invite = el("input", { type: "text", id: "invite", readonly: "", placeholder: "코코포리아 룸 연결 후 생성됩니다." });
   const socketLine = el("p", { class: "muted", id: "socket" });
   const roomLine = el("p", { class: "muted", id: "room" });
+  const healthLine = el("p", { class: "muted", id: "health" });
   const participants = el("div", { class: "participants", id: "participants", "aria-live": "polite" });
   const toast = el("div", { class: "toast", id: "toast", role: "status" });
   const say = (text, error = false) => { toast.textContent = text; toast.classList.toggle("error", error); };
@@ -175,10 +176,19 @@
     }[info.state] || String(info.state);
     socketLine.textContent = `실시간 연결: ${text} · ${ago}초 전`;
   };
+  // Result of the structure check of CCFOLIA's data (relay-page computes it, relay-bridge stores it).
+  const renderHealth = info => {
+    if (!roomId || !info || info.roomId !== roomId) { healthLine.textContent = ""; return; }
+    const version = info.ccfoliaVersion ? `코코포리아 ${info.ccfoliaVersion}` : "코코포리아";
+    healthLine.textContent = info.ok ? `${version} · 구조 점검 정상` : `${version} · 구조 점검 이상: ${(info.missing || []).slice(0, 5).join(", ")}`;
+    healthLine.style.color = info.ok ? "" : "#f44336";
+  };
+  const loadHealth = () => chrome.storage.local.get(["relayHealth"], value => renderHealth(value.relayHealth));
   const loadSocket = () => chrome.storage.local.get(["relaySocket"], value => renderSocket(value.relaySocket));
   const onStorageChanged = (changes, area) => {
     if (area !== "local") return;
     if (changes.relaySocket) renderSocket(changes.relaySocket.newValue);
+    if (changes.relayHealth) renderHealth(changes.relayHealth.newValue);
     if (changes.relayInvites) { invites = changes.relayInvites.newValue || {}; invite.value = inviteFor(roomId); }
   };
   chrome.storage.onChanged?.addListener(onStorageChanged);
@@ -255,7 +265,7 @@
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20, el("p", { class: "muted", text: "롤20 캠페인 페이지에서 'Launch Game'으로 들어간 게임 탭만 연결됩니다." })),
       toast,
       el("hr"),
-      el("h3", { text: "참가 승인" }), roomLine, socketLine, participants),
+      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, participants),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);
   backdrop.addEventListener("mousedown", event => { if (event.target === backdrop) closeModal(); });
@@ -278,13 +288,13 @@
     invites = value.relayInvites || {};
     invite.value = inviteFor(roomId);
     refreshParticipants();
-    loadSocket();
+    loadSocket(); loadHealth();
     (enabled.checked ? close : enabled).focus?.();
   });
   timer = setInterval(() => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; }
     const room = currentRoom();
     if (room !== roomId) { roomId = room; invite.value = inviteFor(roomId); }
-    refreshParticipants(); loadSocket();
+    refreshParticipants(); loadSocket(); loadHealth();
   }, 3000);
 })();

@@ -114,4 +114,16 @@ const panel = (messages, subscribers) => ({
   page.state.intervals[0]();
   assert.deepEqual(JSON.parse(JSON.stringify(page.snapshots().at(-1).present)), { main: { ids: ['p', 'q'], since: '2026-01-01T00:00:02.000Z' }, info: { ids: [], since: null } });
 }
+// Structure check result goes out with the first snapshot and again only when it changes.
+{
+  let result = { ok: true, ccfoliaVersion: '1.37.5', missing: [] };
+  const page = createPage({ api: { relayMessages: () => [{ id: 'h', name: 'GM', text: 't', at: 1, channel: 'main' }], relayHealth: () => result } });
+  const first = page.snapshots().at(-1);
+  assert.equal(JSON.stringify(first.health), JSON.stringify(result), 'first snapshot carries the health result');
+  page.state.intervals[0](); for (let i = 0; i < 5; i += 1) page.state.intervals[0]();
+  assert(page.snapshots().length > 1 && page.snapshots().slice(1).every(snapshot => snapshot.health === undefined), 'unchanged result is not sent again');
+  result = { ok: true, ccfoliaVersion: '1.38.0', missing: [] };
+  for (let i = 0; i < 6; i += 1) page.state.intervals[0]();
+  assert(page.snapshots().some(snapshot => snapshot.health?.ccfoliaVersion === '1.38.0'), 'a new CCFOLIA version is sent again');
+}
 console.log('relay-page: store-driven snapshots (debounced), late subscription, polling fallback, room changes passed');
