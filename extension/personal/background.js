@@ -19,12 +19,31 @@ chrome.action.onClicked.addListener(async (tab) => {
   } catch (error) { await flagError(tab.id, error); }
 });
 
+// Roll20 tab -> campaign number, learned from the addresses the tab visits: .../campaigns/details/<number>/... (before "Launch Game"), join, or /editor/setcampaign/<number>.
+// The setcampaign pattern is a precaution: how Launch Game opens the editor was not observed. A new tab opened from a tab with a number inherits it.
+const R20_CAMPAIGN_URL = /^https:\/\/app\.roll20\.net\/(?:campaigns\/(?:details|join)|editor\/setcampaign)\/(\d+)/;
+const tabCampaigns = async () => (await chrome.storage.session.get(["r20TabCampaign"])).r20TabCampaign || {};
+const saveTabCampaigns = value => chrome.storage.session.set({ r20TabCampaign: value });
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  const number = R20_CAMPAIGN_URL.exec(changeInfo.url || "")?.[1];
+  if (number) tabCampaigns().then(known => saveTabCampaigns({ ...known, [tabId]: number })).catch(() => {});
+});
+chrome.tabs.onCreated.addListener(tab => {
+  if (tab.openerTabId == null) return;
+  tabCampaigns().then(known => { const number = known[tab.openerTabId]; if (number) return saveTabCampaigns({ ...known, [tab.id]: number }); }).catch(() => {});
+});
+chrome.tabs.onRemoved.addListener(tabId => {
+  tabCampaigns().then(known => { if (tabId in known) { delete known[tabId]; return saveTabCampaigns(known); } }).catch(() => {});
+});
+
 // Roll20 -> CCFOLIA: forward a chat line from the Roll20 tab to the CCFOLIA room tab it is linked to (storage r20Links, keyed by Roll20 campaign id, set in the share modal).
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== "r20-message" || !String(sender.tab?.url || "").startsWith("https://app.roll20.net/")) return;
   (async () => {
     const { r20Links } = await chrome.storage.local.get(["r20Links"]);
-    const link = r20Links?.[String(message.message?.campaignId)];
+    // The game screen itself has no campaign number; the tab's earlier campaign page address does (remembered below). No number -> dropped, never guessed.
+    const campaignId = String(message.message?.campaignId || (await tabCampaigns())[sender.tab.id] || "");
+    const link = campaignId ? r20Links?.[campaignId] : null;
     if (!link?.roomId) return;
     const [tab] = await chrome.tabs.query({ url: `https://ccfolia.com/rooms/${link.roomId}*` });
     if (tab?.id) await chrome.tabs.sendMessage(tab.id, { type: "r20-message", message: { ...message.message, channel: link.channel } });
