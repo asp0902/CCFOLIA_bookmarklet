@@ -61,6 +61,11 @@
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin || request?.source !== SOURCE || request?.direction !== "bridge") return;
+    if (request.action === "external" && request.roomId === roomId) {
+      const m = request.message || {};
+      try { await window.__CCF_SECOND_CHAT_PANEL__?.relaySend?.(clean(m.name, 40) || "롤20", clean(m.text, 2000), clean(m.channel, 100), "", { source: "roll20", sourceId: clean(m.id, 160) }); } catch (_) {}
+      return;
+    }
     if (request.action !== "command" || !["chat.send", "piece.move", "status.set"].includes(request.command?.type) || request.roomId !== roomId) return;
     const commandId = clean(request.command.id, 100);
     try {

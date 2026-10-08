@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.27
+// @version      0.2.28
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.27";
+  const VERSION = "0.2.28";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1021,7 +1021,7 @@
     };
   }
 
-  async function sendMessage(text, channel = currentChannel, speaker = null) {
+  async function sendMessage(text, channel = currentChannel, speaker = null, meta = null) {
     const ctx = await getAuthContext();
     const template = await fetchTemplateFields(ctx);
     const fields = {};
@@ -1032,17 +1032,19 @@
     }
     // 서식: 마크다운 마커를 파싱해 봉투(invisible envelope)를 만든다. 다이스 판정이면
     // 서식은 무시하고 명령 원문만 보낸다(판정 카드에 서식은 의미 없음).
-    const parsed = parseFormatMarkers(text);
+    // meta(다른 곳에서 넘어온 메시지, 예: 롤20)는 서식·판정 해석 없이 그대로 보내고, 출처만 봉투에 보이지 않게 싣는다.
+    const parsed = meta ? { text: String(text), runs: [], alignRuns: [] } : parseFormatMarkers(text);
     const cleanText = parsed.text;
-    const rolled = evaluateDiceCommand(cleanText);
+    const rolled = meta ? null : evaluateDiceCommand(cleanText);
     let outText = cleanText;
-    const extra = rolled ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
+    const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
-    if (!rolled && (parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || alignAll.length > 0)) {
+    if (!rolled && (meta || parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
-        blockStyle: narrationOn ? { narration: true } : {}
+        blockStyle: narrationOn && !meta ? { narration: true } : {},
+        ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {})
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
       outText = cleanText + encodeEnvelopeToInvisible(payload);
@@ -3075,14 +3077,14 @@
         if (!response.ok) throw new Error(`이동 실패 (${response.status})`);
       },
       // characterId 가 있으면 그 캐릭터의 이름·아이콘·색으로, 없으면 참여자 이름만 달아 보낸다.
-      relaySend: (displayName, text, channel, characterId) => {
+      relaySend: (displayName, text, channel, characterId, meta) => {
         const body = String(text || "").trim().slice(0, 2000);
         if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
         const target = listChannels().includes(channel) ? channel : "main";
         const c = characterId ? findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId] : null;
         if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
         const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
-        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : "", color: c ? c.color : "" });
+        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : "", color: c ? c.color : "" }, meta || null);
       },
       // 참여자가 고친 캐릭터 상태값(index 번째 칸의 value)을 코코포리아에 반영한다. 배열째 다시 쓴다.
       relaySetStatus: async (characterId, index, value) => {

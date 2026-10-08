@@ -109,6 +109,13 @@
   host.__capybaraClose = closeModal;
 
   const enabled = el("input", { type: "checkbox", id: "enabled", "aria-label": "웹 공유 사용" });
+  const r20 = el("input", { type: "checkbox", id: "r20", "aria-label": "롤20 채팅 받기" });
+  r20.addEventListener("change", () => {
+    if (r20.checked && !roomId) { r20.checked = false; say("코코포리아 룸 화면에서 켜주세요.", true); return; }
+    // direction is fixed to "in" for now (Roll20 -> CCFOLIA); the field is kept so a reverse link can reuse the same setting.
+    if (r20.checked) chrome.storage.local.set({ r20Link: { roomId, channel: "main", direction: "in" } });
+    else chrome.storage.local.remove("r20Link");
+  });
   const url = el("input", { type: "text", id: "url", autocomplete: "off", spellcheck: "false" });
   const token = el("input", { type: "password", id: "token", autocomplete: "off" });
   const invite = el("input", { type: "text", id: "invite", readonly: "", placeholder: "코코포리아 룸 연결 후 생성됩니다." });
@@ -236,6 +243,8 @@
       el("div", { class: "field" }, el("label", { for: "url", text: "릴레이 주소" }), url),
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
+      el("div", { class: "field row" }, el("label", { for: "r20", text: "롤20 채팅 받기 (이 룸으로)" }),
+        el("label", { class: "switch", title: "롤20 채팅 받기" }, r20, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" }))))),
       toast,
       el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, participants),
@@ -252,7 +261,8 @@
   document.addEventListener("keydown", onKey, true);
   document.documentElement.append(host);
 
-  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites"], value => {
+  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Link"], value => {
+    r20.checked = !!value.r20Link && value.r20Link.roomId === roomId;
     enabled.checked = value.relayEnabled === true;
     url.value = value.relayUrl || "http://127.0.0.1:8787";
     token.value = value.relayGmToken || "";

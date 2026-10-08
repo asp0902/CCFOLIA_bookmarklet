@@ -18,7 +18,7 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     URL, btoa, TextEncoder, setInterval: (fn, delay) => { state.intervals.push(fn); state.intervalDelays.push(delay); return state.intervals.length; }, clearInterval() {}, setTimeout: fn => { state.timeouts.push(fn); return state.timeouts.length; }, clearTimeout() {},
     location: { pathname, origin: ORIGIN },
     navigator: { userActivation: { isActive: active } },
-    chrome: { runtime: { id: "test-extension" }, storage: { onChanged: { addListener: fn => { state.storageListeners.push(fn); } }, local: {
+    chrome: { runtime: { id: "test-extension", onMessage: { addListener: () => {} } }, storage: { onChanged: { addListener: fn => { state.storageListeners.push(fn); } }, local: {
       get: async keys => Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]])),
       set: async value => { Object.assign(store, value); },
       remove: async keys => { for (const key of [].concat(keys)) delete store[key]; }
