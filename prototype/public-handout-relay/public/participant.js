@@ -320,7 +320,7 @@ const renderState = data => {
   list.replaceChildren(...(data.messages || []).filter(message => (message.channel || "main") === activeChannel).map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
-    for (const [flag, on] of Object.entries(message.roll || {})) if (on) item.classList.add(`roll-${flag}`);
+    for (const [flag, on] of Object.entries(message.roll || {})) if (on === true) item.classList.add(`roll-${flag}`);
     const name = message.author || "이름 없음";
     const avatar = document.createElement("div"); avatar.className = "avatar";
     if (message.icon) { const img = document.createElement("img"); img.src = message.icon; img.alt = ""; img.referrerPolicy = "no-referrer"; img.addEventListener("error", () => { img.remove(); avatar.textContent = [...name][0] || "?"; }); avatar.append(img); }
@@ -332,6 +332,8 @@ const renderState = data => {
     const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
     head.append(author, " - ", time);
     const body = document.createElement("p"); renderRich(body, message.text || "");
+    // Native rows show the typed text, then the dice result in a dimmer colour (measured: rgba(255,255,255,.7)).
+    if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll-result"; result.textContent = ` ${message.roll.result}`; (body.lastElementChild || body).append(result); }
     text.append(head, body); item.append(avatar, text); return item;
   }));
   if (stickToBottom) list.scrollTop = list.scrollHeight;
