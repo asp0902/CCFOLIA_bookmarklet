@@ -84,7 +84,7 @@
     if (event.source !== window || event.origin !== location.origin || request?.source !== SOURCE || request?.direction !== "bridge") return;
     if (request.action === "external" && request.roomId === roomId) {
       const m = request.message || {};
-      try { await window.__CCF_SECOND_CHAT_PANEL__?.relaySend?.(clean(m.name, 40) || "롤20", clean(m.text, 2000), clean(m.channel, 100), "", { source: "roll20", sourceId: clean(m.id, 160) }); }
+      try { await window.__CCF_SECOND_CHAT_PANEL__?.relaySend?.(clean(m.name, 40) || "롤20", clean(m.text, 2000), clean(m.channel, 100), "", { source: "roll20", sourceId: clean(m.id, 160) }, undefined, /^https:\/\/\S{1,490}$/.test(String(m.avatar || "")) ? String(m.avatar) : ""); }
       catch (error) { warnOnce(clean(error?.message || "전송 실패", 200)); }
       return;
     }
