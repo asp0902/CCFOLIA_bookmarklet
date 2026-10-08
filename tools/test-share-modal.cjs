@@ -65,6 +65,7 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(await q(page, '.participant b').count(), 0);
       assert.deepEqual(await q(page, 'button[data-decision]').evaluateAll(b => b.map(x => `${x.dataset.id}:${x.dataset.decision}`)), ['p1:approve', 'p1:reject', 'p2:revoke']);
       // Approve: authenticated POST for that participant.
+      assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.querySelector('button[data-decision="approve"]')).color, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['rgb(33, 150, 243)', '15px'], 'approve button is blue, participant name is 15px');
       await q(page, 'button[data-decision="approve"]').click();
       await flush(page);
       const decision = (await page.evaluate(() => window.__calls)).find(c => /\/decision$/.test(c.url));
