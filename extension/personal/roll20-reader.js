@@ -10,10 +10,18 @@
   // The editor URL is the same for every campaign; the campaign id is in an inline script of the page (campaign_id = 123).
   let campaignId = "";
   const findCampaignId = () => campaignId ||= [...document.scripts].map(s => s.textContent.match(/campaign_id\s*=\s*(\d+)/)?.[1]).find(Boolean) || "";
+  // The speaker's picture (https only, 500 chars). It is read before the avatar node is removed from the text below.
+  let lastAvatar = "";
+  const avatarOf = el => {
+    const src = el.querySelector(".avatar img")?.getAttribute("src");
+    if (!src) return "";
+    try { const url = new URL(src, location.href); return url.protocol === "https:" && url.href.length <= 500 ? url.href : ""; } catch (_) { return ""; }
+  };
   const read = el => {
     const by = el.querySelector(".by");
     const name = by ? clean(by.textContent, 80).replace(/:$/, "").trim() : "";
-    if (name) lastName = name; // Roll20 leaves the name out of consecutive lines by the same speaker
+    // Roll20 leaves the name (and picture) out of consecutive lines by the same speaker; a new name takes its own picture, or none
+    if (name) { lastName = name; lastAvatar = avatarOf(el); }
     const kind = el.classList.contains("rollresult") ? "rollresult" : el.classList.contains("emote") ? "emote" : el.classList.contains("desc") ? "desc" : "general";
     let text;
     if (kind === "rollresult") {
@@ -24,7 +32,7 @@
       body.querySelectorAll(".by, .tstamp, .avatar").forEach(node => node.remove());
       text = clean(body.innerText, 2000); // roll templates keep their line breaks
     }
-    return { id: clean(el.dataset.messageid, 160), name: name || lastName, text, kind, source: "roll20", campaignId };
+    return { id: clean(el.dataset.messageid, 160), name: name || lastName, avatar: name ? lastAvatar : (avatarOf(el) || lastAvatar), text, kind, source: "roll20", campaignId };
   };
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload

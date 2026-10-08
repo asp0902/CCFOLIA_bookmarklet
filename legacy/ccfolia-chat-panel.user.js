@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.34
+// @version      0.2.35
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.34";
+  const VERSION = "0.2.35";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -210,6 +210,11 @@
     if (message.whisper) return null;
     if (message.rollInfo?.secret) return { ...message, text: "시크릿 다이스", roll: "", rollInfo: { secret: true }, channel };
     return { ...message, channel };
+  }
+
+  // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소: https 만, 캐릭터를 쓰지 않을 때만 쓴다.
+  function relayIconUrl(value) {
+    return /^https:\/\/\S{1,490}$/.test(String(value || "")) ? String(value) : "";
   }
 
   function readMessages(channel) {
@@ -3107,14 +3112,14 @@
         if (!response.ok) throw new Error(`이동 실패 (${response.status})`);
       },
       // characterId 가 있으면 그 캐릭터의 이름·아이콘·색으로, 없으면 참여자 이름만 달아 보낸다.
-      relaySend: (displayName, text, channel, characterId, meta, color) => {
+      relaySend: (displayName, text, channel, characterId, meta, color, icon) => {
         const body = String(text || "").trim().slice(0, 2000);
         if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
         const target = listChannels().includes(channel) ? channel : "main";
         const c = characterId ? findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId] : null;
         if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
         const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
-        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : "", color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") }, meta || null);
+        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : relayIconUrl(icon), color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") }, meta || null);
       },
       // 참여자가 고친 캐릭터 상태값(index 번째 칸의 value)을 코코포리아에 반영한다. 배열째 다시 쓴다.
       relaySetStatus: async (characterId, index, value) => {

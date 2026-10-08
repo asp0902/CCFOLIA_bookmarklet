@@ -6,7 +6,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-cha
 const start = source.indexOf('  function pick(obj, keys)');
 const end = source.indexOf('  function readMessages(channel)');
 assert(start >= 0 && end > start, 'helpers not found');
-const { toPanelMessage, relayView } = new Function(`${source.slice(start, end)}; return { toPanelMessage, relayView };`)();
+const { toPanelMessage, relayView, relayIconUrl } = new Function(`${source.slice(start, end)}; return { toPanelMessage, relayView, relayIconUrl };`)();
 const view = (id, msg) => relayView(toPanelMessage(id, { name: 'A', ...msg }), 'main');
 assert.equal(view('w', { text: 'psst', to: 'someone' }), null, 'whisper dropped');
 assert.equal(view('w2', { text: 'psst', to: ['x'] }), null, 'whisper (list) dropped');
@@ -20,4 +20,7 @@ assert.equal(pub.rollInfo.success, true);
 assert.equal(pub.roll, '1D20 > 5');
 // the GM's own panel still sees everything
 assert.equal(toPanelMessage('w', { text: 'psst', to: 'someone' }).text, 'psst');
+// icons from other places (Roll20): https only
+assert.equal(relayIconUrl('https://files.example/a.png'), 'https://files.example/a.png');
+for (const bad of ['http://x/a.png', 'data:image/png;base64,AAAA', 'javascript:alert(1)', '', undefined, 'https://x/' + 'a'.repeat(500)]) assert.equal(relayIconUrl(bad), '', String(bad));
 console.log('chat-panel relay privacy PASS');
