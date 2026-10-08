@@ -9,6 +9,13 @@ const token = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
+// Invite links are short: a 9-byte (72 bit) token as 12 base64url characters, and /j/<room>/<token> redirects to the page that reads the old #room=..&token=.. form.
+export const newInviteToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(9)))).replace(/\+/g, "-").replace(/\//g, "_");
+export const inviteUrl = (origin, roomId, inviteToken) => `${origin}/j/${encodeURIComponent(roomId)}/${encodeURIComponent(inviteToken)}`;
+export const shortInviteLocation = pathname => {
+  const match = pathname.match(/^\/j\/([\w-]{1,200})\/([\w-]{1,100})\/?$/);
+  return match ? `/#room=${match[1]}&token=${match[2]}` : "/";
+};
 const text = (value, max) => typeof value === "string" ? value.replace(/\u0000/g, "").slice(0, max) : "";
 const bearer = request => {
   const header = /^Bearer\s+(.+)$/i.exec(request.headers.get("Authorization") || "")?.[1];
@@ -152,7 +159,7 @@ export class RoomRelay {
     if (request.method === "POST" && url.pathname === "/api/connect") {
       const body = await request.json();
       if (Object.keys(body).some(key => !["roomId", "roomTitle", "capabilities"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
-      if (!room?.active) room = this.normalize({ active: true, inviteToken: token() });
+      if (!room?.active) room = this.normalize({ active: true, inviteToken: newInviteToken() });
       room.active = true;
       room.roomTitle = text(body.roomTitle, 200).trim();
       room.capabilities = {
@@ -163,7 +170,7 @@ export class RoomRelay {
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
       this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
-      return json({ inviteUrl: `${request.headers.get("X-Public-Origin")}/#room=${encodeURIComponent(body.roomId)}&token=${encodeURIComponent(room.inviteToken)}` });
+      return json({ inviteUrl: inviteUrl(request.headers.get("X-Public-Origin"), body.roomId, room.inviteToken) });
     }
     if (request.method === "POST" && url.pathname === "/api/share") {
       const body = await request.json();
@@ -171,12 +178,12 @@ export class RoomRelay {
       if (Object.keys(body.handout || {}).some(key => !["id", "title", "bodyText"].includes(key))) return json({ error: "공개 필드만 전송할 수 있습니다." }, 400);
       const handout = { id: text(body.handout?.id, 200), title: text(body.handout?.title, 500), bodyText: text(body.handout?.bodyText, 50_000), updatedAt: new Date().toISOString() };
       if (!handout.id) return json({ error: "handout.id가 필요합니다." }, 400);
-      if (!room?.active) room = this.normalize({ active: true, inviteToken: token() });
+      if (!room?.active) room = this.normalize({ active: true, inviteToken: newInviteToken() });
       room.active = true; room.handout = handout;
       await this.save(room);
       Object.values(room.participants).forEach(member => { if (member.status === "approved") this.send(member.id, "handout", handout); });
       if (room.capabilities.publicHandout) this.push("p", { type: "handout", handout });
-      return json({ inviteUrl: `${request.headers.get("X-Public-Origin")}/#room=${encodeURIComponent(body.roomId)}&token=${encodeURIComponent(room.inviteToken)}` });
+      return json({ inviteUrl: inviteUrl(request.headers.get("X-Public-Origin"), body.roomId, room.inviteToken) });
     }
     if (request.method === "POST" && url.pathname === "/api/share/stop") {
       if (room) {
@@ -439,6 +446,7 @@ export class RoomRelay {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/j/")) return new Response(null, { status: 302, headers: { Location: shortInviteLocation(url.pathname), ...securityHeadersFor(url) } });
     if (!url.pathname.startsWith("/api/")) {
       const response = await env.ASSETS.fetch(request);
       const headers = new Headers(response.headers);
