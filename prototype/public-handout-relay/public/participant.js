@@ -351,6 +351,18 @@ function decodeEnvelope(full) {
   } catch (_) { return { text: full.slice(0, a), env: null }; }
 }
 const safeColor = value => (typeof value === "string" && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(value.trim())) ? value.trim() : "";
+// Roll20 CSS macros (colour bands etc.) travel as style.extraCss. Same keys as the roll20-css-bridge, minus position/top/left/...
+// (a message must not be able to cover the page); values stay short and cannot reference urls or escapes.
+const EXTRA_CSS_KEYS = ["fontStyle", "fontFamily", "boxShadow", "backgroundPosition", "backgroundRepeat", "backgroundSize", "width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight", "overflow", "textOverflow", "whiteSpace", "wordBreak", "overflowWrap", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginRight", "marginBottom", "marginLeft", "verticalAlign", "textTransform", "borderTop", "borderRight", "borderBottom", "borderLeft", "display"];
+const applyExtraCss = (span, extra) => {
+  if (!extra || typeof extra !== "object") return;
+  for (const key of EXTRA_CSS_KEYS) {
+    const value = extra[key];
+    if (typeof value !== "string" || value.length > 240 || /url\(|expression|[\\@<>{}]/i.test(value)) continue;
+    if (key === "display" && !/^(inline|block|inline-block)$/.test(value)) continue;
+    span.style[key] = value;
+  }
+};
 function styleSegment(span, style) {
   if (style.bold) span.style.fontWeight = "700";
   if (style.italic) span.style.fontStyle = "italic";
@@ -361,6 +373,7 @@ function styleSegment(span, style) {
   const size = Math.round(Number(style.fontSize)); if (size >= 6 && size <= 120) span.style.fontSize = `${size}px`;
   if (style.blur) { span.style.webkitTextFillColor = "transparent"; span.style.textShadow = "0 0 6px #fff"; span.title = "클릭하면 보입니다"; span.addEventListener("click", () => { span.style.webkitTextFillColor = ""; span.style.textShadow = ""; }, { once: true }); }
   if (style.codeMode) { span.style.fontFamily = "monospace"; span.style.background = "rgba(255,255,255,.12)"; span.style.padding = "0 4px"; span.style.borderRadius = "3px"; }
+  applyExtraCss(span, style.extraCss);
   if (style.tooltipText) { span.title = String(style.tooltipText).slice(0, 200); span.style.borderBottom = "1px dotted currentColor"; }
 }
 function renderRich(container, full) {
