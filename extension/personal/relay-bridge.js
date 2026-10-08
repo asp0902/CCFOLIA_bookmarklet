@@ -168,6 +168,12 @@
     setSocketStatus("off");
     if (roomId) autoStart();
   }, 1000);
+  // A chat line from the linked Roll20 tab: hand it to the page script, which sends it into this room.
+  chrome.runtime.onMessage.addListener(request => {
+    if (request?.type !== "r20-message" || !roomId) return;
+    const m = request.message || {};
+    window.postMessage({ source: ROOM_SOURCE, direction: "bridge", action: "external", roomId, message: { id: clean(m.id, 160), name: clean(m.name, 40), text: clean(m.text, 2000), kind: clean(m.kind, 20), source: "roll20", channel: clean(m.channel, 100) } }, location.origin);
+  });
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin) return;

@@ -218,7 +218,7 @@ const flush = page => page.waitForTimeout(80);
       });
       assert.equal(look.transition.split(',')[0].trim(), '0.15s');
       const checked = await q(page, '#enabled').isChecked();
-      await q(page, '.sw').click(); await flush(page); await page.waitForTimeout(250);
+      await q(page, 'header .sw').click(); await flush(page); await page.waitForTimeout(250);
       const after = await page.evaluate(() => { const root = document.getElementById('capybara-share-modal-host').shadowRoot; const thumb = getComputedStyle(root.querySelector('.base')); const track = getComputedStyle(root.querySelector('.track')); return { thumb: thumb.color, shift: thumb.transform, track: track.backgroundColor, opacity: track.opacity }; });
       const on = checked ? look : after, off = checked ? after : look;
       assert.equal(off.thumb, 'rgb(224, 224, 224)'); assert.equal(off.opacity, '0.3');

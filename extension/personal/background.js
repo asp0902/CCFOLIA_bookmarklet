@@ -19,6 +19,17 @@ chrome.action.onClicked.addListener(async (tab) => {
   } catch (error) { await flagError(tab.id, error); }
 });
 
+// Roll20 -> CCFOLIA: forward a chat line from the Roll20 tab to the CCFOLIA room tab it is linked to (storage r20Link, set in the share modal).
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== "r20-message" || !String(sender.tab?.url || "").startsWith("https://app.roll20.net/")) return;
+  (async () => {
+    const { r20Link } = await chrome.storage.local.get(["r20Link"]);
+    if (!r20Link?.roomId) return;
+    const [tab] = await chrome.tabs.query({ url: `https://ccfolia.com/rooms/${r20Link.roomId}*` });
+    if (tab?.id) await chrome.tabs.sendMessage(tab.id, { type: "r20-message", message: { ...message.message, channel: r20Link.channel } });
+  })().catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== "capybara-open-toolkit" || !Number.isInteger(sender.tab?.id) || !isRoomTab(sender.tab)) return;
   (async () => {
