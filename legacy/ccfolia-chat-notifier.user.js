@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.28
+// @version      0.3.29
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.28";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.29";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -566,6 +566,9 @@
     }
   }
   let ccfBgmActiveLoop = true;
+  // "반복 예약": 곡이 재생 중이고 반복이 켜져 있는 동안 true. 곡이 끝나 멈춘 뒤에도 이 값으로 다시 시작할지 정한다.
+  // 끝난 뒤에 반복을 켜는 것은 이 값을 켜지 않으므로(재생 중일 때만 켜짐) 멈춘 곡이 저절로 재생되지 않는다(#239). 정지·곡 전환·슬롯 해제 때 false.
+  let ccfBgmLoopArmed = false;
   let ccfBgmLastControlSeed = null;
   let ccfBgmEditingSlotKey = "";
   let ccfBgmLastDialogSlotKey = "";
@@ -3350,6 +3353,7 @@
     ccfBgmActiveSlotKey = normalizedSlotKey;
     ccfBgmActiveEntryKey = resolvedEntryKey;
     ccfBgmActiveLoop = state.loop;
+    ccfBgmLoopArmed = state.loop === true; // 사용자가 재생을 시작한 곡: 아주 짧은 곡도 반복되도록 처음부터 예약
     // 새로고침 후 같은 트랙 복원을 위해 last active slot persist.
     persistCcfBgmActiveSlot(normalizedSlotKey, resolvedEntryKey, entry?.videoId);
     markCcfYoutubeBgmSlotButtons();
@@ -3711,6 +3715,7 @@
     ccfBgmStopping = true;
     window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
     ccfBgmActiveLoop = false;
+    ccfBgmLoopArmed = false;
     try {
       if (typeof ccfBgmPlayer.pauseVideo === "function") ccfBgmPlayer.pauseVideo();
       if (typeof ccfBgmPlayer.stopVideo === "function") ccfBgmPlayer.stopVideo();
@@ -3739,10 +3744,11 @@
         return;
       }
       // 사용자가 정지시켜 발생한 ENDED 면 loop 로 되살리지 않는다 (앞부분 무한 반복 방지).
-      if (ccfBgmActiveLoop && !ccfBgmStopping) {
+      if (shouldRestartEndedCcfBgm(0)) {
         event.target.seekTo(0, true);
         event.target.playVideo();
       } else {
+        ccfBgmLoopArmed = false;
         ccfBgmActiveSlotKey = "";
         ccfBgmActiveEntryKey = "";
         ccfBgmPlayerVisible = false;
@@ -3775,6 +3781,7 @@
     // 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
     // → 정지 → ENDED → 재생 → … 앞 0~1초 무한 반복. 정지 중임을 표시해 구분한다.
     ccfBgmStopping = true;
+    ccfBgmLoopArmed = false;
     window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
     // 진행 중이던 크로스페이드를 끝내고 대기 플레이어도 확실히 세운다(좀비 방지).
     cancelCcfBgmCrossfade();
@@ -3816,6 +3823,7 @@
     ccfBgmActiveEntryKey = "";
     // 반복재생 설정도 함께 내린다. 남겨두면 대기 중인 플레이어의 ENDED 로 곡이 되살아난다.
     ccfBgmActiveLoop = false;
+    ccfBgmLoopArmed = false;
     ccfBgmPlayerVisible = false;
     updateCcfBgmPersistedState("stopped");
     syncCcfYoutubeBgmPlayerDockVisibility();
@@ -5330,6 +5338,7 @@
       // 멈춘 곡에는 저장만 하고(다음에 재생할 때 적용) 재생 중일 때만 바로 반영한다(#239).
       if (loopButton && ccfBgmActiveEntryKey === entryKey && isCcfYoutubeBgmPlayingNow()) {
         ccfBgmActiveLoop = loopButton.dataset.loop === "1";
+        ccfBgmLoopArmed = ccfBgmActiveLoop;
       }
     };
 
@@ -5482,6 +5491,7 @@
 
       if (ccfBgmActiveEntryKey === entryKey && isCcfYoutubeBgmPlayingNow()) {
         ccfBgmActiveLoop = current.loop;
+        ccfBgmLoopArmed = current.loop === true;
         applyCcfBgmPlayerVolume({
           volume: current.volume,
           loop: current.loop
@@ -6192,6 +6202,12 @@
     ccfBgmProgressTimer = window.setTimeout(tick, BGM_PROGRESS_UPDATE_MS);
   }
 
+  // 곡이 끝났고(상태 0) 활성 곡이 있고 반복이 예약돼 있고 사용자가 멈춘 중이 아니면 처음부터 다시 시작해야 한다.
+  // 진행바 확인(끝 구간을 놓칠 수 있음)과 ENDED 이벤트 처리가 같은 조건을 쓴다.
+  function shouldRestartEndedCcfBgm(playerState) {
+    return playerState === 0 && !!ccfBgmActiveSlotKey && ccfBgmLoopArmed && !ccfBgmStopping;
+  }
+
   // 활성 곡이 지금 재생 중(1)이거나 버퍼링 중(3)인가. 끝나서 멈춘 곡에는 진행바 백업이나 반복 설정 변경이 재생을 일으키면 안 된다(#239).
   function isCcfYoutubeBgmPlayingNow() {
     if (!ccfBgmPlayer || !ccfBgmActiveSlotKey) return false;
@@ -6230,6 +6246,21 @@
       && playback.total > 0
       && Math.abs(playback.total - ccfBgmLoopNudgeFromTotal) < 1
       && ratio > 0.5;
+
+    // 반복 예약 갱신과 끝난 곡 재시작: 재생 중이면 현재 반복 설정을 예약에 옮기고, 이미 끝나(상태 0) 멈춰 있으면 예약된 곡만 다시 시작한다.
+    let playerState = null;
+    try { playerState = ccfBgmPlayer?.getPlayerState?.(); } catch (error) { /* 상태를 못 읽으면 아무것도 하지 않는다 */ }
+    if (ccfBgmActiveSlotKey && (playerState === 1 || playerState === 3)) {
+      ccfBgmLoopArmed = ccfBgmActiveLoop === true;
+    } else if (shouldRestartEndedCcfBgm(playerState) && sinceLoopNudge > 1000 && ccfBgmPlayer) {
+      ccfBgmLoopNudgeAt = nowMs;
+      try {
+        ccfBgmPlayer.seekTo?.(0, true);
+        ccfBgmPlayer.playVideo?.();
+      } catch (error) {
+        debugLog?.("bgm-youtube-loop-restart-failed", serializeError?.(error) || String(error));
+      }
+    }
 
     if (nearEnd && ccfBgmActiveLoop) {
       // 루프: 처음으로 되감기 + 진행바 시각 100% (한 frame 동안). 다음 frame 의
