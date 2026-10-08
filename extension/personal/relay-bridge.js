@@ -79,7 +79,10 @@
   // Commands arrive over the push socket; polling stays as a slow safety net (fast while the socket is down).
   const startPolling = () => { clearInterval(pollTimer); pollTimer = setInterval(pollCommands, socketOpen ? 10_000 : 1500); };
   const connect = (roomTitle = "") => { const run = connectChain.catch(() => {}).then(() => doConnect(roomTitle)); connectChain = run; return run; };
+  // The number of waiting join requests goes to the background, which shows it on this tab's extension icon.
+  const reportPending = count => { try { Promise.resolve(chrome.runtime.sendMessage({ type: "relay-pending", count: Math.max(0, Math.min(99, Math.trunc(Number(count)) || 0)) })).catch(() => {}); } catch (_) {} };
   async function disconnect() {
+    reportPending(0);
     stopped = true; connectedTitle = null;
     clearInterval(pollTimer); pollTimer = 0;
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
@@ -90,6 +93,7 @@
   }
   // Drop everything that belongs to the previous room (socket, polling, queued commands, delivered-message memory).
   function resetConnection() {
+    reportPending(0);
     stopped = false; connectedTitle = null;
     clearInterval(pollTimer); pollTimer = 0;
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
@@ -100,6 +104,7 @@
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
     socket = null; socketOpen = false;
+    reportPending(0);
     setSocketStatus("closed", { code: event?.code ?? 0, reason: String(event?.reason || "").slice(0, 80) });
     clearInterval(socketPingTimer);
     try { own.close(); } catch (_) {}
@@ -131,7 +136,8 @@
       lastSeen = Date.now();
       let message;
       try { message = JSON.parse(event.data); } catch (_) { return; }
-      if (message.type === "command") handleCommand(message.command).catch(warn);
+      if (message.type === "pending") reportPending(message.count);
+      else if (message.type === "command") handleCommand(message.command).catch(warn);
       else if (message.type === "closed") disconnect().catch(() => {});
     };
     own.onclose = event => dropSocket(own, event);

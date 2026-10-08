@@ -14,9 +14,30 @@ chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!isRoomTab(tab)) throw new Error("코코포리아 탭에서 사용해주세요.");
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["share-modal.js"] });
-    await chrome.action.setBadgeText({ tabId: tab.id, text: "" });
-    await chrome.action.setTitle({ tabId: tab.id, title: "웹 공유 설정" });
+    // opening the settings clears an error mark, but not the number of waiting join requests
+    if (await chrome.action.getBadgeText({ tabId: tab.id }) === "!") {
+      await chrome.action.setBadgeText({ tabId: tab.id, text: "" });
+      await chrome.action.setTitle({ tabId: tab.id, title: "웹 공유 설정" });
+    }
   } catch (error) { await flagError(tab.id, error); }
+});
+
+// Waiting join requests (sent by relay-bridge from the room tab): a blue number on that tab's icon; 0 clears it; an error mark ("!") has priority.
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== "relay-pending" || !Number.isInteger(sender.tab?.id) || !isRoomTab(sender.tab)) return;
+  const tabId = sender.tab.id;
+  const count = Math.max(0, Math.min(99, Math.trunc(Number(message.count)) || 0));
+  (async () => {
+    if (await chrome.action.getBadgeText({ tabId }) === "!") return;
+    if (count > 0) {
+      await chrome.action.setBadgeText({ tabId, text: String(count) });
+      await chrome.action.setBadgeBackgroundColor({ tabId, color: "#1976d2" });
+      await chrome.action.setTitle({ tabId, title: `참가 승인 요청 ${count}건` });
+    } else {
+      await chrome.action.setBadgeText({ tabId, text: "" });
+      await chrome.action.setTitle({ tabId, title: "웹 공유 설정 (코코포리아에서 사용)" });
+    }
+  })().catch(() => {});
 });
 
 // Roll20 tab -> campaign number, learned from the addresses the tab visits: .../campaigns/details/<number>/... (before "Launch Game"), join, or /editor/setcampaign/<number>.
