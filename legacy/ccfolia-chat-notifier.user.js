@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.25
+// @version      0.3.26
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.25";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.26";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -485,6 +485,8 @@
   let ccfBgmActiveSlotKey = "";
   let ccfBgmActiveEntryKey = "";
   let ccfBgmStopping = false; // 정지 중 발생한 ENDED 를 loop 재생과 구분
+  // 반복재생이 안 될 때 원인을 보려고 곡이 끝날 때마다(ENDED) 상태를 남긴다(콘솔 로그와 무관하게 항상, 최근 20개): __CCF_CHAT_NOTIFIER_DEBUG__.loopTrace()
+  const ccfLoopTrace = [];
   // "새로고침 전 곡 복원"은 페이지당 한 번뿐. 이후의 패널 재렌더(컷인 등)로는
   // 다시 재생되지 않게 한다.
   let ccfBgmRestoreConsumed = false;
@@ -1521,6 +1523,10 @@
     ccfChatNotifierDebugApi = {
       isActive() {
         return chatNotifierLifecycle.isActive();
+      },
+      // 곡이 끝난 순간(ENDED)의 활성 슬롯·반복·정지 중 여부 기록 — 반복이 안 될 때 이 값을 알려 주세요.
+      loopTrace() {
+        return ccfLoopTrace.slice();
       },
       // 유튜브 BGM 크로스페이드 — 아직 검증 전이라 기본 꺼짐. setCrossfade(true) 로 켠다.
       setCrossfade(on) {
@@ -3689,6 +3695,15 @@
 
   function handleCcfBgmPlayerStateChange(event) {
     if (event?.data === window.YT?.PlayerState?.ENDED) {
+      const isActivePlayer = !ccfBgmPlayer || event.target === ccfBgmPlayer;
+      ccfLoopTrace.push({ at: new Date().toISOString(), slot: ccfBgmActiveSlotKey || "", loop: ccfBgmActiveLoop, stopping: ccfBgmStopping, activePlayer: isActivePlayer });
+      if (ccfLoopTrace.length > 20) ccfLoopTrace.shift();
+      debugLog("bgm-youtube-ended", ccfLoopTrace[ccfLoopTrace.length - 1]);
+      // 대기 플레이어의 ENDED(우리가 silenceCcfBgmStandby 로 stopVideo 해서 생긴 것)로 대기 플레이어를 되살리면 안 된다.
+      // 예전에는 event.target 이 누구든 반복 중이면 seekTo(0)+playVideo 를 해서, 크로스페이드를 켠 상태에서 대기 플레이어가 계속 되살아났다.
+      if (!isActivePlayer) {
+        return;
+      }
       // 재생 중인 유튜브 곡이 없으면 무엇도 되살리지 않는다.
       // ccfBgmActiveLoop 는 마지막에 재생한 곡의 설정이 그대로 남아 true 인 채였고,
       // 대기(cue) 상태 플레이어에서 온 ENDED 로도 seekTo+playVideo 가 돌아
