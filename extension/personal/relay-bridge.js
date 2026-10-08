@@ -7,7 +7,7 @@
   // every time it is needed, and a watcher below re-connects when it changes, so each room gets its own relay room and invite URL.
   const readRoomId = () => location.pathname.match(/^\/rooms\/([^/?#]+)/i)?.[1] || "";
   let roomId = readRoomId();
-  const sentMessages = new Set();
+  const sentMessages = new Map(); // id -> what was sent (a message edited in CCFOLIA has the same id and a different body, and is sent again)
   let lastChannelKey = "";
   let lastPresentKey = "";
   let lastScene = null; // latest room scene from the page, sent again after (re)connecting
@@ -221,9 +221,10 @@
         const run = snapshotChain.catch(() => {}).then(async () => {
           for (const message of messages) {
             const id = clean(message.id, 160);
-            if (!id || sentMessages.has(id)) continue;
-            sentMessages.add(id);
-            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600), roll: message.roll && typeof message.roll === "object" ? message.roll : undefined }); }
+            const signature = JSON.stringify([message.text, message.color, message.icon, message.roll, message.edited === true]);
+            if (!id || sentMessages.get(id) === signature) continue;
+            sentMessages.set(id, signature);
+            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600), roll: message.roll && typeof message.roll === "object" ? message.roll : undefined, edited: message.edited === true }); }
             catch (error) { sentMessages.delete(id); throw error; }
           }
           // After the upload: tell the relay what the GM still has so deleted messages disappear for participants too.

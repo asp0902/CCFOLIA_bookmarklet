@@ -181,7 +181,6 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     await h.page('ready');
     const messages = [
       { id: 'm1', author: 'a'.repeat(200), text: 'bc\u0000'.repeat(3000), createdAt: '2025-01-01' },
-      { id: 'm1', author: 'dup', text: 'dup' },
       { author: 'noid', text: 'x' }
     ];
     await h.page('snapshot', { messages });
@@ -191,6 +190,20 @@ function createHarness({ pathname = '/rooms/R1', storage = {}, active = true, co
     assert.equal(posts[0].body.author.length, 80);
     assert.equal(posts[0].body.text.length, 4000);
     assert(!posts[0].body.text.includes('\u0000'));
+  }
+
+  // A message edited in CCFOLIA keeps its id and gets a new body: it is sent again; an unchanged one is not.
+  {
+    const h = createHarness();
+    await h.page('ready');
+    const base = { id: 'e1', author: 'A', text: '처음', createdAt: '2026-01-01T00:00:00Z' };
+    await h.page('snapshot', { messages: [base] });
+    await h.page('snapshot', { messages: [{ ...base }] });
+    assert.equal(h.callsTo(/\/api\/admin\/rooms\/R1\/messages$/).length, 1, 'unchanged: not sent again');
+    await h.page('snapshot', { messages: [{ ...base, text: '수정됨', edited: true }] });
+    const posts = h.callsTo(/\/api\/admin\/rooms\/R1\/messages$/);
+    assert.equal(posts.length, 2, 'edited: sent again');
+    assert.deepEqual([posts[1].body.text, posts[1].body.edited], ['수정됨', true]);
   }
 
   // Late-resolved room title: reconnects with the new title; empty titles are ignored.
