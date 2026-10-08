@@ -274,7 +274,7 @@ export class RoomRelay {
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages$/.test(url.pathname)) {
       const body = await request.json();
-      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color", "icon"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
+      if (Object.keys(body).some(key => !["id", "author", "text", "createdAt", "channel", "color", "icon", "roll"].includes(key))) return json({ error: "허용되지 않은 필드" }, 400);
       const message = {
         id: text(body.id, 160).trim(),
         author: text(body.author, 80).trim() || "CCFOLIA",
@@ -285,6 +285,8 @@ export class RoomRelay {
         icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(text(body.icon, 600)) ? text(body.icon, 600) : "",
         createdAt: text(body.createdAt, 40) || new Date().toISOString(),
       };
+      // Dice outcome flags only (booleans); the result text itself travels as the message text.
+      if (body.roll && typeof body.roll === "object") message.roll = Object.fromEntries(["success", "failure", "critical", "fumble", "secret"].map(key => [key, body.roll[key] === true]));
       if (!message.id || !message.text) return json({ error: "메시지 ID와 본문이 필요합니다." }, 400);
       const added = this.appendMessage(room, message);
       room.gmHeartbeatAt = Date.now();

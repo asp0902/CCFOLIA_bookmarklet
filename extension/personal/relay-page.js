@@ -53,6 +53,7 @@
       channel: clean(message.channel, 100) || "main",
       color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
       icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(message.icon || "") ? message.icon : "",
+      roll: message.rollInfo ? { success: !!message.rollInfo.success, failure: !!message.rollInfo.failure, critical: !!message.rollInfo.critical, fumble: !!message.rollInfo.fumble, secret: !!message.rollInfo.secret } : undefined,
     })).filter(message => message.id && message.text);
     const channels = typeof api.relayChannels === "function" ? api.relayChannels().slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
     emit({ action: "snapshot", messages, channels, dicebot: readDicebot() });

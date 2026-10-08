@@ -222,7 +222,7 @@
             const id = clean(message.id, 160);
             if (!id || sentMessages.has(id)) continue;
             sentMessages.add(id);
-            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600) }); }
+            try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600), roll: message.roll && typeof message.roll === "object" ? message.roll : undefined }); }
             catch (error) { sentMessages.delete(id); throw error; }
           }
         });
