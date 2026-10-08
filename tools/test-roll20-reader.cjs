@@ -31,6 +31,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   ]);
   await page.waitForTimeout(1300);
   assert.equal((await page.evaluate(() => window.sent)).length, 4, 'nothing is sent twice');
+  // a new chat node is sent at once (a MutationObserver), not on the next slow poll
+  const before = (await page.evaluate(() => window.sent)).length;
+  await page.evaluate(() => document.querySelector('#textchat .content').insertAdjacentHTML('beforeend', '<div class="message general" data-messageid="fast1"><span class="by">Zed:</span>즉시</div>'));
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => window.sent);
+  assert.equal(after.length, before + 1, 'sent within 300 ms');
+  assert.equal(after.at(-1).message.id, 'fast1');
   await browser.close();
   console.log('roll20 reader PASS');
 })().catch(error => { console.error(error); process.exit(1); });

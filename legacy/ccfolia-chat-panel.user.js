@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.37
+// @version      0.2.38
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.37";
+  const VERSION = "0.2.38";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1048,9 +1048,27 @@
     };
   }
 
+  // 중계(참여자·롤20)로 보내는 메시지는 이름·아이콘·색을 따로 정하므로 본뜰 틀을 룸별로 기억해 둔다(매 전송 runQuery 왕복 제거).
+  // GM 자신의 패널 전송은 마지막 내 메시지의 이름·색을 따라가야 하므로 항상 새로 읽는다. 전송이 실패하면 틀을 버리고 한 번 다시 시도한다.
+  let templateCache = null; // { roomId, fields, at }
+  const TEMPLATE_TTL_MS = 5 * 60 * 1000;
+  async function templateFor(ctx, cacheable) {
+    if (cacheable && templateCache && templateCache.roomId === ctx.roomId && Date.now() - templateCache.at < TEMPLATE_TTL_MS) return templateCache.fields;
+    const fields = await fetchTemplateFields(ctx);
+    templateCache = cacheable ? { roomId: ctx.roomId, fields, at: Date.now() } : null;
+    return fields;
+  }
   async function sendMessage(text, channel = currentChannel, speaker = null, meta = null) {
+    try { return await sendMessageOnce(text, channel, speaker, meta); }
+    catch (error) {
+      if (!(speaker || meta) || !templateCache) throw error;
+      templateCache = null; // 오래된 틀 때문일 수 있다: 새로 읽어 한 번만 다시
+      return sendMessageOnce(text, channel, speaker, meta);
+    }
+  }
+  async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null) {
     const ctx = await getAuthContext();
-    const template = await fetchTemplateFields(ctx);
+    const template = await templateFor(ctx, !!(speaker || meta));
     const fields = {};
     // 템플릿의 필드 구조를 그대로 유지하되, 우리가 정하는 값만 덮어쓴다.
     for (const [key, value] of Object.entries(template)) {

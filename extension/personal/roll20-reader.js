@@ -52,6 +52,15 @@
       chrome.runtime.sendMessage({ type: "r20-message", message }).catch(() => {});
     }
   };
-  const timer = setInterval(scan, 1000);
+  // New lines are picked up as soon as they are added; the slow poll covers the time before the chat list exists (and a replaced list).
+  let observed = null;
+  const observe = () => {
+    const content = document.querySelector("#textchat .content");
+    if (!content || content === observed) return;
+    observed = content;
+    new MutationObserver(scan).observe(content, { childList: true });
+  };
+  const timer = setInterval(() => { observe(); scan(); }, 5000);
+  observe();
   scan();
 })();
