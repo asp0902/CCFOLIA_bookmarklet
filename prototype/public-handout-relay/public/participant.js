@@ -782,8 +782,66 @@ document.getElementById("char-list-open").addEventListener("click", () => {
 document.getElementById("room-menu-btn").addEventListener("click", event => {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
   if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
+  items.push({ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") });
   openMenu(event.currentTarget, items);
 });
+
+// Log export: everything this page holds (the relay keeps the latest messages of every tab), saved as a file on this computer. Whispers to the GM and secret dice results
+// never reach a participant, so they are not in it. Built here in the browser; nothing is sent anywhere.
+const logTime = value => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const logChannels = () => (current.channels?.length ? current.channels : DEFAULT_CHANNELS);
+const logMessages = channel => (current.messages || []).filter(message => (message.channel || "main") === channel.id);
+function buildLogText() {
+  const lines = [`${current.roomTitle || "플레이 룸"} — 로그 (${logTime(Date.now())} 내보냄)`, ""];
+  for (const channel of logChannels()) {
+    const messages = logMessages(channel);
+    if (!messages.length) continue;
+    lines.push(`# ${channel.label || channel.id}`);
+    for (const message of messages) lines.push(`[${logTime(message.createdAt)}] ${message.author || "이름 없음"}: ${decodeEnvelope(message.text || "").text}${message.roll?.result ? ` ${message.roll.result}` : ""}`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+function buildLogHtml() {
+  const box = document.createElement("div");
+  const title = document.createElement("h1"); title.textContent = `${current.roomTitle || "플레이 룸"} — 로그`; box.append(title);
+  const note = document.createElement("p"); note.className = "note"; note.textContent = `${logTime(Date.now())} 내보냄`; box.append(note);
+  for (const channel of logChannels()) {
+    const messages = logMessages(channel);
+    if (!messages.length) continue;
+    const section = document.createElement("section");
+    const heading = document.createElement("h2"); heading.textContent = channel.label || channel.id; section.append(heading);
+    for (const message of messages) {
+      const row = document.createElement("div"); row.className = "msg";
+      if (message.icon) { const img = document.createElement("img"); img.src = message.icon; img.alt = ""; row.append(img); }
+      const body = document.createElement("div");
+      const head = document.createElement("div");
+      const name = document.createElement("span"); name.className = "name"; name.textContent = message.author || "이름 없음";
+      if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color;
+      const time = document.createElement("span"); time.className = "time"; time.textContent = ` ${logTime(message.createdAt)}`;
+      head.append(name, time);
+      const text = document.createElement("p"); renderRich(text, message.text || "");
+      if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll"; result.textContent = ` ${message.roll.result}`; (text.lastElementChild || text).append(result); }
+      body.append(head, text); row.append(body); section.append(row);
+    }
+    box.append(section);
+  }
+  const css = "body{background:#202020;color:#fff;font:14px/1.5 'Noto Sans KR',sans-serif;max-width:760px;margin:0 auto;padding:16px}h1{font-size:20px}h2{font-size:16px;margin:24px 0 4px;border-bottom:1px solid #444}.note,.time{color:#aaa;font-size:12px}.msg{display:flex;gap:12px;padding:8px 0;border-top:1px solid #333}.msg img{width:40px;height:40px;object-fit:cover;flex:none}.name{font-weight:700}.msg p{margin:2px 0 0}.roll{color:rgba(255,255,255,.7)}";
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title.textContent.replace(/[<>&]/g, "")}</title><style>${css}</style></head><body>${box.innerHTML}</body></html>`;
+}
+function downloadLog(kind) {
+  const pad = n => String(n).padStart(2, "0"), d = new Date();
+  const name = `${(current.roomTitle || "room").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60)}-log-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${kind}`;
+  const blob = new Blob([kind === "html" ? buildLogHtml() : buildLogText()], { type: kind === "html" ? "text/html;charset=utf-8" : "text/plain;charset=utf-8" });
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = name;
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+}
 document.getElementById("account-btn").addEventListener("click", event => {
   openMenu(event.currentTarget, [{ header: chatName.value || "참여자" }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
 });
