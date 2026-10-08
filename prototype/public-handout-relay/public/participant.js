@@ -171,7 +171,7 @@ function renderScene(scene) {
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
-    if (item.id && !item.locked) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; }
+    if (item.id) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, item.z);
     img.style.objectFit = "fill"; nodes.push(img);
   }
@@ -245,18 +245,18 @@ window.addEventListener("resize", () => renderScene());
   let piece = null; // a movable piece being dragged (drawn only until drop; one command is sent on release)
   stage.addEventListener("pointerdown", event => {
     if (event.button !== 0 || interactive(event.target)) return;
-    if (event.target.dataset?.id) { piece = { el: event.target, x: event.clientX, y: event.clientY, dx: 0, dy: 0 }; stage.setPointerCapture?.(event.pointerId); return; }
+    if (event.target.dataset?.id) { piece = { el: event.target, x: event.clientX, y: event.clientY, dx: 0, dy: 0, locked: event.target.dataset.locked === "1" }; stage.setPointerCapture?.(event.pointerId); return; }
     drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
     stage.setPointerCapture?.(event.pointerId); stage.classList.add("panning");
   });
   stage.addEventListener("pointermove", event => {
-    if (piece) { piece.dx = event.clientX - piece.x; piece.dy = event.clientY - piece.y; piece.el.style.translate = `${piece.dx}px ${piece.dy}px`; return; }
+    if (piece) { if (piece.locked) return; piece.dx = event.clientX - piece.x; piece.dy = event.clientY - piece.y; piece.el.style.translate = `${piece.dx}px ${piece.dy}px`; return; }
     if (!drag) return;
     view.x = drag.vx + event.clientX - drag.x; view.y = drag.vy + event.clientY - drag.y; redraw();
   });
   const dropPiece = async () => {
     const { el, dx, dy } = piece; piece = null;
-    if (Math.abs(dx) + Math.abs(dy) < 4) { el.style.translate = ""; return; } // a click, not a move
+    if (Math.abs(dx) + Math.abs(dy) < 4 || el.dataset.locked === "1") { el.style.translate = ""; if (el.dataset.kind === "character") openSheet(el.dataset.id); return; } // a click (or a locked piece): the character sheet
     const { kind, id } = el.dataset, isChar = kind === "character";
     const k = (isChar ? 24 : 1) / view.unit; // screen px -> the piece's own unit (characters: px at zoom 1, items: grid cells)
     const round = v => isChar ? Math.round(v) : Math.round(v * 100) / 100;
@@ -313,7 +313,7 @@ const renderState = data => {
   renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
-  document.getElementById("gm-state").textContent = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
+  const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   const list = document.getElementById("messages");
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
@@ -602,3 +602,88 @@ chatInput.addEventListener("keydown", event => {
   chatForm.requestSubmit();
 });
 if (roomId && !inviteToken) { consent.hidden = true; mode = "pending"; checkStatus().catch(() => {}).finally(schedule); }
+
+// ---- Top toolbar and dialogs. Measured on ccfolia.com 1.37.5 (GM view): 64px bar, room-menu button (14px bold name + chevron), 40x40 icon buttons
+// with 24px icons, 50x50 account avatar button, menu paper rgba(44,44,44,.87) / 4px radius / 8px 0 padding / items 6px 16px 16px text.
+// A participant has the ordinary player's toolbar: no screen-panel / marker / scenario-text / scene / cut-in lists (those are GM only).
+const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+let menuEl = null;
+const closeMenu = () => { if (!menuEl) return; menuEl.remove(); menuEl = null; document.querySelectorAll('[aria-expanded="true"]').forEach(b => b.setAttribute("aria-expanded", "false")); };
+function openMenu(anchor, items) {
+  const same = menuEl && menuEl.anchor === anchor;
+  closeMenu(); if (same) return;
+  const paper = el("div", "menu-paper"); paper.setAttribute("role", "menu"); paper.anchor = anchor;
+  for (const item of items) {
+    if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
+    const row = el("button", "menu-item", item.label); row.type = "button"; row.setAttribute("role", "menuitem");
+    row.addEventListener("click", () => { closeMenu(); item.run(); });
+    paper.append(row);
+  }
+  document.body.append(paper); menuEl = paper; anchor.setAttribute("aria-expanded", "true");
+  const r = anchor.getBoundingClientRect();
+  paper.style.top = `${r.bottom + 4}px`;
+  if (r.left + paper.offsetWidth > innerWidth - 8) paper.style.left = `${Math.max(8, r.right - paper.offsetWidth)}px`; else paper.style.left = `${r.left}px`;
+}
+document.addEventListener("pointerdown", event => { if (menuEl && !menuEl.contains(event.target) && !menuEl.anchor.contains(event.target)) closeMenu(); }, true);
+document.addEventListener("keydown", event => { if (event.key === "Escape") closeMenu(); });
+
+function openDialog(title, build) {
+  const back = el("div", "dlg-backdrop"), paper = el("div", "dlg"), head = el("h2", "", title);
+  paper.setAttribute("role", "dialog"); paper.setAttribute("aria-modal", "true"); paper.append(head);
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = event => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
+  const body = el("div", "dlg-body"); const foot = el("div", "dlg-foot");
+  const done = el("button", "", "닫기"); done.type = "button"; done.addEventListener("click", close); foot.append(done);
+  build(body, foot, close); paper.append(body, foot); back.append(paper);
+  back.addEventListener("click", event => { if (event.target === back) close(); });
+  document.addEventListener("keydown", onKey, true); document.body.append(back);
+  return close;
+}
+const statusSummary = c => (c.status || []).map(s => `${s.label} ${s.value}${s.max ? `/${s.max}` : ""}`).join(" · ");
+function useSpeaker(id) { speaker.value = id; try { localStorage.setItem(SPEAKER_KEY, id); } catch (_) {} }
+// Character sheet (view only): icon, name, status, parameters, memo, reference link. The chat command palette is not shown.
+function openSheet(id) {
+  const c = (sceneData?.characters || []).find(item => item.id === id); if (!c) return;
+  openDialog(c.name || "캐릭터", (body, foot, close) => {
+    const top = el("div", "sheet-top"); const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer"; top.append(img, el("span", "", statusSummary(c) || "상태 없음")); body.append(top);
+    if (c.params?.length) { const table = el("dl", "sheet-params"); for (const p of c.params) table.append(el("dt", "", p.label), el("dd", "", p.value)); body.append(table); }
+    if (c.memo) body.append(el("div", "sheet-memo", c.memo));
+    if (/^https:\/\//.test(c.externalUrl || "")) { const a = el("a", "", "참고 URL"); a.href = c.externalUrl; a.target = "_blank"; a.rel = "noopener noreferrer"; body.append(a); }
+    const speak = el("button", "", "이 캐릭터로 발언"); speak.type = "button"; speak.addEventListener("click", () => { useSpeaker(c.id); close(); }); foot.prepend(speak);
+  });
+}
+document.getElementById("char-list-open").addEventListener("click", () => {
+  openDialog("내 캐릭터 목록", (body, foot, close) => {
+    const list = sceneData?.characters || [];
+    if (!list.length) body.append(el("p", "", "장면에 보이는 캐릭터가 없습니다."));
+    for (const c of list) {
+      const row = el("button", "char-row"); row.type = "button";
+      const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
+      const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
+      row.append(img, text); row.addEventListener("click", () => { close(); openSheet(c.id); }); body.append(row);
+    }
+  });
+});
+document.getElementById("room-menu-btn").addEventListener("click", event => {
+  const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
+  if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
+  openMenu(event.currentTarget, items);
+});
+document.getElementById("account-btn").addEventListener("click", event => {
+  openMenu(event.currentTarget, [{ header: chatName.value || "참여자" }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
+});
+setInterval(() => { document.getElementById("account-av").textContent = [...(chatName.value || "?")][0] || "?"; }, 1000);
+// Chat window open/close (same function for the panel's >| button and the edge button); remembered per browser.
+{
+  const COLLAPSE_KEY = "capybara-chat-collapsed";
+  const set = on => {
+    document.getElementById("room").classList.toggle("chat-collapsed", on);
+    document.getElementById("chat-open").hidden = !on;
+    try { localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (_) {}
+    renderScene();
+  };
+  document.getElementById("chat-close").addEventListener("click", () => set(true));
+  document.getElementById("chat-open").addEventListener("click", () => set(false));
+  let saved = "0"; try { saved = localStorage.getItem(COLLAPSE_KEY) || "0"; } catch (_) {}
+  if (saved === "1") { document.getElementById("room").classList.add("chat-collapsed"); document.getElementById("chat-open").hidden = false; }
+}

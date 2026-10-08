@@ -33,7 +33,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const unit = await page.evaluate(() => view.unit);
   await drag('img[data-id="i1"]', unit * 3, unit * 2);
   await drag('img[data-id="c1"]', unit * 2, 0);
-  assert.equal(await page.locator('img[data-id="i2"]').count(), 0, 'locked piece is not draggable');
+  assert.equal(await page.locator('img[data-id="i2"][data-locked="1"]').count(), 1, 'locked piece is marked and cannot be dragged');
   await page.waitForTimeout(300);
   assert.equal(sent.length, 2);
   assert.deepEqual(sent[0], { kind: 'item', id: 'i1', x: 3, y: 2 });
