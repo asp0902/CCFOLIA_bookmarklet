@@ -244,20 +244,8 @@ export class RoomRelay {
       command.status = body.status;
       command.acknowledgedAt = new Date().toISOString();
       command.error = text(body.error, 300);
-      let appended = null;
-      if (body.status === "delivered") {
-        const message = {
-          id: `external:${command.participantId}:${command.clientMessageId}`,
-          author: command.displayName,
-          text: command.text,
-          origin: "external",
-          channel: command.channel || "main",
-          createdAt: command.createdAt,
-        };
-        if (this.appendMessage(room, message)) appended = message;
-      }
+      // No copy of a delivered message is added here: the GM's real CCFOLIA message arrives with the next snapshot. A copy made the participant see their own message twice.
       await this.save(room);
-      if (appended) this.pushMessage(room, appended);
       return json({ id: command.id, status: command.status });
     }
     // The room scene (background, field image, pieces, characters) as the GM sees it. Everything is validated field by field; only images on CCFOLIA's own CDN are kept.
