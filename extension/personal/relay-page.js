@@ -92,7 +92,7 @@
         return;
       }
       if (typeof api?.relaySend !== "function") throw new Error("채팅 전송 기능이 아직 준비되지 않았습니다.");
-      await api.relaySend(clean(request.command.displayName, 40), clean(request.command.text, 2000), clean(request.command.channel, 100), clean(request.command.characterId, 100));
+      await api.relaySend(clean(request.command.name, 40) || clean(request.command.displayName, 40), clean(request.command.text, 2000), clean(request.command.channel, 100), clean(request.command.characterId, 100), undefined, /^#[0-9a-f]{6}$/i.test(request.command.color || "") ? request.command.color : "");
       emit({ action: "commandResult", commandId, status: "delivered" });
     } catch (error) {
       emit({ action: "commandResult", commandId, status: "failed", error: clean(error?.message || "전송 실패", 300) });

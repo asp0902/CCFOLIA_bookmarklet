@@ -6,6 +6,7 @@ const consent = document.getElementById("consent");
 // Remember the display name on this browser so a returning participant does not retype it.
 const NAME_KEY = "capybara-display-name";
 const chatName = document.getElementById("chat-name");
+chatName.addEventListener("input", () => { chatName.dataset.touched = "1"; });
 try { const saved = localStorage.getItem(NAME_KEY); if (saved) { document.getElementById("display-name").value = saved; chatName.value = saved; } } catch (_) {}
 const room = document.getElementById("room");
 const gateStatus = document.getElementById("gate-status");
@@ -208,13 +209,14 @@ function renderStatusPanel(characters) {
 // Speaker: the participant's own name, or any visible character (the GM side checks again before sending).
 const SPEAKER_KEY = "capybara-speaker";
 const speaker = document.createElement("select"); speaker.id = "speaker"; speaker.setAttribute("aria-label", "화자"); speaker.title = "화자";
-document.querySelector("#chat-form .name-row button").before(speaker);
+speaker.hidden = true; document.getElementById("chat-form").append(speaker);
 function renderSpeakers(characters) {
   let want = speaker.value; try { want ||= localStorage.getItem(SPEAKER_KEY) || ""; } catch (_) {}
   speaker.replaceChildren(new Option("내 이름", ""), ...characters.map(c => new Option(c.name || "(이름 없음)", c.id)));
   speaker.value = characters.some(c => c.id === want) ? want : "";
+  refreshSpeakerUi();
 }
-speaker.addEventListener("change", () => { try { localStorage.setItem(SPEAKER_KEY, speaker.value); } catch (_) {} });
+speaker.addEventListener("change", () => { try { localStorage.setItem(SPEAKER_KEY, speaker.value); } catch (_) {} refreshSpeakerUi(); });
 // Click a status bar to set its value; one command, the GM side applies it.
 document.getElementById("scene-status").addEventListener("click", async event => {
   const bar = event.target.closest(".st-bar"); if (!bar) return;
@@ -527,7 +529,7 @@ async function checkStatus() {
   if (transient(response)) return;
   if (!response.ok) return stop("요청이 만료되었거나 룸이 종료되었습니다.");
   const data = await response.json();
-  if (data.displayName) chatName.value = data.displayName;
+  if (data.displayName && !chatName.dataset.touched) chatName.value = data.displayName;
   if (data.status === "approved") {
     consent.hidden = true; gateStatus.hidden = true; room.inert = false; room.removeAttribute("aria-hidden");
     if (mode !== "live") { mode = "live"; await refresh(); connectSocket(); }
@@ -547,29 +549,76 @@ async function join() {
 }
 document.getElementById("cancel").addEventListener("click", () => { consent.hidden = true; setGate("입장을 취소했습니다. 초대 링크를 다시 열면 입장할 수 있습니다.", ""); });
 document.getElementById("join").addEventListener("click", () => join().catch(() => setGate("연결할 수 없습니다.", "error")));
-// Dice row (like CCFOLIA's): each button puts its roll at the cursor of the message box.
+// Dice row (measured on ccfolia.com): D4..D100 as 30x30 round buttons with the native 24px icons; each button puts its roll at the cursor of the message box.
+const DICE = [
+  [4, ["M30.5851 28.4169L16.5342 4.30479C16.4238 4.11637 16.2195 4.00006 16 4.00006C15.7805 4.00006 15.5762 4.11753 15.4659 4.30479L1.41611 28.4169C1.30693 28.6053 1.30693 28.8391 1.41611 29.0275C1.52646 29.2159 1.73073 29.3322 1.95026 29.3322H30.0509C30.2705 29.3322 30.4747 29.2148 30.5851 29.0275C30.6954 28.8391 30.6954 28.6053 30.5851 28.4169Z", "M30.5851 28.4169L16.5342 4.30479C16.4238 4.11637 16.2195 4.00006 16 4.00006C15.7805 4.00006 15.5762 4.11753 15.4659 4.30479L1.41611 28.4169C1.30693 28.6053 1.30693 28.8391 1.41611 29.0275C1.52646 29.2159 1.73073 29.3322 1.95026 29.3322H30.0509C30.2705 29.3322 30.4747 29.2148 30.5851 29.0275C30.6954 28.8391 30.6954 28.6053 30.5851 28.4169ZM16 21.2569L28.3029 28.3436H3.69826L16.0012 21.2569H16ZM16.4989 20.4008V6.2239L28.9345 27.5643L16.4989 20.4008ZM15.5011 6.2239V20.4008L3.06668 27.5643L15.5011 6.2239Z"]],
+  [6, ["M25.5126 4.47534H6.48639C5.36163 4.47534 4.44983 5.43779 4.44983 6.62504V26.7083C4.44983 27.8955 5.36163 28.858 6.48639 28.858H25.5126C26.6374 28.858 27.5492 27.8955 27.5492 26.7083V6.62504C27.5492 5.43779 26.6374 4.47534 25.5126 4.47534Z", "M25.5142 29.3333H6.48689C5.11576 29.3333 4 28.1556 4 26.7083V6.62505C4 5.17775 5.11576 4 6.48689 4H25.5142C26.8853 4 28.0011 5.17775 28.0011 6.62505V26.7094C28.0011 28.1567 26.8853 29.3344 25.5142 29.3344V29.3333ZM6.48689 4.9507C5.61272 4.9507 4.90172 5.70119 4.90172 6.62393V26.7083C4.90172 27.631 5.61272 28.3815 6.48689 28.3815H25.5142C26.3883 28.3815 27.0993 27.631 27.0993 26.7083V6.62505C27.0993 5.70231 26.3883 4.95182 25.5142 4.95182H6.48689V4.9507Z"]],
+  [8, ["M15.999 2.66669L3.99902 9.33277V22.6661L15.999 29.3334L27.999 22.6661V9.33277L15.999 2.66669Z", "M15.999 2.66669L3.99902 9.33277V22.6661L15.999 29.3334L27.999 22.6661V9.33277L15.999 2.66669ZM26.9651 21.1655L16.8323 4.27966L26.9638 9.90866V21.1667L26.9651 21.1655ZM26.06 21.6478H5.93922L15.999 4.88013L26.0588 21.6466L26.06 21.6478ZM15.1658 4.27966L5.03298 21.1655V9.90749L15.1658 4.27966ZM6.02558 22.6427H25.9725L15.999 28.1839L6.02558 22.6427Z"]],
+  [10, ["M17.7437 2.66669L4.66699 11.1315V19.2819L17.7426 29.3334L31.3337 19.2875V11.1259L17.7437 2.66669Z", "M17.7437 2.66669L4.66699 11.1315V19.2819L17.7426 29.3334L31.3337 19.2875V11.1259L17.7437 2.66669ZM10.2844 20.2889L17.278 25.642V27.7814L6.87502 19.7843L10.2844 20.2889ZM17.8045 5.04892L24.7748 19.7451L17.7437 24.8039L10.999 19.6422L17.8045 5.04892ZM18.2194 25.6297L25.62 20.3046L29.0515 19.7966L18.2194 27.8026V25.6297ZM30.3945 18.6363L25.6277 19.3423L18.4583 4.22873L30.3934 11.6574V18.6351L30.3945 18.6363ZM17.1773 4.16271L10.1174 19.302L5.60839 18.634V11.6518L17.1773 4.16271Z"]],
+  [12, ["M26.2524 5.22471L18.0194 2.66669L9.77878 5.20205L4.679 11.8618L4.66602 20.1022L9.74631 26.7764L17.9793 29.3344L26.2199 26.799L31.3208 20.1393L31.3338 11.8988L26.2535 5.22471H26.2524Z", "M26.2524 5.22471L18.0194 2.66669L9.77878 5.20205L4.679 11.8618L4.66602 20.1022L9.74631 26.7764L17.9793 29.3344L26.2199 26.799L31.3208 20.1393L31.3338 11.8988L26.2535 5.22471H26.2524ZM30.1465 11.8329L25.6885 13.4374L18.4793 8.45313V3.73047L25.6831 5.96823L30.1476 11.8319L30.1465 11.8329ZM22.394 22.0753H13.6036L10.887 14.1201L17.9988 9.20386L25.1106 14.1201L22.394 22.0753ZM10.347 5.94763L17.5583 3.72841V8.42636L10.2983 13.4456L5.86195 11.8031L10.347 5.94763ZM5.59787 12.6444L9.96926 14.2633L12.754 22.4182L10.0483 25.6786L5.58813 19.819L5.59895 12.6444H5.59787ZM10.8015 26.1822L13.4835 22.9507H22.4763L25.1658 26.2017L17.9804 28.4117L10.8015 26.1811V26.1822ZM25.9223 25.7002L23.235 22.4512L26.0359 14.2488L30.4127 12.6743L30.4019 19.853L25.9234 25.7002H25.9223Z"]],
+  [20, ["M16.0003 2.66669L2.66699 9.33279V22.6661L16.0003 29.3334L29.3337 22.6661V9.33279L16.0003 2.66669Z", "M16.0003 2.66669L2.66699 9.33279V22.6661L16.0003 29.3334L29.3337 22.6661V9.33279L16.0003 2.66669ZM24.2725 11.0573L17.7236 4.63008L27.6272 9.58172L24.2725 11.0573ZM8.66168 11.7088L16.0651 4.44282L23.4684 11.7088L16.0651 22.8904L8.66168 11.7088ZM7.85376 11.0607L4.38383 9.57611L14.5398 4.49776L7.85376 11.0607ZM7.3022 11.8882L3.76753 20.3148V10.3767L7.3022 11.8882ZM8.09976 12.7785L15.6378 24.1642L4.23752 21.9877L8.09976 12.7785ZM24.0213 12.7897L27.767 21.9866L16.5092 24.1361L24.0213 12.7897ZM24.8215 11.886L28.2318 10.3868V20.2598L24.8215 11.8871V11.886ZM6.21849 23.3411L16.0003 25.2092L25.7822 23.3423L16.0003 28.2334L6.21849 23.3423V23.3411Z"]],
+  [100, ["M21.1431 4.00006L15.9002 7.82282L10.4487 4.00006L0.000976562 11.6184V18.9537L10.4479 28.0001L15.9002 23.4603L21.1422 28.0001L32.001 18.9588V11.6134L21.1431 4.00006Z", "M21.1431 4.00006L15.9011 7.82282L10.4487 4.00006L0.000976562 11.6184V18.9537L10.4479 28.0001L15.9002 23.4603L21.1422 28.0001L32.001 18.9588V11.6134L21.1431 4.00006ZM20.6906 5.34649L18.8186 9.86814L16.6117 8.3203L20.6906 5.34548V5.34649ZM20.5554 12.0917V18.3717L16.7469 19.0071L11.0197 5.4059L20.5554 12.0917ZM0.752233 12.0867L9.99623 5.34649L4.35561 18.9719L0.753117 18.3707V12.0867H0.752233ZM10.0767 26.6023L1.7651 19.4059L4.48907 19.8601L10.0767 24.6778V26.6033V26.6023ZM5.05914 19.277L10.4974 6.14407L16.0664 19.3707L10.4487 23.9235L5.06003 19.278L5.05914 19.277ZM10.8279 24.6657L16.7407 19.8732L19.4815 19.416L10.827 26.6214V24.6657H10.8279ZM20.771 26.6023L16.533 22.9326L17.6599 21.994L20.771 24.6758V26.6013V26.6023ZM18.2936 21.4673L21.3066 18.9588V11.6134L19.4621 10.3203L21.1908 6.14407L26.7599 19.3707L21.1422 23.9235L18.2936 21.4673ZM21.5223 26.6224V24.6667L27.4351 19.8742L30.1759 19.417L21.5214 26.6224H21.5223ZM31.2497 18.3717L27.4413 19.0071L21.7141 5.4059L31.2497 12.0917V18.3717Z"]]
+];
 {
   const NS = "http://www.w3.org/2000/svg";
-  const SHAPES = [
-    [4, ["M12 3 22 20H2z"]], [6, ["M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"]],
-    [8, ["M12 2 21 12 12 22 3 12z", "M3 12h18"]], [10, ["M12 2 21 10 12 22 3 10z", "M12 2v20"]],
-    [12, ["M12 2 22 9.5 18.2 21H5.8L2 9.5z", "M12 2v5M2 9.5l4.5 2.3M22 9.5l-4.5 2.3M5.8 21l3-6.5M18.2 21l-3-6.5"]],
-    [20, ["M12 2 21 7v10l-9 5-9-5V7z", "M12 8l5.5 9h-11z"]],
-    [100, ["M9 3 16 7v8l-7 4-7-4V7z", "M15 6l7 4v8l-7 4-4-2.3"]]
-  ];
   const row = document.createElement("div"); row.className = "dice-row";
-  for (const [faces, paths] of SHAPES) {
+  for (const [faces, [silhouette, outline]] of DICE) {
     const b = document.createElement("button"); b.type = "button"; b.title = `1d${faces}`; b.setAttribute("aria-label", `D${faces}`);
-    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "24"); svg.setAttribute("height", "24");
-    for (const d of paths) { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("fill", "none"); p.setAttribute("stroke", "#acacac"); p.setAttribute("stroke-width", "1"); p.setAttribute("stroke-linejoin", "round"); svg.append(p); }
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 32 32"); svg.setAttribute("width", "24"); svg.setAttribute("height", "24"); svg.setAttribute("aria-hidden", "true");
+    [[silhouette, "#202020"], [outline, "#ACACAC"]].forEach(([d, fill]) => { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("fill", fill); svg.append(p); });
     b.append(svg);
-    b.addEventListener("click", () => {
-      const input = document.getElementById("chat-input"); const a = input.selectionStart ?? input.value.length, z = input.selectionEnd ?? a;
-      const text = `1d${faces}`; input.value = input.value.slice(0, a) + text + input.value.slice(z); input.focus(); input.setSelectionRange(a + text.length, a + text.length);
-    });
+    b.addEventListener("click", () => insertAtCursor(`1d${faces}`));
     row.append(b);
   }
+  row.append(document.querySelector("#chat-form button[type=submit]"));
   document.querySelector("#chat-form .name-row").after(row);
+  document.querySelector("#chat-form button[type=submit]").hidden = false;
+}
+const nameColor0 = (() => { try { return localStorage.getItem("capybara-name-color") || ""; } catch (_) { return ""; } })();
+let nameColor = /^#[0-9a-f]{6}$/i.test(nameColor0) ? nameColor0 : "";
+function insertAtCursor(text, cursorBack = 0) {
+  const input = document.getElementById("chat-input"); const a = input.selectionStart ?? input.value.length, z = input.selectionEnd ?? a;
+  input.value = input.value.slice(0, a) + text + input.value.slice(z); input.focus();
+  const at = a + text.length - cursorBack; input.setSelectionRange(at, at);
+}
+// Wrap the selection in a format marker (the GM side turns the markers into a format envelope when it sends); nothing selected: insert the pair and stand between.
+function wrapSelection(open, close) {
+  const input = document.getElementById("chat-input"); const a = input.selectionStart ?? 0, z = input.selectionEnd ?? a;
+  const middle = input.value.slice(a, z);
+  input.value = input.value.slice(0, a) + open + middle + close + input.value.slice(z); input.focus();
+  const at = middle ? a + open.length + middle.length + close.length : a + open.length; input.setSelectionRange(at, at);
+}
+const speakerBtn = document.getElementById("speaker-btn"), speakerImg = document.getElementById("speaker-img"), palBtn = document.getElementById("pal-btn"), colorBtn = document.getElementById("color-btn"), colorInput = document.getElementById("color-input");
+function chosenCharacter() { return (sceneData?.characters || []).find(c => c.id === speaker.value) || null; }
+function refreshSpeakerUi() {
+  const c = chosenCharacter();
+  speakerImg.hidden = !c; speakerBtn.querySelector("svg").style.display = c ? "none" : "";
+  if (c) speakerImg.src = c.iconUrl;
+  palBtn.disabled = !(c && String(c.commands || "").trim());
+  colorBtn.style.color = nameColor || "#cce5df";
+}
+function openSpeakerMenu() {
+  const items = [{ label: "내 이름", current: !speaker.value, run: () => useSpeaker("") }, ...(sceneData?.characters || []).map(c => ({ label: c.name || "(이름 없음)", current: c.id === speaker.value, run: () => useSpeaker(c.id) }))];
+  openMenu(speakerBtn, items);
+}
+speakerBtn.addEventListener("click", openSpeakerMenu);
+palBtn.addEventListener("click", () => {
+  const lines = String(chosenCharacter()?.commands || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length) openMenu(palBtn, lines.map(line => ({ label: line.length > 40 ? `${line.slice(0, 40)}…` : line, run: () => insertAtCursor(line) })));
+});
+colorBtn.addEventListener("click", () => { colorInput.value = nameColor || "#cce5df"; colorInput.showPicker?.(); });
+colorInput.addEventListener("input", () => { nameColor = colorInput.value; try { localStorage.setItem("capybara-name-color", nameColor); } catch (_) {} refreshSpeakerUi(); });
+refreshSpeakerUi();
+// Format rows: the same markers the GM panel understands (**bold**, *italic*, __underline__, ~~strike~~, ||blur||, `code`, [base|ruby], [base^tooltip], {a:center|text|}).
+{
+  const mk = (label, title, run) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", run); return b; };
+  const row1 = document.createElement("div"); row1.className = "fmt-row";
+  row1.append(mk("B", "Bold", () => wrapSelection("**", "**")), mk("I", "Italic", () => wrapSelection("*", "*")), mk("U", "Underline", () => wrapSelection("__", "__")), mk("S", "Strike", () => wrapSelection("~~", "~~")),
+    mk("Rb", "Ruby", () => wrapSelection("[", "|]")), mk("Tip", "Tooltip", () => wrapSelection("[", "^]")), mk("Bl", "Blur", () => wrapSelection("||", "||")), mk("</>", "Code block", () => wrapSelection("`", "`")));
+  const row2 = document.createElement("div"); row2.className = "fmt-row";
+  const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("width", "15"); svg.setAttribute("height", "15"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); p.setAttribute("fill", "currentColor"); svg.append(p); b.append(svg); return b; };
+  row2.append(align("left", "M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"), align("center", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"), align("right", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"));
+  document.querySelector("#chat-form .dice-row").after(row1, row2);
 }
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
@@ -587,7 +636,7 @@ chatForm.addEventListener("submit", async event => {
   chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel, characterId: speaker.value }) });
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel, characterId: speaker.value, name: chatName.value.trim(), color: nameColor }) });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
     showSendStatus("GM 브리지 전달 대기", 2500);
   } catch (error) {
@@ -597,6 +646,7 @@ chatForm.addEventListener("submit", async event => {
 });
 // Enter sends, Shift+Enter inserts a newline. Enter that confirms an IME composition (Korean/Japanese) must not send.
 chatInput.addEventListener("keydown", event => {
+  if (event.key === "`" && !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); openSpeakerMenu(); return; }
   if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
   event.preventDefault();
   chatForm.requestSubmit();
@@ -616,16 +666,25 @@ function openMenu(anchor, items) {
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
     const row = el("button", "menu-item", item.label); row.type = "button"; row.setAttribute("role", "menuitem");
+    if (item.current) row.dataset.current = "1";
     row.addEventListener("click", () => { closeMenu(); item.run(); });
     paper.append(row);
   }
+  paper.addEventListener("keydown", event => {
+    const rows = [...paper.querySelectorAll(".menu-item")], at = rows.indexOf(document.activeElement);
+    if (event.key === "ArrowDown") { event.preventDefault(); rows[(at + 1) % rows.length]?.focus(); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); rows[(at - 1 + rows.length) % rows.length]?.focus(); }
+    else if (event.key === "Home") { event.preventDefault(); rows[0]?.focus(); }
+    else if (event.key === "End") { event.preventDefault(); rows[rows.length - 1]?.focus(); }
+  });
   document.body.append(paper); menuEl = paper; anchor.setAttribute("aria-expanded", "true");
+  (paper.querySelector('[data-current="1"]') || paper.querySelector(".menu-item"))?.focus();
   const r = anchor.getBoundingClientRect();
   paper.style.top = `${r.bottom + 4}px`;
   if (r.left + paper.offsetWidth > innerWidth - 8) paper.style.left = `${Math.max(8, r.right - paper.offsetWidth)}px`; else paper.style.left = `${r.left}px`;
 }
 document.addEventListener("pointerdown", event => { if (menuEl && !menuEl.contains(event.target) && !menuEl.anchor.contains(event.target)) closeMenu(); }, true);
-document.addEventListener("keydown", event => { if (event.key === "Escape") closeMenu(); });
+document.addEventListener("keydown", event => { if (event.key === "Escape") { const anchor = menuEl?.anchor; closeMenu(); anchor?.focus?.(); } });
 
 function openDialog(title, build) {
   const back = el("div", "dlg-backdrop"), paper = el("div", "dlg"), head = el("h2", "", title);
@@ -640,7 +699,7 @@ function openDialog(title, build) {
   return close;
 }
 const statusSummary = c => (c.status || []).map(s => `${s.label} ${s.value}${s.max ? `/${s.max}` : ""}`).join(" · ");
-function useSpeaker(id) { speaker.value = id; try { localStorage.setItem(SPEAKER_KEY, id); } catch (_) {} }
+function useSpeaker(id) { speaker.value = id; speaker.dispatchEvent(new Event("change")); }
 // Character sheet (view only): icon, name, status, parameters, memo, reference link. The chat command palette is not shown.
 function openSheet(id) {
   const c = (sceneData?.characters || []).find(item => item.id === id); if (!c) return;
