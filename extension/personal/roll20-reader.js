@@ -33,8 +33,7 @@
       if (seen.has(id)) continue;
       seen.add(id);
       const message = read(el);
-      if (!findCampaignId()) continue; // without the campaign id the line cannot be routed to a room
-      message.campaignId = campaignId;
+      if (findCampaignId()) message.campaignId = campaignId; // the game screen usually has none; the background knows it from the tab's campaign page
       if (Date.now() - startedAt < 3000 || el.matches(SKIP) || !message.text) continue;
       chrome.runtime.sendMessage({ type: "r20-message", message }).catch(() => {});
     }

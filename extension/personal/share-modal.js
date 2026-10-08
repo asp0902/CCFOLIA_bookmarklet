@@ -252,7 +252,7 @@
       el("div", { class: "field" }, el("label", { for: "url", text: "릴레이 주소" }), url),
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
-      el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
+      el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20, el("p", { class: "muted", text: "롤20 캠페인 페이지에서 'Launch Game'으로 들어간 게임 탭만 연결됩니다." })),
       toast,
       el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, participants),
