@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.24
+// @version      0.3.25
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -36,6 +36,18 @@
   const YOUTUBE_IFRAME_API_URL = "https://www.youtube.com/iframe_api";
   const YOUTUBE_EMBED_HOST = "https://www.youtube-nocookie.com";
   const YOUTUBE_PLAYER_MIN_SIZE = 200;
+  // BGM 영상 독 접기: 독을 24px 막대로 잘라 보이게만 한다(iframe 은 200x200 그대로라 재생이 끊기지 않는다). 유튜브 임베드 약관의 "200x200 이상으로 보이게" 기준을 벗어나므로 사용자 판단으로 넣었다.
+  const CCF_BGM_FOLD_KEY = "ccf-youtube-bgm-folded";
+  const CCF_BGM_FOLD_CSS = `
+      .ccf-youtube-bgm-player-dock { position: relative !important; }
+      .ccf-youtube-bgm-fold-bar { position: absolute !important; top: 0 !important; right: 0 !important; z-index: 2 !important; display: flex !important; align-items: center !important; color: #fff !important; }
+      .ccf-youtube-bgm-fold-title { display: none !important; flex: 1 1 auto !important; min-width: 0 !important; padding: 0 8px !important; font-size: 12px !important; line-height: 24px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+      .ccf-youtube-bgm-fold-btn { display: flex !important; align-items: center !important; justify-content: center !important; flex: none !important; width: 24px !important; height: 24px !important; padding: 0 !important; border: 0 !important; border-radius: 50% !important; background: rgba(0, 0, 0, 0.45) !important; color: #fff !important; cursor: pointer !important; }
+      .ccf-youtube-bgm-fold-btn:hover { background: rgba(0, 0, 0, 0.7) !important; }
+      .ccf-youtube-bgm-player-dock[data-ccf-youtube-bgm-folded="1"] { height: 24px !important; min-height: 24px !important; max-height: 24px !important; }
+      .ccf-youtube-bgm-player-dock[data-ccf-youtube-bgm-folded="1"] .ccf-youtube-bgm-fold-bar { left: 0 !important; background: rgba(33, 33, 33, 0.95) !important; }
+      .ccf-youtube-bgm-player-dock[data-ccf-youtube-bgm-folded="1"] .ccf-youtube-bgm-fold-title { display: block !important; }
+  `;
   const YOUTUBE_AUDIO_REINFORCE_DELAYS_MS = Object.freeze([0, 80, 250, 700, 1500]);
   const DEBUG_ENABLED = true;
   const DEBUG_PREFIX = "[CCF Chat Notifier]";
@@ -97,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.24";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.25";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -6000,10 +6012,46 @@
     return ccfBgmPlayerDock;
   }
 
+  // 접기/펴기 버튼과 접었을 때 보이는 곡 제목 줄. 표시/숨김 로직과는 따로 두고 독의 속성 하나만 바꾼다.
+  function ensureCcfBgmFoldBar() {
+    const dock = ccfBgmPlayerDock;
+    if (!dock) return;
+    let bar = dock.querySelector(":scope > .ccf-youtube-bgm-fold-bar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "ccf-youtube-bgm-fold-bar";
+      const title = document.createElement("span");
+      title.className = "ccf-youtube-bgm-fold-title";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ccf-youtube-bgm-fold-btn";
+      button.addEventListener("click", () => {
+        const folded = dock.getAttribute("data-ccf-youtube-bgm-folded") === "1";
+        if (folded) dock.removeAttribute("data-ccf-youtube-bgm-folded"); else dock.setAttribute("data-ccf-youtube-bgm-folded", "1");
+        try { localStorage.setItem(CCF_BGM_FOLD_KEY, folded ? "0" : "1"); } catch (_) {}
+        ensureCcfBgmFoldBar();
+      });
+      bar.append(title, button);
+      dock.append(bar);
+      let saved = "0";
+      try { saved = localStorage.getItem(CCF_BGM_FOLD_KEY) || "0"; } catch (_) {}
+      if (saved === "1") dock.setAttribute("data-ccf-youtube-bgm-folded", "1");
+    }
+    const folded = dock.getAttribute("data-ccf-youtube-bgm-folded") === "1";
+    const button = bar.querySelector(".ccf-youtube-bgm-fold-btn");
+    // MUI ExpandLess (접기) / ExpandMore (펴기)
+    button.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="' + (folded ? "M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z" : "m12 8-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z") + '"/></svg>';
+    button.setAttribute("aria-label", folded ? "BGM 영상 펴기" : "BGM 영상 접기");
+    let name = "";
+    try { name = String(ccfBgmPlayer?.getVideoData?.()?.title || ""); } catch (_) {}
+    bar.querySelector(".ccf-youtube-bgm-fold-title").textContent = name;
+  }
+
   function syncCcfYoutubeBgmPlayerDockVisibility() {
     if (!ccfBgmPlayerDock) {
       return;
     }
+    ensureCcfBgmFoldBar();
 
     if (ccfBgmPlayerVisible) {
       ccfBgmPlayerDock.setAttribute("data-ccf-youtube-bgm-visible", "1");
@@ -8845,6 +8893,8 @@
         opacity: 1 !important;
         pointer-events: auto !important;
       }
+
+      ${CCF_BGM_FOLD_CSS}
 
       [data-ccf-bgm-dialog-root="1"] {
         display: flex !important;
