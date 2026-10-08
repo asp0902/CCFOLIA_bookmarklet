@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.44
+// @version      0.0.45
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.44"),
+  version: getUserscriptVersion("0.0.45"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -712,6 +712,36 @@
     } catch (error) {
       return null;
     }
+  }
+
+  // 일반 플레이어의 룸 메뉴에는 네이티브 "로그 출력"이 없어 공식 로그가 비는 경우가 있다. 추가 채팅 패널이 있으면 그 저장소 읽기로 탭 묶음을 만든다.
+  async function collectPanelPackageTabGroups() {
+    const api = window.__CCF_SECOND_CHAT_PANEL__;
+    if (typeof api?.relayLoadAllMessages !== "function") return [];
+    let messages = [];
+    try { messages = await api.relayLoadAllMessages(); } catch (_) { return []; }
+    if (!Array.isArray(messages) || !messages.length) return [];
+    const channels = typeof api.relayChannels === "function" ? api.relayChannels() : [];
+    const labels = new Map(channels.map((channel) => [channel.id, channel.label]));
+    const order = new Map(channels.map((channel, index) => [channel.id, index]));
+    const byChannel = new Map();
+    for (const message of messages) {
+      const id = String(message.channel || "main");
+      const tab = createRuntimeTabContext({ id, key: id, name: labels.get(id) || id, order: order.has(id) ? order.get(id) + 1 : null });
+      const text = message.roll ? `${message.text || ""} ${message.roll}`.trim() : message.text;
+      const entry = buildRuntimeEntryFromMessage({
+        id: message.id, name: message.name, text, createdAt: message.at, color: message.color, iconUrl: message.icon, channel: id
+      }, tab, { inMessageList: true });
+      if (!entry) continue;
+      if (!byChannel.has(id)) byChannel.set(id, { tab, entries: [] });
+      byChannel.get(id).entries.push(entry);
+    }
+    return [...byChannel.values()]
+      .sort((left, right) => (left.tab.order ?? 1e9) - (right.tab.order ?? 1e9))
+      .map(({ tab, entries }, index) => ({
+        id: tab.id, key: tab.key, index, order: tab.order ?? index + 1, name: tab.name || `탭 ${index + 1}`, selected: false,
+        entries: entries.map((entry, entryIndex) => ({ ...entry, index: entryIndex + 1, tabId: tab.id, tabName: tab.name }))
+      }));
   }
 
   function collectRuntimePackageTabGroups(roomTitle = "") {
@@ -2723,6 +2753,12 @@
       } else {
         tabGroups = await collectSinglePackageTabGroup(originButton, roomTitle, currentTab, 0, officialLog);
       }
+    }
+
+    if (!tabGroups.length) {
+      const tPanel = Date.now();
+      tabGroups = await collectPanelPackageTabGroups();
+      console.info("[CAPYBARA LOG][timing] panel-store-scan", { ms: Date.now() - tPanel, groups: tabGroups.length, entries: tabGroups.reduce((n, g) => n + (g?.entries?.length || 0), 0) });
     }
 
     if (!tabGroups.length) {
