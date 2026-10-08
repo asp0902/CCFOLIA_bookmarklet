@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.28
+// @version      0.2.29
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.28";
+  const VERSION = "0.2.29";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -189,7 +189,12 @@
   // 네이티브 CREE-GRRR 카드는 우리 패널을 처리하지 않으므로, 최소한 결과 문자열을
   // 붙여 굴림이 보이게 한다.
   function toPanelMessage(id, msg) {
+    const roll = msg?.extend?.roll || {};
+    const to = pick(msg, ["to"]);
     return {
+      // 참여자 웹 중계용: 귓속말 여부와 굴림 결과(성공·실패·시크릿). 패널 자신의 표시에는 쓰지 않는다.
+      whisper: Array.isArray(to) ? to.length > 0 : !!to,
+      rollInfo: { result: String(roll.result || "").slice(0, 400), success: !!roll.success, failure: !!roll.failure, critical: !!roll.critical, fumble: !!roll.fumble, secret: !!roll.secret },
       id,
       name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
       text: String(pick(msg, ["text", "message", "body"]) || ""),
@@ -198,6 +203,13 @@
       icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
       at: readCreatedAt(msg)
     };
+  }
+
+  // 참여자에게 내보내는 모양: GM에게 온 귓속말은 빼고, 시크릿 다이스는 결과를 지운다(네이티브도 다른 사람에게는 숨김).
+  function relayView(message, channel) {
+    if (message.whisper) return null;
+    if (message.rollInfo?.secret) return { ...message, text: "시크릿 다이스", roll: "", rollInfo: { secret: true }, channel };
+    return { ...message, channel };
   }
 
   function readMessages(channel) {
@@ -3006,7 +3018,7 @@
       channels: listChannels,
       peek: () => readMessages(currentChannel)?.slice(-3),
       // 웹 공유(릴레이): 모든 탭의 메시지를 channel 과 함께, 탭 목록은 relayChannels 로 넘긴다.
-      relayMessages: () => listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => ({ ...message, channel }))),
+      relayMessages: () => listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => relayView(message, channel)).filter(Boolean)),
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
       relayScene: () => {
         try {
