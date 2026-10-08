@@ -70,12 +70,14 @@
     button.contained:hover { background: #fff; }
     button.danger { color: #f44336; }
     button.danger:hover { background: rgba(244,67,54,.08); }
+    button.approve { color: #2196f3; }
+    button.approve:hover { background: rgba(33,150,243,.08); }
     button.stop { background: #d32f2f; color: #fff; font-weight: 700; border-radius: 0; }
     button.stop:hover { background: #b71c1c; }
     button.icon { min-width: 0; width: 36px; padding: 0; border-radius: 50%; font-size: 1.25rem; line-height: 1; }
     .participants { margin-top: 4px; }
     .participant { display: flex; align-items: center; gap: 4px; min-height: 48px; border-top: 1px solid rgba(255,255,255,.12); }
-    .participant .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .participant .name { flex: 1; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
     .participant .state { color: rgba(255,255,255,.7); font-size: .875rem; margin-right: 4px; }
     footer { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,.4); }
     footer .spacer, header .spacer { flex: 1; }
@@ -143,7 +145,7 @@
     participants.replaceChildren();
     if (!items.length) { participants.append(el("p", { class: "muted", text: "참가 요청 없음" })); return; }
     for (const item of items) {
-      const act = (label, decision, danger = false) => el("button", { type: "button", class: danger ? "danger" : "", "data-decision": decision, "data-id": item.id, text: label });
+      const act = (label, decision, danger = false) => el("button", { type: "button", class: danger ? "danger" : decision === "approve" ? "approve" : "", "data-decision": decision, "data-id": item.id, text: label });
       participants.append(el("div", { class: "participant" },
         el("span", { class: "name", text: item.displayName }),
         el("span", { class: "state", text: STATUS_LABEL[item.status] || item.status }),
