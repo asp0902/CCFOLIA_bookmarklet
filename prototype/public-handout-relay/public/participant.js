@@ -359,6 +359,7 @@ function renderTabs(data) {
 const healthNote = document.createElement("div"); healthNote.id = "health-note"; healthNote.hidden = true; healthNote.textContent = "GM 쪽 코코포리아 업데이트로 일부 기능 점검 중";
 document.body.append(healthNote);
 function showHealth(health) { healthNote.hidden = !(health && health.ok === false); }
+const isSameSpeakerRun = (previousName, message) => previousName !== null && previousName === (message.author || "이름 없음");
 const renderState = data => {
   showHealth(data.health);
   renderTabs(data);
@@ -368,9 +369,13 @@ const renderState = data => {
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   const list = document.getElementById("messages");
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  let previousName = null;
   list.replaceChildren(...(data.messages || []).filter(message => (message.channel || "main") === activeChannel).map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
+    // Measured on ccfolia.com: a message from the same speaker as the one right above (same name, any time gap) drops the avatar, the header and the top padding.
+    if (isSameSpeakerRun(previousName, message)) item.classList.add("merged");
+    previousName = message.author || "이름 없음";
     for (const [flag, on] of Object.entries(message.roll || {})) if (on === true) item.classList.add(`roll-${flag}`);
     const name = message.author || "이름 없음";
     const avatar = document.createElement("div"); avatar.className = "avatar";
@@ -385,6 +390,8 @@ const renderState = data => {
     const body = document.createElement("p"); renderRich(body, message.text || "");
     // Native rows show the typed text, then the dice result in a dimmer colour (measured: rgba(255,255,255,.7)).
     if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll-result"; result.textContent = ` ${message.roll.result}`; (body.lastElementChild || body).append(result); }
+    // A message edited in CCFOLIA ends with " [편집 완료]" (measured: inline span, 12px, #757575, the same as the time).
+    if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; (body.lastElementChild || body).append(edited); }
     text.append(head, body); item.append(avatar, text); return item;
   }));
   if (stickToBottom) list.scrollTop = list.scrollHeight;

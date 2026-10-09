@@ -48,7 +48,7 @@ main{padding:0}
 #messages .msg-text{flex:1;min-width:0;margin-top:6px}
 #messages h6{margin:0;font-size:14px;font-weight:700;line-height:1.57;letter-spacing:.00714em}
 #messages h6 strong{font-size:14px;font-weight:700;color:#fff}
-#messages .msg-time{margin-left:4px;font-size:12px;font-weight:400;line-height:1.66;color:#eee}
+#messages .msg-time{margin-left:4px;font-size:12px;font-weight:400;line-height:1.66;color:#757575}
 #messages p{margin:0 0 8px;font-size:14px;line-height:1.43;color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
 /* Bottom bar like CCFOLIA's chat input (measured: panel rgb(18,18,18)+10% black, tab 48px/14px bold, indicator #f50057, textarea well rgba(0,0,0,.2)). */
 .chat{grid-template-rows:auto minmax(0,1fr) auto}
@@ -81,7 +81,12 @@ main{padding:0}
 /* Step 2: the chat panel runs the full height of the window (title bar included) like CCFOLIA's drawer; the room title stays over the stage. */
 #messages li{margin:0 16px;padding:8px 0 5px}
 #messages h6 strong{color:#888}
-#messages .msg-time{margin-left:0;color:#eee}
+#messages .msg-time{margin-left:0;color:#757575}
+#messages .msg-edited{font-size:12px;font-weight:400;color:#757575}
+#messages li.merged{padding-top:0}
+#messages li.merged .avatar{visibility:hidden;height:0}
+#messages li.merged h6{display:none}
+#messages li.merged .msg-text{margin-top:0}
 @media(min-width:721px){
   #room>header{position:relative;z-index:1;width:calc(100% - 376px)}
   .play-layout{margin-top:-64px;min-height:100vh;position:relative}
