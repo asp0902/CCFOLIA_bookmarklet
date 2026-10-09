@@ -47,7 +47,7 @@ const encode = obj => {
   assert(html.includes('(1D6) ＞ 4'), 'the dice result is in the HTML');
   // downloading from the room menu
   const downloadOf = async label => {
-    await page.click('#room-menu-btn');
+    await page.click('#chat-gear');
     const [download] = await Promise.all([page.waitForEvent('download'), page.click(`.menu-item:has-text("${label}")`)]);
     return { name: download.suggestedFilename(), body: fs.readFileSync(await download.path(), 'utf8') };
   };
