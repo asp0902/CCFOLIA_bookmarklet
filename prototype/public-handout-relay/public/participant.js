@@ -782,8 +782,11 @@ document.getElementById("char-list-open").addEventListener("click", () => {
 document.getElementById("room-menu-btn").addEventListener("click", event => {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
   if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
-  items.push({ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") });
   openMenu(event.currentTarget, items);
+});
+// CCFOLIA keeps log output in the gear menu of the chat panel header (not in the room menu); the GM-only entries (tab edit, log deletion) are left out.
+document.getElementById("chat-gear").addEventListener("click", event => {
+  openMenu(event.currentTarget, [{ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }]);
 });
 
 // Log export: everything this page holds (the relay keeps the latest messages of every tab), saved as a file on this computer. Whispers to the GM and secret dice results

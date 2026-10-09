@@ -205,6 +205,8 @@ body.pip .chat{position:static;width:100%;height:100vh;display:grid;grid-templat
 .chat h2{position:relative}
 .chat-toggle{position:absolute;left:8px;top:8px;width:48px;height:48px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .chat-toggle:hover{background:rgba(255,255,255,.08)}
+.chat-gear{position:absolute;right:8px;top:8px;width:48px;height:48px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.chat-gear:hover{background:rgba(255,255,255,.08)}
 html.pip .chat-toggle{display:none}
 #chat-open{position:fixed;right:0;top:0;z-index:70;width:24px;height:64px;padding:0;border:0;border-radius:0;background:rgba(0,0,0,.4);color:#eee;cursor:pointer;display:flex;align-items:center;justify-content:center}
 #chat-open[hidden]{display:none}
