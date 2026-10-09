@@ -78,6 +78,8 @@
   const STAR_BORDER_PATH = "M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.33 2.88 1 4.28L12 15.4z";
   const PANEL_CSS = `
     #${PANEL_ID} h3 { margin: 16px 16px 0; font-size: 1rem; font-weight: 700; color: #fff; font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    #${PANEL_ID} summary { margin: 16px 16px 0; cursor: pointer; }
+    #${PANEL_ID} summary h3 { display: inline; margin: 0; }
     #${PANEL_ID} .capybara-empty { margin: 4px 16px 0; color: rgba(255,255,255,.6); font-size: .875rem; }
     .capybara-star-btn.on { color: #ffca28 !important; }`;
 
@@ -154,15 +156,21 @@
     return cell;
   };
 
-  const section = (template, title, list, emptyText) => {
-    const frag = document.createDocumentFragment();
-    frag.append(el("h3", { textContent: title }));
-    if (!list.length) { frag.append(el("div", { className: "capybara-empty", textContent: emptyText })); return frag; }
+  // Folding uses the browser's own <details>; only the state is remembered (localStorage, restored on every redraw).
+  const FOLD_KEY = "capybara-home-fold";
+  const readFold = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || {}; } catch (_) { return {}; } };
+  const saveFold = (id, open) => { try { localStorage.setItem(FOLD_KEY, JSON.stringify({ ...readFold(), [id]: open })); } catch (_) {} };
+  const section = (template, id, title, list, emptyText) => {
+    const details = el("details", {});
+    details.open = readFold()[id] !== false;
+    details.addEventListener("toggle", () => saveFold(id, details.open));
+    details.append(el("summary", {}, el("h3", { textContent: title })));
+    if (!list.length) { details.append(el("div", { className: "capybara-empty", textContent: emptyText })); return details; }
     const grid = template.parentElement.parentElement.cloneNode(false);
     grid.style.paddingBottom = "8px";
     grid.append(...list.map(r => makeCard(template, r)));
-    frag.append(grid);
-    return frag;
+    details.append(grid);
+    return details;
   };
 
   const renderHome = () => {
@@ -179,8 +187,8 @@
     const pinned = all.filter(r => r.pinned).sort((a, b) => b.lastVisit - a.lastVisit);
     const recent = all.filter(r => !r.pinned).sort((a, b) => b.lastVisit - a.lastVisit);
     panel.replaceChildren(
-      section(template, "★ 즐겨찾기", pinned, "룸 카드의 ☆ 버튼으로 즐겨찾기에 고정하세요."),
-      section(template, "최근 방문한 룸", recent, "아직 방문 기록이 없습니다. 룸에 접속하면 자동으로 남습니다."));
+      section(template, "favorites", "즐겨찾기", pinned, "룸 카드의 ☆ 버튼으로 즐겨찾기에 고정하세요."),
+      section(template, "recent", "최근 방문한 룸", recent, "아직 방문 기록이 없습니다. 룸에 접속하면 자동으로 남습니다."));
     return true;
   };
 
