@@ -253,3 +253,5 @@ html.pip .chat-toggle{display:none}
 #chat-form .fmt-row button:hover{background:#383838}
 #health-note{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:90;padding:3px 12px;border-radius:0 0 4px 4px;background:rgba(33,33,33,.95);color:#ffcc80;font-size:12px}
 #health-note[hidden]{display:none}
+
+#messages-host{min-height:0;overflow:auto}

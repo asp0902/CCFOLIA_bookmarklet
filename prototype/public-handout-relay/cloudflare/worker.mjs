@@ -1,3 +1,4 @@
+import { validateMirror, mirrorHash } from "../public/mirror-sanitize.mjs";
 const encoder = new TextEncoder();
 const GM_SOCKET_PROTOCOL = "capybara-gm";
 const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
@@ -41,7 +42,7 @@ const roomFromPath = pathname => {
 };
 const securityHeadersFor = url => ({
   "Cache-Control": "no-store",
-  "Content-Security-Policy": `default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self'; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net; media-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
+  "Content-Security-Policy": `default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ${url.origin.replace(/^http/, "ws")}; img-src https://storage.ccfolia-cdn.net data:; media-src https://storage.ccfolia-cdn.net; frame-src https://www.youtube.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -317,6 +318,18 @@ export class RoomRelay {
       this.push("p", { type: "health", health: { ok: room.health.ok } });
       return json({ accepted: true });
     }
+    // Native mirroring: CCFOLIA's own CSS and DOM shapes from the GM page. Everything is re-checked here (mirror-sanitize.mjs) whatever the GM sent; each part is stored only when its hash changed.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/mirror$/.test(url.pathname)) {
+      const checked = validateMirror(await request.json().catch(() => ({})));
+      if (checked.error) return json({ error: checked.error }, 400);
+      const meta = await this.state.storage.get("mirror:meta") || {};
+      if (checked.css !== null) { await this.state.storage.put("mirror:css", checked.css); meta.cssHash = mirrorHash(checked.css); }
+      if (checked.templates) { await this.state.storage.put("mirror:tpl", checked.templates); meta.tplHash = mirrorHash(JSON.stringify(checked.templates)); }
+      meta.fontLinks = checked.fontLinks;
+      await this.state.storage.put("mirror:meta", meta);
+      this.push("p", { type: "mirror", mirror: { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", fontLinks: meta.fontLinks } });
+      return json({ accepted: true, cssHash: meta.cssHash || "", tplHash: meta.tplHash || "" });
+    }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages\/sync$/.test(url.pathname)) {
       const body = await request.json().catch(() => ({}));
       const entries = Object.entries(body.present && typeof body.present === "object" ? body.present : {});
@@ -403,6 +416,9 @@ export class RoomRelay {
       if (this.sockets("p").length >= MAX_PARTICIPANT_SOCKETS) return json({ error: "연결이 너무 많습니다." }, 429);
       return this.acceptSocket(["p", `p:${member.id}`]);
     }
+    // The mirrored CSS is a file (not inline) so style-src 'self' stays; templates are fetched when their hash changes, not on every state poll.
+    if (request.method === "GET" && /\/mirror\.css$/.test(url.pathname)) return new Response(await this.state.storage.get("mirror:css") || "", { headers: { "Content-Type": "text/css; charset=utf-8" } });
+    if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {} });
     if (request.method === "GET" && /\/state$/.test(url.pathname)) return json({
       roomTitle: room.roomTitle || "플레이 룸",
       capabilities: room.capabilities,
@@ -413,6 +429,7 @@ export class RoomRelay {
       channels: room.channels || [],
       dicebot: room.dicebot || "",
       health: room.health ? { ok: room.health.ok } : null,
+      mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
       scene: room.scene || null,
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {
