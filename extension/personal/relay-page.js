@@ -68,7 +68,8 @@
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
       channel: clean(message.channel, 100) || "main",
       color: /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "",
-      icon: /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(message.icon || "") ? message.icon : "",
+      // an icon uploaded long ago has a firebasestorage address; CCFOLIA itself shows it through the CDN (same prefix replacement)
+      icon: (icon => /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(icon) ? icon : "")(String(message.icon || "").replace("https://firebasestorage.googleapis.com/v0/b/ccfolia-160aa.appspot.com/o", "https://storage.ccfolia-cdn.net")),
       edited: !!message.edited,
       roll: message.rollInfo && (message.roll || message.rollInfo.secret) ? { result: clean(message.roll, 400), success: !!message.rollInfo.success, failure: !!message.rollInfo.failure, critical: !!message.rollInfo.critical, fumble: !!message.rollInfo.fumble, secret: !!message.rollInfo.secret } : undefined,
     })).filter(message => message.id && message.text);

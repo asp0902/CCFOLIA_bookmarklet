@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.45
+// @version      0.2.46
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.45";
+  const VERSION = "0.2.46";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -281,6 +281,12 @@
       .filter(([, marker]) => marker && url(marker.imageUrl))
       .slice(0, 100)
       .map(([id, marker]) => ({ id: String(id).slice(0, 60), x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl) }));
+  }
+
+  // 참여자에게 보내는 이미지 주소: 코코포리아 CDN 만. 코코포리아 자신이 하는 변환(실측: 앱 번들의 주소 함수)을 따라, 예전에 올린 이미지의 firebasestorage 주소는 CDN 주소로 바꿔 쓴다.
+  function relayCdnUrl(value) {
+    const address = typeof value === "string" ? value.replace("https://firebasestorage.googleapis.com/v0/b/ccfolia-160aa.appspot.com/o", "https://storage.ccfolia-cdn.net") : "";
+    return /^https:\/\/storage\.ccfolia-cdn\.net\//.test(address) ? address : "";
   }
 
   // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소: https 만, 캐릭터를 쓰지 않을 때만 쓴다.
@@ -3270,7 +3276,7 @@
           const room = Object.values(ent.rooms?.entities || {})[0];
           if (!room) return null;
           const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
-          const url = (v) => (typeof v === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\//.test(v) ? v : "");
+          const url = relayCdnUrl;
           const roomAudio = (src, name, volume, repeat) => (url(src) ? { url: url(src), name: String(name || "").slice(0, 100), volume: Math.max(0, Math.min(1, num(volume, 1))), repeat: repeat !== false } : null);
           const items = Object.values(ent.roomItems?.entities || {}).map((item) => relayItemView(item, url, num)).filter(Boolean);
           const characters = Object.values(ent.roomCharacters?.entities || {})
@@ -3285,6 +3291,7 @@
           return {
             backgroundUrl: url(room.backgroundUrl), foregroundUrl: url(room.foregroundUrl), backgroundColor: /^#[0-9a-f]{3,8}$/i.test(room.backgroundColor || "") ? room.backgroundColor : "",
             fieldWidth: num(room.fieldWidth, 40), fieldHeight: num(room.fieldHeight, 20), fieldObjectFit: ["fill", "contain", "cover"].includes(room.fieldObjectFit) ? room.fieldObjectFit : "fill",
+            displayGrid: room.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(room.gridSize, 1))),
             items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)
