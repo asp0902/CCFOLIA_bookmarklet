@@ -266,7 +266,7 @@ function renderStatusPanel(characters) {
       const bar = document.createElement("div"); bar.className = "st-bar";
       const track = document.createElement("i"); track.className = "st-track";
       const fill = document.createElement("i"); fill.className = "st-fill";
-      fill.style.width = `${st.max > 0 ? Math.max(0, Math.min(100, (st.value / st.max) * 100)) : 100}%`;
+      fill.style.width = `${st.max > 0 ? Math.max(0, Math.min(100, (st.value / st.max) * 100)) : 0}%`; // CCFOLIA: 0 wide without a maximum (measured: HP 0/0 shows only the dim track)
       const label = document.createElement("b"); label.textContent = st.label;
       const value = document.createElement("b"); value.className = "st-value";
       const cur = document.createElement("span"); cur.textContent = String(st.value);
@@ -490,7 +490,10 @@ const renderState = data => {
   const mirrored = cmMirror.has("chatShell") && cmMirror.has("chatRow");
   const list = mirrored ? cmMirror.shadow("messages-host", node => document.getElementById("messages").after(node)).host : document.getElementById("messages");
   document.getElementById("messages").hidden = mirrored;
-  const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  // The scrolling element: the page's #messages list, or (mirrored) the list element inside the shadow root, which CCFOLIA's CSS makes the one scroller (overflow-y: scroll) - the host does not scroll.
+  const scroller = () => (mirrored ? list.shadowRoot?.querySelector("ul") : list) || list;
+  const before = scroller(), previousTop = before.scrollTop;
+  const stickToBottom = !rendered || before.scrollHeight - before.scrollTop - before.clientHeight < 40;
   const shown = (data.messages || []).filter(message => (message.channel || "main") === activeChannel);
   let previousName = null;
   if (mirrored) {
@@ -522,7 +525,7 @@ const renderState = data => {
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; (body.lastElementChild || body).append(edited); }
     text.append(head, body); item.append(avatar, text); return item;
   }));
-  if (stickToBottom) list.scrollTop = list.scrollHeight;
+  { const now = scroller(); now.scrollTop = stickToBottom ? now.scrollHeight : previousTop; }
   rendered = true;
   const handout = data.handout || {};
   syncHandoutPopup(handout);
@@ -675,6 +678,7 @@ function renderRich(container, full, toolkit = false) {
   if (!env || typeof env !== "object") { container.textContent = text; return info; }
   if (toolkit && env.roll20Macro === true) {
     info.macro = true; info.bubble = true; info.narration = env.blockStyle?.narration === true;
+    container.dataset.ccfMacro = "1"; // format-sync marks a Roll20 macro so that its narration look (centred, italic) does not apply to it
     // the bridge also marks a narration macro as a narration root (applyNarrationRenderMarker): same class and attribute, and the row gets the attribute
     if (info.narration) { container.classList.add("ccf-render-root"); container.dataset.ccfNarration = "1"; }
     renderRoll20(container, text, env); return info;
@@ -878,7 +882,7 @@ function refreshSpeakerUi() {
   speakerImg.hidden = !c; speakerBtn.querySelector("svg").style.display = c ? "none" : "";
   if (c) speakerImg.src = c.iconUrl;
   palBtn.disabled = !(c && String(c.commands || "").trim());
-  colorBtn.style.color = nameColor || "#cce5df";
+  colorBtn.style.color = (c && /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "") || nameColor || "#cce5df"; // the palette icon takes the speaker's colour, like CCFOLIA's
 }
 function openSpeakerMenu() {
   const items = [{ label: "내 이름", current: !speaker.value, run: () => useSpeaker("") }, ...(sceneData?.characters || []).map(c => ({ label: c.name || "(이름 없음)", current: c.id === speaker.value, run: () => useSpeaker(c.id) }))];
@@ -905,6 +909,9 @@ refreshSpeakerUi();
   const row2 = document.createElement("div"); row2.className = "fmt-row";
   const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("width", "15"); svg.setAttribute("height", "15"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); p.setAttribute("fill", "currentColor"); svg.append(p); b.append(svg); return b; };
   row2.append(align("left", "M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"), align("center", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"), align("right", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"));
+  // alignment buttons: one is active, like the toolkit's toolbar (left by default)
+  const aligns = [...row2.querySelectorAll("button")].slice(0, 3);
+  aligns.forEach((button, index) => { button.setAttribute("aria-pressed", String(index === 0)); button.addEventListener("click", () => aligns.forEach(other => other.setAttribute("aria-pressed", String(other === button)))); });
   const colorTool = (title, initial, marker) => {
     const label = document.createElement("label"); label.className = "fmt-color"; label.title = title;
     const input = document.createElement("input"); input.type = "color"; input.value = initial; input.setAttribute("aria-label", title);

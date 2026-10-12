@@ -23,6 +23,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => { document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none'; renderState({ roomTitle: 'r', gmOnline: true, messages: [], channels: [{ id: 'main', label: '메인' }] }); });
   assert.equal(await page.locator('.fmt-row button[aria-label="Narration"]').count(), 1);
   assert.equal(await page.locator('.fmt-color input[type=color]').count(), 2);
+  // alignment buttons act as one group (left active first), like the toolkit toolbar
+  const pressed = async () => page.evaluate(() => [...document.querySelectorAll('.fmt-row button[aria-label^="Align"]')].map(b => b.getAttribute('aria-pressed')).join());
+  assert.equal(await pressed(), 'true,false,false'); await page.click('.fmt-row button[aria-label="Align center"]'); assert.equal(await pressed(), 'false,true,false');
+  // a status bar without a maximum has no fill (CCFOLIA shows only the dim track for HP 0/0)
+  const fill = await page.evaluate(() => { renderScene({ fieldWidth: 20, fieldHeight: 10, items: [], markers: [], characters: [{ id: 'c', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: 'https://storage.ccfolia-cdn.net/a.png', status: [{ label: 'HP', value: 0, max: 0 }, { label: 'MP', value: 5, max: 10 }] }] }); return [...document.querySelectorAll('.st-fill')].map(f => f.style.width).join(); });
+  assert.equal(fill, '0%,50%');
   // colour on a selection, size on Enter
   await page.fill('#chat-input', '빨강 글자');
   await page.evaluate(() => { const i = document.getElementById('chat-input'); i.setSelectionRange(0, 2); });
