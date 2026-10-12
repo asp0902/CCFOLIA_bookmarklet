@@ -192,7 +192,7 @@ function renderScene(scene) {
   bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
   const w = stage.clientWidth, h = stage.clientHeight;
   const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight) * view.zoom;
-  view.unit = unit;
+  view.unit = unit; view.base = unit / view.zoom;
   const place = (el, x, y, width, height, angle, z) => {
     el.style.position = "absolute";
     el.style.left = `${(w / 2) + view.x + x * unit}px`; el.style.top = `${(h / 2) + view.y + y * unit}px`;
@@ -247,6 +247,7 @@ function renderScene(scene) {
   field.replaceChildren(...nodes);
   renderStatusPanel(s.characters || []);
   renderSpeakers(s.characters || []);
+  window.syncZoomBar?.();
 }
 // Top-left status panel, like CCFOLIA's: avatar (+ initiative badge) and a 2-column grid of 96x16 bars (label left, value/max right).
 function renderStatusPanel(characters) {
@@ -304,7 +305,7 @@ window.addEventListener("resize", () => renderScene());
     redraw();
   };
   const centre = () => [stage.clientWidth / 2 - stage.clientWidth / 2, 0];
-  const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #handout, #room > header");
+  const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #zoom-host, #handout, #room > header");
   stage.addEventListener("wheel", event => {
     if (interactive(event.target)) return;
     event.preventDefault();
@@ -349,6 +350,29 @@ window.addEventListener("resize", () => renderScene());
     mk("⌂", "화면 맞춤", () => { view.zoom = 1; view.x = 0; view.y = 0; redraw(); }));
   stage.append(ctl);
   void centre;
+  // Native mirroring: CCFOLIA's own zoom bar (magnifier buttons around a vertical slider), working like its code (read from the app): the scale is cell px / 24 (0.2 .. 2); the buttons add or
+  // subtract 0.1 (min((10n+1)/10, 2), max((10n-1)/10, 0.2)); the slider has min 0.2, max 2, step 0.1 and its position scales with it. The play room's fit-to-window size is scale 1 x its base.
+  let zoomUi = null;
+  const scaleNow = () => view.base * view.zoom / 24;
+  const setScale = target => zoomAt(target / scaleNow(), 0, 0);
+  const zoomFraction = () => (Math.max(0.2, Math.min(2, scaleNow())) - 0.2) / 1.8;
+  window.syncZoomBar = () => { if (!zoomUi) return; const percent = `${Math.round(zoomFraction() * 1000) / 10}%`; zoomUi.track.style.height = percent; zoomUi.thumb.style.bottom = percent; };
+  window.renderMirroredZoom = () => {
+    const on = cmMirror.has("zoomBar");
+    ctl.hidden = on;
+    if (!on) { document.getElementById("zoom-host")?.remove(); zoomUi = null; return; }
+    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:24px;z-index:100"; stage.append(node); });
+    const bar = cmMirror.make("zoomBar"), slot = name => cmMirror.slot(bar, name);
+    slot("zoomIn").addEventListener("click", () => setScale(Math.min((10 * scaleNow() + 1) / 10, 2)));
+    slot("zoomOut").addEventListener("click", () => setScale(Math.max((10 * scaleNow() - 1) / 10, 0.2)));
+    const slider = slot("slider");
+    const setFromPointer = event => { const r = slider.getBoundingClientRect(); const p = Math.max(0, Math.min(1, 1 - (event.clientY - r.top) / (r.height || 1))); setScale(Math.round((0.2 + p * 1.8) * 10) / 10); };
+    slider.addEventListener("pointerdown", event => { try { slider.setPointerCapture(event.pointerId); } catch (_) { /* a synthetic event has no active pointer */ } setFromPointer(event); slider.onpointermove = setFromPointer; });
+    slider.addEventListener("pointerup", () => { slider.onpointermove = null; });
+    zoomUi = { track: slot("track"), thumb: slot("thumb") };
+    cmMirror.show("zoom-host", [bar]);
+    window.syncZoomBar();
+  };
 }
 let activeChannel = "main";
 const seenCount = {}, unread = new Set(); // per-channel message counts, to mark tabs that received something while another tab was open
@@ -921,7 +945,7 @@ function renderMirroredHeader() {
   menu?.addEventListener("click", () => openChatMenu(menu));
   cmMirror.show("chat-head-host", [header]);
 }
-cmMirror.onChange = () => { renderMirroredHeader(); renderMirroredTopBar(); if (typeof current !== "undefined" && current) renderState(current); };
+cmMirror.onChange = () => { renderMirroredHeader(); renderMirroredTopBar(); window.renderMirroredZoom?.(); if (typeof current !== "undefined" && current) renderState(current); };
 
 // Log export: everything this page holds (the relay keeps the latest messages of every tab), saved as a file on this computer. Whispers to the GM and secret dice results
 // never reach a participant, so they are not in it. Built here in the browser; nothing is sent anywhere.

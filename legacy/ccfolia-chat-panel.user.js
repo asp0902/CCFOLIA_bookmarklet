@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.46
+// @version      0.2.47
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.46";
+  const VERSION = "0.2.47";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3199,6 +3199,21 @@
     title.querySelector("span")?.replaceChildren();
     return copy.outerHTML;
   }
+  // 장면 확대/축소 막대: 확대 단추, 세로 슬라이더(레일·트랙·손잡이), 축소 단추. 슬라이더 위치(트랙 높이·손잡이 위치)는 참여자 쪽이 확대 비율로 채운다.
+  function mirrorZoomBarTemplate() {
+    const slider = [...document.querySelectorAll(".MuiSlider-root")].find((el) => { const r = el.getBoundingClientRect(); return r.height > r.width && el.querySelector(".MuiSlider-thumb") && el.offsetParent !== null; });
+    const box = slider?.parentElement;
+    const buttons = box ? [...box.children].filter((child) => child.tagName === "BUTTON") : [];
+    if (!slider || buttons.length !== 2) return null;
+    const copy = mirrorStripClone(box.cloneNode(true));
+    copy.removeAttribute("style");
+    const mark = (el, slot) => { if (el) el.setAttribute("data-cm-slot", slot); };
+    const copyButtons = [...copy.children].filter((child) => child.tagName === "BUTTON");
+    mark(copyButtons[0], "zoomIn"); mark(copyButtons[1], "zoomOut");
+    const copySlider = copy.querySelector(".MuiSlider-root");
+    mark(copySlider, "slider"); mark(copy.querySelector(".MuiSlider-track"), "track"); mark(copy.querySelector(".MuiSlider-thumb"), "thumb");
+    return copy.querySelector('[data-cm-slot="thumb"]') && copy.querySelector('[data-cm-slot="track"]') ? copy.outerHTML : null;
+  }
   function mirrorChatTemplates() {
     // 본보기 줄: 나레이션·이어짐이 아닌 보통 줄(chat-panel 의 captureNativeRowTemplate 와 같은 기준).
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement
@@ -3240,7 +3255,8 @@
     if (css.length > MIRROR_CSS_LIMIT) css = "";
     const topBar = mirrorTopBarTemplate();
     const chat = mirrorChatTemplates();
-    const templates = chat || topBar ? { ...(chat || {}), ...(topBar ? { topBar } : {}) } : null;
+    const zoomBar = mirrorZoomBarTemplate();
+    const templates = chat || topBar || zoomBar ? { ...(chat || {}), ...(topBar ? { topBar } : {}), ...(zoomBar ? { zoomBar } : {}) } : null;
     const templateText = templates ? JSON.stringify(templates) : "";
     const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
     const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);

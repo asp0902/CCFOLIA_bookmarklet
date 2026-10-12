@@ -17,6 +17,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     chatTabIdle: '<button class="tab idle" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
     chatTabUnread: '<button class="tab unread" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
     topBar: '<header class="MuiAppBar-positionFixed tb" style="position:fixed"><button class="mn" data-cm-slot="menu" aria-label="룸 메뉴"><h6 data-cm-slot="title"><span data-cm-slot="subtitle"></span></h6></button><button class="ch" data-cm-slot="chars" aria-label="내 캐릭터 목록"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></button><button class="ac" data-cm-slot="account"><div><img data-cm-slot="avatar"></div></button><button class="co" data-cm-slot="chatOpen"></button></header>',
+    zoomBar: '<div class="zb"><button class="zi" data-cm-slot="zoomIn"></button><span class="sl" data-cm-slot="slider" style="display:block;height:60px;width:28px;position:relative"><span data-cm-slot="track" style="position:absolute;bottom:0;width:2px"></span><span data-cm-slot="thumb" style="position:absolute;width:24px;height:2px"></span></span><button class="zo" data-cm-slot="zoomOut"></button></div>',
     chatRow: '<div class="wrap"><div class="MuiListItem-root row" style="display:flex;padding:8px"><div class="av"><img class="MuiAvatar-img" data-cm-slot="icon"></div><div class="tx"><h6 class="nm" data-cm-slot="name" style="color:red"><span class="tm" data-cm-slot="time"></span></h6><p class="bd" data-cm-slot="body"></p></div></div><hr class="dv"></div>'
   };
   await page.route('**/*', route => {
@@ -91,6 +92,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const narrationText = '내용' + encode({ v: 1, text: '내용', formatRuns: [], alignRuns: [], blockStyle: { narration: true } });
   const marked = await page.evaluate(text => { current = { ...current, roomTitle: 't', gmOnline: true, channels: [{ id: 'main', label: '메인' }], mirror: { cssHash: 'h1', tplHash: 't1', fontLinks: [] }, messages: [{ id: 'n1', author: 'GM', text, channel: 'main', createdAt: '2026-10-08T01:00:00Z' }] }; renderState(current); const row = document.getElementById('messages-host').shadowRoot.querySelector('.row'); const p = row.querySelector('.bd'); return { row: row.dataset.ccfNarration, body: p.dataset.ccfNarration, root: p.classList.contains('ccf-render-root'), line: !!p.querySelector('.ccf-render-overlay > .ccf-line') }; }, narrationText);
   assert.deepEqual(marked, { row: '1', body: '1', root: true, line: true });
+  // zoom bar: like CCFOLIA's (scale 0.2..2, buttons +-0.1, slider step 0.1); the thumb follows the scale
+  const zoom = await page.evaluate(async () => {
+    renderScene({ fieldWidth: 20, fieldHeight: 10, items: [], markers: [], characters: [] });
+    const root = document.getElementById('zoom-host').shadowRoot, wait = ms => new Promise(r => setTimeout(r, ms)), scale = () => Math.round(view.base * view.zoom / 24 * 1000) / 1000;
+    const out = { oldHidden: document.getElementById('zoom-ctl').hidden, start: scale() };
+    root.querySelector('.zi').click(); await wait(80); out.in = scale();
+    root.querySelector('.zo').click(); root.querySelector('.zo').click(); await wait(80); out.out = scale();
+    const slider = root.querySelector('.sl'), r = slider.getBoundingClientRect();
+    slider.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + 5, clientY: r.top + r.height * 0.5, bubbles: true })); await wait(200);
+    out.mid = scale(); out.thumb = root.querySelector('[data-cm-slot=thumb]').style.bottom; out.track = root.querySelector('[data-cm-slot=track]').style.height;
+    return out;
+  });
+  assert.equal(zoom.oldHidden, true);
+  assert(Math.abs(zoom.in - (zoom.start + 0.1)) < 0.002 && Math.abs(zoom.out - (zoom.start - 0.1)) < 0.002, JSON.stringify(zoom));
+  assert.equal(zoom.mid, 1.1, 'half way up the slider is (0.2 + 0.9) rounded to the 0.1 step'); assert.equal(zoom.thumb, '50%', JSON.stringify(zoom)); assert.equal(zoom.track, '50%');
   // top bar
   const top = await page.evaluate(() => {
     const root = document.getElementById('top-host').shadowRoot;
