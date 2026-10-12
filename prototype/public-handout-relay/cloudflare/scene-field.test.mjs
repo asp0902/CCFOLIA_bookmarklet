@@ -22,4 +22,10 @@ await scene({ fieldWidth: 20, fieldHeight: 10, displayGrid: "yes", gridSize: 999
 current = await field(); assert.equal(current.displayGrid, false, 'only a real true turns it on'); assert.equal(current.gridSize, 50, 'clamped');
 await scene({ fieldWidth: 20, fieldHeight: 10, gridSize: -3 });
 assert.equal((await field()).gridSize, 1);
+await scene({ fieldWidth: 20, fieldHeight: 10, screen: { scale: 0.8, x: 30.4, y: -12 } });
+current = await field(); assert.deepEqual(current.screen, { scale: 0.8, x: 30, y: -12 }, "the GM's own view is the participant's starting view");
+await scene({ fieldWidth: 20, fieldHeight: 10, screen: { scale: 9, x: "a" } });
+assert.deepEqual((await field()).screen, { scale: 2, x: 0, y: 0 }, "clamped to CCFOLIA's 0.2..2");
+await scene({ fieldWidth: 20, fieldHeight: 10 });
+assert.deepEqual((await field()).screen, { scale: 1, x: 0, y: 0 }, "default scale 1");
 console.log("scene field PASS");

@@ -34,7 +34,8 @@
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     const scene = typeof api?.relayScene === "function" ? api.relayScene() : null;
     if (!scene) return;
-    const key = JSON.stringify(scene);
+    // the GM's own zoom/pan (scene.screen) is only the participant's starting view: it must not make a scene update of its own while the GM pans
+    const key = JSON.stringify({ ...scene, screen: undefined });
     if (key === lastSceneKey) return;
     lastSceneKey = key;
     emit({ action: "scene", scene });
@@ -63,7 +64,7 @@
     if (!all) return; // the store is not ready yet: an empty list here would look like "everything was deleted"
     const messages = [].concat(...[...new Set(all.map(message => message.channel))].map(channel => all.filter(message => message.channel === channel).slice(-100))).map(message => ({
       id: clean(message.id, 160),
-      author: clean(message.name, 80) || "CCFOLIA",
+      author: clean(message.name === "이름 없음" ? "noname" : message.name, 80) || "CCFOLIA",
       text: clean(message.text || message.roll, 4000),
       createdAt: message.at ? new Date(message.at).toISOString() : new Date().toISOString(),
       channel: clean(message.channel, 100) || "main",

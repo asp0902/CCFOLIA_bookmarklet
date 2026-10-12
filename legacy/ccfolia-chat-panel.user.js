@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.47
+// @version      0.2.48
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.47";
+  const VERSION = "0.2.48";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -995,10 +995,11 @@
     const runs = [];
     const spans = []; // {c|b|s|a:값|…|} 선택 구간 서식(글자색·배경색·크기·정렬) 열린 목록
     const alignSpans = [];
+    let narration = false;
     let i = 0;
     while (i < input.length) {
       if (input[i] === "{") {
-        const head = /^\{([cbsa]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
+        const head = /^\{([cbsan]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
         if (head) { spans.push({ key: head[1], value: head[2], start: text.length }); i += head[0].length; continue; }
       }
       if (spans.length && input.startsWith("|}", i)) {
@@ -1008,6 +1009,7 @@
           else if (span.key === "b" && /^#[0-9a-f]{3,8}$/i.test(span.value)) runs.push({ start: span.start, end: text.length, style: { backgroundColor: span.value } });
           else if (span.key === "s" && /^\d{1,2}$/.test(span.value)) runs.push({ start: span.start, end: text.length, style: { fontSize: Math.max(8, Math.min(72, Number(span.value))) } });
           else if (span.key === "a" && ["left", "center", "right"].includes(span.value)) alignSpans.push({ start: span.start, end: text.length, align: span.value });
+          else if (span.key === "n") narration = true; // {n:1|글|} : 나레이션 메시지(참여자 웹의 Nr 단추)
         }
         i += 2;
         continue;
@@ -1053,7 +1055,7 @@
     }
     const lineAt = (pos) => (text.slice(0, pos).match(/\n/g) || []).length;
     const alignRuns = alignSpans.map((sp) => ({ start: lineAt(sp.start), end: lineAt(Math.max(sp.end - 1, sp.start)) + 1, align: sp.align }));
-    return { text, runs, alignRuns };
+    return { text, runs, alignRuns, narration };
   }
 
   // 크툴루(CoC 7판) CC<=X 판정. 네이티브 형식(diceDiag)을 그대로 재현한다:
@@ -1160,11 +1162,12 @@
     let outText = cleanText;
     const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
-    if (!rolled && (meta || parsed.runs.length > 0 || narrationOn || extra.runs.length > 0 || alignAll.length > 0)) {
+    const narrate = (narrationOn || parsed.narration === true) && !meta;
+    if (!rolled && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
-        blockStyle: narrationOn && !meta ? { narration: true } : {},
+        blockStyle: narrate ? { narration: true } : {},
         ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {})
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
@@ -3308,6 +3311,8 @@
             backgroundUrl: url(room.backgroundUrl), foregroundUrl: url(room.foregroundUrl), backgroundColor: /^#[0-9a-f]{3,8}$/i.test(room.backgroundColor || "") ? room.backgroundColor : "",
             fieldWidth: num(room.fieldWidth, 40), fieldHeight: num(room.fieldHeight, 20), fieldObjectFit: ["fill", "contain", "cover"].includes(room.fieldObjectFit) ? room.fieldObjectFit : "fill",
             displayGrid: room.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(room.gridSize, 1))),
+            // 이 GM 화면의 확대 비율과 위치(코코포리아 앱 상태 roomScreenScale 0.2~2, roomScreenPosition 화면 px): 참여자 화면이 처음 열릴 때 같은 구도로 시작한다.
+            screen: (() => { const app = findStore()?.getState()?.app?.state || {}; return { scale: Math.max(0.2, Math.min(2, num(app.roomScreenScale, 1))), x: Math.round(num(app.roomScreenPosition?.x)), y: Math.round(num(app.roomScreenPosition?.y)) }; })(),
             items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)

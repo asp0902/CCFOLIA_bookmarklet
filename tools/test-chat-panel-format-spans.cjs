@@ -8,4 +8,5 @@ assert.equal(r.text,'앞 빨강 굵게 뒤\n가운데줄\n큰 배경');
 assert.deepEqual(r.alignRuns,[{start:1,end:2,align:'center'}]);
 assert(r.runs.some(x=>x.style.color==='#ff0000'&&x.start===2&&x.end===7));
 assert(r.runs.some(x=>x.style.fontSize===30));assert(r.runs.some(x=>x.style.backgroundColor==='#00ff00'));
+const n=parseFormatMarkers('{n:1|조용한 장면|}');assert.equal(n.text,'조용한 장면');assert.equal(n.narration,true);assert.equal(parseFormatMarkers('평범').narration,false);
 console.log('chat panel format spans (colour, background, size, align) parse PASS');
