@@ -256,3 +256,8 @@ html.pip .chat-toggle{display:none}
 
 #messages-host{min-height:0;overflow:auto}
 [hidden]{display:none!important}
+.menu-item{line-height:24px}
+.menu-paper.has-profile{padding:0 0 8px}
+.menu-profile{display:flex;align-items:flex-start;box-sizing:border-box;height:72px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px}
+.menu-profile-av{flex:none;width:40px;height:40px;margin-right:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#555;color:#fff;font-size:20px;line-height:20px}
+.menu-profile-text{margin:6px 0;min-width:78px}.menu-profile-text p{margin:0;font-size:16px;line-height:24px;color:#fff;white-space:nowrap}.menu-profile-text .menu-profile-sub{font-size:14px;line-height:20.02px;color:rgba(255,255,255,.7)}

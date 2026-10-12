@@ -807,6 +807,12 @@ function openMenu(anchor, items) {
   const paper = el("div", "menu-paper"); paper.setAttribute("role", "menu"); paper.anchor = anchor;
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
+    // the account menu's top row as CCFOLIA draws it (measured): 40px round avatar, name 16px/24px and a 14px 70% line under it, 72px high, then a divider
+    if (item.profile) {
+      const row = el("div", "menu-profile"), text = el("div", "menu-profile-text");
+      text.append(el("p", "", item.profile.name), el("p", "menu-profile-sub", item.profile.sub)); row.append(el("span", "menu-profile-av", item.profile.letter), text);
+      paper.append(row); paper.classList.add("has-profile"); continue;
+    }
     const row = el("button", "menu-item", item.label); row.type = "button"; row.setAttribute("role", "menuitem");
     if (item.current) row.dataset.current = "1";
     row.addEventListener("click", () => { closeMenu(); item.run(); });
@@ -945,7 +951,7 @@ function downloadLog(kind) {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
-const openAccountMenu = anchor => openMenu(anchor, [{ header: chatName.value || "참여자" }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
+const openAccountMenu = anchor => openMenu(anchor, [{ profile: { letter: document.getElementById("account-av").textContent, name: chatName.value || "참여자", sub: "플레이 룸 참여자" } }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
 document.getElementById("account-btn").addEventListener("click", event => openAccountMenu(event.currentTarget));
 // Native mirroring: the top bar is CCFOLIA's own (GM-only buttons were left out on the GM side). Its buttons call the same functions as the built-in ones;
 // the built-in header stays in the page (hidden) as the data holder and the fallback. A handout button (not a CCFOLIA feature) is added by copying the character-list button.

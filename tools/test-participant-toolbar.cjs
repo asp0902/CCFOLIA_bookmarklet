@@ -59,6 +59,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('#health-note').isVisible(), true);
   await page.evaluate(() => onPush({ data: JSON.stringify({ type: 'health', health: { ok: true } }) }));
   assert.equal(await page.locator('#health-note').isVisible(), false);
+  // menus as CCFOLIA draws them (measured): items 36px high; the account menu starts with a 72px profile row (40px round avatar, name 16/24px, 14px line under it)
+  await page.click('#account-btn');
+  const menu = await page.evaluate(() => { const row = document.querySelector('.menu-profile'), item = document.querySelector('.menu-item'); return { profile: row.getBoundingClientRect().height, avatar: document.querySelector('.menu-profile-av').getBoundingClientRect().width, radius: getComputedStyle(document.querySelector('.menu-profile-av')).borderRadius, item: item.getBoundingClientRect().height, sub: getComputedStyle(document.querySelector('.menu-profile-sub')).fontSize }; });
+  assert.equal(menu.profile, 72); assert.equal(menu.avatar, 40); assert.equal(menu.radius, '50%'); assert.equal(menu.item, 36); assert.equal(menu.sub, '14px');
+  await page.keyboard.press('Escape');
   await browser.close();
   console.log('participant toolbar PASS');
 })().catch(error => { console.error(error); process.exit(1); });
