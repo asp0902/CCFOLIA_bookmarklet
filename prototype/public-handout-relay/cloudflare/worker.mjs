@@ -50,12 +50,14 @@ const securityHeadersFor = url => ({
 });
 
 // Drops CCFOLIA messages the GM no longer has. Per tab, only messages newer than the oldest one the GM sent are compared (older ones are unknown to the GM);
-// since === null means the tab is empty. Participant-sent (external) messages are never touched. Returns the removed ids.
+// since === null means the tab is empty. Copies the relay itself used to add of a delivered participant message (origin other than "ccfolia", from before the real message
+// came back through the snapshot) are stale duplicates now and are removed whatever the tab says. Returns the removed ids.
 export function applyMessageSync(room, present) {
   const removed = new Set();
   for (const message of room.messages) {
+    if (message.origin !== "ccfolia") { removed.add(message.id); continue; }
     const info = present[message.channel || "main"];
-    if (!info || message.origin !== "ccfolia") continue;
+    if (!info) continue;
     if (info.since === null || (Date.parse(message.createdAt) >= Date.parse(info.since) && !info.ids.includes(message.id))) removed.add(message.id);
   }
   room.messages = room.messages.filter(message => !removed.has(message.id));
