@@ -16,6 +16,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     chatTabOn: '<button class="tab on" role="tab" aria-selected="true" data-cm-slot="label2"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
     chatTabIdle: '<button class="tab idle" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
     chatTabUnread: '<button class="tab unread" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
+    topBar: '<header class="MuiAppBar-positionFixed tb" style="position:fixed"><button class="mn" data-cm-slot="menu" aria-label="룸 메뉴"><h6 data-cm-slot="title"><span data-cm-slot="subtitle"></span></h6></button><button class="ch" data-cm-slot="chars" aria-label="내 캐릭터 목록"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></button><button class="ac" data-cm-slot="account"><div><img data-cm-slot="avatar"></div></button><button class="co" data-cm-slot="chatOpen"></button></header>',
     chatRow: '<div class="wrap"><div class="MuiListItem-root row" style="display:flex;padding:8px"><div class="av"><img class="MuiAvatar-img" data-cm-slot="icon"></div><div class="tx"><h6 class="nm" data-cm-slot="name" style="color:red"><span class="tm" data-cm-slot="time"></span></h6><p class="bd" data-cm-slot="body"></p></div></div><hr class="dv"></div>'
   };
   await page.route('**/*', route => {
@@ -81,6 +82,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.cl').click());
   assert.equal(await page.evaluate(() => document.getElementById('room').classList.contains('chat-collapsed')), true, 'close button works');
+  // top bar
+  const top = await page.evaluate(() => {
+    const root = document.getElementById('top-host').shadowRoot;
+    const bar = root.querySelector('header');
+    return { legacyHidden: document.querySelector('#room > header').hidden, position: getComputedStyle(bar).position, title: root.querySelector('h6').firstChild.textContent,
+      buttons: [...root.querySelectorAll('button')].map(b => b.className + (b.hidden ? '(hidden)' : '')), letter: root.querySelector('.ac span').textContent, hasImg: !!root.querySelector('img') };
+  });
+  assert.equal(top.legacyHidden, true); assert.equal(top.position, 'relative', 'a fixed AppBar is laid out in flow inside the page');
+  assert.equal(top.title, 't'); assert.deepEqual(top.buttons, ['mn', 'ch', 'ch(hidden)', 'ac', 'co(hidden)'], 'handout copy added after the characters button, hidden without a handout; chat-open follows the built-in state');
+  assert.equal(top.hasImg, false, 'the participant avatar is a letter');
+  await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.ch').click());
+  assert.equal(await page.locator('.dlg').count(), 1, 'the character list button opens the built-in dialog');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.mn').click());
+  assert(await page.locator('.menu-item').count() >= 1, 'the room menu opens from the mirrored button');
+  await page.keyboard.press('Escape');
   assert.deepEqual(violations.filter(v => !/fonts\.googleapis|evil\.test\/x\.png/.test(v)), [], 'no CSP violations');
   await browser.close();
   console.log('participant mirror PASS');

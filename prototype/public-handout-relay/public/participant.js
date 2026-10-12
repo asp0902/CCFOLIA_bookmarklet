@@ -439,6 +439,7 @@ const renderState = data => {
   rendered = true;
   const handout = data.handout || {};
   syncHandoutPopup(handout);
+  syncTopBar();
   document.getElementById("title").textContent = handout.title || "";
   document.getElementById("body").textContent = handout.bodyText || "";
   document.getElementById("updated").textContent = handout.updatedAt ? `갱신 ${new Date(handout.updatedAt).toLocaleString()}` : "";
@@ -827,11 +828,12 @@ document.getElementById("char-list-open").addEventListener("click", () => {
     }
   });
 });
-document.getElementById("room-menu-btn").addEventListener("click", event => {
+function openRoomMenu(anchor) {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
   if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
-  openMenu(event.currentTarget, items);
-});
+  openMenu(anchor, items);
+}
+document.getElementById("room-menu-btn").addEventListener("click", event => openRoomMenu(event.currentTarget));
 // CCFOLIA keeps log output in the gear menu of the chat panel header (not in the room menu); the GM-only entries (tab edit, log deletion) are left out.
 const openChatMenu = anchor => openMenu(anchor, [{ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }]);
 document.getElementById("chat-gear").addEventListener("click", event => openChatMenu(event.currentTarget));
@@ -848,7 +850,7 @@ function renderMirroredHeader() {
   menu?.addEventListener("click", () => openChatMenu(menu));
   cmMirror.show("chat-head-host", [header]);
 }
-cmMirror.onChange = () => { renderMirroredHeader(); if (typeof current !== "undefined" && current) renderState(current); };
+cmMirror.onChange = () => { renderMirroredHeader(); renderMirroredTopBar(); if (typeof current !== "undefined" && current) renderState(current); };
 
 // Log export: everything this page holds (the relay keeps the latest messages of every tab), saved as a file on this computer. Whispers to the GM and secret dice results
 // never reach a participant, so they are not in it. Built here in the browser; nothing is sent anywhere.
@@ -906,10 +908,49 @@ function downloadLog(kind) {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
-document.getElementById("account-btn").addEventListener("click", event => {
-  openMenu(event.currentTarget, [{ header: chatName.value || "참여자" }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
-});
-setInterval(() => { document.getElementById("account-av").textContent = [...(chatName.value || "?")][0] || "?"; }, 1000);
+const openAccountMenu = anchor => openMenu(anchor, [{ header: chatName.value || "참여자" }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
+document.getElementById("account-btn").addEventListener("click", event => openAccountMenu(event.currentTarget));
+// Native mirroring: the top bar is CCFOLIA's own (GM-only buttons were left out on the GM side). Its buttons call the same functions as the built-in ones;
+// the built-in header stays in the page (hidden) as the data holder and the fallback. A handout button (not a CCFOLIA feature) is added by copying the character-list button.
+let topBar = null;
+function renderMirroredTopBar() {
+  const legacy = document.querySelector("#room > header");
+  const on = cmMirror.has("topBar");
+  legacy.hidden = on;
+  if (!on) { document.getElementById("top-host")?.remove(); topBar = null; return; }
+  cmMirror.shadow("top-host", node => legacy.before(node));
+  const bar = cmMirror.make("topBar"), slot = name => cmMirror.slot(bar, name);
+  const menu = slot("menu"), chars = slot("chars"), account = slot("account"), chatOpen = slot("chatOpen"), avatar = slot("avatar");
+  menu.addEventListener("click", () => openRoomMenu(menu));
+  chars.addEventListener("click", () => document.getElementById("char-list-open").click());
+  account.addEventListener("click", () => openAccountMenu(account));
+  chatOpen.addEventListener("click", () => document.getElementById("chat-open").click());
+  const handout = chars.cloneNode(true); handout.removeAttribute("data-cm-slot"); handout.setAttribute("aria-label", "핸드아웃");
+  const icon = handout.querySelector("svg"), source = document.querySelector("#handout-open svg");
+  if (icon && source) { icon.replaceChildren(...[...source.children].map(child => child.cloneNode(true))); for (const name of ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"]) { if (source.hasAttribute(name)) icon.setAttribute(name, source.getAttribute(name)); else icon.removeAttribute(name); } }
+  handout.addEventListener("click", () => document.getElementById("handout-open").click());
+  chars.after(handout);
+  // the avatar is a letter (the participant has no CCFOLIA photo) and a dot shows whether the GM is connected
+  const letter = document.createElement("span");
+  letter.style.cssText = "width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#555;color:#fff;font-size:20px";
+  avatar.replaceWith(letter);
+  const dot = document.createElement("i"); dot.style.cssText = "position:absolute;right:3px;bottom:3px;width:12px;height:12px;border-radius:50%;border:2px solid #202020;font-size:0;background:#9e9e9e";
+  account.style.position = "relative"; account.append(dot);
+  const subtitle = slot("subtitle"); if (subtitle) subtitle.style.display = "none";
+  topBar = { title: slot("title"), letter, dot, handout, chatOpen };
+  cmMirror.show("top-host", [bar]);
+  syncTopBar();
+}
+function syncTopBar() {
+  if (!topBar) return;
+  const { title, letter, dot, handout, chatOpen } = topBar;
+  title.firstChild?.nodeType === Node.TEXT_NODE ? title.firstChild.nodeValue = document.getElementById("room-title").textContent : title.insertBefore(document.createTextNode(document.getElementById("room-title").textContent), title.firstChild);
+  letter.textContent = document.getElementById("account-av").textContent;
+  dot.style.background = document.getElementById("gm-state").dataset.online === "1" ? "#4caf50" : "#9e9e9e";
+  handout.hidden = document.getElementById("handout-open").hidden;
+  chatOpen.hidden = document.getElementById("chat-open").hidden;
+}
+setInterval(() => { document.getElementById("account-av").textContent = [...(chatName.value || "?")][0] || "?"; syncTopBar(); }, 1000);
 // Chat window open/close (same function for the panel's >| button and the edge button); remembered per browser.
 {
   const COLLAPSE_KEY = "capybara-chat-collapsed";

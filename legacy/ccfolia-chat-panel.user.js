@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.44
+// @version      0.2.45
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.44";
+  const VERSION = "0.2.45";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3177,6 +3177,22 @@
     }
     return out;
   }
+  // 상단 앱 바: 룸 메뉴 단추(제목·부제), 캐릭터 목록 단추, 계정(아바타) 단추, 채팅창 열기 단추. "[GM]" 로 시작하는 라벨의 단추(GM 전용 목록)는 틀에서 뺀다.
+  function mirrorTopBarTemplate() {
+    const bar = [...document.querySelectorAll("header")].find((header) => { const r = header.getBoundingClientRect(); return r.top < 5 && r.width > 600 && r.height >= 40 && header.querySelector("button h6"); });
+    if (!bar) return null;
+    const copy = mirrorStripClone(bar.cloneNode(true), true);
+    copy.querySelectorAll("button").forEach((button) => { if (/^\s*\[GM\]/.test(button.getAttribute("aria-label") || "")) button.remove(); });
+    const buttons = [...copy.querySelectorAll("button")];
+    const title = copy.querySelector("button h6"), account = buttons.find((button) => button.querySelector("img"));
+    if (buttons.length < 4 || !title || !account) return null;
+    const mark = (el, slot) => { if (el) el.setAttribute("data-cm-slot", slot); };
+    mark(buttons[0], "menu"); mark(title, "title"); mark(title.querySelector("span"), "subtitle"); mark(buttons[1], "chars"); mark(account, "account"); mark(account.querySelector("img"), "avatar"); mark(buttons[buttons.length - 1], "chatOpen");
+    // 제목·부제는 룸 이름 같은 데이터다.
+    for (const node of [...title.childNodes]) if (node.nodeType === Node.TEXT_NODE) node.remove();
+    title.querySelector("span")?.replaceChildren();
+    return copy.outerHTML;
+  }
   function mirrorChatTemplates() {
     // 본보기 줄: 나레이션·이어짐이 아닌 보통 줄(chat-panel 의 captureNativeRowTemplate 와 같은 기준).
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement
@@ -3216,7 +3232,9 @@
       try { css += `${[...sheet.cssRules].map((rule) => rule.cssText).join("\n")}\n`; } catch (_) { /* 다른 출처 시트(구글 폰트)는 글꼴 링크로 따로 */ }
     }
     if (css.length > MIRROR_CSS_LIMIT) css = "";
-    const templates = mirrorChatTemplates();
+    const topBar = mirrorTopBarTemplate();
+    const chat = mirrorChatTemplates();
+    const templates = chat || topBar ? { ...(chat || {}), ...(topBar ? { topBar } : {}) } : null;
     const templateText = templates ? JSON.stringify(templates) : "";
     const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
     const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);
