@@ -191,7 +191,10 @@ function renderScene(scene) {
   bg.style.backgroundColor = s.backgroundColor || "";
   bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
   const w = stage.clientWidth, h = stage.clientHeight;
-  const unit = Math.min(24, (w * 0.96) / s.fieldWidth, (h * 0.96) / s.fieldHeight) * view.zoom;
+  // CCFOLIA's own view (read from its app code): a cell is 24px times the screen scale (0.2 .. 2, default 1), the field is centred on the stage; there is no fit-to-window. A first view that the GM sent
+  // (its current scale and position) is taken once, so the first picture is the GM's composition; after that the view belongs to this participant.
+  if (s.screen && !view.fromGm && !view.touched) { view.fromGm = true; view.zoom = Math.max(0.2, Math.min(2, Number(s.screen.scale) || 1)); view.x = Number(s.screen.x) || 0; view.y = Number(s.screen.y) || 0; }
+  const unit = 24 * view.zoom;
   view.unit = unit; view.base = unit / view.zoom;
   const place = (el, x, y, width, height, angle, z) => {
     el.style.position = "absolute";
@@ -299,7 +302,8 @@ window.addEventListener("resize", () => renderScene());
   let raf = 0;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderScene(); }); };
   const zoomAt = (factor, cx, cy) => {
-    const next = Math.max(0.2, Math.min(6, view.zoom * factor));
+    view.touched = true;
+    const next = Math.max(0.2, Math.min(2, view.zoom * factor));
     const k = next / view.zoom;
     view.x = cx - (cx - view.x) * k; view.y = cy - (cy - view.y) * k; view.zoom = next;
     redraw();
@@ -317,6 +321,7 @@ window.addEventListener("resize", () => renderScene());
   stage.addEventListener("pointerdown", event => {
     if (event.button !== 0 || interactive(event.target)) return;
     if (event.target.dataset?.id) { piece = { el: event.target, x: event.clientX, y: event.clientY, dx: 0, dy: 0, locked: event.target.dataset.locked === "1" }; stage.setPointerCapture?.(event.pointerId); return; }
+    view.touched = true;
     drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
     stage.setPointerCapture?.(event.pointerId); stage.classList.add("panning");
   });
@@ -341,7 +346,7 @@ window.addEventListener("resize", () => renderScene());
   };
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
-  stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
+  stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.touched = true; view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
   const mk = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", fn); return b; };
   ctl.append(
@@ -361,7 +366,7 @@ window.addEventListener("resize", () => renderScene());
     const on = cmMirror.has("zoomBar");
     ctl.hidden = on;
     if (!on) { document.getElementById("zoom-host")?.remove(); zoomUi = null; return; }
-    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:24px;z-index:100"; stage.append(node); });
+    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:24px;z-index:100;color:#000"; stage.append(node); }); // CCFOLIA's scene text colour is black: the white buttons carry black icons
     const bar = cmMirror.make("zoomBar"), slot = name => cmMirror.slot(bar, name);
     slot("zoomIn").addEventListener("click", () => setScale(Math.min((10 * scaleNow() + 1) / 10, 2)));
     slot("zoomOut").addEventListener("click", () => setScale(Math.max((10 * scaleNow() - 1) / 10, 0.2)));
@@ -435,24 +440,44 @@ function rollResultSpan(roll) {
   if (tone) result.style.color = tone === "primary" ? "#2196f3" : "#dc004e";
   return result;
 }
+// The toolkit's "prose mode" groups consecutive messages of the same speaker: the row gets data-ccf-prose-cont (leader / last) and its wrapper the -wrap variants, and the toolkit CSS hides the avatar and
+// the name of the continued rows. Same rule as its scan (the displayed name, only ASCII edge spaces trimmed; narration rows are a separate group); only the attributes are set here.
+function markSpeakerRuns(wrappers) {
+  const keys = wrappers.map(wrapper => {
+    const item = wrapper.querySelector(".MuiListItem-root"), head = wrapper.querySelector('[data-cm-slot="name"]');
+    const name = head && [...head.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim());
+    if (!item || !name) return null;
+    const author = name.nodeValue.replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
+    return item.getAttribute("data-ccf-narration") === "1" || item.querySelector('.ccf-render-root[data-ccf-narration="1"]') ? `${author}\0nr` : author;
+  });
+  const set = (el, name, on) => { if (on) el.setAttribute(name, "1"); else el.removeAttribute(name); };
+  wrappers.forEach((wrapper, i) => {
+    const item = wrapper.querySelector(".MuiListItem-root");
+    if (!item) return;
+    const key = keys[i], cont = !!(key && key === keys[i - 1]), leader = !cont && !!(key && key === keys[i + 1]), last = cont && keys[i + 1] !== key;
+    set(item, "data-ccf-prose-cont", cont); set(item, "data-ccf-prose-cont-leader", leader); set(item, "data-ccf-prose-cont-last", last);
+    set(wrapper, "data-ccf-prose-cont-wrap", cont); set(wrapper, "data-ccf-prose-cont-wrap-last", last); set(wrapper, "data-ccf-prose-cont-leader-wrap", leader);
+  });
+}
 const BLANK_ICON = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="; // a message without an icon (CCFOLIA uses its own blank image): no broken-image frame
 // One message's data into a copy of the mirrored CCFOLIA row (slots: icon, name, time, body). Text is only ever set as text; the icon only from the CCFOLIA CDN.
 function fillMirrorRow(row, message) {
   const icon = cmMirror.slot(row, "icon"), name = cmMirror.slot(row, "name"), time = cmMirror.slot(row, "time"), body = cmMirror.slot(row, "body");
   if (icon) { if (/^https:\/\/storage\.ccfolia-cdn\.net\//.test(message.icon || "")) { icon.referrerPolicy = "no-referrer"; icon.src = message.icon; } else icon.src = BLANK_ICON; }
-  if (name) { name.insertBefore(document.createTextNode(message.author || "이름 없음"), name.firstChild); if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color; }
+  if (name) { name.insertBefore(document.createTextNode(!message.author || message.author === "이름 없음" ? "noname" : message.author), name.firstChild); if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color; }
   if (time) time.textContent = ` - ${messageTime(message.createdAt)}`;
   if (body) {
     let info = { narration: false };
     if (cmMirror.toolkit()) info = renderRich(body, message.text || "", true);
     else body.textContent = decodeEnvelope(message.text || "").visible;
     if (info.narration) row.querySelector(".MuiListItem-root")?.setAttribute("data-ccf-narration", "1");
+    if (info.bubble) row.querySelector(".MuiListItemText-root")?.classList.add("ccr20-roll20-bubble-container");
     const tail = () => body.lastElementChild || body;
     if (message.roll?.result) (tail()).append(rollResultSpan(message.roll));
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; tail().append(edited); }
   }
 }
-const isSameSpeakerRun = (previousName, message) => previousName !== null && previousName === (message.author || "이름 없음");
+const isSameSpeakerRun = (previousName, message) => previousName !== null && previousName === (message.author || "noname");
 const renderState = data => {
   showHealth(data.health);
   renderTabs(data);
@@ -471,15 +496,16 @@ const renderState = data => {
   if (mirrored) {
     const shell = cmMirror.make("chatShell"), rows = cmMirror.slot(shell, "rows");
     for (const message of shown) { const row = cmMirror.make("chatRow"); fillMirrorRow(row, message); rows.append(row); }
+    markSpeakerRuns([...rows.children]);
     cmMirror.show("messages-host", [shell]);
   } else list.replaceChildren(...shown.map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
     // Measured on ccfolia.com: a message from the same speaker as the one right above (same name, any time gap) drops the avatar, the header and the top padding.
     if (isSameSpeakerRun(previousName, message)) item.classList.add("merged");
-    previousName = message.author || "이름 없음";
+    previousName = message.author || "noname";
     for (const [flag, on] of Object.entries(message.roll || {})) if (on === true) item.classList.add(`roll-${flag}`);
-    const name = message.author || "이름 없음";
+    const name = message.author || "noname";
     const avatar = document.createElement("div"); avatar.className = "avatar";
     if (message.icon) { const img = document.createElement("img"); img.src = message.icon; img.alt = ""; img.referrerPolicy = "no-referrer"; img.addEventListener("error", () => { img.remove(); avatar.textContent = [...name][0] || "?"; }); avatar.append(img); }
     else avatar.textContent = [...name][0] || "?";
@@ -584,12 +610,75 @@ function styleSegment(span, style) {
   applyExtraCss(span, style.extraCss);
   if (style.tooltipText) { span.title = String(style.tooltipText).slice(0, 200); span.style.borderBottom = "1px dotted currentColor"; }
 }
+// Roll20 macro messages (envelope.roll20Macro) are drawn by the GM's roll20-css-bridge with its own names: p.ccr20-render-root.ccr20-roll20-bubble[data-ccr20-macro-background] > span.ccr20-line > span.ccr20-frag,
+// the text container of the row gets .ccr20-roll20-bubble-container. Top-level run styles (display, padding, text-align, ...) are applied like its applyInlineStyle (values checked), then its layout safeguards
+// and the colour-band centring (a "0 8px 0 15px" shadow becomes a clipped full-width band, data-ccr20-band) so that the toolkit CSS in mirror.css lays it out the same way.
+const STYLE_VALUE = /^[#%.,\s\w()-]{1,60}$/;
+const okValue = value => typeof value === "string" && STYLE_VALUE.test(value) && !/url|expression|javascript/i.test(value);
+function applyToolkitStyle(span, style) {
+  styleSegment(span, style);
+  if (style.code) span.style.whiteSpace = "break-spaces";
+  if (/^(inline|block|inline-block)$/.test(style.display || "")) span.style.display = style.display;
+  for (const key of ["padding", "margin", "borderRadius", "letterSpacing", "lineHeight", "textShadow"]) if (okValue(style[key])) span.style[key] = style[key];
+  if (/^(left|center|right)$/.test(style.textAlign || "")) span.style.textAlign = style.textAlign;
+  if (okValue(style.border) && !/^none$/i.test(style.border)) span.style.border = style.border;
+  const display = (span.style.display || "").toLowerCase();
+  if (display === "block" || display === "inline-block") {
+    span.style.boxSizing = "border-box"; span.style.maxWidth = "100%"; span.style.minWidth = "0px"; span.style.wordBreak = span.style.wordBreak || "break-word"; span.style.overflowWrap = span.style.overflowWrap || "anywhere";
+    const side = (value, horizontal) => { const raw = (value || "").trim().toLowerCase(); if (!raw) return "0px"; if (raw === "auto") return horizontal ? "auto" : "0px"; return raw.startsWith("-") || raw.endsWith("%") ? "0px" : raw; };
+    span.style.marginTop = side(span.style.marginTop, false); span.style.marginRight = side(span.style.marginRight, true); span.style.marginBottom = side(span.style.marginBottom, false); span.style.marginLeft = side(span.style.marginLeft, true);
+    if (display === "block") { const width = (span.style.width || "").trim(); if (!width || /^100(?:\.0+)?%$/.test(width)) span.style.width = "auto"; span.style.marginLeft = "0px"; span.style.marginRight = "0px"; span.style.overflow = span.style.overflow || "hidden"; }
+  }
+  centerBandShadow(span);
+}
+function centerBandShadow(span) {
+  const match = /^(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]+|[a-z]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px$/i.exec(span.style.boxShadow || "");
+  if (!match) return;
+  const [, color, dx, , blur, spread] = match, reach = Number(spread);
+  if (Number(dx) !== 0 || Number(blur) !== 0 || reach <= 0 || /^inset$/i.test(color)) return;
+  const top = span.style.marginTop === "" ? 0 : parseFloat(span.style.marginTop), bottom = span.style.marginBottom === "" ? 0 : parseFloat(span.style.marginBottom);
+  if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+  const vertical = reach / 2;
+  span.style.boxShadow = `${color} 0px 0px 0px ${reach}px`; span.style.clipPath = `inset(${-vertical}px ${-reach}px)`;
+  span.style.marginTop = `${top + vertical}px`; span.style.marginBottom = `${bottom + vertical}px`; span.setAttribute("data-ccr20-band", "1");
+}
+function renderRoll20(container, text, env) {
+  container.classList.add("ccr20-render-root", "ccr20-roll20-bubble");
+  container.dataset.ccr20MacroBackground = env.roll20Background === "black" || env.roll20Background === "white" ? env.roll20Background : "transparent";
+  container.dataset.ccr20Rendered = "1";
+  const runs = (Array.isArray(env.formatRuns) ? env.formatRuns : []).map(r => ({ start: Math.max(0, Number(r.start) || 0), end: Math.min(text.length, Number(r.end) || 0), style: r.style && typeof r.style === "object" ? r.style : {} })).filter(r => r.end > r.start);
+  const align = Array.isArray(env.alignRuns) ? env.alignRuns : [];
+  let offset = 0;
+  text.split("\n").forEach((line, index) => {
+    const lineEl = document.createElement("span"); lineEl.className = "ccr20-line";
+    const run = align.find(a => a.start <= index && a.end > index);
+    lineEl.style.textAlign = run && ["left", "center", "right"].includes(run.align) ? run.align : "";
+    const end = offset + line.length, cuts = new Set([offset, end]);
+    for (const r of runs) { if (r.start > offset && r.start < end) cuts.add(r.start); if (r.end > offset && r.end < end) cuts.add(r.end); }
+    const points = [...cuts].sort((a, b) => a - b);
+    if (!line.length) lineEl.append(document.createElement("br"));
+    for (let i = 0; i + 1 < points.length && line.length; i += 1) {
+      const piece = text.slice(points[i], points[i + 1]), active = runs.filter(r => r.start <= points[i] && r.end >= points[i + 1]);
+      if (!active.length) { lineEl.append(piece); continue; }
+      const span = document.createElement("span"); span.className = "ccr20-frag"; span.textContent = piece;
+      for (const r of active) applyToolkitStyle(span, r.style);
+      lineEl.append(span);
+    }
+    container.append(lineEl); offset = end + 1;
+  });
+}
 // toolkit: draw it the way the GM's toolkit scripts do (the same class and attribute names: .ccf-render-root > .ccf-render-overlay > .ccf-line > .ccf-frag, data-ccf-narration / data-ccf-macro),
 // so the toolkit's own CSS that came over in mirror.css lays it out (narration centred without avatar, Roll20 bars, ...). Returns what the row needs to know.
 function renderRich(container, full, toolkit = false) {
   const { text, env } = decodeEnvelope(full);
-  const info = { narration: false, macro: false };
+  const info = { narration: false, macro: false, bubble: false };
   if (!env || typeof env !== "object") { container.textContent = text; return info; }
+  if (toolkit && env.roll20Macro === true) {
+    info.macro = true; info.bubble = true; info.narration = env.blockStyle?.narration === true;
+    // the bridge also marks a narration macro as a narration root (applyNarrationRenderMarker): same class and attribute, and the row gets the attribute
+    if (info.narration) { container.classList.add("ccf-render-root"); container.dataset.ccfNarration = "1"; }
+    renderRoll20(container, text, env); return info;
+  }
   const runs = (Array.isArray(env.formatRuns) ? env.formatRuns : []).map(r => ({ start: Math.max(0, Number(r.start) || 0), end: Math.min(text.length, Number(r.end) || 0), style: r.style && typeof r.style === "object" ? r.style : {} })).filter(r => r.end > r.start);
   const align = Array.isArray(env.alignRuns) ? env.alignRuns : [];
   const narration = !!env.blockStyle?.narration;
@@ -809,10 +898,31 @@ refreshSpeakerUi();
   const row1 = document.createElement("div"); row1.className = "fmt-row";
   row1.append(mk("B", "Bold", () => wrapSelection("**", "**")), mk("I", "Italic", () => wrapSelection("*", "*")), mk("U", "Underline", () => wrapSelection("__", "__")), mk("S", "Strike", () => wrapSelection("~~", "~~")),
     mk("Rb", "Ruby", () => wrapSelection("[", "|]")), mk("Tip", "Tooltip", () => wrapSelection("[", "^]")), mk("Bl", "Blur", () => wrapSelection("||", "||")), mk("</>", "Code block", () => wrapSelection("`", "`")));
+  // The toolkit's own toolbar also has Nr (narration for the whole message), text / background colour, a size box and "()" (grey parentheses). The GM side understands {n:1|..|}, {c:#hex|..|}, {b:#hex|..|},
+  // {s:N|..|}; Nr and "()" are toggles applied when the message is sent.
+  const toggle = (label, title, key) => { const b = mk(label, title, () => { fmtState[key] = !fmtState[key]; b.setAttribute("aria-pressed", String(fmtState[key])); }); b.setAttribute("aria-pressed", "false"); return b; };
+  row1.append(toggle("Nr", "Narration", "narration"));
   const row2 = document.createElement("div"); row2.className = "fmt-row";
   const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("width", "15"); svg.setAttribute("height", "15"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); p.setAttribute("fill", "currentColor"); svg.append(p); b.append(svg); return b; };
   row2.append(align("left", "M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"), align("center", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"), align("right", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"));
+  const colorTool = (title, initial, marker) => {
+    const label = document.createElement("label"); label.className = "fmt-color"; label.title = title;
+    const input = document.createElement("input"); input.type = "color"; input.value = initial; input.setAttribute("aria-label", title);
+    input.addEventListener("change", () => wrapSelection(`{${marker}:${input.value}|`, "|}"));
+    label.append(input); return label;
+  };
+  const size = document.createElement("input"); size.className = "fmt-size"; size.type = "text"; size.inputMode = "numeric"; size.placeholder = "16"; size.title = "Font size"; size.setAttribute("aria-label", "Font size");
+  size.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); const n = Math.round(Number(size.value)); if (n >= 8 && n <= 72) wrapSelection(`{s:${n}|`, "|}"); } });
+  row2.append(colorTool("Text color", "#ffffff", "c"), colorTool("Background color", "#010101", "b"), size, toggle("()", "Parentheses gray", "parenGray"));
   document.querySelector("#chat-form .dice-row").after(row1, row2);
+}
+// What the toggles do to a message when it is sent (the GM side turns the markers into the format envelope).
+const fmtState = { narration: false, parenGray: false };
+function outgoingText(text) {
+  let out = text;
+  if (fmtState.parenGray) out = out.replace(/([(（][^()（）\n]*[)）])/g, "{c:#9e9e9e|$1|}");
+  if (fmtState.narration) out = `{n:1|${out}|}`;
+  return out;
 }
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
@@ -830,7 +940,7 @@ chatForm.addEventListener("submit", async event => {
   chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel, characterId: speaker.value, name: chatName.value.trim(), color: nameColor }) });
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text: outgoingText(text), channel: activeChannel, characterId: speaker.value, name: chatName.value.trim(), color: nameColor }) });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
     showSendStatus("GM 브리지 전달 대기", 2500);
   } catch (error) {
@@ -963,7 +1073,7 @@ function buildLogText() {
     const messages = logMessages(channel);
     if (!messages.length) continue;
     lines.push(`# ${channel.label || channel.id}`);
-    for (const message of messages) lines.push(`[${logTime(message.createdAt)}] ${message.author || "이름 없음"}: ${decodeEnvelope(message.text || "").text}${message.roll?.result ? ` ${message.roll.result}` : ""}`);
+    for (const message of messages) lines.push(`[${logTime(message.createdAt)}] ${message.author || "noname"}: ${decodeEnvelope(message.text || "").text}${message.roll?.result ? ` ${message.roll.result}` : ""}`);
     lines.push("");
   }
   return lines.join("\n");
@@ -982,7 +1092,7 @@ function buildLogHtml() {
       if (message.icon) { const img = document.createElement("img"); img.src = message.icon; img.alt = ""; row.append(img); }
       const body = document.createElement("div");
       const head = document.createElement("div");
-      const name = document.createElement("span"); name.className = "name"; name.textContent = message.author || "이름 없음";
+      const name = document.createElement("span"); name.className = "name"; name.textContent = message.author || "noname";
       if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color;
       const time = document.createElement("span"); time.className = "time"; time.textContent = ` ${logTime(message.createdAt)}`;
       head.append(name, time);

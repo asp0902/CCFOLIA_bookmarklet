@@ -261,3 +261,9 @@ html.pip .chat-toggle{display:none}
 .menu-profile{display:flex;align-items:flex-start;box-sizing:border-box;height:72px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px}
 .menu-profile-av{flex:none;width:40px;height:40px;margin-right:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#555;color:#fff;font-size:20px;line-height:20px}
 .menu-profile-text{margin:6px 0;min-width:78px}.menu-profile-text p{margin:0;font-size:16px;line-height:24px;color:#fff;white-space:nowrap}.menu-profile-text .menu-profile-sub{font-size:14px;line-height:20.02px;color:rgba(255,255,255,.7)}
+#chat-name{height:40px;background:rgba(0,0,0,.2)}
+.fmt-row button[aria-pressed="true"]{background:#fff;color:#000}
+.fmt-color{display:flex;width:30px;height:30px;margin:0;padding:0;font-weight:400;cursor:pointer}
+.fmt-color input{width:30px;height:30px;padding:0;border:0;border-radius:0;background:none;cursor:pointer}
+.fmt-size{width:44px;height:30px;padding:0 4px;border:0;border-radius:0;background:#282828;color:#fff;font-size:12px;text-align:center}
+.fmt-size::placeholder{color:#fff}

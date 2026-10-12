@@ -50,6 +50,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(dom.italic, '', 'the look comes from the toolkit CSS, not from inline styles'); assert.equal(dom.center, '');
   const plain = await page.evaluate(full => { const p = document.createElement('p'); renderRich(p, full, true); return { cls: p.className, text: p.textContent }; }, '그냥' + encode({ v: 1, text: '그냥', formatRuns: [], alignRuns: [], blockStyle: {} }));
   assert.deepEqual(plain, { cls: '', text: '그냥' }, 'a formatting-free envelope is plain text');
+  // a Roll20 macro band (envelope roll20Macro + narration block): drawn with the roll20-css-bridge's names and band centring so its CSS makes it a full-width bar without avatar
+  const band = encode({ v: 1, source: 'ccr20-roll20-desc', text: '내용', formatRuns: [{ start: 0, end: 2, style: { bold: true, color: 'rgb(255, 255, 255)', backgroundColor: 'rgb(155, 207, 196)', display: 'block', padding: '2px', textAlign: 'center', extraCss: { boxShadow: 'rgb(155, 207, 196) 0px 8px 0px 15px' } } }], alignRuns: [{ start: 0, end: 1, align: 'center' }], blockStyle: { narration: true }, roll20Macro: true, roll20Background: 'transparent' });
+  const bandDom = await page.evaluate(full => { const p = document.createElement('p'); const info = renderRich(p, full, true); const frag = p.querySelector('.ccr20-frag'); return { info, cls: p.className, bg: p.dataset.ccr20MacroBackground, narration: p.dataset.ccfNarration, line: p.querySelector('.ccr20-line').style.textAlign, band: frag.getAttribute('data-ccr20-band'), shadow: frag.style.boxShadow, clip: frag.style.clipPath, margin: frag.style.marginTop + '|' + frag.style.marginBottom, display: frag.style.display, width: frag.style.width, overflow: frag.style.overflow }; }, '내용' + band);
+  assert.equal(bandDom.info.bubble, true); assert.equal(bandDom.info.narration, true);
+  assert(bandDom.cls.includes('ccr20-render-root') && bandDom.cls.includes('ccr20-roll20-bubble') && bandDom.cls.includes('ccf-render-root'));
+  assert.equal(bandDom.bg, 'transparent'); assert.equal(bandDom.narration, '1'); assert.equal(bandDom.line, 'center'); assert.equal(bandDom.band, '1');
+  assert.equal(bandDom.shadow, 'rgb(155, 207, 196) 0px 0px 0px 15px'); assert.equal(bandDom.clip, 'inset(-7.5px -15px)'); assert.equal(bandDom.margin, '7.5px|7.5px'); assert.equal(bandDom.display, 'block'); assert.equal(bandDom.width, 'auto'); assert.equal(bandDom.overflow, 'hidden');
+  // prose mode grouping like the toolkit: same displayed name as the row above = continued; narration rows are a separate group
+  const groups = await page.evaluate(() => {
+    const make = (name, narration) => { const w = document.createElement('div'); w.innerHTML = `<div class="MuiListItem-root"${narration ? ' data-ccf-narration="1"' : ''}><h6 data-cm-slot="name"></h6></div>`; w.querySelector('h6').append(document.createTextNode(name)); return w; };
+    const rows = [make('A'), make('A'), make('A'), make('B'), make('A', true), make('A', true)];
+    markSpeakerRuns(rows);
+    return rows.map(w => ['data-ccf-prose-cont', 'data-ccf-prose-cont-leader', 'data-ccf-prose-cont-last'].map(a => (w.firstElementChild.hasAttribute(a) ? 1 : 0)).join('') + '/' + (w.hasAttribute('data-ccf-prose-cont-wrap') ? 1 : 0));
+  });
+  assert.deepEqual(groups, ['010/0', '100/1', '101/1', '000/0', '010/0', '101/1'], 'A A A | B | narration A A');
   await browser.close();
   console.log('participant message rows PASS');
 })().catch(error => { console.error(error); process.exit(1); });
