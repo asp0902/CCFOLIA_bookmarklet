@@ -11,6 +11,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
   const templates = {
     chatShell: '<ul class="MuiList-root"><div data-cm-slot="rows"></div></ul>',
+    chatHeader: '<header class="hd"><div class="bar"><button class="cl" data-cm-slot="close"></button><h6 class="ttl">룸 채팅</h6><button class="mn" data-cm-slot="menu"></button></div></header>',
+    chatTabsShell: '<header class="th"><div class="tl" role="tablist" data-cm-slot="tabs"></div></header>',
+    chatTabOn: '<button class="tab on" role="tab" aria-selected="true" data-cm-slot="label2"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
+    chatTabIdle: '<button class="tab idle" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
+    chatTabUnread: '<button class="tab unread" role="button"><span class="lb" data-cm-slot="label"><span class="bd"></span></span></button>',
     chatRow: '<div class="wrap"><div class="MuiListItem-root row" style="display:flex;padding:8px"><div class="av"><img class="MuiAvatar-img" data-cm-slot="icon"></div><div class="tx"><h6 class="nm" data-cm-slot="name" style="color:red"><span class="tm" data-cm-slot="time"></span></h6><p class="bd" data-cm-slot="body"></p></div></div><hr class="dv"></div>'
   };
   await page.route('**/*', route => {
@@ -35,7 +40,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // the mirror arrives
   const info = { cssHash: 'h1', tplHash: 't1', fontLinks: ['https://fonts.googleapis.com/css2?family=Roboto', 'https://evil.test/x.css'] };
   await page.evaluate(s => renderState(s), state(info));
-  await page.waitForFunction(() => cmMirror.active());
+  await page.waitForFunction(() => cmMirror.has('chatShell') && cmMirror.has('chatHeader'));
   await page.evaluate(s => renderState(s), state({ ...info, fontLinks: [] }));
   const result = await page.evaluate(() => {
     const shadow = document.getElementById('messages-host').shadowRoot;
@@ -62,6 +67,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(result.dividerHidden, 'none');
   assert(result.fonts.includes('https://fonts.googleapis.com/css2?family=Roboto') && !result.fonts.some(href => href.includes('evil.test')), 'only Google Fonts links');
   assert.equal(result.leaked, false, 'the mirror does not leak into the page DOM');
+  // header and tabs
+  const chrome = await page.evaluate(() => {
+    const head = document.getElementById('chat-head-host').shadowRoot, tabs = document.getElementById('chat-tabs-host').shadowRoot;
+    return { oldTitleHidden: document.querySelector('.chat > h2').hidden, title: head.querySelector('.ttl').textContent, tabsOld: document.getElementById('chat-tabs').hidden,
+      tabs: [...tabs.querySelectorAll('.tab')].map(t => t.className + ':' + t.querySelector('.lb').firstChild.textContent) };
+  });
+  assert.equal(chrome.oldTitleHidden, true); assert.equal(chrome.title, '룸 채팅'); assert.equal(chrome.tabsOld, true);
+  assert.deepEqual(chrome.tabs, ['tab on:메인']);
+  // the menu button of the mirrored header opens the log menu; the close button closes the chat
+  await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.mn').click());
+  assert.equal(await page.locator('.menu-item').count(), 2, 'chat menu opened from the mirrored button');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.cl').click());
+  assert.equal(await page.evaluate(() => document.getElementById('room').classList.contains('chat-collapsed')), true, 'close button works');
   assert.deepEqual(violations.filter(v => !/fonts\.googleapis|evil\.test\/x\.png/.test(v)), [], 'no CSP violations');
   await browser.close();
   console.log('participant mirror PASS');
