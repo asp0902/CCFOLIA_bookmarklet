@@ -267,3 +267,11 @@ html.pip .chat-toggle{display:none}
 .fmt-color input{width:30px;height:30px;padding:0;border:0;border-radius:0;background:none;cursor:pointer}
 .fmt-size{width:44px;height:30px;padding:0 4px;border:0;border-radius:0;background:#282828;color:#fff;font-size:12px;text-align:center}
 .fmt-size::placeholder{color:#fff}
+#messages-host{overflow:hidden}
+.chat{border-left:1px solid rgba(255,255,255,.12)}
+#chat-tabs-host{padding-left:40px}
+#chat-form .fmt-row{gap:4px 6px;padding:3px 6px}
+#chat-form .fmt-row button,.fmt-color,.fmt-size{border:1px solid rgba(255,255,255,.12);box-sizing:border-box}
+#chat-form .fmt-row button{font-weight:400}
+.fmt-row button[aria-pressed="true"]{background:#383838;color:#fff;border-color:#fafafa}
+.fmt-color input{width:28px;height:28px}

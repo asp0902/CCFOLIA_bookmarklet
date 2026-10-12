@@ -107,6 +107,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(zoom.oldHidden, true);
   assert(Math.abs(zoom.in - (zoom.start + 0.1)) < 0.002 && Math.abs(zoom.out - (zoom.start - 0.1)) < 0.002, JSON.stringify(zoom));
   assert.equal(zoom.mid, 1.1, 'half way up the slider is (0.2 + 0.9) rounded to the 0.1 step'); assert.equal(zoom.thumb, '50%', JSON.stringify(zoom)); assert.equal(zoom.track, '50%');
+  // one scrollbar: the mirrored list element is the scroller (CCFOLIA's CSS), the host must not scroll too; the panel has CCFOLIA's 1px left divider; the tab strip starts after the 40px arrow slot
+  const layout = await page.evaluate(() => ({ host: getComputedStyle(document.getElementById('messages-host')).overflowY, border: getComputedStyle(document.querySelector('.chat')).borderLeftWidth + ' ' + getComputedStyle(document.querySelector('.chat')).borderLeftColor, tabsPad: getComputedStyle(document.getElementById('chat-tabs-host')).paddingLeft }));
+  assert.equal(layout.host, 'hidden'); assert.equal(layout.border, '1px rgba(255, 255, 255, 0.12)'); assert.equal(layout.tabsPad, '40px');
   // top bar
   const top = await page.evaluate(() => {
     const root = document.getElementById('top-host').shadowRoot;
