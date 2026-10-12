@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-cha
 const a = source.indexOf('  function relayItemView(');
 const b = source.indexOf('  // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소');
 assert(a >= 0 && b > a, 'piece helpers not found');
-const { relayItemView, relayMarkerViews } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews })`, {});
+const { relayItemView, relayMarkerViews, relayCdnUrl } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews, relayCdnUrl })`, {});
 const CDN = 'https://storage.ccfolia-cdn.net/';
 const url = v => (typeof v === 'string' && v.startsWith(CDN) ? v : '');
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -35,4 +35,9 @@ assert.deepEqual(markers, [{ id: 'm1', x: -21, y: 0, z: 1, angle: 0, width: 10, 
 assert(!JSON.stringify(markers).includes('비밀'), 'the memo is not sent');
 assert.equal(relayMarkerViews(null, url, num).length, 0);
 assert.equal(relayMarkerViews(Object.fromEntries(Array.from({ length: 150 }, (_, i) => [`m${i}`, { imageUrl: `${CDN}m.png` }])), url, num).length, 100, 'at most 100');
+// an image uploaded long ago has a firebasestorage address: it is sent through the CDN like CCFOLIA itself shows it; other hosts stay out
+assert.equal(relayCdnUrl('https://firebasestorage.googleapis.com/v0/b/ccfolia-160aa.appspot.com/o/users%2Fabc%2Ffile.png?alt=media&token=t'), 'https://storage.ccfolia-cdn.net/users%2Fabc%2Ffile.png?alt=media&token=t');
+assert.equal(relayCdnUrl('https://storage.ccfolia-cdn.net/a.png'), 'https://storage.ccfolia-cdn.net/a.png');
+assert.equal(relayCdnUrl('https://firebasestorage.googleapis.com/v0/b/other-project.appspot.com/o/a.png'), '');
+assert.equal(relayCdnUrl('https://evil.example/a.png'), ''); assert.equal(relayCdnUrl(null), '');
 console.log('chat panel scene pieces PASS');

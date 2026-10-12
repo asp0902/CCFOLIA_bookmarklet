@@ -201,10 +201,26 @@ function renderScene(scene) {
     el.style.zIndex = String(Math.round(z || 0) + 10);
   };
   const nodes = [];
-  if (s.foregroundUrl) {
-    const img = document.createElement("img"); img.src = s.foregroundUrl; img.alt = ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
-    place(img, -s.fieldWidth / 2, -s.fieldHeight / 2, s.fieldWidth, s.fieldHeight, 0, 0);
-    img.style.objectFit = s.fieldObjectFit; img.style.zIndex = "1"; nodes.push(img);
+  // The field exactly as CCFOLIA's app code draws it: it starts trunc(size/2) cells left of / above the centre; the room background image fills it, the foreground image lies over that
+  // (both with fieldObjectFit); with no image at all the default grid (1px lines, alpha .1) and a 4px dark outline show; with "display grid" on, a grid lies over the images
+  // (line width 1 / 1.8 / 2.6px by zoom, alpha .25, every gridSize cells). Pieces are drawn above it.
+  {
+    const hasImage = !!(s.backgroundUrl || s.foregroundUrl), scale = unit / 24, lineWidth = scale < 0.3 ? 2.6 : scale < 0.6 ? 1.8 : 1;
+    const lines = (alpha, width) => `linear-gradient(rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px)`;
+    const field = document.createElement("div");
+    place(field, -Math.trunc(s.fieldWidth / 2), -Math.trunc(s.fieldHeight / 2), s.fieldWidth, s.fieldHeight, 0, -9);
+    field.style.boxSizing = "border-box"; field.style.backgroundSize = `${unit}px ${unit}px`;
+    if (!hasImage && !s.displayGrid) field.style.backgroundImage = lines(0.1, 1);
+    if (!hasImage) field.style.outline = "4px solid rgba(0, 0, 0, 0.2)";
+    const layer = url => { const img = document.createElement("img"); img.src = url; img.alt = ""; img.referrerPolicy = "no-referrer"; img.draggable = false; img.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;object-fit:${s.fieldObjectFit}`; field.append(img); };
+    if (s.backgroundUrl) layer(s.backgroundUrl);
+    if (s.foregroundUrl) layer(s.foregroundUrl);
+    if (s.displayGrid) {
+      const grid = document.createElement("div"), step = unit * (s.gridSize || 1);
+      grid.style.cssText = `position:absolute;left:-1px;top:-1px;width:${s.fieldWidth * unit + 1}px;height:${s.fieldHeight * unit + 1}px;box-sizing:border-box;background-image:${lines(hasImage ? 0.25 : 0.1, lineWidth)};background-size:${step}px ${step}px`;
+      field.append(grid);
+    }
+    nodes.push(field);
   }
   // Pieces store x/y in grid units, characters in pixels at zoom 1 (24px = 1 unit); sizes are in grid units for both.
   // Markers share the items' layer in CCFOLIA (same container, same grid units, drawn after the items of the same z); they cannot be moved by a participant.
@@ -219,6 +235,14 @@ function renderScene(scene) {
     if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
+    // A character token carries its name under it (measured on ccfolia.com: bottom -11.9px of the 96px token, centred, 12px bold, black, 1px #f5f5f5 outline in eight directions, ellipsis within the token width).
+    if (item.kind === "character" && item.name) {
+      const scale = unit / 24, label = document.createElement("span"), px = value => `${Math.round(value * scale * 100) / 100}px`;
+      label.textContent = item.name;
+      place(label, item.x / 24 + item.width / 2, item.y / 24 + item.height, 0, 0, 0, layerOf(item));
+      label.style.cssText += `;width:auto;height:${px(19.92)};max-width:${px(item.width * 24)};transform:translate(-50%,${px(-8)});font:700 ${px(12)}/${px(19.92)} Roboto,Helvetica,Arial,sans-serif;letter-spacing:${px(0.4)};color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;text-shadow:${[[1, 1], [-1, -1], [-1, 1], [1, -1], [0, 1], [0, -1], [-1, 0], [1, 0]].map(([x, y]) => `${px(x)} ${px(y)} 0 #f5f5f5`).join(",")}`;
+      label.dataset.label = item.id; nodes.push(label);
+    }
   }
   field.replaceChildren(...nodes);
   renderStatusPanel(s.characters || []);

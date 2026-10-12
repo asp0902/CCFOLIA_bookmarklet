@@ -260,6 +260,7 @@ export class RoomRelay {
         backgroundUrl: cdn(body.backgroundUrl), foregroundUrl: cdn(body.foregroundUrl), backgroundColor: color(body.backgroundColor),
         fieldWidth: num(body.fieldWidth, 40), fieldHeight: num(body.fieldHeight, 20),
         fieldObjectFit: ["fill", "contain", "cover"].includes(body.fieldObjectFit) ? body.fieldObjectFit : "fill",
+        displayGrid: body.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(body.gridSize, 1))),
         // CCFOLIA's own audio (BGM file and sound effect): CDN address only, volume 0..1.
         media: audio(body.media), sound: audio(body.sound),
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
