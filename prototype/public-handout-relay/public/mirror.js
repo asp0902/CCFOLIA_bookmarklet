@@ -3,7 +3,7 @@
 // inside its own shadow root, so the mirrored CSS cannot touch the rest of this page and this page's CSS cannot touch the mirror. The CSS is fetched once as a file and shared
 // by every shadow root (one constructed style sheet). If anything is missing or fails, has() stays false and the built-in renderer is used.
 const cmMirror = (() => {
-  let clean = null, cssHash = "", tplHash = "", token = 0;
+  let clean = null, cssHash = "", tplHash = "", token = 0, toolkitCss = false;
   const templates = new Map(), hosts = new Map(), fontLinks = new Set();
   const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet();
   base.replaceSync("[hidden]{display:none !important}:host{display:block;color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}.MuiAppBar-positionFixed{position:relative !important}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
@@ -19,6 +19,8 @@ const cmMirror = (() => {
     const styles = [root, ...root.querySelectorAll("*")].map(el => { const value = el.getAttribute("style") || ""; el.removeAttribute("style"); return value; });
     return { root: document.importNode(root, true), styles };
   }
+  // true when the GM's page had the format toolkit switched on: its rules (.ccf-render-root ...) are in the CSS. Without it the GM shows message text plain, so the mirrored rows do too.
+  api.toolkit = () => toolkitCss;
   api.has = name => templates.has(name) && !!cssHash;
   api.make = name => {
     const template = templates.get(name);
@@ -68,6 +70,7 @@ const cmMirror = (() => {
         if (!response.ok || mine !== token) return;
         const text = await response.text();
         sheet.replaceSync(text);
+        toolkitCss = text.includes("ccf-render-root");
         // @font-face inside a shadow root's style sheet is ignored by the browser; the same rules are registered for the whole document.
         const faces = [...sheet.cssRules].filter(rule => rule instanceof CSSFontFaceRule).map(rule => rule.cssText);
         fontSheet.replaceSync(faces.join("\n"));

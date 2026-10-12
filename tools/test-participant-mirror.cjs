@@ -23,7 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const u = new URL(route.request().url());
     if (u.hostname !== 'relay.test') return route.abort();
     if (u.pathname.endsWith('/mirror.json')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ templates }) });
-    if (u.pathname.endsWith('/mirror.css')) return route.fulfill({ contentType: 'text/css', body: '.row .nm{font-weight:700}.tm{color:rgb(117,117,117)}.dv{display:none}' });
+    if (u.pathname.endsWith('/mirror.css')) return route.fulfill({ contentType: 'text/css', body: '.row .nm{font-weight:700}.tm{color:rgb(117,117,117)}.dv{display:none}.ccf-render-root{white-space:pre-wrap}' });
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
     if (fs.existsSync(fp)) return route.fulfill({ body: fs.readFileSync(fp), contentType: f.endsWith('.js') || f.endsWith('.mjs') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; img-src https://storage.ccfolia-cdn.net data:" } });
@@ -82,6 +82,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.cl').click());
   assert.equal(await page.evaluate(() => document.getElementById('room').classList.contains('chat-collapsed')), true, 'close button works');
+  // the format toolkit's CSS rules are only in the mirror when the GM had the toolkit on: otherwise a formatted message shows plain text like on the GM screen
+  const plainRow = await page.evaluate(() => { const p = document.createElement('p'); fillMirrorRow(Object.assign(document.createElement('div'), { innerHTML: '<div><p data-cm-slot="body"></p></div>' }), { author: 'A', text: '내용', createdAt: '2026-10-08T01:00:00Z' }); return cmMirror.toolkit(); });
+  assert.equal(plainRow, true, 'the toolkit rules (.ccf-render-root) are in this CSS');
+  // a narration message gets the toolkit's markers on its row and body, so the toolkit CSS lays it out
+  const START = '⁣⁣⁣', END = '⁢⁢⁢', MAP = ['​', '‌', '‍', '⁠'];
+  const encode = obj => { const b64 = Buffer.from(JSON.stringify(obj), 'utf8').toString('base64'); let bits = ''; for (const ch of b64) bits += ch.charCodeAt(0).toString(2).padStart(8, '0'); let out = START; for (let i = 0; i < bits.length; i += 2) out += MAP[parseInt(bits.slice(i, i + 2).padEnd(2, '0'), 2)]; return out + END; };
+  const narrationText = '내용' + encode({ v: 1, text: '내용', formatRuns: [], alignRuns: [], blockStyle: { narration: true } });
+  const marked = await page.evaluate(text => { current = { ...current, roomTitle: 't', gmOnline: true, channels: [{ id: 'main', label: '메인' }], mirror: { cssHash: 'h1', tplHash: 't1', fontLinks: [] }, messages: [{ id: 'n1', author: 'GM', text, channel: 'main', createdAt: '2026-10-08T01:00:00Z' }] }; renderState(current); const row = document.getElementById('messages-host').shadowRoot.querySelector('.row'); const p = row.querySelector('.bd'); return { row: row.dataset.ccfNarration, body: p.dataset.ccfNarration, root: p.classList.contains('ccf-render-root'), line: !!p.querySelector('.ccf-render-overlay > .ccf-line') }; }, narrationText);
+  assert.deepEqual(marked, { row: '1', body: '1', root: true, line: true });
   // top bar
   const top = await page.evaluate(() => {
     const root = document.getElementById('top-host').shadowRoot;
@@ -90,7 +99,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       buttons: [...root.querySelectorAll('button')].map(b => b.className + (b.hidden ? '(hidden)' : '')), letter: root.querySelector('.ac span').textContent, hasImg: !!root.querySelector('img') };
   });
   assert.equal(top.legacyHidden, true); assert.equal(top.position, 'relative', 'a fixed AppBar is laid out in flow inside the page');
-  assert.equal(top.title, 't'); assert.deepEqual(top.buttons, ['mn', 'ch', 'ch(hidden)', 'ac', 'co(hidden)'], 'handout copy added after the characters button, hidden without a handout; chat-open follows the built-in state');
+  assert.equal(top.title, 't'); assert.deepEqual(top.buttons, ['mn', 'ch', 'ch(hidden)', 'ac', 'co'], 'handout copy added after the characters button, hidden without a handout; chat-open follows the built-in state (the chat was closed by the test above, so it shows)');
   assert.equal(top.hasImg, false, 'the participant avatar is a letter');
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.ch').click());
   assert.equal(await page.locator('.dlg').count(), 1, 'the character list button opens the built-in dialog');

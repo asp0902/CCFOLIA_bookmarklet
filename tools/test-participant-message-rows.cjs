@@ -40,6 +40,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const decoded = await page.evaluate(([front, stale]) => { const a = document.createElement('p'), b = document.createElement('p'); renderRich(a, front); renderRich(b, stale); return { frontBg: a.querySelector('span')?.style.backgroundColor, frontText: a.textContent, staleText: b.textContent, staleSpan: !!b.querySelector('span') }; }, [env + '내용', '바뀐 글' + env]);
   assert.equal(decoded.frontText, '내용'); assert.equal(decoded.frontBg, 'rgb(155, 207, 196)', 'envelope in front of the text still formats it');
   assert.equal(decoded.staleText, '바뀐 글'); assert.equal(decoded.staleSpan, false, 'an envelope that no longer matches the text is not applied');
+  // dice result colours as CCFOLIA's chat row does (from its code): success primary, failure and secret dice secondary, no flag dimmer; Japanese words decide when there are no flags
+  const colours = await page.evaluate(() => [{ result: 'r', success: true }, { result: 'r', failure: true }, { result: '(1D100) ＞ 3' }, { result: '判定 成功' }, { result: '判定 失敗' }, { result: 'x', secret: true }].map(roll => rollResultSpan(roll).style.color || 'default'));
+  assert.deepEqual(colours, ['rgb(33, 150, 243)', 'rgb(220, 0, 78)', 'default', 'rgb(33, 150, 243)', 'rgb(220, 0, 78)', 'rgb(220, 0, 78)']);
+  // toolkit mode: the same classes and attributes the toolkit scripts use, so the toolkit's CSS from mirror.css lays narration / macro rows out
+  const narr = encode({ v: 1, text: '내용', formatRuns: [], alignRuns: [], blockStyle: { narration: true } });
+  const dom = await page.evaluate(full => { const p = document.createElement('p'); const info = renderRich(p, full, true); return { info, cls: p.className, narration: p.dataset.ccfNarration, rendered: p.dataset.ccfRendered, overlay: !!p.querySelector(':scope > .ccf-render-overlay > .ccf-line'), italic: p.querySelector('.ccf-line').style.fontStyle || '', center: p.querySelector('.ccf-line').style.textAlign || '' }; }, '내용' + narr);
+  assert.equal(dom.info.narration, true); assert.equal(dom.cls, 'ccf-render-root'); assert.equal(dom.narration, '1'); assert.equal(dom.rendered, '1'); assert.equal(dom.overlay, true);
+  assert.equal(dom.italic, '', 'the look comes from the toolkit CSS, not from inline styles'); assert.equal(dom.center, '');
+  const plain = await page.evaluate(full => { const p = document.createElement('p'); renderRich(p, full, true); return { cls: p.className, text: p.textContent }; }, '그냥' + encode({ v: 1, text: '그냥', formatRuns: [], alignRuns: [], blockStyle: {} }));
+  assert.deepEqual(plain, { cls: '', text: '그냥' }, 'a formatting-free envelope is plain text');
   await browser.close();
   console.log('participant message rows PASS');
 })().catch(error => { console.error(error); process.exit(1); });

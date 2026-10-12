@@ -402,6 +402,15 @@ function renderTabs(data) {
 const healthNote = document.createElement("div"); healthNote.id = "health-note"; healthNote.hidden = true; healthNote.textContent = "GM 쪽 코코포리아 업데이트로 일부 기능 점검 중";
 document.body.append(healthNote);
 function showHealth(health) { healthNote.hidden = !(health && health.ok === false); }
+// The dice result after the text, coloured as CCFOLIA's chat row does (read from the app code): the secret-dice placeholder and failures are the secondary colour (#dc004e), successes the primary
+// (#2196f3), and with no flags the Japanese words decide (成功 / スペシャル primary, 失敗 secondary); everything else is the dimmer text colour.
+function rollResultSpan(roll) {
+  const result = document.createElement("span"), text = String(roll.result || "");
+  result.className = "roll-result"; result.textContent = ` ${text}`;
+  const tone = roll.secret ? "secondary" : roll.success ? "primary" : roll.failure ? "secondary" : /成功|スペシャル/.test(text) ? "primary" : /失敗/.test(text) ? "secondary" : "";
+  if (tone) result.style.color = tone === "primary" ? "#2196f3" : "#dc004e";
+  return result;
+}
 const BLANK_ICON = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="; // a message without an icon (CCFOLIA uses its own blank image): no broken-image frame
 // One message's data into a copy of the mirrored CCFOLIA row (slots: icon, name, time, body). Text is only ever set as text; the icon only from the CCFOLIA CDN.
 function fillMirrorRow(row, message) {
@@ -410,9 +419,12 @@ function fillMirrorRow(row, message) {
   if (name) { name.insertBefore(document.createTextNode(message.author || "이름 없음"), name.firstChild); if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color; }
   if (time) time.textContent = ` - ${messageTime(message.createdAt)}`;
   if (body) {
-    renderRich(body, message.text || "");
+    let info = { narration: false };
+    if (cmMirror.toolkit()) info = renderRich(body, message.text || "", true);
+    else body.textContent = decodeEnvelope(message.text || "").visible;
+    if (info.narration) row.querySelector(".MuiListItem-root")?.setAttribute("data-ccf-narration", "1");
     const tail = () => body.lastElementChild || body;
-    if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll-result"; result.textContent = ` ${message.roll.result}`; tail().append(result); }
+    if (message.roll?.result) (tail()).append(rollResultSpan(message.roll));
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; tail().append(edited); }
   }
 }
@@ -455,7 +467,7 @@ const renderState = data => {
     head.append(author, " - ", time);
     const body = document.createElement("p"); renderRich(body, message.text || "");
     // Native rows show the typed text, then the dice result in a dimmer colour (measured: rgba(255,255,255,.7)).
-    if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll-result"; result.textContent = ` ${message.roll.result}`; (body.lastElementChild || body).append(result); }
+    if (message.roll?.result) ((body.lastElementChild || body)).append(rollResultSpan(message.roll));
     // A message edited in CCFOLIA ends with " [편집 완료]" (measured: inline span, 12px, #757575, the same as the time).
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; (body.lastElementChild || body).append(edited); }
     text.append(head, body); item.append(avatar, text); return item;
@@ -506,9 +518,9 @@ async function verifyAccess() {
 const INVIS_START = "\u2063\u2063\u2063", INVIS_END = "\u2062\u2062\u2062", INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
 function decodeEnvelope(full) {
   const a = full.indexOf(INVIS_START);
-  if (a < 0) return { text: full, env: null };
+  if (a < 0) return { text: full, env: null, visible: full };
   const b = full.indexOf(INVIS_END, a + INVIS_START.length);
-  if (b < 0) return { text: full, env: null };
+  if (b < 0) return { text: full, env: null, visible: full };
   try {
     let bits = "";
     for (const ch of full.slice(a + INVIS_START.length, b)) { const i = INVIS_MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, "0"); }
@@ -518,9 +530,9 @@ function decodeEnvelope(full) {
     // The visible text is what is outside the envelope (it may stand before or after it, e.g. Roll20 header rows start with the envelope). The envelope's own text is what its runs
     // refer to; if it is not the visible text (the message was edited afterwards) the formatting is stale and the visible text is shown plain.
     const visible = full.slice(0, a) + full.slice(b + INVIS_END.length);
-    if (env && typeof env.text === "string" && env.text.trim() !== visible.trim()) return { text: visible, env: null };
-    return { text: env && typeof env.text === "string" ? env.text : visible, env };
-  } catch (_) { return { text: full.slice(0, a), env: null }; }
+    if (env && typeof env.text === "string" && env.text.trim() !== visible.trim()) return { text: visible, env: null, visible };
+    return { text: env && typeof env.text === "string" ? env.text : visible, env, visible };
+  } catch (_) { return { text: full.slice(0, a), env: null, visible: full.slice(0, a) }; }
 }
 const safeColor = value => (typeof value === "string" && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(value.trim())) ? value.trim() : "";
 // Roll20 CSS macros (colour bands etc.) travel as style.extraCss. Same keys as the roll20-css-bridge, minus position/top/left/...
@@ -548,21 +560,35 @@ function styleSegment(span, style) {
   applyExtraCss(span, style.extraCss);
   if (style.tooltipText) { span.title = String(style.tooltipText).slice(0, 200); span.style.borderBottom = "1px dotted currentColor"; }
 }
-function renderRich(container, full) {
+// toolkit: draw it the way the GM's toolkit scripts do (the same class and attribute names: .ccf-render-root > .ccf-render-overlay > .ccf-line > .ccf-frag, data-ccf-narration / data-ccf-macro),
+// so the toolkit's own CSS that came over in mirror.css lays it out (narration centred without avatar, Roll20 bars, ...). Returns what the row needs to know.
+function renderRich(container, full, toolkit = false) {
   const { text, env } = decodeEnvelope(full);
-  if (!env || typeof env !== "object") { container.textContent = text; return; }
+  const info = { narration: false, macro: false };
+  if (!env || typeof env !== "object") { container.textContent = text; return info; }
   const runs = (Array.isArray(env.formatRuns) ? env.formatRuns : []).map(r => ({ start: Math.max(0, Number(r.start) || 0), end: Math.min(text.length, Number(r.end) || 0), style: r.style && typeof r.style === "object" ? r.style : {} })).filter(r => r.end > r.start);
   const align = Array.isArray(env.alignRuns) ? env.alignRuns : [];
   const narration = !!env.blockStyle?.narration;
+  info.narration = narration; info.macro = env.roll20Macro === true;
+  // formatting-free envelopes are not drawn over (the toolkit does the same): plain text
+  if (toolkit && !runs.length && !align.length && !narration && !info.macro) { container.textContent = text; info.narration = false; return info; }
+  const target = toolkit ? document.createElement("div") : container;
+  if (toolkit) {
+    target.className = "ccf-render-overlay";
+    container.classList.add("ccf-render-root"); container.dataset.ccfRendered = "1";
+    if (narration) container.dataset.ccfNarration = "1";
+    if (info.macro) container.dataset.ccfMacro = "1";
+    container.append(target);
+  }
   const lines = text.split("\n");
   let offset = 0;
   lines.forEach((line, index) => {
     const lineEl = document.createElement("div");
-    lineEl.style.minHeight = "1.43em";
+    if (toolkit) lineEl.className = "ccf-line"; else lineEl.style.minHeight = "1.43em";
     const run = align.find(a => a.start <= index && a.end > index);
-    const alignment = narration ? "center" : (run && ["left", "center", "right"].includes(run.align) ? run.align : "");
+    const alignment = narration ? (toolkit ? "" : "center") : (run && ["left", "center", "right"].includes(run.align) ? run.align : "");
     if (alignment) lineEl.style.textAlign = alignment;
-    if (narration) lineEl.style.fontStyle = "italic";
+    if (narration && !toolkit) lineEl.style.fontStyle = "italic";
     const lineStart = offset, lineEnd = offset + line.length;
     const cuts = new Set([lineStart, lineEnd]);
     for (const r of runs) { if (r.start > lineStart && r.start < lineEnd) cuts.add(r.start); if (r.end > lineStart && r.end < lineEnd) cuts.add(r.end); }
@@ -574,14 +600,16 @@ function renderRich(container, full) {
       const ruby = active.find(r => r.style.rubyText);
       if (!active.length) { lineEl.append(piece); continue; }
       const span = document.createElement(ruby ? "ruby" : "span");
+      if (toolkit) span.className = "ccf-frag";
       for (const r of active) styleSegment(span, r.style);
       span.append(piece);
       if (ruby) { const rt = document.createElement("rt"); rt.textContent = String(ruby.style.rubyText).slice(0, 60); span.append(rt); }
       lineEl.append(span);
     }
-    container.append(lineEl);
+    target.append(lineEl);
     offset = lineEnd + 1;
   });
+  return info;
 }
 // CCFOLIA's chat time is date-fns formatRelative with its Japanese strings (read from the app code): today "今日 p", yesterday "昨日 p", 2-6 days back "先週 eeee p", older: the date only "P" (y/MM/dd);
 // p is H:mm (hour not padded). The weekday is the full Japanese name.
