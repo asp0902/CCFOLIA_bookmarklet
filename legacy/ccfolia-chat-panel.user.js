@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.43
+// @version      0.2.44
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.43";
+  const VERSION = "0.2.44";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3127,15 +3127,55 @@
     for (const attr of [...el.attributes]) if (MIRROR_STRIP_ATTR.test(attr.name)) el.removeAttribute(attr.name);
   }
   // 복제본에서 데이터를 지운다: 속성, 글자, 다른 스크립트가 붙인 렌더 결과(format-sync 의 오버레이 등).
-  function mirrorStripClone(root) {
+  // keepText: 화면 틀의 고정 문구(패널 제목 등)는 남긴다. 데이터가 들어갈 자리는 호출한 쪽이 비운다.
+  function mirrorStripClone(root, keepText = false) {
     root.querySelectorAll("script, iframe, style, link, .ccf-render-overlay, .ccf-original-hidden").forEach((el) => el.remove());
     for (const el of [root, ...root.querySelectorAll("*")]) {
       mirrorStripAttributes(el);
       el.classList.remove("ccf-render-root");
       if (!el.getAttribute("class")) el.removeAttribute("class");
-      for (const node of [...el.childNodes]) if (node.nodeType === Node.TEXT_NODE) node.remove();
+      if (!keepText) for (const node of [...el.childNodes]) if (node.nodeType === Node.TEXT_NODE) node.remove();
     }
     return root;
+  }
+  // 패널 머리(제목 + 닫기/채팅 메뉴 단추)와 탭 줄. 탭은 상태별 한 개씩(선택 / 보통 / 안 읽음 점), 라벨 자리만 비운다.
+  function mirrorPanelTemplates(list) {
+    const paper = list.closest(".MuiDrawer-paper");
+    const out = {};
+    const header = paper && [...paper.children].find((child) => child.tagName === "HEADER");
+    if (header) {
+      const copy = mirrorStripClone(header.cloneNode(true), true);
+      const buttons = [...copy.querySelectorAll("button")];
+      if (buttons.length >= 2) { buttons[0].setAttribute("data-cm-slot", "close"); buttons[buttons.length - 1].setAttribute("data-cm-slot", "menu"); out.chatHeader = copy.outerHTML; }
+    }
+    const tablist = (paper || document).querySelector('[role="tablist"]');
+    const tabs = tablist ? [...tablist.children].filter((tab) => tab instanceof HTMLElement && tab.tagName === "BUTTON" && tab.querySelector(".MuiBadge-badge")) : [];
+    if (tablist && tabs.length) {
+      let shell = null, depth = 0;
+      for (let el = tablist; el && depth < 6; el = el.parentElement, depth += 1) {
+        const copy = mirrorStripClone(el.cloneNode(false), true);
+        copy.removeAttribute("style");
+        if (shell) copy.append(shell); else copy.setAttribute("data-cm-slot", "tabs");
+        shell = copy;
+        if (el.tagName === "HEADER") break;
+      }
+      out.chatTabsShell = shell.outerHTML;
+      const unread = (tab) => { const badge = tab.querySelector(".MuiBadge-badge"); return !!badge && !badge.classList.contains("MuiBadge-invisible"); };
+      const plainLabel = (tab) => [...(tab.firstElementChild?.childNodes || [])].some((n) => n.nodeType === Node.TEXT_NODE && n.nodeValue.trim());
+      const pick = (test) => tabs.find((tab) => test(tab) && plainLabel(tab)) || tabs.find(test);
+      const make = (tab, name) => {
+        if (!tab) return;
+        const copy = mirrorStripClone(tab.cloneNode(true));
+        copy.removeAttribute("style");
+        const label = copy.firstElementChild;
+        if (label) label.setAttribute("data-cm-slot", "label");
+        out[name] = copy.outerHTML;
+      };
+      make(pick((tab) => tab.getAttribute("aria-selected") === "true"), "chatTabOn");
+      make(pick((tab) => tab.getAttribute("aria-selected") !== "true" && !unread(tab)), "chatTabIdle");
+      make(pick((tab) => tab.getAttribute("aria-selected") !== "true" && unread(tab)), "chatTabUnread");
+    }
+    return out;
   }
   function mirrorChatTemplates() {
     // 본보기 줄: 나레이션·이어짐이 아닌 보통 줄(chat-panel 의 captureNativeRowTemplate 와 같은 기준).
@@ -3165,7 +3205,7 @@
       shell = copy;
       if (el === list) break;
     }
-    return { chatShell: shell.outerHTML, chatRow: row.outerHTML };
+    return { chatShell: shell.outerHTML, chatRow: row.outerHTML, ...mirrorPanelTemplates(list) };
   }
   // known: 상대가 이미 가진 해시. 같으면 그 부분은 비워 보낸다(CSS 는 100KB 이상이라 바뀔 때만).
   function relayMirror(known = {}) {

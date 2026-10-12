@@ -1,11 +1,15 @@
-// Native mirroring (participant side): CCFOLIA's own CSS (mirror.css) and the shape of its chat list and message row (templates) come from the GM's browser;
-// this page only fills the data into those shapes. Templates are checked again here with the same code the Worker used (mirror-sanitize.mjs) and drawn inside a shadow root,
-// so the mirrored CSS cannot touch the rest of this page and this page's CSS cannot touch the mirror. If anything is missing or fails, active() stays false and the built-in renderer is used.
+// Native mirroring (participant side): CCFOLIA's own CSS (mirror.css) and the shapes of its chat parts (templates) come from the GM's browser;
+// this page only fills data into those shapes. Templates are checked again here with the same code the Worker used (mirror-sanitize.mjs) and each mirrored part is drawn
+// inside its own shadow root, so the mirrored CSS cannot touch the rest of this page and this page's CSS cannot touch the mirror. The CSS is fetched once as a file and shared
+// by every shadow root (one constructed style sheet). If anything is missing or fails, has() stays false and the built-in renderer is used.
 const cmMirror = (() => {
-  let clean = null, cssHash = "", tplHash = "", shell = null, row = null, host = null, shadow = null, link = null, token = 0;
-  const fontLinks = new Set();
+  let clean = null, cssHash = "", tplHash = "", token = 0;
+  const templates = new Map(), hosts = new Map(), fontLinks = new Set();
+  const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet();
+  base.replaceSync(":host{display:block;color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
   const FONT = /^https:\/\/fonts\.googleapis\.com\//;
-  const api = { onChange: () => {}, active: () => !!(shell && row && cssHash && host) };
+  const api = { onChange: () => {} };
 
   // A template as { root, styles }: inline style attributes are taken off before the DOM is built (style-src 'self' would refuse them) and put back through the CSSOM on every copy.
   function prepare(html) {
@@ -15,29 +19,29 @@ const cmMirror = (() => {
     const styles = [root, ...root.querySelectorAll("*")].map(el => { const value = el.getAttribute("style") || ""; el.removeAttribute("style"); return value; });
     return { root: document.importNode(root, true), styles };
   }
-  function instantiate(template) {
+  api.has = name => templates.has(name) && !!cssHash;
+  api.make = name => {
+    const template = templates.get(name);
     const copy = template.root.cloneNode(true);
     [copy, ...copy.querySelectorAll("*")].forEach((el, index) => { if (template.styles[index]) el.style.cssText = template.styles[index]; });
     return copy;
-  }
-  const slot = (root, name) => (root.matches?.(`[data-cm-slot="${name}"]`) ? root : root.querySelector(`[data-cm-slot="${name}"]`));
+  };
+  api.slot = (root, name) => (root.matches?.(`[data-cm-slot="${name}"]`) ? root : root.querySelector(`[data-cm-slot="${name}"]`));
+  // A shadow root for one mirrored part; insert(host) puts the host where the part belongs on the page (called once).
+  api.shadow = (id, insert) => {
+    let entry = hosts.get(id);
+    if (!entry) {
+      const host = document.createElement("div"); host.id = id;
+      const root = host.attachShadow({ mode: "open" });
+      root.adoptedStyleSheets = [base, sheet];
+      insert(host);
+      entry = { host, root }; hosts.set(id, entry);
+    }
+    return entry;
+  };
+  // Replaces what a shadow root shows (the style sheets are adopted, so the content is all there is).
+  api.show = (id, nodes) => { const entry = hosts.get(id); if (entry) entry.root.replaceChildren(...nodes); };
 
-  function ensureHost(roomId) {
-    if (host) return;
-    const messages = document.getElementById("messages");
-    host = document.createElement("div"); host.id = "messages-host";
-    shadow = host.attachShadow({ mode: "open" });
-    const base = new CSSStyleSheet();
-    base.replaceSync(":host{display:block;color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}");
-    shadow.adoptedStyleSheets = [base];
-    link = document.createElement("link"); link.rel = "stylesheet";
-    shadow.append(link);
-    messages.after(host);
-    messages.hidden = true;
-  }
-
-  api.host = () => host;
-  api.slot = slot;
   // info: { cssHash, tplHash, fontLinks } from /state
   api.sync = async (info, roomId) => {
     if (!info || !roomId) return;
@@ -52,30 +56,25 @@ const cmMirror = (() => {
       let changed = false;
       if (info.tplHash && info.tplHash !== tplHash) {
         const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mirror.json`);
-        if (!response.ok) return;
-        const { templates } = await response.json();
+        if (!response.ok || mine !== token) return;
+        const next = new Map();
+        for (const [name, html] of Object.entries((await response.json()).templates || {})) { const prepared = prepare(html); if (prepared) next.set(name, prepared); }
         if (mine !== token) return;
-        const nextShell = templates?.chatShell && prepare(templates.chatShell), nextRow = templates?.chatRow && prepare(templates.chatRow);
-        if (!nextShell || !nextRow) return;
-        shell = nextShell; row = nextRow; tplHash = info.tplHash; changed = true;
+        templates.clear(); next.forEach((value, key) => templates.set(key, value));
+        tplHash = info.tplHash; changed = true;
       }
       if (info.cssHash && info.cssHash !== cssHash) {
-        ensureHost(roomId);
-        link.href = `/api/rooms/${encodeURIComponent(roomId)}/mirror.css?v=${encodeURIComponent(info.cssHash)}`;
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mirror.css?v=${encodeURIComponent(info.cssHash)}`);
+        if (!response.ok || mine !== token) return;
+        const text = await response.text();
+        sheet.replaceSync(text);
+        // @font-face inside a shadow root's style sheet is ignored by the browser; the same rules are registered for the whole document.
+        const faces = [...sheet.cssRules].filter(rule => rule instanceof CSSFontFaceRule).map(rule => rule.cssText);
+        fontSheet.replaceSync(faces.join("\n"));
         cssHash = info.cssHash; changed = true;
-      } else if (shell && row && cssHash) ensureHost(roomId);
+      }
       if (changed) api.onChange();
     } catch (_) { /* the built-in renderer keeps working */ }
-  };
-  // Draws the list: fill(rowRoot, message) puts one message's data into a fresh copy of the row template.
-  api.render = (messages, fill) => {
-    const list = instantiate(shell);
-    const rows = slot(list, "rows");
-    if (!rows) return false;
-    for (const message of messages) { const copy = instantiate(row); fill(copy, message); rows.append(copy); }
-    [...shadow.children].filter(el => el !== link).forEach(el => el.remove());
-    shadow.append(list);
-    return true;
   };
   return api;
 })();

@@ -345,6 +345,25 @@ function renderTabs(data) {
   const channels = data.channels?.length ? data.channels : DEFAULT_CHANNELS;
   if (!channels.some(item => item.id === activeChannel)) activeChannel = channels[0].id;
   const bar = document.getElementById("chat-tabs");
+  // Native mirroring: the tab strip is CCFOLIA's own (one template per state); the built-in buttons below are the fallback.
+  const tabStates = cmMirror.has("chatTabsShell") && cmMirror.has("chatTabOn") && cmMirror.has("chatTabIdle");
+  bar.hidden = tabStates;
+  if (tabStates) {
+    const { host } = cmMirror.shadow("chat-tabs-host", node => bar.after(node));
+    const shell = cmMirror.make("chatTabsShell"), tabs = cmMirror.slot(shell, "tabs");
+    for (const item of channels) {
+      const selected = item.id === activeChannel, hasUnread = unread.has(item.id);
+      const tab = cmMirror.make(selected ? "chatTabOn" : hasUnread && cmMirror.has("chatTabUnread") ? "chatTabUnread" : "chatTabIdle");
+      const label = cmMirror.slot(tab, "label");
+      if (label) label.insertBefore(document.createTextNode(item.label || item.id), label.firstChild);
+      if (!selected && hasUnread && !cmMirror.has("chatTabUnread")) { const dot = document.createElement("i"); dot.style.cssText = "position:absolute;top:10px;right:6px;width:6px;height:6px;border-radius:50%;background:#f50057"; tab.append(dot); }
+      tab.addEventListener("click", () => { if (activeChannel === item.id) return; activeChannel = item.id; rendered = false; renderState(current); });
+      tabs.append(tab);
+    }
+    cmMirror.show("chat-tabs-host", [shell]);
+    return;
+  }
+  document.getElementById("chat-tabs-host")?.remove();
   bar.replaceChildren(...channels.map(item => {
     const tab = document.createElement("button");
     tab.type = "button"; tab.className = "chat-tab"; tab.setAttribute("role", "tab");
@@ -382,13 +401,17 @@ const renderState = data => {
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
   if (data.mirror) cmMirror.sync(data.mirror, roomId);
-  const mirrored = cmMirror.active();
-  const list = mirrored ? cmMirror.host() : document.getElementById("messages");
+  const mirrored = cmMirror.has("chatShell") && cmMirror.has("chatRow");
+  const list = mirrored ? cmMirror.shadow("messages-host", node => document.getElementById("messages").after(node)).host : document.getElementById("messages");
   document.getElementById("messages").hidden = mirrored;
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
   const shown = (data.messages || []).filter(message => (message.channel || "main") === activeChannel);
   let previousName = null;
-  if (mirrored && cmMirror.render(shown, fillMirrorRow)) { /* drawn */ } else list.replaceChildren(...shown.map(message => {
+  if (mirrored) {
+    const shell = cmMirror.make("chatShell"), rows = cmMirror.slot(shell, "rows");
+    for (const message of shown) { const row = cmMirror.make("chatRow"); fillMirrorRow(row, message); rows.append(row); }
+    cmMirror.show("messages-host", [shell]);
+  } else list.replaceChildren(...shown.map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
     // Measured on ccfolia.com: a message from the same speaker as the one right above (same name, any time gap) drops the avatar, the header and the top padding.
@@ -764,7 +787,7 @@ function openMenu(anchor, items) {
   paper.style.top = `${r.bottom + 4}px`;
   if (r.left + paper.offsetWidth > innerWidth - 8) paper.style.left = `${Math.max(8, r.right - paper.offsetWidth)}px`; else paper.style.left = `${r.left}px`;
 }
-document.addEventListener("pointerdown", event => { if (menuEl && !menuEl.contains(event.target) && !menuEl.anchor.contains(event.target)) closeMenu(); }, true);
+document.addEventListener("pointerdown", event => { if (menuEl && !event.composedPath().includes(menuEl) && !event.composedPath().includes(menuEl.anchor)) closeMenu(); }, true);
 document.addEventListener("keydown", event => { if (event.key === "Escape") { const anchor = menuEl?.anchor; closeMenu(); anchor?.focus?.(); } });
 
 function openDialog(title, build) {
@@ -810,9 +833,22 @@ document.getElementById("room-menu-btn").addEventListener("click", event => {
   openMenu(event.currentTarget, items);
 });
 // CCFOLIA keeps log output in the gear menu of the chat panel header (not in the room menu); the GM-only entries (tab edit, log deletion) are left out.
-document.getElementById("chat-gear").addEventListener("click", event => {
-  openMenu(event.currentTarget, [{ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }]);
-});
+const openChatMenu = anchor => openMenu(anchor, [{ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }]);
+document.getElementById("chat-gear").addEventListener("click", event => openChatMenu(event.currentTarget));
+// Native mirroring: the panel header is CCFOLIA's own (title + close + chat menu buttons); its two buttons do what the built-in ones do.
+function renderMirroredHeader() {
+  const title = document.querySelector(".chat > h2");
+  const on = cmMirror.has("chatHeader");
+  if (title) title.hidden = on;
+  if (!on) { document.getElementById("chat-head-host")?.remove(); return; }
+  cmMirror.shadow("chat-head-host", node => title.before(node));
+  const header = cmMirror.make("chatHeader");
+  cmMirror.slot(header, "close")?.addEventListener("click", () => document.getElementById("chat-close").click());
+  const menu = cmMirror.slot(header, "menu");
+  menu?.addEventListener("click", () => openChatMenu(menu));
+  cmMirror.show("chat-head-host", [header]);
+}
+cmMirror.onChange = () => { renderMirroredHeader(); if (typeof current !== "undefined" && current) renderState(current); };
 
 // Log export: everything this page holds (the relay keeps the latest messages of every tab), saved as a file on this computer. Whispers to the GM and secret dice results
 // never reach a participant, so they are not in it. Built here in the browser; nothing is sent anywhere.
