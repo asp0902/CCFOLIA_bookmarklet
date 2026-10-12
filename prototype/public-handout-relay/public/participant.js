@@ -402,10 +402,11 @@ function renderTabs(data) {
 const healthNote = document.createElement("div"); healthNote.id = "health-note"; healthNote.hidden = true; healthNote.textContent = "GM 쪽 코코포리아 업데이트로 일부 기능 점검 중";
 document.body.append(healthNote);
 function showHealth(health) { healthNote.hidden = !(health && health.ok === false); }
+const BLANK_ICON = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="; // a message without an icon (CCFOLIA uses its own blank image): no broken-image frame
 // One message's data into a copy of the mirrored CCFOLIA row (slots: icon, name, time, body). Text is only ever set as text; the icon only from the CCFOLIA CDN.
 function fillMirrorRow(row, message) {
   const icon = cmMirror.slot(row, "icon"), name = cmMirror.slot(row, "name"), time = cmMirror.slot(row, "time"), body = cmMirror.slot(row, "body");
-  if (icon) { if (/^https:\/\/storage\.ccfolia-cdn\.net\//.test(message.icon || "")) { icon.referrerPolicy = "no-referrer"; icon.src = message.icon; } else icon.removeAttribute("src"); }
+  if (icon) { if (/^https:\/\/storage\.ccfolia-cdn\.net\//.test(message.icon || "")) { icon.referrerPolicy = "no-referrer"; icon.src = message.icon; } else icon.src = BLANK_ICON; }
   if (name) { name.insertBefore(document.createTextNode(message.author || "이름 없음"), name.firstChild); if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color; }
   if (time) time.textContent = ` - ${messageTime(message.createdAt)}`;
   if (body) {
@@ -514,7 +515,11 @@ function decodeEnvelope(full) {
     let raw = "";
     for (let i = 0; i + 8 <= bits.length; i += 8) raw += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2));
     const env = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/\0+$/g, "")))));
-    return { text: full.slice(0, a), env };
+    // The visible text is what is outside the envelope (it may stand before or after it, e.g. Roll20 header rows start with the envelope). The envelope's own text is what its runs
+    // refer to; if it is not the visible text (the message was edited afterwards) the formatting is stale and the visible text is shown plain.
+    const visible = full.slice(0, a) + full.slice(b + INVIS_END.length);
+    if (env && typeof env.text === "string" && env.text.trim() !== visible.trim()) return { text: visible, env: null };
+    return { text: env && typeof env.text === "string" ? env.text : visible, env };
   } catch (_) { return { text: full.slice(0, a), env: null }; }
 }
 const safeColor = value => (typeof value === "string" && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(value.trim())) ? value.trim() : "";
@@ -578,11 +583,19 @@ function renderRich(container, full) {
     offset = lineEnd + 1;
   });
 }
-function messageTime(value) {
+// CCFOLIA's chat time is date-fns formatRelative with its Japanese strings (read from the app code): today "今日 p", yesterday "昨日 p", 2-6 days back "先週 eeee p", older: the date only "P" (y/MM/dd);
+// p is H:mm (hour not padded). The weekday is the full Japanese name.
+const WEEKDAYS = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+function messageTime(value, now = new Date()) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  const pad = n => String(n).padStart(2, "0");
-  return d.toDateString() === new Date().toDateString() ? `今日 ${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const clock = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const day = date => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = Math.round((day(d) - day(now)) / 86400000);
+  if (diff === 0) return `今日 ${clock}`;
+  if (diff === -1) return `昨日 ${clock}`;
+  if (diff < -1 && diff >= -6) return `先週 ${WEEKDAYS[d.getDay()]} ${clock}`;
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
 }
 function onPush(event) {
   let message;

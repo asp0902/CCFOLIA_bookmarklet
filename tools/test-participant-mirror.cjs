@@ -63,7 +63,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(result.colors[0], 'rgb(255, 136, 0)', 'the sender colour is applied from the message');
   assert.equal(result.bold, '700', 'the mirrored CSS applies inside the shadow root');
   assert.equal(result.display, 'flex', 'template inline style applied through the CSSOM');
-  assert.deepEqual(result.icons, ['https://storage.ccfolia-cdn.net/a.png', null], 'only CCFOLIA CDN icons');
+  assert.equal(result.icons[0], 'https://storage.ccfolia-cdn.net/a.png'); assert(result.icons[1].startsWith('data:image/gif'), 'a message without a (CDN) icon gets a blank image, never the foreign address and no broken-image frame');
   assert(result.body2.includes('판정') && result.body2.includes('(1D100) ＞ 3') && result.edited);
   assert.equal(result.dividerHidden, 'none');
   assert(result.fonts.includes('https://fonts.googleapis.com/css2?family=Roboto') && !result.fonts.some(href => href.includes('evil.test')), 'only Google Fonts links');

@@ -6,7 +6,7 @@ const cmMirror = (() => {
   let clean = null, cssHash = "", tplHash = "", token = 0;
   const templates = new Map(), hosts = new Map(), fontLinks = new Set();
   const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet();
-  base.replaceSync(":host{display:block;color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}.MuiAppBar-positionFixed{position:relative !important}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
+  base.replaceSync("[hidden]{display:none !important}:host{display:block;color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}.MuiAppBar-positionFixed{position:relative !important}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
   const FONT = /^https:\/\/fonts\.googleapis\.com\//;
   const api = { onChange: () => {} };
