@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.42
+// @version      0.2.43
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.42";
+  const VERSION = "0.2.43";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3117,6 +3117,76 @@
     const timer = window.setInterval(() => { if (active) ensureMenuItem(); }, 1000);
     ensureMenuItem();
 
+  // ── 네이티브 미러링(GM 쪽): 코코포리아의 실제 CSS와 화면 요소의 "모양"(템플릿)을 참여자 플레이 룸에 보낸다 ──
+  // 템플릿은 모양만이다: 글자·이미지·링크·id·on*·data-*(data-cm-* 슬롯 표시만 예외)를 지운다. 서버(mirror-sanitize.mjs)와 참여자 쪽이 허용 목록으로 다시 거른다.
+  // 슬롯(data-cm-slot): 참여자 쪽이 데이터를 채우는 자리. rows=목록 껍데기 안쪽, icon/name/time/body=메시지 줄.
+  const MIRROR_CSS_LIMIT = 900000;
+  const MIRROR_FONT_LINK = /^https:\/\/fonts\.googleapis\.com\//;
+  const MIRROR_STRIP_ATTR = /^(?:id|src|srcset|href|value|name|title|alt|for|list|poster|action|formaction|on.*|data-(?!cm-).*)$/i;
+  function mirrorStripAttributes(el) {
+    for (const attr of [...el.attributes]) if (MIRROR_STRIP_ATTR.test(attr.name)) el.removeAttribute(attr.name);
+  }
+  // 복제본에서 데이터를 지운다: 속성, 글자, 다른 스크립트가 붙인 렌더 결과(format-sync 의 오버레이 등).
+  function mirrorStripClone(root) {
+    root.querySelectorAll("script, iframe, style, link, .ccf-render-overlay, .ccf-original-hidden").forEach((el) => el.remove());
+    for (const el of [root, ...root.querySelectorAll("*")]) {
+      mirrorStripAttributes(el);
+      el.classList.remove("ccf-render-root");
+      if (!el.getAttribute("class")) el.removeAttribute("class");
+      for (const node of [...el.childNodes]) if (node.nodeType === Node.TEXT_NODE) node.remove();
+    }
+    return root;
+  }
+  function mirrorChatTemplates() {
+    // 본보기 줄: 나레이션·이어짐이 아닌 보통 줄(chat-panel 의 captureNativeRowTemplate 와 같은 기준).
+    const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement
+      && li.querySelector("h6.MuiListItemText-primary") && li.offsetParent !== null && !li.closest(`#${PANEL_ID}`)
+      && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")
+      && !li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]') && !li.querySelector('[data-ccf-narration="1"]')
+      && li.querySelector(".MuiListItemAvatar-root img"));
+    const source = rows[rows.length - 1];
+    const list = source?.closest("ul");
+    if (!source || !list) return null;
+    // 줄 + 구분선(hr)을 한 단위로 담는 래퍼가 있으면 래퍼째(실측: 래퍼 > [줄, hr]).
+    let unit = source;
+    while (unit.parentElement && unit.parentElement !== list && unit.parentElement.children.length === 2 && [...unit.parentElement.children].some((c) => c.tagName === "HR")) unit = unit.parentElement;
+    const row = mirrorStripClone(unit.cloneNode(true));
+    const mark = (selector, slot) => { const el = row.querySelector(selector); if (el) el.setAttribute("data-cm-slot", slot); };
+    mark(".MuiListItemAvatar-root img", "icon"); mark("h6.MuiListItemText-primary", "name"); mark("h6.MuiListItemText-primary span", "time"); mark("p.MuiListItemText-secondary", "body");
+    const bodySlot = row.querySelector('[data-cm-slot="body"]');
+    if (!bodySlot || !row.querySelector('[data-cm-slot="name"]')) return null;
+    bodySlot.replaceChildren(); // 본문 안의 서식 요소도 데이터다
+    // 목록 껍데기: 줄의 조상을 ul 까지 속을 비운 채 복제해 겹친다(자손 선택자 CSS 가 걸리도록). 가상 스크롤이 남긴 인라인 style 은 버린다.
+    let shell = null, depth = 0;
+    for (let el = unit.parentElement; el && depth < 8; el = el.parentElement, depth += 1) {
+      const copy = mirrorStripClone(el.cloneNode(false));
+      copy.removeAttribute("style");
+      if (shell) copy.append(shell); else copy.setAttribute("data-cm-slot", "rows");
+      shell = copy;
+      if (el === list) break;
+    }
+    return { chatShell: shell.outerHTML, chatRow: row.outerHTML };
+  }
+  // known: 상대가 이미 가진 해시. 같으면 그 부분은 비워 보낸다(CSS 는 100KB 이상이라 바뀔 때만).
+  function relayMirror(known = {}) {
+    const hash = (value) => { let h = 0x811c9dc5; for (let i = 0; i < value.length; i += 1) { h ^= value.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return `${value.length.toString(36)}-${h.toString(36)}`; };
+    let css = "";
+    for (const sheet of document.styleSheets) {
+      if (sheet.disabled || sheet.ownerNode?.closest?.(`#${PANEL_ID}`)) continue;
+      try { css += `${[...sheet.cssRules].map((rule) => rule.cssText).join("\n")}\n`; } catch (_) { /* 다른 출처 시트(구글 폰트)는 글꼴 링크로 따로 */ }
+    }
+    if (css.length > MIRROR_CSS_LIMIT) css = "";
+    const templates = mirrorChatTemplates();
+    const templateText = templates ? JSON.stringify(templates) : "";
+    const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
+    const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);
+    return {
+      cssHash, tplHash, fontLinks,
+      css: css && cssHash !== known.cssHash ? css : undefined,
+      templates: templates && tplHash !== known.tplHash ? templates : undefined
+    };
+  }
+
     window.__CCF_SECOND_CHAT_PANEL__ = {
       version: VERSION,
       open: openPanel,
@@ -3134,6 +3204,7 @@
       // 저장소가 아직 없으면 null(로딩 중에 빈 목록으로 오해해 참여자 쪽 로그를 지우지 않게).
       relayMessages: () => !getRoomMessagesSlice() ? null : listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => relayView(message, channel)).filter(Boolean)),
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
+      relayMirror,
       relayScene: () => {
         try {
           const ent = findStore()?.getState()?.entities;

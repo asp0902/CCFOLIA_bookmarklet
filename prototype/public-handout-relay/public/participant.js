@@ -359,6 +359,19 @@ function renderTabs(data) {
 const healthNote = document.createElement("div"); healthNote.id = "health-note"; healthNote.hidden = true; healthNote.textContent = "GM 쪽 코코포리아 업데이트로 일부 기능 점검 중";
 document.body.append(healthNote);
 function showHealth(health) { healthNote.hidden = !(health && health.ok === false); }
+// One message's data into a copy of the mirrored CCFOLIA row (slots: icon, name, time, body). Text is only ever set as text; the icon only from the CCFOLIA CDN.
+function fillMirrorRow(row, message) {
+  const icon = cmMirror.slot(row, "icon"), name = cmMirror.slot(row, "name"), time = cmMirror.slot(row, "time"), body = cmMirror.slot(row, "body");
+  if (icon) { if (/^https:\/\/storage\.ccfolia-cdn\.net\//.test(message.icon || "")) { icon.referrerPolicy = "no-referrer"; icon.src = message.icon; } else icon.removeAttribute("src"); }
+  if (name) { name.insertBefore(document.createTextNode(message.author || "이름 없음"), name.firstChild); if (/^#[0-9a-f]{3,8}$/i.test(message.color || "")) name.style.color = message.color; }
+  if (time) time.textContent = ` - ${messageTime(message.createdAt)}`;
+  if (body) {
+    renderRich(body, message.text || "");
+    const tail = () => body.lastElementChild || body;
+    if (message.roll?.result) { const result = document.createElement("span"); result.className = "roll-result"; result.textContent = ` ${message.roll.result}`; tail().append(result); }
+    if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; tail().append(edited); }
+  }
+}
 const isSameSpeakerRun = (previousName, message) => previousName !== null && previousName === (message.author || "이름 없음");
 const renderState = data => {
   showHealth(data.health);
@@ -367,10 +380,15 @@ const renderState = data => {
   document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
   const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
-  const list = document.getElementById("messages");
+  // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
+  if (data.mirror) cmMirror.sync(data.mirror, roomId);
+  const mirrored = cmMirror.active();
+  const list = mirrored ? cmMirror.host() : document.getElementById("messages");
+  document.getElementById("messages").hidden = mirrored;
   const stickToBottom = !rendered || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  const shown = (data.messages || []).filter(message => (message.channel || "main") === activeChannel);
   let previousName = null;
-  list.replaceChildren(...(data.messages || []).filter(message => (message.channel || "main") === activeChannel).map(message => {
+  if (mirrored && cmMirror.render(shown, fillMirrorRow)) { /* drawn */ } else list.replaceChildren(...shown.map(message => {
     // Same layout as CCFOLIA's chat rows: 40px square avatar, bold name + caption time, 14px body.
     const item = document.createElement("li");
     // Measured on ccfolia.com: a message from the same speaker as the one right above (same name, any time gap) drops the avatar, the header and the top padding.
