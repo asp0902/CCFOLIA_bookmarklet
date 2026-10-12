@@ -12,6 +12,7 @@ const code = source.slice(a, b);
   const page = await browser.newPage();
   await page.setContent(`<style>.css-row{display:flex;padding:8px}</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400"><link rel="stylesheet" href="https://evil.test/a.css">
     <header class="MuiAppBar-root tb" style="position:fixed;top:0;width:1000px;height:64px"><div class="MuiToolbar-root"><button aria-label="룸 메뉴" style="text-transform:none"><h6>비밀 룸 이름<span>시스템명</span></h6><span><svg viewBox="0 0 24 24"><path d="M3 3"/></svg></span></button><button aria-label="내 캐릭터 목록"><svg viewBox="0 0 24 24"><path d="M4 4"/></svg></button><button aria-label="[GM] 스크린 패널 목록"><svg viewBox="0 0 24 24"><path d="M5 5"/></svg></button><button aria-label="[GM] 장면 목록"></button><button aria-label="메뉴"></button><button><div><img src="https://storage.ccfolia-cdn.net/me.png"></div></button><button aria-label="채팅창 열기"><svg viewBox="0 0 24 24"><path d="M6 6"/></svg></button></div></header>
+    <div class="zb" style="position:absolute;right:32px;bottom:96px;width:28px"><button aria-label="확대"><svg viewBox="0 0 24 24"><path d="M7 7"/></svg></button><span class="MuiSlider-root MuiSlider-vertical" style="height:61px;display:inline-block;width:28px"><span class="MuiSlider-rail"></span><span class="MuiSlider-track" style="height:14%"></span><span class="MuiSlider-thumb" style="bottom:14%"><input type="range" min="0" max="1" step="0.01" aria-label="배율"></span></span><button aria-label="축소"><svg viewBox="0 0 24 24"><path d="M8 8"/></svg></button></div>
     <div class="MuiDrawer-paper"><header class="MuiPaper-root"><div class="bar"><button aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></button><h6>룸 채팅</h6><button aria-label="메뉴"><svg viewBox="0 0 24 24"><path d="M2 2"/></svg></button></div></header>
     <ul class="MuiList-root sc-list" aria-label="룸 채팅" style="height: 925px"><div style="position:relative"><div class="rows">
       <div class="wrap"><div class="MuiListItem-root css-row" data-ccf-x="1" id="r1"><div class="MuiListItemAvatar-root"><div class="MuiAvatar-root"><img class="MuiAvatar-img" src="https://storage.ccfolia-cdn.net/a.png" alt="사용자"></div></div>
@@ -45,6 +46,8 @@ const code = source.slice(a, b);
   assert(t.topBar && !/GM|비밀 룸|시스템명|me\.png|src=/.test(t.topBar), `top bar: GM buttons and data left out: ${t.topBar}`);
   for (const slot of ['menu', 'title', 'subtitle', 'chars', 'account', 'avatar', 'chatOpen']) assert(t.topBar.includes(`data-cm-slot="${slot}"`), `top bar slot ${slot}`);
   assert(t.topBar.includes('aria-label="내 캐릭터 목록"'), 'player buttons stay');
+  for (const slot of ['zoomIn', 'zoomOut', 'slider', 'track', 'thumb']) assert(t.zoomBar.includes(`data-cm-slot="${slot}"`), `zoom bar slot ${slot}`);
+  assert(!/style="position/.test(t.zoomBar), 'zoom bar: the container position is dropped');
   assert.equal(again.css, undefined); assert.equal(again.templates, undefined); assert.equal(again.cssHash, first.cssHash, 'unchanged parts are not sent again');
   await browser.close();
   console.log('chat panel mirror PASS');

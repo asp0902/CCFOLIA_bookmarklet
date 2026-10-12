@@ -215,7 +215,11 @@
       if (request.action === "mirror") {
         const templates = request.templates && typeof request.templates === "object" ? Object.fromEntries(Object.entries(request.templates).filter(([, value]) => typeof value === "string").slice(0, 60)) : undefined;
         const body = { css: typeof request.css === "string" ? request.css.slice(0, 900_000) : undefined, templates, fontLinks: Array.isArray(request.fontLinks) ? request.fontLinks.filter(link => typeof link === "string").slice(0, 6) : [] };
-        if (body.css !== undefined || body.templates) await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/mirror`, body);
+        if (body.css !== undefined || body.templates) {
+          await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/mirror`, body);
+          // what was collected, for the share settings window (the structure check of the mirror: a template CCFOLIA's page no longer yields is missing here)
+          if (templates) try { Promise.resolve(chrome.storage.local.set({ relayMirror: { roomId, names: Object.keys(templates).slice(0, 60), at: Date.now() } })).catch(() => {}); } catch (_) {}
+        }
       }
       if (request.action === "bgm") {
         const bgm = request.bgm || {};
