@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-cha
 const a = source.indexOf('  function relayItemView(');
 const b = source.indexOf('  // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소');
 assert(a >= 0 && b > a, 'piece helpers not found');
-const { relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCdnUrl } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCdnUrl })`, {});
+const { relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCharacterDocs, relayCdnUrl } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCharacterDocs, relayCdnUrl })`, { Object, Array, String, Number });
 const CDN = 'https://storage.ccfolia-cdn.net/';
 const url = v => (typeof v === 'string' && v.startsWith(CDN) ? v : '');
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -52,4 +52,10 @@ assert.deepEqual(own.map(d => [d.id, d.coverUrl, d.count]), [['d1', '/images/tru
 const dice = plain(relayDiceViews({ a: { _id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4, closed: false, name: '-', owner: 'uid-secret', changeCount: 0 }, b: { _id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, value: 17, closed: true } }, num));
 assert.deepEqual(dice, [{ id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, closed: false, value: 4 }, { id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, closed: true, value: 0 }]);
 assert(!JSON.stringify(dice).includes('uid-secret'), 'the owner is not sent');
+// character documents for the editor: every character (also off the field), secret or invisible ones without name, memo, commands, status or params; nothing about the owner
+const docs = plain(relayCharacterDocs({ a: { _id: 'a', name: '알리스', memo: '메모', commands: '1d100', initiative: 3, externalUrl: 'https://x.test/s', x: 5, y: -6, width: 4, active: false, status: [{ label: 'HP', value: 7, max: 10 }], params: [{ label: 'STR', value: 60 }], owner: 'uid-secret', color: '#fff' }, b: { _id: 'b', name: '비밀', memo: '비밀 메모', secret: true, status: [{ label: 'HP', value: 1, max: 1 }], width: 2 }, c: { name: 'no id' } }));
+assert.deepEqual(docs.map(d => d.id), ['a', 'b']);
+assert.deepEqual([docs[0].name, docs[0].memo, docs[0].commands, docs[0].initiative, docs[0].x, docs[0].y, docs[0].active, docs[0].status[0].value], ['알리스', '메모', '1d100', 3, 5, -6, false, 7]);
+assert.deepEqual([docs[1].name, docs[1].memo, docs[1].status.length, docs[1].params.length], ['', '', 0, 0], 'a hidden character shows nothing');
+assert(!JSON.stringify(docs).includes('uid-secret'), 'no owner id');
 console.log('chat panel scene pieces PASS');

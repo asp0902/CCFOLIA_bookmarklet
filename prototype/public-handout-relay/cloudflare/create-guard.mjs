@@ -1,6 +1,6 @@
 // Rules for objects a participant creates in the GM's room (characters, panels, ...): who may create, how fast, how many, and who owns what.
 // CCFOLIA documents are created under the GM's account, so the relay keeps its own ledger { objectId -> participantId }; a participant may change or delete only what they made.
-export const CREATE_LIMITS = Object.freeze({ perMinute: 10, perRoom: 200, windowMs: 60_000 });
+export const CREATE_LIMITS = Object.freeze({ perMinute: 10, perRoom: 200, windowMs: 60_000, editsPerMinute: 60, graceMs: 120_000 });
 
 // room: the stored room record (capabilities.participantCreate, created, createLog); member: { id }.
 export function checkCreate(room, member, now = Date.now()) {
@@ -17,13 +17,23 @@ export function logCreate(room, member, now = Date.now()) {
   log[member.id] = [...(log[member.id] || []).filter(at => now - at < CREATE_LIMITS.windowMs), now];
 }
 // the object now exists in the room: its maker is remembered
-export function recordCreate(room, member, objectId) {
+export function recordCreate(room, member, objectId, now = Date.now()) {
   room.created = { ...(room.created || {}), [objectId]: member.id };
+  room.createdAt = { ...(room.createdAt || {}), [objectId]: now };
+}
+// changes to what a participant made (edit, place, delete): lighter than creating, but bounded too
+export function checkEdit(room, member, now = Date.now()) {
+  const recent = (room.editLog?.[member.id] || []).filter(at => now - at < CREATE_LIMITS.windowMs);
+  if (recent.length >= CREATE_LIMITS.editsPerMinute) return { ok: false, status: 429, error: "잠시 후 다시 시도해 주세요." };
+  const log = room.editLog ||= {};
+  log[member.id] = [...recent, now];
+  return { ok: true };
 }
 export const ownsObject = (room, member, objectId) => !!objectId && room.created?.[objectId] === member.id;
-export function forgetObject(room, objectId) { if (room.created) delete room.created[objectId]; }
+export function forgetObject(room, objectId) { if (room.created) delete room.created[objectId]; if (room.createdAt) delete room.createdAt[objectId]; }
 // the ledger only keeps what is still in the room: objects the GM removed are dropped
-export function pruneCreated(room, existingIds) {
+// (an object made in the last two minutes stays: the GM's page may report the room from just before it appeared)
+export function pruneCreated(room, existingIds, now = Date.now()) {
   const alive = new Set(existingIds);
-  for (const id of Object.keys(room.created || {})) if (!alive.has(id)) delete room.created[id];
+  for (const id of Object.keys(room.created || {})) if (!alive.has(id) && now - (room.createdAt?.[id] ?? 0) > CREATE_LIMITS.graceMs) forgetObject(room, id);
 }

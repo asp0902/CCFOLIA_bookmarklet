@@ -18,8 +18,8 @@ const scene = body => call(`/api/admin/rooms/${room}/scene`, { gm: true, body })
 const field = async () => (await call(`/api/rooms/${room}/state`, { cookie })).json.scene;
 
 const createCall = body => call(`/api/rooms/${room}/objects/create`, { cookie, body });
-// stage 1 makes dice symbols only
-assert.equal((await createCall({ kind: "character" })).response.status, 400);
+// kinds: dice symbols and characters
+assert.equal((await createCall({ kind: "deck" })).response.status, 400);
 assert.equal((await createCall({ kind: "dice", faces: 1 })).response.status, 400, "faces out of range");
 assert.equal((await createCall({ kind: "dice", x: 5000 })).response.status, 400, "position out of range");
 let made = await createCall({ kind: "dice", x: 3, y: -2, faces: 20 });
@@ -29,8 +29,38 @@ assert.deepEqual([pending.type, pending.kind, pending.x, pending.y, pending.face
 // the GM's page reports the id of the new document: its maker is remembered
 const ack = await call(`/api/admin/rooms/${room}/commands/${made.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "doc123" } });
 assert.equal(ack.response.status, 200);
+// characters: create with the editor's fields only, then only the maker may change, place, duplicate or delete
+const op = (name, body) => call(`/api/rooms/${room}/objects/${name}`, { cookie, body });
+const commandsNow = async () => (await call(`/api/admin/rooms/${room}/commands`, { gm: true })).json.commands;
+const madeChar = await op("create", { kind: "character", fields: { name: "알리스", size: 3, owner: "evil", secret: true, memo: "m" } });
+assert.equal(madeChar.response.status, 202);
+const charCommand = (await commandsNow()).find(c => c.id === madeChar.json.commandId);
+assert.deepEqual(charCommand.fields, { name: "알리스", width: 3, height: 3, memo: "m" }, "only the editor's fields reach the GM");
+assert.equal((await op("update", { kind: "character", id: "c1", fields: { name: "x" } })).response.status, 403, "not made by this participant");
+await call(`/api/admin/rooms/${room}/commands/${madeChar.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "c1" } });
+assert.equal((await op("update", { kind: "character", id: "c1", fields: {} })).response.status, 400, "nothing to change");
+const upd = await op("update", { kind: "character", id: "c1", fields: { name: "새 이름", status: [{ label: "HP", value: 5, max: 10 }], secret: true } });
+assert.equal(upd.response.status, 202);
+assert.deepEqual((await commandsNow()).find(c => c.id === upd.json.commandId).fields, { name: "새 이름", status: [{ label: "HP", value: 5, max: 10 }] });
+const placed = await op("place", { kind: "character", id: "c1", x: 12, y: -4 });
+assert.deepEqual((await commandsNow()).find(c => c.id === placed.json.commandId).fields, { x: 12, y: -4 });
+const dup = await op("duplicate", { kind: "character", id: "c1" });
+assert.equal(dup.response.status, 202);
+await call(`/api/admin/rooms/${room}/commands/${dup.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "c2" } });
+// the characters made by this participant come back with the editor's fields (reported by the GM's page with the scene)
+await scene({ fieldWidth: 20, fieldHeight: 10, characterDocs: [{ id: "c1", name: "새 이름", memo: "m", width: 3, status: [{ label: "HP", value: 5, max: 10 }], owner: "gm", secret: true }, { id: "c2", name: "복제" }, { id: "gm-char", name: "GM의 캐릭터" }] });
+const mine = (await call(`/api/rooms/${room}/mine`, { cookie })).json.characters;
+assert.deepEqual(mine.map(c => c.id).sort(), ["c1", "c2"], "only their own characters");
+assert(!JSON.stringify(mine).includes("GM의") && !("owner" in mine[0]) && !("secret" in mine[0]));
+assert.equal((await call(`/api/rooms/${room}/mine`)).response.status >= 400, true, "not for strangers");
+// delete: the GM's page confirms, then the id leaves the ledger
+const del = await op("delete", { kind: "character", id: "c2" });
+assert.equal(del.response.status, 202);
+await call(`/api/admin/rooms/${room}/commands/${del.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
+assert.equal((await op("update", { kind: "character", id: "c2", fields: { name: "y" } })).response.status, 403, "deleted objects are no longer theirs");
+assert.equal((await op("create", { kind: "dice", id: "c1" })).response.status, 202); // (counts as one create)
 // 10 a minute per participant
-for (let i = 0; i < 9; i += 1) assert.equal((await createCall({ kind: "dice" })).response.status, 202);
+for (let i = 0; i < 6; i += 1) assert.equal((await createCall({ kind: "dice" })).response.status, 202);
 assert.equal((await createCall({ kind: "dice" })).response.status, 429, "rate limit");
 // the GM switch
 await call("/api/connect", { gm: true, body: { roomId: room, roomTitle: "t", capabilities: { chatRead: true, chatWrite: true, publicHandout: true, participantCreate: false } } });

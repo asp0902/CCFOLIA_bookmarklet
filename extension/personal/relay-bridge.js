@@ -150,7 +150,7 @@
     return Object.fromEntries(Object.entries(value).filter(([path, data]) => typeof data === "string").slice(0, 24).map(([path, data]) => [String(path).slice(0, 120), data.slice(0, 90000)]));
   }
   async function handleCommand(command) {
-    if (!["chat.send", "piece.move", "status.set", "object.create"].includes(command?.type) || !command.id) return;
+    if (!(["chat.send", "piece.move", "status.set"].includes(command?.type) || /^object\.(create|update|delete|duplicate|place)$/.test(String(command?.type))) || !command.id) return;
     if (inFlight.has(command.id)) return; // already handed to the page; its result will acknowledge it
     if (config.delivered.has(command.id)) { await ack(command.id, "delivered"); return; }
     inFlight.add(command.id);

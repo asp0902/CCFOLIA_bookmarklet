@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.57
+// @version      0.2.58
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.57";
+  const VERSION = "0.2.58";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -294,6 +294,15 @@
       .filter((die) => die && die._id)
       .slice(0, 50)
       .map((die) => ({ id: String(die._id).slice(0, 60), x: num(die.x), y: num(die.y), width: num(die.width, 2), height: num(die.height, 2), faces: Math.max(2, Math.min(1000, num(die.faces, 6))), closed: die.closed === true, value: die.closed === true ? 0 : num(die.value) }));
+  }
+  // 모든 캐릭터의 편집 대화상자 필드(필드에 안 놓인 것 포함). 서버는 공개 장면과 따로 두고, 만든 참여자에게만 돌려준다. 비밀·숨김 캐릭터는 이름·메모를 보내지 않는다.
+  function relayCharacterDocs(characters) {
+    return Object.values(characters && typeof characters === "object" ? characters : {}).filter((c) => c && c._id).slice(0, 100).map((c) => {
+      const hidden = c.secret === true || c.invisible === true;
+      return { id: String(c._id).slice(0, 100), name: hidden ? "" : String(c.name || "").slice(0, 40), memo: hidden ? "" : String(c.memo || "").slice(0, 2000), commands: hidden ? "" : String(c.commands || "").slice(0, 4000), initiative: Number(c.initiative) || 0, externalUrl: hidden ? "" : String(c.externalUrl || "").slice(0, 500), x: Number(c.x) || 0, y: Number(c.y) || 0, width: Number(c.width) || 4, active: c.active === true,
+        status: hidden ? [] : (Array.isArray(c.status) ? c.status : []).slice(0, 8).map((st) => ({ label: String(st?.label || "").slice(0, 20), value: Number(st?.value) || 0, max: Number(st?.max) || 0 })),
+        params: hidden ? [] : (Array.isArray(c.params) ? c.params : []).slice(0, 30).map((p) => ({ label: String(p?.label || "").slice(0, 20), value: String(p?.value ?? "").slice(0, 60) })) };
+    });
   }
   // 마커 패널(room.markers: id -> {x,y,z,angle,width,height,locked,freezed,text,imageUrl,clickAction}). 좌표·크기는 아이템과 같은 칸 단위(실측: translate = x*24px). 메모(text)는 보내지 않는다.
   function relayMarkerViews(markers, url, num) {
@@ -3408,7 +3417,7 @@
             displayGrid: room.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(room.gridSize, 1))),
             // 이 GM 화면의 확대 비율과 위치(코코포리아 앱 상태 roomScreenScale 0.2~2, roomScreenPosition 화면 px): 참여자 화면이 처음 열릴 때 같은 구도로 시작한다.
             screen: (() => { const app = findStore()?.getState()?.app?.state || {}; return { scale: Math.max(0.2, Math.min(2, num(app.roomScreenScale, 1))), x: Math.round(num(app.roomScreenPosition?.x)), y: Math.round(num(app.roomScreenPosition?.y)) }; })(),
-            items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
+            characterDocs: relayCharacterDocs(ent.roomCharacters?.entities), items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)
           };
@@ -3477,6 +3486,58 @@
       },
       // 참여자가 만든 오브젝트(1단계: 다이스 심볼)를 GM 계정으로 룸에 만든다. 필드는 실측(ccfolia 1.37.5, 네이티브가 만든 다이스 심볼): x,y,width 2,height 2,faces,value 1,closed false,name "-",owner,changeCount 0,createdAt,updatedAt.
       // 생성 허용은 룸의 기본 역할이 "player" 일 때만(네이티브 플레이어가 만들 수 있는 조건, 실측). 시각 필드의 저장 형식은 같은 룸의 기존 문서(아이템)에서 읽어 따른다. 새 문서 id 를 돌려준다.
+      // 참여자가 캐릭터를 만들거나 바꾸는 명령(만들기·편집·화면에 추가·복제·삭제). 필드 이름과 기본값은 실측: 네이티브 플레이어가 만든 캐릭터 문서(룸에 이미 있던 것)를 그대로 본떴다.
+      // 서버가 소유 대장으로 "자기가 만든 것만"을 이미 걸렀고, 여기서는 룸 기본 역할과 문서가 있는지, 비밀 캐릭터가 아닌지를 다시 본다. 새 문서 id 를 돌려준다.
+      relayObject: async (command) => {
+        const kind = String(command?.kind || ""), type = String(command?.type || "");
+        if (kind === "dice" && type === "object.create") return window.__CCF_SECOND_CHAT_PANEL__.relayCreateObject("dice", command);
+        if (kind !== "character") throw new Error("아직 다룰 수 없는 종류입니다.");
+        const ent = findStore()?.getState()?.entities;
+        const room = Object.values(ent?.rooms?.entities || {})[0];
+        if (!room || room.defaultRole !== "player") throw new Error("이 룸은 참여자가 오브젝트를 만들 수 없습니다.");
+        const ctx = await getAuthContext();
+        const base = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/characters`;
+        const headers = { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" };
+        const fields = command.fields && typeof command.fields === "object" ? command.fields : {};
+        const stamp = async () => {
+          const query = await fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}:runQuery`, { method: "POST", headers, body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "characters" }], limit: 1 } }) });
+          const sample = query.ok ? (await query.json())?.find?.((row) => row?.document)?.document?.fields : null;
+          return makeTimestampLike(sample?.createdAt);
+        };
+        const toTyped = (data) => Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)]));
+        const allowed = ["name", "memo", "commands", "initiative", "externalUrl", "x", "y", "width", "height", "status", "params"];
+        const edit = Object.fromEntries(Object.entries(fields).filter(([key]) => allowed.includes(key)));
+        const existing = (id) => {
+          const doc = ent?.roomCharacters?.entities?.[id];
+          if (!doc) throw new Error("대상을 찾지 못했습니다.");
+          if (doc.secret || doc.invisible) throw new Error("바꿀 수 없는 캐릭터입니다.");
+          return doc;
+        };
+        const create = async (data) => {
+          const at = await stamp();
+          const doc = { name: "", playerName: "", memo: "", initiative: 0, externalUrl: "", status: [{ label: "HP", value: 0, max: 0 }], params: [{ label: "", value: "" }], iconUrl: null, faces: [], x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, active: false, secret: false, invisible: false, hideStatus: false, color: "#888888", roomId: null, commands: "", speaking: false, diceSkin: {}, order: 1, ...data, owner: ctx.uid };
+          const response = await fetch(base, { method: "POST", headers, body: JSON.stringify({ fields: { ...toTyped(doc), createdAt: at, updatedAt: at } }) });
+          if (!response.ok) throw new Error(`만들기 실패 (${response.status})`);
+          return String((await response.json())?.name || "").split("/").pop();
+        };
+        const patch = async (id, data) => {
+          const names = [...Object.keys(data), "updatedAt"];
+          const response = await fetch(`${base}/${encodeURIComponent(id)}?${names.map((n) => `updateMask.fieldPaths=${n}`).join("&")}`, { method: "PATCH", headers, body: JSON.stringify({ fields: { ...toTyped(data), updatedAt: await stamp() } }) });
+          if (!response.ok) throw new Error(`바꾸기 실패 (${response.status})`);
+        };
+        if (type === "object.create") return create(edit);
+        const id = String(command.targetId || "");
+        const doc = existing(id);
+        if (type === "object.update") { await patch(id, edit); return id; }
+        if (type === "object.place") { await patch(id, { ...Object.fromEntries(Object.entries(edit).filter(([key]) => key === "x" || key === "y")), active: true }); return id; }
+        if (type === "object.duplicate") return create({ name: doc.name, memo: doc.memo, commands: doc.commands, initiative: doc.initiative, externalUrl: doc.externalUrl, width: doc.width, height: doc.height, status: doc.status, params: doc.params, x: doc.x, y: doc.y });
+        if (type === "object.delete") {
+          const response = await fetch(`${base}/${encodeURIComponent(id)}`, { method: "DELETE", headers });
+          if (!response.ok) throw new Error(`삭제 실패 (${response.status})`);
+          return id;
+        }
+        throw new Error("알 수 없는 명령입니다.");
+      },
       relayCreateObject: async (kind, params = {}) => {
         if (kind !== "dice") throw new Error("아직 만들 수 없는 종류입니다.");
         const room = Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0];
