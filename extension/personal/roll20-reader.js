@@ -97,6 +97,52 @@
     label.append(input, "/desc");
     send.after(label);
   };
+  // Voice and video off on entering the game (measured on a game screen): the settings sidebar keeps its sections in the page even when it is closed, "음성&영상" (#collapseAudioAndVideo) among them. Its
+  // controls are Element Plus selects: a label.legacy-label, a .el-select with the chosen text in .el-select__placeholder and an input[role=combobox] whose aria-controls names the list of options, which
+  // sits in a popper in the page (display none until opened). "채팅 기술" is #select_chat_tech; "송신 옵션" and "수신 옵션" only exist while the chat technology is on. A choice is made the way a click does it:
+  // clicking the option in that list. Nothing is opened or shown. Only a control whose chosen text differs is touched; what cannot be found or clicked is left alone (one line in the console).
+  const AV_TARGETS = [
+    { label: "송신 옵션", want: "미사용" },
+    { label: "수신 옵션", want: "미사용" },
+    { label: "채팅 기술", want: "영상/음성 채팅 사용 안 함" }
+  ];
+  const avSelectFor = text => {
+    const root = document.getElementById("collapseAudioAndVideo");
+    const label = root && [...root.querySelectorAll("label")].find(node => node.textContent.trim() === text);
+    return label?.parentElement?.querySelector(".el-select") || null;
+  };
+  const avChosen = select => (select.querySelector(".el-select__placeholder, .el-select__selected-item:not(.is-hidden)")?.textContent || "").trim();
+  const avOptions = select => {
+    const id = select.querySelector("input[role=combobox]")?.getAttribute("aria-controls");
+    const list = id ? document.getElementById(id) : null;
+    return [...(list?.closest(".el-select__popper") || list || document).querySelectorAll(".el-select-dropdown__item")];
+  };
+  const avPass = () => {
+    let touched = 0, pending = 0;
+    for (const target of AV_TARGETS) {
+      const select = avSelectFor(target.label);
+      if (!select) continue;
+      if (avChosen(select) === target.want) continue;
+      const option = avOptions(select).find(item => item.textContent.trim() === target.want);
+      if (!option) { pending += 1; continue; }
+      option.click();
+      touched += 1;
+    }
+    return { touched, pending };
+  };
+  const startAvOff = () => {
+    let enabled = true;
+    try { chrome.storage.local.get(["r20AvOff"]).then(value => { enabled = value.r20AvOff !== false; }); } catch (_) {}
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (!enabled || !document.getElementById("collapseAudioAndVideo")) { if (tries > 90) clearInterval(timer); return; }
+      const { touched, pending } = avPass();
+      // the sections of the settings sidebar are drawn a little after the page; once every control that exists has the wanted choice there is nothing more to do
+      if (!touched && !pending && AV_TARGETS.some(target => avSelectFor(target.label))) clearInterval(timer);
+      if (tries > 90) { clearInterval(timer); if (pending) console.info("[capybara roll20] voice/video: an option could not be found"); }
+    }, 1000);
+  };
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
     for (const el of document.querySelectorAll("#textchat .content div.message[data-messageid]")) {
@@ -118,6 +164,7 @@
     new MutationObserver(scan).observe(content, { childList: true });
   };
   const timer = setInterval(() => { observe(); scan(); mountDesc(); }, 5000);
+  startAvOff();
   const mountTimer = setInterval(() => { mountDesc(); if (document.getElementById(DESC_ID)) clearInterval(mountTimer); }, 500); // the chat input appears a little after the page loads
   setTimeout(() => clearInterval(mountTimer), 60000);
   observe();
