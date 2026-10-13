@@ -271,6 +271,11 @@ export class RoomRelay {
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+        // Card decks: only the back and the number of cards left (the faces of the cards inside never reach the relay). Dice symbols: position, size, faces, and the value unless it is hidden.
+        decks: (Array.isArray(body.decks) ? body.decks : []).slice(0, 50).filter(item => cdn(item?.coverUrl))
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), width: num(item.width, 1), height: num(item.height, 1), count: Math.max(0, Math.min(9999, Math.round(num(item.count)))), coverUrl: cdn(item.coverUrl) })),
+        diceSymbols: (Array.isArray(body.diceSymbols) ? body.diceSymbols : []).slice(0, 50).filter(item => item && typeof item.id === "string")
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), width: num(item.width, 2), height: num(item.height, 2), faces: Math.max(2, Math.min(1000, Math.round(num(item.faces, 6)))), closed: item.closed === true, value: item.closed === true ? 0 : Math.round(num(item.value)) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, name: text(item.name, 40),
             params: (Array.isArray(item.params) ? item.params : []).slice(0, 30).map(p => ({ label: text(p?.label, 20), value: text(String(p?.value ?? ""), 60) })).filter(p => p.label || p.value),

@@ -54,6 +54,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     renderScene({ ...room, screen: { scale: 0.8, x: 30, y: -12 } }); const first = { zoom: view.zoom, unit: view.unit, x: view.x, y: view.y };
     view.x = 5; renderScene({ ...room, screen: { scale: 1.5, x: 99, y: 99 } }); return { first, afterUpdate: { zoom: view.zoom, x: view.x } }; });
   assert(Math.abs(view0.first.unit - 24) < 1e-9); delete view0.first.unit; assert.deepEqual(view0.first, { zoom: 1, x: 0, y: 0 }, 'a player starts at scale 1, position 0,0 (measured), not at the GM view'); assert.deepEqual(view0.afterUpdate, { zoom: 1, x: 5 }, "later scene updates do not move the participant's own view");
+  // a card deck shows its back with the cards left; a dice symbol shows its value, "?" while hidden
+  const extra = await page.evaluate(() => { renderScene({ fieldWidth: 50, fieldHeight: 30, items: [], markers: [], characters: [], decks: [{ id: 'd1', x: 3, y: 4, z: 0, width: 6, height: 8, count: 54, coverUrl: 'https://storage.ccfolia-cdn.net/back.png' }], diceSymbols: [{ id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4, closed: false }, { id: 'b', x: 2, y: 2, width: 2, height: 2, faces: 20, value: 0, closed: true }] }); return { deck: !!document.querySelector('#scene-field img[data-kind="deck"]'), count: document.querySelector('.deck-count')?.textContent, dice: [...document.querySelectorAll('.scene-die')].map(d => d.textContent) }; });
+  assert.deepEqual(extra, { deck: true, count: '54 장', dice: ['4', '?'] });
   await browser.close();
   console.log('participant field PASS');
 })().catch(error => { console.error(error); process.exit(1); });

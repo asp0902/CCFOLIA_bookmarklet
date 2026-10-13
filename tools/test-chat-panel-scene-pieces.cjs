@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-cha
 const a = source.indexOf('  function relayItemView(');
 const b = source.indexOf('  // 다른 곳(롤20)에서 넘어온 메시지의 아이콘 주소');
 assert(a >= 0 && b > a, 'piece helpers not found');
-const { relayItemView, relayMarkerViews, relayCdnUrl } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews, relayCdnUrl })`, {});
+const { relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCdnUrl } = vm.runInNewContext(`${source.slice(a, b)}; ({ relayItemView, relayMarkerViews, relayDeckViews, relayDiceViews, relayCdnUrl })`, {});
 const CDN = 'https://storage.ccfolia-cdn.net/';
 const url = v => (typeof v === 'string' && v.startsWith(CDN) ? v : '');
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -40,4 +40,13 @@ assert.equal(relayCdnUrl('https://firebasestorage.googleapis.com/v0/b/ccfolia-16
 assert.equal(relayCdnUrl('https://storage.ccfolia-cdn.net/a.png'), 'https://storage.ccfolia-cdn.net/a.png');
 assert.equal(relayCdnUrl('https://firebasestorage.googleapis.com/v0/b/other-project.appspot.com/o/a.png'), '');
 assert.equal(relayCdnUrl('https://evil.example/a.png'), ''); assert.equal(relayCdnUrl(null), '');
+// decks: the pile only (back + cards left); the front address of any card inside never appears
+const decks = plain(relayDeckViews({ d1: { _id: 'd1', x: 3, y: 4, z: 2, zIndex: 9, width: 6, height: 8, coverImageUrl: `${CDN}back.png`, items: { c1: { imageUrl: `${CDN}front1.png`, memo: '비밀' }, c2: { imageUrl: `${CDN}front2.png`, memo: '' }, c3: { imageUrl: `${CDN}front3.png`, memo: '' } } }, d2: { _id: 'd2', coverImageUrl: 'https://evil.example/b.png', items: {} } }, url, num));
+assert.deepEqual(decks, [{ id: 'd1', x: 3, y: 4, z: 2, width: 6, height: 8, count: 3, coverUrl: `${CDN}back.png` }]);
+assert(!JSON.stringify(decks).includes('front') && !JSON.stringify(decks).includes('비밀'), 'no card face or memo is sent');
+assert.equal(relayDeckViews(null, url, num).length, 0);
+// dice symbols: place, size, faces, value; a hidden value is not sent
+const dice = plain(relayDiceViews({ a: { _id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4, closed: false, name: '-', owner: 'uid-secret', changeCount: 0 }, b: { _id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, value: 17, closed: true } }, num));
+assert.deepEqual(dice, [{ id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, closed: false, value: 4 }, { id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, closed: true, value: 0 }]);
+assert(!JSON.stringify(dice).includes('uid-secret'), 'the owner is not sent');
 console.log('chat panel scene pieces PASS');
