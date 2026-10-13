@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.50
+// @version      0.2.51
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.50";
+  const VERSION = "0.2.51";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3169,6 +3169,8 @@
         if (el.tagName === "HEADER") break;
       }
       out.chatTabsShell = shell.outerHTML;
+      const add = [...(paper || document).querySelectorAll("button")].find((button) => button.querySelector('path[d^="M19 13h-6v6h-2v-6H5"]') && button.closest('[role="tablist"]') !== null || (button.querySelector('path[d^="M19 13h-6v6h-2v-6H5"]') && button.getBoundingClientRect().height >= 40 && button.parentElement === tablist.parentElement));
+      if (add) { const copy = mirrorStripClone(add.cloneNode(true)); copy.removeAttribute("style"); out.chatTabAdd = copy.outerHTML; }
       const unread = (tab) => { const badge = tab.querySelector(".MuiBadge-badge"); return !!badge && !badge.classList.contains("MuiBadge-invisible"); };
       const plainLabel = (tab) => [...(tab.firstElementChild?.childNodes || [])].some((n) => n.nodeType === Node.TEXT_NODE && n.nodeValue.trim());
       const pick = (test) => tabs.find((tab) => test(tab) && plainLabel(tab)) || tabs.find(test);
@@ -3191,7 +3193,8 @@
     const bar = [...document.querySelectorAll("header")].find((header) => { const r = header.getBoundingClientRect(); return r.top < 5 && r.width > 600 && r.height >= 40 && header.querySelector("button h6"); });
     if (!bar) return null;
     const copy = mirrorStripClone(bar.cloneNode(true), true);
-    copy.querySelectorAll("button").forEach((button) => { if (/^\s*\[GM\]/.test(button.getAttribute("aria-label") || "")) button.remove(); });
+    // 플레이어 화면(시크릿 창 실측)에도 "[GM]" 목록 단추가 보인다. 빠지는 것은 툴킷이 붙인 핸드아웃 단추뿐(코코포리아 것이 아님).
+    copy.querySelectorAll("button").forEach((button) => { if ((button.getAttribute("aria-label") || "") === "핸드아웃") button.remove(); });
     const buttons = [...copy.querySelectorAll("button")];
     const title = copy.querySelector("button h6"), account = buttons.find((button) => button.querySelector("img"));
     if (buttons.length < 4 || !title || !account) return null;
@@ -3272,7 +3275,17 @@
   const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
   new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = { ...help, system: helpSystem() }; } }).observe(document.body, { childList: true, subtree: true });
   let helpProbing = false;
-  const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.system || "").slice(0, 60); } catch (_) { return ""; } };
+  // CCFOLIA's default account picture (/ccfolia.png, 2.4KB): read once from the GM's page and sent as a data URI, so the play room needs no extra image host.
+  let relayLogoCache = "";
+  async function relayLogoLoad() {
+    if (relayLogoCache) return;
+    try {
+      const response = await fetch("/ccfolia.png"), blob = await response.blob();
+      if (!response.ok || blob.type !== "image/png" || blob.size > 60000) return;
+      relayLogoCache = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => resolve(""); reader.readAsDataURL(blob); });
+    } catch (_) { /* the play room draws a letter instead */ }
+  }
+  const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.diceBotSystem || "").slice(0, 60); } catch (_) { return ""; } };
   // Opens the native dialog out of sight, reads it and closes it again - only when nothing is stored yet or the room's dice system changed since the stored text (otherwise the text is updated when the GM opens the dialog
   // themself); never while the GM is typing, focus goes back to where it was.
   async function relayHelpProbe() {
@@ -3308,9 +3321,9 @@
     const templateText = templates ? JSON.stringify(templates) : "";
     const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
     const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);
-    const helpHash = relayHelpCache ? hash(JSON.stringify(relayHelpCache)) : "";
+    const helpHash = relayHelpCache ? hash(JSON.stringify(relayHelpCache)) : "", logoHash = relayLogoCache ? hash(relayLogoCache) : "";
     return {
-      cssHash, tplHash, helpHash, fontLinks, help: relayHelpCache && helpHash !== known.helpHash ? relayHelpCache : undefined,
+      cssHash, tplHash, helpHash, logoHash, logo: relayLogoCache && logoHash !== known.logoHash ? relayLogoCache : undefined, fontLinks, help: relayHelpCache && helpHash !== known.helpHash ? relayHelpCache : undefined,
       css: css && cssHash !== known.cssHash ? css : undefined,
       templates: templates && tplHash !== known.tplHash ? templates : undefined
     };
@@ -3335,6 +3348,7 @@
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
       relayMirror,
       relayHelpProbe,
+      relayLogoLoad,
       relayScene: () => {
         try {
           const ent = findStore()?.getState()?.entities;

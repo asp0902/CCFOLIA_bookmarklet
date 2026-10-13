@@ -3,13 +3,13 @@
 // inside its own shadow root, so the mirrored CSS cannot touch the rest of this page and this page's CSS cannot touch the mirror. The CSS is fetched once as a file and shared
 // by every shadow root (one constructed style sheet). If anything is missing or fails, has() stays false and the built-in renderer is used.
 const cmMirror = (() => {
-  let clean = null, cssHash = "", tplHash = "", helpHash = "", token = 0, toolkitCss = false;
+  let clean = null, cssHash = "", tplHash = "", helpHash = "", logoHash = "", token = 0, toolkitCss = false;
   const templates = new Map(), hosts = new Map(), fontLinks = new Set();
   const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet();
   base.replaceSync("[hidden]{display:none !important}ul{height:100%;box-sizing:border-box}:host{color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}.MuiAppBar-positionFixed{position:relative !important}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
   const FONT = /^https:\/\/fonts\.googleapis\.com\//;
-  const api = { onChange: () => {}, help: null }; // help: the text of CCFOLIA's chat-command dialog (plain data, see cleanHelp)
+  const api = { onChange: () => {}, help: null, logo: "" }; // help: the text of CCFOLIA's chat-command dialog (plain data, see cleanHelp)
 
   // A template as { root, styles }: inline style attributes are taken off before the DOM is built (style-src 'self' would refuse them) and put back through the CSSOM on every copy.
   function prepare(html) {
@@ -56,14 +56,14 @@ const cmMirror = (() => {
         const el = document.createElement("link"); el.rel = "stylesheet"; el.href = href; document.head.append(el);
       }
       let changed = false;
-      if ((info.tplHash && info.tplHash !== tplHash) || (info.helpHash && info.helpHash !== helpHash)) {
+      if ((info.tplHash && info.tplHash !== tplHash) || (info.helpHash && info.helpHash !== helpHash) || (info.logoHash && info.logoHash !== logoHash)) {
         const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mirror.json`);
         if (!response.ok || mine !== token) return;
         const next = new Map(), loaded = await response.json();
         for (const [name, html] of Object.entries(loaded.templates || {})) { const prepared = prepare(html); if (prepared) next.set(name, prepared); }
         if (mine !== token) return;
         templates.clear(); next.forEach((value, key) => templates.set(key, value));
-        tplHash = info.tplHash || tplHash; helpHash = info.helpHash || ""; api.help = loaded.help || null; changed = true;
+        tplHash = info.tplHash || tplHash; helpHash = info.helpHash || ""; logoHash = info.logoHash || ""; api.help = loaded.help || null; api.logo = loaded.logo || ""; changed = true;
       }
       if (info.cssHash && info.cssHash !== cssHash) {
         const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mirror.css?v=${encodeURIComponent(info.cssHash)}`);

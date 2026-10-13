@@ -93,6 +93,9 @@ export function cleanHelp(help) {
   })).filter(section => section.title || section.text);
   return sections.length ? { title: text(help?.title, 100), system: text(help?.system, 60), sections } : null;
 }
+// CCFOLIA's default account picture as a small PNG data URI (the only image the play room takes from the GM besides CSS).
+const LOGO = /^data:image\/png;base64,[A-Za-z0-9+/=]{1,80000}$/;
+export const cleanLogo = value => (typeof value === "string" && LOGO.test(value) ? value : null);
 export function validateMirror(body) {
   const css = typeof body?.css === "string" ? body.css : null;
   if (css !== null && css.length > MIRROR_LIMITS.css) return { error: "css too large" };
@@ -111,5 +114,5 @@ export function validateMirror(body) {
     if (total > MIRROR_LIMITS.tplTotal) return { error: "templates too large" };
   }
   const fontLinks = (Array.isArray(body?.fontLinks) ? body.fontLinks : []).filter(link => typeof link === "string" && FONT_LINK.test(link)).slice(0, MIRROR_LIMITS.fontLinks);
-  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks, help: body?.help ? cleanHelp(body.help) : null };
+  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks, help: body?.help ? cleanHelp(body.help) : null, logo: cleanLogo(body?.logo) };
 }
