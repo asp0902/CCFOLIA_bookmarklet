@@ -70,7 +70,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.deepEqual(wheel, [{ s: 1.1, y: -211 }, { s: 1.2, y: -230 }, { s: 1.1, y: -211 }, { s: 0.2, y: -38 }, { s: 2, y: -384 }], 'one step per wheel event, clamped, the position scales with the scale');
   // the hand-check helper returns its result as one JSON text (it is also copied for pasting)
   const diag = await page.evaluate(() => window.playroomDiag());
-  assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'help', 'plainDice']);
+  assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'dpr', 'fieldSize', 'help', 'plainDice', 'scale', 'stage', 'touched', 'view', 'window']);
   await browser.close();
   console.log('participant field PASS');
 })().catch(error => { console.error(error); process.exit(1); });
