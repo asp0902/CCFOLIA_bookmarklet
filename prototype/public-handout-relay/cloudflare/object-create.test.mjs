@@ -59,6 +59,15 @@ assert.equal(del.response.status, 202);
 await call(`/api/admin/rooms/${room}/commands/${del.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
 assert.equal((await op("update", { kind: "character", id: "c2", fields: { name: "y" } })).response.status, 403, "deleted objects are no longer theirs");
 assert.equal((await op("create", { kind: "dice", id: "c1" })).response.status, 202); // (counts as one create)
+// two GM tabs: the one that claims a command first runs it, the other is told no; the same tab may claim again; a claim does not outlive a minute
+const claimCall = (id, by) => call(`/api/admin/rooms/${room}/commands/${id}/claim`, { gm: true, body: { by } });
+const raced = await op("update", { kind: "character", id: "c1", fields: { name: "z" } });
+assert.equal((await claimCall(raced.json.commandId, "tab-a")).json.claimed, true);
+assert.equal((await claimCall(raced.json.commandId, "tab-b")).json.claimed, false, "the other tab skips it");
+assert.equal((await claimCall(raced.json.commandId, "tab-a")).json.claimed, true, "the claiming tab again");
+assert.equal((await claimCall("nope", "tab-a")).json.claimed, false);
+await call(`/api/admin/rooms/${room}/commands/${raced.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
+assert.equal((await claimCall(raced.json.commandId, "tab-b")).json.claimed, false, "an answered command is not claimed again");
 // the participant can read what became of their own request (and only theirs)
 const statusOf = id => call(`/api/rooms/${room}/commands/${id}/result`, { cookie });
 assert.deepEqual((await statusOf(upd.json.commandId)).json, { status: "pending", error: "" });

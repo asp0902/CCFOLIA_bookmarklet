@@ -313,7 +313,8 @@ function renderScene(scene) {
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
-    if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
+    if (item.kind === "deck") img.dataset.kind = "deck"; // a deck is not a piece the participant moves: no id, so a press on it pans like on the background
+    else if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
     if (item.kind === "deck") {
@@ -376,7 +377,7 @@ speaker.addEventListener("change", () => { try { localStorage.setItem(SPEAKER_KE
 document.getElementById("scene-status").addEventListener("click", async event => {
   const bar = event.target.closest(".st-bar"); if (!bar) return;
   const answer = prompt("새 값", bar.dataset.value); if (answer === null || answer.trim() === "" || !Number.isFinite(Number(answer))) return;
-  try { await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status/set`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ characterId: bar.dataset.char, index: Number(bar.dataset.index), value: Number(answer) }) }); } catch (_) {}
+  try { const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/status/set`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ characterId: bar.dataset.char, index: Number(bar.dataset.index), value: Number(answer) }) }); if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "상태값을 바꾸지 못했습니다."); const result = await waitForCommand((await response.json().catch(() => ({}))).commandId); if (!result.ok) throw new Error(result.error); } catch (error) { showSendStatus(error.message || "상태값을 바꾸지 못했습니다.", 6000); }
 });
 window.addEventListener("resize", () => renderScene());
 // Zoom (wheel or +/- buttons) and pan (drag) of the stage.
@@ -422,11 +423,14 @@ window.addEventListener("resize", () => renderScene());
     const round = v => isChar ? Math.round(v) : Math.round(v * 100) / 100;
     const x = round(Number(el.dataset.x) + dx * k), y = round(Number(el.dataset.y) + dy * k);
     moved.set(id, { x, y, at: Date.now() });
+    // the piece stays where it was dropped while the GM's page does the move; if the relay or the GM's page refuses, it goes back and says why (it used to snap back after a few seconds without a word)
+    renderScene();
     try {
       const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/pieces/move`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, x, y }) });
-      if (!response.ok) throw new Error("이동 요청 실패");
-    } catch (_) { moved.delete(id); }
-    renderScene();
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "이동 요청 실패");
+      const answer = await waitForCommand((await response.json().catch(() => ({}))).commandId);
+      if (!answer.ok) throw new Error(answer.error);
+    } catch (error) { moved.delete(id); showSendStatus(error.message || "옮기지 못했습니다.", 6000); renderScene(); }
   };
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);

@@ -23,6 +23,7 @@
   let snapshotChain = Promise.resolve();
   let lastWarnAt = 0;
   const inFlight = new Set();
+  const tabToken = (crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`).slice(0, 64); // this tab, for claiming commands
   // Shown on the options page so the GM can see whether the push socket is up (otherwise only slow polling runs).
   const setSocketStatus = (state, detail = {}) => { try { Promise.resolve(chrome.storage.local.set({ relaySocket: { state, roomId, at: Date.now(), ...detail } })).catch(() => {}); } catch (_) {} };
   // Every failure is also kept (the last 10, with the request that failed) for the share settings window; the console shows one a few seconds.
@@ -167,6 +168,11 @@
     if (!(["chat.send", "piece.move", "status.set"].includes(command?.type) || /^object\.(create|update|delete|duplicate|place)$/.test(String(command?.type))) || !command.id) return;
     if (inFlight.has(command.id)) return; // already handed to the page; its result will acknowledge it
     if (config.delivered.has(command.id)) { await ack(command.id, "delivered"); return; }
+    // Another tab of this room may have the same command: only the tab the relay lets claim it runs it (an older relay without the claim answers 404: then every tab runs it, as before).
+    try {
+      const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/commands/${encodeURIComponent(command.id)}/claim`, { method: "POST", body: JSON.stringify({ by: tabToken }) });
+      if (response.ok && (await response.json().catch(() => ({}))).claimed !== true) return;
+    } catch (error) { warn(error); }
     inFlight.add(command.id);
     await rememberDelivered(command.id);
     window.postMessage({ source: ROOM_SOURCE, direction: "bridge", action: "command", roomId, command }, location.origin);

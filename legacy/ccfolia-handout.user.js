@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.96
+// @version      0.1.97
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.96",
+    version: "0.1.97",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -354,7 +354,7 @@
     }
     pendingPublicRelayRequests.add(requestId);
     window.postMessage(message, location.origin);
-    toast(action === "share" ? "공개 핸드아웃을 릴레이로 전송 중입니다." : "웹 공유를 중단 중입니다.");
+    toast(action === "share" ? "핸드아웃을 공유하는 중입니다." : "공유를 중단하는 중입니다.");
   }
 
   window.addEventListener("message", event => {
@@ -363,8 +363,8 @@
     const call = relayCalls.get(result.requestId);
     if (call) { relayCalls.delete(result.requestId); if (result.ok) call.resolve(result); else call.reject(new Error(result.error || "릴레이 요청 실패")); return; }
     if (!pendingPublicRelayRequests.delete(result.requestId)) return;
-    if (!result.ok) { toast(result.error || "웹 공유에 실패했습니다."); return; }
-    if (result.action === "stop") { toast("웹 공유를 중단했습니다."); return; }
+    if (!result.ok) { toast(result.error || "공유에 실패했습니다."); return; }
+    if (result.action === "stop") { toast("공유를 중단했습니다."); return; }
     if (result.inviteUrl) prompt("참여자에게 전달할 읽기 전용 링크입니다.", result.inviteUrl);
   }, lifecycle.withSignal());
 
@@ -3290,8 +3290,8 @@
           <div class="head">
             ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
-            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="웹 공유" aria-label="웹 공유">${WEB_SHARE_ICON}</button>` : ""}
-            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="웹 공유 중단" aria-label="웹 공유 중단">${WEB_STOP_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="공유" aria-label="공유">${WEB_SHARE_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="공유 중단" aria-label="공유 중단">${WEB_STOP_ICON}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
