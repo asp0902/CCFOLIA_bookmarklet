@@ -559,7 +559,8 @@ export class RoomRelay {
         command.targetId = targetId;
         if (kind === "dice" && op === "update") command.roll = true; // the GM's page picks the number
         else if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
-        if (op === "place") command.fields = cleanCharacterFields({ x: body.x, y: body.y });
+        if (op === "place" && body.stow === true) { command.stow = true; command.fields = {}; } // put it away (off the screen)
+        else if (op === "place") command.fields = cleanCharacterFields({ x: body.x, y: body.y });
       }
       if (op === "create" || op === "duplicate") {
         const allowed = checkCreate(room, member);

@@ -80,6 +80,8 @@ assert.equal(roll.response.status, 202); assert.equal((await call(`/api/admin/ro
 assert.equal((await op("update", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to roll");
 assert.equal((await op("delete", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to delete");
 assert.equal((await op("delete", { kind: "dice", id: "doc123" })).response.status, 202);
+const stow = await op("place", { kind: "character", id: "c1", stow: true });
+assert.equal(stow.response.status, 202); assert.equal((await call(`/api/admin/rooms/${room}/commands`, { gm: true })).json.commands.find(c => c.id === stow.json.commandId)?.stow, true, "put away");
 assert.equal((await call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "deck", id: "d", x: 1, y: 1 } })).response.status, 400, "decks are not movable");
 // the participant can read what became of their own request (and only theirs)
 const statusOf = id => call(`/api/rooms/${room}/commands/${id}/result`, { cookie });

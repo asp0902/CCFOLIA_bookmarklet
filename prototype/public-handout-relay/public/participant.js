@@ -320,7 +320,7 @@ function renderScene(scene) {
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
     if (item.kind === "deck") img.dataset.kind = "deck"; // a deck is not a piece the participant moves: no id, so a press on it pans like on the background
-    else if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
+    else if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; if (window.__selectedDie === item.id) img.classList.add("selected"); }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
     if (item.kind === "deck") {
@@ -442,17 +442,42 @@ window.addEventListener("resize", () => renderScene());
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
   // Own dice symbols (a CCFOLIA player moves, rolls and deletes only the ones they made): a click or right click selects (blue outline) and the right click opens the menu.
-  const selectDie = node => { document.querySelectorAll(".scene-die.selected,.scene-die-img.selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = node ? node.dataset.id : null; node?.classList.add("selected"); };
-  stage.addEventListener("pointerdown", event => { if (interactive(event.target)) return; selectDie(event.target.closest?.(".scene-die.mine,.scene-die-img.mine") || null); }, true);
+  const pieceNode = target => target.closest?.(".scene-die.mine,.scene-die-img.mine,img[data-kind=character]") || null;
+  const selectDie = node => { document.querySelectorAll(".stage .selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = node ? node.dataset.id : null; node?.classList.add("selected"); };
+  stage.addEventListener("pointerdown", event => { if (interactive(event.target)) return; selectDie(pieceNode(event.target)); }, true);
   stage.addEventListener("contextmenu", event => {
-    const node = event.target.closest?.(".scene-die.mine,.scene-die-img.mine");
+    if (interactive(event.target)) return;
+    if (event.target.closest?.("#scene-field")) event.preventDefault(); // never the browser's image menu on the scene
+    const node = pieceNode(event.target);
     if (!node) return;
-    event.preventDefault(); selectDie(node);
+    selectDie(node);
     const id = node.dataset.id, fail = answer => { if (!answer.ok) showSendStatus(answer.error || "처리하지 못했습니다.", 6000); };
     const anchor = { setAttribute() {}, getBoundingClientRect: () => ({ left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY - 4 }) };
+    if (node.dataset.kind === "dice") {
+      openMenu(anchor, [
+        { label: "roll a dice", run: async () => fail(await characterRequest("update", { kind: "dice", id })) },
+        { label: "삭제", run: async () => { selectDie(null); fail(await characterRequest("delete", { kind: "dice", id })); } }
+      ]);
+      return;
+    }
+    // A character, as CCFOLIA's player menu lists it. What this page can do for the person: look at (or, for their own, edit) the sheet, put away, duplicate, delete, copy the id and
+    // pick a palette line; rotate, take ownership and copy are shown but off until their native behaviour is measured.
+    const mine = ownedIds.has(id), scene = (sceneData?.characters || []).find(c => c.id === id);
+    const palette = String(scene?.commands || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     openMenu(anchor, [
-      { label: "roll a dice", run: async () => fail(await characterRequest("update", { kind: "dice", id })) },
-      { label: "삭제", run: async () => { selectDie(null); fail(await characterRequest("delete", { kind: "dice", id })); } }
+      { label: "편집", run: () => (mine ? openCharacterEditor(id) : openSheet(id)) },
+      { label: "회전", key: "R or Shift+R", disabled: true },
+      { divider: true },
+      { label: "집어넣기", key: "S", disabled: !mine, run: async () => { selectDie(null); fail(await characterRequest("place", { id, stow: true })); setTimeout(refreshMyCharacters, 900); } },
+      { label: "소유 권한 갖기", key: "T", disabled: true },
+      { label: "복제", key: "Ctrl+D", disabled: !mine, run: async () => { fail(await characterRequest("duplicate", { id })); setTimeout(refreshMyCharacters, 900); } },
+      { label: "복사", key: "Ctrl+C", disabled: true },
+      { divider: true },
+      { label: "채팅 팔레트", key: "▸", disabled: !palette.length, run: () => openMenu(anchor, palette.map(line => ({ label: line.length > 40 ? `${line.slice(0, 40)}…` : line, run: () => insertAtCursor(line) }))) },
+      { divider: true },
+      { label: "삭제", key: "Ctrl+⌫", disabled: !mine, run: async () => { if (!confirm("이 캐릭터를 삭제할까요?")) return; selectDie(null); fail(await characterRequest("delete", { id })); setTimeout(refreshMyCharacters, 900); } },
+      { divider: true },
+      { label: "ID 복사(개발자용)", run: () => navigator.clipboard?.writeText(id).catch(() => {}) }
     ]);
   });
   stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.touched = true; view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
@@ -1138,6 +1163,7 @@ function openMenu(anchor, items) {
     // a link the menu opens in a new tab (CCFOLIA's help / terms / privacy entries), or an entry shown but not usable here (log in, developer commands)
     if (item.href) { const link = el("a", "menu-item", item.label); link.href = item.href; link.target = "_blank"; link.rel = "noopener noreferrer"; link.setAttribute("role", "menuitem"); link.addEventListener("click", () => closeMenu()); paper.append(link); continue; }
     const row = el("button", "menu-item", item.label); row.type = "button"; row.setAttribute("role", "menuitem");
+    if (item.key) { row.classList.add("has-key"); row.append(el("span", "menu-key", item.key)); }
     if (item.disabled) { row.disabled = true; row.setAttribute("aria-disabled", "true"); paper.append(row); continue; }
     if (item.current) row.dataset.current = "1";
     row.addEventListener("click", () => { closeMenu(); item.run(); });
