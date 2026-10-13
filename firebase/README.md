@@ -47,5 +47,5 @@ The GM seat can be taken back on another browser by a client that writes `meta/g
 ## Publishing (by the owner, in the Firebase console)
 Firebase console -> project `ccfolia-handout-25c6b` -> Firestore Database -> Rules -> paste -> Publish. Keep a copy of the old text above to roll back (Rules tab -> history also keeps earlier versions). With the Firebase CLI: `firebase deploy --only firestore:rules --project ccfolia-handout-25c6b` from a folder that has `firebase.json` pointing at this file.
 
-## Not tested here
-The rules are not run against the emulator yet (it needs the Firebase emulator download); read them with that in mind. A rules test with `@firebase/rules-unit-testing` is the next step once downloading the emulator is allowed.
+## Tests
+`firebase/rules-test/` runs 53 checks against the Firestore emulator (`cd firebase/rules-test && npm install && npm test`; needs Java): originals GM only, inbox per person, members, the GM seat, folders, shows, presence, pictures, closed paths. The run found one hole in the first draft (a merge update could take the GM seat without knowing the owner uid); the seat takeover now needs a proof document `claims/{gmCcfoliaUid}_{uid}` that the handout tool (0.1.99) creates first. Known weakness that remains: whoever knows the owner CCFOLIA uid can still take the seat.

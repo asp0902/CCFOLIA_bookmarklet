@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.98
+// @version      0.1.99
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.98",
+    version: "0.1.99",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2296,6 +2296,8 @@
     const { doc, setDoc, serverTimestamp } = fb.modules.fs;
     const roomKey = getCurrentRoomKey();
     if (roomKey === "global") throw new Error("not in a room");
+    // Taking the seat over from another browser of the same CCFOLIA account needs the proof document the rules ask for (harmless when the seat is new or already ours).
+    if (myCcfUid) { try { await setDoc(doc(fb.db, "rooms", roomKey, "claims", `${myCcfUid}_${fb.uid}`), { at: serverTimestamp() }); } catch (_) {} }
     await setDoc(doc(fb.db, "rooms", roomKey, "meta", "gm"), {
       gmCharacter: gmCharacter || "",
       gmUid: fb.uid,
