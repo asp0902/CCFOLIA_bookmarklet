@@ -42,7 +42,7 @@ assert.equal(relayCdnUrl('https://firebasestorage.googleapis.com/v0/b/other-proj
 assert.equal(relayCdnUrl('https://evil.example/a.png'), ''); assert.equal(relayCdnUrl(null), '');
 // decks: the pile only (back + cards left); the front address of any card inside never appears
 const decks = plain(relayDeckViews({ d1: { _id: 'd1', x: 3, y: 4, z: 2, zIndex: 9, width: 6, height: 8, coverImageUrl: `${CDN}back.png`, items: { c1: { imageUrl: `${CDN}front1.png`, memo: '비밀' }, c2: { imageUrl: `${CDN}front2.png`, memo: '' }, c3: { imageUrl: `${CDN}front3.png`, memo: '' } } }, d2: { _id: 'd2', coverImageUrl: 'https://evil.example/b.png', items: {} } }, url, num));
-assert.deepEqual(decks, [{ id: 'd1', x: 3, y: 4, z: 2, width: 6, height: 8, count: 3, coverUrl: `${CDN}back.png` }]);
+assert.deepEqual(decks, [{ id: 'd1', x: 3, y: 4, z: 2, layer: 9, width: 6, height: 8, count: 3, coverUrl: `${CDN}back.png` }]);
 assert(!JSON.stringify(decks).includes('front') && !JSON.stringify(decks).includes('비밀'), 'no card face or memo is sent');
 assert.equal(relayDeckViews(null, url, num).length, 0);
 // the default card back is a path on CCFOLIA's own site: the path is sent (the picture comes as an asset), other relative paths and other hosts are not
@@ -58,4 +58,6 @@ assert.deepEqual(docs.map(d => d.id), ['a', 'b']);
 assert.deepEqual([docs[0].name, docs[0].memo, docs[0].commands, docs[0].initiative, docs[0].x, docs[0].y, docs[0].active, docs[0].status[0].value], ['알리스', '메모', '1d100', 3, 5, -6, false, 7]);
 assert.deepEqual([docs[1].name, docs[1].memo, docs[1].status.length, docs[1].params.length], ['', '', 0, 0], 'a hidden character shows nothing');
 assert(!JSON.stringify(docs).includes('uid-secret'), 'no owner id');
+// a new die or deck makes the scene go out at once (the store watch lists them)
+assert(/const sig = \[ent\?\.rooms, ent\?\.roomItems, ent\?\.roomCharacters, ent\?\.roomDecks, ent\?\.roomDices\]/.test(source), 'scene watch includes decks and dice');
 console.log('chat panel scene pieces PASS');
