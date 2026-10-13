@@ -37,6 +37,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.click('text=이 캐릭터로 발언');
   assert.equal(await page.locator('#speaker').inputValue(), 'c1');
   assert.equal(await page.locator('.dlg').count(), 0);
+  // the pencil button and its menu work with a real mouse (the stage's pan handler must not take the press), the menu opens above the button, and the dice symbol item asks the relay
+  await page.mouse.click(...await page.evaluate(() => { const r = document.querySelector('.pen-fab').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  const pen = await page.evaluate(() => { const m = document.querySelector('.pen-menu'), f = document.querySelector('.pen-fab'); return { open: !m.hidden, above: m.getBoundingClientRect().bottom <= f.getBoundingClientRect().top }; });
+  assert.deepEqual(pen, { open: true, above: true }, 'the pencil menu opens above the button');
+  const asked = page.waitForRequest(req => req.url().endsWith('/objects/create') && req.method() === 'POST');
+  await page.locator('.pen-item', { hasText: '다이스 심볼을 추가' }).click();
+  assert.deepEqual(JSON.parse((await asked).postData()), { kind: 'dice' });
+  assert.equal(await page.evaluate(() => document.querySelector('.pen-menu').hidden), true, 'the menu closes after a choice');
+  await page.mouse.click(...await page.evaluate(() => { const r = document.querySelector('.select-tool').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  assert.equal(await page.getAttribute('.select-tool', 'aria-pressed'), 'true', 'the select tool toggles with a real click');
   // a click (not a drag) on the piece opens the sheet too
   const b = await page.locator('img[data-id="c1"]').boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
