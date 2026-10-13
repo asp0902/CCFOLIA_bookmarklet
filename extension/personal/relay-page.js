@@ -120,7 +120,7 @@
       catch (error) { warnOnce(clean(error?.message || "전송 실패", 200)); }
       return;
     }
-    if (request.action !== "command" || !["chat.send", "piece.move", "status.set"].includes(request.command?.type) || /^object\.(create|update|delete|duplicate|place)$/.test(String(request.command?.type)) || request.roomId !== roomId) return;
+    if (request.action !== "command" || !(["chat.send", "piece.move", "status.set"].includes(request.command?.type) || /^object\.(create|update|delete|duplicate|place)$/.test(String(request.command?.type))) || request.roomId !== roomId) return;
     const commandId = clean(request.command.id, 100);
     try {
       const api = window.__CCF_SECOND_CHAT_PANEL__;
