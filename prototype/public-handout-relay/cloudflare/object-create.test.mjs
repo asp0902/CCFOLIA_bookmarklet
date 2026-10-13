@@ -14,6 +14,8 @@ const joined = await call("/api/join", { body: { roomId: room, token, displayNam
 const cookie = joined.response.headers.get("set-cookie").split(";")[0];
 const participant = (await call(`/api/admin/rooms/${room}/participants`, { gm: true })).json.participants[0];
 await call(`/api/admin/rooms/${room}/participants/${participant.id}/decision`, { gm: true, body: { decision: "approve" } });
+const approvedStatus = (await call(`/api/rooms/${room}/status`, { cookie })).json;
+assert.equal(approvedStatus.status, "approved"); assert(Date.parse(approvedStatus.approvedAt) > 0, "the time of approval is kept and given back to the participant");
 const scene = body => call(`/api/admin/rooms/${room}/scene`, { gm: true, body });
 const field = async () => (await call(`/api/rooms/${room}/state`, { cookie })).json.scene;
 

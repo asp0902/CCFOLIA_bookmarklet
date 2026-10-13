@@ -141,6 +141,10 @@ seekInput.addEventListener("pointerup", () => { delete seekInput.dataset.draggin
 // Handout popup: when the GM shares (or updates) a handout it pops up over the page like a CCFOLIA dialog; "핸드아웃" in the header reopens it.
 const handoutEl = document.getElementById("handout");
 let handoutSeen = "", handoutClosed = "";
+// The time the GM let this person in (the relay's /status): a handout pops up by itself only when it was shared or changed after that; what was already there when they came in is only in their list
+// (with the dot for unread). Without a time (people let in before the relay kept it) every new one pops up as before.
+let approvedAt = "";
+const arrivedAfterApproval = updatedAt => !approvedAt || Date.parse(updatedAt) > Date.parse(approvedAt);
 {
   const backdrop = document.createElement("div"); backdrop.id = "handout-backdrop"; backdrop.hidden = true;
   const close = document.createElement("button"); close.type = "button"; close.id = "handout-close"; close.textContent = "닫기";
@@ -158,7 +162,7 @@ let handoutSeen = "", handoutClosed = "";
     handoutEl.hidden = false;
     // it pops up when it is new or changed, not again on every reload: what was shown is remembered in the browser
     const shownBefore = (() => { try { const stored = localStorage.getItem("capybara-handout-legacy-shown") || ""; return stored === key || (!handout.updatedAt && stored.startsWith(`${handout.id}:`)); } catch (_) { return false; } })(); // a state without its time stamp (before the full one arrives) is the same handout
-    if (key !== handoutSeen && !(!handout.updatedAt && handoutSeen.startsWith(`${handout.id}:`))) { handoutSeen = key; try { if (handout.updatedAt || !shownBefore) localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
+    if (key !== handoutSeen && !(!handout.updatedAt && handoutSeen.startsWith(`${handout.id}:`))) { handoutSeen = key; try { if (handout.updatedAt || !shownBefore) localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore && arrivedAfterApproval(handout.updatedAt)) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
   };
 }
 // ---- My handouts: the GM's handout tool works out what each person may read (title, body with its formatting, the secret part only for those who may read it) and the relay gives a participant only their own list.
@@ -217,7 +221,7 @@ function applyMyHandouts(items, announce) {
   myHandouts = Array.isArray(items) ? items : [];
   refreshHandoutButton();
   if (!announce) return;
-  const fresh = myHandouts.filter(h => handoutIsNew(h) && before.get(h.id) !== handoutStamp(h));
+  const fresh = myHandouts.filter(h => handoutIsNew(h) && before.get(h.id) !== handoutStamp(h) && arrivedAfterApproval(h.updatedAt));
   if (fresh.length) openHandoutDetail([...fresh].sort((x, y) => String(y.updatedAt).localeCompare(String(x.updatedAt)))[0].id); // the most recently changed one (the first listed on a tie)
 }
 async function loadMyHandouts(announce = false) {
@@ -1023,6 +1027,7 @@ async function checkStatus() {
   if (transient(response)) return;
   if (!response.ok) return stop("요청이 만료되었거나 룸이 종료되었습니다.");
   const data = await response.json();
+  if (data.approvedAt) approvedAt = data.approvedAt;
   if (data.displayName && !chatName.dataset.touched) chatName.value = data.displayName;
   if (data.status === "approved") {
     consent.hidden = true; gateStatus.hidden = true; room.inert = false; room.removeAttribute("aria-hidden");
