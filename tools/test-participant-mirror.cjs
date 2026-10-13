@@ -23,7 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.hostname !== 'relay.test') return route.abort();
-    if (u.pathname.endsWith('/mirror.json')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ templates, help: { title: '채팅 커맨드', sections: [{ title: '공통', text: 'CC<=x 문서: https://docs.bcdice.org/ 끝', links: [{ text: 'https://docs.bcdice.org/', href: 'https://docs.bcdice.org/' }] }] } }) });
+    if (u.pathname.endsWith('/mirror.json')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ assets: globalThis.__assets || {}, templates, help: { title: '채팅 커맨드', sections: [{ title: '공통', text: 'CC<=x 문서: https://docs.bcdice.org/ 끝', links: [{ text: 'https://docs.bcdice.org/', href: 'https://docs.bcdice.org/' }] }] } }) });
     if (u.pathname.endsWith('/mirror.css')) return route.fulfill({ contentType: 'text/css', body: '.row .nm{font-weight:700}.tm{color:rgb(117,117,117)}.dv{display:none}.ccf-render-root{white-space:pre-wrap}' });
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
@@ -138,6 +138,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const pos = await page.evaluate(() => { const st = document.querySelector('.stage').getBoundingClientRect(), z = document.getElementById('zoom-host').shadowRoot.firstElementChild.getBoundingClientRect(), t = document.querySelector('.select-tool').getBoundingClientRect(); return { zRight: Math.round(st.right - z.right), zBottom: Math.round(st.bottom - z.bottom), toolBottom: Math.round(st.bottom - t.bottom), zIndexZoom: getComputedStyle(document.getElementById('zoom-host')).zIndex }; });
   assert.deepEqual({ zRight: pos.zRight, zBottom: pos.zBottom, toolBottom: pos.toolBottom }, { zRight: 32, zBottom: 96, toolBottom: 230 });
   assert(Number(pos.zIndexZoom) >= 100, 'the zoom bar is above the map objects');
+  // pictures that arrive with the mirror are drawn on the scene right away: a deck without its card back is absent, then present once the assets are in
+  await page.evaluate(() => renderScene({ fieldWidth: 50, fieldHeight: 30, items: [], markers: [], characters: [], decks: [{ id: 'd1', x: 3, y: 4, z: 0, width: 4, height: 6, count: 54, coverUrl: '/images/trump/z01.png' }], diceSymbols: [] }));
+  assert.equal(await page.locator('#scene-field img[data-kind="deck"]').count(), 0);
+  globalThis.__assets = { '/images/trump/z01.png': 'data:image/png;base64,iVBORw0KGgo=' };
+  await page.evaluate(s => renderState(s), state({ ...info, assetsHash: 'a1' }));
+  await page.waitForFunction(() => document.querySelectorAll('#scene-field img[data-kind="deck"]').length === 1);
   // the "?" button shows once the GM's help text has arrived and opens it as a dialog (links open in a new tab without opener)
   await page.waitForFunction(() => !document.getElementById('help-btn').hidden);
   await page.evaluate(() => document.getElementById('help-btn').click());

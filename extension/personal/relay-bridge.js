@@ -144,6 +144,11 @@
     own.onclose = event => dropSocket(own, event);
     own.onerror = () => {};
   }
+  // Small pictures of CCFOLIA's own site as { path: PNG data URI } for the play room (the relay checks them again): bounded here before sending.
+  function boundedAssets(value) {
+    if (!value || typeof value !== "object") return undefined;
+    return Object.fromEntries(Object.entries(value).filter(([path, data]) => typeof data === "string").slice(0, 24).map(([path, data]) => [String(path).slice(0, 120), data.slice(0, 90000)]));
+  }
   async function handleCommand(command) {
     if (!["chat.send", "piece.move", "status.set", "object.create"].includes(command?.type) || !command.id) return;
     if (inFlight.has(command.id)) return; // already handed to the page; its result will acknowledge it
@@ -214,7 +219,7 @@
       // Native mirroring: the relay re-checks and stores these (Worker mirror route); here only the shape and size are bounded before sending.
       if (request.action === "mirror") {
         const templates = request.templates && typeof request.templates === "object" ? Object.fromEntries(Object.entries(request.templates).filter(([, value]) => typeof value === "string").slice(0, 60)) : undefined;
-        const body = { css: typeof request.css === "string" ? request.css.slice(0, 900_000) : undefined, templates, help: request.help && typeof request.help === "object" ? request.help : undefined, assets: typeof request.assets === "string" ? request.assets.slice(0, 90000) : undefined, fontLinks: Array.isArray(request.fontLinks) ? request.fontLinks.filter(link => typeof link === "string").slice(0, 6) : [] };
+        const body = { css: typeof request.css === "string" ? request.css.slice(0, 900_000) : undefined, templates, help: request.help && typeof request.help === "object" ? request.help : undefined, assets: boundedAssets(request.assets), fontLinks: Array.isArray(request.fontLinks) ? request.fontLinks.filter(link => typeof link === "string").slice(0, 6) : [] };
         if (body.css !== undefined || body.templates || body.help || body.assets) {
           await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/mirror`, body);
           // what was collected, for the share settings window (the structure check of the mirror: a template CCFOLIA's page no longer yields is missing here)

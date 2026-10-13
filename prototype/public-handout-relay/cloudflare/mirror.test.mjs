@@ -31,6 +31,12 @@ assert.deepEqual(state.mirror.fontLinks, ["https://fonts.googleapis.com/css2?fam
 // a template-only update keeps the stored CSS
 await post({ templates: { row: "<div></div>" } });
 assert.equal((await call(`/api/rooms/${room}/mirror.css`, { cookie })).text, " .a{background:none}");
+// pictures of CCFOLIA's own site (card backs, dice faces): stored as a table, announced by a hash in /state, served with mirror.json
+const png = "data:image/png;base64,iVBORw0KGgo=";
+assert.equal((await post({ assets: { "/images/trump/z01.png": png, "/images/6_dice/6_dice[1].png": png, "/evil.png": png } })).response.status, 200);
+const stateNow = (await call(`/api/rooms/${room}/state`, { cookie })).json;
+assert.match(stateNow.mirror.assetsHash, /\S/);
+assert.deepEqual((await call(`/api/rooms/${room}/mirror.json`, { cookie })).json.assets, { "/images/trump/z01.png": png, "/images/6_dice/6_dice[1].png": png });
 // not reachable without approval / as a stranger
 assert.equal((await call(`/api/rooms/${room}/mirror.css`)).response.status >= 400, true);
 console.log("mirror worker PASS");
