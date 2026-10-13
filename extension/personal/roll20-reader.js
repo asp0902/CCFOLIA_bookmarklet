@@ -23,13 +23,35 @@
     if (!src) return "";
     try { const url = new URL(src, location.href); return url.protocol === "https:" && url.href.length <= 500 ? url.href : ""; } catch (_) { return ""; }
   };
+  // A message that carries styled links or pictures (a CSS macro): its markup is rebuilt as the macro text it was typed as, so the CCFOLIA side can convert it with the same function the chat input uses
+  // ([label](#" style="…") for a styled link, [x](https://…) for a picture). Plain text, roll results and anything with a style that could not be written back (a ")" or a quote in it) stay plain.
+  const httpsUrl = value => { try { const url = new URL(value, location.href); return url.protocol === "https:" && url.href.length <= 500 && !/[\s()<>"]/.test(url.href) ? url.href : ""; } catch (_) { return ""; } };
+  const macroOf = (body, kind) => {
+    let styled = false;
+    const walk = node => {
+      if (node.nodeType === 3) return node.nodeValue;
+      if (node.nodeType !== 1) return "";
+      if (node.tagName === "BR") return "\n";
+      if (node.tagName === "IMG") { const src = httpsUrl(node.getAttribute("src")); if (src) styled = true; return src ? `[x](${src})` : ""; }
+      if (node.tagName === "A") {
+        const inner = [...node.childNodes].map(walk).join("").replace(/[\r\n]+/g, " ");
+        const style = (node.getAttribute("style") || "").trim();
+        if (node.querySelector("img")) return inner;
+        if (style && !/[)"\r\n]/.test(style)) { styled = true; return `[${inner.replace(/[\[\]]/g, "")}](#" style="${style}")`; }
+        return inner;
+      }
+      return [...node.childNodes].map(walk).join("");
+    };
+    const text = walk(body).trim();
+    return styled && text.length <= 8000 ? `${kind === "desc" ? "/desc " : ""}${text}` : "";
+  };
   const read = el => {
     const by = el.querySelector(".by");
     const name = by ? clean(by.textContent, 80).replace(/:$/, "").trim() : "";
     // Roll20 leaves the name (and picture) out of consecutive lines by the same speaker; a new name takes its own picture, or none
     if (name) { lastName = name; lastAvatar = avatarOf(el); }
     const kind = el.classList.contains("rollresult") ? "rollresult" : el.classList.contains("emote") ? "emote" : el.classList.contains("desc") ? "desc" : "general";
-    let text;
+    let text, macro = "";
     if (kind === "rollresult") {
       const formula = clean(el.querySelector(".formula")?.textContent, 200).replace(/^rolling\s+/i, "");
       text = `${formula} → ${clean(el.querySelector(".rolled")?.textContent, 40)}`;
@@ -37,8 +59,9 @@
       const body = el.cloneNode(true);
       body.querySelectorAll(".by, .tstamp, .avatar").forEach(node => node.remove());
       text = clean(body.innerText, 2000); // roll templates keep their line breaks
+      macro = macroOf(body, kind);
     }
-    return { id: clean(el.dataset.messageid, 160), name: name || lastName, avatar: name ? lastAvatar : (avatarOf(el) || lastAvatar), text, kind, source: "roll20", campaignId };
+    return { id: clean(el.dataset.messageid, 160), name: name || lastName, avatar: name ? lastAvatar : (avatarOf(el) || lastAvatar), text, ...(macro ? { macro } : {}), kind, source: "roll20", campaignId };
   };
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload

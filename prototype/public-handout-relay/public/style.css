@@ -353,3 +353,7 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .dlg-foot.ce-foot{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:8px 0;background:rgba(0,0,0,.22)}.dlg-foot.ce-foot button{justify-self:center}.dlg-foot.ce-foot .ce-danger{margin-right:0}
 .ce-icon{font-weight:300;font-size:26px}
 .cw-row .char-text b,.cw-row .char-text small{display:block;font-size:16px;line-height:20px;font-weight:400;color:#fff}
+/* Roll20 handout macros in the play room (same names as the toolkit's, so its mirrored CSS and these agree): a line that pulls its blocks over the neighbours sits in a /desc line's padding; pictures keep their size up to the full width */
+.ccr20-render-root .ccr20-line.ccr20-line-flush{display:block;padding:14px 10px 8px}
+.ccr20-render-root .ccr20-line-flush .ccr20-image-frag{display:block;overflow:visible}
+.ccr20-render-root .ccr20-line-flush .ccr20-image{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;border:0}

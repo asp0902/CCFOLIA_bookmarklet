@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.97
+// @version      0.3.98
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.97"),
+    version: getUserscriptVersion("0.3.98"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -395,6 +395,21 @@
   }
 
   ccr20Lifecycle.installDebugApi({ renderMacroHtml });
+  if (window.__CCF_ROLL20_BRIDGE_DEBUG__) window.__CCF_ROLL20_BRIDGE_DEBUG__.macroToText = macroToText;
+
+  // The same conversion the chat input gets when a macro is sent (visible text + invisible envelope), for a macro that comes from somewhere else (the Roll20 link): one function for both.
+  function macroToText(source) {
+    const editor = document.createElement("textarea");
+    editor.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px";
+    document.body.appendChild(editor);
+    try {
+      editor.value = String(source || "");
+      preparePayloadForSend(editor);
+      return getEditorText(editor);
+    } finally {
+      editor.remove();
+    }
+  }
 
   function renderMacroHtml(source) {
     const draft = parseRoll20MacroToDraft(source);
@@ -1018,6 +1033,14 @@
         width: 100%;
         max-width: 100%;
       }
+
+      /* a macro line that pulls its blocks over the neighbours with negative margins (Roll20 handout macros) sits in the padding Roll20 gives a /desc line; its pictures keep their own size up to the full width */
+      .ccr20-render-root .ccr20-line.ccr20-line-flush {
+        display: block;
+        padding: 14px 10px 8px;
+      }
+      .ccr20-render-root .ccr20-line-flush .ccr20-image-frag { overflow: visible; }
+      .ccr20-render-root .ccr20-line-flush .ccr20-image { width: auto; max-width: 100%; margin: 0 auto; }
 
       [data-ccf-narration-hidden="1"] {
         display: none !important;
@@ -3114,7 +3137,7 @@
     const display = `${el.style.display || window.getComputedStyle(el).display || ""}`.trim().toLowerCase();
     if (!["block", "inline-block"].includes(display)) return;
 
-    el.style.boxSizing = "border-box";
+    el.style.boxSizing = el.style.height && el.style.height !== "auto" ? "content-box" : "border-box"; // a block with its own height is sized like Roll20: padding and border on top of it
     el.style.maxWidth = "100%";
     el.style.minWidth = "0px";
     el.style.wordBreak = el.style.wordBreak || "break-word";
@@ -3129,8 +3152,11 @@
       if (!width || /^100(?:\.0+)?%$/i.test(width)) {
         el.style.width = "auto";
       }
-      el.style.marginLeft = "0px";
-      el.style.marginRight = "0px";
+      // a block may reach out over the message padding with a small negative side margin (Roll20 macros do: margin:0 -10px); every other side margin stays 0
+      const sideLeft = /^-/.test(el.style.marginLeft) ? el.style.marginLeft : "0px", sideRight = /^-/.test(el.style.marginRight) ? el.style.marginRight : "0px";
+      el.style.marginLeft = sideLeft;
+      el.style.marginRight = sideRight;
+      if (sideLeft !== "0px" || sideRight !== "0px") el.style.maxWidth = "calc(100% + 48px)";
       el.style.overflow = el.style.overflow || "hidden";
     }
 
@@ -3907,7 +3933,8 @@
       const openIndex = rawLine.indexOf("[", scanIndex);
       if (openIndex < 0) break;
 
-      const segment = parseRoll20StyleLinkSegment(rawLine, openIndex);
+      // a style link, or (Roll20 draws a link to a picture as the picture) a plain [label](https://….png) link between them
+      const segment = parseRoll20InlineImageSegment(rawLine, openIndex) || parseRoll20StyleLinkSegment(rawLine, openIndex);
       if (!segment) {
         scanIndex = openIndex + 1;
         continue;
@@ -3919,7 +3946,9 @@
       const start = text.length;
       text += label;
 
-      const style = parseRoll20InlineStyle(segment.styleText || "");
+      const style = segment.imageUrl
+        ? cleanupStyle({ imageUrl: segment.imageUrl, imageAlt: label || "image" })
+        : parseRoll20InlineStyle(segment.styleText || "");
       if (start !== text.length && Object.keys(style).length > 0) {
         runs.push({
           start,
@@ -4009,6 +4038,15 @@
     }
 
     return null;
+  }
+
+  function parseRoll20InlineImageSegment(source, openIndex) {
+    if (typeof source !== "string" || source[openIndex] !== "[" || isMarkdownEscaped(source, openIndex)) return null;
+    const match = source.slice(openIndex).match(/^\[([^\]\r\n]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?\s*\)/i);
+    if (!match) return null;
+    const imageUrl = normalizeImageUrl(decodeHtmlEntities(match[2]));
+    if (!imageUrl || !isLikelyStandaloneImageUrl(imageUrl)) return null;
+    return { label: match[1], imageUrl, endIndex: openIndex + match[0].length };
   }
 
   function extractRoll20StyleLinkPayload(payload) {
@@ -4304,8 +4342,18 @@
         });
       }
 
+      markFlushMacroLine(lineEl);
       container.appendChild(lineEl);
     }
+  }
+
+  // see .ccr20-line-flush: the padding the negative margins expect, filled with the blocks' own colour (they all share one) so no strip shows between lines
+  function markFlushMacroLine(lineEl) {
+    const frags = [...lineEl.querySelectorAll(".ccr20-frag")];
+    const flush = frags.some((frag) => /^-/.test(frag.style.marginTop) || /^-/.test(frag.style.marginLeft));
+    lineEl.classList.toggle("ccr20-line-flush", flush);
+    const colours = new Set(frags.filter((frag) => frag.style.display === "block").map((frag) => frag.style.backgroundColor));
+    lineEl.style.backgroundColor = flush && colours.size === 1 && [...colours][0] ? [...colours][0] : "";
   }
 
   function createStyledFragmentNode(frag) {
@@ -4586,7 +4634,7 @@
     const display = `${style?.display || el.style.display || ""}`.trim().toLowerCase();
     if (!["block", "inline-block"].includes(display)) return;
 
-    el.style.boxSizing = "border-box";
+    el.style.boxSizing = el.style.height && el.style.height !== "auto" ? "content-box" : "border-box"; // a block with its own height is sized like Roll20: padding and border on top of it
     el.style.maxWidth = "100%";
     el.style.minWidth = "0px";
     el.style.wordBreak = el.style.wordBreak || "break-word";
@@ -4601,8 +4649,11 @@
       if (!width || /^100(?:\.0+)?%$/i.test(width)) {
         el.style.width = "auto";
       }
-      el.style.marginLeft = "0px";
-      el.style.marginRight = "0px";
+      // a block may reach out over the message padding with a small negative side margin (Roll20 macros do: margin:0 -10px); every other side margin stays 0
+      const sideLeft = /^-/.test(el.style.marginLeft) ? el.style.marginLeft : "0px", sideRight = /^-/.test(el.style.marginRight) ? el.style.marginRight : "0px";
+      el.style.marginLeft = sideLeft;
+      el.style.marginRight = sideRight;
+      if (sideLeft !== "0px" || sideRight !== "0px") el.style.maxWidth = "calc(100% + 48px)";
       el.style.overflow = el.style.overflow || "hidden";
     }
 
@@ -4620,7 +4671,14 @@
     if (raw === "auto") {
       return axis === "horizontal" ? "auto" : "0px";
     }
-    if (/^-/.test(raw)) return "0px";
+    if (/^-/.test(raw)) {
+      // Roll20 handout macros pull blocks over their neighbours with negative margins: allowed within a bound (up to 400px or 100% up, 24px sideways; no negative percent sideways)
+      const negative = raw.match(/^-(\d+(?:\.\d+)?)(px|%)$/);
+      if (!negative) return "0px";
+      const amount = Number(negative[1]);
+      if (axis === "vertical") return (negative[2] === "px" ? amount <= 400 : amount <= 100) ? `-${amount}${negative[2]}` : "0px";
+      return negative[2] === "px" && amount <= 24 ? `-${amount}px` : "0px";
+    }
 
     const normalized = normalizeCssValue(raw, 40);
     if (!normalized) return "0px";
@@ -6067,7 +6125,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.97",
+    version: "0.3.98",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

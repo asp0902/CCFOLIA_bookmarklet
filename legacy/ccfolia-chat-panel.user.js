@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.65
+// @version      0.2.66
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.65";
+  const VERSION = "0.2.66";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1192,7 +1192,7 @@
     const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
     const narrate = (narrationOn || parsed.narration === true) && !meta;
-    if (!rolled && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
+    if (!rolled && !meta?.rawEnvelope && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
@@ -3482,7 +3482,14 @@
         const c = characterId ? findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId] : null;
         if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
         const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
-        return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : relayIconUrl(icon), color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") }, meta || null);
+        const speaker = { name: name.slice(0, 40), icon: c ? c.iconUrl : relayIconUrl(icon), color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") };
+        // a Roll20 CSS macro from the Roll20 link: the roll20-css-bridge makes the same text + envelope it makes for a macro typed in the chat (styled blocks, pictures); without the bridge the plain text goes
+        if (meta?.macro) {
+          let converted = "";
+          try { converted = String(window.__CCF_ROLL20_BRIDGE_DEBUG__?.macroToText?.(meta.macro) || ""); } catch (_) { converted = ""; }
+          if (converted.length > body.length && converted.length <= 24000) return sendMessage(converted, target, speaker, { source: meta.source, sourceId: meta.sourceId, rawEnvelope: true });
+        }
+        return sendMessage(body, target, speaker, meta ? { source: meta.source, sourceId: meta.sourceId } : null);
       },
       // 참여자가 만든 오브젝트(1단계: 다이스 심볼)를 GM 계정으로 룸에 만든다. 필드는 실측(ccfolia 1.37.5, 네이티브가 만든 다이스 심볼): x,y,width 2,height 2,faces,value 1,closed false,name "-",owner,changeCount 0,createdAt,updatedAt.
       // 생성 허용은 룸의 기본 역할이 "player" 일 때만(네이티브 플레이어가 만들 수 있는 조건, 실측). 시각 필드의 저장 형식은 같은 룸의 기존 문서(아이템)에서 읽어 따른다. 새 문서 id 를 돌려준다.
