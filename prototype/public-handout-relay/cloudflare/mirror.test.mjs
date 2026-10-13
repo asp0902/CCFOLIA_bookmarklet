@@ -35,7 +35,7 @@ assert.equal((await call(`/api/rooms/${room}/mirror.css`, { cookie })).text, " .
 const png = "data:image/png;base64,iVBORw0KGgo=";
 assert.equal((await post({ assets: { "/images/trump/z01.png": png, "/images/6_dice/6_dice[1].png": png, "/evil.png": png } })).response.status, 200);
 const stateNow = (await call(`/api/rooms/${room}/state`, { cookie })).json;
-assert.match(stateNow.mirror.assetsHash, /\S/);
+assert.deepEqual(Object.keys(stateNow.mirror).sort(), ["assetsHash", "cssHash", "fontLinks", "helpHash", "tplHash"], "/state announces every hash"); assert(stateNow.mirror.assetsHash.length > 3, "the pictures hash is set once pictures were stored");
 assert.deepEqual((await call(`/api/rooms/${room}/mirror.json`, { cookie })).json.assets, { "/images/trump/z01.png": png, "/images/6_dice/6_dice[1].png": png });
 // not reachable without approval / as a stranger
 assert.equal((await call(`/api/rooms/${room}/mirror.css`)).response.status >= 400, true);
