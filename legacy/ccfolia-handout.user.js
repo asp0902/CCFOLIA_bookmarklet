@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.95
+// @version      0.1.96
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.95",
+    version: "0.1.96",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -360,11 +360,97 @@
   window.addEventListener("message", event => {
     const result = event.data;
     if (event.source !== window || event.origin !== location.origin || result?.source !== PUBLIC_RELAY_SOURCE || result?.direction !== "response") return;
+    const call = relayCalls.get(result.requestId);
+    if (call) { relayCalls.delete(result.requestId); if (result.ok) call.resolve(result); else call.reject(new Error(result.error || "릴레이 요청 실패")); return; }
     if (!pendingPublicRelayRequests.delete(result.requestId)) return;
     if (!result.ok) { toast(result.error || "웹 공유에 실패했습니다."); return; }
     if (result.action === "stop") { toast("웹 공유를 중단했습니다."); return; }
     if (result.inviteUrl) prompt("참여자에게 전달할 읽기 전용 링크입니다.", result.inviteUrl);
   }, lifecycle.withSignal());
+
+  // ===== 플레이룸 핸드아웃: 참여자별 목록 =====
+  // 웹 공유로 올린 핸드아웃을, 참여자마다 "그 사람이 읽을 수 있는 것만" 골라 릴레이에 보낸다(제목·본문·비밀 본문은 권한이 있는 사람에게만). 릴레이는 각자에게 자기 목록만 준다.
+  const relayCalls = new Map();
+  function relayCall(action, payload = {}) {
+    return new Promise((resolve, reject) => {
+      const requestId = `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      relayCalls.set(requestId, { resolve, reject });
+      window.postMessage({ source: PUBLIC_RELAY_SOURCE, direction: "request", requestId, action, roomId: getCurrentRoomKey(), ...payload }, location.origin);
+      setTimeout(() => { if (relayCalls.delete(requestId)) reject(new Error("릴레이 응답 없음")); }, 15000);
+    });
+  }
+  const webSharedKey = () => `ccf-handout:web-shared:${getCurrentRoomKey()}`;
+  function readWebShared() { try { return new Set(JSON.parse(localStorage.getItem(webSharedKey()) || "[]")); } catch (_) { return new Set(); } }
+  function writeWebShared(set) { try { localStorage.setItem(webSharedKey(), JSON.stringify([...set])); } catch (_) {} }
+
+  // 참여자 → 수신자: GM 이 지정한 키(recipientKey)를 우선, 없으면 표시 이름이 PL 이름·병합 이름과 같은 PL. 반환: { name, extra }(권한표 이름 키와 계정 uid 키).
+  function recipientFor(participant, plList) {
+    const norm = (v) => normalizePlNameKey(v);
+    const keyOf = String(participant?.recipientKey || "");
+    const pls = Array.isArray(plList) ? plList : [];
+    const pl = keyOf
+      ? pls.find((p) => (p.uid && p.uid === keyOf) || norm(p.name) === norm(keyOf))
+      : pls.find((p) => [p.name, ...(p.aliases || [])].some((n) => norm(n) && norm(n) === norm(participant?.displayName)));
+    return { name: pl?.name || (keyOf ? keyOf : String(participant?.displayName || "")), extra: [...new Set([keyOf, pl?.uid].filter(Boolean))] };
+  }
+  // 목록 계산(순수): 승인된 참여자마다 { id: [{ id, title, html, secretHtml, folder, order, updatedAt }] }. 공개 본문은 볼 권한, 비밀 본문은 비밀 권한이 있을 때만 담는다.
+  function buildHandoutLists(handouts, folders, plList, participants, sharedIds, renderBody, imageHtml) {
+    const lists = {};
+    const folderName = (id) => (folders || []).find((f) => f.id === id)?.name || "";
+    for (const person of participants || []) {
+      if (person.status !== "approved") continue;
+      const who = recipientFor(person, plList);
+      const items = [];
+      for (const h of handouts || []) {
+        if (!sharedIds.has(h.id)) continue;
+        const view = canView(h, who.name, who.extra), secret = canViewSecret(h, who.name, who.extra);
+        if (!view && !secret) continue;
+        items.push({
+          id: h.id, title: h.title || "",
+          html: view ? `${imageHtml(h.image)}${renderBody(h.description || "")}` : "",
+          secretHtml: secret ? renderBody(h.gmNotes || "") : "",
+          folder: folderName(h.folderId), order: Number.isFinite(h.order) ? h.order : 0, updatedAt: h.updatedAt || ""
+        });
+      }
+      lists[person.id] = items;
+    }
+    return lists;
+  }
+  const handoutImageHtml = (image) => (typeof image === "string" && /^(?:data:image\/(?:png|jpeg|webp|gif);base64,|https:\/\/storage\.ccfolia-cdn\.net\/)/.test(image) ? `<p><img src="${escapeAttr(image)}"></p>` : "");
+  let webSyncTimer = 0, webSyncBusy = false, webSyncWanted = false;
+  async function syncPublicHandouts() {
+    if (!hasPlayerRelay() || !isAdminMode()) return;
+    if (webSyncBusy) { webSyncWanted = true; return; }
+    webSyncBusy = true;
+    try {
+      const shared = readWebShared();
+      const info = await relayCall("participants");
+      const plList = mergePlListById(state.data.plList || []);
+      const lists = buildHandoutLists(state.data.handouts, state.data.folders, plList, info.participants, shared, renderHandoutBody, handoutImageHtml);
+      const recipients = plList.map((p) => ({ key: p.uid || p.name, label: p.name })).filter((r) => r.key).slice(0, 100);
+      await relayCall("handouts", { lists, recipients });
+    } catch (error) {
+      console.warn("[ccf-handout] web handout sync failed:", error?.message || error);
+    } finally {
+      webSyncBusy = false;
+      if (webSyncWanted) { webSyncWanted = false; scheduleWebSync(1500); }
+    }
+  }
+  function scheduleWebSync(delay = 800) {
+    if (!hasPlayerRelay() || !isAdminMode()) return;
+    clearTimeout(webSyncTimer);
+    webSyncTimer = setTimeout(syncPublicHandouts, delay);
+  }
+  function markWebShared(id, on) {
+    const set = readWebShared();
+    if (on) set.add(id); else set.delete(id);
+    writeWebShared(set);
+    scheduleWebSync(200);
+    return set.size;
+  }
+  // 참여자 승인·수신자 지정은 릴레이 쪽에서 바뀌므로, 올려 둔 핸드아웃이 있으면 가끔 다시 계산한다(바뀐 사람의 목록만 실제로 전송된다).
+  const webSyncInterval = setInterval(() => { if (readWebShared().size) scheduleWebSync(100); }, 20000);
+  registerTeardown(() => { clearInterval(webSyncInterval); clearTimeout(webSyncTimer); });
 
   // ===== util =====
   function uuid() {
@@ -3813,10 +3899,16 @@
     }
     if (action === "web-share-handout") {
       const h = findHandout(id);
-      if (h && canManageHandout(h)) requestPublicRelay("share", h);
+      if (h && canManageHandout(h)) { requestPublicRelay("share", h); markWebShared(h.id, true); }
       return;
     }
-    if (action === "web-stop-sharing") { requestPublicRelay("stop", findHandout(id)); return; }
+    if (action === "web-stop-sharing") {
+      // 이 핸드아웃만 참여자 목록에서 내린다. 올려 둔 것이 하나도 없어지면 예전처럼 웹 공유 전체를 끝낸다.
+      const left = markWebShared(id, false);
+      if (!left) requestPublicRelay("stop", findHandout(id));
+      else toast("이 핸드아웃을 참여자 목록에서 내렸습니다.");
+      return;
+    }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "folder-new") {
       createFolderFromPrompt();
@@ -4203,6 +4295,7 @@
       console.warn("[ccf-handout] Firestore push 실패:", error);
       toast("송신 실패 — 콘솔 확인 (로컬은 저장됨)");
     });
+    scheduleWebSync(); // 웹 공유 중인 핸드아웃이 바뀌면 참여자 목록도 다시 계산한다
   }
 
   async function saveSettingsFromForm() {
