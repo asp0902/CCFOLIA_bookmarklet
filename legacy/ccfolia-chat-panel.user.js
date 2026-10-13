@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.58
+// @version      0.2.59
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.58";
+  const VERSION = "0.2.59";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3459,14 +3459,14 @@
       // 참여자가 옮긴 말(캐릭터 x/y=px, 아이템 x/y=칸)을 코코포리아에 반영한다. 실행 직전에 저장소에서 다시 읽어 잠금·비공개면 거부.
       relayMovePiece: async (kind, id, x, y) => {
         const ent = findStore()?.getState()?.entities;
-        const isChar = kind === "character";
-        const doc = (isChar ? ent?.roomCharacters : ent?.roomItems)?.entities?.[id];
+        const isChar = kind === "character", isDice = kind === "dice"; // a dice symbol (made by a participant: the relay checked it is theirs) moves like an item, in cells
+        const doc = (isChar ? ent?.roomCharacters : isDice ? ent?.roomDices : ent?.roomItems)?.entities?.[id];
         if (!doc) throw new Error("대상을 찾지 못했습니다.");
-        if (doc.locked || doc.freezed || (isChar ? doc.secret || doc.invisible : doc.visible === false || doc.active === false || doc.closed)) throw new Error("옮길 수 없는 말입니다.");
+        if (!isDice && (doc.locked || doc.freezed || (isChar ? doc.secret || doc.invisible : doc.visible === false || doc.active === false || doc.closed))) throw new Error("옮길 수 없는 말입니다.");
         const num = (v) => (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v });
         const ctx = await getAuthContext();
         const mask = ["x", "y", "updatedAt"].map((f) => `updateMask.fieldPaths=${f}`).join("&");
-        const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/${isChar ? "characters" : "items"}/${encodeURIComponent(id)}?${mask}`;
+        const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/${isChar ? "characters" : isDice ? "dices" : "items"}/${encodeURIComponent(id)}?${mask}`;
         const response = await fetch(url, {
           method: "PATCH",
           headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },

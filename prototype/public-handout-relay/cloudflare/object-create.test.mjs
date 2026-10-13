@@ -68,6 +68,13 @@ assert.equal((await claimCall(raced.json.commandId, "tab-a")).json.claimed, true
 assert.equal((await claimCall("nope", "tab-a")).json.claimed, false);
 await call(`/api/admin/rooms/${room}/commands/${raced.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
 assert.equal((await claimCall(raced.json.commandId, "tab-b")).json.claimed, false, "an answered command is not claimed again");
+// a dice symbol moves only for the participant who made it (ledger); /mine lists everything they made
+await call(`/api/admin/rooms/${room}/commands/${made.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "doc123" } });
+assert((await call(`/api/rooms/${room}/mine`, { cookie })).json.owned.includes("doc123"));
+const moveDie = id => call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "dice", id, x: 3, y: 4 } });
+assert.equal((await moveDie("doc123")).response.status, 202, "their own die");
+assert.equal((await moveDie("somebody-elses")).response.status, 403, "not theirs");
+assert.equal((await call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "deck", id: "d", x: 1, y: 1 } })).response.status, 400, "decks are not movable");
 // the participant can read what became of their own request (and only theirs)
 const statusOf = id => call(`/api/rooms/${room}/commands/${id}/result`, { cookie });
 assert.deepEqual((await statusOf(upd.json.commandId)).json, { status: "pending", error: "" });

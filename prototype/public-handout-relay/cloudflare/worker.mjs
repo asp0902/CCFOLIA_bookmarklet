@@ -527,7 +527,9 @@ export class RoomRelay {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
       const body = await request.json();
       const x = Number(body.x), y = Number(body.y);
-      if (!["character", "item"].includes(body.kind) || !/^[\w-]{1,100}$/.test(String(body.id)) || !(Math.abs(x) <= 10_000) || !(Math.abs(y) <= 10_000)) return json({ error: "올바르지 않은 이동 요청" }, 400);
+      if (!["character", "item", "dice"].includes(body.kind) || !/^[\w-]{1,100}$/.test(String(body.id)) || !(Math.abs(x) <= 10_000) || !(Math.abs(y) <= 10_000)) return json({ error: "올바르지 않은 이동 요청" }, 400);
+      // a dice symbol belongs to whoever made it (ledger): only they move it
+      if (body.kind === "dice" && !ownsObject(room, member, String(body.id))) return json({ error: "내가 만든 다이스 심볼만 옮길 수 있습니다." }, 403);
       const command = { id: token(), type: "piece.move", kind: body.kind, pieceId: String(body.id), x, y, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
@@ -587,7 +589,7 @@ export class RoomRelay {
     // The characters this participant made, with everything the editor shows (the GM's page reports them with the scene; only the maker gets them back).
     if (request.method === "GET" && /\/mine$/.test(url.pathname)) {
       const docs = await this.state.storage.get("charDocs") || [];
-      return json({ characters: docs.filter(doc => ownsObject(room, member, doc.id)) });
+      return json({ characters: docs.filter(doc => ownsObject(room, member, doc.id)), owned: Object.keys(room.created || {}).filter(id => ownsObject(room, member, id)) });
     }
     if (request.method === "POST" && /\/status\/set$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
