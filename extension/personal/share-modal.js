@@ -284,7 +284,8 @@
       remove.disabled = true;
       try {
         const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(remove.dataset.remove)}`, { method: "DELETE" });
-        if (!response.ok) throw new Error(await errorOf(response, "삭제 실패"));
+        // the reason, the status and which relay code answered (a room object may still run older code than the page it serves), so a refusal is not silent
+        if (!response.ok) throw new Error(`${await errorOf(response, "삭제 실패")} [${response.status}${response.headers.get("X-Relay-Build") ? `, ${response.headers.get("X-Relay-Build")}` : ""}]`);
         say("목록에서 삭제했습니다.");
       } catch (error) { say(error.message, true); }
       await refreshParticipants();

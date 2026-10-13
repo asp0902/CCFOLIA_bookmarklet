@@ -9,7 +9,7 @@ const htmlAttribute = value => String(value).replace(/&/g, "&amp;").replace(/"/g
 const MAX_GM_SOCKETS = 5;
 const MAX_PARTICIPANT_SOCKETS = 100;
 // The code version that answered (a room object may keep running older code than the page it serves: the play room diagnostics show this).
-const BUILD = "2026-10-13-r3";
+const BUILD = "2026-10-13-r4";
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Relay-Build": BUILD, ...headers } });
 const token = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -720,6 +720,7 @@ export default {
     const outputHeaders = new Headers(response.headers);
     Object.entries(securityHeadersFor(url)).forEach(([key, value]) => outputHeaders.set(key, value));
     if (allowedOrigin) outputHeaders.set("Access-Control-Allow-Origin", allowedOrigin);
+    if (allowedOrigin) outputHeaders.set("Access-Control-Expose-Headers", "X-Relay-Build"); // the GM's share window shows which relay code answered
     return new Response(response.body, { status: response.status, headers: outputHeaders });
   }
 };
