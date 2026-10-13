@@ -173,6 +173,8 @@
       list.append(item);
     });
     document.body.append(list);
+    const height = list.getBoundingClientRect().height;
+    if (rect.bottom + 2 + height > window.innerHeight - 8) list.style.top = `${Math.max(8, Math.round(rect.top - height - 2))}px`;
     tickList = list;
     paint();
     const onKey = event => {
@@ -186,6 +188,8 @@
       if (tickList === list) paint(); else document.removeEventListener("keydown", onKey, true);
     };
     document.addEventListener("keydown", onKey, true);
+    const onOutside = event => { if (!list.contains(event.target)) { document.removeEventListener("mousedown", onOutside, true); if (tickList === list) closeTickList(); } };
+    document.addEventListener("mousedown", onOutside, true);
   };
   // A Korean IME marks even the first key it takes as "composing" (key "Process", keyCode 229) without a word being composed: whether a composition is really going on is told by the composition
   // events themselves. A back-tick the IME would insert as a letter is stopped before it is typed.
@@ -201,17 +205,9 @@
     event.preventDefault();
     event.stopPropagation();
     const from = area.selectionStart, to = area.selectionEnd;
-    select.focus();
-    let opened = false;
-    try { select.showPicker(); opened = true; } catch (_) { opened = false; }
-    if (!opened) { openTickList(area, select, from, to); return; }
-    // the browser's list closes with a choice (change), Esc or a click elsewhere (blur): the focus and the cursor go back to the input
-    const done = () => { select.removeEventListener("change", done); select.removeEventListener("blur", done); select.removeEventListener("keydown", onSelectKey); select.removeEventListener("keyup", onSelectKey); setTimeout(() => backToChat(area, from, to), 0); };
-    const onSelectKey = key => { if (key.key === "Escape" || key.key === "Enter") done(); };
-    select.addEventListener("change", done);
-    select.addEventListener("blur", done);
-    select.addEventListener("keydown", onSelectKey);
-    select.addEventListener("keyup", onSelectKey); // the browser's list takes Esc and Enter for itself while it is open: the key coming up on the select tells it has closed
+    // the browser's own picker (showPicker) was tried first and does not show up on a real keyboard press: the page's own small list is always used, the focus stays in the input
+    if (tickList) { closeTickList(); return; }
+    openTickList(area, select, from, to);
   }, true);
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
