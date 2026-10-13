@@ -146,7 +146,7 @@ export class RoomRelay {
     room.messages ||= [];
     room.commands ||= [];
     room.seenMessageIds ||= {};
-    room.capabilities ||= { chatRead: true, chatWrite: true, publicHandout: true };
+    room.capabilities ||= { chatRead: true, chatWrite: true, publicHandout: true, participantCreate: true };
     return room;
   }
   // Returns "added", "updated" (same id, different content: the message was edited in CCFOLIA) or "" (unchanged / not usable).
@@ -182,6 +182,7 @@ export class RoomRelay {
         chatRead: body.capabilities?.chatRead !== false,
         chatWrite: body.capabilities?.chatWrite !== false,
         publicHandout: body.capabilities?.publicHandout !== false,
+        participantCreate: body.capabilities?.participantCreate !== false, // participants may create characters / panels (the GM can switch this off)
       };
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
