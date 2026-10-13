@@ -27,10 +27,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.deepEqual(await page.locator('#room > header button:visible').evaluateAll(b => b.map(x => x.id)), ['room-menu-btn', 'char-list-open', 'account-btn']);
   assert.equal(await page.locator('#room-title').textContent(), '테스트룸');
   assert.equal(await page.locator('#gm-state').getAttribute('data-online'), '1');
-  // character list -> sheet -> speaker
+  // the list window shows only the characters a participant made (CCFOLIA's own list is theirs only); a character on the field opens its sheet by clicking the token; the dialog has an x
   await page.click('#char-list-open');
-  assert.match(await page.locator('.char-row').innerText(), /알리스[\s\S]*HP 7\/10/);
-  await page.click('.char-row');
+  assert.match(await page.locator('#char-window').innerText(), /아직 만든 캐릭터가 없습니다/);
+  await page.click('#char-window .cw-btn[aria-label="닫기"]');
+  await page.evaluate(() => openSheet('c1'));
+  assert.equal(await page.locator('.dlg .dlg-x').count(), 1, 'every dialog has an x');
+  assert.equal(await page.evaluate(() => { const f = document.querySelector('.pen-fab').getBoundingClientRect(); const top = document.elementFromPoint(f.x + f.width / 2, f.y + f.height / 2); return !!top.closest('.dlg-backdrop'); }), true, 'a dialog is above the scene tools (zoom bar, select tool, pencil button)');
   const sheet = await page.locator('.dlg').innerText();
   assert(sheet.includes('STR') && sheet.includes('60') && sheet.includes('메모 첫 줄\n둘째 줄') && sheet.includes('참고 URL'), 'sheet shows params, memo and link');
   assert.equal(await page.locator('.dlg a').getAttribute('href'), 'https://example.com/sheet');
@@ -53,7 +56,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('.dlg h2').textContent(), '알리스');
   await page.keyboard.press('Escape');
   // account menu and chat collapse
-  await page.click('#account-btn');
+  await page.evaluate(() => document.getElementById('account-btn').click()); // (a real click sometimes hit <main> in the headless run: the button was not under the pointer yet)
   // the account menu is CCFOLIA's as a player sees it: profile, log in (disabled), divider, help / terms / privacy as new-tab links, divider, developer commands (disabled)
   assert.deepEqual(await page.locator('.menu-item').allTextContents(), ['로그인', '도움말', '이용약관', '개인 정보 정책', '개발자 명령']);
   assert.equal(await page.locator('.menu-profile-sub').textContent(), 'SNS 미인증');
@@ -74,7 +77,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => onPush({ data: JSON.stringify({ type: 'health', health: { ok: true } }) }));
   assert.equal(await page.locator('#health-note').isVisible(), false);
   // menus as CCFOLIA draws them (measured): items 36px high; the account menu starts with a 72px profile row (40px round avatar, name 16/24px, 14px line under it)
-  await page.click('#account-btn');
+  await page.evaluate(() => document.getElementById('account-btn').click()); // (a real click sometimes hit <main> in the headless run: the button was not under the pointer yet)
   const menu = await page.evaluate(() => { const row = document.querySelector('.menu-profile'), item = document.querySelector('.menu-item'); return { profile: row.getBoundingClientRect().height, avatar: document.querySelector('.menu-profile-av').getBoundingClientRect().width, radius: getComputedStyle(document.querySelector('.menu-profile-av')).borderRadius, item: item.getBoundingClientRect().height, sub: getComputedStyle(document.querySelector('.menu-profile-sub')).fontSize }; });
   assert.equal(menu.profile, 72); assert.equal(menu.avatar, 40); assert.equal(menu.radius, '50%'); assert.equal(menu.item, 36); assert.equal(menu.sub, '14px');
   await page.keyboard.press('Escape');

@@ -302,12 +302,15 @@ function renderScene(scene) {
     // a dice symbol is drawn as a die face with its value ("?" while hidden); a card deck shows its back with the number of cards left in the middle
     if (item.kind === "dice") {
       // CCFOLIA draws a die as the picture /images/{faces}_dice/{faces}_dice[{value}].png ([0] while hidden); the GM page sends those pictures as assets. Without the picture: a plain face.
+      const mine = ownedIds.has(item.id); // a participant's own dice symbol can be dragged like a piece
       const picture = cmMirror.assets[`/images/${item.faces}_dice/${item.faces}_dice[${item.closed ? 0 : item.value}].png`];
       if (picture) {
         const face = document.createElement("img"); face.src = picture; face.alt = ""; face.draggable = false; face.dataset.id = item.id; face.className = "scene-die-img";
+        if (mine) { face.classList.add("mine"); face.dataset.kind = "dice"; face.dataset.id = item.id; face.dataset.x = item.x; face.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
         place(face, item.x, item.y, item.width, item.height, 0, layerOf(item)); face.style.objectFit = "fill"; nodes.push(face); continue;
       }
       const die = document.createElement("div"); die.className = "scene-die"; die.dataset.id = item.id; die.textContent = item.closed ? "?" : String(item.value);
+      if (mine) { die.classList.add("mine"); die.dataset.kind = "dice"; die.dataset.id = item.id; die.dataset.x = item.x; die.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
       place(die, item.x, item.y, item.width, item.height, 0, layerOf(item)); die.style.fontSize = `${Math.round(item.height * unit * 0.5)}px`; nodes.push(die); continue;
     }
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
@@ -590,7 +593,7 @@ const renderState = data => {
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
   if (data.mirror) cmMirror.sync(data.mirror, roomId).then(refreshHelpBtn);
-  if (!window.__handoutsLoaded) { window.__handoutsLoaded = true; loadMyHandouts(true); }
+  if (!window.__handoutsLoaded) { window.__handoutsLoaded = true; loadMyHandouts(true); refreshMyCharacters(); }
   const mirrored = cmMirror.has("chatShell") && cmMirror.has("chatRow");
   const list = mirrored ? cmMirror.shadow("messages-host", node => document.getElementById("messages").after(node)).host : document.getElementById("messages");
   document.getElementById("messages").hidden = mirrored;
@@ -870,7 +873,7 @@ function onPush(event) {
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);
-    if (document.getElementById("char-window")) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
+    if (document.getElementById("char-window") || ownedIds.size) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
   } else if (message.type === "channels") {
     current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
     renderState(current);
@@ -1140,12 +1143,16 @@ document.addEventListener("keydown", event => { if (event.key === "Escape") { co
 
 function openDialog(title, build) {
   const back = el("div", "dlg-backdrop"), paper = el("div", "dlg"), head = el("h2", "", title);
-  paper.setAttribute("role", "dialog"); paper.setAttribute("aria-modal", "true"); paper.append(head);
-  const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
+  paper.setAttribute("role", "dialog"); paper.setAttribute("aria-modal", "true");
+  const closeX = el("button", "dlg-x", "×"); closeX.type = "button"; closeX.setAttribute("aria-label", "닫기");
+  const header = el("div", "dlg-head"); header.append(head, closeX); paper.append(header);
+  const hooks = {}; // a dialog may ask to be told before it closes (the editor saves what is typed)
+  const close = () => { try { hooks.beforeClose?.(); } catch (_) {} back.remove(); document.removeEventListener("keydown", onKey, true); };
+  closeX.addEventListener("click", () => close());
   const onKey = event => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
   const body = el("div", "dlg-body"); const foot = el("div", "dlg-foot");
   const done = el("button", "", "닫기"); done.type = "button"; done.addEventListener("click", close); foot.append(done);
-  build(body, foot, close); paper.append(body, foot); back.append(paper);
+  build(body, foot, close, hooks); paper.append(body, foot); back.append(paper);
   back.addEventListener("click", event => { if (event.target === back) close(); });
   document.addEventListener("keydown", onKey, true); document.body.append(back);
   return close;
@@ -1208,16 +1215,22 @@ async function createObject(request) {
     const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/objects/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "만들 수 없습니다.");
     showSendStatus("다이스 심볼을 만들어 달라고 요청했습니다.", 3000);
+    const answer = await waitForCommand((await response.clone().json().catch(() => ({}))).commandId);
+    if (!answer.ok) throw new Error(answer.error);
+    setTimeout(refreshMyCharacters, 1200); setTimeout(refreshMyCharacters, 3500); // the new die is the participant's: movable once the relay lists it
   } catch (error) { showSendStatus(error.message, 4000); }
 }
 // "My characters": a window that floats over the scene and moves by its title bar (measured: 320x280, translucent grey, title 14px bold, + and x on the right).
 // The characters a participant made (kept by the relay in a ledger, reported by the GM's page) are listed first; a row opens CCFOLIA's "캐릭터 편집" dialog. The characters on the field follow (a row opens the sheet).
-let myCharacters = [];
+let myCharacters = [], ownedIds = new Set(); // ownedIds: everything this participant made (the relay's ledger), e.g. dice symbols they can move
 async function refreshMyCharacters() {
   try {
     const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mine`);
     if (!response.ok) return myCharacters;
-    myCharacters = (await response.json()).characters || [];
+    const data = await response.json();
+    myCharacters = data.characters || [];
+    const before = ownedIds.size; ownedIds = new Set(Array.isArray(data.owned) ? data.owned : []);
+    if (ownedIds.size !== before && sceneData) renderScene(); // newly known own dice symbols become movable
   } catch (_) { /* the list keeps what it had */ }
   document.getElementById("char-window")?.dispatchEvent(new Event("cm-refresh"));
   return myCharacters;
@@ -1274,17 +1287,7 @@ function openCharacterWindow() {
       const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", c.active ? "화면에 있음" : "화면에 없음"));
       row.append(text); row.addEventListener("click", () => openCharacterEditor(c.id)); body.append(row);
     }
-    const placed = sceneData?.characters || [];
-    if (!myCharacters.length && !placed.length) body.append(el("p", "", "아직 만든 캐릭터가 없습니다. + 로 만들 수 있습니다."));
-    if (placed.length) {
-      if (myCharacters.length) body.append(el("p", "cw-sub", "장면의 캐릭터"));
-      for (const c of placed) {
-        const row = el("button", "char-row"); row.type = "button";
-        const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
-        const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
-        row.append(img, text); row.addEventListener("click", () => openSheet(c.id)); body.append(row);
-      }
-    }
+    if (!myCharacters.length) body.append(el("p", "", "아직 만든 캐릭터가 없습니다. + 로 만들 수 있습니다."));
   };
   win.addEventListener("cm-refresh", fill);
   fill(); win.append(head, body); document.body.append(win);
@@ -1301,10 +1304,11 @@ function openCharacterEditor(id) {
   const doc = current(); if (!doc) return;
   const field = (labelText, input) => { const wrap = el("label", "ce-field"); wrap.append(el("span", "ce-label", labelText), input); return wrap; };
   const input = (value, type = "text", extra = {}) => Object.assign(el("input", "ce-input"), { type, value: value ?? "", ...extra });
-  openDialog("캐릭터 편집", (body, foot, close) => {
+  openDialog("캐릭터 편집", (body, foot, close, hooks) => {
     body.classList.add("ce-body");
     const name = input(doc.name, "text", { maxLength: 40, placeholder: "이름" }), initiative = input(doc.initiative ?? 0, "number");
-    const top = el("div", "ce-row"); top.append(field("이름", name), field("이니셔티브", initiative));
+    const avatar = el("span", "ce-avatar", "👤"); avatar.title = "아이콘 (이미지는 준비 중입니다)"; avatar.setAttribute("aria-hidden", "true");
+    const top = el("div", "ce-row ce-top"); top.append(avatar, field("이름", name), field("이니셔티브", initiative));
     const memo = Object.assign(el("textarea", "ce-input ce-area"), { value: doc.memo || "", maxLength: 2000, placeholder: "캐릭터 메모", rows: 4 });
     const size = input(doc.width ?? 4, "number", { min: 1, max: 100 }), px = input(doc.x ?? 0, "number"), py = input(doc.y ?? 0, "number");
     const geometry = el("div", "ce-row3"); geometry.append(field("토큰 사이즈", size), field("x", px), field("y", py));
@@ -1345,7 +1349,8 @@ function openCharacterEditor(id) {
     copy.addEventListener("click", async () => { flush(); const known = new Set(myCharacters.map(c => c.id)); const result = await characterRequest("duplicate", { id }); if (!result.ok) { status.textContent = result.error; return; } status.textContent = "복제하는 중입니다."; await refreshUntil((_, now) => now.some(c => !known.has(c.id))); status.textContent = "복제했습니다."; });
     place.addEventListener("click", async () => { flush(); const result = await characterRequest("place", { id, x: Number(px.value) || 0, y: Number(py.value) || 0 }); status.textContent = result.ok ? "화면에 추가했습니다." : result.error; if (result.ok) setTimeout(refreshMyCharacters, 900); });
     foot.replaceChildren(remove, copy, place);
-    const closeButton = el("button", "ce-act", "닫기"); closeButton.type = "button"; closeButton.addEventListener("click", () => { flush(); close(); }); foot.append(closeButton);
+    foot.classList.add("ce-foot");
+    hooks.beforeClose = flush; // closing (x, Escape, outside click) saves what was typed first
   });
 }
 function openRoomMenu(anchor) {
@@ -1464,7 +1469,7 @@ function renderMirroredTopBar() {
   chatOpen.addEventListener("click", () => document.getElementById("chat-open").click());
   const handout = chars.cloneNode(true); handout.removeAttribute("data-cm-slot"); handout.setAttribute("aria-label", "핸드아웃");
   const icon = handout.querySelector("svg"), source = document.querySelector("#handout-open svg");
-  if (icon && source) { icon.replaceChildren(...[...source.children].map(child => child.cloneNode(true))); for (const name of ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"]) { if (source.hasAttribute(name)) icon.setAttribute(name, source.getAttribute(name)); else icon.removeAttribute(name); } }
+  if (icon && source) { icon.replaceChildren(...[...source.children].map(child => child.cloneNode(true))); for (const name of ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"]) { if (source.hasAttribute(name)) icon.setAttribute(name, source.getAttribute(name)); else icon.removeAttribute(name); } icon.style.fill = source.getAttribute("fill") || ""; icon.style.stroke = source.getAttribute("stroke") || ""; }
   handout.addEventListener("click", () => document.getElementById("handout-open").click());
   chars.after(handout);
   // the avatar is a letter (the participant has no CCFOLIA photo) and a dot shows whether the GM is connected

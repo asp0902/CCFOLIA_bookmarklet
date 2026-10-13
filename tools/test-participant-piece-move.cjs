@@ -44,6 +44,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.locator('#scene-status .st-bar').click();
   await page.waitForTimeout(200);
   assert.deepEqual(statusSent, [{ characterId: 'c1', index: 0, value: 9 }]);
+  // a dice symbol the participant made (the relay's ledger) can be dragged like an item; somebody else's cannot
+  await page.evaluate(() => { ownedIds = new Set(['d1']); renderScene({ fieldWidth: 40, fieldHeight: 20, items: [], markers: [], characters: [], diceSymbols: [{ id: 'd1', x: 0, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }, { id: 'd2', x: 6, y: 0, width: 2, height: 2, faces: 6, value: 5, closed: false }] }); });
+  assert.equal(await page.locator('.scene-die.mine').count(), 1, 'only their own die is a drag handle');
+  const diceBefore = sent.length;
+  await drag('.scene-die[data-id="d1"]', unit * 2, unit);
+  await page.waitForTimeout(300);
+  assert.deepEqual(sent[diceBefore], { kind: 'dice', id: 'd1', x: 2, y: 1 });
+  await drag('.scene-die:not(.mine)', unit, unit); await page.waitForTimeout(200);
+  assert.equal(sent.length, diceBefore + 1, "somebody else's die pans the scene instead of moving");
   // markers and flipped cards are drawn and cannot be moved
   await page.evaluate(img => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill',
     items: [{ id: 'k1', closed: true, locked: true, x: 2, y: 2, z: 1, angle: 0, width: 4, height: 4, imageUrl: img }],
