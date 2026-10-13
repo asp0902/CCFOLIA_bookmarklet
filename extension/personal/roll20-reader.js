@@ -198,11 +198,12 @@
     try { select.showPicker(); opened = true; } catch (_) { opened = false; }
     if (!opened) { openTickList(area, select, from, to); return; }
     // the browser's list closes with a choice (change), Esc or a click elsewhere (blur): the focus and the cursor go back to the input
-    const done = () => { select.removeEventListener("change", done); select.removeEventListener("blur", done); select.removeEventListener("keydown", onSelectKey); setTimeout(() => backToChat(area, from, to), 0); };
+    const done = () => { select.removeEventListener("change", done); select.removeEventListener("blur", done); select.removeEventListener("keydown", onSelectKey); select.removeEventListener("keyup", onSelectKey); setTimeout(() => backToChat(area, from, to), 0); };
     const onSelectKey = key => { if (key.key === "Escape" || key.key === "Enter") done(); };
     select.addEventListener("change", done);
     select.addEventListener("blur", done);
     select.addEventListener("keydown", onSelectKey);
+    select.addEventListener("keyup", onSelectKey); // the browser's list takes Esc and Enter for itself while it is open: the key coming up on the select tells it has closed
   }, true);
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
