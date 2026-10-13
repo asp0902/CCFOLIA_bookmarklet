@@ -11,10 +11,14 @@ export function checkCreate(room, member, now = Date.now()) {
   if (recent.length >= CREATE_LIMITS.perMinute) return { ok: false, status: 429, error: "잠시 후 다시 만들어 주세요." };
   return { ok: true };
 }
-export function recordCreate(room, member, objectId, now = Date.now()) {
-  room.created = { ...(room.created || {}), [objectId]: member.id };
+// one attempt (counted when a create request is accepted, whether or not the GM manages to carry it out)
+export function logCreate(room, member, now = Date.now()) {
   const log = room.createLog ||= {};
   log[member.id] = [...(log[member.id] || []).filter(at => now - at < CREATE_LIMITS.windowMs), now];
+}
+// the object now exists in the room: its maker is remembered
+export function recordCreate(room, member, objectId) {
+  room.created = { ...(room.created || {}), [objectId]: member.id };
 }
 export const ownsObject = (room, member, objectId) => !!objectId && room.created?.[objectId] === member.id;
 export function forgetObject(room, objectId) { if (room.created) delete room.created[objectId]; }

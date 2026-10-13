@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.53
+// @version      0.2.54
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.53";
+  const VERSION = "0.2.54";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3458,6 +3458,22 @@
         if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
         const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
         return sendMessage(body, target, { name: name.slice(0, 40), icon: c ? c.iconUrl : relayIconUrl(icon), color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") }, meta || null);
+      },
+      // 참여자가 만든 오브젝트(1단계: 다이스 심볼)를 GM 계정으로 룸에 만든다. 필드는 실측(ccfolia 1.37.5, 네이티브가 만든 다이스 심볼): x,y,width 2,height 2,faces,value 1,closed false,name "-",owner,changeCount 0,createdAt,updatedAt.
+      // 생성 허용은 룸의 기본 역할이 "player" 일 때만(네이티브 플레이어가 만들 수 있는 조건, 실측). 시각 필드의 저장 형식은 같은 룸의 기존 문서(아이템)에서 읽어 따른다. 새 문서 id 를 돌려준다.
+      relayCreateObject: async (kind, params = {}) => {
+        if (kind !== "dice") throw new Error("아직 만들 수 없는 종류입니다.");
+        const room = Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0];
+        if (!room || room.defaultRole !== "player") throw new Error("이 룸은 참여자가 오브젝트를 만들 수 없습니다.");
+        const ctx = await getAuthContext();
+        const query = await fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}:runQuery`, { method: "POST", headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "items" }], limit: 1 } }) });
+        const sample = query.ok ? (await query.json())?.find?.((row) => row?.document)?.document?.fields : null;
+        const stamp = makeTimestampLike(sample?.createdAt);
+        const num = (v) => (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v });
+        const fields = { x: num(Number(params.x) || 0), y: num(Number(params.y) || 0), width: num(2), height: num(2), faces: num(Math.max(2, Math.min(100, Math.round(Number(params.faces) || 6)))), value: num(1), closed: { booleanValue: false }, name: { stringValue: "-" }, owner: { stringValue: ctx.uid }, changeCount: num(0), createdAt: stamp, updatedAt: stamp };
+        const response = await fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/dices`, { method: "POST", headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
+        if (!response.ok) throw new Error(`만들기 실패 (${response.status})`);
+        return String((await response.json())?.name || "").split("/").pop();
       },
       // 참여자가 고친 캐릭터 상태값(index 번째 칸의 value)을 코코포리아에 반영한다. 배열째 다시 쓴다.
       relaySetStatus: async (characterId, index, value) => {

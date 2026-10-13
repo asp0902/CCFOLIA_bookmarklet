@@ -1084,7 +1084,9 @@ const PEN_ITEMS = [
   fab.append(svgIcon("M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"));
   const menu = el("div", "pen-menu"); menu.hidden = true; menu.setAttribute("role", "menu");
   for (const [path, title, desc, pro] of PEN_ITEMS) {
-    const row = el("div", "pen-item"); row.setAttribute("role", "menuitem"); row.setAttribute("aria-disabled", "true");
+    const row = el("div", "pen-item"); row.setAttribute("role", "menuitem");
+    // only the dice symbol can be made so far (the others need images or have not been built); the rest stay disabled
+    if (title === "다이스 심볼을 추가") { row.tabIndex = 0; row.addEventListener("click", () => { close(); createObject({ kind: "dice" }); }); } else row.setAttribute("aria-disabled", "true");
     const av = el("span", "pen-av"); av.append(svgIcon(path));
     const text = el("span", "pen-text"), head = el("span", "pen-title", title);
     if (pro) head.append(" ", el("em", "pen-pro", "PRO"));
@@ -1095,6 +1097,14 @@ const PEN_ITEMS = [
   document.addEventListener("pointerdown", event => { if (!menu.hidden && !event.composedPath().includes(menu) && !event.composedPath().includes(fab)) close(); }, true);
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !menu.hidden) close(); });
   stageEl.append(select, menu, fab);
+}
+// Ask the relay to make an object in the GM's room (the GM's page does the writing). The result shows up through the next scene update.
+async function createObject(request) {
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/objects/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "만들 수 없습니다.");
+    showSendStatus("다이스 심볼을 만들어 달라고 요청했습니다.", 3000);
+  } catch (error) { showSendStatus(error.message, 4000); }
 }
 // "My characters": a window that floats over the scene and moves by its title bar (measured: 320x280, translucent grey, title 14px bold, + and x on the right).
 function openCharacterWindow() {

@@ -120,10 +120,16 @@
       catch (error) { warnOnce(clean(error?.message || "전송 실패", 200)); }
       return;
     }
-    if (request.action !== "command" || !["chat.send", "piece.move", "status.set"].includes(request.command?.type) || request.roomId !== roomId) return;
+    if (request.action !== "command" || !["chat.send", "piece.move", "status.set", "object.create"].includes(request.command?.type) || request.roomId !== roomId) return;
     const commandId = clean(request.command.id, 100);
     try {
       const api = window.__CCF_SECOND_CHAT_PANEL__;
+      if (request.command.type === "object.create") {
+        if (typeof api?.relayCreateObject !== "function") throw new Error("오브젝트 만들기 기능이 아직 준비되지 않았습니다.");
+        const objectId = await api.relayCreateObject(clean(request.command.kind, 20), { x: Number(request.command.x), y: Number(request.command.y), faces: Number(request.command.faces) });
+        emit({ action: "commandResult", commandId, status: "delivered", objectId: clean(objectId, 100) });
+        return;
+      }
       if (request.command.type === "status.set") {
         if (typeof api?.relaySetStatus !== "function") throw new Error("상태값 변경 기능이 아직 준비되지 않았습니다.");
         await api.relaySetStatus(clean(request.command.characterId, 100), Number(request.command.index), Number(request.command.value));

@@ -284,7 +284,7 @@ html.pip .chat-toggle{display:none}
 .pen-fab:hover{background:#e0e0e0}
 .pen-menu{position:absolute;right:16px;bottom:115px;z-index:101;width:360px;max-width:calc(100% - 32px);padding:8px 0;border-radius:4px;background:rgba(44,44,44,.87);color:#fff;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
 .pen-menu[hidden]{display:none}
-.pen-item{display:flex;align-items:center;padding:4px 16px;opacity:.5;cursor:default}
+.pen-item{display:flex;align-items:center;padding:4px 16px;cursor:pointer}.pen-item:hover{background:rgba(255,255,255,.08)}.pen-item[aria-disabled=true]{opacity:.5;cursor:default}.pen-item[aria-disabled=true]:hover{background:none}
 .pen-av{display:flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;margin-right:16px;border-radius:50%;background:#757575;color:#121212}
 .pen-text{display:flex;flex-direction:column;margin:6px 0;min-width:0}
 .pen-title{font-size:14px;line-height:20px;color:#fff}.pen-desc{font-size:14px;line-height:20px;color:rgba(255,255,255,.7)}
