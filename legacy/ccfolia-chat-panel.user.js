@@ -3270,23 +3270,25 @@
     } catch (_) { return null; }
   }
   const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
-  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = help; } }).observe(document.body, { childList: true, subtree: true });
-  let helpProbeAt = 0, helpProbing = false;
-  // Opens the native dialog out of sight, reads it and closes it again (at most every 5 minutes, never while the GM is typing; focus goes back to where it was).
+  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = { ...help, system: helpSystem() }; } }).observe(document.body, { childList: true, subtree: true });
+  let helpProbing = false;
+  const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.system || "").slice(0, 60); } catch (_) { return ""; } };
+  // Opens the native dialog out of sight, reads it and closes it again - only when nothing is stored yet or the room's dice system changed since the stored text (otherwise the text is updated when the GM opens the dialog
+  // themself); never while the GM is typing, focus goes back to where it was.
   async function relayHelpProbe() {
-    if (helpProbing || Date.now() - helpProbeAt < 300000) return;
+    if (helpProbing || (relayHelpCache && relayHelpCache.system === helpSystem())) return;
     const active = document.activeElement;
     if (active && active !== document.body && /^(INPUT|TEXTAREA)$/.test(active.tagName) || active?.isContentEditable) return;
     const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(`#${PANEL_ID}`));
     if (!button || helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"))) return;
-    helpProbing = true; helpProbeAt = Date.now();
+    helpProbing = true;
     const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;transition:none !important;pointer-events:none !important}";
     document.head.append(hide);
     try {
       button.click();
       let dialog = null;
       for (let i = 0; i < 20 && !dialog; i += 1) { await new Promise((r) => setTimeout(r, 100)); dialog = helpDialogs().find((d) => readHelpDialog(d)); }
-      if (dialog) { relayHelpCache = readHelpDialog(dialog); (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
+      if (dialog) { relayHelpCache = { ...readHelpDialog(dialog), system: helpSystem() }; (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
       for (let i = 0; i < 20 && helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root")); i += 1) await new Promise((r) => setTimeout(r, 100));
     } finally { hide.remove(); helpProbing = false; try { active?.focus?.(); } catch (_) {} }
   }

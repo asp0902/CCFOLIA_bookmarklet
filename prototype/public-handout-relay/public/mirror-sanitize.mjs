@@ -91,7 +91,7 @@ export function cleanHelp(help) {
     links: (Array.isArray(section?.links) ? section.links : []).slice(0, 8)
       .map(link => ({ text: text(link?.text, 200), href: text(link?.href, 300) })).filter(link => link.text && HELP_LINK.test(link.href))
   })).filter(section => section.title || section.text);
-  return sections.length ? { title: text(help?.title, 100), sections } : null;
+  return sections.length ? { title: text(help?.title, 100), system: text(help?.system, 60), sections } : null;
 }
 export function validateMirror(body) {
   const css = typeof body?.css === "string" ? body.css : null;
