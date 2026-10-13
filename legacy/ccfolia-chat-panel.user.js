@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.64
+// @version      0.2.65
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.64";
+  const VERSION = "0.2.65";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1165,15 +1165,15 @@
     templateCache = cacheable ? { roomId: ctx.roomId, fields, at: Date.now() } : null;
     return fields;
   }
-  async function sendMessage(text, channel = currentChannel, speaker = null, meta = null) {
-    try { return await sendMessageOnce(text, channel, speaker, meta); }
+  async function sendMessage(text, channel = currentChannel, speaker = null, meta = null, rollExtend = null) {
+    try { return await sendMessageOnce(text, channel, speaker, meta, rollExtend); }
     catch (error) {
       if (!(speaker || meta) || !templateCache) throw error;
       templateCache = null; // 오래된 틀 때문일 수 있다: 새로 읽어 한 번만 다시
-      return sendMessageOnce(text, channel, speaker, meta);
+      return sendMessageOnce(text, channel, speaker, meta, rollExtend);
     }
   }
-  async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null) {
+  async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null, rollExtend = null) {
     const ctx = await getAuthContext();
     const template = await templateFor(ctx, !!(speaker || meta));
     const fields = {};
@@ -1187,7 +1187,7 @@
     // meta(다른 곳에서 넘어온 메시지, 예: 롤20)는 서식·판정 해석 없이 그대로 보내고, 출처만 봉투에 보이지 않게 싣는다.
     const parsed = meta ? { text: String(text), runs: [], alignRuns: [] } : parseFormatMarkers(text);
     const cleanText = parsed.text;
-    const rolled = meta ? null : evaluateDiceCommand(cleanText);
+    const rolled = rollExtend || (meta ? null : evaluateDiceCommand(cleanText));
     let outText = cleanText;
     const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
@@ -3517,6 +3517,11 @@
           } else { value = 1 + Math.floor(Math.random() * faces); closed = false; }
           const patch = await fetch(`${url}?updateMask.fieldPaths=faces&updateMask.fieldPaths=value&updateMask.fieldPaths=closed&updateMask.fieldPaths=changeCount&updateMask.fieldPaths=updatedAt`, { method: "PATCH", headers, body: JSON.stringify({ fields: { faces: { integerValue: String(faces) }, value: { integerValue: String(value) }, closed: { booleanValue: closed }, changeCount: { integerValue: String(count + 1) }, updatedAt: { timestampValue: new Date().toISOString() } } }) });
           if (!patch.ok) throw new Error(`굴리기 실패 (${patch.status})`);
+          if (command.rollMessage === true) {
+            // the native die says its roll in the chat: text "1D6 다이스 심볼", roll "(1D6) ＞ 3" (measured), under the roller's name
+            const result = `(1D${faces}) ＞ ${value}`;
+            try { await sendMessage(`1D${faces} 다이스 심볼`, "main", { name: String(command.displayName || "참여자").slice(0, 40), icon: "", color: "" }, null, { roll: { result, success: false, fumble: false, critical: false, failure: false, secret: false, dices: [{ faces, value, kind: "normal" }], skin: { ...DICE_SKIN } } }); } catch (_) { /* the die has turned; the chat line is a courtesy */ }
+          }
           return id;
         }
         if (kind !== "character") throw new Error("아직 다룰 수 없는 종류입니다.");

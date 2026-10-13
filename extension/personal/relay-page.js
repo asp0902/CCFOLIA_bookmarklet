@@ -126,7 +126,7 @@
       const api = window.__CCF_SECOND_CHAT_PANEL__;
       if (/^object\./.test(request.command.type)) {
         if (typeof api?.relayObject !== "function") throw new Error("오브젝트 기능이 아직 준비되지 않았습니다.");
-        const objectId = await api.relayObject({ type: clean(request.command.type, 30), kind: clean(request.command.kind, 20), targetId: clean(request.command.targetId, 100), fields: request.command.fields && typeof request.command.fields === "object" ? JSON.parse(JSON.stringify(request.command.fields).slice(0, 20000)) : {}, x: Number(request.command.x), y: Number(request.command.y), faces: Number(request.command.faces), stow: request.command.stow === true });
+        const objectId = await api.relayObject({ type: clean(request.command.type, 30), kind: clean(request.command.kind, 20), targetId: clean(request.command.targetId, 100), fields: request.command.fields && typeof request.command.fields === "object" ? JSON.parse(JSON.stringify(request.command.fields).slice(0, 20000)) : {}, x: Number(request.command.x), y: Number(request.command.y), faces: Number(request.command.faces), stow: request.command.stow === true, rollMessage: request.command.rollMessage === true, displayName: clean(request.command.displayName, 40) });
         emit({ action: "commandResult", commandId, status: "delivered", objectId: clean(objectId, 100) });
         setTimeout(sendScene, 200); setTimeout(sendScene, 1200); // the room changed: tell the participants without waiting for the next watch tick
         return;

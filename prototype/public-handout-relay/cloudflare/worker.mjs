@@ -579,6 +579,7 @@ export class RoomRelay {
           if ("closed" in f) out.closed = f.closed === true;
           if (!Object.keys(out).length) command.roll = true; // no fields: the GM's page picks the number
           else command.fields = out;
+          if (body.roll === true && out.value) command.rollMessage = true; // a roll is also said in the chat
         }
         else if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
         if (op === "place" && body.stow === true) { command.stow = true; command.fields = {}; } // put it away (off the screen)
