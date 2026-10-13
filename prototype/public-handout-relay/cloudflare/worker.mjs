@@ -647,7 +647,13 @@ export default {
     headers.set("X-Client-IP", request.headers.get("CF-Connecting-IP") || "unknown");
     headers.set("X-Public-Origin", url.origin);
     if (headers.has("Sec-WebSocket-Protocol")) headers.set("Sec-WebSocket-Protocol", gmRoute ? GM_SOCKET_PROTOCOL : headers.get("Sec-WebSocket-Protocol"));
-    const response = await env.ROOMS.getByName(roomId).fetch(new Request(request, { headers }));
+    // An exception inside the room would reach the browser as a bare "Failed to fetch" (no CORS headers on the platform's error page): answer with JSON and the CORS header instead, and log it.
+    let response;
+    try { response = await env.ROOMS.getByName(roomId).fetch(new Request(request, { headers })); }
+    catch (error) {
+      console.error("room error", request.method, url.pathname.replace(/\/rooms\/[^/]+/, "/rooms/*"), String(error?.message || error));
+      return fail({ error: "릴레이 내부 오류" }, 500);
+    }
     if (response.status === 101) return response;
     const outputHeaders = new Headers(response.headers);
     Object.entries(securityHeadersFor(url)).forEach(([key, value]) => outputHeaders.set(key, value));

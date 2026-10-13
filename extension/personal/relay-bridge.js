@@ -25,22 +25,36 @@
   const inFlight = new Set();
   // Shown on the options page so the GM can see whether the push socket is up (otherwise only slow polling runs).
   const setSocketStatus = (state, detail = {}) => { try { Promise.resolve(chrome.storage.local.set({ relaySocket: { state, roomId, at: Date.now(), ...detail } })).catch(() => {}); } catch (_) {} };
-  const warn = error => { const now = Date.now(); if (now - lastWarnAt > 10_000) { lastWarnAt = now; console.warn("[Capybara player relay]", error); } };
+  // Every failure is also kept (the last 10, with the request that failed) for the share settings window; the console shows one a few seconds.
+  const recentErrors = [];
+  const warn = error => {
+    const now = Date.now();
+    recentErrors.push({ at: now, message: String(error?.message || error).slice(0, 300) });
+    if (recentErrors.length > 10) recentErrors.shift();
+    try { Promise.resolve(chrome.storage.local.set({ relayErrors: recentErrors })).catch(() => {}); } catch (_) {}
+    if (now - lastWarnAt > 10_000) { lastWarnAt = now; console.warn("[Capybara player relay]", error); }
+  };
+  const shortPath = path => String(path).replace(/\/rooms\/[^/]+/, "/rooms/*").replace(/\/commands\/[^/]+/, "/commands/*").slice(0, 80);
   const b64url = value => btoa(String.fromCharCode(...new TextEncoder().encode(value))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const relayOrigin = value => { try { const url = new URL(String(value || "").trim()); return url.origin === "http://127.0.0.1:8787" || url.protocol === "https:" ? url.origin : ""; } catch (_) { return ""; } };
   const loadConfig = async () => {
     const value = await chrome.storage.local.get(["relayUrl", "relayGmToken", "relayEnabled", "relayDeliveredCommandIds"]);
     return { enabled: value.relayEnabled === true, origin: relayOrigin(value.relayUrl || "http://127.0.0.1:8787"), token: clean(value.relayGmToken, 500).trim(), delivered: new Set(Array.isArray(value.relayDeliveredCommandIds) ? value.relayDeliveredCommandIds : []) };
   };
+  // "Failed to fetch" says nothing: the error names the request. A network or CORS failure is a TypeError (the relay never answered or the answer was hidden by the browser).
+  const fetchRelay = async (url, path, options) => {
+    try { return await fetch(url, options); }
+    catch (error) { throw new Error(`${options.method || "GET"} ${shortPath(path)}: 릴레이에 닿지 못했습니다 (${error?.message || error})`); }
+  };
   const adminFetch = async (path, options = {}) => {
     config ||= await loadConfig();
     if (!config.enabled || !config.origin || !config.token) throw new Error("참여자 룸 설정이 완료되지 않았습니다.");
-    return fetch(config.origin + path, { ...options, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${config.token}`, ...options.headers } });
+    return fetchRelay(config.origin + path, path, { ...options, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${config.token}`, ...options.headers } });
   };
   const post = async (path, body) => {
     const response = await adminFetch(path, { method: "POST", body: JSON.stringify(body) });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || `릴레이 오류 (${response.status})`);
+    if (!response.ok) throw new Error(`POST ${shortPath(path)}: ${result.error || "릴레이 오류"} (${response.status})`);
     return result;
   };
   const rememberDelivered = async id => {
