@@ -163,7 +163,8 @@
           ...recipients.map(option => el("option", { value: option.key, text: option.label || option.key, ...(option.key === item.recipientKey ? { selected: "" } : {}) })),
           ...(item.recipientKey && !recipients.some(option => option.key === item.recipientKey) ? [el("option", { value: item.recipientKey, text: item.recipientKey, selected: "" })] : [])) : null,
         item.status === "pending" ? [act("승인", "approve"), act("거절", "reject", true)] : null,
-        item.status === "approved" ? act("접근 취소", "revoke", true) : null));
+        item.status === "approved" ? act("접근 취소", "revoke", true) : null,
+        item.status === "rejected" || item.status === "revoked" ? el("button", { type: "button", class: "danger", "data-remove": item.id, "data-name": item.displayName, text: "삭제" }) : null));
     }
   };
   async function refreshParticipants() {
@@ -272,6 +273,19 @@
         const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(rename.dataset.rename)}/rename`, { method: "POST", body: JSON.stringify({ displayName: next }) });
         if (!response.ok) throw new Error(await errorOf(response, "이름 변경 실패"));
         say("표시 이름을 바꿨습니다.");
+      } catch (error) { say(error.message, true); }
+      await refreshParticipants();
+      return;
+    }
+    // a refused or revoked participant leaves the list (one confirmation; their session and handout list go with them, the objects they made stay in the room)
+    const remove = event.target.closest?.("button[data-remove]");
+    if (remove && roomId) {
+      if (!confirm(`${remove.dataset.name} 님을 목록에서 삭제할까요? 이 사람은 다시 요청해야 합니다.`)) return;
+      remove.disabled = true;
+      try {
+        const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(remove.dataset.remove)}`, { method: "DELETE" });
+        if (!response.ok) throw new Error(await errorOf(response, "삭제 실패"));
+        say("목록에서 삭제했습니다.");
       } catch (error) { say(error.message, true); }
       await refreshParticipants();
       return;
