@@ -77,7 +77,7 @@ const cmMirror = (() => {
         cssHash = info.cssHash; changed = true;
       }
       if (changed) api.onChange();
-    } catch (_) { /* the built-in renderer keeps working */ }
+    } catch (error) { console.warn("mirror sync failed", error); /* the built-in renderer keeps working */ }
   };
   return api;
 })();
