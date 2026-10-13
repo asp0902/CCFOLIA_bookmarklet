@@ -98,6 +98,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => { document.querySelector('.menu-paper')?.remove(); renderScene({ fieldWidth: 40, fieldHeight: 20, items: [], markers: [], characters: [], diceSymbols: [{ id: 'dd1', x: 8, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }, { id: 'dd2', x: 12, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }] }); });
   await page.evaluate(() => { const node = document.querySelector('.scene-die.mine'); const r = node.getBoundingClientRect(); node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 5, clientY: r.y + 5 })); });
   assert.deepEqual(await items(), ['roll a dice', '삭제'], 'their own die');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.dice-menu .dm-select')].map(sel => [...sel.options].map(o => o.textContent).join(','))), ['D4,D6,D8,D10,D12,D20', '1,2,3,4,5,6'], 'kind and value choices of the native die menu');
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });
