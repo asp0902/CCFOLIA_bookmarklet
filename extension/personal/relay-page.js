@@ -50,11 +50,11 @@
     if (typeof api?.relayMirror !== "function") return;
     try {
       const resend = mirrorRoom !== roomId || Date.now() - mirrorAt > 300000;
-      try { await api.relayLogoLoad?.(); await api.relayHelpProbe?.(); } catch (_) {}
+      try { await api.relayAssetLoad?.(); await api.relayHelpProbe?.(); } catch (_) {}
       const result = api.relayMirror(resend ? {} : mirrorKnown);
-      if (!resend && !result.css && !result.templates && !result.help && !result.logo) return;
-      mirrorRoom = roomId; mirrorAt = resend ? Date.now() : mirrorAt; mirrorKnown = { cssHash: result.cssHash, tplHash: result.tplHash, helpHash: result.helpHash, logoHash: result.logoHash };
-      emit({ action: "mirror", css: result.css, templates: result.templates, help: result.help, logo: result.logo, fontLinks: result.fontLinks });
+      if (!resend && !result.css && !result.templates && !result.help && !result.assets) return;
+      mirrorRoom = roomId; mirrorAt = resend ? Date.now() : mirrorAt; mirrorKnown = { cssHash: result.cssHash, tplHash: result.tplHash, helpHash: result.helpHash, assetsHash: result.assetsHash };
+      emit({ action: "mirror", css: result.css, templates: result.templates, help: result.help, assets: result.assets, fontLinks: result.fontLinks });
     } catch (_) { /* a failed mirror must never stop the chat relay */ }
   };
   const snapshot = () => {

@@ -34,4 +34,7 @@ current = await field();
 assert.deepEqual(current.decks, [{ id: "d1", x: 1, y: 2, z: 0, width: 6, height: 8, count: 54, coverUrl: "https://storage.ccfolia-cdn.net/back.png" }]);
 assert(!JSON.stringify(current).includes("front.png"), "no card face reaches the participant");
 assert.deepEqual(current.diceSymbols.map(d => [d.id, d.closed, d.value]), [["a", false, 4], ["b", true, 0]]);
+// the default card back (a path on CCFOLIA's own site) is accepted as a path only
+await scene({ fieldWidth: 20, fieldHeight: 10, decks: [{ id: "d1", coverUrl: "/images/trump/z01.png", count: 54 }, { id: "d2", coverUrl: "/images/../etc.png" }, { id: "d3", coverUrl: "https://evil.test/z.png" }] });
+assert.deepEqual((await field()).decks.map(d => [d.id, d.coverUrl]), [["d1", "/images/trump/z01.png"]]);
 console.log("scene field PASS");

@@ -54,7 +54,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.keyboard.press('Escape');
   // account menu and chat collapse
   await page.click('#account-btn');
-  assert.deepEqual(await page.locator('.menu-item').allTextContents(), ['BGM 음소거', '룸에서 나가기']);
+  // the account menu is CCFOLIA's as a player sees it: profile, log in (disabled), divider, help / terms / privacy as new-tab links, divider, developer commands (disabled)
+  assert.deepEqual(await page.locator('.menu-item').allTextContents(), ['로그인', '도움말', '이용약관', '개인 정보 정책', '개발자 명령']);
+  assert.equal(await page.locator('.menu-profile-sub').textContent(), 'SNS 미인증');
+  assert.deepEqual(await page.locator('a.menu-item').evaluateAll(links => links.map(a => [a.href, a.target, a.rel])), [['https://docs.ccfolia.com/', '_blank', 'noopener noreferrer'], ['https://ccfolia.com/termsOfService.html', '_blank', 'noopener noreferrer'], ['https://ccfolia.com/privacyPolicy.html', '_blank', 'noopener noreferrer']]);
+  assert.equal(await page.locator('button.menu-item:disabled').count(), 2); assert.equal(await page.locator('.menu-divider').count(), 2);
   await page.keyboard.press('Escape');
   await page.click('#chat-close');
   assert(await page.locator('#room').evaluate(r => r.classList.contains('chat-collapsed')));

@@ -262,6 +262,7 @@ export class RoomRelay {
     // The room scene (background, field image, pieces, characters) as the GM sees it. Everything is validated field by field; only images on CCFOLIA's own CDN are kept.
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/scene$/.test(url.pathname)) {
       const body = await request.json().catch(() => ({}));
+      const staticCover = value => typeof value === "string" && /^\/images\/[\w\-./]{1,100}\.png$/.test(value) && !value.includes("..") ? value : "";
       const cdn = value => typeof value === "string" && /^https:\/\/storage\.ccfolia-cdn\.net\/[\w\-./%~+=?&]{1,500}$/.test(value) ? value : "";
       const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(-100000, Math.min(100000, Number(value))) : fallback;
       const color = value => /^#[0-9a-fA-F]{3,8}$/.test(String(value || "")) ? String(value) : "";
@@ -279,8 +280,8 @@ export class RoomRelay {
         markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
         // Card decks: only the back and the number of cards left (the faces of the cards inside never reach the relay). Dice symbols: position, size, faces, and the value unless it is hidden.
-        decks: (Array.isArray(body.decks) ? body.decks : []).slice(0, 50).filter(item => cdn(item?.coverUrl))
-          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), width: num(item.width, 1), height: num(item.height, 1), count: Math.max(0, Math.min(9999, Math.round(num(item.count)))), coverUrl: cdn(item.coverUrl) })),
+        decks: (Array.isArray(body.decks) ? body.decks : []).slice(0, 50).filter(item => cdn(item?.coverUrl) || staticCover(item?.coverUrl))
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), width: num(item.width, 1), height: num(item.height, 1), count: Math.max(0, Math.min(9999, Math.round(num(item.count)))), coverUrl: cdn(item.coverUrl) || staticCover(item.coverUrl) })),
         diceSymbols: (Array.isArray(body.diceSymbols) ? body.diceSymbols : []).slice(0, 50).filter(item => item && typeof item.id === "string")
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), width: num(item.width, 2), height: num(item.height, 2), faces: Math.max(2, Math.min(1000, Math.round(num(item.faces, 6)))), closed: item.closed === true, value: item.closed === true ? 0 : Math.round(num(item.value)) })),
         characters: (Array.isArray(body.characters) ? body.characters : []).slice(0, 100).filter(item => cdn(item?.iconUrl))
@@ -343,10 +344,10 @@ export class RoomRelay {
       if (checked.css !== null) { await this.state.storage.put("mirror:css", checked.css); meta.cssHash = mirrorHash(checked.css); }
       if (checked.templates) { await this.state.storage.put("mirror:tpl", checked.templates); meta.tplHash = mirrorHash(JSON.stringify(checked.templates)); }
       if (checked.help) { await this.state.storage.put("mirror:help", checked.help); meta.helpHash = mirrorHash(JSON.stringify(checked.help)); }
-      if (checked.logo) { await this.state.storage.put("mirror:logo", checked.logo); meta.logoHash = mirrorHash(checked.logo); }
+      if (checked.assets) { await this.state.storage.put("mirror:assets", checked.assets); meta.assetsHash = mirrorHash(JSON.stringify(checked.assets)); }
       meta.fontLinks = checked.fontLinks;
       await this.state.storage.put("mirror:meta", meta);
-      this.push("p", { type: "mirror", mirror: { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", logoHash: meta.logoHash || "", fontLinks: meta.fontLinks } });
+      this.push("p", { type: "mirror", mirror: { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", assetsHash: meta.assetsHash || "", fontLinks: meta.fontLinks } });
       return json({ accepted: true, cssHash: meta.cssHash || "", tplHash: meta.tplHash || "" });
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages\/sync$/.test(url.pathname)) {
@@ -437,7 +438,7 @@ export class RoomRelay {
     }
     // The mirrored CSS is a file (not inline) so style-src 'self' stays; templates are fetched when their hash changes, not on every state poll.
     if (request.method === "GET" && /\/mirror\.css$/.test(url.pathname)) return new Response(await this.state.storage.get("mirror:css") || "", { headers: { "Content-Type": "text/css; charset=utf-8" } });
-    if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {}, help: await this.state.storage.get("mirror:help") || null, logo: await this.state.storage.get("mirror:logo") || "" });
+    if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {}, help: await this.state.storage.get("mirror:help") || null, assets: await this.state.storage.get("mirror:assets") || {} });
     if (request.method === "GET" && /\/state$/.test(url.pathname)) return json({
       roomTitle: room.roomTitle || "플레이룸",
       capabilities: room.capabilities,
@@ -448,7 +449,7 @@ export class RoomRelay {
       channels: room.channels || [],
       dicebot: room.dicebot || "",
       health: room.health ? { ok: room.health.ok } : null,
-      mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", logoHash: meta.logoHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
+      mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", assetsHash: meta.assetsHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
       scene: room.scene || null,
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {

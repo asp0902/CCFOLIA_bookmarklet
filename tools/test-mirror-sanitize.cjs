@@ -26,5 +26,9 @@
   const help = m.validateMirror({ help: { title: 'T', sections: [{ title: 'S', text: 'a <b>x</b>', links: [{ text: 'ok', href: 'https://docs.bcdice.org/a' }, { text: 'bad', href: 'https://evil.com/' }, { text: 'js', href: 'javascript:1' }] }, { title: '', text: '' }] } }).help;
   assert.deepEqual(help, { title: 'T', system: '', sections: [{ title: 'S', text: 'a <b>x</b>', links: [{ text: 'ok', href: 'https://docs.bcdice.org/a' }] }] });
   assert.equal(m.validateMirror({ help: { sections: [] } }).help, null);
+  // static pictures of CCFOLIA's own site (default account picture, default card back, dice faces) as PNG data URIs: only known paths, only PNG data, bounded
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  assert.deepEqual(m.validateMirror({ assets: { '/ccfolia.png': png, '/images/trump/z01.png': png, '/images/6_dice/6_dice[1].png': png, '/evil.png': png, '/images/../x.png': png, '/images/a.png': 'data:text/html;base64,AA', '/images/b.png': 'https://evil.test/b.png' } }).assets, { '/ccfolia.png': png, '/images/trump/z01.png': png, '/images/6_dice/6_dice[1].png': png });
+  assert.equal(m.validateMirror({ assets: {} }).assets, null); assert.equal(m.validateMirror({}).assets, null);
   console.log('mirror sanitize PASS');
 })().catch(e => { console.error(e); process.exit(1); });

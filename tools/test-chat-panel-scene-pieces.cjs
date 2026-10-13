@@ -45,6 +45,9 @@ const decks = plain(relayDeckViews({ d1: { _id: 'd1', x: 3, y: 4, z: 2, zIndex: 
 assert.deepEqual(decks, [{ id: 'd1', x: 3, y: 4, z: 2, width: 6, height: 8, count: 3, coverUrl: `${CDN}back.png` }]);
 assert(!JSON.stringify(decks).includes('front') && !JSON.stringify(decks).includes('비밀'), 'no card face or memo is sent');
 assert.equal(relayDeckViews(null, url, num).length, 0);
+// the default card back is a path on CCFOLIA's own site: the path is sent (the picture comes as an asset), other relative paths and other hosts are not
+const own = plain(relayDeckViews({ d1: { _id: 'd1', coverImageUrl: '/images/trump/z01.png', items: { a: { imageUrl: `${CDN}f.png` } } }, d2: { _id: 'd2', coverImageUrl: '/x/../secret.png' }, d3: { _id: 'd3', coverImageUrl: 'https://evil.example/b.png' } }, url, num));
+assert.deepEqual(own.map(d => [d.id, d.coverUrl, d.count]), [['d1', '/images/trump/z01.png', 1]]);
 // dice symbols: place, size, faces, value; a hidden value is not sent
 const dice = plain(relayDiceViews({ a: { _id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4, closed: false, name: '-', owner: 'uid-secret', changeCount: 0 }, b: { _id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, value: 17, closed: true } }, num));
 assert.deepEqual(dice, [{ id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, closed: false, value: 4 }, { id: 'b', x: 0, y: 0, width: 2, height: 2, faces: 20, closed: true, value: 0 }]);
