@@ -216,7 +216,7 @@
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin) return;
-    if (request?.source === HANDOUT_SOURCE && request?.direction === "request" && (request.action === "participants" || request.action === "handouts")) {
+    if (request?.source === HANDOUT_SOURCE && request?.direction === "request" && (request.action === "participants" || request.action === "handouts" || request.action === "popup")) {
       // the handout tool reads who is in the room and sends what each person may read (no click needed: the tool does it on its own)
       const requestId = clean(request.requestId, 100), action = request.action;
       config ||= await loadConfig();
@@ -228,6 +228,9 @@
           if (!response.ok) throw new Error(`참가자 조회 실패 (${response.status})`);
           const data = await response.json();
           answer({ ok: true, participants: (data.participants || []).slice(0, 100).map(item => ({ id: clean(item.id, 100), displayName: clean(item.displayName, 40), status: clean(item.status, 20), recipientKey: clean(item.recipientKey, 128) })) });
+        } else if (action === "popup") {
+          const response = await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/handout-popup`, { id: clean(request.handoutId, 200) });
+          answer({ ok: true, count: Number(response?.count) || 0 });
         } else {
           const lists = request.lists && typeof request.lists === "object" ? request.lists : {};
           const options = Array.isArray(request.recipients) ? request.recipients.slice(0, 100).map(option => ({ key: clean(option?.key, 128), label: clean(option?.label, 80) })) : [];

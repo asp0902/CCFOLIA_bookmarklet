@@ -131,12 +131,10 @@
     return { touched, pending };
   };
   const startAvOff = () => {
-    let enabled = true;
-    try { chrome.storage.local.get(["r20AvOff"]).then(value => { enabled = value.r20AvOff !== false; }); } catch (_) {}
     let tries = 0;
     const timer = setInterval(() => {
       tries += 1;
-      if (!enabled || !document.getElementById("collapseAudioAndVideo")) { if (tries > 90) clearInterval(timer); return; }
+      if (!document.getElementById("collapseAudioAndVideo")) { if (tries > 90) clearInterval(timer); return; }
       const { touched, pending } = avPass();
       // the sections of the settings sidebar are drawn a little after the page; once every control that exists has the wanted choice there is nothing more to do
       if (!touched && !pending && AV_TARGETS.some(target => avSelectFor(target.label))) clearInterval(timer);

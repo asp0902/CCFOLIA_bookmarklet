@@ -190,8 +190,16 @@ async function handoutNodes(html) {
   for (const element of root.querySelectorAll("[data-cm-style]")) { element.style.cssText = element.getAttribute("data-cm-style"); element.removeAttribute("data-cm-style"); }
   return [...root.childNodes];
 }
+// The GM shared this handout with the people who may read it: it opens (the list may arrive a moment after the signal)
+async function popupHandout(id) {
+  if (!myHandouts.some(h => h.id === id)) await loadMyHandouts(false);
+  if (document.querySelector(".dlg #handout-detail") && openDetailId === id) return;
+  openHandoutDetail(id);
+}
+let openDetailId = "";
 async function openHandoutDetail(id) {
   const item = myHandouts.find(h => h.id === id); if (!item) return;
+  openDetailId = id;
   const seen = readSeen(); seen[item.id] = handoutStamp(item); writeSeen(seen); refreshHandoutButton();
   const body = await handoutNodes(item.html), secret = item.secretHtml ? await handoutNodes(item.secretHtml) : null;
   openDialog(item.title || "핸드아웃", (box, foot, close) => {
@@ -224,7 +232,7 @@ function applyMyHandouts(items, announce) {
   myHandouts = Array.isArray(items) ? items : [];
   refreshHandoutButton();
   if (!announce) return;
-  const fresh = myHandouts.filter(h => handoutIsNew(h) && before.get(h.id) !== handoutStamp(h) && arrivedAfterApproval(h.updatedAt));
+  const fresh = myHandouts.filter(h => before.has(h.id) && handoutIsNew(h) && before.get(h.id) !== handoutStamp(h) && arrivedAfterApproval(h.updatedAt));
   for (const h of myHandouts) if (handoutIsNew(h) && before.get(h.id) !== handoutStamp(h)) logPopup("list", h.id, h.updatedAt, fresh.includes(h));
   if (fresh.length) openHandoutDetail([...fresh].sort((x, y) => String(y.updatedAt).localeCompare(String(x.updatedAt)))[0].id); // the most recently changed one (the first listed on a tie)
 }
@@ -976,6 +984,8 @@ function onPush(event) {
     renderState(current);
   } else if (message.type === "handouts") {
     applyMyHandouts(message.items, true);
+  } else if (message.type === "handout-popup") {
+    popupHandout(String(message.id || ""));
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);

@@ -273,6 +273,19 @@ export class RoomRelay {
       }
       return json({ accepted: true, changed: count });
     }
+    // "Open it now" for the participants whose own list holds this handout (the GM's tool put it there only for those who may read it): { id } -> { count }
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/handout-popup$/.test(url.pathname)) {
+      const id = text((await request.json().catch(() => ({}))).id, 200);
+      let count = 0;
+      for (const member of Object.values(room.participants)) {
+        if (member.status !== "approved") continue;
+        const items = await this.state.storage.get(`handouts:${member.id}`) || [];
+        if (!items.some(item => item.id === id)) continue;
+        this.push(`p:${member.id}`, { type: "handout-popup", id });
+        count += 1;
+      }
+      return json({ accepted: true, count });
+    }
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/commands$/.test(url.pathname)) {
       room.gmHeartbeatAt = Date.now();
       await this.save(room);

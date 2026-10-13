@@ -27,7 +27,6 @@
 
   const css = `
     :host { all: initial; }
-    .check { display: flex; gap: 8px; align-items: center; }
     *, *::before, *::after { box-sizing: border-box; }
     .backdrop { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0.5); font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
@@ -114,9 +113,6 @@
   const enabled = el("input", { type: "checkbox", id: "enabled", "aria-label": "웹 공유 사용" });
   // Roll20 campaign link: the campaign page URL pasted here is reduced to its id; r20Links maps campaign id -> this room. Empty = unlink.
   const r20 = el("input", { type: "text", id: "r20", autocomplete: "off", spellcheck: "false", placeholder: "https://app.roll20.net/campaigns/details/123456/…" });
-  // Roll20 game screen: voice and video are switched off on entering (the toolkit's Roll20 script does it); on by default, this box turns it off
-  const r20Av = el("input", { type: "checkbox", id: "r20av" });
-  r20Av.addEventListener("change", () => chrome.storage.local.set({ r20AvOff: r20Av.checked }));
   r20.addEventListener("change", async () => {
     if (!roomId) { say("코코포리아 룸 화면에서 설정해주세요.", true); return; }
     const id = r20.value.match(/\/campaigns\/(?:details|join)\/(\d+)/)?.[1];
@@ -315,7 +311,6 @@
       el("div", { class: "field" }, el("label", { for: "token", text: "GM 토큰" }), token),
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
-      el("div", { class: "field" }, el("label", { for: "r20av", class: "check" }, r20Av, "롤20 입장 시 음성·영상 끄기")),
       toast,
       el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants),
@@ -332,8 +327,7 @@
   document.addEventListener("keydown", onKey, true);
   document.documentElement.append(host);
 
-  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Links", "r20AvOff"], value => {
-    r20Av.checked = value.r20AvOff !== false;
+  chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Links"], value => {
     const linked = Object.entries(value.r20Links || {}).find(([, link]) => link.roomId === roomId)?.[0];
     r20.value = linked ? `캠페인 ${linked}` : "";
     enabled.checked = value.relayEnabled === true;
