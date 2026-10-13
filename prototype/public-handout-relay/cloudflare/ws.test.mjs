@@ -56,9 +56,9 @@ try {
   // Link preview (Discord/Slack unfurl): absolute og:* addresses for the host that served the page, an image that exists.
   const meta = name => new RegExp(`<meta (?:property|name)="${name}" content="([^"]*)"`).exec(html)?.[1];
   assert(!html.includes("__PUBLIC_ORIGIN__"), "no placeholder left in the page");
-  assert.equal(meta("og:image"), `${base}/og-image.png`);
+  assert.equal(meta("og:image"), `${base}/og-image.png?v=2`);
   assert.equal(meta("og:url"), `${base}/`);
-  assert.equal(meta("twitter:image"), `${base}/og-image.png`);
+  assert.equal(meta("twitter:image"), `${base}/og-image.png?v=2`);
   assert.equal(meta("twitter:card"), "summary_large_image");
   assert(meta("og:title") && meta("og:description"), "title and description are present");
   assert.equal(meta("og:image:width"), "1200");
