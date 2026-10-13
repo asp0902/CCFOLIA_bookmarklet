@@ -8,7 +8,9 @@ const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
 const htmlAttribute = value => String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const MAX_GM_SOCKETS = 5;
 const MAX_PARTICIPANT_SOCKETS = 100;
-const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers } });
+// The code version that answered (a room object may keep running older code than the page it serves: the play room diagnostics show this).
+const BUILD = "2026-10-13-r3";
+const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Relay-Build": BUILD, ...headers } });
 const token = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
