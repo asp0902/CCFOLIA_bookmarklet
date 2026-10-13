@@ -149,15 +149,80 @@ let handoutSeen = "", handoutClosed = "";
   const hide = () => { handoutEl.classList.remove("open"); backdrop.hidden = true; handoutClosed = handoutSeen; };
   close.addEventListener("click", hide); backdrop.addEventListener("click", hide);
   document.addEventListener("keydown", event => { if (event.key === "Escape" && handoutEl.classList.contains("open")) hide(); });
-  document.getElementById("handout-open").addEventListener("click", () => { handoutEl.hidden = false; handoutEl.classList.add("open"); backdrop.hidden = false; });
+  document.getElementById("handout-open").addEventListener("click", () => { if (myHandouts.length) { openHandoutList(); return; } handoutEl.hidden = false; handoutEl.classList.add("open"); backdrop.hidden = false; });
   window.syncHandoutPopup = handout => {
     const has = !!handout.id;
-    document.getElementById("handout-open").hidden = !has;
+    legacyHandout = has; refreshHandoutButton();
     if (!has) { handoutEl.hidden = true; handoutEl.classList.remove("open"); backdrop.hidden = true; handoutSeen = ""; return; }
     const key = `${handout.id}:${handout.updatedAt || ""}`;
     handoutEl.hidden = false;
     if (key !== handoutSeen) { handoutSeen = key; handoutEl.classList.add("open"); backdrop.hidden = false; }
   };
+}
+// ---- My handouts: the GM's handout tool works out what each person may read (title, body with its formatting, the secret part only for those who may read it) and the relay gives a participant only their own list.
+// New or changed ones pop up once; the header button opens the list; a dot shows what has not been opened. Bodies are cleaned again here (same code as the relay) and drawn without inline styles in the markup (CSP): style goes through the CSSOM.
+let myHandouts = [], legacyHandout = false;
+const handoutSeenKey = "capybara-handout-seen";
+const readSeen = () => { try { return JSON.parse(localStorage.getItem(handoutSeenKey) || "{}") || {}; } catch (_) { return {}; } };
+const writeSeen = seen => { try { localStorage.setItem(handoutSeenKey, JSON.stringify(seen)); } catch (_) {} };
+const handoutStamp = item => `${item.updatedAt || ""}|${item.html.length}|${item.secretHtml.length}`;
+const handoutIsNew = item => readSeen()[item.id] !== handoutStamp(item);
+function refreshHandoutButton() {
+  const button = document.getElementById("handout-open");
+  button.hidden = !(legacyHandout || myHandouts.length);
+  button.classList.toggle("has-new", myHandouts.some(handoutIsNew));
+  syncTopBar?.();
+}
+async function handoutNodes(html) {
+  const { cleanHandoutHtml } = await import("/handout-sanitize.mjs");
+  const markup = cleanHandoutHtml(html).replace(/<[^<>]*>/g, tag => tag.replace(/ style="/g, ' data-cm-style="'));
+  const doc = new DOMParser().parseFromString(`<!doctype html><body>${markup}`, "text/html");
+  const root = document.importNode(doc.body, true);
+  for (const element of root.querySelectorAll("[data-cm-style]")) { element.style.cssText = element.getAttribute("data-cm-style"); element.removeAttribute("data-cm-style"); }
+  return [...root.childNodes];
+}
+async function openHandoutDetail(id) {
+  const item = myHandouts.find(h => h.id === id); if (!item) return;
+  const seen = readSeen(); seen[item.id] = handoutStamp(item); writeSeen(seen); refreshHandoutButton();
+  const body = await handoutNodes(item.html), secret = item.secretHtml ? await handoutNodes(item.secretHtml) : null;
+  openDialog(item.title || "핸드아웃", (box, foot, close) => {
+    box.classList.add("handout-detail"); box.id = "handout-detail";
+    const main = el("div", "handout-body"); main.append(...body); box.append(main);
+    if (secret) { const part = el("section", "handout-secret"); part.append(el("h3", "", "비밀 (읽을 권한이 있는 사람에게만 보입니다)")); const inner = el("div", "handout-body"); inner.append(...secret); part.append(inner); box.append(part); }
+    if (myHandouts.length > 1) { const back = el("button", "", "목록"); back.type = "button"; back.addEventListener("click", () => { close(); openHandoutList(); }); foot.prepend(back); }
+  });
+}
+function openHandoutList() {
+  openDialog("핸드아웃", (box, foot, close) => {
+    box.classList.add("handout-list");
+    const groups = new Map();
+    for (const item of [...myHandouts].sort((a, b) => a.order - b.order)) { const key = item.folder || ""; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(item); }
+    for (const [folder, items] of groups) {
+      if (folder) box.append(el("h3", "handout-folder", folder));
+      for (const item of items) {
+        const row = el("button", "handout-row"); row.type = "button";
+        row.append(el("span", "handout-title", item.title || "(제목 없음)")); if (handoutIsNew(item)) row.append(el("i", "handout-dot"));
+        if (item.secretHtml) row.append(el("small", "", "비밀 포함"));
+        row.addEventListener("click", () => { close(); openHandoutDetail(item.id); }); box.append(row);
+      }
+    }
+    if (!myHandouts.length) box.append(el("p", "", "받은 핸드아웃이 없습니다."));
+  });
+}
+// the list arrived (loaded, or pushed by the relay): what is new pops up once, the newest first
+function applyMyHandouts(items, announce) {
+  const before = new Map(myHandouts.map(h => [h.id, handoutStamp(h)]));
+  myHandouts = Array.isArray(items) ? items : [];
+  refreshHandoutButton();
+  if (!announce) return;
+  const fresh = myHandouts.filter(h => handoutIsNew(h) && before.get(h.id) !== handoutStamp(h));
+  if (fresh.length) openHandoutDetail([...fresh].sort((x, y) => String(y.updatedAt).localeCompare(String(x.updatedAt)))[0].id); // the most recently changed one (the first listed on a tie)
+}
+async function loadMyHandouts(announce = false) {
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/my-handouts`);
+    if (response.ok) applyMyHandouts((await response.json()).items, announce);
+  } catch (_) { /* the legacy single handout keeps working */ }
 }
 // Floating window: Document Picture-in-Picture (Chrome/Edge 116+) keeps the chat panel in an always-on-top window next to CCFOLIA, no install needed.
 {
@@ -521,6 +586,7 @@ const renderState = data => {
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
   if (data.mirror) cmMirror.sync(data.mirror, roomId).then(refreshHelpBtn);
+  if (!window.__handoutsLoaded) { window.__handoutsLoaded = true; loadMyHandouts(true); }
   const mirrored = cmMirror.has("chatShell") && cmMirror.has("chatRow");
   const list = mirrored ? cmMirror.shadow("messages-host", node => document.getElementById("messages").after(node)).host : document.getElementById("messages");
   document.getElementById("messages").hidden = mirrored;
@@ -795,6 +861,8 @@ function onPush(event) {
     const gone = new Set(Array.isArray(message.ids) ? message.ids : []);
     current.messages = current.messages.filter(item => !gone.has(item.id));
     renderState(current);
+  } else if (message.type === "handouts") {
+    applyMyHandouts(message.items, true);
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);

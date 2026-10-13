@@ -1,6 +1,7 @@
 import { validateMirror, mirrorHash } from "../public/mirror-sanitize.mjs";
 import { checkCreate, checkEdit, logCreate, recordCreate, forgetObject, ownsObject, pruneCreated } from "./create-guard.mjs";
 import { cleanCharacterFields, cleanCharacterDoc } from "./character-fields.mjs";
+import { cleanHandoutList } from "../public/handout-sanitize.mjs";
 const encoder = new TextEncoder();
 const GM_SOCKET_PROTOCOL = "capybara-gm";
 const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
@@ -235,7 +236,40 @@ export class RoomRelay {
       return gmSocket;
     }
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/participants$/.test(url.pathname)) {
-      return json({ participants: Object.values(room.participants).map(({ id, displayName, status, requestedAt }) => ({ id, displayName, status, requestedAt })) });
+      return json({ participants: Object.values(room.participants).map(({ id, displayName, status, requestedAt, recipientKey }) => ({ id, displayName, status, requestedAt, recipientKey: recipientKey || "" })), recipients: room.recipientOptions || [] });
+    }
+    // Who a participant is for the handouts: one of the recipients the GM's handout tool offers (a PL / account key). The choice is the GM's; the handout tool matches by name when none is set.
+    const recipientMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/recipient$/);
+    if (request.method === "POST" && recipientMatch) {
+      const member = room.participants[decodeURIComponent(recipientMatch[1])];
+      if (!member) return json({ error: "참가 요청을 찾을 수 없습니다." }, 404);
+      const key = text((await request.json().catch(() => ({}))).key, 128).trim();
+      if (key) member.recipientKey = key; else delete member.recipientKey;
+      await this.save(room);
+      return json({ id: member.id, recipientKey: member.recipientKey || "" });
+    }
+    // The recipients the GM's handout tool offers (PL list / accounts): { key, label }.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/recipients$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      room.recipientOptions = (Array.isArray(body.options) ? body.options : []).slice(0, 100).map(option => ({ key: text(option?.key, 128).trim(), label: text(option?.label, 80).trim() })).filter(option => option.key);
+      await this.save(room);
+      return json({ accepted: true, count: room.recipientOptions.length });
+    }
+    // The handouts each participant may see, worked out by the GM's tool from its permissions: { lists: { [participantId]: [item] } }. Stored and pushed per person; one person's list is never sent to another.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/handouts$/.test(url.pathname)) {
+      const body = await request.json().catch(() => ({}));
+      const lists = body.lists && typeof body.lists === "object" ? body.lists : {};
+      let count = 0;
+      for (const member of Object.values(room.participants)) {
+        if (member.status !== "approved") { await this.state.storage.delete(`handouts:${member.id}`); continue; }
+        const items = cleanHandoutList(lists[member.id]);
+        const before = JSON.stringify(await this.state.storage.get(`handouts:${member.id}`) || []);
+        if (JSON.stringify(items) === before) continue;
+        if (items.length) await this.state.storage.put(`handouts:${member.id}`, items); else await this.state.storage.delete(`handouts:${member.id}`);
+        this.push(`p:${member.id}`, { type: "handouts", items });
+        count += 1;
+      }
+      return json({ accepted: true, changed: count });
     }
     if (request.method === "GET" && /^\/api\/admin\/rooms\/[^/]+\/commands$/.test(url.pathname)) {
       room.gmHeartbeatAt = Date.now();
@@ -526,6 +560,10 @@ export class RoomRelay {
       await this.save(room);
       this.push("gm", { type: "command", command });
       return json({ accepted: true, commandId: command.id }, 202);
+    }
+    // This participant's own handouts (the GM's tool decided what each person may read; the secret part is empty unless they may read it).
+    if (request.method === "GET" && /\/my-handouts$/.test(url.pathname)) {
+      return json({ items: await this.state.storage.get(`handouts:${member.id}`) || [] });
     }
     // The characters this participant made, with everything the editor shows (the GM's page reports them with the scene; only the maker gets them back).
     if (request.method === "GET" && /\/mine$/.test(url.pathname)) {
