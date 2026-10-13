@@ -1,0 +1,72 @@
+// DRAFT - not published. Firebase project: ccfolia-handout-25c6b (the handout tool's own project, anonymous sign-in).
+// It replaces the rules that are published now (see firebase/README.md for what they allow and why they have to change). Publish it only after the handout tool that writes
+// inbox copies is released (handout-overhaul stage 2), otherwise the tool that is in use today stops syncing.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function gmDoc(roomId) { return get(/databases/$(database)/documents/rooms/$(roomId)/meta/gm); }
+    // the GM of a room: the account that wrote meta/gm (the room's owner in CCFOLIA, decided by the handout tool on the owner's side)
+    function isGm(roomId) { return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/meta/gm) && gmDoc(roomId).data.gmUid == request.auth.uid; }
+
+    match /rooms/{roomId} {
+      // GM marker: anybody signed in reads it; the first writer creates it; afterwards only the current GM changes it - or the same CCFOLIA account on another browser
+      // (its anonymous uid changed): the new document must carry the gmCcfoliaUid the old one has. That claim is made by a client, so it is only as good as the secrecy of the owner's
+      // CCFOLIA uid (a participant can read it in members/meta only if they are the GM; it is not published to players).
+      match /meta/gm {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.gmUid == request.auth.uid;
+        allow update: if signedIn() && request.resource.data.gmUid == request.auth.uid
+          && (resource.data.gmUid == request.auth.uid
+            || (resource.data.get('gmCcfoliaUid', '') != '' && resource.data.gmCcfoliaUid == request.resource.data.get('gmCcfoliaUid', '')));
+        allow delete: if isGm(roomId);
+      }
+      // other meta documents (folders): everybody signed in reads, only the GM writes
+      match /meta/{docId} {
+        allow read: if signedIn();
+        allow write: if docId != 'gm' && isGm(roomId);
+      }
+
+      // the originals, with the secret text: only the GM
+      match /handouts/{handoutId} {
+        allow read, write: if isGm(roomId);
+      }
+      // what one person may read: the GM writes it, the person reads their own (the document id is the person's anonymous uid)
+      match /inbox/{uid}/handouts/{handoutId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow write: if isGm(roomId);
+      }
+      // who is who: everybody writes only their own record (account uid and display name); the GM and the person read it
+      match /members/{uid} {
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['ccfoliaUid', 'displayName', 'updatedAt'])
+          && request.resource.data.ccfoliaUid is string && request.resource.data.ccfoliaUid.size() > 0 && request.resource.data.ccfoliaUid.size() <= 128
+          && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80;
+        allow read: if signedIn() && (request.auth.uid == uid || isGm(roomId));
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
+      // "show to players" signals: created by the GM, read by everybody signed in (they only name a handout id; what can be read stays in the inbox)
+      match /shows/{showId} {
+        allow read: if signedIn();
+        allow create: if isGm(roomId) && request.resource.data.atUid == request.auth.uid;
+        allow delete: if isGm(roomId);
+      }
+      match /presence/{uid} {
+        allow read: if signedIn();
+        allow write, delete: if signedIn() && request.auth.uid == uid;
+      }
+      // pictures of handouts (split into chunks): the GM writes; reading needs a sign-in and the picture id, which is a random id inside the handout text
+      // (a person who may not read a handout never gets the text with the id; the id is not listed anywhere because listing is not allowed below)
+      match /images/{imageId} {
+        allow get: if signedIn();
+        allow list: if false;
+        allow create, update, delete: if isGm(roomId);
+        match /chunks/{chunkId} {
+          allow get: if signedIn();
+          allow list: if signedIn(); // the reader asks for the chunks of one known picture
+          allow create, update, delete: if isGm(roomId);
+        }
+      }
+    }
+  }
+}
