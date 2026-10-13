@@ -47,6 +47,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // the browser never starts its own image drag (it would cut the pointer events short); movable pieces show CCFOLIA's move cursor
   const dragInfo = await page.evaluate(() => { const img = document.querySelector('#scene-field img[data-id]'); const event = new DragEvent('dragstart', { bubbles: true, cancelable: true }); img.dispatchEvent(event); const cs = getComputedStyle(img); return { prevented: event.defaultPrevented, userDrag: cs.webkitUserDrag, cursor: cs.cursor, draggable: img.draggable }; });
   assert.deepEqual(dragInfo, { prevented: true, userDrag: 'none', cursor: 'move', draggable: false });
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.stage')).cursor), 'auto', 'the empty map keeps the default cursor (CCFOLIA: auto)');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('img[data-locked]')).cursor), 'default', 'a locked piece does not show a hand or move cursor');
   // a dice symbol the participant made (the relay's ledger) can be dragged like an item; somebody else's cannot
   await page.evaluate(() => { ownedIds = new Set(['d1']); renderScene({ fieldWidth: 40, fieldHeight: 20, items: [], markers: [], characters: [], diceSymbols: [{ id: 'd1', x: 0, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }, { id: 'd2', x: 6, y: 0, width: 2, height: 2, faces: 6, value: 5, closed: false }] }); });
   assert.equal(await page.locator('.scene-die.mine').count(), 1, 'only their own die is a drag handle');
