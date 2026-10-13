@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.102
+// @version      0.1.103
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.102",
+    version: "0.1.103",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -178,7 +178,7 @@
     forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
     fb() { return fbState; },
     // who holds the GM seat in Firestore against this browser (for a refused read/write): the seat document, this anonymous uid, the account uid, the role CCFOLIA gave, what the claim did, the last refusal
-    seat() { return JSON.parse(JSON.stringify({ myUid: fbState?.uid || "", myCcfUid, role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seat: lastGmDoc, claim: seatClaimLog, issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null })); },
+    seat() { return JSON.parse(JSON.stringify({ roomKey: getCurrentRoomKey(), seatPath: `rooms/${getCurrentRoomKey()}/meta/gm`, myUid: fbState?.uid || "", myCcfUid, role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seat: lastGmDoc, claim: seatClaimLog, issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null })); },
     initFirebase() { return initFirebase(); },
     pushHandout(id) {
       const h = state.data.handouts.find((x) => x.id === id);
@@ -1547,9 +1547,9 @@
       display: none;
       align-items: center; gap: 8px;
     }
-    .room-strip[data-tab-visible="1"] { display: flex; }
+    .room-strip[data-tab-visible="1"] { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
     .room-strip .room-info {
-      flex: 1; min-width: 0;
+      flex: 0 0 auto; min-width: 0;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     /* PL 목록 관리 모달 (Shadow DOM 안의 nested overlay) */
@@ -2357,13 +2357,15 @@
     if (lastGmDoc.gmUid === fbState.uid) return;
     if (Date.now() - seatClaimAt < 60000) return;
     seatClaimAt = Date.now();
+    const triedSeat = { ...lastGmDoc };
     try {
       await resolveMyCcfUid();
       await pushGmToFirestore(String(state.data.myCharacter || lastGmDoc.gmCharacter || "").trim());
       seatClaimLog = { at: new Date().toISOString(), ok: true, from: lastGmDoc.gmUid || "(none)", ccfUid: !!myCcfUid };
       await resubscribeAfterSeat();
     } catch (error) {
-      seatClaimLog = { at: new Date().toISOString(), ok: false, code: String(error?.code || error?.message || error).slice(0, 80), seatHadAccountUid: !!lastGmDoc.gmCcfoliaUid, ccfUid: !!myCcfUid };
+      // what the seat looked like when the try was made (an empty account uid counts as none: the old tool wrote it that way)
+      seatClaimLog = { at: new Date().toISOString(), ok: false, code: String(error?.code || error?.message || error).slice(0, 80), seatHadAccountUid: !!(triedSeat.gmCcfoliaUid && triedSeat.gmCcfoliaUid.length), seatGmUid: triedSeat.gmUid || "", ccfUid: !!myCcfUid };
       noteFirebaseIssue("GM 자리 되찾기", error);
       console.warn("[ccf-handout] GM seat claim failed:", error);
     }
@@ -3390,6 +3392,7 @@
       let stripHtml = "";
       if (state.activeTab === "settings") {
         stripHtml = `
+          <span class="room-info" data-firebase-line>Firebase: ${escapeHtml(firebaseIssueLabel())}</span>
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
         `;
       }
@@ -3933,7 +3936,6 @@
         </div>
         ${renderSettingsPlList()}
       </div>
-      <div class="hint" style="margin:14px 0 0;">Firebase: ${escapeHtml(firebaseIssueLabel())}</div>
     `;
   }
 
