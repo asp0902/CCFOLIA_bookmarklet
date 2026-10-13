@@ -100,6 +100,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => { const node = document.querySelector('.scene-die.mine'); const r = node.getBoundingClientRect(); node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 5, clientY: r.y + 5 })); });
   assert.deepEqual(await items(), ['roll a dice', '삭제'], 'their own die');
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.dice-menu .dm-select')].map(sel => [...sel.options].map(o => o.textContent).join(','))), ['D4,D6,D8,D10,D12,D20', '1,2,3,4,5,6'], 'kind and value choices of the native die menu');
+  // a double click rolls one's own die (shown at once, one request with roll: true) and does not reset the view
+  const rolls = []; page.on('request', r => { if (/\/objects\/update$/.test(r.url())) rolls.push(JSON.parse(r.postData())); });
+  await page.evaluate(() => { document.querySelector('.menu-paper')?.remove(); document.querySelector('.scene-die.mine').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); });
+  await page.waitForTimeout(300);
+  assert.equal(rolls.length, 1); assert.equal(rolls[0].kind, 'dice'); assert.equal(rolls[0].roll, true); assert(rolls[0].fields.value >= 1 && rolls[0].fields.value <= 6, 'a random face');
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });

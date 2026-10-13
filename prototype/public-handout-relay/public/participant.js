@@ -458,13 +458,7 @@ window.addEventListener("resize", () => renderScene());
     const anchor = { setAttribute() {}, getBoundingClientRect: () => ({ left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY - 4 }) };
     if (node.dataset.kind === "dice") {
       const die = (sceneData?.diceSymbols || []).find(d => d.id === id) || {};
-      // a change shows at once (the die is redrawn from the local scene) and goes to the GM's page; if it is refused the die goes back
-      const change = async fields => {
-        const before = { faces: die.faces, value: die.value, closed: die.closed };
-        Object.assign(die, fields); if ("faces" in fields && !("value" in fields)) die.value = 1; renderScene();
-        const answer = await characterRequest("update", { kind: "dice", id, fields });
-        if (!answer.ok) { Object.assign(die, before); renderScene(); fail(answer); }
-      };
+      const change = fields => dieRequest(id, fields);
       const field = (labelText, options, current, onChange) => {
         const wrap = el("label", "dm-field"), select = el("select", "dm-select");
         for (const [value, text] of options) { const option = el("option", "", text); option.value = String(value); select.append(option); }
@@ -481,7 +475,7 @@ window.addEventListener("resize", () => renderScene());
         hideRow);
       openMenu(anchor, [
         { node: box },
-        { label: "roll a dice", run: () => change({ value: 1 + Math.floor(Math.random() * faces) }) },
+        { label: "roll a dice", run: () => rollDie(id) },
         { label: "삭제", run: async () => { selectDie(null); fail(await removeNow(id, () => characterRequest("delete", { kind: "dice", id }))); } }
       ], "ctx-menu dice-menu");
       return;
@@ -505,6 +499,13 @@ window.addEventListener("resize", () => renderScene());
       { divider: true },
       { label: "ID 복사(개발자용)", run: () => navigator.clipboard?.writeText(id).catch(() => {}) }
     ], "ctx-menu");
+  });
+  // CCFOLIA: a double click rolls one's own die and opens the editor of a character (measured on the GM screen); it must not also reset the view
+  stage.addEventListener("dblclick", event => {
+    if (interactive(event.target)) return;
+    const own = event.target.closest?.(".scene-die.mine,.scene-die-img.mine"), token = event.target.closest?.("img[data-kind=character]");
+    if (own) { event.stopImmediatePropagation(); rollDie(own.dataset.id); }
+    else if (token) { event.stopImmediatePropagation(); editCharacter(token.dataset.id); }
   });
   stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.touched = true; view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
@@ -1419,6 +1420,16 @@ document.addEventListener("keydown", event => {
   if (!name) return;
   event.preventDefault(); charAction(name, id);
 });
+// A change to one's own die shows at once (the die is redrawn from the local scene) and goes to the GM's page; if it is refused the die goes back.
+async function dieRequest(id, fields, extra = {}) {
+  const die = (sceneData?.diceSymbols || []).find(d => d.id === id); if (!die) return;
+  const before = { faces: die.faces, value: die.value, closed: die.closed };
+  Object.assign(die, fields); if ("faces" in fields && !("value" in fields)) die.value = 1; renderScene();
+  const answer = await characterRequest("update", { kind: "dice", id, fields, ...extra });
+  if (!answer.ok) { Object.assign(die, before); renderScene(); showSendStatus(answer.error || "처리하지 못했습니다.", 6000); }
+}
+// Rolling (the menu entry and a double click on the die, like CCFOLIA): a random face, shown at once; the GM's page also says it in the chat ("1D6 다이스 심볼 (1D6) > 3").
+const rollDie = id => { const faces = Number((sceneData?.diceSymbols || []).find(d => d.id === id)?.faces) || 6; return dieRequest(id, { value: 1 + Math.floor(Math.random() * faces) }, { roll: true }); };
 // Any character of the room opens in the full editor (a native player can edit them all): the editor fields of one that is not the person's own come from the relay.
 async function editCharacter(id) {
   if (!myCharacters.some(c => c.id === id)) {
