@@ -464,7 +464,7 @@ export class RoomRelay {
       const member = room.participants[decodeURIComponent(decisionMatch[1])];
       const decision = (await request.json()).decision;
       if (!member) return json({ error: "참가 요청을 찾을 수 없습니다." }, 404);
-      if (decision === "approve" && member.status === "pending") member.status = "approved";
+      if (decision === "approve" && member.status === "pending") { member.status = "approved"; member.approvedAt = new Date().toISOString(); } // what was shared before this does not pop up for the newcomer
       else if (decision === "reject" && member.status === "pending") { member.status = "rejected"; this.close(member.id, "rejected"); }
       else if (decision === "revoke" && member.status === "approved") { member.status = "revoked"; this.close(member.id, "revoked"); }
       else return json({ error: "현재 상태에서 처리할 수 없습니다." }, 409);
@@ -486,7 +486,7 @@ export class RoomRelay {
     }
     const member = this.access(request, room);
     if (!member) return json({ error: "접근 권한이 없습니다." }, 403);
-    if (request.method === "GET" && /\/status$/.test(url.pathname)) return json({ status: member.status, displayName: member.displayName });
+    if (request.method === "GET" && /\/status$/.test(url.pathname)) return json({ status: member.status, displayName: member.displayName, ...(member.approvedAt ? { approvedAt: member.approvedAt } : {}) });
     if (member.status !== "approved") return json({ error: "GM 승인이 필요합니다." }, 403);
     if (request.method === "GET" && /\/ws$/.test(url.pathname) && request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       if (this.sockets("p").length >= MAX_PARTICIPANT_SOCKETS) return json({ error: "연결이 너무 많습니다." }, 429);

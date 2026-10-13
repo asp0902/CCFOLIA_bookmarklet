@@ -63,6 +63,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => syncHandoutPopup({ id: 'p1', title: '공개', bodyText: 'y', updatedAt: 't2' }));
   assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), true, 'changed: pops up again');
   assert.deepEqual(violations, [], 'no CSP violations');
+  // a newcomer (approved at 10:00) is not met with what was shared before: those are in the list with a dot, only what is shared or changed afterwards pops up
+  await page.evaluate(() => { approvedAt = '2026-10-13T10:00:00.000Z'; localStorage.clear(); applyMyHandouts([], true); });
+  await page.evaluate(() => applyMyHandouts([{ id: 'o1', title: '먼저 공유', html: '<p>a</p>', secretHtml: '', folder: '', order: 0, updatedAt: '2026-10-13T09:00:00.000Z' }], true));
+  assert.equal(await page.locator('.dlg').count(), 0, 'shared before they came in: no popup');
+  assert.equal(await page.evaluate(() => document.getElementById('handout-open').classList.contains('has-new')), true, 'but it is unread in the list');
+  await page.evaluate(() => applyMyHandouts([{ id: 'o1', title: '먼저 공유', html: '<p>a</p>', secretHtml: '', folder: '', order: 0, updatedAt: '2026-10-13T09:00:00.000Z' }, { id: 'o2', title: '나중 공유', html: '<p>b</p>', secretHtml: '', folder: '', order: 1, updatedAt: '2026-10-13T11:00:00.000Z' }], true));
+  await page.waitForSelector('.dlg h2:text("나중 공유")');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { syncHandoutPopup({}); localStorage.removeItem('capybara-handout-legacy-shown'); syncHandoutPopup({ id: 'p9', title: '이전', bodyText: 'x', updatedAt: '2026-10-13T08:00:00.000Z' }); });
+  assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), false, 'the shared handout from before: no popup');
+  await page.evaluate(() => { localStorage.removeItem('capybara-handout-legacy-shown'); syncHandoutPopup({ id: 'p9', title: '이전', bodyText: 'y', updatedAt: '2026-10-13T12:00:00.000Z' }); });
+  assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), true, 'changed after they came in: popup');
   await browser.close();
   console.log('participant handouts PASS');
 })().catch(error => { console.error(error); process.exit(1); });
