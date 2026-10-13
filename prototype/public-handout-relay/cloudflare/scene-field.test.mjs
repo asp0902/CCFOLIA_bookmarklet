@@ -28,4 +28,10 @@ await scene({ fieldWidth: 20, fieldHeight: 10, screen: { scale: 9, x: "a" } });
 assert.deepEqual((await field()).screen, { scale: 2, x: 0, y: 0 }, "clamped to CCFOLIA's 0.2..2");
 await scene({ fieldWidth: 20, fieldHeight: 10 });
 assert.deepEqual((await field()).screen, { scale: 1, x: 0, y: 0 }, "default scale 1");
+// decks and dice symbols: only the back of a deck (CDN) and its card count; a hidden die carries no value
+await scene({ fieldWidth: 20, fieldHeight: 10, decks: [{ id: "d1", x: 1, y: 2, z: 0, width: 6, height: 8, count: 54, coverUrl: "https://storage.ccfolia-cdn.net/back.png", items: { c: { imageUrl: "https://storage.ccfolia-cdn.net/front.png" } } }, { id: "d2", coverUrl: "https://evil.test/b.png" }], diceSymbols: [{ id: "a", x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4 }, { id: "b", faces: 20, value: 17, closed: true }] });
+current = await field();
+assert.deepEqual(current.decks, [{ id: "d1", x: 1, y: 2, z: 0, width: 6, height: 8, count: 54, coverUrl: "https://storage.ccfolia-cdn.net/back.png" }]);
+assert(!JSON.stringify(current).includes("front.png"), "no card face reaches the participant");
+assert.deepEqual(current.diceSymbols.map(d => [d.id, d.closed, d.value]), [["a", false, 4], ["b", true, 0]]);
 console.log("scene field PASS");

@@ -295,3 +295,5 @@ html.pip .chat-toggle{display:none}
 .cw-btn{width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;color:#fff;font-size:22px;line-height:34px;cursor:pointer}
 .cw-btn:hover:not(:disabled){background:rgba(255,255,255,.08)}.cw-btn:disabled{color:rgba(255,255,255,.3);cursor:default}
 .cw-body{flex:1;overflow:auto;padding:0 8px 8px}.cw-body p{margin:8px 16px;font-size:14px;color:rgba(255,255,255,.7)}
+.scene-die{display:flex;align-items:center;justify-content:center;box-sizing:border-box;border-radius:12%;background:#fff;color:#212121;font-weight:700;font-family:Roboto,Helvetica,Arial,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none}
+.deck-count{padding:0 6px;border-radius:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;line-height:20px;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none}

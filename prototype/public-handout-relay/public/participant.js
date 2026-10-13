@@ -229,14 +229,23 @@ function renderScene(scene) {
   // Layer (measured on ccfolia.com 1.37.5): an item or marker wrapper has z-index = its stored z, a character wrapper has 100 + its stored z, so characters are above items and markers
   // (a stored z of 100 or more on an item is the only way to get above a character); equal layers keep the DOM order items, markers.
   const layerOf = piece => (piece.kind === "character" ? 100 : 0) + (Number(piece.z) || 0);
-  const all = [...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
+  const all = [...(s.decks || []).map(deck => ({ ...deck, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl })), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 0 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
   for (const item of all.sort((a, b) => layerOf(a) - layerOf(b))) {
+    // a dice symbol is drawn as a die face with its value ("?" while hidden); a card deck shows its back with the number of cards left in the middle
+    if (item.kind === "dice") {
+      const die = document.createElement("div"); die.className = "scene-die"; die.dataset.id = item.id; die.textContent = item.closed ? "?" : String(item.value);
+      place(die, item.x, item.y, item.width, item.height, 0, layerOf(item)); die.style.fontSize = `${Math.round(item.height * unit * 0.5)}px`; nodes.push(die); continue;
+    }
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
     if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
+    if (item.kind === "deck") {
+      const badge = document.createElement("span"); badge.className = "deck-count"; badge.textContent = `${item.count} 장`;
+      place(badge, item.x + item.width / 2, item.y + item.height / 2, 0, 0, 0, layerOf(item)); nodes.push(badge);
+    }
     // A character token carries its name under it (measured on ccfolia.com: bottom -11.9px of the 96px token, centred, 12px bold, black, 1px #f5f5f5 outline in eight directions, ellipsis within the token width).
     if (item.kind === "character" && item.name) {
       const scale = unit / 24, label = document.createElement("span"), px = value => `${Math.round(value * scale * 100) / 100}px`;

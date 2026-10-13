@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.51
+// @version      0.2.52
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.51";
+  const VERSION = "0.2.52";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -274,6 +274,20 @@
     const image = item.closed ? url(item.coverImageUrl) : url(item.imageUrl);
     if (!image) return null;
     return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image };
+  }
+  // 카드 덱(entities.roomDecks: x,y,z,width,height,coverImageUrl,items = 덱 안 카드 맵). 덱 안 카드(앞면 주소 imageUrl)는 절대 보내지 않고 뒷면과 남은 장수만. 뽑혀서 필드에 놓인 카드는 아이템(deckId)이라 relayItemView 가 다룬다.
+  function relayDeckViews(decks, url, num) {
+    return Object.values(decks && typeof decks === "object" ? decks : {})
+      .filter((deck) => deck && url(deck.coverImageUrl))
+      .slice(0, 50)
+      .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) }));
+  }
+  // 다이스 심볼(entities.roomDices: x,y,width,height,faces,value,closed,name,owner,changeCount). closed(가려진 값)이면 값은 보내지 않는다. 좌표·크기는 아이템과 같은 칸 단위.
+  function relayDiceViews(dices, num) {
+    return Object.values(dices && typeof dices === "object" ? dices : {})
+      .filter((die) => die && die._id)
+      .slice(0, 50)
+      .map((die) => ({ id: String(die._id).slice(0, 60), x: num(die.x), y: num(die.y), width: num(die.width, 2), height: num(die.height, 2), faces: Math.max(2, Math.min(1000, num(die.faces, 6))), closed: die.closed === true, value: die.closed === true ? 0 : num(die.value) }));
   }
   // 마커 패널(room.markers: id -> {x,y,z,angle,width,height,locked,freezed,text,imageUrl,clickAction}). 좌표·크기는 아이템과 같은 칸 단위(실측: translate = x*24px). 메모(text)는 보내지 않는다.
   function relayMarkerViews(markers, url, num) {
@@ -3374,7 +3388,7 @@
             displayGrid: room.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(room.gridSize, 1))),
             // 이 GM 화면의 확대 비율과 위치(코코포리아 앱 상태 roomScreenScale 0.2~2, roomScreenPosition 화면 px): 참여자 화면이 처음 열릴 때 같은 구도로 시작한다.
             screen: (() => { const app = findStore()?.getState()?.app?.state || {}; return { scale: Math.max(0.2, Math.min(2, num(app.roomScreenScale, 1))), x: Math.round(num(app.roomScreenPosition?.x)), y: Math.round(num(app.roomScreenPosition?.y)) }; })(),
-            items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), characters: characters.slice(0, 100),
+            items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)
           };
