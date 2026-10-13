@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.101
+// @version      0.1.102
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.101",
+    version: "0.1.102",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -177,6 +177,8 @@
     resetGreetingFlags() { return clearGreetingFlags(); },
     forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
     fb() { return fbState; },
+    // who holds the GM seat in Firestore against this browser (for a refused read/write): the seat document, this anonymous uid, the account uid, the role CCFOLIA gave, what the claim did, the last refusal
+    seat() { return JSON.parse(JSON.stringify({ myUid: fbState?.uid || "", myCcfUid, role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seat: lastGmDoc, claim: seatClaimLog, issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null })); },
     initFirebase() { return initFirebase(); },
     pushHandout(id) {
       const h = state.data.handouts.find((x) => x.id === id);
@@ -809,6 +811,7 @@
     const fb = await initFirebase();
     const roomKey = getCurrentRoomKey();
     if (!fb || roomKey === "global" || unsubMembers) return;
+    if (ccfRole.known && !ccfRole.isOwner) return; // only the GM may read who is who (the rules refuse everybody else)
     const { collection, onSnapshot } = fb.modules.fs;
     unsubMembers = onSnapshot(collection(fb.db, "rooms", roomKey, "members"), (snap) => {
       remoteMembers.clear();
@@ -2345,6 +2348,34 @@
   // rooms/{roomKey}/meta/gm 에 GM 캐릭터를 기록하고 모든 참가자가 구독.
   // 누가 새로고침하든 Firestore 기록이 진실 — 자동 감지가 덮어쓰지 않음.
   let unsubGm = null;
+  // The security rules let only the account that holds meta/gm (gmUid) read the members and the originals of the handouts and write them. This browser's anonymous account changes when its data is cleared, so the
+  // room's owner (CCFOLIA tells who that is) takes the seat back on connecting: the proof document claims/{owner account}_{this uid} first, then meta/gm with this uid (pushGmToFirestore does both). The
+  // subscriptions that were refused meanwhile are made again. One try a minute; the result is kept for __CCF_HANDOUT_DEBUG__.seat().
+  let lastGmDoc = null, seatClaimAt = 0, seatClaimLog = null;
+  async function maybeClaimGmSeat() {
+    if (!ccfRole.known || !ccfRole.isOwner || !fbState?.uid || !lastGmDoc) return;
+    if (lastGmDoc.gmUid === fbState.uid) return;
+    if (Date.now() - seatClaimAt < 60000) return;
+    seatClaimAt = Date.now();
+    try {
+      await resolveMyCcfUid();
+      await pushGmToFirestore(String(state.data.myCharacter || lastGmDoc.gmCharacter || "").trim());
+      seatClaimLog = { at: new Date().toISOString(), ok: true, from: lastGmDoc.gmUid || "(none)", ccfUid: !!myCcfUid };
+      await resubscribeAfterSeat();
+    } catch (error) {
+      seatClaimLog = { at: new Date().toISOString(), ok: false, code: String(error?.code || error?.message || error).slice(0, 80), seatHadAccountUid: !!lastGmDoc.gmCcfoliaUid, ccfUid: !!myCcfUid };
+      noteFirebaseIssue("GM 자리 되찾기", error);
+      console.warn("[ccf-handout] GM seat claim failed:", error);
+    }
+  }
+  async function resubscribeAfterSeat() {
+    try { unsubHandouts?.(); } catch (_) {} unsubHandouts = null; subscribedRoom = null;
+    try { unsubMembers?.(); } catch (_) {} unsubMembers = null; membersWarned = false;
+    inboxDeniedAt = 0;
+    await Promise.all([subscribeToRoomHandouts(), registerMember().then(subscribeToMembers)]);
+    scheduleInboxSync(500);
+    scheduleWebSync(500);
+  }
   let subscribedGmRoom = null;
   let remoteGmInfo = null; // { gmCharacter, gmUid }
 
@@ -2377,6 +2408,8 @@
     remoteGmInfo = null;
     unsubGm = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "gm"),
       (snap) => {
+        lastGmDoc = snap.exists() ? { gmUid: String((snap.data() || {}).gmUid || ""), gmCcfoliaUid: String((snap.data() || {}).gmCcfoliaUid || ""), gmCharacter: String((snap.data() || {}).gmCharacter || "") } : { exists: false };
+        setTimeout(() => { maybeClaimGmSeat(); }, 0);
         if (!snap.exists()) { remoteGmInfo = null; return; }
         const data = snap.data() || {};
         const gmCharacter = String(data.gmCharacter || "").trim();
@@ -3885,7 +3918,7 @@
     const roleLabel = ccfRole.known ? (ccfRole.isOwner ? "GM(방장)" : "플레이어") : `확인 못 함(${ccfRole.reason}) — 예전 방식으로 판별 중`;
     return `
       <div class="field">
-        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)} · Firebase: ${escapeHtml(firebaseIssueLabel())}</div>
+        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)}</div>
         <label>GM 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
@@ -3900,6 +3933,7 @@
         </div>
         ${renderSettingsPlList()}
       </div>
+      <div class="hint" style="margin:14px 0 0;">Firebase: ${escapeHtml(firebaseIssueLabel())}</div>
     `;
   }
 
