@@ -78,7 +78,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.reload();
   // the hand-check helper returns its result as one JSON text (it is also copied for pasting)
   const diag = await page.evaluate(() => window.playroomDiag());
-  assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'dpr', 'fieldSize', 'help', 'owned', 'pieces', 'plainDice', 'scale', 'stage', 'touched', 'view', 'window']);
+  assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'dpr', 'fieldSize', 'help', 'net', 'owned', 'pieces', 'plainDice', 'scale', 'sceneCharacters', 'stage', 'touched', 'view', 'window']);
   await browser.close();
   console.log('participant field PASS');
 })().catch(error => { console.error(error); process.exit(1); });
