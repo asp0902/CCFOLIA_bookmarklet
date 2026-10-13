@@ -13,6 +13,7 @@ export function cleanCharacterFields(input) {
   if ("externalUrl" in f) out.externalUrl = /^https:\/\/[^\s<>"]{1,490}$/.test(String(f.externalUrl || "")) ? String(f.externalUrl) : "";
   if ("x" in f) out.x = Math.round(num(f.x, -100000, 100000));
   if ("y" in f) out.y = Math.round(num(f.y, -100000, 100000));
+  if ("angle" in f) out.angle = Math.round(num(f.angle, -360, 360)); // R / Shift+R of the menu: +-45 degrees (measured)
   if ("size" in f) { const size = num(f.size, 1, 100, 4); out.width = size; out.height = size; } // "토큰 사이즈": cells, width and height together
   if (Array.isArray(f.status)) out.status = f.status.slice(0, 8).map(s => ({ label: text(s?.label, 20), value: num(s?.value, -1_000_000, 1_000_000), max: num(s?.max, -1_000_000, 1_000_000) }));
   if (Array.isArray(f.params)) out.params = f.params.slice(0, 30).map(p => ({ label: text(p?.label, 20), value: text(String(p?.value ?? ""), 60) }));

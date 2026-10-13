@@ -128,6 +128,7 @@
         if (typeof api?.relayObject !== "function") throw new Error("오브젝트 기능이 아직 준비되지 않았습니다.");
         const objectId = await api.relayObject({ type: clean(request.command.type, 30), kind: clean(request.command.kind, 20), targetId: clean(request.command.targetId, 100), fields: request.command.fields && typeof request.command.fields === "object" ? JSON.parse(JSON.stringify(request.command.fields).slice(0, 20000)) : {}, x: Number(request.command.x), y: Number(request.command.y), faces: Number(request.command.faces), stow: request.command.stow === true });
         emit({ action: "commandResult", commandId, status: "delivered", objectId: clean(objectId, 100) });
+        setTimeout(sendScene, 200); setTimeout(sendScene, 1200); // the room changed: tell the participants without waiting for the next watch tick
         return;
       }
       if (request.command.type === "status.set") {
@@ -141,6 +142,7 @@
         const { kind, pieceId, x, y } = request.command;
         await api.relayMovePiece(kind, clean(pieceId, 100), Number(x), Number(y));
         emit({ action: "commandResult", commandId, status: "delivered" });
+        setTimeout(sendScene, 200);
         return;
       }
       if (typeof api?.relaySend !== "function") throw new Error("채팅 전송 기능이 아직 준비되지 않았습니다.");
