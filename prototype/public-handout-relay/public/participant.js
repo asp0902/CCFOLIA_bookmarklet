@@ -375,7 +375,8 @@ window.addEventListener("resize", () => renderScene());
   const scaleNow = () => view.base * view.zoom / 24;
   const setScale = target => zoomAt(target / scaleNow(), 0, 0);
   const zoomFraction = () => (Math.max(0.2, Math.min(2, scaleNow())) - 0.2) / 1.8;
-  window.syncZoomBar = () => { if (!zoomUi) return; const percent = `${Math.round(zoomFraction() * 1000) / 10}%`; zoomUi.track.style.height = percent; zoomUi.thumb.style.bottom = percent; };
+  // MUI's value label (measured on CCFOLIA): the thumb's own span.MuiSlider-valueLabel shows the scale ("1", "0.6") while the thumb is hovered or dragged (class MuiSlider-valueLabelOpen, the mirrored CSS does the rest)
+  window.syncZoomBar = () => { if (!zoomUi) return; const percent = `${Math.round(zoomFraction() * 1000) / 10}%`; zoomUi.track.style.height = percent; zoomUi.thumb.style.bottom = percent; if (zoomUi.label) zoomUi.label.textContent = String(Math.round(scaleNow() * 10) / 10); };
   window.renderMirroredZoom = () => {
     const on = cmMirror.has("zoomBar");
     ctl.hidden = on;
@@ -389,7 +390,13 @@ window.addEventListener("resize", () => renderScene());
     const setFromPointer = event => { const r = slider.getBoundingClientRect(); const p = Math.max(0, Math.min(1, 1 - (event.clientY - r.top) / (r.height || 1))); setScale(Math.round((0.2 + p * 1.8) * 10) / 10); };
     slider.addEventListener("pointerdown", event => { try { slider.setPointerCapture(event.pointerId); } catch (_) { /* a synthetic event has no active pointer */ } setFromPointer(event); slider.onpointermove = setFromPointer; });
     slider.addEventListener("pointerup", () => { slider.onpointermove = null; });
-    zoomUi = { track: slot("track"), thumb: slot("thumb") };
+    zoomUi = { track: slot("track"), thumb: slot("thumb"), label: slot("thumb")?.querySelector(".MuiSlider-valueLabel") };
+    if (zoomUi.label) {
+      let hover = false, drag = false;
+      const show = () => zoomUi.label.classList.toggle("MuiSlider-valueLabelOpen", hover || drag);
+      slot("thumb").addEventListener("mouseover", () => { hover = true; show(); }); slot("thumb").addEventListener("mouseout", () => { hover = false; show(); });
+      slider.addEventListener("pointerdown", () => { drag = true; show(); }); for (const target of [window, slider]) for (const type of ["pointerup", "pointercancel"]) target.addEventListener(type, () => { drag = false; show(); });
+    }
     cmMirror.show("zoom-host", [bar]);
     // CCFOLIA's own CSS makes the bar absolute (right 32px, bottom 96px of the stage, measured); when the mirrored CSS does not, the same place is set here
     if (getComputedStyle(bar).position !== "absolute") { bar.style.position = "absolute"; bar.style.right = "32px"; bar.style.bottom = "96px"; }
