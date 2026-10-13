@@ -132,6 +132,7 @@
   const roomLine = el("p", { class: "muted", id: "room" });
   const healthLine = el("p", { class: "muted", id: "health" });
   const mirrorLine = el("p", { class: "muted", id: "mirror" });
+  const errorLine = el("p", { class: "muted", id: "relay-errors" });
   const participants = el("div", { class: "participants", id: "participants", "aria-live": "polite" });
   const toast = el("div", { class: "toast", id: "toast", role: "status" });
   const say = (text, error = false) => { toast.textContent = text; toast.classList.toggle("error", error); };
@@ -198,13 +199,20 @@
     mirrorLine.textContent = missing.length ? `미러 템플릿 수집 안 됨: ${missing.join(", ")} (해당 부분은 기본 모양)` : "미러 템플릿 수집 정상";
     mirrorLine.style.color = missing.length ? "#f44336" : "";
   };
-  const loadHealth = () => chrome.storage.local.get(["relayHealth", "relayMirror"], value => { renderHealth(value.relayHealth); renderMirror(value.relayMirror); });
+  // The last failed requests to the relay (the bridge keeps them): which request and why, so "Failed to fetch" in the console can be told apart.
+  const renderErrors = list => {
+    const last = Array.isArray(list) && list.length ? list[list.length - 1] : null;
+    errorLine.textContent = last ? `최근 릴레이 오류 (${new Date(last.at).toLocaleTimeString()}): ${last.message}` : "";
+    errorLine.style.color = last && Date.now() - last.at < 60_000 ? "#f44336" : "";
+  };
+  const loadHealth = () => chrome.storage.local.get(["relayHealth", "relayMirror", "relayErrors"], value => { renderHealth(value.relayHealth); renderMirror(value.relayMirror); renderErrors(value.relayErrors); });
   const loadSocket = () => chrome.storage.local.get(["relaySocket"], value => renderSocket(value.relaySocket));
   const onStorageChanged = (changes, area) => {
     if (area !== "local") return;
     if (changes.relaySocket) renderSocket(changes.relaySocket.newValue);
     if (changes.relayHealth) renderHealth(changes.relayHealth.newValue);
     if (changes.relayMirror) renderMirror(changes.relayMirror.newValue);
+    if (changes.relayErrors) renderErrors(changes.relayErrors.newValue);
     if (changes.relayInvites) { invites = changes.relayInvites.newValue || {}; invite.value = inviteFor(roomId); }
   };
   chrome.storage.onChanged?.addListener(onStorageChanged);
@@ -290,7 +298,7 @@
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20, el("p", { class: "muted", text: "롤20 캠페인 페이지에서 'Launch Game'으로 들어간 게임 탭만 연결됩니다." })),
       toast,
       el("hr"),
-      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, participants),
+      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);
   backdrop.addEventListener("mousedown", event => { if (event.target === backdrop) closeModal(); });
