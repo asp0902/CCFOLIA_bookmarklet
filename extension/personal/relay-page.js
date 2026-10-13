@@ -44,16 +44,17 @@
   let lastHealthKey = "";
   // Native mirroring: CCFOLIA's own CSS and DOM shapes for the participant page. Only parts whose hash changed are sent, and everything is sent again every 5 minutes (a reconnected relay starts empty).
   let mirrorKnown = {}, mirrorRoom = "", mirrorAt = 0;
-  const sendMirror = () => {
+  const sendMirror = async () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
     if (typeof api?.relayMirror !== "function") return;
     try {
       const resend = mirrorRoom !== roomId || Date.now() - mirrorAt > 300000;
+      try { await api.relayHelpProbe?.(); } catch (_) {}
       const result = api.relayMirror(resend ? {} : mirrorKnown);
-      if (!resend && !result.css && !result.templates) return;
-      mirrorRoom = roomId; mirrorAt = resend ? Date.now() : mirrorAt; mirrorKnown = { cssHash: result.cssHash, tplHash: result.tplHash };
-      emit({ action: "mirror", css: result.css, templates: result.templates, fontLinks: result.fontLinks });
+      if (!resend && !result.css && !result.templates && !result.help) return;
+      mirrorRoom = roomId; mirrorAt = resend ? Date.now() : mirrorAt; mirrorKnown = { cssHash: result.cssHash, tplHash: result.tplHash, helpHash: result.helpHash };
+      emit({ action: "mirror", css: result.css, templates: result.templates, help: result.help, fontLinks: result.fontLinks });
     } catch (_) { /* a failed mirror must never stop the chat relay */ }
   };
   const snapshot = () => {

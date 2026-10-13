@@ -214,8 +214,8 @@
       // Native mirroring: the relay re-checks and stores these (Worker mirror route); here only the shape and size are bounded before sending.
       if (request.action === "mirror") {
         const templates = request.templates && typeof request.templates === "object" ? Object.fromEntries(Object.entries(request.templates).filter(([, value]) => typeof value === "string").slice(0, 60)) : undefined;
-        const body = { css: typeof request.css === "string" ? request.css.slice(0, 900_000) : undefined, templates, fontLinks: Array.isArray(request.fontLinks) ? request.fontLinks.filter(link => typeof link === "string").slice(0, 6) : [] };
-        if (body.css !== undefined || body.templates) {
+        const body = { css: typeof request.css === "string" ? request.css.slice(0, 900_000) : undefined, templates, help: request.help && typeof request.help === "object" ? request.help : undefined, fontLinks: Array.isArray(request.fontLinks) ? request.fontLinks.filter(link => typeof link === "string").slice(0, 6) : [] };
+        if (body.css !== undefined || body.templates || body.help) {
           await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/mirror`, body);
           // what was collected, for the share settings window (the structure check of the mirror: a template CCFOLIA's page no longer yields is missing here)
           if (templates) try { Promise.resolve(chrome.storage.local.set({ relayMirror: { roomId, names: Object.keys(templates).slice(0, 60), at: Date.now() } })).catch(() => {}); } catch (_) {}
