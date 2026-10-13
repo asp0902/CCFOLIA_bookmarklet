@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.94
+// @version      0.1.95
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.94",
+    version: "0.1.95",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -185,7 +185,7 @@
     },
     fetchAll() { return fetchAllFromFirestore(); },
     subscribe() {
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers)]);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders()]);
     },
     unsubscribe() {
       try { unsubHandouts?.(); } catch (_) {}
@@ -1861,6 +1861,7 @@
       gmNotes: handout.gmNotes || "",
       permissions: handout.permissions || {},
       tags: handout.tags || [],
+      folderId: handout.folderId || "", // 폴더는 룸 전체에서 같은 id (목록은 meta/folders)
       ownerUid: fb.uid,
       ownerName: state.data.myCharacter || "",
       updatedAt: serverTimestamp(),
@@ -1990,6 +1991,7 @@
       // 수신측 로컬 저장소에는 권한표를 남기지 않는다. 표시/비밀 여부는 수신 시점에 확정.
       permissions: {},
       tags: data.tags || [],
+      folderId: typeof data.folderId === "string" ? data.folderId : "",
       ownerUid: data.ownerUid,
       ownerName: data.ownerName || "",
       createdAt: data.createdAt || new Date().toISOString(),
@@ -2015,6 +2017,42 @@
     }
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
     if (state.isOpen) render();
+  }
+
+  // ===== 폴더 동기화 =====
+  // rooms/{room}/meta/folders = { folders: [{ id, name }] }. 쓰는 사람은 GM 뿐이고, 나머지는 읽어서 같은 폴더 구조로 본다(접힘 상태는 각자 로컬).
+  const folderList = () => (Array.isArray(state.data.folders) ? state.data.folders : []).map((f) => ({ id: String(f.id), name: String(f.name || "").slice(0, 80) })).slice(0, 100);
+  async function pushFolders() {
+    if (!isAdminMode()) return;
+    try {
+      const fb = await initFirebase();
+      const roomKey = getCurrentRoomKey();
+      if (!fb || roomKey === "global") return;
+      const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+      await setDoc(doc(fb.db, "rooms", roomKey, "meta", "folders"), { folders: folderList(), updatedAt: serverTimestamp() });
+    } catch (error) { console.warn("[ccf-handout] folder push failed:", error); }
+  }
+  // 받은 폴더 목록을 로컬에 반영: 수신자는 그대로 따르고(접힘만 유지), GM 은 새 브라우저처럼 로컬이 비어 있을 때만 받아들인다.
+  function adoptRemoteFolders(remote) {
+    const local = Array.isArray(state.data.folders) ? state.data.folders : [];
+    if (isAdminMode() && local.length) return false;
+    const next = (Array.isArray(remote) ? remote : []).filter((f) => f && typeof f.id === "string" && f.id).slice(0, 100)
+      .map((f) => ({ id: f.id, name: String(f.name || "").slice(0, 80), collapsed: local.find((x) => x.id === f.id)?.collapsed === true }));
+    if (JSON.stringify(next.map(({ id, name }) => ({ id, name }))) === JSON.stringify(folderList())) return false;
+    state.data.folders = next;
+    return true;
+  }
+  let unsubFolders = null;
+  async function subscribeToFolders() {
+    const fb = await initFirebase();
+    const roomKey = getCurrentRoomKey();
+    if (!fb || roomKey === "global" || unsubFolders) return;
+    const { doc, onSnapshot } = fb.modules.fs;
+    unsubFolders = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "folders"), (snap) => {
+      if (!snap.exists()) { if (isAdminMode() && folderList().length) pushFolders(); return; } // 처음: GM 의 기존 폴더를 올린다
+      if (adoptRemoteFolders(snap.data()?.folders)) { saveAll(state.data).catch(() => {}); if (state.isOpen) render(); }
+    }, (error) => console.warn("[ccf-handout] folders subscribe error:", error));
+    registerTeardown(() => { try { unsubFolders?.(); } catch (_) {} unsubFolders = null; });
   }
 
   // ===== Show to Players — 일회용 강제 팝업 신호 =====
@@ -2431,7 +2469,7 @@
     refreshCcfoliaRole();
     syncStarting = initFirebase().then((fb) => {
       syncInfo = { reason: "" };
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers)]).then(() => fb);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders()]).then(() => fb);
     }).catch((error) => {
       syncInfo = { reason: String(error?.message || error).slice(0, 80) };
       throw error;
@@ -3061,6 +3099,7 @@
     if (!Array.isArray(state.data.folders)) state.data.folders = [];
     state.data.folders.push({ id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, collapsed: false });
     saveAll(state.data).catch(() => {});
+    pushFolders();
     render();
   }
 
@@ -3799,6 +3838,7 @@
       if (!name || name === f.name) return;
       f.name = name;
       saveAll(state.data).catch(() => {});
+      pushFolders();
       render();
       return;
     }
@@ -3807,9 +3847,12 @@
       const f = (state.data.folders || []).find((x) => x.id === id);
       if (!f) return;
       if (!confirm(`"${f.name}" 폴더를 삭제할까요? 안의 핸드아웃은 목록 밖으로 이동합니다.`)) return;
+      const moved = state.data.handouts.filter((h) => h.folderId === id && !h._remote);
       state.data.handouts.forEach((h) => { if (h.folderId === id) delete h.folderId; });
       state.data.folders = (state.data.folders || []).filter((x) => x.id !== id);
       saveAll(state.data).catch(() => {});
+      pushFolders();
+      moved.forEach((h) => pushHandoutToFirestore(h).catch(() => {})); // 공유 문서의 folderId 도 함께 비운다
       render();
       return;
     }
