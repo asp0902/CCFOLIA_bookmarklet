@@ -48,12 +48,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(label.text, '드와이프'); assert(Math.abs(label.dx) < 1, `centred ${label.dx}`); assert(Math.abs(label.dy) < 1, `8px up ${label.dy}`);
   assert.equal(label.weight, '700'); assert.equal(label.color, 'rgb(0, 0, 0)'); assert.equal(label.shadows, 8, 'outline in eight directions'); assert.equal(label.labels, 1);
   assert(Math.abs(parseFloat(label.size) - 12 * label.unit / 24) < 0.05, 'scales with the zoom');
-  // CCFOLIA's own view: a cell is 24px times the scale (no fit-to-window); the GM's scale and position are the first view only, taken once
+  // CCFOLIA's own view: a cell is 24px times the scale (no fit-to-window); a player's first view is scale 1, position 0,0 whatever the GM's view is
   const view0 = await page.evaluate(() => { const room = { fieldWidth: 50, fieldHeight: 30, items: [], markers: [], characters: [] };
     view.zoom = 1; view.x = 0; view.y = 0; view.fromGm = false; view.touched = false;
     renderScene({ ...room, screen: { scale: 0.8, x: 30, y: -12 } }); const first = { zoom: view.zoom, unit: view.unit, x: view.x, y: view.y };
     view.x = 5; renderScene({ ...room, screen: { scale: 1.5, x: 99, y: 99 } }); return { first, afterUpdate: { zoom: view.zoom, x: view.x } }; });
-  assert(Math.abs(view0.first.unit - 19.2) < 1e-9); delete view0.first.unit; assert.deepEqual(view0.first, { zoom: 0.8, x: 30, y: -12 }); assert.deepEqual(view0.afterUpdate, { zoom: 0.8, x: 5 }, "later scene updates do not move the participant's own view");
+  assert(Math.abs(view0.first.unit - 24) < 1e-9); delete view0.first.unit; assert.deepEqual(view0.first, { zoom: 1, x: 0, y: 0 }, 'a player starts at scale 1, position 0,0 (measured), not at the GM view'); assert.deepEqual(view0.afterUpdate, { zoom: 1, x: 5 }, "later scene updates do not move the participant's own view");
   await browser.close();
   console.log('participant field PASS');
 })().catch(error => { console.error(error); process.exit(1); });

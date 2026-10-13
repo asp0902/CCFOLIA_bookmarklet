@@ -192,8 +192,7 @@ function renderScene(scene) {
   bg.style.backgroundImage = s.backgroundUrl ? `url("${s.backgroundUrl}")` : "none";
   const w = stage.clientWidth, h = stage.clientHeight;
   // CCFOLIA's own view (read from its app code): a cell is 24px times the screen scale (0.2 .. 2, default 1), the field is centred on the stage; there is no fit-to-window. A first view that the GM sent
-  // (its current scale and position) is taken once, so the first picture is the GM's composition; after that the view belongs to this participant.
-  if (s.screen && !view.fromGm && !view.touched) { view.fromGm = true; view.zoom = Math.max(0.2, Math.min(2, Number(s.screen.scale) || 1)); view.x = Number(s.screen.x) || 0; view.y = Number(s.screen.y) || 0; }
+  // A player entering CCFOLIA starts at scale 1, position 0,0 (measured on a player screen), not at the GM's view.
   const unit = 24 * view.zoom;
   view.unit = unit; view.base = unit / view.zoom;
   const place = (el, x, y, width, height, angle, z) => {
@@ -413,6 +412,8 @@ function renderTabs(data) {
       tab.addEventListener("click", () => { if (activeChannel === item.id) return; activeChannel = item.id; rendered = false; renderState(current); });
       tabs.append(tab);
     }
+    // the add-tab "+" a player also sees on CCFOLIA: same look, disabled (a player cannot add tabs)
+    if (cmMirror.has("chatTabAdd")) { const add = cmMirror.make("chatTabAdd"); add.title = add.getAttribute("aria-label") || ""; add.disabled = true; add.classList.add("Mui-disabled"); tabs.append(add); }
     cmMirror.show("chat-tabs-host", [shell]);
     return;
   }
@@ -1166,7 +1167,10 @@ function renderMirroredTopBar() {
   // the avatar is a letter (the participant has no CCFOLIA photo) and a dot shows whether the GM is connected
   const letter = document.createElement("span");
   letter.style.cssText = "width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#555;color:#fff;font-size:20px";
-  avatar.replaceWith(letter);
+  // CCFOLIA's default account picture (sent by the GM page as a data URI) when it has arrived; otherwise a letter
+  if (cmMirror.logo && avatar) { avatar.src = cmMirror.logo; avatar.alt = ""; letter.hidden = true; avatar.after(letter); } else avatar.replaceWith(letter);
+  // buttons a player sees on CCFOLIA (lists of the GM tools, the folded menu): same look and place, disabled like on a player screen (measured: only the character list is active)
+  for (const button of bar.querySelectorAll("button[aria-label]")) { const label = button.getAttribute("aria-label"); if (/^\s*\[GM\]/.test(label) || label === "메뉴") { button.title = label; button.disabled = true; button.classList.add("Mui-disabled"); } }
   const dot = document.createElement("i"); dot.style.cssText = "position:absolute;right:3px;bottom:3px;width:12px;height:12px;border-radius:50%;border:2px solid #202020;font-size:0;background:#9e9e9e";
   account.style.position = "relative"; account.append(dot);
   const subtitle = slot("subtitle"); if (subtitle) subtitle.style.display = "none";
