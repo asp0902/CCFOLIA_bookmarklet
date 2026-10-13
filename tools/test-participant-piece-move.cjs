@@ -83,6 +83,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     characters: [{ id: 'ch', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: img, status: [] }] }), img);
   const order = await page.evaluate(() => [...document.querySelectorAll('#scene-field img')].map(i => ({ id: i.dataset.id || 'marker', z: Number(i.style.zIndex) })).sort((a, b) => a.z - b.z).map(x => x.id));
   assert.deepEqual(order, ['it', 'marker', 'ch'], 'item, then marker, then the character on top');
+  // right click: never the browser's menu; a character shows CCFOLIA's player menu (what is not available here is off), a die its own two entries; somebody else's piece is not touched
+  await page.evaluate(img => { ownedIds = new Set(['dd1']); renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [], markers: [],
+    characters: [{ id: 'cm', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: img, status: [], commands: '1d100 판정\n2d6' }],
+    diceSymbols: [{ id: 'dd1', x: 8, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }, { id: 'dd2', x: 12, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }] }); }, img);
+  const prevented = await page.evaluate(() => new Promise(resolve => { const node = document.querySelector('img[data-id="cm"]'); const r = node.getBoundingClientRect(); const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 5, clientY: r.y + 5 }); node.dispatchEvent(e); resolve(e.defaultPrevented); }));
+  assert.equal(prevented, true, "the browser's own image menu is blocked");
+  const items = () => page.evaluate(() => [...document.querySelectorAll('.menu-paper .menu-item')].map(b => `${b.firstChild.textContent}${b.disabled ? ' (off)' : ''}`));
+  assert.deepEqual(await items(), ['편집', '회전 (off)', '집어넣기 (off)', '소유 권한 갖기 (off)', '복제 (off)', '복사 (off)', '채팅 팔레트', '삭제 (off)', 'ID 복사(개발자용)'], "somebody else's character: the menu with what a visitor may do");
+  assert.equal(await page.evaluate(() => !!document.querySelector('img[data-id="cm"].selected')), true, 'selected: blue outline');
+  await page.evaluate(() => { document.querySelector('.menu-paper')?.remove(); ownedIds = new Set(['cm', 'dd1']); renderScene({ fieldWidth: 40, fieldHeight: 20, items: [], markers: [], characters: [{ id: 'cm', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: 'https://storage.ccfolia-cdn.net/a.png', status: [] }], diceSymbols: [] }); });
+  await page.evaluate(() => { const node = document.querySelector('img[data-id="cm"]'); const r = node.getBoundingClientRect(); node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 5, clientY: r.y + 5 })); });
+  assert.deepEqual(await items(), ['편집', '회전 (off)', '집어넣기', '소유 권한 갖기 (off)', '복제', '복사 (off)', '채팅 팔레트 (off)', '삭제', 'ID 복사(개발자용)'], 'their own character: put away, duplicate and delete are on');
+  await page.evaluate(() => { document.querySelector('.menu-paper')?.remove(); renderScene({ fieldWidth: 40, fieldHeight: 20, items: [], markers: [], characters: [], diceSymbols: [{ id: 'dd1', x: 8, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }, { id: 'dd2', x: 12, y: 0, width: 2, height: 2, faces: 6, value: 3, closed: false }] }); });
+  await page.evaluate(() => { const node = document.querySelector('.scene-die.mine'); const r = node.getBoundingClientRect(); node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 5, clientY: r.y + 5 })); });
+  assert.deepEqual(await items(), ['roll a dice', '삭제'], 'their own die');
   await browser.close();
   console.log('participant piece move PASS');
 })().catch(error => { console.error(error); process.exit(1); });

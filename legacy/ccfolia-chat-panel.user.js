@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.61
+// @version      0.2.62
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.61";
+  const VERSION = "0.2.62";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3550,6 +3550,7 @@
         const id = String(command.targetId || "");
         const doc = existing(id);
         if (type === "object.update") { await patch(id, edit); return id; }
+        if (type === "object.place" && command.stow === true) { await patch(id, { active: false }); return id; }
         if (type === "object.place") { await patch(id, { ...Object.fromEntries(Object.entries(edit).filter(([key]) => key === "x" || key === "y")), active: true }); return id; }
         if (type === "object.duplicate") return create({ name: doc.name, memo: doc.memo, commands: doc.commands, initiative: doc.initiative, externalUrl: doc.externalUrl, width: doc.width, height: doc.height, status: doc.status, params: doc.params, x: doc.x, y: doc.y });
         if (type === "object.delete") {
