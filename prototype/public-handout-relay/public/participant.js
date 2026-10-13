@@ -386,6 +386,7 @@ window.addEventListener("resize", () => renderScene());
 // Zoom (wheel or +/- buttons) and pan (drag) of the stage.
 {
   const stage = document.querySelector(".stage");
+  stage.addEventListener("dragstart", event => event.preventDefault()); // an image is never dragged by the browser (CCFOLIA: draggable false, user-drag none)
   let raf = 0;
   const redraw = () => { try { localStorage.setItem(SCALE_KEY, String(Math.round(view.zoom * 100) / 100)); } catch (_) {} if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderScene(); }); };
   const zoomAt = (factor, cx, cy) => {
@@ -1282,10 +1283,16 @@ function openCharacterWindow() {
   const body = el("div", "cw-body");
   const fill = () => {
     body.replaceChildren();
+    // a row as CCFOLIA draws it (measured on a player's screen): avatar circle, name ("NO NAME" while empty), memo line ("NO TEXT" while empty), put-on-the-screen icon on the right
     for (const c of myCharacters) {
-      const row = el("button", "char-row"); row.type = "button";
-      const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", c.active ? "화면에 있음" : "화면에 없음"));
-      row.append(text); row.addEventListener("click", () => openCharacterEditor(c.id)); body.append(row);
+      const line = el("div", "cw-row"), row = el("button", "char-row"); row.type = "button";
+      const avatar = el("span", "cw-avatar"); avatar.append(svgIcon("M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z", 24));
+      const text = el("span", "char-text"); text.append(el("b", "", c.name || "NO NAME"), el("small", "", String(c.memo || "").split("\n")[0] || "NO TEXT"));
+      row.append(avatar, text); row.addEventListener("click", () => openCharacterEditor(c.id));
+      const place = el("button", "cw-place"); place.type = "button"; place.title = c.active ? "화면에 있음" : "화면에 추가"; place.setAttribute("aria-label", place.title); place.disabled = !!c.active;
+      place.append(svgIcon("M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z", 24));
+      place.addEventListener("click", async () => { const result = await characterRequest("place", { id: c.id, x: Number(c.x) || 0, y: Number(c.y) || 0 }); if (!result.ok) showSendStatus(result.error, 6000); else setTimeout(refreshMyCharacters, 900); });
+      line.append(row, place); body.append(line);
     }
     if (!myCharacters.length) body.append(el("p", "", "아직 만든 캐릭터가 없습니다. + 로 만들 수 있습니다."));
   };

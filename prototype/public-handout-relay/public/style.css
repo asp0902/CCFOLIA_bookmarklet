@@ -327,3 +327,9 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .dlg-foot.ce-foot{justify-content:space-between;padding:8px 24px}
 .dlg-foot .ce-danger{color:#f50057;margin-right:auto}.dlg-foot .ce-act{color:#2196f3}.dlg-foot .ce-primary{color:#2196f3}
 .scene-die.mine,.scene-die-img.mine{pointer-events:auto;cursor:grab}
+.stage img,.scene-die{-webkit-user-drag:none;user-select:none}
+.stage img[data-id]:not([data-locked]),.scene-die.mine,.scene-die-img.mine{cursor:move}
+.cw-row{display:flex;align-items:center}.cw-row .char-row{flex:1;min-width:0}
+.cw-avatar{display:flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;margin-right:12px;border-radius:50%;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7)}
+.cw-row .char-text small{display:block;font-size:12px;color:rgba(255,255,255,.5)}
+.cw-place{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer}.cw-place:hover:not(:disabled){background:rgba(255,255,255,.08)}.cw-place:disabled{color:rgba(255,255,255,.3);cursor:default}
