@@ -49,7 +49,7 @@
     config.delivered = new Set(ids);
     await chrome.storage.local.set({ relayDeliveredCommandIds: ids });
   };
-  const ack = (id, status, error = "") => post(`/api/admin/rooms/${encodeURIComponent(roomId)}/commands/${encodeURIComponent(id)}/ack`, { status, error });
+  const ack = (id, status, error = "", objectId = "") => post(`/api/admin/rooms/${encodeURIComponent(roomId)}/commands/${encodeURIComponent(id)}/ack`, { status, error, objectId });
   let connectedTitle = null;
   let stopped = false;
   let connectChain = Promise.resolve();
@@ -145,7 +145,7 @@
     own.onerror = () => {};
   }
   async function handleCommand(command) {
-    if (!["chat.send", "piece.move", "status.set"].includes(command?.type) || !command.id) return;
+    if (!["chat.send", "piece.move", "status.set", "object.create"].includes(command?.type) || !command.id) return;
     if (inFlight.has(command.id)) return; // already handed to the page; its result will acknowledge it
     if (config.delivered.has(command.id)) { await ack(command.id, "delivered"); return; }
     inFlight.add(command.id);
@@ -274,7 +274,7 @@
         if (!id) return;
         inFlight.delete(id);
         if (request.status === "delivered") await rememberDelivered(id);
-        await ack(id, request.status === "delivered" ? "delivered" : "failed", clean(request.error, 300));
+        await ack(id, request.status === "delivered" ? "delivered" : "failed", clean(request.error, 300), clean(request.objectId, 100));
       }
     } catch (error) { warn(error); }
   });

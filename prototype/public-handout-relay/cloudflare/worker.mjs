@@ -1,4 +1,5 @@
 import { validateMirror, mirrorHash } from "../public/mirror-sanitize.mjs";
+import { checkCreate, logCreate, recordCreate } from "./create-guard.mjs";
 const encoder = new TextEncoder();
 const GM_SOCKET_PROTOCOL = "capybara-gm";
 const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
@@ -248,6 +249,12 @@ export class RoomRelay {
       command.status = body.status;
       command.acknowledgedAt = new Date().toISOString();
       command.error = text(body.error, 300);
+      // a delivered create command reports the id of the new document: its maker goes into the ledger (only the maker may change or delete it later)
+      if (command.type === "object.create" && body.status === "delivered" && /^[\w-]{1,100}$/.test(String(body.objectId || ""))) {
+        command.objectId = String(body.objectId);
+        const maker = room.participants[command.participantId];
+        if (maker) recordCreate(room, maker, command.objectId);
+      }
       // No copy of a delivered message is added here: the GM's real CCFOLIA message arrives with the next snapshot. A copy made the participant see their own message twice.
       await this.save(room);
       return json({ id: command.id, status: command.status });
@@ -467,6 +474,23 @@ export class RoomRelay {
       const x = Number(body.x), y = Number(body.y);
       if (!["character", "item"].includes(body.kind) || !/^[\w-]{1,100}$/.test(String(body.id)) || !(Math.abs(x) <= 10_000) || !(Math.abs(y) <= 10_000)) return json({ error: "올바르지 않은 이동 요청" }, 400);
       const command = { id: token(), type: "piece.move", kind: body.kind, pieceId: String(body.id), x, y, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
+      room.commands.push(command);
+      if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
+      await this.save(room);
+      this.push("gm", { type: "command", command });
+      return json({ accepted: true, commandId: command.id }, 202);
+    }
+    // A participant creates an object in the GM's room (the GM's page writes it). Stage 1: dice symbols. Rules: create-guard.mjs; the GM's page also checks the room's default role.
+    if (request.method === "POST" && /\/objects\/create$/.test(url.pathname)) {
+      if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
+      const body = await request.json().catch(() => ({}));
+      if (body.kind !== "dice") return json({ error: "아직 만들 수 없는 종류입니다." }, 400);
+      const x = Number(body.x ?? -1), y = Number(body.y ?? -1), faces = Number(body.faces ?? 6);
+      if (!(Math.abs(x) <= 1_000) || !(Math.abs(y) <= 1_000) || !Number.isInteger(faces) || faces < 2 || faces > 100) return json({ error: "올바르지 않은 생성 요청" }, 400);
+      const allowed = checkCreate(room, member);
+      if (!allowed.ok) return json({ error: allowed.error }, allowed.status);
+      logCreate(room, member);
+      const command = { id: token(), type: "object.create", kind: "dice", x, y, faces, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);

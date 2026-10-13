@@ -125,6 +125,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('#char-window .cw-btn[disabled]').count(), 1, 'the + of the window is disabled for now');
   const tools = await page.evaluate(() => { const sel = document.querySelector('.select-tool'); sel.click(); const on = sel.getAttribute('aria-pressed'); document.querySelector('.pen-fab').click(); return { on, menu: !document.querySelector('.pen-menu').hidden, items: document.querySelectorAll('.pen-item').length, pro: document.querySelector('.pen-pro')?.textContent }; });
   assert.deepEqual(tools, { on: 'true', menu: true, items: 6, pro: 'PRO' }, 'select tool toggles; the pencil menu has the six items');
+  // the dice symbol item asks the relay to make one; the other items are disabled for now
+  assert.equal(await page.locator('.pen-item[aria-disabled="true"]').count(), 5);
+  const asked = page.waitForRequest(req => req.url().endsWith('/objects/create') && req.method() === 'POST');
+  await page.evaluate(() => [...document.querySelectorAll('.pen-item')].find(r => r.textContent.includes('다이스 심볼')).click());
+  assert.deepEqual(JSON.parse((await asked).postData()), { kind: 'dice' });
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.mn').click());
   assert(await page.locator('.menu-item').count() >= 1, 'the room menu opens from the mirrored button');
