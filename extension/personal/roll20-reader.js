@@ -143,6 +143,67 @@
       if (tries > 90) { clearInterval(timer); if (pending) console.info("[capybara roll20] voice/video: an option could not be found"); }
     }, 1000);
   };
+  // The back-tick key in the chat input opens the speaker list (select#speakingas, a plain select measured on a game screen; Roll20 saves the speaker from its jQuery "change" handler, so choosing means
+  // setting the value and sending a native change event). The key is told by its code (also under a Korean IME), only without Shift/Ctrl/Alt/Meta and not while composing; the character is not typed.
+  // The browser's own picker opens (showPicker); only if that is refused a small list under the input takes over (arrow keys, Enter, Esc). Afterwards the focus and the cursor go back to the input.
+  const speakerSelect = () => document.querySelector("#textchat-input #speakingas");
+  let tickList = null;
+  const closeTickList = () => { tickList?.remove(); tickList = null; };
+  const backToChat = (area, from, to) => { closeTickList(); area.focus(); try { area.setSelectionRange(from, to); } catch (_) {} };
+  const openTickList = (area, select, from, to) => {
+    closeTickList();
+    const list = document.createElement("ul");
+    list.id = "capybara-r20-speakers";
+    list.setAttribute("role", "listbox");
+    const rect = area.getBoundingClientRect();
+    list.style.cssText = `position:fixed;left:${Math.round(rect.left)}px;top:${Math.round(rect.bottom + 2)}px;min-width:${Math.round(rect.width / 2)}px;max-height:240px;overflow:auto;margin:0;padding:2px 0;list-style:none;background:#fff;color:#333;border:1px solid #999;box-shadow:0 2px 6px rgba(0,0,0,.3);font:13px sans-serif;z-index:2147483000`;
+    let active = Math.max(0, select.selectedIndex);
+    const options = [...select.options];
+    const paint = () => [...list.children].forEach((item, index) => { item.style.background = index === active ? "#d5e6fb" : ""; item.setAttribute("aria-selected", String(index === active)); });
+    const choose = index => {
+      if (index !== select.selectedIndex) { select.selectedIndex = index; select.dispatchEvent(new Event("change", { bubbles: true })); }
+      backToChat(area, from, to);
+    };
+    options.forEach((option, index) => {
+      const item = document.createElement("li");
+      item.setAttribute("role", "option");
+      item.textContent = option.textContent.trim();
+      item.style.cssText = "padding:3px 10px;cursor:pointer;white-space:nowrap";
+      item.addEventListener("mousedown", event => { event.preventDefault(); choose(index); });
+      list.append(item);
+    });
+    document.body.append(list);
+    tickList = list;
+    paint();
+    const onKey = event => {
+      if (tickList !== list) { document.removeEventListener("keydown", onKey, true); return; }
+      const move = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+      if (move) active = (active + move + options.length) % options.length;
+      else if (event.key === "Enter") choose(active);
+      else if (event.key === "Escape") backToChat(area, from, to);
+      else return;
+      event.preventDefault(); event.stopPropagation();
+      if (tickList === list) paint(); else document.removeEventListener("keydown", onKey, true);
+    };
+    document.addEventListener("keydown", onKey, true);
+  };
+  document.addEventListener("keydown", event => {
+    const area = chatBox(), select = speakerSelect();
+    if (event.code !== "Backquote" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.isComposing || event.target !== area || !select) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const from = area.selectionStart, to = area.selectionEnd;
+    select.focus();
+    let opened = false;
+    try { select.showPicker(); opened = true; } catch (_) { opened = false; }
+    if (!opened) { openTickList(area, select, from, to); return; }
+    // the browser's list closes with a choice (change), Esc or a click elsewhere (blur): the focus and the cursor go back to the input
+    const done = () => { select.removeEventListener("change", done); select.removeEventListener("blur", done); select.removeEventListener("keydown", onSelectKey); setTimeout(() => backToChat(area, from, to), 0); };
+    const onSelectKey = key => { if (key.key === "Escape" || key.key === "Enter") done(); };
+    select.addEventListener("change", done);
+    select.addEventListener("blur", done);
+    select.addEventListener("keydown", onSelectKey);
+  }, true);
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
     for (const el of document.querySelectorAll("#textchat .content div.message[data-messageid]")) {
