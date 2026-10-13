@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.67
+// @version      0.1.68
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.67"),
+    version: getUserscriptVersion("0.1.68"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -764,6 +764,14 @@
         line-height: 0;
       }
 
+      /* a Roll20 macro draws its pictures at their own size, up to the full width, with no gap (its spacers are sized for that) */
+      [data-ccf-macro="1"] .ccf-image-frag { margin: 0; }
+      [data-ccf-macro="1"] .ccf-image-frag .ccf-image { max-width: 100%; }
+      /* a macro line that reaches over its neighbours with negative margins sits in the message padding Roll20 gives a /desc line (14px 10px 8px), and the rows around it close up */
+      .ccf-render-root .ccf-line-flush { display: block; padding: 14px 10px 8px; }
+      .MuiListItem-root:has([data-ccf-macro-flush="1"]), li:has([data-ccf-macro-flush="1"]) { padding-top: 0 !important; padding-bottom: 0 !important; border-bottom: 0 !important; }
+      .MuiListItem-root:has([data-ccf-macro-flush="1"]) + .MuiDivider-root, li:has([data-ccf-macro-flush="1"]) + .MuiDivider-root { display: none !important; }
+
       .ccf-render-root .ccf-image {
         display: block;
         width: auto;
@@ -1358,9 +1366,27 @@
     }
 
     renderStyledText(overlay, renderText, runs, alignRuns);
+    markFlushMacroLines(el, overlay, macro);
     if (isFirstRender) preserveBottomScrollAfterRender(bottomScrollState);
 
     el.setAttribute(CCF_RENDERED_ATTR, "1");
+  }
+
+  // Roll20 macro lines whose blocks pull themselves over the neighbours with negative margins (spacers, pictures laid over spacers) get the message padding those margins expect
+  function markFlushMacroLines(el, overlay, macro) {
+    let any = false;
+    if (macro) {
+      for (const line of overlay.querySelectorAll(".ccf-line")) {
+        const flush = [...line.querySelectorAll(".ccf-frag")].some((frag) => /^-/.test(frag.style.marginTop) || /^-/.test(frag.style.marginLeft));
+        line.classList.toggle("ccf-line-flush", flush);
+        // the padding the margins expect is filled with the blocks' own colour (they all share one), so no strip of the message shows between lines
+        const colours = new Set([...line.querySelectorAll(".ccf-frag")].filter((frag) => frag.style.display === "block").map((frag) => frag.style.backgroundColor));
+        line.style.backgroundColor = flush && colours.size === 1 && [...colours][0] ? [...colours][0] : "";
+        any = any || flush;
+      }
+    }
+    if (any) el.setAttribute("data-ccf-macro-flush", "1");
+    else el.removeAttribute("data-ccf-macro-flush");
   }
 
   // React가 소유한 원본 <p>의 text node(invisible envelope 포함)는 그대로 두고
@@ -1842,6 +1868,8 @@
   function applyExtraCssStyle(el, extraCss) {
     if (!extraCss) return;
     for (const key of extraCssKeys()) if (extraCss[key]) el.style[key] = extraCss[key];
+    // a Roll20 block with its own height is sized like Roll20 does (padding and border come on top of the height)
+    if (extraCss.height && extraCss.height !== "auto") el.style.boxSizing = "content-box";
     // 나눔명조 같은 Google Fonts 는 roll20 브리지가 로드해 준다(없으면 기본 글꼴로 표시).
     if (extraCss.fontFamily) window.__CCF_ENSURE_GOOGLE_FONTS__?.(extraCss.fontFamily);
     centerBandShadow(el);
@@ -13470,6 +13498,8 @@
   function applyExtraCssStyle(el, extraCss) {
     if (!extraCss) return;
     for (const key of extraCssKeys()) if (extraCss[key]) el.style[key] = extraCss[key];
+    // a Roll20 block with its own height is sized like Roll20 does (padding and border come on top of the height)
+    if (extraCss.height && extraCss.height !== "auto") el.style.boxSizing = "content-box";
     // 나눔명조 같은 Google Fonts 는 roll20 브리지가 로드해 준다(없으면 기본 글꼴로 표시).
     if (extraCss.fontFamily) window.__CCF_ENSURE_GOOGLE_FONTS__?.(extraCss.fontFamily);
     centerBandShadow(el);

@@ -804,10 +804,23 @@ function applyToolkitStyle(span, style) {
   if (okValue(style.border) && !/^none$/i.test(style.border)) span.style.border = style.border;
   const display = (span.style.display || "").toLowerCase();
   if (display === "block" || display === "inline-block") {
-    span.style.boxSizing = "border-box"; span.style.maxWidth = "100%"; span.style.minWidth = "0px"; span.style.wordBreak = span.style.wordBreak || "break-word"; span.style.overflowWrap = span.style.overflowWrap || "anywhere";
-    const side = (value, horizontal) => { const raw = (value || "").trim().toLowerCase(); if (!raw) return "0px"; if (raw === "auto") return horizontal ? "auto" : "0px"; return raw.startsWith("-") || raw.endsWith("%") ? "0px" : raw; };
+    // a block with its own height is sized like Roll20: padding and border on top of it
+    span.style.boxSizing = span.style.height && span.style.height !== "auto" ? "content-box" : "border-box"; span.style.maxWidth = "100%"; span.style.minWidth = "0px"; span.style.wordBreak = span.style.wordBreak || "break-word"; span.style.overflowWrap = span.style.overflowWrap || "anywhere";
+    // negative margins pull a block over its neighbours (Roll20 handout macros): allowed within a bound, like the toolkit (up to 400px / 100% up and down, 24px sideways)
+    const side = (value, horizontal) => {
+      const raw = (value || "").trim().toLowerCase();
+      if (!raw) return "0px";
+      if (raw === "auto") return horizontal ? "auto" : "0px";
+      if (raw.startsWith("-")) { const m = raw.match(/^-(\d+(?:\.\d+)?)(px|%)$/); if (!m) return "0px"; const n = Number(m[1]); return horizontal ? (m[2] === "px" && n <= 24 ? raw : "0px") : (m[2] === "px" ? n <= 400 : n <= 100) ? raw : "0px"; }
+      return raw.endsWith("%") ? "0px" : raw;
+    };
     span.style.marginTop = side(span.style.marginTop, false); span.style.marginRight = side(span.style.marginRight, true); span.style.marginBottom = side(span.style.marginBottom, false); span.style.marginLeft = side(span.style.marginLeft, true);
-    if (display === "block") { const width = (span.style.width || "").trim(); if (!width || /^100(?:\.0+)?%$/.test(width)) span.style.width = "auto"; span.style.marginLeft = "0px"; span.style.marginRight = "0px"; span.style.overflow = span.style.overflow || "hidden"; }
+    if (display === "block") {
+      const width = (span.style.width || "").trim(); if (!width || /^100(?:\.0+)?%$/.test(width)) span.style.width = "auto";
+      if (!span.style.marginLeft.startsWith("-")) span.style.marginLeft = "0px"; if (!span.style.marginRight.startsWith("-")) span.style.marginRight = "0px";
+      if (span.style.marginLeft.startsWith("-") || span.style.marginRight.startsWith("-")) span.style.maxWidth = "calc(100% + 48px)";
+      span.style.overflow = span.style.overflow || "hidden";
+    }
   }
   centerBandShadow(span);
 }
@@ -840,10 +853,24 @@ function renderRoll20(container, text, env) {
     for (let i = 0; i + 1 < points.length && line.length; i += 1) {
       const piece = text.slice(points[i], points[i + 1]), active = runs.filter(r => r.start <= points[i] && r.end >= points[i + 1]);
       if (!active.length) { lineEl.append(piece); continue; }
+      // a picture link of the macro (Roll20 draws it as the picture): only the hosts the page's CSP allows
+      const picture = active.map(r => r.style && r.style.imageUrl).find(url => typeof url === "string" && /^https:\/\/(i\.imgur\.com|storage\.ccfolia-cdn\.net)\/[\w./%~+-]+$/.test(url));
+      if (picture) {
+        const wrap = document.createElement("span"); wrap.className = "ccr20-image-frag";
+        const img = document.createElement("img"); img.className = "ccr20-image"; img.src = picture; img.alt = piece; img.referrerPolicy = "no-referrer"; img.loading = "lazy"; img.decoding = "async";
+        wrap.append(img); lineEl.append(wrap); continue;
+      }
       const span = document.createElement("span"); span.className = "ccr20-frag"; span.textContent = piece;
       for (const r of active) applyToolkitStyle(span, r.style);
       lineEl.append(span);
     }
+    // a line whose blocks pull themselves over the neighbours with negative margins sits in the padding Roll20 gives a /desc line, filled with the blocks' own colour (see the toolkit's .ccr20-line-flush)
+    const frags = [...lineEl.querySelectorAll(".ccr20-frag")];
+    const flush = frags.some(f => /^-/.test(f.style.marginTop) || /^-/.test(f.style.marginLeft));
+    lineEl.classList.toggle("ccr20-line-flush", flush);
+    const colours = new Set(frags.filter(f => f.style.display === "block").map(f => f.style.backgroundColor));
+    if (flush && colours.size === 1 && [...colours][0]) lineEl.style.backgroundColor = [...colours][0];
+    if (flush) container.dataset.ccfMacroFlush = "1";
     container.append(lineEl); offset = end + 1;
   });
 }
