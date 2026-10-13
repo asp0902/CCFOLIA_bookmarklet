@@ -94,8 +94,11 @@ export function cleanHelp(help) {
   return sections.length ? { title: text(help?.title, 100), system: text(help?.system, 60), sections } : null;
 }
 // CCFOLIA's default account picture as a small PNG data URI (the only image the play room takes from the GM besides CSS).
-const LOGO = /^data:image\/png;base64,[A-Za-z0-9+/=]{1,80000}$/;
-export const cleanLogo = value => (typeof value === "string" && LOGO.test(value) ? value : null);
+const ASSET_PATH = /^\/(?:ccfolia\.png|images\/[\w\-./\[\]]{1,100}\.png)$/, ASSET_DATA = /^data:image\/png;base64,[A-Za-z0-9+/=]{1,80000}$/;
+export function cleanAssets(value) {
+  const entries = Object.entries(value && typeof value === "object" ? value : {}).filter(([path, data]) => ASSET_PATH.test(path) && !path.includes("..") && typeof data === "string" && ASSET_DATA.test(data)).slice(0, 24);
+  return entries.length && entries.reduce((sum, [, data]) => sum + data.length, 0) <= 450_000 ? Object.fromEntries(entries) : null;
+}
 export function validateMirror(body) {
   const css = typeof body?.css === "string" ? body.css : null;
   if (css !== null && css.length > MIRROR_LIMITS.css) return { error: "css too large" };
@@ -114,5 +117,5 @@ export function validateMirror(body) {
     if (total > MIRROR_LIMITS.tplTotal) return { error: "templates too large" };
   }
   const fontLinks = (Array.isArray(body?.fontLinks) ? body.fontLinks : []).filter(link => typeof link === "string" && FONT_LINK.test(link)).slice(0, MIRROR_LIMITS.fontLinks);
-  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks, help: body?.help ? cleanHelp(body.help) : null, logo: cleanLogo(body?.logo) };
+  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks, help: body?.help ? cleanHelp(body.help) : null, assets: cleanAssets(body?.assets) };
 }

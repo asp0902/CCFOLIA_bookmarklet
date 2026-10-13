@@ -229,10 +229,16 @@ function renderScene(scene) {
   // Layer (measured on ccfolia.com 1.37.5): an item or marker wrapper has z-index = its stored z, a character wrapper has 100 + its stored z, so characters are above items and markers
   // (a stored z of 100 or more on an item is the only way to get above a character); equal layers keep the DOM order items, markers.
   const layerOf = piece => (piece.kind === "character" ? 100 : 0) + (Number(piece.z) || 0);
-  const all = [...(s.decks || []).map(deck => ({ ...deck, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl })), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 0 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
+  const all = [...(s.decks || []).map(deck => ({ ...deck, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl.startsWith("/") ? (cmMirror.assets[deck.coverUrl] || "") : deck.coverUrl })).filter(deck => deck.imageUrl), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 0 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
   for (const item of all.sort((a, b) => layerOf(a) - layerOf(b))) {
     // a dice symbol is drawn as a die face with its value ("?" while hidden); a card deck shows its back with the number of cards left in the middle
     if (item.kind === "dice") {
+      // CCFOLIA draws a die as the picture /images/{faces}_dice/{faces}_dice[{value}].png ([0] while hidden); the GM page sends those pictures as assets. Without the picture: a plain face.
+      const picture = cmMirror.assets[`/images/${item.faces}_dice/${item.faces}_dice[${item.closed ? 0 : item.value}].png`];
+      if (picture) {
+        const face = document.createElement("img"); face.src = picture; face.alt = ""; face.draggable = false; face.dataset.id = item.id; face.className = "scene-die-img";
+        place(face, item.x, item.y, item.width, item.height, 0, layerOf(item)); face.style.objectFit = "fill"; nodes.push(face); continue;
+      }
       const die = document.createElement("div"); die.className = "scene-die"; die.dataset.id = item.id; die.textContent = item.closed ? "?" : String(item.value);
       place(die, item.x, item.y, item.width, item.height, 0, layerOf(item)); die.style.fontSize = `${Math.round(item.height * unit * 0.5)}px`; nodes.push(die); continue;
     }
@@ -374,8 +380,9 @@ window.addEventListener("resize", () => renderScene());
     const on = cmMirror.has("zoomBar");
     ctl.hidden = on;
     if (!on) { document.getElementById("zoom-host")?.remove(); zoomUi = null; return; }
-    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:96px;z-index:100;color:#000"; stage.append(node); }); // CCFOLIA's scene text colour is black: the white buttons carry black icons
+    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;inset:0;z-index:100000;color:#000;pointer-events:none"; stage.append(node); }); // the host covers the stage like CCFOLIA's container (the bar's own mirrored CSS puts it right 32px / bottom 96px); CCFOLIA's scene text colour is black: the white buttons carry black icons
     const bar = cmMirror.make("zoomBar"), slot = name => cmMirror.slot(bar, name);
+    bar.style.pointerEvents = "auto";
     slot("zoomIn").addEventListener("click", () => setScale(Math.min((10 * scaleNow() + 1) / 10, 2)));
     slot("zoomOut").addEventListener("click", () => setScale(Math.max((10 * scaleNow() - 1) / 10, 0.2)));
     const slider = slot("slider");
@@ -384,6 +391,8 @@ window.addEventListener("resize", () => renderScene());
     slider.addEventListener("pointerup", () => { slider.onpointermove = null; });
     zoomUi = { track: slot("track"), thumb: slot("thumb") };
     cmMirror.show("zoom-host", [bar]);
+    // CCFOLIA's own CSS makes the bar absolute (right 32px, bottom 96px of the stage, measured); when the mirrored CSS does not, the same place is set here
+    if (getComputedStyle(bar).position !== "absolute") { bar.style.position = "absolute"; bar.style.right = "32px"; bar.style.bottom = "96px"; }
     window.syncZoomBar();
   };
 }
@@ -423,6 +432,10 @@ function renderTabs(data) {
     }
     // the add-tab "+" a player also sees on CCFOLIA: same look, disabled (a player cannot add tabs)
     if (cmMirror.has("chatTabAdd")) { const add = cmMirror.make("chatTabAdd"); add.title = add.getAttribute("aria-label") || ""; add.disabled = true; add.classList.add("Mui-disabled"); tabs.append(add); }
+    // the strip's own scroll arrows (left disabled, right shown, no action: nothing to scroll in this strip); without them the 40px slot is kept
+    const stripRoot = tabs.closest(".MuiTabs-root"), arrowL = cmMirror.has("chatTabScrollL") && cmMirror.has("chatTabScrollR") && stripRoot;
+    if (arrowL) { const left = cmMirror.make("chatTabScrollL"), right = cmMirror.make("chatTabScrollR"); stripRoot.prepend(left); stripRoot.append(right); }
+    host.style.paddingLeft = arrowL ? "" : "40px";
     cmMirror.show("chat-tabs-host", [shell]);
     return;
   }
@@ -1007,13 +1020,20 @@ function openMenu(anchor, items) {
   const paper = el("div", "menu-paper"); paper.setAttribute("role", "menu"); paper.anchor = anchor;
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
+    if (item.divider) { paper.append(el("hr", "menu-divider")); continue; }
     // the account menu's top row as CCFOLIA draws it (measured): 40px round avatar, name 16px/24px and a 14px 70% line under it, 72px high, then a divider
     if (item.profile) {
       const row = el("div", "menu-profile"), text = el("div", "menu-profile-text");
-      text.append(el("p", "", item.profile.name), el("p", "menu-profile-sub", item.profile.sub)); row.append(el("span", "menu-profile-av", item.profile.letter), text);
+      text.append(el("p", "", item.profile.name), el("p", "menu-profile-sub", item.profile.sub));
+      const avatar = el("span", "menu-profile-av", item.profile.image ? "" : item.profile.letter);
+      if (item.profile.image) { const img = el("img"); img.src = item.profile.image; img.alt = ""; avatar.append(img); }
+      row.append(avatar, text);
       paper.append(row); paper.classList.add("has-profile"); continue;
     }
+    // a link the menu opens in a new tab (CCFOLIA's help / terms / privacy entries), or an entry shown but not usable here (log in, developer commands)
+    if (item.href) { const link = el("a", "menu-item", item.label); link.href = item.href; link.target = "_blank"; link.rel = "noopener noreferrer"; link.setAttribute("role", "menuitem"); link.addEventListener("click", () => closeMenu()); paper.append(link); continue; }
     const row = el("button", "menu-item", item.label); row.type = "button"; row.setAttribute("role", "menuitem");
+    if (item.disabled) { row.disabled = true; row.setAttribute("aria-disabled", "true"); paper.append(row); continue; }
     if (item.current) row.dataset.current = "1";
     row.addEventListener("click", () => { closeMenu(); item.run(); });
     paper.append(row);
@@ -1132,6 +1152,7 @@ function openCharacterWindow() {
 function openRoomMenu(anchor) {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
   if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
+  items.push({ label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") });
   openMenu(anchor, items);
 }
 document.getElementById("room-menu-btn").addEventListener("click", event => openRoomMenu(event.currentTarget));
@@ -1209,7 +1230,12 @@ function downloadLog(kind) {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
-const openAccountMenu = anchor => openMenu(anchor, [{ profile: { letter: document.getElementById("account-av").textContent, name: chatName.value || "참여자", sub: "플레이룸 참여자" } }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
+// The account menu as a CCFOLIA player sees it (measured): profile row (default picture, name, "SNS 미인증"), log in, divider, help / terms / privacy (new tab), divider, developer commands.
+// Log in and developer commands have no meaning here and are shown disabled. BGM mute lives on the BGM bar; leaving the room is in the room menu.
+const openAccountMenu = anchor => openMenu(anchor, [{ profile: { letter: document.getElementById("account-av").textContent, image: cmMirror.assets["/ccfolia.png"] || "", name: chatName.value || "참여자", sub: "SNS 미인증" } },
+  { label: "로그인", disabled: true }, { divider: true },
+  { label: "도움말", href: "https://docs.ccfolia.com/" }, { label: "이용약관", href: "https://ccfolia.com/termsOfService.html" }, { label: "개인 정보 정책", href: "https://ccfolia.com/privacyPolicy.html" }, { divider: true },
+  { label: "개발자 명령", disabled: true }]);
 document.getElementById("account-btn").addEventListener("click", event => openAccountMenu(event.currentTarget));
 // Native mirroring: the top bar is CCFOLIA's own (GM-only buttons were left out on the GM side). Its buttons call the same functions as the built-in ones;
 // the built-in header stays in the page (hidden) as the data holder and the fallback. A handout button (not a CCFOLIA feature) is added by copying the character-list button.
@@ -1235,7 +1261,7 @@ function renderMirroredTopBar() {
   const letter = document.createElement("span");
   letter.style.cssText = "width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#555;color:#fff;font-size:20px";
   // CCFOLIA's default account picture (sent by the GM page as a data URI) when it has arrived; otherwise a letter
-  if (cmMirror.logo && avatar) { avatar.src = cmMirror.logo; avatar.alt = ""; letter.hidden = true; avatar.after(letter); } else avatar.replaceWith(letter);
+  if (cmMirror.assets["/ccfolia.png"] && avatar) { avatar.src = cmMirror.assets["/ccfolia.png"]; avatar.alt = ""; letter.hidden = true; avatar.after(letter); } else avatar.replaceWith(letter);
   // buttons a player sees on CCFOLIA (lists of the GM tools, the folded menu): same look and place, disabled like on a player screen (measured: only the character list is active)
   for (const button of bar.querySelectorAll("button[aria-label]")) { const label = button.getAttribute("aria-label"); if (/^\s*\[GM\]/.test(label) || label === "메뉴") { button.title = label; button.disabled = true; button.classList.add("Mui-disabled"); } }
   const dot = document.createElement("i"); dot.style.cssText = "position:absolute;right:3px;bottom:3px;width:12px;height:12px;border-radius:50%;border:2px solid #202020;font-size:0;background:#9e9e9e";

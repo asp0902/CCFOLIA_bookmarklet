@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.54
+// @version      0.2.57
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.54";
+  const VERSION = "0.2.57";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -280,11 +280,13 @@
     return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image };
   }
   // 카드 덱(entities.roomDecks: x,y,z,width,height,coverImageUrl,items = 덱 안 카드 맵). 덱 안 카드(앞면 주소 imageUrl)는 절대 보내지 않고 뒷면과 남은 장수만. 뽑혀서 필드에 놓인 카드는 아이템(deckId)이라 relayItemView 가 다룬다.
+  // CCFOLIA's default card back is a path on its own site (/images/trump/z01.png): the path is sent, the picture itself comes as an asset (relayAssetLoad)
+  const staticCover = (value) => (/^\/images\/[\w\-./]{1,100}\.png$/.test(typeof value === "string" ? value : "") ? value : "");
   function relayDeckViews(decks, url, num) {
     return Object.values(decks && typeof decks === "object" ? decks : {})
-      .filter((deck) => deck && url(deck.coverImageUrl))
+      .filter((deck) => deck && (url(deck.coverImageUrl) || staticCover(deck.coverImageUrl)))
       .slice(0, 50)
-      .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) }));
+      .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) || staticCover(deck.coverImageUrl) }));
   }
   // 다이스 심볼(entities.roomDices: x,y,width,height,faces,value,closed,name,owner,changeCount). closed(가려진 값)이면 값은 보내지 않는다. 좌표·크기는 아이템과 같은 칸 단위.
   function relayDiceViews(dices, num) {
@@ -3189,6 +3191,9 @@
       out.chatTabsShell = shell.outerHTML;
       const add = [...(paper || document).querySelectorAll("button")].find((button) => button.querySelector('path[d^="M19 13h-6v6h-2v-6H5"]') && button.closest('[role="tablist"]') !== null || (button.querySelector('path[d^="M19 13h-6v6h-2v-6H5"]') && button.getBoundingClientRect().height >= 40 && button.parentElement === tablist.parentElement));
       if (add) { const copy = mirrorStripClone(add.cloneNode(true)); copy.removeAttribute("style"); out.chatTabAdd = copy.outerHTML; }
+      // the scroll arrows of the tab strip (left one is disabled/invisible until the strip scrolls, the right one shows even when nothing overflows, measured on a player screen too)
+      const arrows = [...(tablist.closest(".MuiTabs-root") || document.createElement("div")).querySelectorAll(".MuiTabScrollButton-root")];
+      if (arrows.length === 2) arrows.forEach((arrow, index) => { const copy = mirrorStripClone(arrow.cloneNode(true)); copy.removeAttribute("style"); out[index ? "chatTabScrollR" : "chatTabScrollL"] = copy.outerHTML; });
       const unread = (tab) => { const badge = tab.querySelector(".MuiBadge-badge"); return !!badge && !badge.classList.contains("MuiBadge-invisible"); };
       const plainLabel = (tab) => [...(tab.firstElementChild?.childNodes || [])].some((n) => n.nodeType === Node.TEXT_NODE && n.nodeValue.trim());
       const pick = (test) => tabs.find((tab) => test(tab) && plainLabel(tab)) || tabs.find(test);
@@ -3293,15 +3298,26 @@
   const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
   new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = { ...help, system: helpSystem() }; } }).observe(document.body, { childList: true, subtree: true });
   let helpProbing = false;
-  // CCFOLIA's default account picture (/ccfolia.png, 2.4KB): read once from the GM's page and sent as a data URI, so the play room needs no extra image host.
-  let relayLogoCache = "";
-  async function relayLogoLoad() {
-    if (relayLogoCache) return;
+  // Small static pictures of CCFOLIA's own site (the default account picture /ccfolia.png, the default card back /images/trump/..): read from the GM's page and sent as PNG data URIs, so the play room needs no extra image host.
+  const RELAY_STATIC_PATH = /^\/(?:ccfolia\.png|images\/[\w\-./\[\]]{1,100}\.png)$/;
+  let relayAssetCache = {};
+  async function relayAssetLoad() {
+    const wanted = new Set(["/ccfolia.png"]);
     try {
-      const response = await fetch("/ccfolia.png"), blob = await response.blob();
-      if (!response.ok || blob.type !== "image/png" || blob.size > 60000) return;
-      relayLogoCache = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => resolve(""); reader.readAsDataURL(blob); });
-    } catch (_) { /* the play room draws a letter instead */ }
+      const ent = findStore()?.getState()?.entities;
+      for (const deck of Object.values(ent?.roomDecks?.entities || {})) if (RELAY_STATIC_PATH.test(deck?.coverImageUrl || "")) wanted.add(deck.coverImageUrl);
+      // a dice symbol is the picture /images/{faces}_dice/{faces}_dice[{value}].png (measured; [0] is the hidden face)
+      for (const die of Object.values(ent?.roomDices?.entities || {})) { const faces = Math.round(Number(die?.faces)); if (faces >= 2 && faces <= 1000) wanted.add(`/images/${faces}_dice/${faces}_dice[${die.closed === true ? 0 : Math.round(Number(die.value) || 0)}].png`); }
+    } catch (_) { /* nothing more to load */ }
+    for (const path of [...wanted].filter((p) => RELAY_STATIC_PATH.test(p)).slice(0, 24)) {
+      if (relayAssetCache[path]) continue;
+      try {
+        const response = await fetch(path), blob = await response.blob();
+        if (!response.ok || blob.type !== "image/png" || blob.size > 60000) continue;
+        const data = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => resolve(""); reader.readAsDataURL(blob); });
+        if (data) relayAssetCache = { ...relayAssetCache, [path]: data };
+      } catch (_) { /* the play room draws a letter / a plain card instead */ }
+    }
   }
   const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.diceBotSystem || "").slice(0, 60); } catch (_) { return ""; } };
   // Opens the native dialog out of sight, reads it and closes it again - only when nothing is stored yet or the room's dice system changed since the stored text (otherwise the text is updated when the GM opens the dialog
@@ -3339,9 +3355,9 @@
     const templateText = templates ? JSON.stringify(templates) : "";
     const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
     const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);
-    const helpHash = relayHelpCache ? hash(JSON.stringify(relayHelpCache)) : "", logoHash = relayLogoCache ? hash(relayLogoCache) : "";
+    const helpHash = relayHelpCache ? hash(JSON.stringify(relayHelpCache)) : "", assetsHash = Object.keys(relayAssetCache).length ? hash(JSON.stringify(relayAssetCache)) : "";
     return {
-      cssHash, tplHash, helpHash, logoHash, logo: relayLogoCache && logoHash !== known.logoHash ? relayLogoCache : undefined, fontLinks, help: relayHelpCache && helpHash !== known.helpHash ? relayHelpCache : undefined,
+      cssHash, tplHash, helpHash, assetsHash, assets: assetsHash && assetsHash !== known.assetsHash ? relayAssetCache : undefined, fontLinks, help: relayHelpCache && helpHash !== known.helpHash ? relayHelpCache : undefined,
       css: css && cssHash !== known.cssHash ? css : undefined,
       templates: templates && tplHash !== known.tplHash ? templates : undefined
     };
@@ -3366,7 +3382,7 @@
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
       relayMirror,
       relayHelpProbe,
-      relayLogoLoad,
+      relayAssetLoad,
       relayScene: () => {
         try {
           const ent = findStore()?.getState()?.entities;

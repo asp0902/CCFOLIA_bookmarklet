@@ -134,6 +134,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.mn').click());
   assert(await page.locator('.menu-item').count() >= 1, 'the room menu opens from the mirrored button');
   await page.keyboard.press('Escape');
+  // the zoom bar sits like CCFOLIA's (measured: right 32px, bottom 96px of the stage) and the select tool is centred above it, over the map objects
+  const pos = await page.evaluate(() => { const st = document.querySelector('.stage').getBoundingClientRect(), z = document.getElementById('zoom-host').shadowRoot.firstElementChild.getBoundingClientRect(), t = document.querySelector('.select-tool').getBoundingClientRect(); return { zRight: Math.round(st.right - z.right), zBottom: Math.round(st.bottom - z.bottom), toolBottom: Math.round(st.bottom - t.bottom), zIndexZoom: getComputedStyle(document.getElementById('zoom-host')).zIndex }; });
+  assert.deepEqual({ zRight: pos.zRight, zBottom: pos.zBottom, toolBottom: pos.toolBottom }, { zRight: 32, zBottom: 96, toolBottom: 230 });
+  assert(Number(pos.zIndexZoom) >= 100, 'the zoom bar is above the map objects');
   // the "?" button shows once the GM's help text has arrived and opens it as a dialog (links open in a new tab without opener)
   await page.waitForFunction(() => !document.getElementById('help-btn').hidden);
   await page.evaluate(() => document.getElementById('help-btn').click());
