@@ -138,6 +138,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // the value label of the zoom slider shows the scale and opens on hover (class MuiSlider-valueLabelOpen), like MUI's on CCFOLIA
   const label = await page.evaluate(async () => { const root = document.getElementById('zoom-host').shadowRoot, thumb = root.querySelector('[data-cm-slot="thumb"]'), l = thumb.querySelector('.MuiSlider-valueLabel'); window.dispatchEvent(new PointerEvent('pointerup')); const text = l.textContent; thumb.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); const open = l.classList.contains('MuiSlider-valueLabelOpen'); thumb.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); return { text, open, closed: !l.classList.contains('MuiSlider-valueLabelOpen') }; });
   assert.deepEqual(label, { text: label.text, open: true, closed: true }); assert.match(label.text, /^\d(\.\d)?$/);
+  // a piece can still be dragged with the mirrored bars and tools around the scene (real mouse), and a click on it opens the sheet
+  await page.evaluate(() => { document.getElementById('char-window')?.remove(); document.querySelector('.pen-menu').hidden = true; });
+  await page.evaluate(() => renderScene({ fieldWidth: 50, fieldHeight: 30, items: [{ id: 'i1', x: -4, y: -4, z: 1, angle: 0, width: 3, height: 3, imageUrl: 'https://storage.ccfolia-cdn.net/a.png' }], markers: [], characters: [] }));
+  const movePosted = page.waitForRequest(req => req.url().endsWith('/pieces/move') && req.method() === 'POST', { timeout: 5000 });
+  const box = await page.locator('img[data-id="i1"]').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 20, { steps: 4 }); await page.mouse.up();
+  assert.equal(JSON.parse((await movePosted).postData()).id, 'i1', 'dragging a piece asks the relay to move it');
   // the zoom bar sits like CCFOLIA's (measured: right 32px, bottom 96px of the stage) and the select tool is centred above it, over the map objects
   const pos = await page.evaluate(() => { const st = document.querySelector('.stage').getBoundingClientRect(), z = document.getElementById('zoom-host').shadowRoot.firstElementChild.getBoundingClientRect(), t = document.querySelector('.select-tool').getBoundingClientRect(); return { zRight: Math.round(st.right - z.right), zBottom: Math.round(st.bottom - z.bottom), toolBottom: Math.round(st.bottom - t.bottom), zIndexZoom: getComputedStyle(document.getElementById('zoom-host')).zIndex }; });
   assert.deepEqual({ zRight: pos.zRight, zBottom: pos.zBottom, toolBottom: pos.toolBottom }, { zRight: 32, zBottom: 96, toolBottom: 230 });

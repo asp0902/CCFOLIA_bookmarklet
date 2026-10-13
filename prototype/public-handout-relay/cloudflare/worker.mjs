@@ -276,6 +276,18 @@ export class RoomRelay {
       await this.save(room);
       return json({ commands: room.commands.filter(command => command.status === "pending").slice(0, 50) });
     }
+    // Two GM tabs of the same room both receive every command; the one that claims it first runs it (a claim lasts a minute, so a tab that died does not hold a command forever).
+    const claimMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/commands\/([^/]+)\/claim$/);
+    if (request.method === "POST" && claimMatch) {
+      const command = room.commands.find(item => item.id === decodeURIComponent(claimMatch[1]));
+      const by = text((await request.json().catch(() => ({}))).by, 64);
+      if (!command || command.status !== "pending" || !by) return json({ claimed: false });
+      const now = Date.now();
+      if (command.claim && command.claim.by !== by && now - command.claim.at < 60_000) return json({ claimed: false });
+      command.claim = { by, at: now };
+      await this.save(room);
+      return json({ claimed: true });
+    }
     const commandAckMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/commands\/([^/]+)\/ack$/);
     if (request.method === "POST" && commandAckMatch) {
       const command = room.commands.find(item => item.id === decodeURIComponent(commandAckMatch[1]));
