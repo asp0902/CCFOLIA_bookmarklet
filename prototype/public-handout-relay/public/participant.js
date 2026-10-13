@@ -317,7 +317,7 @@ window.addEventListener("resize", () => renderScene());
     redraw();
   };
   const centre = () => [stage.clientWidth / 2 - stage.clientWidth / 2, 0];
-  const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #zoom-host, #handout, #room > header");
+  const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #zoom-host, .scene-tool, .pen-menu, #handout, #room > header");
   stage.addEventListener("wheel", event => {
     if (interactive(event.target)) return;
     event.preventDefault();
