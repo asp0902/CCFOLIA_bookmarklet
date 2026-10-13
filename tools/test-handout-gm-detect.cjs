@@ -35,13 +35,13 @@ const calls = [];
 const sync = (greeted, room = 'R1') => {
   calls.length = 0;
   const box = { getCurrentRoomKey: () => room, isGreeted: () => greeted, fbState: null, console, refreshCcfoliaRole: () => calls.push('role'),
-    initFirebase: async () => { calls.push('init'); return { uid: 'u' }; }, subscribeToRoomHandouts: async () => calls.push('handouts'), subscribeToRoomShows: async () => calls.push('shows'), subscribeToRoomGm: async () => calls.push('gm'), registerMember: async () => calls.push('member'), subscribeToMembers: async () => calls.push('members') };
+    initFirebase: async () => { calls.push('init'); return { uid: 'u' }; }, subscribeToRoomHandouts: async () => calls.push('handouts'), subscribeToRoomShows: async () => calls.push('shows'), subscribeToRoomGm: async () => calls.push('gm'), registerMember: async () => calls.push('member'), subscribeToMembers: async () => calls.push('members'), subscribeToFolders: async () => calls.push('folders') };
   vm.runInNewContext(`${syncCode}; this.autoConnectSync = autoConnectSync; this.info = () => syncInfo;`, box);
   return box;
 };
 (async () => {
   let box = sync(true); await box.autoConnectSync();
-  assert.deepEqual(calls, ['role', 'init', 'handouts', 'shows', 'gm', 'member', 'members'], 'greeted room: connects and subscribes without the popup');
+  assert.deepEqual(calls, ['role', 'init', 'handouts', 'shows', 'gm', 'member', 'folders', 'members'], 'greeted room: connects and subscribes without the popup');
   assert.equal(box.info().reason, '');
   box = sync(false); await box.autoConnectSync();
   assert.deepEqual(calls, [], 'not agreed: nothing is started');
