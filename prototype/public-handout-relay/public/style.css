@@ -313,3 +313,11 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .ce-icon{width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;color:#fff;font-size:22px;line-height:34px;cursor:pointer}.ce-icon:hover:not(:disabled){background:rgba(255,255,255,.08)}.ce-icon:disabled{color:rgba(255,255,255,.3);cursor:default}
 .ce-rows{display:flex;flex-direction:column;gap:12px}.ce-status{min-height:18px;margin:0;font-size:12px;color:rgba(255,255,255,.6)}
 .ce-act,.ce-danger{padding:6px 16px;border:0;border-radius:4px;background:none;font:inherit;font-size:14px;font-weight:500;cursor:pointer;color:#2196f3}.ce-danger{color:#f50057;margin-right:auto}.ce-act:hover,.ce-danger:hover{background:rgba(255,255,255,.08)}
+#handout-open.has-new{position:relative}#handout-open.has-new::after{content:"";position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#f50057}
+.handout-detail,.handout-list{min-width:min(560px,calc(100vw - 80px));max-height:70vh;overflow:auto}
+.handout-body{font-size:14px;line-height:1.6;word-break:break-word}.handout-body img{max-width:100%;height:auto}.handout-body table{border-collapse:collapse}.handout-body td,.handout-body th{border:1px solid rgba(255,255,255,.25);padding:4px 8px}
+.handout-body a{color:#2196f3}.handout-body blockquote{margin:8px 0;padding-left:12px;border-left:3px solid rgba(255,255,255,.3)}.handout-missing-image{color:rgba(255,255,255,.5)}
+.handout-secret{margin-top:16px;padding:12px;border:1px dashed #f50057;border-radius:4px;background:rgba(245,0,87,.08)}.handout-secret h3{margin:0 0 8px;font-size:13px;color:#ff80ab}
+.handout-folder{margin:12px 0 4px;font-size:12px;color:rgba(255,255,255,.6)}
+.handout-row{position:relative;display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:10px 12px;border:0;border-radius:4px;background:none;color:#fff;font:inherit;text-align:left;cursor:pointer}.handout-row:hover{background:rgba(255,255,255,.08)}
+.handout-title{flex:1}.handout-row small{color:#ff80ab}.handout-dot{width:8px;height:8px;border-radius:50%;background:#f50057}

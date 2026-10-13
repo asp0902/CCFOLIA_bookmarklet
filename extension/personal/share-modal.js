@@ -143,7 +143,7 @@
   };
   const errorOf = async (response, fallback) => (await response.json().catch(() => ({}))).error || `${fallback} (${response.status})`;
 
-  const renderParticipants = items => {
+  const renderParticipants = (items, recipients = []) => {
     participants.replaceChildren();
     if (!items.length) { participants.append(el("p", { class: "muted", text: "참가 요청 없음" })); return; }
     for (const item of items) {
@@ -152,6 +152,11 @@
         el("span", { class: "name", text: item.displayName }),
         el("span", { class: "state", text: STATUS_LABEL[item.status] || item.status }),
         item.status === "pending" || item.status === "approved" ? el("button", { type: "button", "data-rename": item.id, "data-name": item.displayName, text: "이름 변경" }) : null,
+        // who this participant is for the handouts: one of the people the handout tool knows (blank = matched by name)
+        item.status === "approved" ? el("select", { "data-recipient": item.id, title: "핸드아웃 수신자", "aria-label": `${item.displayName}의 핸드아웃 수신자` },
+          el("option", { value: "", text: "수신자: 이름으로 자동" }),
+          ...recipients.map(option => el("option", { value: option.key, text: option.label || option.key, ...(option.key === item.recipientKey ? { selected: "" } : {}) })),
+          ...(item.recipientKey && !recipients.some(option => option.key === item.recipientKey) ? [el("option", { value: item.recipientKey, text: item.recipientKey, selected: "" })] : [])) : null,
         item.status === "pending" ? [act("승인", "approve"), act("거절", "reject", true)] : null,
         item.status === "approved" ? act("접근 취소", "revoke", true) : null));
     }
@@ -162,7 +167,8 @@
     try {
       const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants`);
       if (!response.ok) throw new Error(await errorOf(response, "조회 실패"));
-      renderParticipants((await response.json()).participants || []);
+      const data = await response.json();
+      renderParticipants(data.participants || [], data.recipients || []);
     } catch (error) { participants.replaceChildren(el("p", { class: "muted", text: error.message })); }
   }
   const renderSocket = info => {
@@ -233,6 +239,15 @@
       invites = rest; invite.value = "";
       say("공유를 중지했습니다. 룸 탭을 새로고침하면 새 초대 URL로 다시 시작됩니다.");
       await refreshParticipants();
+    } catch (error) { say(error.message, true); }
+  });
+  participants.addEventListener("change", async event => {
+    const select = event.target.closest?.("select[data-recipient]");
+    if (!select || !roomId) return;
+    try {
+      const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(select.dataset.recipient)}/recipient`, { method: "POST", body: JSON.stringify({ key: select.value }) });
+      if (!response.ok) throw new Error(await errorOf(response, "수신자 지정 실패"));
+      say("핸드아웃 수신자를 지정했습니다. 다음 핸드아웃 전송부터 반영됩니다.");
     } catch (error) { say(error.message, true); }
   });
   participants.addEventListener("click", async event => {
