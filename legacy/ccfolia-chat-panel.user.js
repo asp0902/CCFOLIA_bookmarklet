@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.52
+// @version      0.2.53
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.52";
+  const VERSION = "0.2.53";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -226,11 +226,13 @@
   // 코코포리아 업데이트로 저장소 모양이 바뀌면 웹 공유가 조용히 깨진다(빈 채팅, 안 보이는 말, 전송 실패). 이 코드가 실제로 읽는 키와 그 타입만 점검한다.
   // 값이 비어 있는 것은 정상(빈 룸)이고, 표본(종류마다 처음 3개)에서 키가 없거나 타입이 바뀐 것만 문제로 본다. 목록은 relayScene·toPanelMessage·sendMessage 가 읽는 키에서 뽑았다.
   const RELAY_SHAPE_SPEC = Object.freeze({
-    entities: ["rooms", "roomCharacters", "roomItems", "roomMessages", "roomMembers"],
+    entities: ["rooms", "roomCharacters", "roomItems", "roomMessages", "roomMembers", "roomDecks", "roomDices"],
     messageSlice: { entities: ["object"], idsGroupBy: ["object"] },
     message: { text: ["string"], name: ["string"], channel: ["string"], color: ["string"], iconUrl: ["null", "string"], createdAt: ["object", "number"], to: ["null", "string", "array"], extend: ["object"], edited: ["boolean"] },
     character: { name: ["string"], iconUrl: ["null", "string"], x: ["number"], y: ["number"], z: ["number"], angle: ["number"], width: ["number"], height: ["number"], status: ["array"], params: ["array"], memo: ["string"], externalUrl: ["string"], commands: ["string"], initiative: ["number"], hideStatus: ["boolean"], active: ["boolean"], secret: ["boolean"], invisible: ["boolean"], color: ["string"] },
     item: { x: ["number"], y: ["number"], z: ["number"], angle: ["number"], width: ["number"], height: ["number"], imageUrl: ["null", "string"], coverImageUrl: ["null", "string"], visible: ["boolean"], closed: ["boolean"], locked: ["boolean"], freezed: ["boolean"] },
+    deck: { x: ["number"], y: ["number"], z: ["number"], width: ["number"], height: ["number"], coverImageUrl: ["null", "string"], items: ["object"] },
+    dice: { x: ["number"], y: ["number"], width: ["number"], height: ["number"], faces: ["number"], value: ["number"], closed: ["boolean"] },
     room: { owner: ["string"], backgroundUrl: ["null", "string"], foregroundUrl: ["null", "string"], backgroundColor: ["string"], fieldWidth: ["number"], fieldHeight: ["number"], fieldObjectFit: ["string"], markers: ["object"], mediaUrl: ["null", "string"], mediaName: ["string"], mediaVolume: ["number"], mediaRepeat: ["boolean"], soundUrl: ["null", "string"], soundName: ["string"], soundVolume: ["number"], soundRepeat: ["boolean"] }
   });
   const shapeType = (value) => (value === null ? "null" : Array.isArray(value) ? "array" : typeof value);
@@ -245,9 +247,11 @@
       message: Object.values(slice?.entities || {}).slice(0, 3),
       character: Object.values(entities?.roomCharacters?.entities || {}).slice(0, 3),
       item: Object.values(entities?.roomItems?.entities || {}).slice(0, 3),
+      deck: Object.values(entities?.roomDecks?.entities || {}).slice(0, 3),
+      dice: Object.values(entities?.roomDices?.entities || {}).slice(0, 3),
       room: Object.values(entities?.rooms?.entities || {}).slice(0, 1)
     };
-    for (const kind of ["message", "character", "item", "room"]) {
+    for (const kind of ["message", "character", "item", "deck", "dice", "room"]) {
       for (const sample of samples[kind]) {
         for (const [key, types] of Object.entries(spec[kind])) {
           const label = `${kind}.${key}`;

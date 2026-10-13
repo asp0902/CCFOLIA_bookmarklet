@@ -16,13 +16,15 @@ const state = () => ({ entities: {
   rooms: { entities: { r: make(fixture.room) } },
   roomCharacters: { entities: { c: make(fixture.character) } },
   roomItems: { entities: { i: make(fixture.item) } },
+  roomDecks: { entities: { d: make(fixture.deck) } },
+  roomDices: { entities: { x: make(fixture.dice) } },
   roomMessages: { entities: { m: make(fixture.message) }, idsGroupBy: { main: ['m'] }, ids: [], addedIds: [] },
   roomMembers: { entities: {} }
 } });
 const check = s => Array.from(checkRelayShape(s, SPEC));
 
 // the spec only asks for keys that were measured, with types that were measured
-for (const [kind, shape] of [['message', SPEC.message], ['character', SPEC.character], ['item', SPEC.item], ['room', SPEC.room]]) {
+for (const [kind, shape] of [['message', SPEC.message], ['character', SPEC.character], ['item', SPEC.item], ['deck', SPEC.deck], ['dice', SPEC.dice], ['room', SPEC.room]]) {
   for (const [key, types] of Object.entries(shape)) {
     assert(key in fixture[kind], `${kind}.${key} is in the measured fixture`);
     assert(fixture[kind][key].every(type => types.includes(type)), `${kind}.${key}: measured types ${fixture[kind][key]} are allowed`);
@@ -45,4 +47,8 @@ const noItems = state(); delete noItems.entities.roomItems;
 assert(check(noItems).includes('entities.roomItems'));
 const noSlice = state(); noSlice.entities.roomMessages.idsGroupBy = [];
 assert(check(noSlice).includes('roomMessages.idsGroupBy'), 'an array where a map is expected');
+const noDeckKey = state(); delete noDeckKey.entities.roomDecks.entities.d.coverImageUrl;
+assert.deepEqual(check(noDeckKey), ['deck.coverImageUrl'], 'a removed deck key is named');
+const noDice = state(); noDice.entities.roomDices.entities.x.value = '3';
+assert.deepEqual(check(noDice), ['dice.value(string)']);
 console.log('ccfolia shape check PASS');
