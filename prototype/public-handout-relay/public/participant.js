@@ -1172,8 +1172,14 @@ function renderMirroredHeader() {
   menu?.addEventListener("click", () => openChatMenu(menu));
   cmMirror.show("chat-head-host", [header]);
 }
-// What the page holds about the mirror, for checking by hand: window.playroomDiag() in the console.
-window.playroomDiag = () => ({ assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length });
+// What the page holds about the mirror, for checking by hand: window.playroomDiag() in the console (the result is also copied).
+window.playroomDiag = () => {
+  const text = JSON.stringify({ assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length });
+  // the result is copied for pasting (DevTools' copy(), then the clipboard API); the same text is returned
+  try { if (typeof copy === "function") copy(text); } catch (_) {}
+  try { navigator.clipboard?.writeText(text).catch(() => {}); } catch (_) {}
+  return text;
+};
 // Each part is redrawn on its own: one that fails (a template CCFOLIA changed) must not stop the others, least of all the scene with the pictures that arrive with the mirror (card backs, dice faces).
 cmMirror.onChange = () => {
   for (const redraw of [() => renderScene(), renderMirroredHeader, renderMirroredTopBar, () => window.renderMirroredZoom?.(), () => { if (typeof current !== "undefined" && current) renderState(current); }]) { try { redraw(); } catch (error) { console.warn("mirror redraw failed", error); } }
