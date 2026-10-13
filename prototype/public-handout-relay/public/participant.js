@@ -250,7 +250,7 @@ function renderScene(scene) {
     img.style.objectFit = "fill"; nodes.push(img);
     if (item.kind === "deck") {
       const badge = document.createElement("span"); badge.className = "deck-count"; badge.textContent = `${item.count} 장`;
-      place(badge, item.x + item.width / 2, item.y + item.height / 2, 0, 0, 0, layerOf(item)); nodes.push(badge);
+      place(badge, item.x + item.width / 2, item.y + item.height / 2, 0, 0, 0, layerOf(item)); badge.style.width = "auto"; badge.style.height = "32px"; /* place() gives a point; the chip has its own size (measured 32px high) */ nodes.push(badge);
     }
     // A character token carries its name under it (measured on ccfolia.com: bottom -11.9px of the 96px token, centred, 12px bold, black, 1px #f5f5f5 outline in eight directions, ellipsis within the token width).
     if (item.kind === "character" && item.name) {
