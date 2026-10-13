@@ -51,9 +51,15 @@ const plain = x => JSON.parse(JSON.stringify(x));
   assert.deepEqual(plain(t.log.filter(x => x[0] === 'issue')), [['issue', 'GM 자리 되찾기', 'permission-denied']]);
   assert.equal(t.log.some(x => x[0] === 'sub'), false);
   assert.deepEqual(plain(t.api.seat().seatClaimLog), Object.assign(plain(t.api.seat().seatClaimLog), { ok: false, code: 'permission-denied', seatHadAccountUid: true }));
+  // a seat the old tool wrote without an account uid ("") is told as having none
+  t = make({ push: async () => { const error = new Error('denied'); error.code = 'permission-denied'; throw error; } });
+  t.api.setSeat({ gmUid: 'old-anon', gmCcfoliaUid: '', gmCharacter: '-' });
+  await t.api.maybeClaimGmSeat();
+  assert.deepEqual([t.api.seat().seatClaimLog.seatHadAccountUid, t.api.seat().seatClaimLog.seatGmUid], [false, 'old-anon']);
   // the members subscription is only the GM's (the rules refuse everybody else)
   assert(/if \(ccfRole\.known && !ccfRole\.isOwner\) return;[^\n]*\n\s*const \{ collection, onSnapshot \} = fb\.modules\.fs;\s*\n\s*unsubMembers = onSnapshot\(/.test(source));
   // the status line is the last thing of the settings tab
-  assert(/renderSettingsPlList\(\)\}\s*<\/div>\s*<div class="hint" style="margin:14px 0 0;">Firebase: /.test(source));
+  assert(/data-firebase-line>Firebase: \$\{escapeHtml\(firebaseIssueLabel\(\)\)\}<\/span>\s*<span class="room-info">룸 /.test(source), 'the Firebase line sits right above the room line at the bottom, in its small grey style');
+  assert(!/<div class="hint"[^>]*>Firebase: /.test(source), 'not in the body of the tab any more');
   console.log('handout gm seat PASS');
 })().catch(error => { console.error(error); process.exit(1); });
