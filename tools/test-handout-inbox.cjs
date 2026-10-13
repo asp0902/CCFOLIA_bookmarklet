@@ -24,10 +24,11 @@ const vm = require('node:vm');
   };
   const ingested = [], removed = [];
   const box = { ALL_KEY: '*', fbState: { uid: 'gm-anon' }, state: { data: { plList: [{ name: '앨리스', aliases: [], uid: 'acct-a' }, { name: '밥', aliases: [], uid: '' }], handouts: [], folders: [{ id: 'f1', name: '1막' }], myCharacter: 'GM' }, isOpen: false }, denied: false,
-    render() {}, registerTeardown() {}, initFirebase: async () => ({ uid: 'gm-anon', db: {}, modules: { fs: fsApi } }), getCurrentRoomKey: () => 'room', saveAll: async () => {}, isAdminMode: () => true,
+    render() {}, registerTeardown() {}, hasPlayerRelay: () => false, noteFirebaseIssue() {}, readWebShared: () => new Set(), initFirebase: async () => ({ uid: 'gm-anon', db: {}, modules: { fs: fsApi } }), getCurrentRoomKey: () => 'room', saveAll: async () => {}, isAdminMode: () => true,
     normalizePlNameKey: v => String(v || '').replace(/\s+/g, '').toLowerCase(), mergePlListById: l => l, ingestRemoteHandout: (data, type) => ingested.push([data, type]), ingestRemoteRemove: id => removed.push(id),
     readFirebaseAuthUids: async () => [], findCcfoliaStore: () => null, setTimeout: () => 0, clearTimeout() {}, console, Object, Array, Set, Map, String, Number, JSON, Date, Promise };
   vm.createContext(box);
+  box.withoutAll = vm.runInContext('(' + source.match(/const withoutAll = (.*);\r?\n/)[1] + ')', box);
   vm.runInContext(`${source.slice(a, b)}\n${source.slice(c, d)}\n;this.api = { inboxCopiesFor, syncInboxes, subscribeToInbox, remoteMembers, inboxActive: () => inboxActive };`, box);
   const api = box.api;
   const handouts = [
@@ -43,17 +44,20 @@ const vm = require('node:vm');
   assert.deepEqual(Object.keys(alice), ['h1'], 'by account: Alice (whatever name she plays under) gets h1 only');
   assert.deepEqual([alice.h1.description, alice.h1.gmNotes, alice.h1.image, alice.h1.folder, JSON.stringify(alice.h1.access)], ['공개', '비밀', 'img', '1막', '{"view":true,"secret":true}']);
   const bob = copy(api.inboxCopiesFor({ ccfoliaUid: 'acct-b', displayName: '밥' }, plList, handouts, box.state.data.folders));
-  assert.deepEqual(Object.keys(bob).sort(), ['h1', 'h2', 'h3'], 'by name: Bob');
-  assert.equal(bob.h1.gmNotes, '', 'no secret text where there is no secret right'); assert.equal(bob.h3.description, '', 'secret-only: no public text'); assert.equal(bob.h3.gmNotes, '비밀 읽기');
+  assert.deepEqual(Object.keys(bob).sort(), ['h2', 'h3'], 'by name: Bob (the old "all players" * permission of h1 is ignored)');
+  assert.equal(bob.h2.gmNotes, '밥의 비밀'); assert.equal(bob.h3.description, '', 'secret-only: no public text'); assert.equal(bob.h3.gmNotes, '비밀 읽기');
   assert(!JSON.stringify(bob).includes('permissions') && !JSON.stringify(alice).includes('"permissions"'), 'the copies carry no permission table');
   const stranger = copy(api.inboxCopiesFor({ ccfoliaUid: 'acct-x', displayName: '낯선 사람' }, plList, handouts, []));
-  assert.deepEqual(Object.keys(stranger), ['h1']); assert.equal(stranger.h1.gmNotes, ''); assert.equal(stranger.h1.access.secret, false);
+  assert.deepEqual(Object.keys(stranger), [], 'a stranger gets nothing');
+  // with the relay (a share button) only what the GM has shared is sent at all
+  assert.deepEqual(Object.keys(copy(api.inboxCopiesFor({ ccfoliaUid: 'acct-b', displayName: '밥' }, plList, handouts, [], new Set(['h3'])))), ['h3'], 'only the shared one');
+  assert.deepEqual(Object.keys(copy(api.inboxCopiesFor({ ccfoliaUid: 'acct-b', displayName: '밥' }, plList, handouts, [], new Set()))), [], 'nothing shared yet: nothing sent');
   // writing: every member except the GM's own account, only what changed, stale copies deleted
   api.remoteMembers.set('gm-anon', { ccfoliaUid: 'acct-gm', displayName: 'GM' }); api.remoteMembers.set('anon-a', { ccfoliaUid: 'acct-a', displayName: '앨리스' }); api.remoteMembers.set('anon-b', { ccfoliaUid: 'acct-b', displayName: '밥' });
   store.set('rooms/room/inbox/anon-b/handouts/old', { id: 'old' }); // left over from a handout that was deleted
   await api.syncInboxes();
-  assert.deepEqual([...store.keys()].sort(), ['rooms/room/inbox/anon-a/handouts/h1', 'rooms/room/inbox/anon-b/handouts/h1', 'rooms/room/inbox/anon-b/handouts/h2', 'rooms/room/inbox/anon-b/handouts/h3']);
-  assert.equal(store.get('rooms/room/inbox/anon-a/handouts/h1').gmNotes, '비밀'); assert.equal(store.get('rooms/room/inbox/anon-b/handouts/h1').gmNotes, '');
+  assert.deepEqual([...store.keys()].sort(), ['rooms/room/inbox/anon-a/handouts/h1', 'rooms/room/inbox/anon-b/handouts/h2', 'rooms/room/inbox/anon-b/handouts/h3']);
+  assert.equal(store.get('rooms/room/inbox/anon-a/handouts/h1').gmNotes, '비밀');
   // a right taken away deletes the copy; a changed text rewrites that copy
   handouts[1].permissions = {}; handouts[0].description = '바뀐 공개';
   await api.syncInboxes();

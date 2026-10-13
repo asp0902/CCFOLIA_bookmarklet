@@ -28,8 +28,8 @@ const render = text => `<p>${text}</p>`, image = value => (value ? '<p><img></p>
 const lists = plain(buildHandoutLists(handouts, [{ id: 'f1', name: '1막' }], pls, people, new Set(['h1', 'h2', 'h4', 'h5']), render, image));
 // Alice (matched by a merged name, rights by her account key) reads the secret part of h1; Bob sees only what is his; a stranger only what is for everyone
 assert.deepEqual(lists.p1.map(i => [i.id, i.html, i.secretHtml, i.folder]), [['h1', '<p>공개 본문</p>', '<p>비밀 본문</p>', '1막']]);
-assert.deepEqual(lists.p2.map(i => [i.id, i.html, i.secretHtml]), [['h1', '<p>공개 본문</p>', ''], ['h2', '<p><img></p><p>밥만 본다</p>', '<p>밥의 비밀</p>'], ['h4', '', '<p>비밀만 읽기</p>']]);
-assert.deepEqual(lists.p3.map(i => [i.id, i.secretHtml]), [['h1', '']]);
+assert.deepEqual(lists.p2.map(i => [i.id, i.html, i.secretHtml]), [['h2', '<p><img></p><p>밥만 본다</p>', '<p>밥의 비밀</p>'], ['h4', '', '<p>비밀만 읽기</p>']], '"all players" (*) is gone: Bob gets only what is named for him');
+assert.deepEqual(lists.p3.map(i => [i.id, i.secretHtml]), [], 'a stranger gets nothing: an old * permission is ignored');
 assert(!JSON.stringify(lists.p1).includes('밥만') && !JSON.stringify(lists.p3).includes('밥의 비밀') && !JSON.stringify(lists.p3).includes('비밀 본문'), 'nothing leaks to somebody without the right');
 assert.equal('p4' in lists, false, 'pending: no list'); assert.equal('p5' in lists, false, 'revoked: no list');
 assert(!lists.p1.some(i => i.id === 'h3') && !lists.p2.some(i => i.id === 'h5'), 'not on the web / nobody: not sent');

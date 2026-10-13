@@ -35,6 +35,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('.dlg .handout-body b').first().textContent(), '본문');
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.dlg .handout-body p')).color), 'rgb(255, 0, 0)', 'style applied through the CSSOM');
   assert.equal(await page.locator('.dlg .handout-secret').innerText().then(t => /비밀 본문/.test(t)), true, 'the secret part is set apart');
+  assert.equal(await page.locator('.dlg .handout-secret h3').textContent(), '비밀', 'the secret part is headed with just 비밀');
   assert.equal(await page.getAttribute('.dlg a', 'target'), '_blank');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.dlg'));
