@@ -459,6 +459,24 @@ export class RoomRelay {
       await this.save(room);
       return json({ id: member.id, displayName: member.displayName });
     }
+    // Takes a participant whose access was revoked or request refused out of the list (an approved or waiting one has to be revoked or refused first). Their session, their handout list and the ledger of what they
+    // made go with them; the objects they made stay in the CCFOLIA room.
+    const removeMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)$/);
+    if (request.method === "DELETE" && removeMatch) {
+      const id = decodeURIComponent(removeMatch[1]), member = room.participants[id];
+      if (!member) return json({ error: "참가 요청을 찾을 수 없습니다." }, 404);
+      if (member.status !== "revoked" && member.status !== "rejected") return json({ error: "접근을 취소하거나 거절한 참여자만 목록에서 지울 수 있습니다." }, 409);
+      delete room.participants[id];
+      for (const [sessionId, owner] of Object.entries(room.sessions || {})) if (owner === id) delete room.sessions[sessionId];
+      for (const [objectId, owner] of Object.entries(room.created || {})) if (owner === id) forgetObject(room, objectId);
+      if (room.createLog) delete room.createLog[id];
+      if (room.editLog) delete room.editLog[id];
+      await this.state.storage.delete(`handouts:${id}`);
+      this.close(id, "removed");
+      await this.save(room);
+      this.notifyPending(room);
+      return json({ id, deleted: true });
+    }
     const decisionMatch = url.pathname.match(/^\/api\/admin\/rooms\/[^/]+\/participants\/([^/]+)\/decision$/);
     if (request.method === "POST" && decisionMatch) {
       const member = room.participants[decodeURIComponent(decisionMatch[1])];
@@ -672,7 +690,7 @@ export default {
     const allowedOrigin = origin === url.origin || /^https:\/\/(?:[a-z0-9-]+\.)*ccfolia\.com$/i.test(origin) || origin.startsWith("chrome-extension://") ? origin : "";
     if (request.method === "OPTIONS") {
       if (!allowedOrigin) return json({ error: "허용되지 않은 출처" }, 403);
-      return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "authorization,content-type", "Access-Control-Allow-Methods": "POST,GET,OPTIONS", "Access-Control-Max-Age": "600" } });
+      return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "authorization,content-type", "Access-Control-Allow-Methods": "POST,GET,DELETE,OPTIONS", "Access-Control-Max-Age": "600" } });
     }
     if (origin && !allowedOrigin) return json({ error: "허용되지 않은 출처" }, 403);
     const gmRoute = url.pathname === "/api/connect" || url.pathname === "/api/share" || url.pathname === "/api/share/stop" || url.pathname.startsWith("/api/admin/");
