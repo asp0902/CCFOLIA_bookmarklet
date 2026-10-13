@@ -18,7 +18,7 @@ const make = ({ isOwner = true, known = true, uid = 'anon2', push = async () => 
     noteFirebaseIssue: (where, error) => log.push(['issue', where, error?.code]),
     unsubHandouts: () => log.push(['unsub', 'handouts']), unsubMembers: () => log.push(['unsub', 'members']), subscribedRoom: 'r', membersWarned: true, inboxDeniedAt: 5,
     subscribeToRoomHandouts: async () => log.push(['sub', 'handouts']), registerMember: async () => log.push(['register']), subscribeToMembers: async () => log.push(['sub', 'members']),
-    scheduleInboxSync: () => log.push(['inbox']), scheduleWebSync: () => log.push(['web'])
+    scheduleInboxSync: () => log.push(['inbox']), scheduleWebSync: () => log.push(['web']), setInterval: () => 0, clearInterval() {}, registerTeardown() {}
   };
   vm.createContext(box);
   vm.runInContext(`${source.slice(a, c)}\n;this.api = { maybeClaimGmSeat, seat: () => ({ lastGmDoc, seatClaimLog }), setSeat: (value) => { lastGmDoc = value; } };`, box);
@@ -44,6 +44,11 @@ const plain = x => JSON.parse(JSON.stringify(x));
   // a missing seat document is created by the owner
   t = make(); t.api.setSeat({ exists: false }); await t.api.maybeClaimGmSeat();
   assert.equal(t.log[0][0], 'push', 'the owner creates the seat');
+  // the role becomes known after the (missing) seat document was read: the retry then creates the seat
+  t = make({ known: false }); t.api.setSeat({ exists: false });
+  await t.api.maybeClaimGmSeat(); assert.equal(t.log.length, 0, 'not yet known: nothing');
+  t.box.ccfRole.known = true; await t.api.maybeClaimGmSeat();
+  assert.equal(t.log[0][0], 'push', 'known now: the owner creates the seat');
   // refused (the old seat holds another account uid): kept for the settings line and seat(), nothing subscribed again
   t = make({ push: async () => { const error = new Error('denied'); error.code = 'permission-denied'; throw error; } });
   t.api.setSeat({ gmUid: 'old-anon', gmCcfoliaUid: 'other-acct', gmCharacter: 'GM' });
@@ -59,6 +64,8 @@ const plain = x => JSON.parse(JSON.stringify(x));
   // the members subscription is only the GM's (the rules refuse everybody else)
   assert(/if \(ccfRole\.known && !ccfRole\.isOwner\) return;[^\n]*\n\s*const \{ collection, onSnapshot \} = fb\.modules\.fs;\s*\n\s*unsubMembers = onSnapshot\(/.test(source));
   // the status line is the last thing of the settings tab
+  assert(/data-sync-line>\$\{escapeHtml\(syncRoleLine\(\)\)\}<\/span>\s*<span class="room-info" data-firebase-line>/.test(source), 'sync and role line right above the Firebase line');
+  assert(/const seatClaimTimer = setInterval\(\(\) => \{ maybeClaimGmSeat\(\); \}, 4000\)/.test(source), 'the claim is retried: the owner may become known after the seat was read');
   assert(/data-firebase-line>Firebase: \$\{escapeHtml\(firebaseIssueLabel\(\)\)\}<\/span>\s*<span class="room-info">룸 /.test(source), 'the Firebase line sits right above the room line at the bottom, in its small grey style');
   assert(!/<div class="hint"[^>]*>Firebase: /.test(source), 'not in the body of the tab any more');
   console.log('handout gm seat PASS');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.103
+// @version      0.1.104
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.103",
+    version: "0.1.104",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2370,6 +2370,8 @@
       console.warn("[ccf-handout] GM seat claim failed:", error);
     }
   }
+  const seatClaimTimer = setInterval(() => { maybeClaimGmSeat(); }, 4000); // a missing seat document does not change again, and the owner may be known only after it was read
+  registerTeardown(() => clearInterval(seatClaimTimer));
   async function resubscribeAfterSeat() {
     try { unsubHandouts?.(); } catch (_) {} unsubHandouts = null; subscribedRoom = null;
     try { unsubMembers?.(); } catch (_) {} unsubMembers = null; membersWarned = false;
@@ -3392,6 +3394,7 @@
       let stripHtml = "";
       if (state.activeTab === "settings") {
         stripHtml = `
+          <span class="room-info" data-sync-line>${escapeHtml(syncRoleLine())}</span>
           <span class="room-info" data-firebase-line>Firebase: ${escapeHtml(firebaseIssueLabel())}</span>
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
         `;
@@ -3907,6 +3910,12 @@
     const reason = firebaseIssue.code === "permission-denied" ? "권한 거절(보안 규칙)" : `오류(${firebaseIssue.code})`;
     return `${firebaseIssue.where} ${reason} · ${time}`;
   }
+  // the line "동기화 · 권한" (it sits in the strip at the bottom of the settings tab, above the Firebase line)
+  function syncRoleLine() {
+    const syncLabel = fbState ? "연결됨" : `꺼짐(${syncInfo.reason || "이유 불명"})`;
+    const roleLabel = ccfRole.known ? (ccfRole.isOwner ? "GM(방장)" : "플레이어") : `확인 못 함(${ccfRole.reason}) — 예전 방식으로 판별 중`;
+    return `동기화: ${syncLabel} · 권한: ${roleLabel}`;
+  }
   function renderSettings() {
     const plCount = (state.data.plList || []).length;
     const myChars = state.myCharacterOptions || [];
@@ -3917,11 +3926,8 @@
       const label = (c === current && !myChars.includes(c)) ? `${c} (저장됨)` : c;
       return `<option value="${escapeAttr(c)}" ${c === current ? "selected" : ""}>${escapeHtml(label)}</option>`;
     }).join("");
-    const syncLabel = fbState ? "연결됨" : `꺼짐(${syncInfo.reason || "이유 불명"})`;
-    const roleLabel = ccfRole.known ? (ccfRole.isOwner ? "GM(방장)" : "플레이어") : `확인 못 함(${ccfRole.reason}) — 예전 방식으로 판별 중`;
     return `
       <div class="field">
-        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)}</div>
         <label>GM 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
