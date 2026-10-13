@@ -329,9 +329,10 @@ export class RoomRelay {
       const meta = await this.state.storage.get("mirror:meta") || {};
       if (checked.css !== null) { await this.state.storage.put("mirror:css", checked.css); meta.cssHash = mirrorHash(checked.css); }
       if (checked.templates) { await this.state.storage.put("mirror:tpl", checked.templates); meta.tplHash = mirrorHash(JSON.stringify(checked.templates)); }
+      if (checked.help) { await this.state.storage.put("mirror:help", checked.help); meta.helpHash = mirrorHash(JSON.stringify(checked.help)); }
       meta.fontLinks = checked.fontLinks;
       await this.state.storage.put("mirror:meta", meta);
-      this.push("p", { type: "mirror", mirror: { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", fontLinks: meta.fontLinks } });
+      this.push("p", { type: "mirror", mirror: { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", fontLinks: meta.fontLinks } });
       return json({ accepted: true, cssHash: meta.cssHash || "", tplHash: meta.tplHash || "" });
     }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/messages\/sync$/.test(url.pathname)) {
@@ -422,7 +423,7 @@ export class RoomRelay {
     }
     // The mirrored CSS is a file (not inline) so style-src 'self' stays; templates are fetched when their hash changes, not on every state poll.
     if (request.method === "GET" && /\/mirror\.css$/.test(url.pathname)) return new Response(await this.state.storage.get("mirror:css") || "", { headers: { "Content-Type": "text/css; charset=utf-8" } });
-    if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {} });
+    if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {}, help: await this.state.storage.get("mirror:help") || null });
     if (request.method === "GET" && /\/state$/.test(url.pathname)) return json({
       roomTitle: room.roomTitle || "플레이 룸",
       capabilities: room.capabilities,
@@ -433,7 +434,7 @@ export class RoomRelay {
       channels: room.channels || [],
       dicebot: room.dicebot || "",
       health: room.health ? { ok: room.health.ok } : null,
-      mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
+      mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
       scene: room.scene || null,
     });
     if (request.method === "POST" && /\/messages$/.test(url.pathname)) {

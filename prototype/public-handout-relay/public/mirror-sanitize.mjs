@@ -80,6 +80,19 @@ export function cleanTemplateHtml(html) {
 }
 
 // What the Worker stores and the participant accepts: names are short words, sizes are capped, fonts only from Google Fonts.
+// The text of CCFOLIA's chat-command help dialog ("?" next to the chat palette): { title, sections: [{ title, text, links: [{ text, href }] }] }, plain text only.
+// Links are kept only when they point at the BCDice documentation (the only host that dialog links to, measured on ccfolia.com 1.37.5).
+const HELP_LINK = /^https:\/\/docs\.bcdice\.org\//;
+export function cleanHelp(help) {
+  const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : "");
+  const sections = (Array.isArray(help?.sections) ? help.sections : []).slice(0, 12).map(section => ({
+    title: text(section?.title, 100),
+    text: text(section?.text, 8000),
+    links: (Array.isArray(section?.links) ? section.links : []).slice(0, 8)
+      .map(link => ({ text: text(link?.text, 200), href: text(link?.href, 300) })).filter(link => link.text && HELP_LINK.test(link.href))
+  })).filter(section => section.title || section.text);
+  return sections.length ? { title: text(help?.title, 100), sections } : null;
+}
 export function validateMirror(body) {
   const css = typeof body?.css === "string" ? body.css : null;
   if (css !== null && css.length > MIRROR_LIMITS.css) return { error: "css too large" };
@@ -98,5 +111,5 @@ export function validateMirror(body) {
     if (total > MIRROR_LIMITS.tplTotal) return { error: "templates too large" };
   }
   const fontLinks = (Array.isArray(body?.fontLinks) ? body.fontLinks : []).filter(link => typeof link === "string" && FONT_LINK.test(link)).slice(0, MIRROR_LIMITS.fontLinks);
-  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks };
+  return { css: css === null ? null : cleanCss(css), templates: body?.templates ? templates : null, fontLinks, help: body?.help ? cleanHelp(body.help) : null };
 }

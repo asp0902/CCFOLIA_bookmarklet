@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.48
+// @version      0.2.49
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.48";
+  const VERSION = "0.2.49";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3247,6 +3247,49 @@
     }
     return { chatShell: shell.outerHTML, chatRow: row.outerHTML, ...mirrorPanelTemplates(list) };
   }
+  // The "?" (chat commands) dialog of CCFOLIA: its text depends on the room's dice system, so it is read from the page instead of being written down here. It is read when the dialog is open
+  // (the user opened it, or relayHelpProbe opened it invisibly for a moment) and kept as plain text for the play room.
+  let relayHelpCache = null;
+  const HELP_LINK = /^https:\/\/docs\.bcdice\.org\//;
+  function readHelpDialog(root) {
+    try {
+      if (!root?.querySelector?.('a[href^="https://docs.bcdice.org/"]')) return null;
+      const content = root.querySelector(".MuiDialogContent-root"), title = root.querySelector(".MuiDialogTitle-root, h2");
+      if (!content || !title) return null;
+      const sections = [];
+      for (const child of content.children) {
+        if (child.tagName === "H6") sections.push({ title: child.innerText.trim(), text: "", links: [] });
+        else if (child.tagName === "P" && sections.length) {
+          const section = sections[sections.length - 1];
+          section.text = child.innerText.replace(/\s+$/, "");
+          section.links = [...child.querySelectorAll("a")].map((a) => ({ text: a.textContent.trim(), href: a.href })).filter((link) => link.text && HELP_LINK.test(link.href));
+        }
+      }
+      const heading = [...title.childNodes].filter((node) => node.nodeType === 3 || node.tagName === "H2").map((node) => node.textContent).join("").trim() || title.innerText.split("\n")[0].trim();
+      return sections.length ? { title: heading, sections } : null;
+    } catch (_) { return null; }
+  }
+  const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
+  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = help; } }).observe(document.body, { childList: true, subtree: true });
+  let helpProbeAt = 0, helpProbing = false;
+  // Opens the native dialog out of sight, reads it and closes it again (at most every 5 minutes, never while the GM is typing; focus goes back to where it was).
+  async function relayHelpProbe() {
+    if (helpProbing || Date.now() - helpProbeAt < 300000) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && /^(INPUT|TEXTAREA)$/.test(active.tagName) || active?.isContentEditable) return;
+    const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(`#${PANEL_ID}`));
+    if (!button || helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"))) return;
+    helpProbing = true; helpProbeAt = Date.now();
+    const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;transition:none !important;pointer-events:none !important}";
+    document.head.append(hide);
+    try {
+      button.click();
+      let dialog = null;
+      for (let i = 0; i < 20 && !dialog; i += 1) { await new Promise((r) => setTimeout(r, 100)); dialog = helpDialogs().find((d) => readHelpDialog(d)); }
+      if (dialog) { relayHelpCache = readHelpDialog(dialog); (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
+      for (let i = 0; i < 20 && helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root")); i += 1) await new Promise((r) => setTimeout(r, 100));
+    } finally { hide.remove(); helpProbing = false; try { active?.focus?.(); } catch (_) {} }
+  }
   // known: 상대가 이미 가진 해시. 같으면 그 부분은 비워 보낸다(CSS 는 100KB 이상이라 바뀔 때만).
   function relayMirror(known = {}) {
     const hash = (value) => { let h = 0x811c9dc5; for (let i = 0; i < value.length; i += 1) { h ^= value.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return `${value.length.toString(36)}-${h.toString(36)}`; };
@@ -3263,8 +3306,9 @@
     const templateText = templates ? JSON.stringify(templates) : "";
     const cssHash = css ? hash(css) : "", tplHash = templateText ? hash(templateText) : "";
     const fontLinks = [...document.querySelectorAll('link[rel~="stylesheet"]')].map((link) => link.href).filter((href) => MIRROR_FONT_LINK.test(href)).slice(0, 6);
+    const helpHash = relayHelpCache ? hash(JSON.stringify(relayHelpCache)) : "";
     return {
-      cssHash, tplHash, fontLinks,
+      cssHash, tplHash, helpHash, fontLinks, help: relayHelpCache && helpHash !== known.helpHash ? relayHelpCache : undefined,
       css: css && cssHash !== known.cssHash ? css : undefined,
       templates: templates && tplHash !== known.tplHash ? templates : undefined
     };
@@ -3288,6 +3332,7 @@
       relayMessages: () => !getRoomMessagesSlice() ? null : listChannels().flatMap((channel) => (readMessages(channel) || []).map((message) => relayView(message, channel)).filter(Boolean)),
       // 웹 공유(릴레이): GM 화면의 룸 장면(배경·전경·말·캐릭터)을 참여자 화면이 그대로 그릴 수 있게 읽는다.
       relayMirror,
+      relayHelpProbe,
       relayScene: () => {
         try {
           const ent = findStore()?.getState()?.entities;

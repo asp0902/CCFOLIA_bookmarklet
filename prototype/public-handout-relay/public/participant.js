@@ -486,7 +486,7 @@ const renderState = data => {
   const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
-  if (data.mirror) cmMirror.sync(data.mirror, roomId);
+  if (data.mirror) cmMirror.sync(data.mirror, roomId).then(refreshHelpBtn);
   const mirrored = cmMirror.has("chatShell") && cmMirror.has("chatRow");
   const list = mirrored ? cmMirror.shadow("messages-host", node => document.getElementById("messages").after(node)).host : document.getElementById("messages");
   document.getElementById("messages").hidden = mirrored;
@@ -892,6 +892,27 @@ speakerBtn.addEventListener("click", openSpeakerMenu);
 palBtn.addEventListener("click", () => {
   const lines = String(chosenCharacter()?.commands || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length) openMenu(palBtn, lines.map(line => ({ label: line.length > 40 ? `${line.slice(0, 40)}…` : line, run: () => insertAtCursor(line) })));
+});
+// "?" next to the chat palette: CCFOLIA's chat-command dialog. Its text comes from the GM's page (cmMirror.help), so it follows the room's dice system; the button shows once that text has arrived.
+const helpBtn = document.getElementById("help-btn");
+function refreshHelpBtn() { helpBtn.hidden = !cmMirror.help; }
+helpBtn.addEventListener("click", () => {
+  const help = cmMirror.help; if (!help) return;
+  openDialog(help.title || "채팅 커맨드", body => {
+    body.classList.add("help-body");
+    for (const section of help.sections) {
+      body.append(el("h3", "help-h", section.title));
+      const p = el("p", "help-p");
+      let rest = section.text;
+      for (const link of section.links) {
+        const at = rest.indexOf(link.text); if (at < 0) continue;
+        p.append(rest.slice(0, at));
+        const a = el("a", "", link.text); a.href = link.href; a.target = "_blank"; a.rel = "noopener noreferrer"; p.append(a);
+        rest = rest.slice(at + link.text.length);
+      }
+      p.append(rest); body.append(p, el("hr", "help-hr"));
+    }
+  });
 });
 colorBtn.addEventListener("click", () => { colorInput.value = nameColor || "#cce5df"; colorInput.showPicker?.(); });
 colorInput.addEventListener("input", () => { nameColor = colorInput.value; try { localStorage.setItem("capybara-name-color", nameColor); } catch (_) {} refreshSpeakerUi(); });

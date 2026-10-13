@@ -23,7 +23,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.hostname !== 'relay.test') return route.abort();
-    if (u.pathname.endsWith('/mirror.json')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ templates }) });
+    if (u.pathname.endsWith('/mirror.json')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ templates, help: { title: '채팅 커맨드', sections: [{ title: '공통', text: 'CC<=x 문서: https://docs.bcdice.org/ 끝', links: [{ text: 'https://docs.bcdice.org/', href: 'https://docs.bcdice.org/' }] }] } }) });
     if (u.pathname.endsWith('/mirror.css')) return route.fulfill({ contentType: 'text/css', body: '.row .nm{font-weight:700}.tm{color:rgb(117,117,117)}.dv{display:none}.ccf-render-root{white-space:pre-wrap}' });
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
@@ -40,7 +40,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('#messages li').count(), 2);
   assert.equal(await page.evaluate(() => document.getElementById('messages').hidden), false);
   // the mirror arrives
-  const info = { cssHash: 'h1', tplHash: 't1', fontLinks: ['https://fonts.googleapis.com/css2?family=Roboto', 'https://evil.test/x.css'] };
+  const info = { cssHash: 'h1', tplHash: 't1', helpHash: 'p1', fontLinks: ['https://fonts.googleapis.com/css2?family=Roboto', 'https://evil.test/x.css'] };
   await page.evaluate(s => renderState(s), state(info));
   await page.waitForFunction(() => cmMirror.has('chatShell') && cmMirror.has('chatHeader'));
   await page.evaluate(s => renderState(s), state({ ...info, fontLinks: [] }));
@@ -125,6 +125,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.mn').click());
   assert(await page.locator('.menu-item').count() >= 1, 'the room menu opens from the mirrored button');
+  await page.keyboard.press('Escape');
+  // the "?" button shows once the GM's help text has arrived and opens it as a dialog (links open in a new tab without opener)
+  await page.waitForFunction(() => !document.getElementById('help-btn').hidden);
+  await page.evaluate(() => document.getElementById('help-btn').click());
+  const help = await page.evaluate(() => { const d = document.querySelector('.dlg'); const a = d.querySelector('a'); return { title: d.querySelector('h2').textContent, h: d.querySelector('.help-h').textContent, a: a.textContent, target: a.target, rel: a.rel, text: d.querySelector('.help-p').textContent }; });
+  assert.equal(help.title, '채팅 커맨드'); assert.equal(help.h, '공통'); assert.equal(help.target, '_blank'); assert.match(help.rel, /noopener/); assert(help.text.startsWith('CC<=x 문서: ') && help.text.endsWith(' 끝'));
   await page.keyboard.press('Escape');
   assert.deepEqual(violations.filter(v => !/fonts\.googleapis|evil\.test\/x\.png/.test(v)), [], 'no CSP violations');
   await browser.close();

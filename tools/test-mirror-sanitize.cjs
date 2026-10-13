@@ -22,5 +22,9 @@
   assert.deepEqual(ok.fontLinks, ['https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap']);
   assert.equal(m.validateMirror({ templates: null }).templates, null);
   assert.equal(m.mirrorHash('abc'), m.mirrorHash('abc')); assert.notEqual(m.mirrorHash('abc'), m.mirrorHash('abd'));
+  // help dialog text: plain text, only BCDice documentation links
+  const help = m.validateMirror({ help: { title: 'T', sections: [{ title: 'S', text: 'a <b>x</b>', links: [{ text: 'ok', href: 'https://docs.bcdice.org/a' }, { text: 'bad', href: 'https://evil.com/' }, { text: 'js', href: 'javascript:1' }] }, { title: '', text: '' }] } }).help;
+  assert.deepEqual(help, { title: 'T', sections: [{ title: 'S', text: 'a <b>x</b>', links: [{ text: 'ok', href: 'https://docs.bcdice.org/a' }] }] });
+  assert.equal(m.validateMirror({ help: { sections: [] } }).help, null);
   console.log('mirror sanitize PASS');
 })().catch(e => { console.error(e); process.exit(1); });
