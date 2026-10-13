@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.60
+// @version      0.2.61
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.60";
+  const VERSION = "0.2.61";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3491,6 +3491,27 @@
       relayObject: async (command) => {
         const kind = String(command?.kind || ""), type = String(command?.type || "");
         if (kind === "dice" && type === "object.create") return window.__CCF_SECOND_CHAT_PANEL__.relayCreateObject("dice", command);
+        if (kind === "dice" && (type === "object.update" || type === "object.delete")) {
+          // roll (a random face; changeCount + 1 as the app counts its own rolls) or delete a dice symbol the participant made (the relay's ledger checked that)
+          const room = Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0];
+          if (!room || room.defaultRole !== "player") throw new Error("이 룸은 참여자가 오브젝트를 만들 수 없습니다.");
+          const ctx = await getAuthContext(), id = String(command.targetId || "");
+          const headers = { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" };
+          const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/dices/${encodeURIComponent(id)}`;
+          if (type === "object.delete") {
+            const response = await fetch(url, { method: "DELETE", headers });
+            if (!response.ok) throw new Error(`삭제 실패 (${response.status})`);
+            return id;
+          }
+          const current = await fetch(url, { headers });
+          if (!current.ok) throw new Error("다이스를 찾지 못했습니다.");
+          const fields = (await current.json())?.fields || {};
+          const faces = Math.max(2, Number(fields.faces?.integerValue ?? fields.faces?.doubleValue) || 6), count = Number(fields.changeCount?.integerValue ?? fields.changeCount?.doubleValue) || 0;
+          const value = 1 + Math.floor(Math.random() * faces);
+          const patch = await fetch(`${url}?updateMask.fieldPaths=value&updateMask.fieldPaths=closed&updateMask.fieldPaths=changeCount&updateMask.fieldPaths=updatedAt`, { method: "PATCH", headers, body: JSON.stringify({ fields: { value: { integerValue: String(value) }, closed: { booleanValue: false }, changeCount: { integerValue: String(count + 1) }, updatedAt: { timestampValue: new Date().toISOString() } } }) });
+          if (!patch.ok) throw new Error(`굴리기 실패 (${patch.status})`);
+          return id;
+        }
         if (kind !== "character") throw new Error("아직 다룰 수 없는 종류입니다.");
         const ent = findStore()?.getState()?.entities;
         const room = Object.values(ent?.rooms?.entities || {})[0];

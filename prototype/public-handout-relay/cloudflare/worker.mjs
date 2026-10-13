@@ -545,7 +545,7 @@ export class RoomRelay {
       const body = await request.json().catch(() => ({}));
       const op = objectOp[1], kind = body.kind, targetId = /^[\w-]{1,100}$/.test(String(body.id || "")) ? String(body.id) : "";
       if (kind !== "dice" && kind !== "character") return json({ error: "아직 만들 수 없는 종류입니다." }, 400);
-      if (kind === "dice" && op !== "create") return json({ error: "다이스 심볼은 만들기만 할 수 있습니다." }, 400);
+      if (kind === "dice" && (op === "duplicate" || op === "place")) return json({ error: "다이스 심볼은 만들기·굴리기·삭제만 할 수 있습니다." }, 400);
       const command = { id: token(), type: `object.${op}`, kind, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
       if (op === "create" && kind === "dice") {
         const x = Number(body.x ?? -1), y = Number(body.y ?? -1), faces = Number(body.faces ?? 6);
@@ -555,9 +555,10 @@ export class RoomRelay {
         if (op === "duplicate") { if (!targetId || !ownsObject(room, member, targetId)) return json({ error: "내가 만든 캐릭터만 복제할 수 있습니다." }, 403); command.targetId = targetId; }
         else command.fields = cleanCharacterFields(body.fields);
       } else {
-        if (!targetId || !ownsObject(room, member, targetId)) return json({ error: "내가 만든 캐릭터만 바꿀 수 있습니다." }, 403);
+        if (!targetId || !ownsObject(room, member, targetId)) return json({ error: kind === "dice" ? "내가 만든 다이스 심볼만 굴리거나 지울 수 있습니다." : "내가 만든 캐릭터만 바꿀 수 있습니다." }, 403);
         command.targetId = targetId;
-        if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
+        if (kind === "dice" && op === "update") command.roll = true; // the GM's page picks the number
+        else if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
         if (op === "place") command.fields = cleanCharacterFields({ x: body.x, y: body.y });
       }
       if (op === "create" || op === "duplicate") {

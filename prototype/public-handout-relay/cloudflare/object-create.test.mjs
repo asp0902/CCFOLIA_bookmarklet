@@ -74,6 +74,12 @@ assert((await call(`/api/rooms/${room}/mine`, { cookie })).json.owned.includes("
 const moveDie = id => call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "dice", id, x: 3, y: 4 } });
 assert.equal((await moveDie("doc123")).response.status, 202, "their own die");
 assert.equal((await moveDie("somebody-elses")).response.status, 403, "not theirs");
+// rolling and deleting one's own die (the GM page picks the number); somebody else's die: refused
+const roll = await op("update", { kind: "dice", id: "doc123" });
+assert.equal(roll.response.status, 202); assert.equal((await call(`/api/admin/rooms/${room}/commands`, { gm: true })).json.commands.find(c => c.id === roll.json.commandId)?.roll, true);
+assert.equal((await op("update", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to roll");
+assert.equal((await op("delete", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to delete");
+assert.equal((await op("delete", { kind: "dice", id: "doc123" })).response.status, 202);
 assert.equal((await call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "deck", id: "d", x: 1, y: 1 } })).response.status, 400, "decks are not movable");
 // the participant can read what became of their own request (and only theirs)
 const statusOf = id => call(`/api/rooms/${room}/commands/${id}/result`, { cookie });

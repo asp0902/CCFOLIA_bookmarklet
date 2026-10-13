@@ -156,10 +156,10 @@ main{padding:0}
 .dice-row svg{display:block}
 
 /* Handout popup (centred dialog like CCFOLIA's) and header actions / floating-window mode. */
-#handout-backdrop{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55)}
+#handout-backdrop{position:fixed;inset:0;z-index:299990;background:rgba(0,0,0,.55)}
 #handout-backdrop[hidden]{display:none}
 #handout{display:none}
-.stage>#handout.open,#handout.open{display:block;position:fixed;z-index:61;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;margin:0;padding:24px;background:#222;color:#fff;border-radius:4px}
+.stage>#handout.open,#handout.open{display:block;position:fixed;z-index:299991;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;margin:0;padding:24px;background:#222;color:#fff;border-radius:4px}
 #handout[hidden]{display:none}
 #handout-close{display:block;margin:16px 0 0 auto;padding:6px 8px;border:0;background:none;color:#2196f3;font:inherit;font-size:.875rem;font-weight:700;cursor:pointer}
 #body{white-space:pre-wrap}
@@ -327,6 +327,7 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .dlg-foot.ce-foot{justify-content:space-between;padding:8px 24px}
 .dlg-foot .ce-danger{color:#f50057;margin-right:auto}.dlg-foot .ce-act{color:#2196f3}.dlg-foot .ce-primary{color:#2196f3}
 .scene-die.mine,.scene-die-img.mine{pointer-events:auto;cursor:grab}
+.scene-die.selected,.scene-die-img.selected{outline:2px solid #2196f3;outline-offset:1px}
 .stage img,.scene-die{-webkit-user-drag:none;user-select:none}
 .stage img[data-id]:not([data-locked]),.scene-die.mine,.scene-die-img.mine{cursor:move}
 .cw-row{display:flex;align-items:center}.cw-row .char-row{flex:1;min-width:0}
