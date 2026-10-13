@@ -26,7 +26,7 @@ function extract(name) {
       const canViewSecret = () => false, resolveHandoutImagesIn = () => {}, registerTeardown = () => {};
       const findHandout = id => state.data.handouts.find(h => h.id === id);
       const canManageHandout = () => true, isAdminMode = () => true;
-      const ensurePermissions = h => h, permissionRowKeys = () => [], withAccountKeys = p => p;
+      const ensurePermissions = h => h, permissionRowKeys = () => [], withAccountKeys = p => p, scheduleWebSync = () => {};
       const escapeHtml = s => String(s || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
       const escapeAttr = escapeHtml, renderHandoutBody = s => s || '';
       const renderFormatToolbar = () => '<div class="handout-format-toolbar"></div>';

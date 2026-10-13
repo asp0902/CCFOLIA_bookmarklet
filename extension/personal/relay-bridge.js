@@ -190,6 +190,29 @@
   window.addEventListener("message", async event => {
     const request = event.data;
     if (event.source !== window || event.origin !== location.origin) return;
+    if (request?.source === HANDOUT_SOURCE && request?.direction === "request" && (request.action === "participants" || request.action === "handouts")) {
+      // the handout tool reads who is in the room and sends what each person may read (no click needed: the tool does it on its own)
+      const requestId = clean(request.requestId, 100), action = request.action;
+      config ||= await loadConfig();
+      if (!requestId || !roomId || !config.enabled) return;
+      const answer = fields => window.postMessage({ source: HANDOUT_SOURCE, direction: "response", requestId, action, ...fields }, location.origin);
+      try {
+        if (action === "participants") {
+          const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants`);
+          if (!response.ok) throw new Error(`참가자 조회 실패 (${response.status})`);
+          const data = await response.json();
+          answer({ ok: true, participants: (data.participants || []).slice(0, 100).map(item => ({ id: clean(item.id, 100), displayName: clean(item.displayName, 40), status: clean(item.status, 20), recipientKey: clean(item.recipientKey, 128) })) });
+        } else {
+          const lists = request.lists && typeof request.lists === "object" ? request.lists : {};
+          const options = Array.isArray(request.recipients) ? request.recipients.slice(0, 100).map(option => ({ key: clean(option?.key, 128), label: clean(option?.label, 80) })) : [];
+          if (JSON.stringify(lists).length > 20_000_000) throw new Error("핸드아웃이 너무 큽니다.");
+          await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/recipients`, { options });
+          await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/handouts`, { lists });
+          answer({ ok: true });
+        }
+      } catch (error) { answer({ ok: false, error: clean(error?.message || "릴레이 요청 실패", 200) }); }
+      return;
+    }
     if (request?.source === HANDOUT_SOURCE && request?.direction === "request") {
       const requestId = clean(request.requestId, 100);
       const action = request.action === "stop" ? "stop" : request.action === "share" ? "share" : "";
