@@ -10,8 +10,11 @@ assert.equal(ownsObject(room, a, "o1"), true); assert.equal(ownsObject(room, b, 
 forgetObject(room, "o1"); assert.equal(ownsObject(room, a, "o1"), false);
 recordCreate(room, a, "fresh", 1_000_000);
 pruneCreated(room, ["o2"], 1_000_000 + 1000);
-assert.deepEqual(Object.keys(room.created).sort(), ["fresh", "o2"], "an old object gone from the room leaves the ledger, a new one stays for a while");
-pruneCreated(room, [], 1_000_000 + CREATE_LIMITS.graceMs + 10); assert.equal(Object.keys(room.created).length, 0, "after the grace time everything missing from the room is dropped");
+assert.equal(Object.keys(room.created).length > 2, true, "one report without an object is not enough to drop it");
+pruneCreated(room, ["o2"], 1_000_000 + 1000 + CREATE_LIMITS.missingMs + 1);
+assert.deepEqual(Object.keys(room.created).sort(), ["fresh", "o2"], "an old object missing for ten minutes leaves the ledger, a new one stays for a while");
+pruneCreated(room, ["o2", "fresh"], 1_000_000 + 2 * CREATE_LIMITS.missingMs); pruneCreated(room, [], 1_000_000 + 3 * CREATE_LIMITS.missingMs); assert.equal(Object.keys(room.created).length, 2, "a missing object has to stay missing for ten minutes counted from when it was first missed");
+pruneCreated(room, [], 1_000_000 + 3 * CREATE_LIMITS.missingMs + CREATE_LIMITS.missingMs + 5); assert.equal(Object.keys(room.created).length, 0, "after that everything missing from the room is dropped");
 const edits = { capabilities: {} };
 for (let i = 0; i < CREATE_LIMITS.editsPerMinute; i += 1) assert.equal(checkEdit(edits, a, i).ok, true);
 assert.equal(checkEdit(edits, a, 1000).status, 429, "edit limit"); assert.equal(checkEdit(edits, b, 1000).ok, true); assert.equal(checkEdit(edits, a, CREATE_LIMITS.windowMs + 100).ok, true);
