@@ -561,6 +561,13 @@ export class RoomRelay {
       this.push("gm", { type: "command", command });
       return json({ accepted: true, commandId: command.id }, 202);
     }
+    // What became of a request this participant made (the GM's page answers each command: delivered, or failed with a reason).
+    const statusMatch = request.method === "GET" && url.pathname.match(/\/commands\/([^/]+)\/result$/);
+    if (statusMatch) {
+      const command = room.commands.find(item => item.id === decodeURIComponent(statusMatch[1]) && item.participantId === member.id);
+      if (!command) return json({ error: "요청을 찾을 수 없습니다." }, 404);
+      return json({ status: command.status, error: command.error || "" });
+    }
     // This participant's own handouts (the GM's tool decided what each person may read; the secret part is empty unless they may read it).
     if (request.method === "GET" && /\/my-handouts$/.test(url.pathname)) {
       return json({ items: await this.state.storage.get(`handouts:${member.id}`) || [] });

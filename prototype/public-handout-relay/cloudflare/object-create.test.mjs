@@ -59,6 +59,12 @@ assert.equal(del.response.status, 202);
 await call(`/api/admin/rooms/${room}/commands/${del.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
 assert.equal((await op("update", { kind: "character", id: "c2", fields: { name: "y" } })).response.status, 403, "deleted objects are no longer theirs");
 assert.equal((await op("create", { kind: "dice", id: "c1" })).response.status, 202); // (counts as one create)
+// the participant can read what became of their own request (and only theirs)
+const statusOf = id => call(`/api/rooms/${room}/commands/${id}/result`, { cookie });
+assert.deepEqual((await statusOf(upd.json.commandId)).json, { status: "pending", error: "" });
+await call(`/api/admin/rooms/${room}/commands/${upd.json.commandId}/ack`, { gm: true, body: { status: "failed", error: "이 룸은 참여자가 오브젝트를 만들 수 없습니다." } });
+assert.deepEqual((await statusOf(upd.json.commandId)).json, { status: "failed", error: "이 룸은 참여자가 오브젝트를 만들 수 없습니다." });
+assert.equal((await statusOf("nope")).response.status, 404);
 // 10 a minute per participant
 for (let i = 0; i < 6; i += 1) assert.equal((await createCall({ kind: "dice" })).response.status, 202);
 assert.equal((await createCall({ kind: "dice" })).response.status, 429, "rate limit");

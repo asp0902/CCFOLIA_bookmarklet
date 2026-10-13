@@ -9,18 +9,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   page.on('dialog', dialog => dialog.accept());
   const posts = [];
-  let mine = [];
+  let mine = [], failNext = false;
   await page.route('**/*', async route => {
     const u = new URL(route.request().url());
     if (u.hostname !== 'relay.test') return route.abort();
     if (u.pathname.endsWith('/mine')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ characters: mine }) });
+    const statusOf = u.pathname.match(/\/commands\/([^/]+)\/result$/);
+    if (statusOf) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(failNext && statusOf[1] === 'bad' ? { status: 'failed', error: '이 룸은 참여자가 오브젝트를 만들 수 없습니다.' } : { status: 'delivered', error: '' }) });
     const op = u.pathname.match(/\/objects\/(\w+)$/);
     if (op && route.request().method() === 'POST') {
       const body = JSON.parse(route.request().postData());
       posts.push([op[1], body]);
       if (op[1] === 'create') mine = [...mine, { id: 'c1', name: '', memo: '', initiative: 0, externalUrl: '', x: 0, y: 0, width: 4, active: false, status: [{ label: 'HP', value: 0, max: 0 }], params: [{ label: '', value: '' }], commands: '' }];
       if (op[1] === 'delete') mine = mine.filter(c => c.id !== body.id);
-      return route.fulfill({ status: 202, contentType: 'application/json', body: '{"accepted":true}' });
+      return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ accepted: true, commandId: failNext ? 'bad' : 'ok' }) });
     }
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
@@ -59,6 +61,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.click('button:text("삭제")');
   await page.waitForFunction(() => !document.querySelector('.dlg'));
   assert.deepEqual(posts.filter(([op]) => op === 'delete').pop(), ['delete', { kind: 'character', id: 'c1' }]);
+  // a request the GM's page could not carry out shows its reason (instead of silence)
+  failNext = true;
+  await page.click('#char-window .cw-btn[aria-label="캐릭터 만들기"]');
+  await page.waitForFunction(() => /참여자가 오브젝트를 만들 수 없습니다/.test(document.getElementById('send-status').textContent), null, { timeout: 8000 });
   await browser.close();
   console.log('participant characters PASS');
 })().catch(error => { console.error(error); process.exit(1); });
