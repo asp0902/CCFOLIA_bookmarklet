@@ -37,6 +37,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.click('#char-window .cw-btn[aria-label="캐릭터 만들기"]');
   await page.waitForSelector('.dlg h2:text("캐릭터 편집")', { timeout: 15000 });
   assert.deepEqual(posts[0], ['create', { kind: 'character', fields: {} }]);
+  // the list row as CCFOLIA draws it: avatar, "NO NAME" / "NO TEXT" while empty, put-on-the-screen icon
+  assert.equal(await page.locator('#char-window .cw-row .char-text').innerText(), 'NO NAME'+String.fromCharCode(10)+'NO TEXT');
+  assert.equal(await page.locator('#char-window .cw-row .cw-place').count(), 1);
   // typing saves after a pause: the editor's fields only
   await page.fill('.ce-body input[placeholder="이름"]', '알리스');
   await page.fill('.ce-body textarea[placeholder="캐릭터 메모"]', '용감함');
