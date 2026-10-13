@@ -27,7 +27,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     if (u.pathname.endsWith('/mirror.css')) return route.fulfill({ contentType: 'text/css', body: '.row .nm{font-weight:700}.tm{color:rgb(117,117,117)}.dv{display:none}.ccf-render-root{white-space:pre-wrap}' });
     const f = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
     const fp = path.join(dir, f);
-    if (fs.existsSync(fp)) return route.fulfill({ body: fs.readFileSync(fp), contentType: f.endsWith('.js') || f.endsWith('.mjs') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; img-src https://storage.ccfolia-cdn.net data:" } });
+    // the page is served with the Worker's content security policy, so a violation shows up here (the style attributes of mirrored templates were reported by the parser)
+    if (fs.existsSync(fp)) return route.fulfill({ headers: f === 'index.html' ? { 'Content-Security-Policy': "default-src 'self'; script-src 'self' https://www.youtube.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https://storage.ccfolia-cdn.net data:; connect-src 'self'" } : {}, body: fs.readFileSync(fp), contentType: f.endsWith('.js') || f.endsWith('.mjs') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; img-src https://storage.ccfolia-cdn.net data:" } });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await page.goto('http://relay.test/#room=x');

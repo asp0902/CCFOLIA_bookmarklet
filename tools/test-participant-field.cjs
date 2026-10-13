@@ -60,6 +60,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // with the pictures CCFOLIA uses (sent as assets) the deck shows its default card back and a die its face picture
   const withAssets = await page.evaluate(() => { const px = 'data:image/png;base64,iVBORw0KGgo='; cmMirror.assets = { '/images/trump/z01.png': px, '/images/6_dice/6_dice[4].png': px, '/images/20_dice/20_dice[0].png': px }; renderScene({ fieldWidth: 50, fieldHeight: 30, items: [], markers: [], characters: [], decks: [{ id: 'd1', x: 3, y: 4, z: 0, width: 4, height: 6, count: 54, coverUrl: '/images/trump/z01.png' }, { id: 'd2', x: 9, y: 4, z: 0, width: 4, height: 6, count: 3, coverUrl: '/images/trump/missing.png' }], diceSymbols: [{ id: 'a', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 4, closed: false }, { id: 'b', x: 2, y: 2, width: 2, height: 2, faces: 20, value: 0, closed: true }, { id: 'c', x: 5, y: 5, width: 2, height: 2, faces: 10, value: 3, closed: false }] }); return { decks: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dieImages: document.querySelectorAll('.scene-die-img').length, plainDice: [...document.querySelectorAll('.scene-die')].map(d => d.textContent) }; });
   assert.deepEqual(withAssets, { decks: 1, dieImages: 2, plainDice: ['3'] }, 'a deck whose picture has not arrived is not drawn; a die without its picture is a plain face');
+  // the hand-check helper returns its result as one JSON text (it is also copied for pasting)
+  const diag = await page.evaluate(() => window.playroomDiag());
+  assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'help', 'plainDice']);
   await browser.close();
   console.log('participant field PASS');
 })().catch(error => { console.error(error); process.exit(1); });

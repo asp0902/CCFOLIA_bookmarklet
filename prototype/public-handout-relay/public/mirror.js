@@ -13,10 +13,13 @@ const cmMirror = (() => {
 
   // A template as { root, styles }: inline style attributes are taken off before the DOM is built (style-src 'self' would refuse them) and put back through the CSSOM on every copy.
   function prepare(html) {
-    const doc = new DOMParser().parseFromString(`<!doctype html><body>${clean(html)}`, "text/html");
+    // style="..." is renamed in the cleaned markup before it is parsed: even a parsed (never shown) document reports "Applying inline style violates style-src" for every style attribute.
+    // The tags are the only place where ` style="` can occur (the cleaner escapes quotes in values).
+    const markup = clean(html).replace(/<[^<>]*>/g, tag => tag.replace(/ style="/g, ' data-cm-style="'));
+    const doc = new DOMParser().parseFromString(`<!doctype html><body>${markup}`, "text/html");
     const root = doc.body.firstElementChild;
     if (!root) return null;
-    const styles = [root, ...root.querySelectorAll("*")].map(el => { const value = el.getAttribute("style") || ""; el.removeAttribute("style"); return value; });
+    const styles = [root, ...root.querySelectorAll("*")].map(el => { const value = el.getAttribute("data-cm-style") || ""; el.removeAttribute("data-cm-style"); return value; });
     return { root: document.importNode(root, true), styles };
   }
   // true when the GM's page had the format toolkit switched on: its rules (.ccf-render-root ...) are in the CSS. Without it the GM shows message text plain, so the mirrored rows do too.
