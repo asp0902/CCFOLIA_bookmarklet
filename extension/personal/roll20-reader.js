@@ -63,6 +63,40 @@
     }
     return { id: clean(el.dataset.messageid, 160), name: name || lastName, avatar: name ? lastAvatar : (avatarOf(el) || lastAvatar), text, ...(macro ? { macro } : {}), kind, source: "roll20", campaignId };
   };
+  // "/desc" box beside the send button of the game screen's chat input (#textchat-input: textarea, #speakingas select, #chatSendBtn; measured on a game screen): when it is ticked, every line of the
+  // message that is not empty and does not start with "/" gets "/desc " in front just before Roll20 takes the text. Roll20 does the sending: Enter (keydown, which Roll20 turns into a click on the
+  // send button) and the send button click are only seen first (capture phase) and the textarea value is changed. Lines that already are a command stay as they are; ticked state is kept per campaign.
+  const DESC_ID = "capybara-r20-desc";
+  const descStore = () => `capybaraR20Desc:${findCampaignId() || "game"}`;
+  const descLines = value => String(value).split("\n").map(line => (line.trim() && !line.trim().startsWith("/") ? `/desc ${line.trimStart()}` : line)).join("\n");
+  const chatBox = () => document.querySelector("#textchat-input textarea");
+  const applyDesc = () => {
+    const box = document.getElementById(DESC_ID)?.querySelector("input"), area = chatBox();
+    if (!box?.checked || !area) return;
+    const next = descLines(area.value);
+    if (next !== area.value) area.value = next;
+  };
+  const autocompleteOpen = () => [...document.querySelectorAll("ul.ui-autocomplete")].some(list => list.offsetParent !== null);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229 && event.target === chatBox() && !autocompleteOpen()) applyDesc();
+  }, true);
+  document.addEventListener("click", event => { if (event.target.closest?.("#chatSendBtn")) applyDesc(); }, true);
+  const mountDesc = () => {
+    if (document.getElementById(DESC_ID)) return;
+    const send = document.querySelector("#textchat-input #chatSendBtn");
+    if (!send) return;
+    const label = document.createElement("label");
+    label.id = DESC_ID;
+    label.title = "켜면 보내는 줄마다 앞에 /desc 를 붙입니다";
+    label.style.cssText = "display:inline-block;margin-left:8px;vertical-align:middle;font:inherit;font-size:13px;color:#333;cursor:pointer;white-space:nowrap";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.style.cssText = "margin:0 3px 0 0;vertical-align:middle";
+    try { input.checked = localStorage.getItem(descStore()) === "1"; } catch (_) {}
+    input.addEventListener("change", () => { try { localStorage.setItem(descStore(), input.checked ? "1" : "0"); } catch (_) {} });
+    label.append(input, "/desc");
+    send.after(label);
+  };
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
     for (const el of document.querySelectorAll("#textchat .content div.message[data-messageid]")) {
@@ -83,7 +117,9 @@
     observed = content;
     new MutationObserver(scan).observe(content, { childList: true });
   };
-  const timer = setInterval(() => { observe(); scan(); }, 5000);
+  const timer = setInterval(() => { observe(); scan(); mountDesc(); }, 5000);
+  const mountTimer = setInterval(() => { mountDesc(); if (document.getElementById(DESC_ID)) clearInterval(mountTimer); }, 500); // the chat input appears a little after the page loads
+  setTimeout(() => clearInterval(mountTimer), 60000);
   observe();
   scan();
 })();
