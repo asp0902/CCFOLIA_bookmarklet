@@ -13,13 +13,21 @@ service cloud.firestore {
       // GM marker: anybody signed in reads it; the first writer creates it; afterwards only the current GM changes it - or the same CCFOLIA account on another browser
       // (its anonymous uid changed): the new document must carry the gmCcfoliaUid the old one has. That claim is made by a client, so it is only as good as the secrecy of the owner's
       // CCFOLIA uid (a participant can read it in members/meta only if they are the GM; it is not published to players).
+      // The claim cannot be a field: a merge update that leaves the field alone would look like a claim. So the proof is a path: the claimant first creates
+      // claims/{gmCcfoliaUid}_{their uid}, which the rules allow only for the account uid the seat holds, and the takeover needs that document to exist.
       match /meta/gm {
         allow read: if signedIn();
         allow create: if signedIn() && request.resource.data.gmUid == request.auth.uid;
         allow update: if signedIn() && request.resource.data.gmUid == request.auth.uid
           && (resource.data.gmUid == request.auth.uid
-            || (resource.data.get('gmCcfoliaUid', '') != '' && resource.data.gmCcfoliaUid == request.resource.data.get('gmCcfoliaUid', '')));
+            || (resource.data.get('gmCcfoliaUid', '') != '' && resource.data.gmCcfoliaUid == request.resource.data.get('gmCcfoliaUid', '')
+              && exists(/databases/$(database)/documents/rooms/$(roomId)/claims/$(resource.data.gmCcfoliaUid + '_' + request.auth.uid))));
         allow delete: if isGm(roomId);
+      }
+      match /claims/{claimId} {
+        allow create, update: if signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/meta/gm)
+          && gmDoc(roomId).data.get('gmCcfoliaUid', '') != ''
+          && claimId == gmDoc(roomId).data.gmCcfoliaUid + '_' + request.auth.uid;
       }
       // other meta documents (folders): everybody signed in reads, only the GM writes
       match /meta/{docId} {
