@@ -798,6 +798,7 @@ function onPush(event) {
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);
+    if (document.getElementById("char-window")) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
   } else if (message.type === "channels") {
     current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
     renderState(current);
@@ -1138,27 +1139,128 @@ async function createObject(request) {
   } catch (error) { showSendStatus(error.message, 4000); }
 }
 // "My characters": a window that floats over the scene and moves by its title bar (measured: 320x280, translucent grey, title 14px bold, + and x on the right).
+// The characters a participant made (kept by the relay in a ledger, reported by the GM's page) are listed first; a row opens CCFOLIA's "캐릭터 편집" dialog. The characters on the field follow (a row opens the sheet).
+let myCharacters = [];
+async function refreshMyCharacters() {
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mine`);
+    if (!response.ok) return myCharacters;
+    myCharacters = (await response.json()).characters || [];
+  } catch (_) { /* the list keeps what it had */ }
+  document.getElementById("char-window")?.dispatchEvent(new Event("cm-refresh"));
+  return myCharacters;
+}
+// one request to the relay about a character; resolves to { ok, error }
+async function characterRequest(op, body) {
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/objects/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "character", ...body }) });
+    if (!response.ok) return { ok: false, error: (await response.json().catch(() => ({}))).error || "요청하지 못했습니다." };
+    return { ok: true };
+  } catch (_) { return { ok: false, error: "요청하지 못했습니다." }; }
+}
+// after a request the GM's page needs a moment to write and report: look again a few times
+async function refreshUntil(changed) {
+  for (let i = 0; i < 10; i += 1) { await new Promise(r => setTimeout(r, 700)); const before = JSON.stringify(myCharacters); await refreshMyCharacters(); if (changed(JSON.parse(before), myCharacters)) return true; }
+  return false;
+}
+async function createCharacter(window_) {
+  const known = new Set(myCharacters.map(c => c.id));
+  const result = await characterRequest("create", { fields: {} });
+  if (!result.ok) { showSendStatus(result.error, 4000); return; }
+  showSendStatus("캐릭터를 만드는 중입니다.", 3000);
+  await refreshUntil((_, now) => now.some(c => !known.has(c.id)));
+  const created = myCharacters.find(c => !known.has(c.id));
+  if (created) openCharacterEditor(created.id);
+}
 function openCharacterWindow() {
   const old = document.getElementById("char-window"); if (old) { old.remove(); return; }
   const win = el("div", "char-window"); win.id = "char-window"; win.setAttribute("role", "dialog"); win.setAttribute("aria-label", "내 캐릭터 목록");
   const head = el("div", "cw-head"); head.append(el("h6", "", "내 캐릭터 목록"));
-  const add = el("button", "cw-btn", "+"); add.type = "button"; add.disabled = true; add.title = "캐릭터 만들기"; add.setAttribute("aria-label", "캐릭터 만들기");
+  const add = el("button", "cw-btn", "+"); add.type = "button"; add.title = "캐릭터 만들기"; add.setAttribute("aria-label", "캐릭터 만들기");
+  add.addEventListener("click", () => createCharacter(win));
   const x = el("button", "cw-btn", "×"); x.type = "button"; x.setAttribute("aria-label", "닫기"); x.addEventListener("click", () => win.remove());
   head.append(add, x);
   const body = el("div", "cw-body");
-  const list = sceneData?.characters || [];
-  if (!list.length) body.append(el("p", "", "장면에 보이는 캐릭터가 없습니다."));
-  for (const c of list) {
-    const row = el("button", "char-row"); row.type = "button";
-    const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
-    const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
-    row.append(img, text); row.addEventListener("click", () => openSheet(c.id)); body.append(row);
-  }
-  win.append(head, body); document.body.append(win);
+  const fill = () => {
+    body.replaceChildren();
+    for (const c of myCharacters) {
+      const row = el("button", "char-row"); row.type = "button";
+      const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", c.active ? "화면에 있음" : "화면에 없음"));
+      row.append(text); row.addEventListener("click", () => openCharacterEditor(c.id)); body.append(row);
+    }
+    const placed = sceneData?.characters || [];
+    if (!myCharacters.length && !placed.length) body.append(el("p", "", "아직 만든 캐릭터가 없습니다. + 로 만들 수 있습니다."));
+    if (placed.length) {
+      if (myCharacters.length) body.append(el("p", "cw-sub", "장면의 캐릭터"));
+      for (const c of placed) {
+        const row = el("button", "char-row"); row.type = "button";
+        const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
+        const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
+        row.append(img, text); row.addEventListener("click", () => openSheet(c.id)); body.append(row);
+      }
+    }
+  };
+  win.addEventListener("cm-refresh", fill);
+  fill(); win.append(head, body); document.body.append(win);
+  refreshMyCharacters();
   let drag = null;
   head.addEventListener("pointerdown", event => { if (event.target.closest("button")) return; const r = win.getBoundingClientRect(); drag = { dx: event.clientX - r.left, dy: event.clientY - r.top }; try { head.setPointerCapture(event.pointerId); } catch (_) {} });
   head.addEventListener("pointermove", event => { if (!drag) return; win.style.left = `${Math.max(0, Math.min(innerWidth - 80, event.clientX - drag.dx))}px`; win.style.top = `${Math.max(0, Math.min(innerHeight - 48, event.clientY - drag.dy))}px`; });
   head.addEventListener("pointerup", () => { drag = null; });
+}
+// CCFOLIA's "캐릭터 편집" (measured from a native player's screen): name + initiative, memo, token size / x / y, reference URL, standing (image: later), status rows (label, current, max) with - and +,
+// parameter rows (label, value) with - and +, chat palette; delete / duplicate / put on the screen at the bottom. Changes are saved a moment after typing stops.
+function openCharacterEditor(id) {
+  const current = () => myCharacters.find(c => c.id === id);
+  const doc = current(); if (!doc) return;
+  const field = (labelText, input) => { const wrap = el("label", "ce-field"); wrap.append(el("span", "ce-label", labelText), input); return wrap; };
+  const input = (value, type = "text", extra = {}) => Object.assign(el("input", "ce-input"), { type, value: value ?? "", ...extra });
+  openDialog("캐릭터 편집", (body, foot, close) => {
+    body.classList.add("ce-body");
+    const name = input(doc.name, "text", { maxLength: 40, placeholder: "이름" }), initiative = input(doc.initiative ?? 0, "number");
+    const top = el("div", "ce-row"); top.append(field("이름", name), field("이니셔티브", initiative));
+    const memo = Object.assign(el("textarea", "ce-input ce-area"), { value: doc.memo || "", maxLength: 2000, placeholder: "캐릭터 메모", rows: 4 });
+    const size = input(doc.width ?? 4, "number", { min: 1, max: 100 }), px = input(doc.x ?? 0, "number"), py = input(doc.y ?? 0, "number");
+    const geometry = el("div", "ce-row3"); geometry.append(field("토큰 사이즈", size), field("x", px), field("y", py));
+    const url = input(doc.externalUrl || "", "url", { maxLength: 490, placeholder: "참고 URL" });
+    const section = (title, note, rowsOf, makeRow, blank, withMinus = true) => {
+      const wrap = el("section", "ce-section"), headRow = el("div", "ce-sec-head");
+      const rows = el("div", "ce-rows"); const list = [];
+      const plus = el("button", "ce-icon", "+"); plus.type = "button"; plus.setAttribute("aria-label", `${title} 추가`);
+      const minus = el("button", "ce-icon", "−"); minus.type = "button"; minus.setAttribute("aria-label", `${title} 줄이기`);
+      const redraw = () => { rows.replaceChildren(...list.map(item => item.node)); };
+      const add = value => { const item = makeRow(value); list.push(item); redraw(); return item; };
+      for (const value of rowsOf) add(value);
+      plus.addEventListener("click", () => { add(blank); queueSave(); });
+      minus.addEventListener("click", () => { list.pop(); redraw(); queueSave(); });
+      headRow.append(el("h3", "", title), ...(withMinus ? [minus] : []), plus);
+      wrap.append(headRow, el("p", "ce-note", note), rows);
+      return { node: wrap, values: () => list.map(item => item.value()) };
+    };
+    const standing = el("section", "ce-section"); const standingHead = el("div", "ce-sec-head"); const standingPlus = el("button", "ce-icon", "+"); standingPlus.type = "button"; standingPlus.disabled = true; standingPlus.title = "이미지는 준비 중입니다";
+    standingHead.append(el("h3", "", "스탠딩"), standingPlus); standing.append(standingHead, el("p", "ce-note", "채팅 시 메시지 박스에 표시되는 이미지를 설정합니다. 예를 들어, \"@미소\"라는 라벨로 설정 한 경우, 채팅 시 \"... @미소\" 처럼 더하는 것으로 스탠딩을 변경합니다."));
+    const statusRow = value => { const a = input(value.label, "text", { maxLength: 20, placeholder: "라벨" }), b = input(value.value, "number"), c = input(value.max, "number"), node = el("div", "ce-row3"); node.append(field("라벨", a), field("현재값", b), field("최대값", c)); for (const control of [a, b, c]) control.addEventListener("input", queueSave); return { node, value: () => ({ label: a.value, value: Number(b.value) || 0, max: Number(c.value) || 0 }) }; };
+    const paramRow = value => { const a = input(value.label, "text", { maxLength: 20, placeholder: "라벨" }), b = input(value.value, "text", { maxLength: 60, placeholder: "값" }), node = el("div", "ce-row"); node.append(field("라벨", a), field("값", b)); for (const control of [a, b]) control.addEventListener("input", queueSave); return { node, value: () => ({ label: a.value, value: b.value }) }; };
+    const statuses = section("스테이터스", "HP나 MP 등 캐릭터에 연동하여 변동하는 스테이터스를 설정합니다. {라벨명}처럼 채팅하면 채팅창에서 현재 값을 불러올 수 있습니다.", doc.status?.length ? doc.status : [{ label: "", value: 0, max: 0 }], statusRow, { label: "", value: 0, max: 0 });
+    const params = section("매개변수", "캐릭터의 거의 변하지 않는 매개변수를 설정합니다. {라벨명}처럼 채팅하면 채팅창에서 값을 불러올 수 있습니다.", doc.params?.length ? doc.params : [{ label: "", value: "" }], paramRow, { label: "", value: "" });
+    const palette = Object.assign(el("textarea", "ce-input ce-area"), { value: doc.commands || "", maxLength: 4000, placeholder: "채팅 팔레트", rows: 5 });
+    const paletteSec = el("section", "ce-section"); paletteSec.append(el("h3", "", "채팅 팔레트"), el("p", "ce-note", "1d100 등의 다이스 커맨드나 캐릭터와 연동 되는 채팅 커맨드를 줄 바꿈으로 구분하여 등록합니다."), palette);
+    const status = el("p", "ce-status"); status.setAttribute("role", "status");
+    body.append(top, memo, geometry, url, standing, statuses.node, params.node, paletteSec, status);
+    let timer = 0, pending = false;
+    const collect = () => ({ name: name.value, initiative: Number(initiative.value) || 0, memo: memo.value, size: Number(size.value) || 4, x: Number(px.value) || 0, y: Number(py.value) || 0, externalUrl: url.value, status: statuses.values(), params: params.values(), commands: palette.value });
+    const save = async () => { timer = 0; pending = false; status.textContent = "저장 중"; const result = await characterRequest("update", { id, fields: collect() }); status.textContent = result.ok ? "저장했습니다." : result.error; if (result.ok) setTimeout(refreshMyCharacters, 900); };
+    function queueSave() { pending = true; clearTimeout(timer); timer = setTimeout(save, 700); }
+    for (const control of [name, initiative, memo, size, px, py, url, palette]) control.addEventListener("input", queueSave);
+    const flush = () => { if (pending) { clearTimeout(timer); save(); } };
+    const remove = el("button", "ce-danger", "삭제"), copy = el("button", "ce-act", "복제"), place = el("button", "ce-act ce-primary", "화면에 추가");
+    for (const button of [remove, copy, place]) button.type = "button";
+    remove.addEventListener("click", async () => { if (!confirm("이 캐릭터를 삭제할까요?")) return; clearTimeout(timer); pending = false; const result = await characterRequest("delete", { id }); if (!result.ok) { status.textContent = result.error; return; } close(); await refreshUntil((_, now) => !now.some(c => c.id === id)); });
+    copy.addEventListener("click", async () => { flush(); const known = new Set(myCharacters.map(c => c.id)); const result = await characterRequest("duplicate", { id }); if (!result.ok) { status.textContent = result.error; return; } status.textContent = "복제하는 중입니다."; await refreshUntil((_, now) => now.some(c => !known.has(c.id))); status.textContent = "복제했습니다."; });
+    place.addEventListener("click", async () => { flush(); const result = await characterRequest("place", { id, x: Number(px.value) || 0, y: Number(py.value) || 0 }); status.textContent = result.ok ? "화면에 추가했습니다." : result.error; if (result.ok) setTimeout(refreshMyCharacters, 900); });
+    foot.replaceChildren(remove, copy, place);
+    const closeButton = el("button", "ce-act", "닫기"); closeButton.type = "button"; closeButton.addEventListener("click", () => { flush(); close(); }); foot.append(closeButton);
+  });
 }
 function openRoomMenu(anchor) {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];

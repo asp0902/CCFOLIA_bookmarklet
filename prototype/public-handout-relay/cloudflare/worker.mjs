@@ -1,5 +1,6 @@
 import { validateMirror, mirrorHash } from "../public/mirror-sanitize.mjs";
-import { checkCreate, logCreate, recordCreate } from "./create-guard.mjs";
+import { checkCreate, checkEdit, logCreate, recordCreate, forgetObject, ownsObject, pruneCreated } from "./create-guard.mjs";
+import { cleanCharacterFields, cleanCharacterDoc } from "./character-fields.mjs";
 const encoder = new TextEncoder();
 const GM_SOCKET_PROTOCOL = "capybara-gm";
 const PUBLIC_ORIGIN_PLACEHOLDER = "__PUBLIC_ORIGIN__";
@@ -250,7 +251,8 @@ export class RoomRelay {
       command.acknowledgedAt = new Date().toISOString();
       command.error = text(body.error, 300);
       // a delivered create command reports the id of the new document: its maker goes into the ledger (only the maker may change or delete it later)
-      if (command.type === "object.create" && body.status === "delivered" && /^[\w-]{1,100}$/.test(String(body.objectId || ""))) {
+      if (command.type === "object.delete" && body.status === "delivered" && command.targetId) forgetObject(room, command.targetId);
+      if ((command.type === "object.create" || command.type === "object.duplicate") && body.status === "delivered" && /^[\w-]{1,100}$/.test(String(body.objectId || ""))) {
         command.objectId = String(body.objectId);
         const maker = room.participants[command.participantId];
         if (maker) recordCreate(room, maker, command.objectId);
@@ -297,6 +299,12 @@ export class RoomRelay {
       for (const character of room.scene.characters) {
         if (character.memo.length > memoBudget) character.memo = ""; memoBudget -= character.memo.length;
         if (character.commands.length > memoBudget) character.commands = ""; memoBudget -= character.commands.length;
+      }
+      // The character documents (the editor's fields, also of characters that are not on the field) are kept apart from the public scene: a participant gets back only the ones they made (GET /mine).
+      if (Array.isArray(body.characterDocs)) {
+        const docs = body.characterDocs.slice(0, 100).map(cleanCharacterDoc).filter(doc => doc.id);
+        await this.state.storage.put("charDocs", docs);
+        pruneCreated(room, [...docs.map(doc => doc.id), ...room.scene.items.map(item => item.id), ...room.scene.markers.map(item => item.id), ...room.scene.decks.map(item => item.id), ...room.scene.diceSymbols.map(item => item.id)]);
       }
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
@@ -481,22 +489,48 @@ export class RoomRelay {
       this.push("gm", { type: "command", command });
       return json({ accepted: true, commandId: command.id }, 202);
     }
-    // A participant creates an object in the GM's room (the GM's page writes it). Stage 1: dice symbols. Rules: create-guard.mjs; the GM's page also checks the room's default role.
-    if (request.method === "POST" && /\/objects\/create$/.test(url.pathname)) {
+    // A participant makes, changes or removes an object in the GM's room (the GM's page does the writing). Kinds: dice symbol (create only) and character (create, update, place, duplicate, delete).
+    // Rules: create-guard.mjs (switch, rates, ownership ledger: a participant changes only what they made) and character-fields.mjs (which fields); the GM's page also checks the room's default role.
+    const objectOp = request.method === "POST" && url.pathname.match(/\/objects\/(create|update|delete|duplicate|place)$/);
+    if (objectOp) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
       const body = await request.json().catch(() => ({}));
-      if (body.kind !== "dice") return json({ error: "아직 만들 수 없는 종류입니다." }, 400);
-      const x = Number(body.x ?? -1), y = Number(body.y ?? -1), faces = Number(body.faces ?? 6);
-      if (!(Math.abs(x) <= 1_000) || !(Math.abs(y) <= 1_000) || !Number.isInteger(faces) || faces < 2 || faces > 100) return json({ error: "올바르지 않은 생성 요청" }, 400);
-      const allowed = checkCreate(room, member);
-      if (!allowed.ok) return json({ error: allowed.error }, allowed.status);
-      logCreate(room, member);
-      const command = { id: token(), type: "object.create", kind: "dice", x, y, faces, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
+      const op = objectOp[1], kind = body.kind, targetId = /^[\w-]{1,100}$/.test(String(body.id || "")) ? String(body.id) : "";
+      if (kind !== "dice" && kind !== "character") return json({ error: "아직 만들 수 없는 종류입니다." }, 400);
+      if (kind === "dice" && op !== "create") return json({ error: "다이스 심볼은 만들기만 할 수 있습니다." }, 400);
+      const command = { id: token(), type: `object.${op}`, kind, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
+      if (op === "create" && kind === "dice") {
+        const x = Number(body.x ?? -1), y = Number(body.y ?? -1), faces = Number(body.faces ?? 6);
+        if (!(Math.abs(x) <= 1_000) || !(Math.abs(y) <= 1_000) || !Number.isInteger(faces) || faces < 2 || faces > 100) return json({ error: "올바르지 않은 생성 요청" }, 400);
+        Object.assign(command, { x, y, faces });
+      } else if (op === "create" || op === "duplicate") {
+        if (op === "duplicate") { if (!targetId || !ownsObject(room, member, targetId)) return json({ error: "내가 만든 캐릭터만 복제할 수 있습니다." }, 403); command.targetId = targetId; }
+        else command.fields = cleanCharacterFields(body.fields);
+      } else {
+        if (!targetId || !ownsObject(room, member, targetId)) return json({ error: "내가 만든 캐릭터만 바꿀 수 있습니다." }, 403);
+        command.targetId = targetId;
+        if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
+        if (op === "place") command.fields = cleanCharacterFields({ x: body.x, y: body.y });
+      }
+      if (op === "create" || op === "duplicate") {
+        const allowed = checkCreate(room, member);
+        if (!allowed.ok) return json({ error: allowed.error }, allowed.status);
+        logCreate(room, member);
+      } else {
+        if (room.capabilities.participantCreate === false) return json({ error: "GM이 참여자의 생성을 허용하지 않았습니다." }, 403);
+        const allowed = checkEdit(room, member);
+        if (!allowed.ok) return json({ error: allowed.error }, allowed.status);
+      }
       room.commands.push(command);
       if (room.commands.length > 300) room.commands.splice(0, room.commands.length - 300);
       await this.save(room);
       this.push("gm", { type: "command", command });
       return json({ accepted: true, commandId: command.id }, 202);
+    }
+    // The characters this participant made, with everything the editor shows (the GM's page reports them with the scene; only the maker gets them back).
+    if (request.method === "GET" && /\/mine$/.test(url.pathname)) {
+      const docs = await this.state.storage.get("charDocs") || [];
+      return json({ characters: docs.filter(doc => ownsObject(room, member, doc.id)) });
     }
     if (request.method === "POST" && /\/status\/set$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);

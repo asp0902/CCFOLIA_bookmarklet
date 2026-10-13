@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
-import { checkCreate, logCreate, recordCreate, ownsObject, forgetObject, pruneCreated, CREATE_LIMITS } from "./create-guard.mjs";
+import { checkCreate, checkEdit, logCreate, recordCreate, ownsObject, forgetObject, pruneCreated, CREATE_LIMITS } from "./create-guard.mjs";
 const room = { capabilities: { participantCreate: true } }, a = { id: "a" }, b = { id: "b" };
 assert.equal(checkCreate(room, a, 0).ok, true);
-for (let i = 0; i < CREATE_LIMITS.perMinute; i += 1) { assert.equal(checkCreate(room, a, i).ok, true); logCreate(room, a, i); recordCreate(room, a, `o${i}`); }
+for (let i = 0; i < CREATE_LIMITS.perMinute; i += 1) { assert.equal(checkCreate(room, a, i).ok, true); logCreate(room, a, i); recordCreate(room, a, `o${i}`, 0); }
 assert.equal(checkCreate(room, a, 1000).status, 429, "per participant per minute");
 assert.equal(checkCreate(room, b, 1000).ok, true, "another participant is not limited by a");
 assert.equal(checkCreate(room, a, CREATE_LIMITS.windowMs + 100).ok, true, "the window moves on");
 assert.equal(ownsObject(room, a, "o1"), true); assert.equal(ownsObject(room, b, "o1"), false, "only the creator owns it"); assert.equal(ownsObject(room, a, ""), false);
 forgetObject(room, "o1"); assert.equal(ownsObject(room, a, "o1"), false);
-pruneCreated(room, ["o2"]); assert.deepEqual(Object.keys(room.created), ["o2"], "objects gone from the room leave the ledger");
+recordCreate(room, a, "fresh", 1_000_000);
+pruneCreated(room, ["o2"], 1_000_000 + 1000);
+assert.deepEqual(Object.keys(room.created).sort(), ["fresh", "o2"], "an old object gone from the room leaves the ledger, a new one stays for a while");
+pruneCreated(room, [], 1_000_000 + CREATE_LIMITS.graceMs + 10); assert.equal(Object.keys(room.created).length, 0, "after the grace time everything missing from the room is dropped");
+const edits = { capabilities: {} };
+for (let i = 0; i < CREATE_LIMITS.editsPerMinute; i += 1) assert.equal(checkEdit(edits, a, i).ok, true);
+assert.equal(checkEdit(edits, a, 1000).status, 429, "edit limit"); assert.equal(checkEdit(edits, b, 1000).ok, true); assert.equal(checkEdit(edits, a, CREATE_LIMITS.windowMs + 100).ok, true);
 assert.equal(checkCreate({ capabilities: { participantCreate: false } }, a).status, 403, "GM switch off");
 assert.equal(checkCreate({ capabilities: {} }, a).ok, true, "on by default");
 const full = { created: Object.fromEntries(Array.from({ length: CREATE_LIMITS.perRoom }, (_, i) => [`x${i}`, "a"])) };

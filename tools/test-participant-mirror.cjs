@@ -123,7 +123,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(top.hasImg, false, 'the participant avatar is a letter');
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.ch').click());
   assert.equal(await page.locator('#char-window').count(), 1, 'the character list button opens the movable window');
-  assert.equal(await page.locator('#char-window .cw-btn[disabled]').count(), 1, 'the + of the window is disabled for now');
+  assert.equal(await page.locator('#char-window .cw-btn[disabled]').count(), 0, 'the + of the window makes a character');
   const tools = await page.evaluate(() => { const sel = document.querySelector('.select-tool'); sel.click(); const on = sel.getAttribute('aria-pressed'); document.querySelector('.pen-fab').click(); return { on, menu: !document.querySelector('.pen-menu').hidden, items: document.querySelectorAll('.pen-item').length, pro: document.querySelector('.pen-pro')?.textContent }; });
   assert.deepEqual(tools, { on: 'true', menu: true, items: 6, pro: 'PRO' }, 'select tool toggles; the pencil menu has the six items');
   // the dice symbol item asks the relay to make one; the other items are disabled for now
