@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.49
+// @version      0.2.50
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.49";
+  const VERSION = "0.2.50";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3270,23 +3270,25 @@
     } catch (_) { return null; }
   }
   const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
-  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = help; } }).observe(document.body, { childList: true, subtree: true });
-  let helpProbeAt = 0, helpProbing = false;
-  // Opens the native dialog out of sight, reads it and closes it again (at most every 5 minutes, never while the GM is typing; focus goes back to where it was).
+  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = { ...help, system: helpSystem() }; } }).observe(document.body, { childList: true, subtree: true });
+  let helpProbing = false;
+  const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.system || "").slice(0, 60); } catch (_) { return ""; } };
+  // Opens the native dialog out of sight, reads it and closes it again - only when nothing is stored yet or the room's dice system changed since the stored text (otherwise the text is updated when the GM opens the dialog
+  // themself); never while the GM is typing, focus goes back to where it was.
   async function relayHelpProbe() {
-    if (helpProbing || Date.now() - helpProbeAt < 300000) return;
+    if (helpProbing || (relayHelpCache && relayHelpCache.system === helpSystem())) return;
     const active = document.activeElement;
     if (active && active !== document.body && /^(INPUT|TEXTAREA)$/.test(active.tagName) || active?.isContentEditable) return;
     const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(`#${PANEL_ID}`));
     if (!button || helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"))) return;
-    helpProbing = true; helpProbeAt = Date.now();
+    helpProbing = true;
     const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;transition:none !important;pointer-events:none !important}";
     document.head.append(hide);
     try {
       button.click();
       let dialog = null;
       for (let i = 0; i < 20 && !dialog; i += 1) { await new Promise((r) => setTimeout(r, 100)); dialog = helpDialogs().find((d) => readHelpDialog(d)); }
-      if (dialog) { relayHelpCache = readHelpDialog(dialog); (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
+      if (dialog) { relayHelpCache = { ...readHelpDialog(dialog), system: helpSystem() }; (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
       for (let i = 0; i < 20 && helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root")); i += 1) await new Promise((r) => setTimeout(r, 100));
     } finally { hide.remove(); helpProbing = false; try { active?.focus?.(); } catch (_) {} }
   }
