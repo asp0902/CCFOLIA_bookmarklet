@@ -365,7 +365,7 @@ window.addEventListener("resize", () => renderScene());
     const on = cmMirror.has("zoomBar");
     ctl.hidden = on;
     if (!on) { document.getElementById("zoom-host")?.remove(); zoomUi = null; return; }
-    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:24px;z-index:100;color:#000"; stage.append(node); }); // CCFOLIA's scene text colour is black: the white buttons carry black icons
+    cmMirror.shadow("zoom-host", node => { node.style.cssText = "position:absolute;right:32px;bottom:96px;z-index:100;color:#000"; stage.append(node); }); // CCFOLIA's scene text colour is black: the white buttons carry black icons
     const bar = cmMirror.make("zoomBar"), slot = name => cmMirror.slot(bar, name);
     slot("zoomIn").addEventListener("click", () => setScale(Math.min((10 * scaleNow() + 1) / 10, 2)));
     slot("zoomOut").addEventListener("click", () => setScale(Math.max((10 * scaleNow() - 1) / 10, 0.2)));
@@ -1050,18 +1050,66 @@ function openSheet(id) {
     const speak = el("button", "", "이 캐릭터로 발언"); speak.type = "button"; speak.addEventListener("click", () => { useSpeaker(c.id); close(); }); foot.prepend(speak);
   });
 }
-document.getElementById("char-list-open").addEventListener("click", () => {
-  openDialog("내 캐릭터 목록", (body, foot, close) => {
-    const list = sceneData?.characters || [];
-    if (!list.length) body.append(el("p", "", "장면에 보이는 캐릭터가 없습니다."));
-    for (const c of list) {
-      const row = el("button", "char-row"); row.type = "button";
-      const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
-      const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
-      row.append(img, text); row.addEventListener("click", () => { close(); openSheet(c.id); }); body.append(row);
-    }
-  });
-});
+document.getElementById("char-list-open").addEventListener("click", openCharacterWindow);
+// ---- Scene tools a CCFOLIA player also sees (measured on a player screen and on the GM tab): multi-select toggle above the zoom bar, the pencil button with its menu, and the movable "my characters" window.
+// The menu items and "+" do nothing yet (creating room objects needs GM-side commands that have not been built); they are shown disabled, "timer [PRO]" stays disabled like on CCFOLIA.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svgIcon(path, size = 24) {
+  const svg = document.createElementNS(SVG_NS, "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", size); svg.setAttribute("height", size); svg.setAttribute("fill", "currentColor"); svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(SVG_NS, "path"); p.setAttribute("d", path); svg.append(p); return svg;
+}
+const ICON_SELECT = "M17 5h-2V3h2v2zm-2 16h2v-2.59L19.59 21 21 19.59 18.41 17H21v-2h-6v6zm4-12h2V7h-2v2zm0 4h2v-2h-2v2zm-8 8h2v-2h-2v2zM7 5h2V3H7v2zM3 17h2v-2H3v2zm2 4v-2H3c0 1.1.9 2 2 2zM19 3v2h2c0-1.1-.9-2-2-2zm-8 2h2V3h-2v2zM3 9h2V7H3v2zm4 12h2v-2H7v2zm-4-8h2v-2H3v2zm0-8h2V3c-1.1 0-2 .9-2 2z";
+const PEN_ITEMS = [
+  ["M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4zm6 9-4 5h12l-3-4-2.03 2.71L10 13zm7-4.5c0-.83-.67-1.5-1.5-1.5S14 7.67 14 8.5s.67 1.5 1.5 1.5S17 9.33 17 8.5zM20 2h-7v2h7v7h2V4c0-1.1-.9-2-2-2zm0 18h-7v2h7c1.1 0 2-.9 2-2v-7h-2v7zM4 13H2v7c0 1.1.9 2 2 2h7v-2H4v-7z", "전경, 배경을 변경", "메인 필드의 이미지를 설정합니다"],
+  ["M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4 2 3 3-4 4 5H5z", "스크린 패널을 추가", "항상 표시하는 이미지 오브젝트를 배치합니다"],
+  ["M12 2C8.14 2 5 5.14 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.86-3.14-7-7-7zm4 8h-3v3h-2v-3H8V8h3V5h2v3h3v2z", "마커 패널을 추가", "장면 내에서만 표시할 이미지 오브젝트를 배치합니다"],
+  ["M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM6 7h5v1.5H6V7zm13 12H5L19 5v14zm-4.5-3v2H16v-2h2v-1.5h-2v-2h-1.5v2h-2V16z", "다이스 심볼을 추가", "화면에 다이스 심볼을 추가합니다"],
+  ["M2 7h4v10H2V7zm5 12h10V5H7v14zM18 7h4v10h-4V7z", "카드 덱을 추가", "패널을 쌓을 수 있는 덱을 추가합니다"],
+  ["m22 5.7-4.6-3.9-1.3 1.5 4.6 3.9L22 5.7zM7.9 3.4 6.6 1.9 2 5.7l1.3 1.5 4.6-3.8zM12.5 8H11v6l4.7 2.9.8-1.2-4-2.4V8zM12 4c-5 0-9 4-9 9s4 9 9 9 9-4 9-9-4-9-9-9zm0 16c-3.9 0-7-3.1-7-7s3.1-7 7-7 7 3.1 7 7-3.1 7-7 7z", "타이머를 표시", "남은 시간을 표시하는 타이머를 배치합니다", true]
+];
+{
+  const stageEl = document.querySelector(".stage");
+  const select = el("button", "scene-tool select-tool"); select.type = "button"; select.title = "Ctrl + ドラッグ"; select.setAttribute("aria-label", "Ctrl + ドラッグ"); select.setAttribute("aria-pressed", "false"); select.append(svgIcon(ICON_SELECT));
+  select.addEventListener("click", () => select.setAttribute("aria-pressed", String(select.getAttribute("aria-pressed") !== "true")));
+  const fab = el("button", "scene-tool pen-fab"); fab.type = "button"; fab.title = "맵 메뉴"; fab.setAttribute("aria-label", "맵 메뉴"); fab.setAttribute("aria-haspopup", "menu"); fab.setAttribute("aria-expanded", "false");
+  fab.append(svgIcon("M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"));
+  const menu = el("div", "pen-menu"); menu.hidden = true; menu.setAttribute("role", "menu");
+  for (const [path, title, desc, pro] of PEN_ITEMS) {
+    const row = el("div", "pen-item"); row.setAttribute("role", "menuitem"); row.setAttribute("aria-disabled", "true");
+    const av = el("span", "pen-av"); av.append(svgIcon(path));
+    const text = el("span", "pen-text"), head = el("span", "pen-title", title);
+    if (pro) head.append(" ", el("em", "pen-pro", "PRO"));
+    text.append(head, el("span", "pen-desc", desc)); row.append(av, text); menu.append(row);
+  }
+  const close = () => { menu.hidden = true; fab.setAttribute("aria-expanded", "false"); };
+  fab.addEventListener("click", () => { menu.hidden = !menu.hidden; fab.setAttribute("aria-expanded", String(!menu.hidden)); });
+  document.addEventListener("pointerdown", event => { if (!menu.hidden && !event.composedPath().includes(menu) && !event.composedPath().includes(fab)) close(); }, true);
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && !menu.hidden) close(); });
+  stageEl.append(select, menu, fab);
+}
+// "My characters": a window that floats over the scene and moves by its title bar (measured: 320x280, translucent grey, title 14px bold, + and x on the right).
+function openCharacterWindow() {
+  const old = document.getElementById("char-window"); if (old) { old.remove(); return; }
+  const win = el("div", "char-window"); win.id = "char-window"; win.setAttribute("role", "dialog"); win.setAttribute("aria-label", "내 캐릭터 목록");
+  const head = el("div", "cw-head"); head.append(el("h6", "", "내 캐릭터 목록"));
+  const add = el("button", "cw-btn", "+"); add.type = "button"; add.disabled = true; add.title = "캐릭터 만들기"; add.setAttribute("aria-label", "캐릭터 만들기");
+  const x = el("button", "cw-btn", "×"); x.type = "button"; x.setAttribute("aria-label", "닫기"); x.addEventListener("click", () => win.remove());
+  head.append(add, x);
+  const body = el("div", "cw-body");
+  const list = sceneData?.characters || [];
+  if (!list.length) body.append(el("p", "", "장면에 보이는 캐릭터가 없습니다."));
+  for (const c of list) {
+    const row = el("button", "char-row"); row.type = "button";
+    const img = el("img"); img.src = c.iconUrl; img.alt = ""; img.referrerPolicy = "no-referrer";
+    const text = el("span", "char-text"); text.append(el("b", "", c.name || "(이름 없음)"), el("small", "", statusSummary(c)));
+    row.append(img, text); row.addEventListener("click", () => openSheet(c.id)); body.append(row);
+  }
+  win.append(head, body); document.body.append(win);
+  let drag = null;
+  head.addEventListener("pointerdown", event => { if (event.target.closest("button")) return; const r = win.getBoundingClientRect(); drag = { dx: event.clientX - r.left, dy: event.clientY - r.top }; try { head.setPointerCapture(event.pointerId); } catch (_) {} });
+  head.addEventListener("pointermove", event => { if (!drag) return; win.style.left = `${Math.max(0, Math.min(innerWidth - 80, event.clientX - drag.dx))}px`; win.style.top = `${Math.max(0, Math.min(innerHeight - 48, event.clientY - drag.dy))}px`; });
+  head.addEventListener("pointerup", () => { drag = null; });
+}
 function openRoomMenu(anchor) {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
   if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
