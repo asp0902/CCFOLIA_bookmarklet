@@ -492,7 +492,7 @@ const renderState = data => {
   showHealth(data.health);
   renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
-  document.getElementById("room-title").textContent = data.roomTitle || "플레이 룸";
+  document.getElementById("room-title").textContent = data.roomTitle || "플레이룸";
   const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
@@ -1164,7 +1164,7 @@ const logTime = value => {
 const logChannels = () => (current.channels?.length ? current.channels : DEFAULT_CHANNELS);
 const logMessages = channel => (current.messages || []).filter(message => (message.channel || "main") === channel.id);
 function buildLogText() {
-  const lines = [`${current.roomTitle || "플레이 룸"} — 로그 (${logTime(Date.now())} 내보냄)`, ""];
+  const lines = [`${current.roomTitle || "플레이룸"} — 로그 (${logTime(Date.now())} 내보냄)`, ""];
   for (const channel of logChannels()) {
     const messages = logMessages(channel);
     if (!messages.length) continue;
@@ -1176,7 +1176,7 @@ function buildLogText() {
 }
 function buildLogHtml() {
   const box = document.createElement("div");
-  const title = document.createElement("h1"); title.textContent = `${current.roomTitle || "플레이 룸"} — 로그`; box.append(title);
+  const title = document.createElement("h1"); title.textContent = `${current.roomTitle || "플레이룸"} — 로그`; box.append(title);
   const note = document.createElement("p"); note.className = "note"; note.textContent = `${logTime(Date.now())} 내보냄`; box.append(note);
   for (const channel of logChannels()) {
     const messages = logMessages(channel);
@@ -1209,7 +1209,7 @@ function downloadLog(kind) {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
-const openAccountMenu = anchor => openMenu(anchor, [{ profile: { letter: document.getElementById("account-av").textContent, name: chatName.value || "참여자", sub: "플레이 룸 참여자" } }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
+const openAccountMenu = anchor => openMenu(anchor, [{ profile: { letter: document.getElementById("account-av").textContent, name: chatName.value || "참여자", sub: "플레이룸 참여자" } }, { label: bgmMuted ? "BGM 음소거 해제" : "BGM 음소거", run: () => document.getElementById("bgm-mute").click() }, { label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") }]);
 document.getElementById("account-btn").addEventListener("click", event => openAccountMenu(event.currentTarget));
 // Native mirroring: the top bar is CCFOLIA's own (GM-only buttons were left out on the GM side). Its buttons call the same functions as the built-in ones;
 // the built-in header stays in the page (hidden) as the data holder and the fallback. A handout button (not a CCFOLIA feature) is added by copying the character-list button.
