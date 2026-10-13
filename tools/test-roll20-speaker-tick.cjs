@@ -36,8 +36,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.waitForTimeout(100);
   assert.equal((await where(page)).active, 'TEXTAREA');
   // keys that are not a plain back-tick, and composition, are left alone
-  for (const init of [{ shiftKey: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }, { code: 'Digit1', key: '1' }]) assert.equal(await press(page, init), false, JSON.stringify(init));
-  assert.equal((await where(page)).picker, 2);
+  for (const init of [{ shiftKey: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { code: 'Digit1', key: '1' }]) assert.equal(await press(page, init), false, JSON.stringify(init));
+  // a real composition (a word being typed) keeps its keys; the IME's own flag on the first key does not count, and the character it would insert is stopped
+  await page.evaluate(() => document.querySelector('#textchat-input textarea').dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })));
+  assert.equal(await press(page, {}), false, 'composing: left alone');
+  await page.evaluate(() => document.querySelector('#textchat-input textarea').dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })));
+  assert.equal(await press(page, { key: 'Process', keyCode: 229, isComposing: true }), true, 'the IME flag alone does not stop it');
+  assert.equal(await page.evaluate(() => { const event = new InputEvent('beforeinput', { data: '`', inputType: 'insertText', bubbles: true, cancelable: true }); document.querySelector('#textchat-input textarea').dispatchEvent(event); return event.defaultPrevented; }), true, 'the letter the IME would type is stopped');
+  assert.equal((await where(page)).picker, 3);
   // a Korean IME reports another key but the same code
   assert.equal(await press(page, { key: 'Process', keyCode: 229 }), true, 'the code decides, not the character');
   await page.close();
