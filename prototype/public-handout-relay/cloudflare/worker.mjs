@@ -539,23 +539,35 @@ export class RoomRelay {
     }
     // A participant makes, changes or removes an object in the GM's room (the GM's page does the writing). Kinds: dice symbol (create only) and character (create, update, place, duplicate, delete).
     // Rules: create-guard.mjs (switch, rates, ownership ledger: a participant changes only what they made) and character-fields.mjs (which fields); the GM's page also checks the room's default role.
-    const objectOp = request.method === "POST" && url.pathname.match(/\/objects\/(create|update|delete|duplicate|place)$/);
+    const objectOp = request.method === "POST" && url.pathname.match(/\/objects\/(create|update|delete|duplicate|place|claim)$/);
     if (objectOp) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
       const body = await request.json().catch(() => ({}));
       const op = objectOp[1], kind = body.kind, targetId = /^[\w-]{1,100}$/.test(String(body.id || "")) ? String(body.id) : "";
       if (kind !== "dice" && kind !== "character") return json({ error: "아직 만들 수 없는 종류입니다." }, 400);
-      if (kind === "dice" && (op === "duplicate" || op === "place")) return json({ error: "다이스 심볼은 만들기·굴리기·삭제만 할 수 있습니다." }, 400);
+      if (kind === "dice" && (op === "duplicate" || op === "place" || op === "claim")) return json({ error: "다이스 심볼은 만들기·굴리기·삭제만 할 수 있습니다." }, 400);
+      // A native player edits, puts away, duplicates and deletes any character that is not secret or hidden (measured), so a character request needs only that the character is in the room (the GM's page
+      // refuses secret and hidden ones); a dice symbol stays its maker's. "Taking ownership" writes the person into the ledger: the character then shows in their own list.
+      const knownCharacter = async id => (await this.state.storage.get("charDocs") || []).some(doc => doc.id === id);
+      if (op === "claim") {
+        if (!targetId || !(await knownCharacter(targetId))) return json({ error: "대상을 찾지 못했습니다." }, 404);
+        if (room.capabilities.participantCreate === false) return json({ error: "GM이 참여자의 생성을 허용하지 않았습니다." }, 403);
+        const allowed = checkEdit(room, member);
+        if (!allowed.ok) return json({ error: allowed.error }, allowed.status);
+        recordCreate(room, member, targetId);
+        await this.save(room);
+        return json({ accepted: true }, 200);
+      }
       const command = { id: token(), type: `object.${op}`, kind, participantId: member.id, displayName: member.displayName, status: "pending", createdAt: new Date().toISOString() };
       if (op === "create" && kind === "dice") {
         const x = Number(body.x ?? -1), y = Number(body.y ?? -1), faces = Number(body.faces ?? 6);
         if (!(Math.abs(x) <= 1_000) || !(Math.abs(y) <= 1_000) || !Number.isInteger(faces) || faces < 2 || faces > 100) return json({ error: "올바르지 않은 생성 요청" }, 400);
         Object.assign(command, { x, y, faces });
       } else if (op === "create" || op === "duplicate") {
-        if (op === "duplicate") { if (!targetId || !ownsObject(room, member, targetId)) return json({ error: "내가 만든 캐릭터만 복제할 수 있습니다." }, 403); command.targetId = targetId; }
+        if (op === "duplicate") { if (!targetId || !(await knownCharacter(targetId))) return json({ error: "대상을 찾지 못했습니다." }, 404); command.targetId = targetId; }
         else command.fields = cleanCharacterFields(body.fields);
       } else {
-        if (!targetId || !ownsObject(room, member, targetId)) return json({ error: kind === "dice" ? "내가 만든 다이스 심볼만 굴리거나 지울 수 있습니다." : "내가 만든 캐릭터만 바꿀 수 있습니다." }, 403);
+        if (!targetId || !(kind === "dice" ? ownsObject(room, member, targetId) : await knownCharacter(targetId))) return json({ error: kind === "dice" ? "내가 만든 다이스 심볼만 굴리거나 지울 수 있습니다." : "대상을 찾지 못했습니다." }, kind === "dice" ? 403 : 404);
         command.targetId = targetId;
         if (kind === "dice" && op === "update") command.roll = true; // the GM's page picks the number
         else if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
@@ -589,6 +601,11 @@ export class RoomRelay {
       return json({ items: await this.state.storage.get(`handouts:${member.id}`) || [] });
     }
     // The characters this participant made, with everything the editor shows (the GM's page reports them with the scene; only the maker gets them back).
+    // Any character's editor fields (the native editor opens for every character of the room that is not secret or hidden).
+    if (request.method === "GET" && /\/character-doc$/.test(url.pathname)) {
+      const id = url.searchParams.get("id") || "", doc = (await this.state.storage.get("charDocs") || []).find(item => item.id === id);
+      return doc ? json({ character: doc }) : json({ error: "대상을 찾지 못했습니다." }, 404);
+    }
     if (request.method === "GET" && /\/mine$/.test(url.pathname)) {
       const docs = await this.state.storage.get("charDocs") || [];
       return json({ characters: docs.filter(doc => ownsObject(room, member, doc.id)), owned: Object.keys(room.created || {}).filter(id => ownsObject(room, member, id)) });

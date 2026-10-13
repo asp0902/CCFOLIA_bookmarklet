@@ -302,6 +302,7 @@ function renderScene(scene) {
   const layerOf = piece => (piece.kind === "character" ? 100 : 0) + (Number(piece.z) || 0);
   const all = [...(s.decks || []).map(deck => ({ ...deck, z: deck.layer ?? 1, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl.startsWith("/") ? (cmMirror.assets[deck.coverUrl] || "") : deck.coverUrl })).filter(deck => deck.imageUrl), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 10000 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
   for (const item of all.sort((a, b) => layerOf(a) - layerOf(b))) {
+    if (window.__goneIds?.has(item.id)) continue; // deleted a moment ago: gone at once, before the GM page confirms
     // a dice symbol is drawn as a die face with its value ("?" while hidden); a card deck shows its back with the number of cards left in the middle
     if (item.kind === "dice") {
       // CCFOLIA draws a die as the picture /images/{faces}_dice/{faces}_dice[{value}].png ([0] while hidden); the GM page sends those pictures as assets. Without the picture: a plain face.
@@ -442,6 +443,8 @@ window.addEventListener("resize", () => renderScene());
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
   // Own dice symbols (a CCFOLIA player moves, rolls and deletes only the ones they made): a click or right click selects (blue outline) and the right click opens the menu.
+  // optimistic delete: the piece leaves the screen at once; if the request fails it comes back
+  const removeNow = async (id, request) => { (window.__goneIds ||= new Set()).add(id); renderScene(); const answer = await request(); if (!answer.ok) { window.__goneIds.delete(id); renderScene(); } else setTimeout(() => window.__goneIds?.delete(id), 8000); return answer; };
   const pieceNode = target => target.closest?.(".scene-die.mine,.scene-die-img.mine,img[data-kind=character]") || null;
   const selectDie = node => { document.querySelectorAll(".stage .selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = node ? node.dataset.id : null; node?.classList.add("selected"); };
   stage.addEventListener("pointerdown", event => { if (interactive(event.target)) return; selectDie(pieceNode(event.target)); }, true);
@@ -456,8 +459,8 @@ window.addEventListener("resize", () => renderScene());
     if (node.dataset.kind === "dice") {
       openMenu(anchor, [
         { label: "roll a dice", run: async () => fail(await characterRequest("update", { kind: "dice", id })) },
-        { label: "삭제", run: async () => { selectDie(null); fail(await characterRequest("delete", { kind: "dice", id })); } }
-      ]);
+        { label: "삭제", run: async () => { selectDie(null); fail(await removeNow(id, () => characterRequest("delete", { kind: "dice", id }))); } }
+      ], "ctx-menu");
       return;
     }
     // A character, as CCFOLIA's player menu lists it. What this page can do for the person: look at (or, for their own, edit) the sheet, put away, duplicate, delete, copy the id and
@@ -465,20 +468,20 @@ window.addEventListener("resize", () => renderScene());
     const mine = ownedIds.has(id), scene = (sceneData?.characters || []).find(c => c.id === id);
     const palette = String(scene?.commands || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     openMenu(anchor, [
-      { label: "편집", run: () => (mine ? openCharacterEditor(id) : openSheet(id)) },
-      { label: "회전", key: "R or Shift+R", disabled: true },
+      { label: "편집", run: () => editCharacter(id) },
+      { label: "회전", key: "R or Shift+R", run: () => charAction("rotate", id) },
       { divider: true },
-      { label: "집어넣기", key: "S", disabled: !mine, run: async () => { selectDie(null); fail(await characterRequest("place", { id, stow: true })); setTimeout(refreshMyCharacters, 900); } },
-      { label: "소유 권한 갖기", key: "T", disabled: true },
-      { label: "복제", key: "Ctrl+D", disabled: !mine, run: async () => { fail(await characterRequest("duplicate", { id })); setTimeout(refreshMyCharacters, 900); } },
+      { label: "집어넣기", key: "S", run: () => charAction("stow", id) },
+      { label: "소유 권한 갖기", key: "T", disabled: mine, run: () => charAction("claim", id) },
+      { label: "복제", key: "Ctrl+D", run: () => charAction("duplicate", id) },
       { label: "복사", key: "Ctrl+C", disabled: true },
       { divider: true },
-      { label: "채팅 팔레트", key: "▸", disabled: !palette.length, run: () => openMenu(anchor, palette.map(line => ({ label: line.length > 40 ? `${line.slice(0, 40)}…` : line, run: () => insertAtCursor(line) }))) },
+      { label: "채팅 팔레트", key: "▸", disabled: !palette.length, run: () => openMenu(anchor, palette.map(line => ({ label: line.length > 40 ? `${line.slice(0, 40)}…` : line, run: () => insertAtCursor(line) })), "ctx-menu") },
       { divider: true },
-      { label: "삭제", key: "Ctrl+⌫", disabled: !mine, run: async () => { if (!confirm("이 캐릭터를 삭제할까요?")) return; selectDie(null); fail(await characterRequest("delete", { id })); setTimeout(refreshMyCharacters, 900); } },
+      { label: "삭제", key: "Ctrl+⌫", run: () => charAction("delete", id) },
       { divider: true },
       { label: "ID 복사(개발자용)", run: () => navigator.clipboard?.writeText(id).catch(() => {}) }
-    ]);
+    ], "ctx-menu");
   });
   stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.touched = true; view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
@@ -1144,10 +1147,10 @@ if (roomId && !inviteToken) { consent.hidden = true; mode = "pending"; checkStat
 const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
 let menuEl = null;
 const closeMenu = () => { if (!menuEl) return; menuEl.remove(); menuEl = null; document.querySelectorAll('[aria-expanded="true"]').forEach(b => b.setAttribute("aria-expanded", "false")); };
-function openMenu(anchor, items) {
+function openMenu(anchor, items, extraClass = "") {
   const same = menuEl && menuEl.anchor === anchor;
   closeMenu(); if (same) return;
-  const paper = el("div", "menu-paper"); paper.setAttribute("role", "menu"); paper.anchor = anchor;
+  const paper = el("div", `menu-paper ${extraClass}`.trim()); paper.setAttribute("role", "menu"); paper.anchor = anchor;
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
     if (item.divider) { paper.append(el("hr", "menu-divider")); continue; }
@@ -1349,8 +1352,45 @@ function openCharacterWindow() {
 }
 // CCFOLIA's "캐릭터 편집" (measured from a native player's screen): name + initiative, memo, token size / x / y, reference URL, standing (image: later), status rows (label, current, max) with - and +,
 // parameter rows (label, value) with - and +, chat palette; delete / duplicate / put on the screen at the bottom. Changes are saved a moment after typing stops.
+// What the character menu and its keys do (CCFOLIA's player menu, measured): R / Shift+R turn the token by 45 degrees, S puts it away, T takes ownership, Ctrl+D duplicates, Ctrl+Backspace deletes.
+async function charAction(name, id) {
+  const fail = answer => { if (!answer.ok) showSendStatus(answer.error || "처리하지 못했습니다.", 6000); };
+  const scene = (sceneData?.characters || []).find(c => c.id === id);
+  if (name === "rotate" || name === "rotateBack") { const turn = name === "rotate" ? 45 : -45; fail(await characterRequest("update", { id, fields: { angle: (((Number(scene?.angle) || 0) + turn) % 360 + 360) % 360 } })); return; }
+  if (name === "stow") { document.querySelectorAll(".stage .selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = null; fail(await characterRequest("place", { id, stow: true })); setTimeout(refreshMyCharacters, 900); return; }
+  if (name === "claim") { fail(await characterRequest("claim", { id })); refreshMyCharacters(); return; }
+  if (name === "duplicate") { fail(await characterRequest("duplicate", { id })); setTimeout(refreshMyCharacters, 900); return; }
+  if (name === "delete") {
+    if (!confirm("이 캐릭터를 삭제할까요?")) return;
+    window.__selectedDie = null; (window.__goneIds ||= new Set()).add(id); renderScene();
+    const answer = await characterRequest("delete", { id });
+    if (!answer.ok) { window.__goneIds.delete(id); renderScene(); } else setTimeout(() => window.__goneIds?.delete(id), 8000);
+    fail(answer); setTimeout(refreshMyCharacters, 900);
+  }
+}
+document.addEventListener("keydown", event => {
+  const id = window.__selectedDie; if (!id || event.isComposing || event.target.closest?.("input, textarea, select, [contenteditable=true], .dlg, .char-window")) return;
+  if (!(sceneData?.characters || []).some(c => c.id === id)) return; // keys act on a selected character (dice have their own menu)
+  const key = event.key.toLowerCase(), plain = !event.altKey && !event.metaKey;
+  let name = "";
+  if (plain && !event.ctrlKey && key === "r") name = event.shiftKey ? "rotateBack" : "rotate";
+  else if (plain && !event.ctrlKey && !event.shiftKey && key === "s") name = "stow";
+  else if (plain && !event.ctrlKey && !event.shiftKey && key === "t" && !ownedIds.has(id)) name = "claim";
+  else if (plain && event.ctrlKey && key === "d") name = "duplicate";
+  else if (plain && event.ctrlKey && event.key === "Backspace") name = "delete";
+  if (!name) return;
+  event.preventDefault(); charAction(name, id);
+});
+// Any character of the room opens in the full editor (a native player can edit them all): the editor fields of one that is not the person's own come from the relay.
+async function editCharacter(id) {
+  if (!myCharacters.some(c => c.id === id)) {
+    try { const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/character-doc?id=${encodeURIComponent(id)}`); if (!response.ok) throw new Error("no doc"); (window.__otherDocs ||= new Map()).set(id, (await response.json()).character); }
+    catch (_) { showSendStatus("캐릭터 정보를 가져오지 못했습니다.", 4000); return; }
+  }
+  openCharacterEditor(id);
+}
 function openCharacterEditor(id) {
-  const current = () => myCharacters.find(c => c.id === id);
+  const current = () => myCharacters.find(c => c.id === id) || window.__otherDocs?.get(id);
   const doc = current(); if (!doc) return;
   const field = (labelText, input) => { const wrap = el("label", "ce-field"); wrap.append(el("span", "ce-label", labelText), input); return wrap; };
   const input = (value, type = "text", extra = {}) => Object.assign(el("input", "ce-input"), { type, value: value ?? "", ...extra });
@@ -1393,11 +1433,11 @@ function openCharacterEditor(id) {
     function queueSave() { pending = true; clearTimeout(timer); timer = setTimeout(save, 700); }
     for (const control of [name, initiative, memo, size, px, py, url, palette]) control.addEventListener("input", queueSave);
     const flush = () => { if (pending) { clearTimeout(timer); save(); } };
-    const remove = el("button", "ce-danger", "삭제"), copy = el("button", "ce-act", "복제"), place = el("button", "ce-act ce-primary", "화면에 추가");
+    const remove = el("button", "ce-danger", "삭제"), copy = el("button", "ce-act", "복제"), place = el("button", "ce-act ce-primary", (sceneData?.characters || []).some(c => c.id === id) ? "맵에서 집어넣기" : "화면에 추가");
     for (const button of [remove, copy, place]) button.type = "button";
     remove.addEventListener("click", async () => { if (!confirm("이 캐릭터를 삭제할까요?")) return; clearTimeout(timer); pending = false; const result = await characterRequest("delete", { id }); if (!result.ok) { status.textContent = result.error; return; } close(); await refreshUntil((_, now) => !now.some(c => c.id === id)); });
     copy.addEventListener("click", async () => { flush(); const known = new Set(myCharacters.map(c => c.id)); const result = await characterRequest("duplicate", { id }); if (!result.ok) { status.textContent = result.error; return; } status.textContent = "복제하는 중입니다."; await refreshUntil((_, now) => now.some(c => !known.has(c.id))); status.textContent = "복제했습니다."; });
-    place.addEventListener("click", async () => { flush(); const result = await characterRequest("place", { id, x: Number(px.value) || 0, y: Number(py.value) || 0 }); status.textContent = result.ok ? "화면에 추가했습니다." : result.error; if (result.ok) setTimeout(refreshMyCharacters, 900); });
+    place.addEventListener("click", async () => { flush(); const putAway = (sceneData?.characters || []).some(c => c.id === id); const result = await characterRequest("place", putAway ? { id, stow: true } : { id, x: Number(px.value) || 0, y: Number(py.value) || 0 }); status.textContent = result.ok ? (putAway ? "맵에서 집어넣었습니다." : "화면에 추가했습니다.") : result.error; if (result.ok) { place.textContent = putAway ? "화면에 추가" : "맵에서 집어넣기"; setTimeout(refreshMyCharacters, 900); } });
     foot.replaceChildren(remove, copy, place);
     foot.classList.add("ce-foot");
     hooks.beforeClose = flush; // closing (x, Escape, outside click) saves what was typed first

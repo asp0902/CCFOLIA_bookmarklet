@@ -36,7 +36,13 @@ const madeChar = await op("create", { kind: "character", fields: { name: "알리
 assert.equal(madeChar.response.status, 202);
 const charCommand = (await commandsNow()).find(c => c.id === madeChar.json.commandId);
 assert.deepEqual(charCommand.fields, { name: "알리스", width: 3, height: 3, memo: "m" }, "only the editor's fields reach the GM");
-assert.equal((await op("update", { kind: "character", id: "c1", fields: { name: "x" } })).response.status, 403, "not made by this participant");
+assert.equal((await op("update", { kind: "character", id: "c1", fields: { name: "x" } })).response.status, 404, "a character that is not in the room");
+await scene({ fieldWidth: 20, fieldHeight: 10, characterDocs: [{ id: "c1", name: "알리스" }, { id: "c2", name: "복제" }, { id: "gm-char", name: "GM의 캐릭터" }] });
+const claimed = await op("claim", { kind: "character", id: "gm-char" });
+assert.equal(claimed.response.status, 200, "taking ownership of a character of the room");
+assert((await call(`/api/rooms/${room}/mine`, { cookie })).json.owned.includes("gm-char"));
+assert.equal((await call(`/api/rooms/${room}/character-doc?id=gm-char`, { cookie })).json.character.name, "GM의 캐릭터", "any character's editor fields");
+assert.equal((await op("claim", { kind: "character", id: "nowhere" })).response.status, 404);
 await call(`/api/admin/rooms/${room}/commands/${madeChar.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "c1" } });
 assert.equal((await op("update", { kind: "character", id: "c1", fields: {} })).response.status, 400, "nothing to change");
 const upd = await op("update", { kind: "character", id: "c1", fields: { name: "새 이름", status: [{ label: "HP", value: 5, max: 10 }], secret: true } });
@@ -50,14 +56,15 @@ await call(`/api/admin/rooms/${room}/commands/${dup.json.commandId}/ack`, { gm: 
 // the characters made by this participant come back with the editor's fields (reported by the GM's page with the scene)
 await scene({ fieldWidth: 20, fieldHeight: 10, characterDocs: [{ id: "c1", name: "새 이름", memo: "m", width: 3, status: [{ label: "HP", value: 5, max: 10 }], owner: "gm", secret: true }, { id: "c2", name: "복제" }, { id: "gm-char", name: "GM의 캐릭터" }] });
 const mine = (await call(`/api/rooms/${room}/mine`, { cookie })).json.characters;
-assert.deepEqual(mine.map(c => c.id).sort(), ["c1", "c2"], "only their own characters");
-assert(!JSON.stringify(mine).includes("GM의") && !("owner" in mine[0]) && !("secret" in mine[0]));
+assert.deepEqual(mine.map(c => c.id).sort(), ["c1", "c2", "gm-char"], "their own characters and the one they took");
+assert(!("owner" in mine[0]) && !("secret" in mine[0]));
 assert.equal((await call(`/api/rooms/${room}/mine`)).response.status >= 400, true, "not for strangers");
 // delete: the GM's page confirms, then the id leaves the ledger
 const del = await op("delete", { kind: "character", id: "c2" });
 assert.equal(del.response.status, 202);
 await call(`/api/admin/rooms/${room}/commands/${del.json.commandId}/ack`, { gm: true, body: { status: "delivered" } });
-assert.equal((await op("update", { kind: "character", id: "c2", fields: { name: "y" } })).response.status, 403, "deleted objects are no longer theirs");
+await scene({ fieldWidth: 20, fieldHeight: 10, characterDocs: [{ id: "c1", name: "알리스" }, { id: "gm-char", name: "GM의 캐릭터" }] });
+assert.equal((await op("update", { kind: "character", id: "c2", fields: { name: "y" } })).response.status, 404, "deleted characters are gone from the room");
 assert.equal((await op("create", { kind: "dice", id: "c1" })).response.status, 202); // (counts as one create)
 // two GM tabs: the one that claims a command first runs it, the other is told no; the same tab may claim again; a claim does not outlive a minute
 const claimCall = (id, by) => call(`/api/admin/rooms/${room}/commands/${id}/claim`, { gm: true, body: { by } });
