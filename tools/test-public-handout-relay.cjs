@@ -13,7 +13,7 @@ assert.doesNotMatch(handout.match(/function requestPublicRelay[\s\S]*?\n  }/)?.[
 assert.match(bridge, /chrome\.storage\.local\.get/);
 assert.match(bridge, /Authorization.*Bearer/);
 assert.doesNotMatch(bridge.match(/const body = action[\s\S]*?\n        const result/)?.[0] || "", /gmNotes|permissions|owner|image/);
-assert.match(bridge, /command\?\.type !== "chat\.send"/);
+assert.match(bridge, /"chat.send", "piece.move", "status.set"/); // the commands the bridge hands to the page
 assert.match(bridge, /relayDeliveredCommandIds/);
 // The share/stop buttons and requests exist only when the extension marked the page.
 assert.equal((handout.match(/manageable && hasPlayerRelay\(\) \? `<button class="card-icon-btn" data-action="web-(?:share-handout|stop-sharing)"/g) || []).length, 2);
@@ -32,6 +32,6 @@ assert.match(handout, /const hasPlayerRelay = \(\) => document\.documentElement\
     return documentElement.dataset.capybaraPlayerRelay;
   };
   assert.equal(run("/rooms/abc"), "1");
-  assert.equal(run("/home"), undefined);
+  assert.equal(run("/home"), "1"); // the room is re-read from the URL by the page loop (a single-page app), so the marker is set on every ccfolia page
 }
 console.log("public handout relay boundary: PASS");
