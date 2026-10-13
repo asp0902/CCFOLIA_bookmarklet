@@ -187,9 +187,17 @@
     };
     document.addEventListener("keydown", onKey, true);
   };
+  // A Korean IME marks even the first key it takes as "composing" (key "Process", keyCode 229) without a word being composed: whether a composition is really going on is told by the composition
+  // events themselves. A back-tick the IME would insert as a letter is stopped before it is typed.
+  let composing = false, tickAt = 0;
+  document.documentElement.dataset.capybaraR20Tick = "1"; // visible from the page console: the key handler of this script is in place
+  document.addEventListener("compositionstart", event => { if (event.target === chatBox()) composing = true; }, true);
+  document.addEventListener("compositionend", event => { if (event.target === chatBox()) composing = false; }, true);
+  document.addEventListener("beforeinput", event => { if (event.target === chatBox() && Date.now() - tickAt < 400 && event.data === "`") event.preventDefault(); }, true);
   document.addEventListener("keydown", event => {
     const area = chatBox(), select = speakerSelect();
-    if (event.code !== "Backquote" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.isComposing || event.target !== area || !select) return;
+    if (event.code !== "Backquote" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || composing || event.target !== area || !select) return;
+    tickAt = Date.now();
     event.preventDefault();
     event.stopPropagation();
     const from = area.selectionStart, to = area.selectionEnd;
