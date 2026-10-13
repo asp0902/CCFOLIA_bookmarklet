@@ -323,13 +323,14 @@ window.addEventListener("resize", () => renderScene());
     view.x = cx - (cx - view.x) * k; view.y = cy - (cy - view.y) * k; view.zoom = next;
     redraw();
   };
-  const centre = () => [stage.clientWidth / 2 - stage.clientWidth / 2, 0];
+  // CCFOLIA's wheel zoom (measured by sending wheel events to its page): one wheel event is one step of 0.1 in the screen scale whatever the delta, up = larger, kept within 0.2..2, around the middle of the field
+  // (the position scales with the scale, the pointer is not the anchor).
+  const stepScale = step => { const now = view.base * view.zoom / 24; zoomAt(Math.max(0.2, Math.min(2, Math.round((now + step) * 10) / 10)) / now, 0, 0); };
   const interactive = target => target.closest("#scene-status, #bgm-bar, #zoom-ctl, #zoom-host, .scene-tool, .pen-menu, #handout, #room > header");
   stage.addEventListener("wheel", event => {
     if (interactive(event.target)) return;
     event.preventDefault();
-    const rect = stage.getBoundingClientRect();
-    zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX - rect.left - rect.width / 2, event.clientY - rect.top - rect.height / 2);
+    stepScale(event.deltaY < 0 ? 0.1 : -0.1);
   }, { passive: false });
   let drag = null;
   let piece = null; // a movable piece being dragged (drawn only until drop; one command is sent on release)
@@ -365,11 +366,10 @@ window.addEventListener("resize", () => renderScene());
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
   const mk = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", fn); return b; };
   ctl.append(
-    mk("+", "확대", () => zoomAt(1.25, 0, 0)),
-    mk("−", "축소", () => zoomAt(1 / 1.25, 0, 0)),
+    mk("+", "확대", () => stepScale(0.1)),
+    mk("−", "축소", () => stepScale(-0.1)),
     mk("⌂", "화면 맞춤", () => { view.zoom = 1; view.x = 0; view.y = 0; redraw(); }));
   stage.append(ctl);
-  void centre;
   // Native mirroring: CCFOLIA's own zoom bar (magnifier buttons around a vertical slider), working like its code (read from the app): the scale is cell px / 24 (0.2 .. 2); the buttons add or
   // subtract 0.1 (min((10n+1)/10, 2), max((10n-1)/10, 0.2)); the slider has min 0.2, max 2, step 0.1 and its position scales with it. The play room's fit-to-window size is scale 1 x its base.
   let zoomUi = null;
