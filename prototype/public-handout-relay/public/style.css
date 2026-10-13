@@ -145,7 +145,7 @@ main{padding:0}
 .web-join button{padding:0;border:0;background:none;color:rgba(255,255,255,.5);font:inherit;font-size:.75rem;text-decoration:underline;cursor:pointer;font-weight:400}
 
 /* Stage camera controls and dice row. */
-.stage{touch-action:none;cursor:grab}
+.stage{touch-action:none}
 .stage.panning{cursor:grabbing}
 #zoom-ctl{position:absolute;right:16px;bottom:24px;z-index:100;display:flex;flex-direction:column;gap:6px}
 #zoom-ctl button{width:32px;height:32px;padding:0;border:0;border-radius:2px;background:#fff;color:#212121;font-size:18px;font-weight:700;line-height:32px;box-shadow:0 2px 4px rgba(0,0,0,.3);cursor:pointer}
@@ -220,7 +220,7 @@ html.pip .chat-toggle{display:none}
 #room.chat-collapsed .play-layout{grid-template-columns:minmax(0,1fr)}
 @media(min-width:721px){#room.chat-collapsed>header{width:calc(100% - 24px)}}
 #scene-field img[data-id]{pointer-events:auto;cursor:move}
-#scene-field img[data-locked]{cursor:pointer}
+#scene-field img[data-locked]{cursor:default}
 #speaker{height:32px;max-width:120px;border:0;border-radius:4px;background:#212121;color:#fff;font:inherit;font-size:13px}
 
 /* Chat input rows (measured on ccfolia.com): avatar button 40x40, name input, 34x34 palette / colour buttons, 30x30 dice buttons 4px apart, send 64x31. */
