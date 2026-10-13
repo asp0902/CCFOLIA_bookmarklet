@@ -942,7 +942,7 @@ function onPush(event) {
   } else if (message.type === "scene") {
     current = { ...current, scene: message.scene };
     renderScene(message.scene);
-    if (document.getElementById("char-window") || ownedIds.size) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
+    if (document.getElementById("char-window") || ownedIds.size || !mineLoaded) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
   } else if (message.type === "channels") {
     current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
     renderState(current);
@@ -1294,15 +1294,21 @@ async function createObject(request) {
 // "My characters": a window that floats over the scene and moves by its title bar (measured: 320x280, translucent grey, title 14px bold, + and x on the right).
 // The characters a participant made (kept by the relay in a ledger, reported by the GM's page) are listed first; a row opens CCFOLIA's "캐릭터 편집" dialog. The characters on the field follow (a row opens the sheet).
 let myCharacters = [], ownedIds = new Set(); // ownedIds: everything this participant made (the relay's ledger), e.g. dice symbols they can move
+// The first answer decides what the person owns after a reload: until one has arrived the list is asked for again (a failed or early request used to leave it empty for good).
+let mineLoaded = false, mineRetry = 0;
+window.__mineInfo = { tries: 0 };
 async function refreshMyCharacters() {
   try {
+    window.__mineInfo.tries += 1; window.__mineInfo.lastAt = new Date().toISOString();
     const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mine`);
-    if (!response.ok) return myCharacters;
+    window.__mineInfo.status = response.status;
+    if (!response.ok) { if (!mineLoaded && mineRetry < 8) { mineRetry += 1; setTimeout(refreshMyCharacters, 1500 * mineRetry); } return myCharacters; }
     const data = await response.json();
+    mineLoaded = true; window.__mineInfo.member = data.member || ""; window.__mineInfo.owned = Array.isArray(data.owned) ? data.owned.length : 0; window.__mineInfo.build = response.headers.get("X-Relay-Build") || "";
     myCharacters = data.characters || [];
     const before = ownedIds.size; ownedIds = new Set(Array.isArray(data.owned) ? data.owned : []);
     if (ownedIds.size !== before && sceneData) renderScene(); // newly known own dice symbols become movable
-  } catch (_) { /* the list keeps what it had */ }
+  } catch (error) { window.__mineInfo.error = String(error); if (!mineLoaded && mineRetry < 8) { mineRetry += 1; setTimeout(refreshMyCharacters, 1500 * mineRetry); } }
   document.getElementById("char-window")?.dispatchEvent(new Event("cm-refresh"));
   return myCharacters;
 }
@@ -1499,13 +1505,17 @@ function renderMirroredHeader() {
   cmMirror.show("chat-head-host", [header]);
 }
 // What the page holds about the mirror, for checking by hand: window.playroomDiag() in the console (the result is also copied).
-window.playroomDiag = async () => {
-  // what the relay answers to the requests the menus make (which code version answered, whether it knows the characters)
-  const net = {};
-  try { const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mine`); net.mine = [r.status, r.headers.get("X-Relay-Build") || "(no build header: old code)"]; if (r.ok) { const d = await r.json(); net.mineCharacters = (d.characters || []).map(c => c.id); } } catch (error) { net.mine = String(error); }
-  const first = (sceneData?.characters || [])[0];
-  if (first) { try { const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/character-doc?id=${encodeURIComponent(first.id)}`); net.characterDoc = [first.id, r.status, r.headers.get("X-Relay-Build") || "(no build header)"]; if (!r.ok) net.characterDocBody = (await r.text()).slice(0, 120); } catch (error) { net.characterDoc = String(error); } }
-  const text = JSON.stringify({ net, sceneCharacters: (sceneData?.characters || []).map(c => c.id), assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length, owned: [...ownedIds], pieces: [...document.querySelectorAll("#scene-field [data-id]")].map(e => [e.tagName.toLowerCase(), e.dataset.kind || "", e.dataset.id, e.dataset.locked ? "locked" : "free", getComputedStyle(e).cursor, getComputedStyle(e).pointerEvents]), scale: Math.round(view.base * view.zoom / 24 * 1000) / 1000, view: [Math.round(view.x), Math.round(view.y)], touched: !!view.touched, stage: [document.querySelector(".stage").clientWidth, document.querySelector(".stage").clientHeight], window: [innerWidth, innerHeight], dpr: devicePixelRatio, fieldSize: [sceneData?.fieldWidth, sceneData?.fieldHeight] });
+window.playroomDiag = () => {
+  // what the relay answers to the requests the menus make: asked in the background, shown from the second call on (the call itself stays synchronous so DevTools' copy() works)
+  const net = window.__diagNet || { note: "call playroomDiag() once more for the relay checks" };
+  (async () => {
+    const found = {};
+    try { const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/mine`); found.mine = [r.status, r.headers.get("X-Relay-Build") || "(no build header: old code)"]; if (r.ok) { const d = await r.json(); found.member = d.member || ""; found.mineCharacters = (d.characters || []).map(c => c.id); found.owned = d.owned || []; } } catch (error) { found.mine = String(error); }
+    const first = (sceneData?.characters || [])[0];
+    if (first) { try { const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/character-doc?id=${encodeURIComponent(first.id)}`); found.characterDoc = [first.id, r.status, r.headers.get("X-Relay-Build") || "(no build header)"]; } catch (error) { found.characterDoc = String(error); } }
+    window.__diagNet = found;
+  })();
+  const text = JSON.stringify({ net, mineInfo: window.__mineInfo, mineLoaded, sceneCharacters: (sceneData?.characters || []).map(c => c.id), assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length, owned: [...ownedIds], pieces: [...document.querySelectorAll("#scene-field [data-id]")].map(e => [e.tagName.toLowerCase(), e.dataset.kind || "", e.dataset.id, e.dataset.locked ? "locked" : "free", getComputedStyle(e).cursor, getComputedStyle(e).pointerEvents]), scale: Math.round(view.base * view.zoom / 24 * 1000) / 1000, view: [Math.round(view.x), Math.round(view.y)], touched: !!view.touched, stage: [document.querySelector(".stage").clientWidth, document.querySelector(".stage").clientHeight], window: [innerWidth, innerHeight], dpr: devicePixelRatio, fieldSize: [sceneData?.fieldWidth, sceneData?.fieldHeight] });
   // the result is copied for pasting (DevTools' copy(), then the clipboard API); the same text is returned
   try { if (typeof copy === "function") copy(text); } catch (_) {}
   try { navigator.clipboard?.writeText(text).catch(() => {}); } catch (_) {}
