@@ -205,7 +205,7 @@ async function openHandoutDetail(id) {
   openDialog(item.title || "핸드아웃", (box, foot, close) => {
     box.classList.add("handout-detail"); box.id = "handout-detail";
     const main = el("div", "handout-body"); main.append(...body); box.append(main);
-    if (secret) { const part = el("section", "handout-secret"); part.append(el("h3", "", "비밀 (읽을 권한이 있는 사람에게만 보입니다)")); const inner = el("div", "handout-body"); inner.append(...secret); part.append(inner); box.append(part); }
+    if (secret) { const part = el("section", "handout-secret"); part.append(el("h3", "", "비밀")); const inner = el("div", "handout-body"); inner.append(...secret); part.append(inner); box.append(part); }
     if (myHandouts.length > 1) { const back = el("button", "", "목록"); back.type = "button"; back.addEventListener("click", () => { close(); openHandoutList(); }); foot.prepend(back); }
   });
 }

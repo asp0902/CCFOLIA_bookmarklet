@@ -16,7 +16,7 @@ const box = {
   markWebShared: (id, on) => calls.push(['mark', id, on]), webSyncTimer: 0, webSyncBusy: false, clearTimeout() {}, setTimeout: (fn) => 0, setInterval: () => 0, clearInterval() {},
   syncPublicHandouts: async () => calls.push(['sync']), scheduleWebSync: ms => calls.push(['schedule', ms]),
   relayCall: async (action, payload) => { calls.push(['relay', action, payload]); return action === 'popup' ? { count: box.popupCount } : { participants: box.participants }; },
-  sendShowSignal: async (id, audience) => calls.push(['show', id, audience]), toast: text => toasts.push(text), saveAll: async () => saved.push(1), render() {},
+  sendShowSignal: async (id, audience) => calls.push(['show', id, audience]), noteFirebaseIssue() {}, toast: text => toasts.push(text), saveAll: async () => saved.push(1), render() {},
   hasPlayerRelay: () => true, isAdminMode: () => true, registerTeardown() {}, prompt() { throw new Error('the read-only link prompt must not come up'); },
   popupCount: 1, participants: []
 };
@@ -26,7 +26,7 @@ const { showAudienceKeys, shareHandoutNow, syncPlayroomMembers } = box.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 (async () => {
   // who is addressed: by the permission table, the GM's own row and a person's account key (it comes with their name key) left out, nobody without a right
-  assert.deepEqual(plain(showAudienceKeys({ permissions: { '*': { view: true } } })), ['*']);
+  assert.deepEqual(plain(showAudienceKeys({ permissions: { '*': { view: true } } })), [], 'the old "all players" permission is ignored');
   assert.deepEqual(plain(showAudienceKeys({ permissions: { '앨리스': { view: true }, 'acct-a': { view: true, secret: true }, '철수': { view: false, secret: false }, '카피바라': { view: true }, '밥': { view: false, secret: true }, 'acct-orphan': { view: true } } })), ['앨리스', '밥', 'acct-orphan']);
   assert.deepEqual(plain(showAudienceKeys({ permissions: {} })), []);
   // the share: list first (the tool syncs and waits), then the popup signal to the holders, show signals to the native players, one short toast
@@ -34,9 +34,6 @@ const plain = x => JSON.parse(JSON.stringify(x));
   await shareHandoutNow({ id: 'h1', permissions: { '앨리스': { view: true } } });
   assert.deepEqual(plain(calls), [['mark', 'h1', true], ['sync'], ['relay', 'popup', { handoutId: 'h1' }], ['show', 'h1', '앨리스']]);
   assert.deepEqual(toasts, ['공유했습니다.']);
-  calls.length = 0;
-  await shareHandoutNow({ id: 'h2', permissions: { '*': { view: true } } });
-  assert.deepEqual(plain(calls.filter(c => c[0] === 'show')), [['show', 'h2', 'all']], 'everybody for "all players"');
   // nobody can read it: the lists are synced, nothing is sent to anybody, and it says so
   calls.length = 0; toasts.length = 0; box.popupCount = 0;
   await shareHandoutNow({ id: 'h3', permissions: {} });
@@ -53,5 +50,19 @@ const plain = x => JSON.parse(JSON.stringify(x));
   assert.equal(saved.length, 1);
   assert.equal(await syncPlayroomMembers(), 0, 'not added twice');
   assert.equal(state.data.plList.length, 3);
+  // the settings tab's status line: "정상" until Firebase refuses something, then the last refusal in words
+  const f1 = source.indexOf('  let firebaseIssue = null;'), f2 = source.indexOf('  function renderSettings()');
+  assert(f1 > 0 && f2 > f1);
+  const fbox = { state: { isOpen: false }, String, Date };
+  vm.createContext(fbox);
+  vm.runInContext(`${source.slice(f1, f2)}
+;this.api = { noteFirebaseIssue, firebaseIssueLabel };`, fbox);
+  assert.equal(fbox.api.firebaseIssueLabel(), '정상');
+  fbox.api.noteFirebaseIssue('받는 사람별 사본 쓰기', { code: 'permission-denied' });
+  assert.match(fbox.api.firebaseIssueLabel(), /^받는 사람별 사본 쓰기 권한 거절\(보안 규칙\) · /);
+  fbox.api.noteFirebaseIssue('폴더 저장', { code: 'unavailable' });
+  assert.match(fbox.api.firebaseIssueLabel(), /^폴더 저장 오류\(unavailable\) · /, 'the last one only');
+  assert(/Firebase: \$\{escapeHtml\(firebaseIssueLabel\(\)\)\}/.test(source), 'shown in the settings line');
+  assert(!/permissionRowKeys[\s\S]{0,400}플레이어 전체/.test(source), 'no all-players row');
   console.log('handout share ux PASS');
 })().catch(error => { console.error(error); process.exit(1); });

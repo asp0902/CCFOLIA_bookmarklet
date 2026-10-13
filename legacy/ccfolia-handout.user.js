@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.100
+// @version      0.1.101
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.100",
+    version: "0.1.101",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -395,6 +395,8 @@
     return { name: pl?.name || (keyOf ? keyOf : String(participant?.displayName || "")), extra: [...new Set([keyOf, pl?.uid].filter(Boolean))] };
   }
   // 목록 계산(순수): 승인된 참여자마다 { id: [{ id, title, html, secretHtml, folder, order, updatedAt }] }. 공개 본문은 볼 권한, 비밀 본문은 비밀 권한이 있을 때만 담는다.
+  // "플레이어 전체"(*) 권한은 없어졌다: 옛 데이터에 남은 값은 공유·사본 계산에서 무시한다(개별 지정한 사람에게만 간다).
+  const withoutAll = (h) => (h && h.permissions && h.permissions[ALL_KEY] ? { ...h, permissions: Object.fromEntries(Object.entries(h.permissions).filter(([key]) => key !== ALL_KEY)) } : h);
   function buildHandoutLists(handouts, folders, plList, participants, sharedIds, renderBody, imageHtml) {
     const lists = {};
     const folderName = (id) => (folders || []).find((f) => f.id === id)?.name || "";
@@ -404,7 +406,7 @@
       const items = [];
       for (const h of handouts || []) {
         if (!sharedIds.has(h.id)) continue;
-        const view = canView(h, who.name, who.extra), secret = canViewSecret(h, who.name, who.extra);
+        const view = canView(withoutAll(h), who.name, who.extra), secret = canViewSecret(withoutAll(h), who.name, who.extra);
         if (!view && !secret) continue;
         items.push({
           id: h.id, title: h.title || "",
@@ -449,9 +451,8 @@
     const perms = h.permissions || {};
     const myKey = removeSpaces(state.data.myCharacter || "");
     const plUids = new Set((state.data.plList || []).map((p) => p.uid).filter(Boolean));
-    if (perms[ALL_KEY] && (perms[ALL_KEY].view || perms[ALL_KEY].secret)) return [ALL_KEY];
     return Object.entries(perms)
-      .filter(([key, perm]) => perm && (perm.view || perm.secret) && key !== myKey && !plUids.has(key)) // an account key of a known person comes with that person's name key
+      .filter(([key, perm]) => key !== ALL_KEY && perm && (perm.view || perm.secret) && key !== myKey && !plUids.has(key)) // only the people named one by one; an account key of a known person comes with that person's name key
       .map(([key]) => key);
   }
   async function shareHandoutNow(h) {
@@ -462,7 +463,7 @@
       await syncPublicHandouts();
       const popup = await relayCall("popup", { handoutId: h.id });
       const keys = showAudienceKeys(h);
-      for (const key of keys) await sendShowSignal(h.id, key === ALL_KEY ? "all" : key).catch((error) => console.warn("[ccf-handout] show signal failed:", error));
+      for (const key of keys) await sendShowSignal(h.id, key).catch((error) => { noteFirebaseIssue("보여주기 신호 보내기", error); console.warn("[ccf-handout] show signal failed:", error); });
       toast(popup.count || keys.length ? "공유했습니다." : "공유했습니다. (지금 볼 수 있는 사람이 없습니다)");
     } catch (error) {
       toast(`공유하지 못했습니다: ${error?.message || error}`);
@@ -497,6 +498,7 @@
     if (on) set.add(id); else set.delete(id);
     writeWebShared(set);
     scheduleWebSync(200);
+    scheduleInboxSync(300);
     return set.size;
   }
   // 참여자 승인·수신자 지정은 릴레이 쪽에서 바뀌므로, 올려 둔 핸드아웃이 있으면 가끔 다시 계산한다(바뀐 사람의 목록만 실제로 전송된다).
@@ -800,7 +802,7 @@
     try {
       const { doc, setDoc, serverTimestamp } = fb.modules.fs;
       await setDoc(doc(fb.db, "rooms", roomKey, "members", fb.uid), { ccfoliaUid: myCcfUid, displayName: myCcfDisplayName(), updatedAt: serverTimestamp() }, { merge: true });
-    } catch (error) { if (!membersWarned) { membersWarned = true; console.warn("[ccf-handout] member register failed:", error); } }
+    } catch (error) { if (!membersWarned) { membersWarned = true; noteFirebaseIssue("참여자 등록", error); console.warn("[ccf-handout] member register failed:", error); } }
   }
   let unsubMembers = null;
   async function subscribeToMembers() {
@@ -813,7 +815,7 @@
       snap.forEach((d) => { const data = d.data() || {}; if (data.ccfoliaUid) remoteMembers.set(d.id, { ccfoliaUid: String(data.ccfoliaUid), displayName: String(data.displayName || "") }); });
       if (isAdminMode()) { linkPlsToMembers(); scheduleInboxSync(); }
       if (state.isOpen) render();
-    }, (error) => { if (!membersWarned) { membersWarned = true; console.warn("[ccf-handout] members subscribe error:", error); } });
+    }, (error) => { if (!membersWarned) { membersWarned = true; noteFirebaseIssue("참여자 목록 읽기", error); console.warn("[ccf-handout] members subscribe error:", error); } });
     registerTeardown(() => { try { unsubMembers?.(); } catch (_) {} unsubMembers = null; });
   }
   // PL 목록의 이름·병합 이름 ↔ 계정(members 의 표시 이름) 연결. 이름이 한 계정과만 맞을 때만 붙인다.
@@ -2096,6 +2098,7 @@
         });
       },
       (error) => {
+        noteFirebaseIssue("핸드아웃 읽기", error);
         console.error("[ccf-handout] subscribe error:", error);
         toast("실시간 수신 실패 — 콘솔 확인");
       }
@@ -2180,11 +2183,11 @@
         // 받은 사본은 기존 수신 경로를 그대로 쓴다: 권한표 자리에 이 사본의 권한(전체 대상)을 넣는다.
         ingestRemoteHandout({ ...data, permissions: { [ALL_KEY]: { view: access.view === true, secret: access.secret === true, edit: false } }, _viaInbox: true }, change.type);
       });
-    }, (error) => { inboxActive = false; console.info("[ccf-handout] inbox not readable (rules not published yet?):", error?.code || error); });
+    }, (error) => { inboxActive = false; noteFirebaseIssue("내 사본 읽기", error); console.info("[ccf-handout] inbox not readable (rules not published yet?):", error?.code || error); });
     registerTeardown(() => { try { unsubInbox?.(); } catch (_) {} unsubInbox = null; inboxActive = false; });
   }
   // 보내는 쪽(GM): 계정(members)마다 읽을 수 있는 사본을 계산한다(순수). 반환: { [핸드아웃 id]: 사본 }
-  function inboxCopiesFor(person, plList, handouts, folders) {
+  function inboxCopiesFor(person, plList, handouts, folders, sharedIds = null) {
     const pl = (plList || []).find((p) => p.uid && p.uid === person.ccfoliaUid)
       || (plList || []).find((p) => [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) && normalizePlNameKey(n) === normalizePlNameKey(person.displayName)));
     const name = pl?.name || person.displayName || "";
@@ -2192,7 +2195,8 @@
     const out = {};
     for (const h of handouts || []) {
       if (!h || !h.id || h._remote) continue;
-      const view = canView(h, name, extra), secret = canViewSecret(h, name, extra);
+      if (sharedIds && !sharedIds.has(h.id)) continue; // nothing reaches anybody before the GM presses share
+      const view = canView(withoutAll(h), name, extra), secret = canViewSecret(withoutAll(h), name, extra);
       if (!view && !secret) continue;
       out[h.id] = {
         id: h.id, title: h.title || "",
@@ -2219,7 +2223,7 @@
       const plList = mergePlListById(state.data.plList || []);
       for (const [anon, person] of remoteMembers) {
         if (anon === fb.uid) continue; // GM 본인은 원본을 읽는다
-        const want = inboxCopiesFor(person, plList, state.data.handouts, state.data.folders);
+        const want = inboxCopiesFor(person, plList, state.data.handouts, state.data.folders, hasPlayerRelay() ? readWebShared() : null); // without the relay extension there is no share button: everything with a right is sent as before
         let known = inboxKnown.get(anon);
         if (!known) { // 처음: 이미 있는 사본을 읽어 낡은 것을 지울 수 있게 한다
           known = new Map();
@@ -2240,6 +2244,7 @@
         }
       }
     } catch (error) {
+      noteFirebaseIssue("받는 사람별 사본 쓰기", error);
       if (error?.code === "permission-denied") { inboxDeniedAt = Date.now(); console.info("[ccf-handout] inbox write refused (rules not published yet?):", error.code); }
       else console.warn("[ccf-handout] inbox sync failed:", error);
     } finally {
@@ -2265,7 +2270,7 @@
       if (!fb || roomKey === "global") return;
       const { doc, setDoc, serverTimestamp } = fb.modules.fs;
       await setDoc(doc(fb.db, "rooms", roomKey, "meta", "folders"), { folders: folderList(), updatedAt: serverTimestamp() });
-    } catch (error) { console.warn("[ccf-handout] folder push failed:", error); }
+    } catch (error) { noteFirebaseIssue("폴더 저장", error); console.warn("[ccf-handout] folder push failed:", error); }
   }
   // 받은 폴더 목록을 로컬에 반영: 수신자는 그대로 따르고(접힘만 유지), GM 은 새 브라우저처럼 로컬이 비어 있을 때만 받아들인다.
   function adoptRemoteFolders(remote) {
@@ -2286,7 +2291,7 @@
     unsubFolders = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "folders"), (snap) => {
       if (!snap.exists()) { if (isAdminMode() && folderList().length) pushFolders(); return; } // 처음: GM 의 기존 폴더를 올린다
       if (adoptRemoteFolders(snap.data()?.folders)) { saveAll(state.data).catch(() => {}); if (state.isOpen) render(); }
-    }, (error) => console.warn("[ccf-handout] folders subscribe error:", error));
+    }, (error) => { noteFirebaseIssue("폴더 읽기", error); console.warn("[ccf-handout] folders subscribe error:", error); });
     registerTeardown(() => { try { unsubFolders?.(); } catch (_) {} unsubFolders = null; });
   }
 
@@ -2332,7 +2337,7 @@
         }
       });
       initialShowsBatch = false;
-    }, (error) => console.error("[ccf-handout] shows subscribe error:", error));
+    }, (error) => { noteFirebaseIssue("보여주기 신호 읽기", error); console.error("[ccf-handout] shows subscribe error:", error); });
     registerTeardown(() => { try { unsubShows?.(); } catch (_) {} unsubShows = null; });
   }
 
@@ -2384,7 +2389,7 @@
           if (state.isOpen) render();
         }
       },
-      (error) => console.warn("[ccf-handout] GM subscribe error:", error)
+      (error) => { noteFirebaseIssue("GM 정보 읽기", error); console.warn("[ccf-handout] GM subscribe error:", error); }
     );
     registerTeardown(() => {
       try { unsubGm?.(); } catch (_) {}
@@ -3435,7 +3440,7 @@
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
       const permKeys = Object.keys(h.permissions || {});
       const viewersLabel = adminMode
-        ? (permKeys.length ? permKeys.map((k) => k === ALL_KEY ? "전체" : k).join(", ") : "GM 전용")
+        ? (permKeys.some((k) => k !== ALL_KEY) ? permKeys.filter((k) => k !== ALL_KEY).join(", ") : "GM 전용")
         : "핸드아웃";
       return `
         <article class="card" data-id="${escapeHtml(h.id)}" data-order="${Number.isFinite(h.order) ? h.order : ""}">
@@ -3514,7 +3519,6 @@
     const myChar = removeSpaces(state.data.myCharacter);
     const plList = mergePlListById(state.data.plList || []).filter((p) => p && p.name);
     const rows = [];
-    rows.push({ key: ALL_KEY, label: "플레이어 전체" });
     if (myChar) {
       // GM 본인 행 — 실제 캐릭터명 + (GM) 배지. 관리자 = GM 으로 통일.
       const adminLabel = state.data.myCharacter || myChar;
@@ -3533,7 +3537,7 @@
     const perms = h.permissions || {};
     const accountKeys = new Set([...plList.map((p) => p.uid).filter(Boolean), ...[...remoteMembers.values()].map((m) => m.ccfoliaUid)]);
     for (const k of Object.keys(perms)) {
-      if (rows.some((r) => r.key === k) || accountKeys.has(k)) continue; // 계정 uid 키는 연결된 PL 의 이름 행과 한 쌍
+      if (k === ALL_KEY || rows.some((r) => r.key === k) || accountKeys.has(k)) continue; // 계정 uid 키는 연결된 PL 의 이름 행과 한 쌍; "플레이어 전체"는 더 이상 없다(옛 값은 무시)
       rows.push({ key: k, label: k });
     }
     return rows;
@@ -3853,6 +3857,20 @@
     return `<div class="settings-pl-list">${rows}</div>`;
   }
 
+  // The last Firebase refusal or failure in words the GM can read (the console is hard to look at): shown on the settings tab; "정상" until one happens.
+  let firebaseIssue = null;
+  function noteFirebaseIssue(where, error) {
+    const code = String(error?.code || "").replace(/^firestore\//, "");
+    if (!code && !error) return;
+    firebaseIssue = { at: new Date(), where, code: code || String(error?.message || error).slice(0, 60) };
+    try { if (state.isOpen && state.activeTab === "settings") render(); } catch (_) { /* the tab redraws itself next time */ }
+  }
+  function firebaseIssueLabel() {
+    if (!firebaseIssue) return "정상";
+    const time = firebaseIssue.at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    const reason = firebaseIssue.code === "permission-denied" ? "권한 거절(보안 규칙)" : `오류(${firebaseIssue.code})`;
+    return `${firebaseIssue.where} ${reason} · ${time}`;
+  }
   function renderSettings() {
     const plCount = (state.data.plList || []).length;
     const myChars = state.myCharacterOptions || [];
@@ -3867,7 +3885,7 @@
     const roleLabel = ccfRole.known ? (ccfRole.isOwner ? "GM(방장)" : "플레이어") : `확인 못 함(${ccfRole.reason}) — 예전 방식으로 판별 중`;
     return `
       <div class="field">
-        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)}</div>
+        <div class="hint" style="margin:0 0 8px;">동기화: ${escapeHtml(syncLabel)} · 권한: ${escapeHtml(roleLabel)} · Firebase: ${escapeHtml(firebaseIssueLabel())}</div>
         <label>GM 설정</label>
         <div class="row">
           <select class="settings-select" data-field="myCharacter" style="flex:1;">${options}</select>
@@ -4444,6 +4462,7 @@
     setTab("list");
     // Firestore에도 push (실패해도 local 저장은 유지)
     pushHandoutToFirestore(handout).catch((error) => {
+      noteFirebaseIssue("핸드아웃 저장", error);
       console.warn("[ccf-handout] Firestore push 실패:", error);
       toast("송신 실패 — 콘솔 확인 (로컬은 저장됨)");
     });
@@ -4468,6 +4487,7 @@
       const allowGmPush = ccfRole.known ? ccfRole.isOwner : (!gmUid || iAmGm);
       if (allowGmPush) {
         pushGmToFirestore(me).catch((error) => {
+          noteFirebaseIssue("GM 정보 저장", error);
           console.warn("[ccf-handout] GM push 실패:", error);
         });
       } else {
@@ -4910,6 +4930,7 @@
     // Firestore에서도 삭제 — 실패를 조용히 넘기면 상대방에게는 계속 남아
     // (유령 핸드아웃) 권한 차단 등으로 혼란이 생기므로 반드시 알린다.
     deleteHandoutFromFirestore(id).catch((error) => {
+      noteFirebaseIssue("핸드아웃 삭제", error);
       console.warn("[ccf-handout] Firestore delete 실패:", error);
       const code = error?.code === "permission-denied"
         ? "권한 없음 — 다른 참가자에게는 계속 보일 수 있습니다"
@@ -4975,6 +4996,7 @@
     sendShowSignal(id, "all").then(() => {
       toast(`"${h.title}" 권한자 전체에게 팝업 송신됨`);
     }).catch((error) => {
+      noteFirebaseIssue("보여주기 신호 보내기", error);
       console.error("[ccf-handout] show send failed:", error);
       toast("팝업 송신 실패 — 콘솔 확인");
     });
