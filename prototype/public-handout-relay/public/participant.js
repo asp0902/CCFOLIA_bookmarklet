@@ -157,8 +157,8 @@ let handoutSeen = "", handoutClosed = "";
     const key = `${handout.id}:${handout.updatedAt || ""}`;
     handoutEl.hidden = false;
     // it pops up when it is new or changed, not again on every reload: what was shown is remembered in the browser
-    const shownBefore = (() => { try { return localStorage.getItem("capybara-handout-legacy-shown") === key; } catch (_) { return false; } })();
-    if (key !== handoutSeen) { handoutSeen = key; try { localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
+    const shownBefore = (() => { try { const stored = localStorage.getItem("capybara-handout-legacy-shown") || ""; return stored === key || (!handout.updatedAt && stored.startsWith(`${handout.id}:`)); } catch (_) { return false; } })(); // a state without its time stamp (before the full one arrives) is the same handout
+    if (key !== handoutSeen && !(!handout.updatedAt && handoutSeen.startsWith(`${handout.id}:`))) { handoutSeen = key; try { if (handout.updatedAt || !shownBefore) localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
   };
 }
 // ---- My handouts: the GM's handout tool works out what each person may read (title, body with its formatting, the secret part only for those who may read it) and the relay gives a participant only their own list.
@@ -308,12 +308,12 @@ function renderScene(scene) {
       const mine = ownedIds.has(item.id); // a participant's own dice symbol can be dragged like a piece
       const picture = cmMirror.assets[`/images/${item.faces}_dice/${item.faces}_dice[${item.closed ? 0 : item.value}].png`];
       if (picture) {
-        const face = document.createElement("img"); face.src = picture; face.alt = ""; face.draggable = false; face.dataset.id = item.id; face.className = "scene-die-img";
-        if (mine) { face.classList.add("mine"); face.dataset.kind = "dice"; face.dataset.id = item.id; face.dataset.x = item.x; face.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
+        const face = document.createElement("img"); face.src = picture; face.alt = ""; face.draggable = false; face.dataset.dieId = item.id; face.className = "scene-die-img";
+        if (mine) { face.classList.add("mine"); if (window.__selectedDie === item.id) face.classList.add("selected"); face.dataset.kind = "dice"; face.dataset.id = item.id; face.dataset.x = item.x; face.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
         place(face, item.x, item.y, item.width, item.height, 0, layerOf(item)); face.style.objectFit = "fill"; nodes.push(face); continue;
       }
-      const die = document.createElement("div"); die.className = "scene-die"; die.dataset.id = item.id; die.textContent = item.closed ? "?" : String(item.value);
-      if (mine) { die.classList.add("mine"); die.dataset.kind = "dice"; die.dataset.id = item.id; die.dataset.x = item.x; die.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
+      const die = document.createElement("div"); die.className = "scene-die"; die.dataset.dieId = item.id; die.textContent = item.closed ? "?" : String(item.value);
+      if (mine) { die.classList.add("mine"); if (window.__selectedDie === item.id) die.classList.add("selected"); die.dataset.kind = "dice"; die.dataset.id = item.id; die.dataset.x = item.x; die.dataset.y = item.y; const drop = moved.get(item.id); if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id); }
       place(die, item.x, item.y, item.width, item.height, 0, layerOf(item)); die.style.fontSize = `${Math.round(item.height * unit * 0.5)}px`; nodes.push(die); continue;
     }
     const img = document.createElement("img"); img.src = item.imageUrl || item.iconUrl; img.alt = item.name || ""; img.referrerPolicy = "no-referrer"; img.draggable = false;
@@ -441,6 +441,20 @@ window.addEventListener("resize", () => renderScene());
   };
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
+  // Own dice symbols (a CCFOLIA player moves, rolls and deletes only the ones they made): a click or right click selects (blue outline) and the right click opens the menu.
+  const selectDie = node => { document.querySelectorAll(".scene-die.selected,.scene-die-img.selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = node ? node.dataset.id : null; node?.classList.add("selected"); };
+  stage.addEventListener("pointerdown", event => { if (interactive(event.target)) return; selectDie(event.target.closest?.(".scene-die.mine,.scene-die-img.mine") || null); }, true);
+  stage.addEventListener("contextmenu", event => {
+    const node = event.target.closest?.(".scene-die.mine,.scene-die-img.mine");
+    if (!node) return;
+    event.preventDefault(); selectDie(node);
+    const id = node.dataset.id, fail = answer => { if (!answer.ok) showSendStatus(answer.error || "처리하지 못했습니다.", 6000); };
+    const anchor = { setAttribute() {}, getBoundingClientRect: () => ({ left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY - 4 }) };
+    openMenu(anchor, [
+      { label: "roll a dice", run: async () => fail(await characterRequest("update", { kind: "dice", id })) },
+      { label: "삭제", run: async () => { selectDie(null); fail(await characterRequest("delete", { kind: "dice", id })); } }
+    ]);
+  });
   stage.addEventListener("dblclick", event => { if (!interactive(event.target)) { view.touched = true; view.zoom = 1; view.x = 0; view.y = 0; redraw(); } });
   const ctl = document.createElement("div"); ctl.id = "zoom-ctl";
   const mk = (label, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", fn); return b; };
