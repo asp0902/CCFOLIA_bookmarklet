@@ -86,6 +86,10 @@ assert.equal((await moveDie("somebody-elses")).response.status, 403, "not theirs
 // rolling and deleting one's own die (the GM page picks the number); somebody else's die: refused
 const roll = await op("update", { kind: "dice", id: "doc123" });
 assert.equal(roll.response.status, 202); assert.equal((await call(`/api/admin/rooms/${room}/commands`, { gm: true })).json.commands.find(c => c.id === roll.json.commandId)?.roll, true);
+const setDie = await op("update", { kind: "dice", id: "doc123", fields: { faces: 8, value: 5, closed: true, owner: "x" } });
+assert.equal(setDie.response.status, 202); assert.deepEqual((await call(`/api/admin/rooms/${room}/commands`, { gm: true })).json.commands.find(c => c.id === setDie.json.commandId)?.fields, { faces: 8, value: 5, closed: true }, "kind, value and hidden only");
+assert.equal((await op("update", { kind: "dice", id: "doc123", fields: { faces: 7 } })).response.status, 400, "only the native kinds");
+assert.equal((await op("update", { kind: "dice", id: "doc123", fields: { faces: 6, value: 9 } })).response.status, 400, "value within the faces");
 assert.equal((await op("update", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to roll");
 assert.equal((await op("delete", { kind: "dice", id: "somebody-elses" })).response.status, 403, "not their die to delete");
 assert.equal((await op("delete", { kind: "dice", id: "doc123" })).response.status, 202);

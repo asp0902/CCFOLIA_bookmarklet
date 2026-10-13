@@ -457,10 +457,33 @@ window.addEventListener("resize", () => renderScene());
     const id = node.dataset.id, fail = answer => { if (!answer.ok) showSendStatus(answer.error || "처리하지 못했습니다.", 6000); };
     const anchor = { setAttribute() {}, getBoundingClientRect: () => ({ left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY - 4 }) };
     if (node.dataset.kind === "dice") {
+      const die = (sceneData?.diceSymbols || []).find(d => d.id === id) || {};
+      // a change shows at once (the die is redrawn from the local scene) and goes to the GM's page; if it is refused the die goes back
+      const change = async fields => {
+        const before = { faces: die.faces, value: die.value, closed: die.closed };
+        Object.assign(die, fields); if ("faces" in fields && !("value" in fields)) die.value = 1; renderScene();
+        const answer = await characterRequest("update", { kind: "dice", id, fields });
+        if (!answer.ok) { Object.assign(die, before); renderScene(); fail(answer); }
+      };
+      const field = (labelText, options, current, onChange) => {
+        const wrap = el("label", "dm-field"), select = el("select", "dm-select");
+        for (const [value, text] of options) { const option = el("option", "", text); option.value = String(value); select.append(option); }
+        select.value = String(current); select.addEventListener("change", () => onChange(Number(select.value)));
+        wrap.append(el("span", "dm-label", labelText), select); return wrap;
+      };
+      const faces = Number(die.faces) || 6, hidden = die.closed === true;
+      const box = el("div", "dm-box");
+      const toggle = Object.assign(el("input", "dm-switch"), { type: "checkbox", checked: hidden }); toggle.addEventListener("change", () => change({ closed: toggle.checked }));
+      const hideRow = el("label", "dm-row"); hideRow.append(el("span", "", "숨기기"), toggle);
+      box.append(
+        field("다이스", [4, 6, 8, 10, 12, 20].map(n => [n, `D${n}`]), faces, n => { change({ faces: n }); closeMenu(); }),
+        field("값", Array.from({ length: faces }, (_, i) => [i + 1, String(i + 1)]), Number(die.value) || 1, n => change({ value: n })),
+        hideRow);
       openMenu(anchor, [
-        { label: "roll a dice", run: async () => fail(await characterRequest("update", { kind: "dice", id })) },
+        { node: box },
+        { label: "roll a dice", run: () => change({ value: 1 + Math.floor(Math.random() * faces) }) },
         { label: "삭제", run: async () => { selectDie(null); fail(await removeNow(id, () => characterRequest("delete", { kind: "dice", id }))); } }
-      ], "ctx-menu");
+      ], "ctx-menu dice-menu");
       return;
     }
     // A character, as CCFOLIA's player menu lists it. What this page can do for the person: look at (or, for their own, edit) the sheet, put away, duplicate, delete, copy the id and
@@ -1154,6 +1177,7 @@ function openMenu(anchor, items, extraClass = "") {
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
     if (item.divider) { paper.append(el("hr", "menu-divider")); continue; }
+    if (item.node) { paper.append(item.node); continue; }
     // the account menu's top row as CCFOLIA draws it (measured): 40px round avatar, name 16px/24px and a 14px 70% line under it, 72px high, then a divider
     if (item.profile) {
       const row = el("div", "menu-profile"), text = el("div", "menu-profile-text");
@@ -1356,7 +1380,15 @@ function openCharacterWindow() {
 async function charAction(name, id) {
   const fail = answer => { if (!answer.ok) showSendStatus(answer.error || "처리하지 못했습니다.", 6000); };
   const scene = (sceneData?.characters || []).find(c => c.id === id);
-  if (name === "rotate" || name === "rotateBack") { const turn = name === "rotate" ? 45 : -45; fail(await characterRequest("update", { id, fields: { angle: (((Number(scene?.angle) || 0) + turn) % 360 + 360) % 360 } })); return; }
+  if (name === "rotate" || name === "rotateBack") {
+    // the token turns at once; if the request is refused it turns back
+    if (!scene) return;
+    const turn = name === "rotate" ? 45 : -45, before = Number(scene.angle) || 0, next = ((before + turn) % 360 + 360) % 360;
+    scene.angle = next; renderScene();
+    const answer = await characterRequest("update", { id, fields: { angle: next } });
+    if (!answer.ok) { scene.angle = before; renderScene(); fail(answer); }
+    return;
+  }
   if (name === "stow") { document.querySelectorAll(".stage .selected").forEach(n => n.classList.remove("selected")); window.__selectedDie = null; fail(await characterRequest("place", { id, stow: true })); setTimeout(refreshMyCharacters, 900); return; }
   if (name === "claim") { fail(await characterRequest("claim", { id })); refreshMyCharacters(); return; }
   if (name === "duplicate") { fail(await characterRequest("duplicate", { id })); setTimeout(refreshMyCharacters, 900); return; }

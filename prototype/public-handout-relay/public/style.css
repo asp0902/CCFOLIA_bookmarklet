@@ -330,6 +330,17 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .stage .selected{outline:2px solid #2196f3;outline-offset:1px}
 /* the native right-click menu (measured on ccfolia.com 1.37.5): paper without padding, min width 160, rows 32px high (14px text, 4px 16px), dividers with 8px margins, shortcut hint 12px at 70% */
 .menu-paper.ctx-menu{padding:0;min-width:160px}.ctx-menu .menu-item{font-size:14px;line-height:24px;padding:4px 16px}.ctx-menu .menu-key{font-size:12px;color:rgba(255,255,255,.7)}
+.dice-menu{min-width:160px}.dm-box{display:flex;flex-direction:column}
+.dm-field{display:block;position:relative;background:rgba(255,255,255,.09);border-bottom:1px solid rgba(255,255,255,.7)}.dm-field+.dm-field{margin-top:2px}
+.dm-label{display:block;padding:8px 12px 0;font-size:12px;line-height:16px;color:rgba(255,255,255,.7)}
+.dm-select{display:block;width:100%;height:32px;padding:0 32px 0 12px;border:0;background:none;color:#fff;font:inherit;font-size:16px;appearance:none;-webkit-appearance:none;cursor:pointer;outline:none}
+.dm-select option{background:#424242;color:#fff}
+.dm-field::after{content:"";position:absolute;right:10px;bottom:14px;border:5px solid transparent;border-top-color:rgba(255,255,255,.7);pointer-events:none}
+.dm-row{display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:0 12px 0 16px;font-size:16px;cursor:pointer}
+.dm-switch{appearance:none;-webkit-appearance:none;position:relative;width:34px;height:14px;margin:0;border-radius:7px;background:rgba(255,255,255,.3);cursor:pointer;transition:background .15s}
+.dm-switch::after{content:"";position:absolute;left:-3px;top:-3px;width:20px;height:20px;border-radius:50%;background:#fafafa;box-shadow:0 2px 1px -1px rgba(0,0,0,.2),0 1px 1px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.12);transition:left .15s,background .15s}
+.dm-switch:checked{background:rgba(33,150,243,.5)}.dm-switch:checked::after{left:17px;background:#2196f3}
+.dice-menu .menu-item{min-height:48px}
 .menu-item.has-key{display:flex;align-items:center;justify-content:space-between;gap:24px}.menu-key{color:rgba(255,255,255,.5);font-size:14px;white-space:nowrap}
 .stage img,.scene-die{-webkit-user-drag:none;user-select:none}
 .stage img[data-id]:not([data-locked]),.scene-die.mine,.scene-die-img.mine{cursor:move}
@@ -337,3 +348,8 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .cw-avatar{display:flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;margin-right:12px;border-radius:50%;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7)}
 .cw-row .char-text small{display:block;font-size:12px;color:rgba(255,255,255,.5)}
 .cw-place{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:none;color:#fff;cursor:pointer}.cw-place:hover:not(:disabled){background:rgba(255,255,255,.08)}.cw-place:disabled{color:rgba(255,255,255,.3);cursor:default}
+/* character window and editor like the native ones (measured on a player screen): the three bottom buttons share the width equally, the header is a shade darker than the body, list rows have two plain 16px lines */
+.dlg:has(.ce-body) .dlg-head{background:rgba(0,0,0,.22)}
+.dlg-foot.ce-foot{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:8px 0;background:rgba(0,0,0,.22)}.dlg-foot.ce-foot button{justify-self:center}.dlg-foot.ce-foot .ce-danger{margin-right:0}
+.ce-icon{font-weight:300;font-size:26px}
+.cw-row .char-text b,.cw-row .char-text small{display:block;font-size:16px;line-height:20px;font-weight:400;color:#fff}

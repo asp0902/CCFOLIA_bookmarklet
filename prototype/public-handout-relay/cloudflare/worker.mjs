@@ -571,7 +571,15 @@ export class RoomRelay {
       } else {
         if (!targetId || !(kind === "dice" ? ownsObject(room, member, targetId) : await knownCharacter(targetId))) return json({ error: kind === "dice" ? "내가 만든 다이스 심볼만 굴리거나 지울 수 있습니다." : "대상을 찾지 못했습니다." }, kind === "dice" ? 403 : 404);
         command.targetId = targetId;
-        if (kind === "dice" && op === "update") command.roll = true; // the GM's page picks the number
+        if (kind === "dice" && op === "update") {
+          // set the kind (faces), the value and whether it is hidden; the GM's page checks the numbers again
+          const f = body.fields && typeof body.fields === "object" ? body.fields : {}, out = {};
+          if ("faces" in f) { if (![4, 6, 8, 10, 12, 20].includes(Number(f.faces))) return json({ error: "올바르지 않은 다이스입니다." }, 400); out.faces = Number(f.faces); }
+          if ("value" in f) { const value = Number(f.value); if (!Number.isInteger(value) || value < 1 || value > (out.faces || 20)) return json({ error: "올바르지 않은 값입니다." }, 400); out.value = value; }
+          if ("closed" in f) out.closed = f.closed === true;
+          if (!Object.keys(out).length) command.roll = true; // no fields: the GM's page picks the number
+          else command.fields = out;
+        }
         else if (op === "update") { command.fields = cleanCharacterFields(body.fields); if (!Object.keys(command.fields).length) return json({ error: "바꿀 내용이 없습니다." }, 400); }
         if (op === "place" && body.stow === true) { command.stow = true; command.fields = {}; } // put it away (off the screen)
         else if (op === "place") command.fields = cleanCharacterFields({ x: body.x, y: body.y });

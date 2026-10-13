@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.63
+// @version      0.2.64
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.63";
+  const VERSION = "0.2.64";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -3506,9 +3506,16 @@
           const current = await fetch(url, { headers });
           if (!current.ok) throw new Error("다이스를 찾지 못했습니다.");
           const fields = (await current.json())?.fields || {};
-          const faces = Math.max(2, Number(fields.faces?.integerValue ?? fields.faces?.doubleValue) || 6), count = Number(fields.changeCount?.integerValue ?? fields.changeCount?.doubleValue) || 0;
-          const value = 1 + Math.floor(Math.random() * faces);
-          const patch = await fetch(`${url}?updateMask.fieldPaths=value&updateMask.fieldPaths=closed&updateMask.fieldPaths=changeCount&updateMask.fieldPaths=updatedAt`, { method: "PATCH", headers, body: JSON.stringify({ fields: { value: { integerValue: String(value) }, closed: { booleanValue: false }, changeCount: { integerValue: String(count + 1) }, updatedAt: { timestampValue: new Date().toISOString() } } }) });
+          const read = (field, fallback) => Number(field?.integerValue ?? field?.doubleValue) || fallback;
+          const was = { faces: Math.max(2, read(fields.faces, 6)), value: read(fields.value, 1), closed: fields.closed?.booleanValue === true }, count = read(fields.changeCount, 0);
+          const set = command.fields && typeof command.fields === "object" ? command.fields : null;
+          let faces = was.faces, value = was.value, closed = was.closed;
+          if (set) { // the kind, the value, hidden: as the native menu sets them (a new kind starts again at 1)
+            if ([4, 6, 8, 10, 12, 20].includes(Number(set.faces))) { faces = Number(set.faces); value = 1; }
+            if (Number.isInteger(Number(set.value))) value = Math.max(1, Math.min(faces, Number(set.value)));
+            if (typeof set.closed === "boolean") closed = set.closed;
+          } else { value = 1 + Math.floor(Math.random() * faces); closed = false; }
+          const patch = await fetch(`${url}?updateMask.fieldPaths=faces&updateMask.fieldPaths=value&updateMask.fieldPaths=closed&updateMask.fieldPaths=changeCount&updateMask.fieldPaths=updatedAt`, { method: "PATCH", headers, body: JSON.stringify({ fields: { faces: { integerValue: String(faces) }, value: { integerValue: String(value) }, closed: { booleanValue: closed }, changeCount: { integerValue: String(count + 1) }, updatedAt: { timestampValue: new Date().toISOString() } } }) });
           if (!patch.ok) throw new Error(`굴리기 실패 (${patch.status})`);
           return id;
         }
