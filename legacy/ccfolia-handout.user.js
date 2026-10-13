@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.99
+// @version      0.1.100
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.99",
+    version: "0.1.100",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -291,7 +291,8 @@
           role: item.role === "gm" ? "gm" : "player",
           aliases: [...new Set(aliases)],
           image: typeof item.image === "string" ? item.image : "",
-          uid: typeof item.uid === "string" ? item.uid.slice(0, 128) : "" // 코코포리아 계정 uid (같은 사람이 브라우저를 바꿔도 같다)
+          uid: typeof item.uid === "string" ? item.uid.slice(0, 128) : "", // 코코포리아 계정 uid (같은 사람이 브라우저를 바꿔도 같다)
+          ...(item.source === "playroom" ? { source: "playroom", playroomId: String(item.playroomId || "").slice(0, 100) } : {}) // 플레이룸 승인 참여자에서 자동으로 들어온 행
         };
       }
       return null;
@@ -365,7 +366,7 @@
     if (!pendingPublicRelayRequests.delete(result.requestId)) return;
     if (!result.ok) { toast(result.error || "공유에 실패했습니다."); return; }
     if (result.action === "stop") { toast("공유를 중단했습니다."); return; }
-    if (result.inviteUrl) prompt("참여자에게 전달할 읽기 전용 링크입니다.", result.inviteUrl);
+    toast("공유했습니다.");
   }, lifecycle.withSignal());
 
   // ===== 플레이룸 핸드아웃: 참여자별 목록 =====
@@ -441,6 +442,56 @@
     clearTimeout(webSyncTimer);
     webSyncTimer = setTimeout(syncPublicHandouts, delay);
   }
+  // 공유 = 이 핸드아웃의 권한표(view·secret)에 따라 볼 권한이 있는 사람에게만: 플레이룸 참여자는 목록에 넣고(비밀 본문은 secret 권한자에게만) 그 사람들에게만 팝업 신호를, 네이티브 툴킷 플레이어는
+  // 같은 사람들을 대상으로 한 shows 신호를 보낸다. "플레이어 전체"에 권한이 있으면 모두에게.
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function showAudienceKeys(h) {
+    const perms = h.permissions || {};
+    const myKey = removeSpaces(state.data.myCharacter || "");
+    const plUids = new Set((state.data.plList || []).map((p) => p.uid).filter(Boolean));
+    if (perms[ALL_KEY] && (perms[ALL_KEY].view || perms[ALL_KEY].secret)) return [ALL_KEY];
+    return Object.entries(perms)
+      .filter(([key, perm]) => perm && (perm.view || perm.secret) && key !== myKey && !plUids.has(key)) // an account key of a known person comes with that person's name key
+      .map(([key]) => key);
+  }
+  async function shareHandoutNow(h) {
+    markWebShared(h.id, true);
+    try {
+      clearTimeout(webSyncTimer);
+      while (webSyncBusy) await sleep(100);
+      await syncPublicHandouts();
+      const popup = await relayCall("popup", { handoutId: h.id });
+      const keys = showAudienceKeys(h);
+      for (const key of keys) await sendShowSignal(h.id, key === ALL_KEY ? "all" : key).catch((error) => console.warn("[ccf-handout] show signal failed:", error));
+      toast(popup.count || keys.length ? "공유했습니다." : "공유했습니다. (지금 볼 수 있는 사람이 없습니다)");
+    } catch (error) {
+      toast(`공유하지 못했습니다: ${error?.message || error}`);
+    }
+  }
+  // 플레이룸에서 승인된 참여자를 PL 목록에 자동으로 넣는다(핸드아웃 수신자 목록과 같은 원천). 이미 같은 이름·별칭의 행이 있으면 건드리지 않는다(GM 이 병합해 쓴다).
+  async function syncPlayroomMembers() {
+    if (!hasPlayerRelay() || !isAdminMode() || !Array.isArray(state.data?.plList)) return 0;
+    let info;
+    try { info = await relayCall("participants"); } catch (_) { return 0; }
+    const added = [];
+    for (const person of (info.participants || []).filter((item) => item.status === "approved")) {
+      const name = String(person.displayName || "").trim(), key = normalizePlNameKey(name);
+      if (!key) continue;
+      const known = state.data.plList.some((pl) => pl.playroomId === person.id || [pl.name, ...(pl.aliases || [])].some((n) => normalizePlNameKey(n) === key));
+      if (known || state.data.plDeleted?.[key]) continue;
+      added.push({ name, id: "", role: "player", aliases: [], image: "", uid: "", source: "playroom", playroomId: person.id });
+    }
+    if (!added.length) return 0;
+    state.data.plList.push(...added);
+    await saveAll(state.data).catch(() => {});
+    if (state.isOpen) render();
+    scheduleWebSync(300);
+    return added.length;
+  }
+  const playroomMemberTimer = setInterval(() => { syncPlayroomMembers(); }, 15000);
+  const playroomMemberFirst = setTimeout(() => { syncPlayroomMembers(); }, 3000);
+  registerTeardown(() => { clearInterval(playroomMemberTimer); clearTimeout(playroomMemberFirst); });
+
   function markWebShared(id, on) {
     const set = readWebShared();
     if (on) set.add(id); else set.delete(id);
@@ -1317,6 +1368,8 @@
       transition: background-color 120ms, color 120ms;
       flex: 0 0 auto;
     }
+    /* the buttons of a card sit close together (the head's gap is for the title and the handle) */
+    .card .head .card-icon-btn + .card-icon-btn { margin-left: -6px; }
     .card-icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .card-icon-btn.danger:hover { background: rgba(244,67,54,.16); color: #ff6e60; }
     /* 핸드아웃 카드 드래그 핸들 (#33) */
@@ -2349,7 +2402,8 @@
     const me = state.data.myCharacter || "";
     const audience = String(data.audience || "all").trim();
     const matched = audience === "all" || audience === "*" ||
-                    removeSpaces(audience).toLowerCase() === removeSpaces(me).toLowerCase();
+                    removeSpaces(audience).toLowerCase() === removeSpaces(me).toLowerCase() ||
+                    (!!myCcfUid && audience === myCcfUid);
     if (!matched) {
       console.info("[ccf-handout] show signal skipped (audience mismatch):", audience, "vs", me);
       return;
@@ -3472,7 +3526,7 @@
       if (name === myChar) continue;
       if (rows.some((r) => r.key === name)) continue;
       const aliasText = (pl.aliases || []).filter(Boolean).length ? ` (${(pl.aliases || []).join(", ")})` : "";
-      const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}`;
+      const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}${pl.source === "playroom" ? " · 플레이룸" : ""}`;
       rows.push({ key: name, label, image: pl.image || "" });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
@@ -3997,14 +4051,14 @@
     }
     if (action === "web-share-handout") {
       const h = findHandout(id);
-      if (h && canManageHandout(h)) { requestPublicRelay("share", h); markWebShared(h.id, true); }
+      if (h && canManageHandout(h)) shareHandoutNow(h);
       return;
     }
     if (action === "web-stop-sharing") {
       // 이 핸드아웃만 참여자 목록에서 내린다. 올려 둔 것이 하나도 없어지면 예전처럼 웹 공유 전체를 끝낸다.
-      const left = markWebShared(id, false);
-      if (!left) requestPublicRelay("stop", findHandout(id));
-      else toast("이 핸드아웃을 참여자 목록에서 내렸습니다.");
+      // only this handout leaves the participants' lists; the web share itself (invite, who is let in) is the share settings window's
+      markWebShared(id, false);
+      toast("이 핸드아웃을 참여자 목록에서 내렸습니다.");
       return;
     }
     if (action === "delete-handout") { deleteHandout(id); return; }
@@ -4581,7 +4635,8 @@
     const isAdmin = row.getAttribute("data-pl-admin") === "1";
     const image = row.getAttribute("data-pl-image") || "";
     const uid = row.getAttribute("data-pl-uid") || ""; // 계정 연결은 목록을 고쳐 저장해도 남긴다
-    return name ? { name, id, role, aliases, image, uid, _isAdmin: isAdmin } : null;
+    const fromPlayroom = row.getAttribute("data-pl-source") === "playroom" ? { source: "playroom", playroomId: row.getAttribute("data-pl-playroom-id") || "" } : {};
+    return name ? { name, id, role, aliases, image, uid, ...fromPlayroom, _isAdmin: isAdmin } : null;
   }
 
   function writePlRow(row, item) {
@@ -4598,6 +4653,7 @@
     else row.removeAttribute("data-pl-admin");
     row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
     if (item.uid) row.setAttribute("data-pl-uid", item.uid); else row.removeAttribute("data-pl-uid");
+    if (item.source === "playroom") { row.setAttribute("data-pl-source", "playroom"); row.setAttribute("data-pl-playroom-id", item.playroomId || ""); } else { row.removeAttribute("data-pl-source"); row.removeAttribute("data-pl-playroom-id"); }
 
     // 아바타 (#74)
     const image = typeof item.image === "string" ? item.image : "";
@@ -4642,8 +4698,9 @@
 
     const badgeEl = row.querySelector("[data-pl-badges]");
     if (badgeEl) {
-      badgeEl.innerHTML = "";
-      badgeEl.hidden = true;
+      // a person who came in through the play room (approved there) is marked; merging them with their CCFOLIA entry works as for any two rows
+      badgeEl.innerHTML = item.source === "playroom" ? '<span class="pl-badge" data-kind="playroom">플레이룸</span>' : "";
+      badgeEl.hidden = item.source !== "playroom";
     }
   }
 

@@ -15,7 +15,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       <script>window.saved = []; window.pickerCalls = 0; document.querySelector('#speakingas').addEventListener('change', () => window.saved.push(document.querySelector('#speakingas').value));
       HTMLSelectElement.prototype.showPicker = function () { window.pickerCalls += 1; };</script>` }));
     await page.goto('https://app.roll20.net/editor/');
-    await page.evaluate(() => { window.chrome = { runtime: { id: 'x', sendMessage: async () => {} }, storage: { local: { get: async () => ({ r20AvOff: false }) } } }; });
+    await page.evaluate(() => { window.chrome = { runtime: { id: 'x', sendMessage: async () => {} } }; });
     await page.evaluate(code);
     return page;
   };
