@@ -68,6 +68,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // wheel zoom like CCFOLIA's (measured): one event = one 0.1 step whatever the delta, up = larger, 0.2..2, around the middle of the field
   const wheel = await page.evaluate(async () => { view.zoom = 1; view.x = 0; view.y = -192; view.touched = false; renderScene({ fieldWidth: 50, fieldHeight: 30, items: [], markers: [], characters: [] }); const st = document.querySelector('.stage'); const fire = dy => { st.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: dy, clientX: 300, clientY: 400 })); }; const wait = () => new Promise(r => setTimeout(r, 60)); const read = () => ({ s: Math.round(view.base * view.zoom / 24 * 100) / 100, y: Math.round(view.y) }); const out = []; fire(-100); await wait(); out.push(read()); fire(-10); await wait(); out.push(read()); fire(100); await wait(); out.push(read()); for (let i = 0; i < 30; i += 1) { fire(100); await wait(); } out.push(read()); for (let i = 0; i < 30; i += 1) { fire(-100); await wait(); } out.push(read()); return out; });
   assert.deepEqual(wheel, [{ s: 1.1, y: -211 }, { s: 1.2, y: -230 }, { s: 1.1, y: -211 }, { s: 0.2, y: -38 }, { s: 2, y: -384 }], 'one step per wheel event, clamped, the position scales with the scale');
+  // the screen scale of the last visit is kept in the browser (not the position), like CCFOLIA's stored app state
+  const kept = await page.evaluate(() => { view.zoom = 1; view.x = 0; view.y = 0; document.querySelector('.stage').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100 })); return new Promise(r => setTimeout(() => r(localStorage.getItem('capybara-screen-scale')), 80)); });
+  assert.equal(kept, '0.9');
+  await page.reload();
+  const restored = await page.evaluate(() => ({ zoom: view.zoom, x: view.x, y: view.y }));
+  assert.deepEqual(restored, { zoom: 0.9, x: 0, y: 0 }, 'the scale comes back after a reload, the position does not');
+  await page.evaluate(() => localStorage.removeItem('capybara-screen-scale'));
+  await page.reload();
   // the hand-check helper returns its result as one JSON text (it is also copied for pasting)
   const diag = await page.evaluate(() => window.playroomDiag());
   assert.equal(typeof diag, 'string'); assert.deepEqual(Object.keys(JSON.parse(diag)).sort(), ['assets', 'deckImages', 'decks', 'dice', 'diceImages', 'dpr', 'fieldSize', 'help', 'plainDice', 'scale', 'stage', 'touched', 'view', 'window']);

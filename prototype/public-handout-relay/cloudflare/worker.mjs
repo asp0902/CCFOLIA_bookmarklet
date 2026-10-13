@@ -538,8 +538,11 @@ export default {
         const html = (await response.text()).replaceAll(PUBLIC_ORIGIN_PLACEHOLDER, htmlAttribute(url.origin));
         headers.delete("Content-Length");
         headers.delete("ETag");
+        headers.set("Cache-Control", "no-cache");
         return new Response(html, { status: response.status, headers });
       }
+      // the page files change with every release and carry no version in their names: the browser asks again every time (cheap, answered by the ETag) instead of reusing an old copy
+      headers.set("Cache-Control", "no-cache");
       return new Response(response.body, { status: response.status, headers });
     }
     const origin = request.headers.get("Origin") || "";
