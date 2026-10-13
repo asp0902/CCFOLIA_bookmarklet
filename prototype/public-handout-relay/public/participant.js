@@ -1182,7 +1182,7 @@ function renderMirroredHeader() {
 }
 // What the page holds about the mirror, for checking by hand: window.playroomDiag() in the console (the result is also copied).
 window.playroomDiag = () => {
-  const text = JSON.stringify({ assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length });
+  const text = JSON.stringify({ assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length, scale: Math.round(view.base * view.zoom / 24 * 1000) / 1000, view: [Math.round(view.x), Math.round(view.y)], touched: !!view.touched, stage: [document.querySelector(".stage").clientWidth, document.querySelector(".stage").clientHeight], window: [innerWidth, innerHeight], dpr: devicePixelRatio, fieldSize: [sceneData?.fieldWidth, sceneData?.fieldHeight] });
   // the result is copied for pasting (DevTools' copy(), then the clipboard API); the same text is returned
   try { if (typeof copy === "function") copy(text); } catch (_) {}
   try { navigator.clipboard?.writeText(text).catch(() => {}); } catch (_) {}
