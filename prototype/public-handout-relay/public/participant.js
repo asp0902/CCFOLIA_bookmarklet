@@ -1223,8 +1223,21 @@ async function characterRequest(op, body) {
   try {
     const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/objects/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "character", ...body }) });
     if (!response.ok) return { ok: false, error: (await response.json().catch(() => ({}))).error || "요청하지 못했습니다." };
-    return { ok: true };
+    return await waitForCommand((await response.json().catch(() => ({}))).commandId);
   } catch (_) { return { ok: false, error: "요청하지 못했습니다." }; }
+}
+// The GM's page answers every request (delivered / failed with a reason): wait for it so a failure is shown instead of silence.
+async function waitForCommand(commandId, ms = 15000) {
+  if (!commandId) return { ok: true };
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/commands/${encodeURIComponent(commandId)}/result`);
+      if (response.ok) { const { status, error } = await response.json(); if (status === "delivered") return { ok: true }; if (status === "failed") return { ok: false, error: error || "GM 화면에서 처리하지 못했습니다." }; }
+    } catch (_) { /* try again */ }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return { ok: false, error: "GM 화면이 응답하지 않습니다. GM의 코코포리아 탭이 열려 있고 확장이 켜져 있는지 확인해 주세요." };
 }
 // after a request the GM's page needs a moment to write and report: look again a few times
 async function refreshUntil(changed) {
@@ -1233,9 +1246,10 @@ async function refreshUntil(changed) {
 }
 async function createCharacter(window_) {
   const known = new Set(myCharacters.map(c => c.id));
+  showSendStatus("캐릭터를 만드는 중입니다.", 15000);
   const result = await characterRequest("create", { fields: {} });
-  if (!result.ok) { showSendStatus(result.error, 4000); return; }
-  showSendStatus("캐릭터를 만드는 중입니다.", 3000);
+  if (!result.ok) { showSendStatus(result.error, 8000); return; }
+  showSendStatus("", 1);
   await refreshUntil((_, now) => now.some(c => !known.has(c.id)));
   const created = myCharacters.find(c => !known.has(c.id));
   if (created) openCharacterEditor(created.id);
