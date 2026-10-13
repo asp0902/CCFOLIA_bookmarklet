@@ -145,6 +145,9 @@ let handoutSeen = "", handoutClosed = "";
 // (with the dot for unread). Without a time (people let in before the relay kept it) every new one pops up as before.
 let approvedAt = "";
 const arrivedAfterApproval = updatedAt => !approvedAt || Date.parse(updatedAt) > Date.parse(approvedAt);
+// what the popups decided and why (shown by playroomDiag): the last 20 decisions
+const popupLog = (window.__popupLog = []);
+const logPopup = (kind, id, updatedAt, opened) => { popupLog.push({ at: new Date().toISOString(), kind, id, updatedAt: String(updatedAt ?? ""), approvedAt, afterApproval: arrivedAfterApproval(updatedAt), opened }); if (popupLog.length > 20) popupLog.shift(); };
 {
   const backdrop = document.createElement("div"); backdrop.id = "handout-backdrop"; backdrop.hidden = true;
   const close = document.createElement("button"); close.type = "button"; close.id = "handout-close"; close.textContent = "닫기";
@@ -162,7 +165,7 @@ const arrivedAfterApproval = updatedAt => !approvedAt || Date.parse(updatedAt) >
     handoutEl.hidden = false;
     // it pops up when it is new or changed, not again on every reload: what was shown is remembered in the browser
     const shownBefore = (() => { try { const stored = localStorage.getItem("capybara-handout-legacy-shown") || ""; return stored === key || (!handout.updatedAt && stored.startsWith(`${handout.id}:`)); } catch (_) { return false; } })(); // a state without its time stamp (before the full one arrives) is the same handout
-    if (key !== handoutSeen && !(!handout.updatedAt && handoutSeen.startsWith(`${handout.id}:`))) { handoutSeen = key; try { if (handout.updatedAt || !shownBefore) localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore && arrivedAfterApproval(handout.updatedAt)) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
+    if (key !== handoutSeen && !(!handout.updatedAt && handoutSeen.startsWith(`${handout.id}:`))) { handoutSeen = key; try { if (handout.updatedAt || !shownBefore) localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} const pops = !shownBefore && arrivedAfterApproval(handout.updatedAt); logPopup("shared", handout.id, handout.updatedAt, pops); if (pops) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
   };
 }
 // ---- My handouts: the GM's handout tool works out what each person may read (title, body with its formatting, the secret part only for those who may read it) and the relay gives a participant only their own list.
@@ -222,6 +225,7 @@ function applyMyHandouts(items, announce) {
   refreshHandoutButton();
   if (!announce) return;
   const fresh = myHandouts.filter(h => handoutIsNew(h) && before.get(h.id) !== handoutStamp(h) && arrivedAfterApproval(h.updatedAt));
+  for (const h of myHandouts) if (handoutIsNew(h) && before.get(h.id) !== handoutStamp(h)) logPopup("list", h.id, h.updatedAt, fresh.includes(h));
   if (fresh.length) openHandoutDetail([...fresh].sort((x, y) => String(y.updatedAt).localeCompare(String(x.updatedAt)))[0].id); // the most recently changed one (the first listed on a tie)
 }
 async function loadMyHandouts(announce = false) {
@@ -745,6 +749,7 @@ async function verifyAccess() {
   if (transient(response)) return;
   if (!response.ok) return stop("접근이 취소되었습니다.");
   const data = await response.json();
+  if (data.approvedAt) approvedAt = data.approvedAt;
   if (data.status !== "approved") stop(data.status === "rejected" ? "GM이 참가 요청을 거절했습니다." : "접근이 취소되었습니다.");
 }
 // Messages written with the toolkit's format tools carry an invisible envelope (formatRuns / alignRuns / blockStyle) after the visible text.
@@ -1558,7 +1563,7 @@ window.playroomDiag = () => {
     if (first) { try { const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/character-doc?id=${encodeURIComponent(first.id)}`); found.characterDoc = [first.id, r.status, r.headers.get("X-Relay-Build") || "(no build header)"]; } catch (error) { found.characterDoc = String(error); } }
     window.__diagNet = found;
   })();
-  const text = JSON.stringify({ net, mineInfo: window.__mineInfo, mineLoaded, sceneCharacters: (sceneData?.characters || []).map(c => c.id), assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length, owned: [...ownedIds], pieces: [...document.querySelectorAll("#scene-field [data-id]")].map(e => [e.tagName.toLowerCase(), e.dataset.kind || "", e.dataset.id, e.dataset.locked ? "locked" : "free", getComputedStyle(e).cursor, getComputedStyle(e).pointerEvents]), scale: Math.round(view.base * view.zoom / 24 * 1000) / 1000, view: [Math.round(view.x), Math.round(view.y)], touched: !!view.touched, stage: [document.querySelector(".stage").clientWidth, document.querySelector(".stage").clientHeight], window: [innerWidth, innerHeight], dpr: devicePixelRatio, fieldSize: [sceneData?.fieldWidth, sceneData?.fieldHeight] });
+  const text = JSON.stringify({ net, mineInfo: window.__mineInfo, mineLoaded, approvedAt, popups: popupLog, lists: myHandouts.map(h => [h.id, h.updatedAt]), sceneCharacters: (sceneData?.characters || []).map(c => c.id), assets: Object.keys(cmMirror.assets), help: !!cmMirror.help, decks: (sceneData?.decks || []).map(d => [d.id, d.coverUrl, d.x, d.y]), deckImages: document.querySelectorAll('#scene-field img[data-kind="deck"]').length, dice: (sceneData?.diceSymbols || []).length, diceImages: document.querySelectorAll(".scene-die-img").length, plainDice: document.querySelectorAll(".scene-die").length, owned: [...ownedIds], pieces: [...document.querySelectorAll("#scene-field [data-id]")].map(e => [e.tagName.toLowerCase(), e.dataset.kind || "", e.dataset.id, e.dataset.locked ? "locked" : "free", getComputedStyle(e).cursor, getComputedStyle(e).pointerEvents]), scale: Math.round(view.base * view.zoom / 24 * 1000) / 1000, view: [Math.round(view.x), Math.round(view.y)], touched: !!view.touched, stage: [document.querySelector(".stage").clientWidth, document.querySelector(".stage").clientHeight], window: [innerWidth, innerHeight], dpr: devicePixelRatio, fieldSize: [sceneData?.fieldWidth, sceneData?.fieldHeight] });
   // the result is copied for pasting (DevTools' copy(), then the clipboard API); the same text is returned
   try { if (typeof copy === "function") copy(text); } catch (_) {}
   try { navigator.clipboard?.writeText(text).catch(() => {}); } catch (_) {}
