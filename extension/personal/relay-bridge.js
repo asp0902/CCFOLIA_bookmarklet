@@ -43,9 +43,15 @@
     return { enabled: value.relayEnabled === true, origin: relayOrigin(value.relayUrl || "http://127.0.0.1:8787"), token: clean(value.relayGmToken, 500).trim(), delivered: new Set(Array.isArray(value.relayDeliveredCommandIds) ? value.relayDeliveredCommandIds : []) };
   };
   // "Failed to fetch" says nothing: the error names the request. A network or CORS failure is a TypeError (the relay never answered or the answer was hidden by the browser).
+  // A request that never got an answer (TypeError: Failed to fetch) is tried again twice after a short wait: every request to the relay can be repeated (the relay stores by id / answers the same). Only then the failure is reported.
   const fetchRelay = async (url, path, options) => {
-    try { return await fetch(url, options); }
-    catch (error) { throw new Error(`${options.method || "GET"} ${shortPath(path)}: 릴레이에 닿지 못했습니다 (${error?.message || error})`); }
+    let last;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt) await new Promise(resolve => setTimeout(resolve, attempt === 1 ? 600 : 1800));
+      try { return await fetch(url, options); } catch (error) { last = error; }
+    }
+    const size = typeof options.body === "string" ? ` ${options.body.length}자` : "";
+    throw new Error(`${options.method || "GET"} ${shortPath(path)}${size}: 릴레이에 닿지 못했습니다 (${last?.message || last}, 3번 시도)`);
   };
   const adminFetch = async (path, options = {}) => {
     config ||= await loadConfig();
@@ -300,7 +306,7 @@
             if (!id || sentMessages.get(id) === signature) continue;
             sentMessages.set(id, signature);
             try { await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/messages`, { id, author: clean(message.author, 80), text: clean(message.text, 4000), createdAt: clean(message.createdAt, 40), channel: clean(message.channel, 100), color: clean(message.color, 20), icon: clean(message.icon, 600), roll: message.roll && typeof message.roll === "object" ? message.roll : undefined, edited: message.edited === true }); }
-            catch (error) { sentMessages.delete(id); throw error; }
+            catch (error) { sentMessages.delete(id); throw new Error(`메시지 ${id.slice(0, 12)} (본문 ${String(message.text || "").length}자, 굴림 ${message.roll ? JSON.stringify(message.roll).length : 0}자): ${error?.message || error}`); }
           }
           // After the upload: tell the relay what the GM still has so deleted messages disappear for participants too.
           const present = {};
