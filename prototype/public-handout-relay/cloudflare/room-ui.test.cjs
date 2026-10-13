@@ -8,7 +8,7 @@ const { chromium } = require('C:/Users/asp92/.cache/codex-runtimes/codex-primary
   const token = process.env.RELAY_GM_TOKEN || 'test-gm-token';
   const roomId = `ui-${Date.now().toString(36)}`;
   const admin = (url, options = {}) => fetch(base + url, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options.headers } });
-  const connect = await admin('/api/connect', { method: 'POST', body: JSON.stringify({ roomId, roomTitle: '플레이 룸 UI 검사', capabilities: { chatRead: true, chatWrite: true, publicHandout: true } }) });
+  const connect = await admin('/api/connect', { method: 'POST', body: JSON.stringify({ roomId, roomTitle: '플레이룸 UI 검사', capabilities: { chatRead: true, chatWrite: true, publicHandout: true } }) });
   const inviteUrl = (await connect.json()).inviteUrl;
   const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -19,9 +19,9 @@ const { chromium } = require('C:/Users/asp92/.cache/codex-runtimes/codex-primary
     await page.getByRole('button', { name: '동의' }).click();
     const list = await (await admin(`/api/admin/rooms/${roomId}/participants`)).json();
     await admin(`/api/admin/rooms/${roomId}/participants/${list.participants[0].id}/decision`, { method: 'POST', body: JSON.stringify({ decision: 'approve' }) });
-    await admin(`/api/admin/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ id: 'ui-message', author: 'GM', text: '플레이 룸 연결 완료', createdAt: new Date().toISOString() }) });
+    await admin(`/api/admin/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ id: 'ui-message', author: 'GM', text: '플레이룸 연결 완료', createdAt: new Date().toISOString() }) });
     await page.getByRole('heading', { name: '채팅' }).waitFor();
-    await page.getByText('플레이 룸 연결 완료').waitFor();
+    await page.getByText('플레이룸 연결 완료').waitFor();
     assert.equal(await page.locator('iframe').count(), 0);
     await page.screenshot({ path: path.join(output, 'player-room-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

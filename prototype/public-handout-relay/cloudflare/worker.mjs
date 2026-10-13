@@ -187,7 +187,7 @@ export class RoomRelay {
       };
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
-      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
+      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이룸", gmOnline: true, capabilities: room.capabilities });
       return json({ inviteUrl: inviteUrl(request.headers.get("X-Public-Origin"), body.roomId, room.inviteToken) });
     }
     if (request.method === "POST" && url.pathname === "/api/share") {
@@ -228,7 +228,7 @@ export class RoomRelay {
       if (this.sockets("gm").length >= MAX_GM_SOCKETS) return json({ error: "연결이 너무 많습니다." }, 429);
       room.gmHeartbeatAt = Date.now();
       await this.save(room);
-      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이 룸", gmOnline: true, capabilities: room.capabilities });
+      this.push("p", { type: "meta", roomTitle: room.roomTitle || "플레이룸", gmOnline: true, capabilities: room.capabilities });
       const gmSocket = this.acceptSocket(["gm"], GM_SOCKET_PROTOCOL);
       this.notifyPending(room); // the current number, once, right after connecting
       return gmSocket;
@@ -439,7 +439,7 @@ export class RoomRelay {
     if (request.method === "GET" && /\/mirror\.css$/.test(url.pathname)) return new Response(await this.state.storage.get("mirror:css") || "", { headers: { "Content-Type": "text/css; charset=utf-8" } });
     if (request.method === "GET" && /\/mirror\.json$/.test(url.pathname)) return json({ templates: await this.state.storage.get("mirror:tpl") || {}, help: await this.state.storage.get("mirror:help") || null, logo: await this.state.storage.get("mirror:logo") || "" });
     if (request.method === "GET" && /\/state$/.test(url.pathname)) return json({
-      roomTitle: room.roomTitle || "플레이 룸",
+      roomTitle: room.roomTitle || "플레이룸",
       capabilities: room.capabilities,
       gmOnline: Date.now() - Number(room.gmHeartbeatAt || 0) < 30_000,
       messages: room.capabilities.chatRead ? room.messages : [],
