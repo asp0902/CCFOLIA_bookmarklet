@@ -1,6 +1,6 @@
 // Rules for objects a participant creates in the GM's room (characters, panels, ...): who may create, how fast, how many, and who owns what.
 // CCFOLIA documents are created under the GM's account, so the relay keeps its own ledger { objectId -> participantId }; a participant may change or delete only what they made.
-export const CREATE_LIMITS = Object.freeze({ perMinute: 10, perRoom: 200, windowMs: 60_000, editsPerMinute: 60, graceMs: 120_000 });
+export const CREATE_LIMITS = Object.freeze({ perMinute: 10, perRoom: 200, windowMs: 60_000, editsPerMinute: 60, graceMs: 120_000, missingMs: 600_000 });
 
 // room: the stored room record (capabilities.participantCreate, created, createLog); member: { id }.
 export function checkCreate(room, member, now = Date.now()) {
@@ -30,10 +30,17 @@ export function checkEdit(room, member, now = Date.now()) {
   return { ok: true };
 }
 export const ownsObject = (room, member, objectId) => !!objectId && room.created?.[objectId] === member.id;
-export function forgetObject(room, objectId) { if (room.created) delete room.created[objectId]; if (room.createdAt) delete room.createdAt[objectId]; }
+export function forgetObject(room, objectId) { if (room.created) delete room.created[objectId]; if (room.createdAt) delete room.createdAt[objectId]; if (room.missingSince) delete room.missingSince[objectId]; }
 // the ledger only keeps what is still in the room: objects the GM removed are dropped
 // (an object made in the last two minutes stays: the GM's page may report the room from just before it appeared)
 export function pruneCreated(room, existingIds, now = Date.now()) {
   const alive = new Set(existingIds);
-  for (const id of Object.keys(room.created || {})) if (!alive.has(id) && now - (room.createdAt?.[id] ?? 0) > CREATE_LIMITS.graceMs) forgetObject(room, id);
+  // A report that lacks an object is not enough (the GM's page may have reported while its room was still loading): it has to stay missing for ten minutes before its maker loses it.
+  const since = room.missingSince ||= {};
+  for (const id of Object.keys(room.created || {})) {
+    if (alive.has(id)) { delete since[id]; continue; }
+    if (now - (room.createdAt?.[id] ?? 0) <= CREATE_LIMITS.graceMs) continue;
+    since[id] ??= now;
+    if (now - since[id] >= CREATE_LIMITS.missingMs) forgetObject(room, id);
+  }
 }

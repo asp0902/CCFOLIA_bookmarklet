@@ -78,6 +78,8 @@ assert.equal((await claimCall(raced.json.commandId, "tab-b")).json.claimed, fals
 // a dice symbol moves only for the participant who made it (ledger); /mine lists everything they made
 await call(`/api/admin/rooms/${room}/commands/${made.json.commandId}/ack`, { gm: true, body: { status: "delivered", objectId: "doc123" } });
 assert((await call(`/api/rooms/${room}/mine`, { cookie })).json.owned.includes("doc123"));
+relay.data = null; // the room object restarts: the ledger comes back from storage
+assert((await call(`/api/rooms/${room}/mine`, { cookie })).json.owned.includes("doc123"), "the ledger survives a restart");
 const moveDie = id => call(`/api/rooms/${room}/pieces/move`, { cookie, body: { kind: "dice", id, x: 3, y: 4 } });
 assert.equal((await moveDie("doc123")).response.status, 202, "their own die");
 assert.equal((await moveDie("somebody-elses")).response.status, 403, "not theirs");
