@@ -618,7 +618,7 @@ export class RoomRelay {
     }
     if (request.method === "GET" && /\/mine$/.test(url.pathname)) {
       const docs = await this.state.storage.get("charDocs") || [];
-      return json({ characters: docs.filter(doc => ownsObject(room, member, doc.id)), owned: Object.keys(room.created || {}).filter(id => ownsObject(room, member, id)) });
+      return json({ member: String(member.id).slice(0, 8), characters: docs.filter(doc => ownsObject(room, member, doc.id)), owned: Object.keys(room.created || {}).filter(id => ownsObject(room, member, id)) });
     }
     if (request.method === "POST" && /\/status\/set$/.test(url.pathname)) {
       if (!room.capabilities.chatWrite) return json({ error: "GM이 외부 입력을 허용하지 않았습니다." }, 403);
