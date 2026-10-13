@@ -156,7 +156,9 @@ let handoutSeen = "", handoutClosed = "";
     if (!has) { handoutEl.hidden = true; handoutEl.classList.remove("open"); backdrop.hidden = true; handoutSeen = ""; return; }
     const key = `${handout.id}:${handout.updatedAt || ""}`;
     handoutEl.hidden = false;
-    if (key !== handoutSeen) { handoutSeen = key; handoutEl.classList.add("open"); backdrop.hidden = false; }
+    // it pops up when it is new or changed, not again on every reload: what was shown is remembered in the browser
+    const shownBefore = (() => { try { return localStorage.getItem("capybara-handout-legacy-shown") === key; } catch (_) { return false; } })();
+    if (key !== handoutSeen) { handoutSeen = key; try { localStorage.setItem("capybara-handout-legacy-shown", key); } catch (_) {} if (!shownBefore) { handoutEl.classList.add("open"); backdrop.hidden = false; } }
   };
 }
 // ---- My handouts: the GM's handout tool works out what each person may read (title, body with its formatting, the secret part only for those who may read it) and the relay gives a participant only their own list.
@@ -292,12 +294,13 @@ function renderScene(scene) {
     }
     nodes.push(field);
   }
+  // Layers measured on ccfolia.com (GM tab): panels z-index = their z (1), decks 1 (the deck's zIndex field, not its z), characters 100 + z, dice symbols 10000 (above everything).
   // Pieces store x/y in grid units, characters in pixels at zoom 1 (24px = 1 unit); sizes are in grid units for both.
   // Markers share the items' layer in CCFOLIA (same container, same grid units, drawn after the items of the same z); they cannot be moved by a participant.
   // Layer (measured on ccfolia.com 1.37.5): an item or marker wrapper has z-index = its stored z, a character wrapper has 100 + its stored z, so characters are above items and markers
   // (a stored z of 100 or more on an item is the only way to get above a character); equal layers keep the DOM order items, markers.
   const layerOf = piece => (piece.kind === "character" ? 100 : 0) + (Number(piece.z) || 0);
-  const all = [...(s.decks || []).map(deck => ({ ...deck, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl.startsWith("/") ? (cmMirror.assets[deck.coverUrl] || "") : deck.coverUrl })).filter(deck => deck.imageUrl), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 0 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
+  const all = [...(s.decks || []).map(deck => ({ ...deck, z: deck.layer ?? 1, unitsXY: true, kind: "deck", imageUrl: deck.coverUrl.startsWith("/") ? (cmMirror.assets[deck.coverUrl] || "") : deck.coverUrl })).filter(deck => deck.imageUrl), ...(s.diceSymbols || []).map(die => ({ ...die, unitsXY: true, kind: "dice", z: 10000 })), ...(s.items || []).map(item => ({ ...item, unitsXY: true, kind: "item" })), ...(s.markers || []).map(marker => ({ ...marker, unitsXY: true, kind: "marker" })), ...(s.characters || []).map(c => ({ ...c, kind: "character" }))];
   for (const item of all.sort((a, b) => layerOf(a) - layerOf(b))) {
     // a dice symbol is drawn as a die face with its value ("?" while hidden); a card deck shows its back with the number of cards left in the middle
     if (item.kind === "dice") {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.97
+// @version      0.1.98
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.97",
+    version: "0.1.98",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -185,7 +185,7 @@
     },
     fetchAll() { return fetchAllFromFirestore(); },
     subscribe() {
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders()]);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]);
     },
     unsubscribe() {
       try { unsubHandouts?.(); } catch (_) {}
@@ -760,7 +760,7 @@
     unsubMembers = onSnapshot(collection(fb.db, "rooms", roomKey, "members"), (snap) => {
       remoteMembers.clear();
       snap.forEach((d) => { const data = d.data() || {}; if (data.ccfoliaUid) remoteMembers.set(d.id, { ccfoliaUid: String(data.ccfoliaUid), displayName: String(data.displayName || "") }); });
-      if (isAdminMode()) { linkPlsToMembers(); }
+      if (isAdminMode()) { linkPlsToMembers(); scheduleInboxSync(); }
       if (state.isOpen) render();
     }, (error) => { if (!membersWarned) { membersWarned = true; console.warn("[ccf-handout] members subscribe error:", error); } });
     registerTeardown(() => { try { unsubMembers?.(); } catch (_) {} unsubMembers = null; });
@@ -1957,6 +1957,7 @@
     };
     await setDoc(docRef, payload);
     console.info("[ccf-handout] Firestore push OK:", handout.id);
+    scheduleInboxSync();
     return docRef.path;
   }
 
@@ -2033,6 +2034,7 @@
       (snap) => {
         snap.docChanges().forEach((change) => {
           const data = change.doc.data();
+          if (inboxActive) return;
           if (change.type === "removed") {
             ingestRemoteRemove(data.id);
           } else {
@@ -2055,6 +2057,7 @@
   function ingestRemoteHandout(data, changeType) {
     if (!fbState) return;
     if (!data || !data.id) return;
+    if (inboxActive && !data._viaInbox) return; // the person's own inbox is the source once it works (the shared originals will be the GM's only)
     // 본인이 만든 핸드아웃 — 이미 local에 있음. skip
     if (data.ownerUid === fbState.uid) return;
 
@@ -2104,6 +2107,99 @@
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
     if (state.isOpen) render();
   }
+
+  // ===== 수신자별 사본(inbox) =====
+  // 원본 rooms/{room}/handouts/{id} 는 (보안 규칙을 게시하면) GM 만 읽는다. 각 사람은 자기 사본 rooms/{room}/inbox/{익명uid}/handouts/{id} 만 읽는다:
+  // 그 사람이 볼 수 있는 필드만(공개 본문·그림은 볼 권한이 있을 때, 비밀 본문은 비밀 권한이 있을 때만) 담고, access 에 두 권한을 적는다. 쓰는 것은 GM 뿐이다.
+  let inboxActive = false;   // 받는 쪽: 자기 inbox 구독이 성공한 뒤로는 inbox 가 진실
+  let unsubInbox = null;
+  async function subscribeToInbox() {
+    const fb = await initFirebase();
+    const roomKey = getCurrentRoomKey();
+    if (!fb || roomKey === "global" || unsubInbox) return;
+    const { collection, onSnapshot } = fb.modules.fs;
+    unsubInbox = onSnapshot(collection(fb.db, "rooms", roomKey, "inbox", fb.uid, "handouts"), (snap) => {
+      inboxActive = true;
+      snap.docChanges().forEach((change) => {
+        const data = change.doc.data() || {};
+        if (change.type === "removed") { ingestRemoteRemove(data.id || change.doc.id); return; }
+        const access = data.access || {};
+        // 받은 사본은 기존 수신 경로를 그대로 쓴다: 권한표 자리에 이 사본의 권한(전체 대상)을 넣는다.
+        ingestRemoteHandout({ ...data, permissions: { [ALL_KEY]: { view: access.view === true, secret: access.secret === true, edit: false } }, _viaInbox: true }, change.type);
+      });
+    }, (error) => { inboxActive = false; console.info("[ccf-handout] inbox not readable (rules not published yet?):", error?.code || error); });
+    registerTeardown(() => { try { unsubInbox?.(); } catch (_) {} unsubInbox = null; inboxActive = false; });
+  }
+  // 보내는 쪽(GM): 계정(members)마다 읽을 수 있는 사본을 계산한다(순수). 반환: { [핸드아웃 id]: 사본 }
+  function inboxCopiesFor(person, plList, handouts, folders) {
+    const pl = (plList || []).find((p) => p.uid && p.uid === person.ccfoliaUid)
+      || (plList || []).find((p) => [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) && normalizePlNameKey(n) === normalizePlNameKey(person.displayName)));
+    const name = pl?.name || person.displayName || "";
+    const extra = [...new Set([person.ccfoliaUid, pl?.uid].filter(Boolean))];
+    const out = {};
+    for (const h of handouts || []) {
+      if (!h || !h.id || h._remote) continue;
+      const view = canView(h, name, extra), secret = canViewSecret(h, name, extra);
+      if (!view && !secret) continue;
+      out[h.id] = {
+        id: h.id, title: h.title || "",
+        image: view ? (h.image || "") : "", description: view ? (h.description || "") : "", gmNotes: secret ? (h.gmNotes || "") : "",
+        tags: Array.isArray(h.tags) ? h.tags : [], folderId: h.folderId || "", folder: (folders || []).find((f) => f.id === h.folderId)?.name || "",
+        order: Number.isFinite(h.order) ? h.order : 0, createdAt: h.createdAt || "", ownerName: state.data.myCharacter || "",
+        access: { view: !!view, secret: !!secret }
+      };
+    }
+    return out;
+  }
+  const inboxKnown = new Map(); // 익명 uid -> Map(핸드아웃 id -> 서명): 이미 써 둔 것
+  let inboxBusy = false, inboxWanted = false, inboxTimer = 0, inboxDeniedAt = 0;
+  async function syncInboxes() {
+    if (!isAdminMode()) return;
+    if (Date.now() - inboxDeniedAt < 300000) return; // 규칙이 아직 거절하면 5분 쉰다
+    if (inboxBusy) { inboxWanted = true; return; }
+    inboxBusy = true;
+    try {
+      const fb = await initFirebase();
+      const roomKey = getCurrentRoomKey();
+      if (!fb || roomKey === "global") return;
+      const { doc, setDoc, deleteDoc, collection, getDocs, serverTimestamp } = fb.modules.fs;
+      const plList = mergePlListById(state.data.plList || []);
+      for (const [anon, person] of remoteMembers) {
+        if (anon === fb.uid) continue; // GM 본인은 원본을 읽는다
+        const want = inboxCopiesFor(person, plList, state.data.handouts, state.data.folders);
+        let known = inboxKnown.get(anon);
+        if (!known) { // 처음: 이미 있는 사본을 읽어 낡은 것을 지울 수 있게 한다
+          known = new Map();
+          const existing = await getDocs(collection(fb.db, "rooms", roomKey, "inbox", anon, "handouts"));
+          existing.forEach((d) => known.set(d.id, "?"));
+          inboxKnown.set(anon, known);
+        }
+        for (const [id, copy] of Object.entries(want)) {
+          const signature = JSON.stringify(copy);
+          if (known.get(id) === signature) continue;
+          await setDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id), { ...copy, updatedAt: serverTimestamp() });
+          known.set(id, signature);
+        }
+        for (const id of [...known.keys()]) {
+          if (want[id]) continue;
+          await deleteDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id));
+          known.delete(id);
+        }
+      }
+    } catch (error) {
+      if (error?.code === "permission-denied") { inboxDeniedAt = Date.now(); console.info("[ccf-handout] inbox write refused (rules not published yet?):", error.code); }
+      else console.warn("[ccf-handout] inbox sync failed:", error);
+    } finally {
+      inboxBusy = false;
+      if (inboxWanted) { inboxWanted = false; scheduleInboxSync(1500); }
+    }
+  }
+  function scheduleInboxSync(delay = 1200) {
+    if (!isAdminMode()) return;
+    clearTimeout(inboxTimer);
+    inboxTimer = setTimeout(syncInboxes, delay);
+  }
+  registerTeardown(() => clearTimeout(inboxTimer));
 
   // ===== 폴더 동기화 =====
   // rooms/{room}/meta/folders = { folders: [{ id, name }] }. 쓰는 사람은 GM 뿐이고, 나머지는 읽어서 같은 폴더 구조로 본다(접힘 상태는 각자 로컬).
@@ -2555,7 +2651,7 @@
     refreshCcfoliaRole();
     syncStarting = initFirebase().then((fb) => {
       syncInfo = { reason: "" };
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders()]).then(() => fb);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]).then(() => fb);
     }).catch((error) => {
       syncInfo = { reason: String(error?.message || error).slice(0, 80) };
       throw error;

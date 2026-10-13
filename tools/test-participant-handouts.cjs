@@ -54,6 +54,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // nothing left: the button goes away (no legacy handout)
   await page.evaluate(() => applyMyHandouts([], true));
   assert.equal(await page.evaluate(() => document.getElementById('handout-open').hidden), true);
+  // the shared public handout pops up when new or changed, not again after every reload
+  await page.evaluate(() => syncHandoutPopup({ id: 'p1', title: '공개', bodyText: 'x', updatedAt: 't1' }));
+  assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), true);
+  await page.reload();
+  await page.evaluate(() => { document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none'; syncHandoutPopup({ id: 'p1', title: '공개', bodyText: 'x', updatedAt: 't1' }); });
+  assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), false, 'seen before: no popup after a reload');
+  await page.evaluate(() => syncHandoutPopup({ id: 'p1', title: '공개', bodyText: 'y', updatedAt: 't2' }));
+  assert.equal(await page.evaluate(() => document.getElementById('handout').classList.contains('open')), true, 'changed: pops up again');
   assert.deepEqual(violations, [], 'no CSP violations');
   await browser.close();
   console.log('participant handouts PASS');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.59
+// @version      0.2.60
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.59";
+  const VERSION = "0.2.60";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -286,7 +286,7 @@
     return Object.values(decks && typeof decks === "object" ? decks : {})
       .filter((deck) => deck && (url(deck.coverImageUrl) || staticCover(deck.coverImageUrl)))
       .slice(0, 50)
-      .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) || staticCover(deck.coverImageUrl) }));
+      .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), layer: num(deck.zIndex, 1), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) || staticCover(deck.coverImageUrl) }));
   }
   // 다이스 심볼(entities.roomDices: x,y,width,height,faces,value,closed,name,owner,changeCount). closed(가려진 값)이면 값은 보내지 않는다. 좌표·크기는 아이템과 같은 칸 단위.
   function relayDiceViews(dices, num) {
@@ -3429,7 +3429,7 @@
         let last = null;
         return store.subscribe(() => {
           const ent = store.getState()?.entities;
-          const sig = [ent?.rooms, ent?.roomItems, ent?.roomCharacters];
+          const sig = [ent?.rooms, ent?.roomItems, ent?.roomCharacters, ent?.roomDecks, ent?.roomDices]; // a new die or deck is sent at once (they were missing here, so a created die waited for the next unrelated change)
           if (last && sig.every((value, index) => value === last[index])) return;
           last = sig;
           try { callback(); } catch (error) { /* 구독자 오류가 코코포리아 저장소를 막지 않게 한다 */ }
