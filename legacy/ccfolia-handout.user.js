@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.93
+// @version      0.1.94
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.93",
+    version: "0.1.94",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -185,7 +185,7 @@
     },
     fetchAll() { return fetchAllFromFirestore(); },
     subscribe() {
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers)]);
     },
     unsubscribe() {
       try { unsubHandouts?.(); } catch (_) {}
@@ -290,7 +290,8 @@
           id: String(item.id || "").trim(),
           role: item.role === "gm" ? "gm" : "player",
           aliases: [...new Set(aliases)],
-          image: typeof item.image === "string" ? item.image : ""
+          image: typeof item.image === "string" ? item.image : "",
+          uid: typeof item.uid === "string" ? item.uid.slice(0, 128) : "" // 코코포리아 계정 uid (같은 사람이 브라우저를 바꿔도 같다)
         };
       }
       return null;
@@ -620,23 +621,95 @@
     return !!p?.[col];
   }
 
-  function canView(h, name) {
+  // 권한 키는 캐릭터 이름(예전) 또는 코코포리아 계정 uid. extraKeys = 같은 사람의 다른 키(내 계정 uid 등).
+  function permFor(h, name, extraKeys, col) {
     if (!h) return false;
-    if (permFlag(h, ALL_KEY, "view")) return true;
-    if (!name) return false;
-    return permFlag(h, name, "view");
+    if (permFlag(h, ALL_KEY, col)) return true;
+    if (name && permFlag(h, name, col)) return true;
+    return (extraKeys || []).some((key) => key && permFlag(h, key, col));
   }
-  function canViewSecret(h, name) {
-    if (!h) return false;
-    if (permFlag(h, ALL_KEY, "secret")) return true;
-    if (!name) return false;
-    return permFlag(h, name, "secret");
+  function canView(h, name, extraKeys) { return permFor(h, name, extraKeys, "view"); }
+  function canViewSecret(h, name, extraKeys) { return permFor(h, name, extraKeys, "secret"); }
+  function canEdit(h, name, extraKeys) { return permFor(h, name, extraKeys, "edit"); }
+
+  // ===== 계정 기준 식별 =====
+  // 사람 = 코코포리아 계정 uid. 이 확장의 익명 계정 uid 는 브라우저가 바뀌면 바뀌므로, 각자가 자기 문서 rooms/{room}/members/{익명uid} 에 { ccfoliaUid, displayName } 을 적어 둔다.
+  // 권한표(permissions)는 이름 키와 계정 uid 키를 함께 쓴다(예전 버전 사용자도 이름 키로 계속 읽는다).
+  let myCcfUid = "";
+  const remoteMembers = new Map(); // 익명 uid -> { ccfoliaUid, displayName }
+  const identityKeys = () => (myCcfUid ? [myCcfUid] : []);
+  async function resolveMyCcfUid() {
+    try {
+      const anon = fbState?.uid || "";
+      const uids = (await readFirebaseAuthUids()).filter((uid) => uid && uid !== anon);
+      const members = Object.values(findCcfoliaStore()?.getState()?.entities?.roomMembers?.entities || {});
+      const inRoom = new Set(members.map((m) => String(m?._id || m?.id || m?.uid || "")).filter(Boolean));
+      // 룸 멤버로 확인되는 계정을 우선, 못 찾으면 후보가 하나일 때만(여럿이면 추측하지 않는다)
+      myCcfUid = uids.find((uid) => inRoom.has(uid)) || (uids.length === 1 ? uids[0] : "");
+    } catch (error) { myCcfUid = ""; }
+    return myCcfUid;
   }
-  function canEdit(h, name) {
-    if (!h) return false;
-    if (permFlag(h, ALL_KEY, "edit")) return true;
-    if (!name) return false;
-    return permFlag(h, name, "edit");
+  function myCcfDisplayName() {
+    const members = Object.values(findCcfoliaStore()?.getState()?.entities?.roomMembers?.entities || {});
+    const me = members.find((m) => String(m?._id || m?.id || m?.uid || "") === myCcfUid);
+    return String(me?.displayName || "").trim().slice(0, 60);
+  }
+  let membersWarned = false;
+  async function registerMember() {
+    const fb = await initFirebase();
+    const roomKey = getCurrentRoomKey();
+    if (!fb || roomKey === "global") return;
+    if (!(await resolveMyCcfUid())) return;
+    try {
+      const { doc, setDoc, serverTimestamp } = fb.modules.fs;
+      await setDoc(doc(fb.db, "rooms", roomKey, "members", fb.uid), { ccfoliaUid: myCcfUid, displayName: myCcfDisplayName(), updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) { if (!membersWarned) { membersWarned = true; console.warn("[ccf-handout] member register failed:", error); } }
+  }
+  let unsubMembers = null;
+  async function subscribeToMembers() {
+    const fb = await initFirebase();
+    const roomKey = getCurrentRoomKey();
+    if (!fb || roomKey === "global" || unsubMembers) return;
+    const { collection, onSnapshot } = fb.modules.fs;
+    unsubMembers = onSnapshot(collection(fb.db, "rooms", roomKey, "members"), (snap) => {
+      remoteMembers.clear();
+      snap.forEach((d) => { const data = d.data() || {}; if (data.ccfoliaUid) remoteMembers.set(d.id, { ccfoliaUid: String(data.ccfoliaUid), displayName: String(data.displayName || "") }); });
+      if (isAdminMode()) { linkPlsToMembers(); }
+      if (state.isOpen) render();
+    }, (error) => { if (!membersWarned) { membersWarned = true; console.warn("[ccf-handout] members subscribe error:", error); } });
+    registerTeardown(() => { try { unsubMembers?.(); } catch (_) {} unsubMembers = null; });
+  }
+  // PL 목록의 이름·병합 이름 ↔ 계정(members 의 표시 이름) 연결. 이름이 한 계정과만 맞을 때만 붙인다.
+  function linkPlsToMembers() {
+    const list = Array.isArray(state.data.plList) ? state.data.plList : [];
+    if (!list.length || !remoteMembers.size) return false;
+    const byName = new Map();
+    for (const { ccfoliaUid, displayName } of remoteMembers.values()) {
+      const key = normalizePlNameKey(displayName);
+      if (!key) continue;
+      if (!byName.has(key)) byName.set(key, new Set());
+      byName.get(key).add(ccfoliaUid);
+    }
+    let changed = false;
+    for (const pl of list) {
+      if (pl.uid) continue;
+      const found = new Set();
+      for (const name of [pl.name, ...(pl.aliases || [])]) for (const uid of byName.get(normalizePlNameKey(name)) || []) found.add(uid);
+      if (found.size === 1) { pl.uid = [...found][0]; changed = true; }
+    }
+    if (changed) saveAll(state.data).catch(() => {});
+    return changed;
+  }
+  // 저장할 권한표에 계정 uid 키를 더한다(이름 키는 그대로 둔다). 같은 이름의 PL 이 계정에 연결돼 있을 때만.
+  function withAccountKeys(permissions) {
+    const out = { ...permissions };
+    const list = Array.isArray(state.data.plList) ? state.data.plList : [];
+    for (const [key, value] of Object.entries(permissions || {})) {
+      if (key === ALL_KEY) continue;
+      const pl = list.find((p) => p.uid && [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) === normalizePlNameKey(key)));
+      if (pl && !out[pl.uid]) out[pl.uid] = { ...value };
+    }
+    return out;
   }
 
   // PL 1명에 대해 전체 핸드아웃 통틀어 view/secret/edit 권한 한 번이라도 받은 적 있는지 집계.
@@ -1899,8 +1972,8 @@
     if (data.ownerUid === fbState.uid) return;
 
     const me = state.data.myCharacter;
-    const hasPublic = canView(data, me);
-    const hasSecret = canViewSecret(data, me);
+    const hasPublic = canView(data, me, identityKeys());
+    const hasSecret = canViewSecret(data, me, identityKeys());
     if (!hasPublic && !hasSecret) {
       console.info("[ccf-handout] remote skipped (no permission):", data.id, "as", me || "(미설정)");
       ingestRemoteRemove(data.id);
@@ -2006,6 +2079,7 @@
     await setDoc(doc(fb.db, "rooms", roomKey, "meta", "gm"), {
       gmCharacter: gmCharacter || "",
       gmUid: fb.uid,
+      gmCcfoliaUid: myCcfUid || "",
       updatedAt: serverTimestamp()
     });
     console.info("[ccf-handout] GM push OK:", gmCharacter);
@@ -2078,7 +2152,7 @@
   function showHandoutModal(handout, fromName, isPreview = false) {
     const previewOpener = isPreview ? (state.shadow?.activeElement || document.activeElement) : null;
     const me = state.data.myCharacter;
-    const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me));
+    const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
@@ -2357,7 +2431,7 @@
     refreshCcfoliaRole();
     syncStarting = initFirebase().then((fb) => {
       syncInfo = { reason: "" };
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm()]).then(() => fb);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers)]).then(() => fb);
     }).catch((error) => {
       syncInfo = { reason: String(error?.message || error).slice(0, 80) };
       throw error;
@@ -3080,7 +3154,7 @@
       const permissionName = getPermissionCharacterName();
       const canSecret = previewAsPl
         ? canViewSecret(h, me)
-        : (adminMode || h._canSecret === true || canViewSecret(h, permissionName));
+        : (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
       const permKeys = Object.keys(h.permissions || {});
       const viewersLabel = adminMode
@@ -3180,8 +3254,9 @@
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
     const perms = h.permissions || {};
+    const accountKeys = new Set([...plList.map((p) => p.uid).filter(Boolean), ...[...remoteMembers.values()].map((m) => m.ccfoliaUid)]);
     for (const k of Object.keys(perms)) {
-      if (rows.some((r) => r.key === k)) continue;
+      if (rows.some((r) => r.key === k) || accountKeys.has(k)) continue; // 계정 uid 키는 연결된 PL 의 이름 행과 한 쌍
       rows.push({ key: k, label: k });
     }
     return rows;
@@ -4051,12 +4126,13 @@
         permissions[k] = { view: !!v.view, secret: !!v.secret, edit: !!v.edit };
       }
     }
+    const permissionsWithAccounts = withAccountKeys(permissions);
     const isNew = !state.editingId || state.editingId === "new";
     const id = isNew ? uuid() : state.editingId;
     const now = new Date().toISOString();
     const existing = isNew ? null : findHandout(state.editingId);
     const handout = {
-      id, title, image, description, gmNotes, permissions,
+      id, title, image, description, gmNotes, permissions: permissionsWithAccounts,
       folderId: (state.data.folders || []).some((folder) => folder.id === getFieldValue("folderId")) ? getFieldValue("folderId") : "",
       tags: existing?.tags || [],
       ownerUid: existing?.ownerUid,
@@ -4270,7 +4346,8 @@
     if (!aliases.length) aliases = findExistingPlAliases(name, id);
     const isAdmin = row.getAttribute("data-pl-admin") === "1";
     const image = row.getAttribute("data-pl-image") || "";
-    return name ? { name, id, role, aliases, image, _isAdmin: isAdmin } : null;
+    const uid = row.getAttribute("data-pl-uid") || ""; // 계정 연결은 목록을 고쳐 저장해도 남긴다
+    return name ? { name, id, role, aliases, image, uid, _isAdmin: isAdmin } : null;
   }
 
   function writePlRow(row, item) {
@@ -4286,6 +4363,7 @@
     if (item._isAdmin) row.setAttribute("data-pl-admin", "1");
     else row.removeAttribute("data-pl-admin");
     row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
+    if (item.uid) row.setAttribute("data-pl-uid", item.uid); else row.removeAttribute("data-pl-uid");
 
     // 아바타 (#74)
     const image = typeof item.image === "string" ? item.image : "";
@@ -4557,7 +4635,7 @@
     const adminMode = isAdminMode();
     const previewAsPl = adminMode && state.plPreview && !!me;
     const permissionName = getPermissionCharacterName();
-    const canSecret = previewAsPl ? canViewSecret(h, me) : (adminMode || h._canSecret === true || canViewSecret(h, permissionName));
+    const canSecret = previewAsPl ? canViewSecret(h, me) : (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
     const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
     const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");
