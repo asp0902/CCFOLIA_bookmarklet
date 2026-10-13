@@ -180,7 +180,10 @@ let handoutSeen = "", handoutClosed = "";
 // the whole field is scaled to fit the window. Positions are top-left offsets from the field centre, in units.
 let sceneData = null;
 const moved = new Map(); // id -> { x, y, at }: a piece the participant just dropped, shown there until the GM's scene catches up
-const view = { zoom: 1, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
+// CCFOLIA keeps the screen scale of the last visit in the browser (its stored app state; the position is not kept, measured: after a reload the scale stays and the position is 0,0): same here, per browser.
+const SCALE_KEY = "capybara-screen-scale";
+const savedScale = (() => { try { const value = Number(localStorage.getItem(SCALE_KEY)); return value >= 0.2 && value <= 2 ? value : 1; } catch (_) { return 1; } })();
+const view = { zoom: savedScale, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
 function renderScene(scene) {
   if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); }
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
@@ -315,7 +318,7 @@ window.addEventListener("resize", () => renderScene());
 {
   const stage = document.querySelector(".stage");
   let raf = 0;
-  const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderScene(); }); };
+  const redraw = () => { try { localStorage.setItem(SCALE_KEY, String(Math.round(view.zoom * 100) / 100)); } catch (_) {} if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderScene(); }); };
   const zoomAt = (factor, cx, cy) => {
     view.touched = true;
     const next = Math.max(0.2, Math.min(2, view.zoom * factor));
