@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.98
+// @version      0.3.99
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.98"),
+    version: getUserscriptVersion("0.3.99"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5795,6 +5795,8 @@
       // 목록(가상 스크롤)은 행 높이를 띠가 그려지기 전에 재서 다시 재지 않는다 → 띠 메시지가 맨 아래면 마지막 구분선이 스크롤 영역 밖으로
       // 밀린다. 띠 메시지가 보이는 동안 목록 아래에 여유를 둔다.
       `ul.MuiList-root:has([data-ccr20-band="1"]) { padding-bottom: 24px !important; }`,
+      // 바닥 고정은 이 스크립트 한 곳이 맡는다: 고정 중인 채팅 스크롤러에서 scrollTop 대입이 네이티브 smooth 애니메이션으로 돌지 않게 한다.
+      `[data-ccr20-scroller] { scroll-behavior: auto !important; }`,
       // 메시지 행(li)은 네이티브가 position: relative 라 뒤따르는 구분선(hr) 위로 올라온다 → 매크로 box-shadow 가
       // 구분선을 덮는다. 구분선을 한 단계 위로 올려 선이 그림자 위에 보이게 한다.
       `.MuiListItem-root + .MuiDivider-root { position: relative; z-index: 1; }`,
@@ -5986,6 +5988,7 @@
     const listenerOptions = { passive: true, signal: controller.signal };
     scroller.__ccr20BottomFinisher = true;
     scroller.__ccr20Pinned = true;
+    scroller.setAttribute("data-ccr20-scroller", "1");
     let lastUserIntentAt = 0;
     const markUserIntent = () => { lastUserIntentAt = Date.now(); };
     scroller.addEventListener("wheel", (event) => {
@@ -6040,6 +6043,7 @@
       if (loadFrame) cancelAnimationFrame(loadFrame);
       delete scroller.__ccr20BottomFinisher;
       delete scroller.__ccr20Pinned;
+      scroller.removeAttribute("data-ccr20-scroller");
       bottomFinishers.delete(scroller);
     } });
     refresh();
@@ -6076,6 +6080,14 @@
     if (isChatTabLike(event.target)) scheduleTabBottomSnap();
   }
 
+  function addsChatRow(mutation) {
+    if (mutation.type !== "childList") return false;
+    for (const node of mutation.addedNodes) {
+      if (node instanceof Element && (node.matches(".MuiListItem-root") || node.querySelector(".MuiListItem-root"))) return true;
+    }
+    return false;
+  }
+
   function isChatTabMutation(mutation) {
     if (mutation.type === "attributes" && mutation.attributeName === "aria-selected") {
       return isChatTabLike(mutation.target);
@@ -6088,7 +6100,15 @@
     document.addEventListener("click", handlePotentialChatTabActivation, true);
     document.addEventListener("keydown", handlePotentialChatTabKeydown, true);
     observer = new MutationObserver((mutations) => {
-      scheduleScan({ forceBottom: mutations.some(isChatTabMutation) });
+      const forceBottom = mutations.some(isChatTabMutation);
+      // A chat row was added: group it (and snap to the bottom) now, in the same task as the row, so the layout the first paint shows is the final one.
+      // Waiting for the next animation frame let the native smooth scroll and the regrouped row heights move the list in two steps.
+      if (!forceBottom && mutations.some(addsChatRow)) {
+        if (scanScheduled) { cancelAnimationFrame(scanScheduled); scanScheduled = 0; }
+        processList();
+        return;
+      }
+      scheduleScan({ forceBottom });
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-ccf-narration"] });
     processList({ forceBottom: true });
@@ -6125,7 +6145,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.98",
+    version: "0.3.99",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
