@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.68
+// @version      0.1.69
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.68"),
+    version: getUserscriptVersion("0.1.69"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -8944,18 +8944,20 @@
     const roomId = options.roomId || getCurrentRoomId();
     if (!roomId) throw createIfhUploadError("CCFOLIA 룸 안에서만 이미지 백업을 만들 수 있습니다.", "not-in-room");
     const fb = await initFirebase();
-    const { collection, getDocs } = fb.modules.fs;
-    const snap = await getDocs(collection(fb.db, "rooms", roomId, "images"));
+    const { doc, getDoc } = fb.modules.fs;
     const now = Date.now();
-    const idFilter = Array.isArray(options.imageIds) ? new Set(options.imageIds.map(String)) : null;
+    // The security rules do not let anybody list the pictures of a room (a picture is found by its id only), so a backup needs the ids: { imageIds: [...] }.
+    const ids = Array.isArray(options.imageIds) ? [...new Set(options.imageIds.map(String))] : [];
+    if (!ids.length) throw createIfhUploadError("보안 규칙상 룸의 이미지 목록을 읽을 수 없습니다. 백업·정리할 이미지 id 를 imageIds 로 넘겨 주세요.", "image-ids-required");
     const expiredOnly = options.expiredOnly === true;
     const records = [];
 
-    for (const imageDoc of snap.docs) {
-      const meta = imageDoc.data() || {};
-      if (idFilter && !idFilter.has(imageDoc.id)) continue;
+    for (const imageId of ids) {
+      const metaSnap = await getDoc(doc(fb.db, "rooms", roomId, "images", imageId));
+      if (!metaSnap.exists()) continue;
+      const meta = metaSnap.data() || {};
       if (expiredOnly && !(Number(meta.expiresAtMs || 0) > 0 && Number(meta.expiresAtMs) <= now)) continue;
-      records.push(await readFirestoreImageRecord(fb, roomId, imageDoc.id, meta));
+      records.push(await readFirestoreImageRecord(fb, roomId, imageId, meta));
     }
 
     const backup = {
