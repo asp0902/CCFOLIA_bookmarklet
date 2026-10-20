@@ -15,6 +15,8 @@ const seed = async () => {
     await setDoc(doc(db, `${R}/members/p1`), { ccfoliaUid: "acct-1", displayName: "앨리스" });
     await setDoc(doc(db, `${R}/images/i1`), { chunkCount: 1 });
     await setDoc(doc(db, `${R}/images/i1/chunks/0000`), { index: 0, data: "x" });
+    await setDoc(doc(db, `${R}/images/i3`), { chunkCount: 1, ownerUid: "p1" });
+    await setDoc(doc(db, `${R}/images/i3/chunks/0000`), { index: 0, data: "mine" });
   });
 };
 const as = uid => (uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore());
@@ -84,6 +86,27 @@ await check("a player cannot delete a picture", deleteDoc(doc(as("p1"), `${R}/im
 await check("a player cannot overwrite a chunk", setDoc(doc(as("p1"), `${R}/images/i1/chunks/0000`), { data: "evil" }), false);
 await check("GM uploads a picture", setDoc(doc(as("gm1"), `${R}/images/i2`), { chunkCount: 1 }), true);
 await check("GM deletes a picture", deleteDoc(doc(as("gm1"), `${R}/images/i1`)), true);
+// pictures pasted into the chat (format tool): the writer owns them through ownerUid
+await check("a player creates a picture of their own", setDoc(doc(as("p2"), `${R}/images/n1`), { chunkCount: 1, ownerUid: "p2", status: "uploading" }), true);
+await check("...and its chunk", setDoc(doc(as("p2"), `${R}/images/n1/chunks/0000`), { index: 0, data: "y" }), true);
+await check("...and marks it ready (merge update)", setDoc(doc(as("p2"), `${R}/images/n1`), { status: "ready" }, { merge: true }), true);
+await check("a picture in somebody else's name is refused", setDoc(doc(as("p2"), `${R}/images/n2`), { chunkCount: 1, ownerUid: "p1" }), false);
+await check("a picture without an owner is refused for a player", setDoc(doc(as("p2"), `${R}/images/n3`), { chunkCount: 1 }), false);
+await check("a chunk of a picture that does not exist is refused", setDoc(doc(as("p2"), `${R}/images/nope/chunks/0000`), { index: 0, data: "z" }), false);
+await check("another player cannot change the picture", setDoc(doc(as("p3"), `${R}/images/n1`), { status: "ready" }, { merge: true }), false);
+await check("another player cannot change its chunk", setDoc(doc(as("p3"), `${R}/images/n1/chunks/0000`), { index: 0, data: "evil" }), false);
+await check("another player cannot delete it", deleteDoc(doc(as("p3"), `${R}/images/n1`)), false);
+await check("another player cannot add a chunk to it", setDoc(doc(as("p3"), `${R}/images/n1/chunks/0001`), { index: 1, data: "evil" }), false);
+await check("the owner cannot hand the picture to somebody else", setDoc(doc(as("p2"), `${R}/images/n1`), { ownerUid: "p3" }, { merge: true }), false);
+await check("an existing picture cannot be taken over by creating it again", setDoc(doc(as("p2"), `${R}/images/i3`), { chunkCount: 1, ownerUid: "p2" }), false);
+await check("a player lists their own picture's chunks", getDocs(collection(as("p2"), `${R}/images/n1/chunks`)), true);
+await check("the owner deletes the chunk and the picture", (async () => { await deleteDoc(doc(as("p1"), `${R}/images/i3/chunks/0000`)); await deleteDoc(doc(as("p1"), `${R}/images/i3`)); })(), true);
+await check("GM deletes a player's picture", deleteDoc(doc(as("gm1"), `${R}/images/n1`)), true);
+await check("GM writes a handout picture with no owner field", setDoc(doc(as("gm1"), `${R}/images/h-img`), { chunkCount: 1, status: "uploading" }), true);
+await check("GM writes its chunk", setDoc(doc(as("gm1"), `${R}/images/h-img/chunks/0000`), { index: 0, data: "g" }), true);
+await check("GM marks it ready", setDoc(doc(as("gm1"), `${R}/images/h-img`), { status: "ready" }, { merge: true }), true);
+await check("a player cannot change the GM's picture", setDoc(doc(as("p2"), `${R}/images/h-img`), { status: "x" }, { merge: true }), false);
+await check("not signed in cannot create a picture", setDoc(doc(as(null), `${R}/images/n9`), { ownerUid: "" }), false);
 await check("not signed in cannot get a picture", getDoc(doc(as(null), `${R}/images/i2`)), false);
 await check("an unknown path is closed", getDoc(doc(as("gm1"), `${R}/secrets/x`)), false);
 await env.cleanup();

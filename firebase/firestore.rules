@@ -63,16 +63,19 @@ service cloud.firestore {
         allow read: if signedIn();
         allow write, delete: if signedIn() && request.auth.uid == uid;
       }
-      // pictures of handouts (split into chunks): the GM writes; reading needs a sign-in and the picture id, which is a random id inside the handout text
-      // (a person who may not read a handout never gets the text with the id; the id is not listed anywhere because listing is not allowed below)
+      // pictures (split into chunks): handout pictures are the GM's, pictures pasted into the chat are anybody's own. A picture belongs to the account in its ownerUid; only that account (or the GM)
+      // changes or deletes it. Reading needs a sign-in and the picture id (random, inside the text that shows it); the id is not listed anywhere because listing the pictures is not allowed.
       match /images/{imageId} {
+        function ownsImage(id) { return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/images/$(id)) && get(/databases/$(database)/documents/rooms/$(roomId)/images/$(id)).data.get('ownerUid', '') == request.auth.uid; }
         allow get: if signedIn();
         allow list: if false;
-        allow create, update, delete: if isGm(roomId);
+        allow create: if isGm(roomId) || (signedIn() && request.resource.data.get('ownerUid', '') == request.auth.uid);
+        allow update: if isGm(roomId) || (ownsImage(imageId) && request.resource.data.get('ownerUid', '') == request.auth.uid);
+        allow delete: if isGm(roomId) || ownsImage(imageId);
         match /chunks/{chunkId} {
           allow get: if signedIn();
           allow list: if signedIn(); // the reader asks for the chunks of one known picture
-          allow create, update, delete: if isGm(roomId);
+          allow create, update, delete: if isGm(roomId) || ownsImage(imageId);
         }
       }
     }
