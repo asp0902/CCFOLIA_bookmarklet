@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.45
+// @version      0.0.46
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.45"),
+  version: getUserscriptVersion("0.0.46"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -3864,10 +3864,11 @@
     const out = new Map();
     if (!(button instanceof HTMLElement) || !isVisible(button)) return out;
 
-    const wasExpanded = button.getAttribute("aria-expanded") === "true";
-    let root = wasExpanded ? findCharacterListRoot(button) : null;
+    // Already open before we touched it (the list is on screen, or the button says so): read it and leave it as it is.
+    let root = findCharacterListRoot(button);
+    const wasExpanded = !!root || button.getAttribute("aria-expanded") === "true";
 
-    if (!root && !wasExpanded) {
+    if (!wasExpanded) {
       button.dispatchEvent(new MouseEvent("click", {
         bubbles: true,
         cancelable: true,
@@ -4089,21 +4090,52 @@
     return target;
   }
 
+  // Closes the list we opened. The list does not always answer to a synthetic Escape, so each way is tried in turn and the list is checked after every one:
+  // its own close button, the list button again (a toggle), the backdrop, Escape.
   async function closeCharacterListPopup(button, root) {
-    const escapeEventInit = {
-      key: "Escape",
-      code: "Escape",
-      keyCode: 27,
-      which: 27,
-      bubbles: true,
-      cancelable: true
+    const isOpen = () => {
+      const current = findCharacterListRoot(button);
+      return !!current || (root instanceof HTMLElement && root.isConnected && isVisible(root));
     };
-    const target = root instanceof HTMLElement ? root : (button instanceof HTMLElement ? button : document.body);
-    target.dispatchEvent(new KeyboardEvent("keydown", escapeEventInit));
-    target.dispatchEvent(new KeyboardEvent("keyup", escapeEventInit));
-    document.dispatchEvent(new KeyboardEvent("keydown", escapeEventInit));
-    document.dispatchEvent(new KeyboardEvent("keyup", escapeEventInit));
-
+    const settle = async () => {
+      for (let i = 0; i < 5; i += 1) {
+        await waitForAnimationFrame();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (!isOpen()) return true;
+      }
+      return !isOpen();
+    };
+    const click = (element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    const scope = (root instanceof HTMLElement ? root : findCharacterListRoot(button));
+    const steps = [
+      () => {
+        const closer = scope && [...scope.querySelectorAll("button, [role=\"button\"]")].find((item) => /^(close|닫기|閉じる)$/i.test(normalizeSpace(item.getAttribute("aria-label") || item.getAttribute("title") || "")) || item.querySelector("[data-testid=\"CloseIcon\"]"));
+        if (!closer) return false;
+        click(closer);
+        return true;
+      },
+      () => { if (!(button instanceof HTMLElement) || !button.isConnected) return false; click(button); return true; },
+      () => {
+        const backdrop = (scope && scope.closest(".MuiModal-root, .MuiPopover-root, .MuiDialog-root"))?.querySelector(".MuiBackdrop-root") || document.querySelector(".MuiBackdrop-root");
+        if (!(backdrop instanceof HTMLElement)) return false;
+        click(backdrop);
+        return true;
+      },
+      () => {
+        const escapeEventInit = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true };
+        const target = scope || (button instanceof HTMLElement ? button : document.body);
+        for (const holder of [target, document]) {
+          holder.dispatchEvent(new KeyboardEvent("keydown", escapeEventInit));
+          holder.dispatchEvent(new KeyboardEvent("keyup", escapeEventInit));
+        }
+        return true;
+      }
+    ];
+    if (!isOpen()) return;
+    for (const step of steps) {
+      if (!step()) continue;
+      if (await settle()) break;
+    }
     if (document.activeElement instanceof HTMLElement) {
       try {
         document.activeElement.blur();
@@ -4111,10 +4143,6 @@
         // Ignore blur failures.
       }
     }
-
-    await waitForAnimationFrame();
-    await waitForAnimationFrame();
-    await new Promise((resolve) => setTimeout(resolve, 40));
   }
 
   function normalizePackageTabDescriptor(tab, index = 0, roomTitle = "") {
