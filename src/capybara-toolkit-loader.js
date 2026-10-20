@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.33";
-  const BUILD_ID = "2026-09-16-saikoro-table-command-guard-206";
+  const VERSION = "0.3.34";
+  const BUILD_ID = "2026-10-20-onoff-centered-207";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -502,7 +502,7 @@
           background: rgba(251, 251, 251, 0.95); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
           will-change: transform;
         }
-        .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .name { font-size: 13px; font-weight: 800; color: #171717; line-height: 1.35; }
         .summary { margin-top: 3px; font-size: 12px; color: #555; line-height: 1.45; }
         .actions { display: flex; gap: 6px; flex: 0 0 auto; }

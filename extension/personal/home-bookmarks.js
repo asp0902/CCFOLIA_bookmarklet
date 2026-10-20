@@ -78,7 +78,10 @@
   const STAR_BORDER_PATH = "M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.33 2.88 1 4.28L12 15.4z";
   const PANEL_CSS = `
     #${PANEL_ID} h3 { margin: 16px 16px 0; font-size: 1rem; font-weight: 700; color: #fff; font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    #${PANEL_ID} summary { margin: 16px 16px 0; cursor: pointer; }
+    #${PANEL_ID} summary { margin: 16px 16px 0; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; width: fit-content; }
+    #${PANEL_ID} summary::-webkit-details-marker { display: none; }
+    #${PANEL_ID} summary::after { content: "▸"; color: #FFFFFF; font-size: 1rem; line-height: 1; }
+    #${PANEL_ID} details[open] > summary::after { content: "▾"; }
     #${PANEL_ID} summary h3 { display: inline; margin: 0; }
     #${PANEL_ID} .capybara-empty { margin: 4px 16px 0; color: rgba(255,255,255,.6); font-size: .875rem; }
     .capybara-star-btn.on { color: #ffca28 !important; }`;
