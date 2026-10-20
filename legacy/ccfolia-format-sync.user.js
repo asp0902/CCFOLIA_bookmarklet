@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.69
+// @version      0.1.70
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.69"),
+    version: getUserscriptVersion("0.1.70"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1459,6 +1459,8 @@
   function preserveBottomScrollAfterRender(state) {
     const scroller = state?.scroller;
     if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
+    // The Roll20 css bridge keeps the chat on the bottom (one place, after the layout, before the paint); a second writer here moved the list in an extra step.
+    if (scroller.__ccr20BottomFinisher) return;
     // 바닥 근처였으면 잔여 gap을 유지하지 않고 정확히 바닥으로 (잔여 gap 영구 보존 방지).
     // 렌더가 높이를 바꾸지 않아 이미 바닥이면 아무것도 쓰지 않는다(불필요한 스크롤 쓰기가
     // 깜빡임과 CCFOLIA native 스크롤과의 충돌 원인). 이동이 필요할 때도 scroller 의 style 을
