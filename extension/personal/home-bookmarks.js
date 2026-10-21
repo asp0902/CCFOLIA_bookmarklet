@@ -80,8 +80,8 @@
     #${PANEL_ID} h3 { margin: 16px 16px 0; font-size: 1rem; font-weight: 700; color: #fff; font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
     #${PANEL_ID} summary { margin: 16px 16px 0; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; width: fit-content; }
     #${PANEL_ID} summary::-webkit-details-marker { display: none; }
-    #${PANEL_ID} summary::after { content: "▸"; color: #FFFFFF; font-size: 1rem; line-height: 1; }
-    #${PANEL_ID} details[open] > summary::after { content: "▾"; }
+    #${PANEL_ID} summary::after { content: "▲"; color: #FFFFFF; font-size: 1rem; line-height: 1; }
+    #${PANEL_ID} details[open] > summary::after { content: "▼"; }
     #${PANEL_ID} summary h3 { display: inline; margin: 0; }
     #${PANEL_ID} .capybara-empty { margin: 4px 16px 0; color: rgba(255,255,255,.6); font-size: .875rem; }
     .capybara-star-btn.on { color: #ffca28 !important; }`;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.104
+// @version      0.1.105
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.104",
+    version: "0.1.105",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -804,6 +804,7 @@
     try {
       const { doc, setDoc, serverTimestamp } = fb.modules.fs;
       await setDoc(doc(fb.db, "rooms", roomKey, "members", fb.uid), { ccfoliaUid: myCcfUid, displayName: myCcfDisplayName(), updatedAt: serverTimestamp() }, { merge: true });
+      noteFirebaseOk("참여자 등록");
     } catch (error) { if (!membersWarned) { membersWarned = true; noteFirebaseIssue("참여자 등록", error); console.warn("[ccf-handout] member register failed:", error); } }
   }
   let unsubMembers = null;
@@ -811,9 +812,12 @@
     const fb = await initFirebase();
     const roomKey = getCurrentRoomKey();
     if (!fb || roomKey === "global" || unsubMembers) return;
-    if (ccfRole.known && !ccfRole.isOwner) return; // only the GM may read who is who (the rules refuse everybody else)
+    // Only the GM may read who is who (the rules refuse everybody else): the owner whose browser holds the seat (meta/gm). Before that is settled nothing is asked, so nothing is refused;
+    // maybeClaimGmSeat starts the subscription as soon as the seat is ours.
+    if (!ccfRole.known || !ccfRole.isOwner || lastGmDoc?.gmUid !== fb.uid) return;
     const { collection, onSnapshot } = fb.modules.fs;
     unsubMembers = onSnapshot(collection(fb.db, "rooms", roomKey, "members"), (snap) => {
+      noteFirebaseOk("참여자 목록 읽기");
       remoteMembers.clear();
       snap.forEach((d) => { const data = d.data() || {}; if (data.ccfoliaUid) remoteMembers.set(d.id, { ccfoliaUid: String(data.ccfoliaUid), displayName: String(data.displayName || "") }); });
       if (isAdminMode()) { linkPlsToMembers(); scheduleInboxSync(); }
@@ -2090,6 +2094,7 @@
     console.info("[ccf-handout] subscribing to room:", roomKey);
     unsubHandouts = onSnapshot(col,
       (snap) => {
+        noteFirebaseOk("핸드아웃 읽기");
         snap.docChanges().forEach((change) => {
           const data = change.doc.data();
           if (inboxActive) return;
@@ -2179,6 +2184,7 @@
     const { collection, onSnapshot } = fb.modules.fs;
     unsubInbox = onSnapshot(collection(fb.db, "rooms", roomKey, "inbox", fb.uid, "handouts"), (snap) => {
       inboxActive = true;
+      noteFirebaseOk("내 사본 읽기");
       snap.docChanges().forEach((change) => {
         const data = change.doc.data() || {};
         if (change.type === "removed") { ingestRemoteRemove(data.id || change.doc.id); return; }
@@ -2292,6 +2298,7 @@
     if (!fb || roomKey === "global" || unsubFolders) return;
     const { doc, onSnapshot } = fb.modules.fs;
     unsubFolders = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "folders"), (snap) => {
+      noteFirebaseOk("폴더 읽기");
       if (!snap.exists()) { if (isAdminMode() && folderList().length) pushFolders(); return; } // 처음: GM 의 기존 폴더를 올린다
       if (adoptRemoteFolders(snap.data()?.folders)) { saveAll(state.data).catch(() => {}); if (state.isOpen) render(); }
     }, (error) => { noteFirebaseIssue("폴더 읽기", error); console.warn("[ccf-handout] folders subscribe error:", error); });
@@ -2330,6 +2337,7 @@
     initialShowsBatch = true;
     const col = collection(fb.db, "rooms", roomKey, "shows");
     unsubShows = onSnapshot(col, (snap) => {
+      noteFirebaseOk("보여주기 신호 읽기");
       snap.docChanges().forEach((change) => {
         if (change.type !== "added") return;
         if (initialShowsBatch) {
@@ -2354,7 +2362,10 @@
   let lastGmDoc = null, seatClaimAt = 0, seatClaimLog = null;
   async function maybeClaimGmSeat() {
     if (!ccfRole.known || !ccfRole.isOwner || !fbState?.uid || !lastGmDoc) return;
-    if (lastGmDoc.gmUid === fbState.uid) return;
+    if (lastGmDoc.gmUid === fbState.uid) {
+      if (!unsubMembers) subscribeToMembers(); // the seat is ours: now the members may be read
+      return;
+    }
     if (Date.now() - seatClaimAt < 60000) return;
     seatClaimAt = Date.now();
     const triedSeat = { ...lastGmDoc };
@@ -2412,6 +2423,7 @@
     remoteGmInfo = null;
     unsubGm = onSnapshot(doc(fb.db, "rooms", roomKey, "meta", "gm"),
       (snap) => {
+        noteFirebaseOk("GM 정보 읽기");
         lastGmDoc = snap.exists() ? { gmUid: String((snap.data() || {}).gmUid || ""), gmCcfoliaUid: String((snap.data() || {}).gmCcfoliaUid || ""), gmCharacter: String((snap.data() || {}).gmCharacter || "") } : { exists: false };
         setTimeout(() => { maybeClaimGmSeat(); }, 0);
         if (!snap.exists()) { remoteGmInfo = null; return; }
@@ -3902,6 +3914,12 @@
     const code = String(error?.code || "").replace(/^firestore\//, "");
     if (!code && !error) return;
     firebaseIssue = { at: new Date(), where, code: code || String(error?.message || error).slice(0, 60) };
+    try { if (state.isOpen && state.activeTab === "settings") render(); } catch (_) { /* the tab redraws itself next time */ }
+  }
+  // The same thing worked later (a subscription that was refused before the seat was settled now delivers): the line goes back to normal.
+  function noteFirebaseOk(where) {
+    if (!firebaseIssue || firebaseIssue.where !== where) return;
+    firebaseIssue = null;
     try { if (state.isOpen && state.activeTab === "settings") render(); } catch (_) { /* the tab redraws itself next time */ }
   }
   function firebaseIssueLabel() {

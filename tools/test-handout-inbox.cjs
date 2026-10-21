@@ -24,7 +24,7 @@ const vm = require('node:vm');
   };
   const ingested = [], removed = [];
   const box = { ALL_KEY: '*', fbState: { uid: 'gm-anon' }, state: { data: { plList: [{ name: '앨리스', aliases: [], uid: 'acct-a' }, { name: '밥', aliases: [], uid: '' }], handouts: [], folders: [{ id: 'f1', name: '1막' }], myCharacter: 'GM' }, isOpen: false }, denied: false,
-    render() {}, registerTeardown() {}, hasPlayerRelay: () => false, noteFirebaseIssue() {}, readWebShared: () => new Set(), initFirebase: async () => ({ uid: 'gm-anon', db: {}, modules: { fs: fsApi } }), getCurrentRoomKey: () => 'room', saveAll: async () => {}, isAdminMode: () => true,
+    render() {}, registerTeardown() {}, hasPlayerRelay: () => false, noteFirebaseIssue() {}, noteFirebaseOk() {}, readWebShared: () => new Set(), initFirebase: async () => ({ uid: 'gm-anon', db: {}, modules: { fs: fsApi } }), getCurrentRoomKey: () => 'room', saveAll: async () => {}, isAdminMode: () => true,
     normalizePlNameKey: v => String(v || '').replace(/\s+/g, '').toLowerCase(), mergePlListById: l => l, ingestRemoteHandout: (data, type) => ingested.push([data, type]), ingestRemoteRemove: id => removed.push(id),
     readFirebaseAuthUids: async () => [], findCcfoliaStore: () => null, setTimeout: () => 0, clearTimeout() {}, console, Object, Array, Set, Map, String, Number, JSON, Date, Promise };
   vm.createContext(box);

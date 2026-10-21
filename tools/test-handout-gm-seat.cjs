@@ -18,7 +18,7 @@ const make = ({ isOwner = true, known = true, uid = 'anon2', push = async () => 
     noteFirebaseIssue: (where, error) => log.push(['issue', where, error?.code]),
     unsubHandouts: () => log.push(['unsub', 'handouts']), unsubMembers: () => log.push(['unsub', 'members']), subscribedRoom: 'r', membersWarned: true, inboxDeniedAt: 5,
     subscribeToRoomHandouts: async () => log.push(['sub', 'handouts']), registerMember: async () => log.push(['register']), subscribeToMembers: async () => log.push(['sub', 'members']),
-    scheduleInboxSync: () => log.push(['inbox']), scheduleWebSync: () => log.push(['web']), setInterval: () => 0, clearInterval() {}, registerTeardown() {}
+    subscribeToMembersCalls: 0, scheduleInboxSync: () => log.push(['inbox']), scheduleWebSync: () => log.push(['web']), setInterval: () => 0, clearInterval() {}, registerTeardown() {}
   };
   vm.createContext(box);
   vm.runInContext(`${source.slice(a, c)}\n;this.api = { maybeClaimGmSeat, seat: () => ({ lastGmDoc, seatClaimLog }), setSeat: (value) => { lastGmDoc = value; } };`, box);
@@ -61,8 +61,23 @@ const plain = x => JSON.parse(JSON.stringify(x));
   t.api.setSeat({ gmUid: 'old-anon', gmCcfoliaUid: '', gmCharacter: '-' });
   await t.api.maybeClaimGmSeat();
   assert.deepEqual([t.api.seat().seatClaimLog.seatHadAccountUid, t.api.seat().seatClaimLog.seatGmUid], [false, 'old-anon']);
-  // the members subscription is only the GM's (the rules refuse everybody else)
-  assert(/if \(ccfRole\.known && !ccfRole\.isOwner\) return;[^\n]*\n\s*const \{ collection, onSnapshot \} = fb\.modules\.fs;\s*\n\s*unsubMembers = onSnapshot\(/.test(source));
+  // the members subscription is only the GM's, and only once this browser holds the seat (nothing is asked before that, so nothing is refused)
+  assert(source.includes('if (!ccfRole.known || !ccfRole.isOwner || lastGmDoc?.gmUid !== fb.uid) return;'), 'members: owner who holds the seat only');
+  // the seat is ours and the members are not subscribed yet: the retry starts the subscription; already subscribed: left alone
+  t = make(); t.box.unsubMembers = null; t.box.subscribeToMembers = async () => t.log.push(['sub', 'members']);
+  t.api.setSeat({ gmUid: 'anon2' }); await t.api.maybeClaimGmSeat();
+  assert.deepEqual(plain(t.log), [['sub', 'members']], 'the seat settled as ours: members subscribed');
+  // a refusal noted earlier is cleared when the same thing works later (seat missing -> created -> subscription delivers)
+  const note = source.slice(source.indexOf('  let firebaseIssue = null;'), source.indexOf('  function firebaseIssueLabel()'));
+  const issueBox = { Date, String, state: { isOpen: false }, render() {} };
+  vm.createContext(issueBox);
+  vm.runInContext(`${note}
+;this.api = { note: noteFirebaseIssue, ok: noteFirebaseOk, has: () => !!firebaseIssue };`, issueBox);
+  issueBox.api.note('참여자 목록 읽기', { code: 'permission-denied' });
+  assert.equal(issueBox.api.has(), true);
+  issueBox.api.ok('폴더 읽기'); assert.equal(issueBox.api.has(), true, 'another subscription working does not clear it');
+  issueBox.api.ok('참여자 목록 읽기'); assert.equal(issueBox.api.has(), false, 'the same subscription delivering clears it');
+  for (const where of ['참여자 목록 읽기', '핸드아웃 읽기', '내 사본 읽기', '폴더 읽기', 'GM 정보 읽기', '보여주기 신호 읽기']) assert(source.includes(`noteFirebaseOk("${where}")`), where);
   // the status line is the last thing of the settings tab
   assert(/data-sync-line>\$\{escapeHtml\(syncRoleLine\(\)\)\}<\/span>\s*<span class="room-info" data-firebase-line>/.test(source), 'sync and role line right above the Firebase line');
   assert(/const seatClaimTimer = setInterval\(\(\) => \{ maybeClaimGmSeat\(\); \}, 4000\)/.test(source), 'the claim is retried: the owner may become known after the seat was read');

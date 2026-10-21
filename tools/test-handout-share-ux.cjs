@@ -16,7 +16,7 @@ const box = {
   markWebShared: (id, on) => calls.push(['mark', id, on]), webSyncTimer: 0, webSyncBusy: false, clearTimeout() {}, setTimeout: (fn) => 0, setInterval: () => 0, clearInterval() {},
   syncPublicHandouts: async () => calls.push(['sync']), scheduleWebSync: ms => calls.push(['schedule', ms]),
   relayCall: async (action, payload) => { calls.push(['relay', action, payload]); return action === 'popup' ? { count: box.popupCount } : { participants: box.participants }; },
-  sendShowSignal: async (id, audience) => calls.push(['show', id, audience]), noteFirebaseIssue() {}, toast: text => toasts.push(text), saveAll: async () => saved.push(1), render() {},
+  sendShowSignal: async (id, audience) => calls.push(['show', id, audience]), noteFirebaseIssue() {}, noteFirebaseOk() {}, toast: text => toasts.push(text), saveAll: async () => saved.push(1), render() {},
   hasPlayerRelay: () => true, isAdminMode: () => true, registerTeardown() {}, prompt() { throw new Error('the read-only link prompt must not come up'); },
   popupCount: 1, participants: []
 };
