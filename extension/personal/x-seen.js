@@ -25,10 +25,10 @@
 
   const style = document.createElement("style");
   style.textContent = `
-    article[data-capybara-seen="1"] { box-shadow: inset 3px 0 0 #00ba7c; }
-    [${BTN}] { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; color: #71767b; font: 700 17px/1 sans-serif; }
-    [${BTN}]:hover { background: rgba(0, 186, 124, .15); color: #00ba7c; }
-    [${BTN}][data-on="1"] { color: #00ba7c; }`;
+    article[data-capybara-seen="1"] { box-shadow: inset 3px 0 0 #FFD400; }
+    [${BTN}] { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; align-self: center; flex: 0 0 auto; width: 34px; height: 34px; margin: 0; padding: 0; border-radius: 50%; color: #71767b; font: 700 17px/1 sans-serif; text-align: center; }
+    [${BTN}]:hover { background: rgba(255, 212, 0, .15); color: #FFD400; }
+    [${BTN}][data-on="1"] { color: #FFD400; }`;
   document.documentElement.append(style);
 
   const tweetId = article => {

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/asp92/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 // x.com "seen" check: one ✓ button per tweet (no duplicates on redraw), toggle + storage, like click and already-liked state check it, the click does not reach the tweet.
 const source = fs.readFileSync(path.join(__dirname, '../extension/personal/x-seen.js'), 'utf8');
-const tweet = (id, { liked = false } = {}) => `<article data-testid="tweet"><a href="/u/status/${id}"><time>1h</time></a><div role="group"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button><button data-testid="retweet">⟲</button></div></article>`;
+const tweet = (id, { liked = false } = {}) => `<article data-testid="tweet"><a href="/u/status/${id}"><time>1h</time></a><div role="group" style="display:flex;align-items:center;height:48px"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button><button data-testid="retweet">⟲</button></div></article>`;
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
@@ -38,6 +38,9 @@ const tweet = (id, { liked = false } = {}) => `<article data-testid="tweet"><a h
     await page.locator('article').nth(0).locator('[data-capybara-xseen-btn]').click();
     await page.waitForTimeout(450);
     assert.deepEqual(await seenIds(), ['222'], 'second click unchecks');
+    // checked = yellow (#FFD400) ✓, and the button sits on the vertical middle of the like button
+    const look = await page.evaluate(() => { const a = document.querySelector('article[data-capybara-seen="1"]'); const b = a.querySelector('[data-capybara-xseen-btn]'); const l = a.querySelector('[data-testid="unlike"], [data-testid="like"]'); const rb = b.getBoundingClientRect(), rl = l.getBoundingClientRect(); return { color: getComputedStyle(b).color, band: getComputedStyle(a).boxShadow, dy: Math.abs((rb.top + rb.height / 2) - (rl.top + rl.height / 2)) }; });
+    assert.equal(look.color, 'rgb(255, 212, 0)'); assert(look.band.includes('rgb(255, 212, 0)'), 'yellow band'); assert(look.dy <= 1, 'centred with the other actions: ' + look.dy);
     // a like click checks
     await page.locator('article').nth(2).locator('[data-testid="like"]').click();
     await page.waitForTimeout(450);
