@@ -82,3 +82,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     } catch (error) { await flagError(sender.tab.id, error); }
   })();
 });
+
+// x.com "seen" check (x-seen.js): the left menu item opens the list page of the extension in a new tab.
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== "x-seen-open" || !/^https:\/\/(x|twitter)\.com\//.test(sender.tab?.url || "")) return;
+  chrome.tabs.create({ url: chrome.runtime.getURL("x-seen.html") }).catch(() => {});
+});
