@@ -12,6 +12,9 @@
   const MAX = 50000;
   const BTN = "data-capybara-xseen-btn";
   const CELL = "data-capybara-xseen-cell";
+  const SNAP = "xSeenSnap:";
+  const SNAP_MAX = 300000;
+  const CHECK_PATH = "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
   const TAB = "data-capybara-xseen-tab";
   const TAB_LIST = "data-capybara-xseen-tablist";
   let seen = {};
@@ -26,7 +29,7 @@
     saveTimer = setTimeout(() => {
       if (!alive()) return;
       const ids = Object.keys(seen);
-      if (ids.length > MAX) ids.sort((a, b) => seen[a] - seen[b]).slice(0, ids.length - MAX).forEach(id => { delete seen[id]; });
+      if (ids.length > MAX) ids.sort((a, b) => seen[a] - seen[b]).slice(0, ids.length - MAX).forEach(id => { delete seen[id]; chrome.storage.local.remove(SNAP + id).catch(() => {}); });
       chrome.storage.local.set({ [KEY]: seen }).catch(() => {});
     }, 300);
   };
@@ -57,9 +60,26 @@
 
   const mark = (id, on) => {
     if (!id || !!seen[id] === on) return false;
-    if (on) seen[id] = Date.now(); else delete seen[id];
+    if (on) seen[id] = Date.now(); else { delete seen[id]; if (alive()) chrome.storage.local.remove(SNAP + id).catch(() => {}); }
     save();
     return true;
+  };
+
+  // What the tweet looked like when it was checked: the article's own markup (its classes make it look the same on x.com), cleaned: no script / frame / video / event attributes, no
+  // button of ours; kept in xSeenSnap:{id}. The "확인 완료" list draws it as a timeline cell.
+  const snapshot = article => {
+    try {
+      const copy = article.cloneNode(true);
+      copy.querySelectorAll("script, iframe, video, source, [data-capybara-xseen-cell]").forEach(el => el.remove());
+      for (const el of [copy, ...copy.querySelectorAll("*")]) {
+        for (const attr of [...el.attributes]) {
+          if (/^on/i.test(attr.name) || /^data-capybara/.test(attr.name) || (/^(href|src)$/i.test(attr.name) && /^\s*javascript:/i.test(attr.value))) el.removeAttribute(attr.name);
+        }
+        if (el.matches("a[href]")) el.setAttribute("href", new URL(el.getAttribute("href"), location.origin).href);
+      }
+      const html = copy.outerHTML;
+      return html.length <= SNAP_MAX ? html : "";
+    } catch (_) { return ""; }
   };
 
   const showToast = id => {
@@ -155,7 +175,7 @@
     listBox = document.createElement("div");
     listBox.setAttribute("data-capybara-xseen-list", "1");
     anchor.after(listBox);
-    mounted = window.__capybaraXSeenList?.mount(listBox, { onBlocked: () => { if (alive()) chrome.runtime.sendMessage({ type: "x-seen-open" }).catch(() => {}); } });
+    mounted = window.__capybaraXSeenList?.mount(listBox, { snapshots: true, onBlocked: () => { if (alive()) chrome.runtime.sendMessage({ type: "x-seen-open" }).catch(() => {}); } });
   };
 
   const ensureTab = () => {
@@ -177,11 +197,13 @@
     for (const label of link.querySelectorAll("span")) {
       if (!label.children.length && label.textContent.trim()) { label.textContent = "확인 완료"; break; }
     }
+    // the icon is the other tab's own svg (same size, spacing and colour): only its path becomes a check mark
     const icon = link.querySelector("svg");
-    const checkIcon = document.createElement("span");
-    checkIcon.textContent = "✓";
-    checkIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;font:700 18px/1 sans-serif;color:inherit";
-    if (icon) icon.replaceWith(checkIcon);
+    if (icon) {
+      const paths = icon.querySelectorAll("path");
+      paths.forEach((path, index) => { if (index) path.remove(); });
+      paths[0]?.setAttribute("d", CHECK_PATH);
+    }
     tablist.setAttribute(TAB_LIST, "1");
     last.after(copy);
   };
@@ -208,7 +230,9 @@
       const currentId = current && tweetId(current);
       if (!currentId) return;
       const nowOn = !seen[currentId];
+      const html = nowOn ? snapshot(current) : "";
       mark(currentId, nowOn);
+      if (html && alive()) chrome.storage.local.set({ [SNAP + currentId]: html }).catch(() => {});
       paint(current);
       if (nowOn && hideOn && !isMainOfTweetPage(currentId)) showToast(currentId);
     }
