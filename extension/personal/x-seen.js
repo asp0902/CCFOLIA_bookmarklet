@@ -1,7 +1,7 @@
 // x.com / twitter.com: a "seen" check under every tweet. X switches off the repost / like marks of old tweets, so what was looked at is kept here.
 // ISOLATED content script; chrome.storage.local: xSeen = { tweetId: checkedAtMs }, xSeenHide = false turns the hiding off (default on).
 // Checked by hand only (the ✓ button right of the like button). A checked tweet is hidden from the timelines (its cellInnerDiv), with a 5 second undo; the main tweet of a
-// tweet page stays. The left menu gets "확인한 트윗" under "북마크": it opens x-seen.html (the list, with the hiding switch).
+// tweet page stays. The bookmarks page gets a third tab "확인 완료" with the list of the checked tweets (x-seen-list.js).
 (() => {
   "use strict";
   if (window.top !== window || window.__CAPYBARA_X_SEEN__) return;
@@ -12,7 +12,8 @@
   const MAX = 50000;
   const BTN = "data-capybara-xseen-btn";
   const CELL = "data-capybara-xseen-cell";
-  const NAV = "data-capybara-xseen-nav";
+  const TAB = "data-capybara-xseen-tab";
+  const TAB_LIST = "data-capybara-xseen-tablist";
   let seen = {};
   let hideOn = true;
   let saveTimer = 0;
@@ -38,6 +39,11 @@
     [${BTN}] { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; align-self: center; flex: 0 0 auto; width: 34px; height: 34px; margin: 0; padding: 0; border-radius: 50%; color: #71767b; font: 700 17px/1 sans-serif; text-align: center; }
     [${BTN}]:hover { background: rgba(255, 212, 0, .15); color: #FFD400; }
     [${BTN}][data-on="1"] { color: #FFD400; }
+    [${TAB}] { position: relative; }
+    [${TAB}][data-active="1"] span { color: #e7e9ea !important; font-weight: 700 !important; }
+    [${TAB}][data-active="1"]::after { content: ""; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 56px; height: 4px; border-radius: 9999px; background: #1d9bf0; }
+    [data-capybara-xseen-dim] span { color: #71767b !important; font-weight: 400 !important; }
+    [data-capybara-xseen-mute] { visibility: hidden !important; }
     #capybara-xseen-toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 2147483647; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 8px; background: #1d9bf0; color: #fff; font: 400 14px/1.3 sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
     #capybara-xseen-toast button { all: unset; cursor: pointer; font-weight: 700; text-decoration: underline; }`;
   document.documentElement.append(style);
@@ -104,40 +110,96 @@
     }
   };
 
-  // the left menu: "확인한 트윗" right under "북마크", the same shape (the bookmarks link cloned, icon and label replaced)
-  const ensureNav = () => {
-    if (document.querySelector(`[${NAV}]`)) return;
-    const bookmarks = document.querySelector('nav a[href="/i/bookmarks"]');
-    if (!bookmarks) return;
-    const item = bookmarks.cloneNode(true);
-    item.setAttribute(NAV, "1");
-    item.setAttribute("href", "#");
-    item.removeAttribute("aria-current");
-    item.removeAttribute("data-testid");
-    item.setAttribute("aria-label", "확인한 트윗");
-    for (const label of item.querySelectorAll("span")) {
-      if (!label.children.length && label.textContent.trim()) { label.textContent = "확인한 트윗"; break; }
-    }
-    const icon = item.querySelector("svg");
-    const checkIcon = document.createElement("span");
-    checkIcon.textContent = "✓";
-    checkIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;font:700 22px/1 sans-serif;color:inherit";
-    if (icon) icon.replaceWith(checkIcon); else item.prepend(checkIcon);
-    bookmarks.after(item);
+  // The bookmarks page ("역사", /i/bookmarks) has the tabs 북마크 | 마음에 들어요: a third one, "확인 완료", is added (a copy of the last tab). It puts the list of the checked tweets
+  // in the place of the page body (the siblings after the header are hidden); any other tab, or leaving the page, puts the page back.
+  let tabActive = false, mounted = null, listBox = null;
+  const hiddenBodies = [];
+  const onBookmarksPage = () => location.pathname.startsWith("/i/bookmarks");
+  const findTablist = () => (onBookmarksPage() ? [...document.querySelectorAll('[role="tablist"]')].find(list => list.querySelectorAll('[role="tab"]').length >= 2 && !list.hasAttribute(TAB_LIST)) : null);
+
+  const deactivate = () => {
+    if (!tabActive && !listBox) return;
+    tabActive = false;
+    try { mounted?.destroy(); } catch (_) {}
+    mounted = null;
+    listBox?.remove();
+    listBox = null;
+    for (const el of hiddenBodies.splice(0)) el.removeAttribute("data-capybara-hidden");
+    for (const el of document.querySelectorAll("[data-capybara-xseen-mute]")) el.removeAttribute("data-capybara-xseen-mute");
+    for (const el of document.querySelectorAll("[data-capybara-xseen-dim]")) el.removeAttribute("data-capybara-xseen-dim");
+    const mine = document.querySelector(`[${TAB}]`);
+    if (mine) mine.dataset.active = "0";
   };
 
-  const paintAll = () => { frame = 0; ensureNav(); document.querySelectorAll('article[data-testid="tweet"]').forEach(paint); };
+  const activate = tablist => {
+    deactivate();
+    tabActive = true;
+    const mine = tablist.querySelector(`[${TAB}]`);
+    if (mine) mine.dataset.active = "1";
+    // the other tabs lose their selected look, their blue underline is muted
+    for (const tab of tablist.querySelectorAll('[role="tab"]')) {
+      if (tab === mine) continue;
+      tab.setAttribute("data-capybara-xseen-dim", "1");
+      for (const el of tab.querySelectorAll("*")) {
+        const cs = getComputedStyle(el);
+        if (cs.backgroundColor === "rgb(29, 155, 240)" && parseFloat(cs.height) <= 6) el.setAttribute("data-capybara-xseen-mute", "1");
+      }
+    }
+    // the page body: the first sibling after the header (going up from the tab list) that comes with content; ours takes its place
+    let node = tablist, anchor = null;
+    for (let depth = 0; node && depth < 8 && !node.matches('[data-testid="primaryColumn"], main'); depth += 1, node = node.parentElement) {
+      if (node.nextElementSibling) { anchor = node; if (node.nextElementSibling.querySelector('[data-testid="cellInnerDiv"]')) break; }
+    }
+    if (!anchor) return;
+    for (let sibling = anchor.nextElementSibling; sibling; sibling = sibling.nextElementSibling) { sibling.setAttribute("data-capybara-hidden", "1"); hiddenBodies.push(sibling); }
+    listBox = document.createElement("div");
+    listBox.setAttribute("data-capybara-xseen-list", "1");
+    anchor.after(listBox);
+    mounted = window.__capybaraXSeenList?.mount(listBox, { onBlocked: () => { if (alive()) chrome.runtime.sendMessage({ type: "x-seen-open" }).catch(() => {}); } });
+  };
+
+  const ensureTab = () => {
+    if (!onBookmarksPage()) { deactivate(); return; }
+    const tablist = findTablist() || document.querySelector(`[${TAB_LIST}]`);
+    if (!tablist) { deactivate(); return; }
+    if (tablist.querySelector(`[${TAB}]`)) return;
+    const tabs = [...tablist.children];
+    const last = tabs[tabs.length - 1];
+    if (!last) return;
+    const copy = last.cloneNode(true);
+    const link = copy.matches('[role="tab"]') ? copy : copy.querySelector('[role="tab"]');
+    if (!link) return;
+    link.setAttribute(TAB, "1");
+    link.dataset.active = tabActive ? "1" : "0";
+    link.setAttribute("aria-selected", "false");
+    link.removeAttribute("data-testid");
+    link.setAttribute("href", "#");
+    for (const label of link.querySelectorAll("span")) {
+      if (!label.children.length && label.textContent.trim()) { label.textContent = "확인 완료"; break; }
+    }
+    const icon = link.querySelector("svg");
+    const checkIcon = document.createElement("span");
+    checkIcon.textContent = "✓";
+    checkIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;font:700 18px/1 sans-serif;color:inherit";
+    if (icon) icon.replaceWith(checkIcon);
+    tablist.setAttribute(TAB_LIST, "1");
+    last.after(copy);
+  };
+
+  const paintAll = () => { frame = 0; ensureTab(); document.querySelectorAll('article[data-testid="tweet"]').forEach(paint); };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(paintAll); };
 
   document.addEventListener("click", event => {
     const target = event.target instanceof Element ? event.target : null;
-    const nav = target?.closest(`[${NAV}]`);
-    if (nav) {
+    const mineTab = target?.closest(`[${TAB}]`);
+    if (mineTab) {
       event.stopPropagation();
       event.preventDefault();
-      if (alive()) chrome.runtime.sendMessage({ type: "x-seen-open" }).catch(() => {});
+      if (!tabActive) activate(mineTab.closest('[role="tablist"]'));
       return;
     }
+    // another tab of the page (or the back button of the page): the page body comes back, X goes on with its own click
+    if (tabActive && target?.closest('[role="tab"]')) deactivate();
     const toggle = target?.closest(`[${BTN}]`);
     if (toggle) {
       event.stopPropagation();

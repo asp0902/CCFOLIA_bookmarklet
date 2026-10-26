@@ -13,15 +13,18 @@ const stub = () => {
   window.__store = store; window.__sent = sent; window.__opened = 0;
 };
 const tweet = (id, { liked = false } = {}) => `<div data-testid="cellInnerDiv"><article data-testid="tweet"><a href="/u/status/${id}"><time>1h</time></a><div role="group" style="display:flex;align-items:center;height:48px"><div class="cell"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button></div><div class="cell"><button data-testid="retweet">⟲</button></div></div></article></div>`;
-const nav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/bookmarks" aria-current="false" data-testid="AppTabBar_Bookmarks_Link"><div><svg width="26" height="26"></svg><div><span>북마크</span></div></div></a><a href="/profile"><span>프로필</span></a></nav>';
+const unusedNav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/bookmarks" aria-current="false" data-testid="AppTabBar_Bookmarks_Link"><div><svg width="26" height="26"></svg><div><span>북마크</span></div></div></a><a href="/profile"><span>프로필</span></a></nav>';
+const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역사</div><div role="tablist"><div role="presentation"><a role="tab" aria-selected="true" href="/i/bookmarks" style="position:relative"><div><svg width="22" height="22"></svg><span style="font-weight:700">북마크</span></div><div class="ul" style="position:absolute;bottom:0;left:0;width:50px;height:4px;background:rgb(29, 155, 240)"></div></a></div><div role="presentation"><a role="tab" aria-selected="false" href="/u/likes"><div><svg width="22" height="22"></svg><span>마음에 들어요</span></div></a></div></div></div><section><div id="tl"></div></section></div>`;
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
     const page = await browser.newPage();
-    await page.route('https://x.com/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><body>${nav}<div id="tl"></div></body>` }));
+    await page.route('https://x.com/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><body>${bookmarksPage}</body>` }));
     await page.goto('https://x.com/home');
     await page.evaluate(stub);
     await page.evaluate(src => { document.querySelector('#tl').innerHTML = src; document.addEventListener('click', () => { window.__opened += 1; }); }, tweet('111') + tweet('222', { liked: true }));
+    await page.route('https://platform.twitter.com/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><body>embed</body>' }));
+    await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'x-seen-list.js'), 'utf8') });
     await page.addScriptTag({ content: source });
     const frame = () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     const seenIds = async () => Object.keys(await page.evaluate(() => window.__store.xSeen || {})).sort();
@@ -76,15 +79,37 @@ const nav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/boo
     await page.locator('article').nth(2).locator('[data-testid="retweet"]').click();
     await page.waitForTimeout(450);
     assert.deepEqual(await seenIds(), ['111'], 'like / repost clicks do not check');
-    // the left menu: one item right under the bookmarks, none doubled, asks for the list page
-    assert.equal(await page.locator('[data-capybara-xseen-nav]').count(), 1);
-    assert.equal(await page.locator('nav a').nth(2).getAttribute('data-capybara-xseen-nav'), '1', 'right under the bookmarks');
-    assert.match(await page.locator('[data-capybara-xseen-nav]').innerText(), /확인한 트윗/);
-    await page.evaluate(() => { const n = document.querySelector('nav'); n.innerHTML = n.innerHTML.replace(/<a[^>]*data-capybara-xseen-nav[\s\S]*?<\/a>(?=<a href="\/profile")/, ''); });
+    // the bookmarks page: a third tab "확인 완료", one only, that swaps the page body for the list and back
+    await page.evaluate(() => history.pushState({}, '', '/i/bookmarks'));
     await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
-    assert.equal(await page.locator('[data-capybara-xseen-nav]').count(), 1, 'put back once after a redraw');
-    await page.locator('[data-capybara-xseen-nav]').click();
-    assert.deepEqual(await page.evaluate(() => window.__sent), [{ type: 'x-seen-open' }], 'asks for the list page');
+    assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, 'one extra tab');
+    assert.equal(await page.locator('[role="tablist"] [role="tab"]').count(), 3);
+    assert.match(await page.locator('[data-capybara-xseen-tab]').innerText(), /확인 완료/);
+    await page.evaluate(() => { document.querySelector('[role="tablist"]').appendChild(document.createElement('i')); document.querySelector('#tl').append(document.createElement('i')); }); await frame();
+    assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, 'still one after a redraw');
+    await page.locator('[data-capybara-xseen-tab]').click();
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-item').count() > 0, true, 'the list takes the body place');
+    assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'none', 'the page body is hidden');
+    assert.equal(await page.locator('[data-capybara-xseen-tab]').getAttribute('data-active'), '1');
+    assert.equal(await page.locator('.ul').evaluate(el => getComputedStyle(el).visibility), 'hidden', 'the old tab underline is muted');
+    // the other tab brings the page back (and its click goes on)
+    await page.evaluate(() => { window.__tabClicked = 0; document.querySelector('a[href="/u/likes"]').addEventListener('click', e => { window.__tabClicked += 1; e.preventDefault(); }); });
+    await page.locator('a[href="/u/likes"]').click();
+    assert.equal(await page.locator('[data-capybara-xseen-list]').count(), 0, 'our list is gone');
+    assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'block', 'the page body is back');
+    assert.equal(await page.evaluate(() => window.__tabClicked), 1, 'X still gets the click');
+    assert.equal(await page.locator('.ul').evaluate(el => getComputedStyle(el).visibility), 'visible', 'underline back');
+    // the page's policy refuses the embed frames: the extension page is opened instead (once)
+    await page.evaluate(() => { window.__sent.length = 0; });
+    await page.locator('[data-capybara-xseen-tab]').click(); await page.waitForTimeout(200);
+    await page.evaluate(() => { for (let i = 0; i < 2; i += 1) document.dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', { violatedDirective: 'frame-src', blockedURI: 'https://platform.twitter.com/embed/Tweet.html?id=1' })); });
+    assert.deepEqual(await page.evaluate(() => window.__sent), [{ type: 'x-seen-open' }], 'asks for the list page once');
+    // and leaving the page puts it back too
+    await page.locator('[data-capybara-xseen-tab]').click(); await page.waitForTimeout(200);
+    await page.evaluate(() => history.pushState({}, '', '/home')); await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
+    assert.equal(await page.locator('[data-capybara-xseen-list]').count(), 0, 'left the page: list removed');
+    assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'block');
 
     // the list page
     const page2 = await browser.newPage();
@@ -95,17 +120,17 @@ const nav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/boo
       window.chrome = { storage: { local: { get: async k => Object.fromEntries(k.map(key => [key, store[key]])), set: async o => { Object.assign(store, o); } } } };
     });
     await page2.goto(require('node:url').pathToFileURL(path.join(root, 'x-seen.html')).href);
-    await page2.waitForSelector('.item');
-    assert.equal(await page2.locator('.item').count(), 20, '20 at first');
-    assert.equal(await page2.locator('.item iframe').first().getAttribute('src'), 'https://platform.twitter.com/embed/Tweet.html?id=1024&theme=dark&dnt=true', 'newest check first, X embed');
-    await page2.locator('#more').click();
-    assert.equal(await page2.locator('.item').count(), 25, '20 more');
-    assert.equal(await page2.locator('#more').isHidden(), true);
-    await page2.locator('.item').first().locator('button').click();
-    assert.equal(await page2.locator('.item').count(), 24, 'shown again = gone from the list');
+    await page2.waitForSelector('.cxs-item');
+    assert.equal(await page2.locator('.cxs-item').count(), 20, '20 at first');
+    assert.equal(await page2.locator('.cxs-item iframe').first().getAttribute('src'), 'https://platform.twitter.com/embed/Tweet.html?id=1024&theme=dark&dnt=true', 'newest check first, X embed');
+    await page2.locator('.cxs-more').click();
+    assert.equal(await page2.locator('.cxs-item').count(), 25, '20 more');
+    assert.equal(await page2.locator('.cxs-more').isHidden(), true);
+    await page2.locator('.cxs-item').first().locator('button').click();
+    assert.equal(await page2.locator('.cxs-item').count(), 24, 'shown again = gone from the list');
     assert.equal(await page2.evaluate(() => '1024' in window.__store.xSeen), false, 'and unchecked in the store');
-    assert.equal(await page2.locator('#hide').isChecked(), true, 'hiding is on by default');
-    await page2.locator('#hide').uncheck();
+    assert.equal(await page2.locator('.cxs-bar input').isChecked(), true, 'hiding is on by default');
+    await page2.locator('.cxs-bar input').uncheck();
     assert.equal(await page2.evaluate(() => window.__store.xSeenHide), false, 'the switch is saved');
     console.log('x seen PASS');
   } finally { await browser.close(); }
