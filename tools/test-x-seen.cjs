@@ -105,6 +105,13 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>ì—­ì‚
     await page.locator('[data-capybara-xseen-tab]').click(); await page.waitForTimeout(200);
     await page.evaluate(() => { for (let i = 0; i < 2; i += 1) document.dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', { violatedDirective: 'frame-src', blockedURI: 'https://platform.twitter.com/embed/Tweet.html?id=1' })); });
     assert.deepEqual(await page.evaluate(() => window.__sent), [{ type: 'x-seen-open' }], 'asks for the list page once');
+    // the history page (/i/history and below) is the same: the tab is there, also after a navigation inside the page
+    await page.evaluate(() => history.pushState({}, '', '/i/history')); await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
+    assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, '/i/history has the tab');
+    await page.evaluate(() => history.pushState({}, '', '/i/history/likes')); await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
+    assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, '/i/history/... too, once');
+    await page.evaluate(() => history.pushState({}, '', '/i/historyx')); await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
+    assert.equal(await page.locator('[data-capybara-xseen-list]').count(), 0);
     // and leaving the page puts it back too
     await page.locator('[data-capybara-xseen-tab]').click(); await page.waitForTimeout(200);
     await page.evaluate(() => history.pushState({}, '', '/home')); await frame(); await page.evaluate(() => { document.querySelector('#tl').append(document.createElement('i')); }); await frame();
