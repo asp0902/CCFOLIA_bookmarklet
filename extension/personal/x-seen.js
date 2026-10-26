@@ -114,7 +114,7 @@
   // in the place of the page body (the siblings after the header are hidden); any other tab, or leaving the page, puts the page back.
   let tabActive = false, mounted = null, listBox = null;
   const hiddenBodies = [];
-  const onBookmarksPage = () => location.pathname.startsWith("/i/bookmarks");
+  const onBookmarksPage = () => /^\/i\/(?:bookmarks|history)(?:\/|$)/.test(location.pathname); // the page is /i/history (called 역사), /i/bookmarks too
   const findTablist = () => (onBookmarksPage() ? [...document.querySelectorAll('[role="tablist"]')].find(list => list.querySelectorAll('[role="tab"]').length >= 2 && !list.hasAttribute(TAB_LIST)) : null);
 
   const deactivate = () => {
