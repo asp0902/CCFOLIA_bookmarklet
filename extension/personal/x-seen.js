@@ -1,5 +1,5 @@
 // x.com / twitter.com: a "seen" check under every tweet. X switches off the repost / like marks of old tweets, so what was looked at is kept here.
-// ISOLATED content script; chrome.storage.local key xSeen = { tweetId: checkedAtMs }. Checking: the ✓ button, or a like / repost click (a tweet that already shows unlike / unretweet counts too).
+// ISOLATED content script; chrome.storage.local key xSeen = { tweetId: checkedAtMs }. Checked by hand only: the ✓ button (liking or reposting does not check).
 (() => {
   "use strict";
   if (window.top !== window || window.__CAPYBARA_X_SEEN__) return;
@@ -48,7 +48,6 @@
     const id = tweetId(article);
     if (!id) return;
     // the virtual list reuses the elements: the id is read again every time
-    if (article.querySelector('[data-testid="unlike"], [data-testid="unretweet"]')) mark(id, true);
     const row = actionRow(article);
     let button = article.querySelector(`[${BTN}]`);
     if (row && !button) {
@@ -79,9 +78,6 @@
       if (currentId) { mark(currentId, !seen[currentId]); paint(current); }
       return;
     }
-    const hit = event.target instanceof Element && event.target.closest('[data-testid="like"], [data-testid="retweet"]');
-    const article = hit && hit.closest('article[data-testid="tweet"]');
-    if (article && mark(tweetId(article), true)) paint(article);
   }, true);
 
   const observer = new MutationObserver(() => { if (!alive()) { observer.disconnect(); return; } schedule(); });
