@@ -8,11 +8,11 @@ const root = path.join(__dirname, '..', 'extension', 'personal');
 const source = fs.readFileSync(path.join(root, 'x-seen.js'), 'utf8');
 const stub = () => {
   const store = {}; const listeners = []; const sent = [];
-  const pick = k => (Array.isArray(k) ? Object.fromEntries(k.map(key => [key, store[key]])) : { [k]: store[k] });
+  const pick = k => (k === null ? { ...store } : Array.isArray(k) ? Object.fromEntries(k.map(key => [key, store[key]])) : { [k]: store[k] });
   window.chrome = { runtime: { id: 'x', sendMessage: async m => { sent.push(m); } }, storage: { local: { get: async k => pick(k), remove: async k => { delete store[k]; }, set: async o => { const changes = {}; for (const k in o) { changes[k] = { newValue: o[k] }; store[k] = o[k]; } listeners.forEach(fn => fn(changes, 'local')); } }, onChanged: { addListener: fn => listeners.push(fn) } } };
   window.__store = store; window.__sent = sent; window.__opened = 0;
 };
-const tweet = (id, { liked = false } = {}) => `<div data-testid="cellInnerDiv"><article data-testid="tweet" class="tw"><a href="/u/status/${id}"><time>1h</time></a><div onclick="x()" class="body">본문 ${id}<script>1</script><iframe src="about:blank"></iframe></div><div role="group" style="display:flex;align-items:center;height:48px"><div class="cell"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button></div><div class="cell"><button data-testid="retweet">⟲</button></div></div></article></div>`;
+const tweet = (id, { liked = false } = {}) => `<div data-testid="cellInnerDiv"><article data-testid="tweet" class="tw"><a href="/u/status/${id}"><time>1h</time></a><div onclick="x()" class="body">본문 ${id}<script>1</script><iframe src="about:blank"></iframe><button><span>관련 있음</span></button><div class="lim"><svg></svg><span>일부 계정만 답글을 쓸 수 있습니다.</span></div><button class="keep">북마크</button></div><div role="group" style="display:flex;align-items:center;height:48px"><div class="cell"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button></div><div class="cell"><button data-testid="retweet">⟲</button></div></div></article></div>`;
 const unusedNav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/bookmarks" aria-current="false" data-testid="AppTabBar_Bookmarks_Link"><div><svg width="26" height="26"></svg><div><span>북마크</span></div></div></a><a href="/profile"><span>프로필</span></a></nav>';
 const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역사</div><div role="tablist"><div role="presentation"><a role="tab" aria-selected="true" href="/i/bookmarks" style="position:relative"><div><svg class="ic" viewBox="0 0 24 24"><g><path d="M1 1h1"></path></g></svg><span style="font-weight:700">북마크</span></div><div class="ul" style="position:absolute;bottom:0;left:0;width:50px;height:4px;background:rgb(29, 155, 240)"></div></a></div><div role="presentation"><a role="tab" aria-selected="false" href="/u/likes"><div><svg class="ic" viewBox="0 0 24 24"><g><path d="M0 0h1"></path><path d="M5 5h1"></path></g></svg><span>마음에 들어요</span></div></a></div></div></div><section><div id="tl"></div></section></div>`;
 (async () => {
@@ -32,6 +32,14 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     await frame();
     // one button per tweet, right of the like button (the cell after the one that holds it)
     assert.equal(await page.locator('[data-capybara-xseen-btn]').count(), 2, 'one button per tweet');
+    // the hover tip is a small box of ours ("확인 완료"), not the browser's title tip
+    assert.equal(await page.locator('[data-capybara-xseen-btn]').first().getAttribute('title'), null);
+    await page.locator('[data-capybara-xseen-btn]').first().hover();
+    await page.waitForSelector('#capybara-xseen-tip');
+    assert.equal(await page.locator('#capybara-xseen-tip').innerText(), '확인 완료');
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(50);
+    assert.equal(await page.locator('#capybara-xseen-tip').count(), 0, 'gone when the pointer leaves');
     assert.equal(await page.locator('article').nth(0).evaluate(a => a.querySelector('[data-capybara-xseen-btn]').closest('[data-capybara-xseen-cell]').previousElementSibling.querySelector('[data-testid="like"], [data-testid="unlike"]') !== null), true, 'right of the like button');
     assert.equal(await page.locator('article').nth(0).evaluate(a => a.querySelector('[data-capybara-xseen-btn]').closest('[data-capybara-xseen-cell]').className), 'cell', 'same cell shape');
     // redraw does not double (innerHTML += re-parses the buttons as dead copies; the extra ones must not appear)
@@ -59,7 +67,9 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     const look = await page.evaluate(() => { const a = document.querySelector('article[data-capybara-seen="1"]'); const b = a.querySelector('[data-capybara-xseen-btn]'); const l = a.querySelector('[data-testid="unlike"], [data-testid="like"]'); const rb = b.getBoundingClientRect(), rl = l.getBoundingClientRect(); return { color: getComputedStyle(b).color, band: getComputedStyle(a).boxShadow, dy: Math.abs((rb.top + rb.height / 2) - (rl.top + rl.height / 2)) }; });
     assert.equal(look.color, 'rgb(255, 212, 0)'); assert(look.band.includes('rgb(255, 212, 0)'), 'yellow band'); assert(look.dy <= 1, 'centred with the other actions: ' + look.dy);
     assert.equal(await page.locator('#capybara-xseen-toast').count(), 0, 'no toast when nothing is hidden');
-    // the markup of the checked tweet is kept (cleaned), for the list
+    // the markup of the checked tweet is kept (cleaned), for the list: without the "관련 있음" button and the box that tells who may reply
+    const kept = await page.evaluate(() => window.__store['xSeenSnap:111']);
+    assert(kept.includes('북마크') && !kept.includes('관련 있음') && !kept.includes('일부 계정만'), 'unwanted parts left out');
     const snap = await page.evaluate(() => window.__store['xSeenSnap:111']);
     assert.equal(typeof snap, 'string'); assert(snap.includes('본문 111') && snap.includes('https://x.com/u/status/111'), 'markup and absolute link');
     assert(!/<script|<iframe|onclick|data-capybara|xseen/.test(snap), 'cleaned: ' + snap.slice(0, 200));
@@ -93,16 +103,22 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     const icon = await page.evaluate(() => { const svgs = [...document.querySelectorAll('[role="tab"] svg')]; const mine = document.querySelector('[data-capybara-xseen-tab] svg'); return { mineClass: mine.getAttribute('class'), otherClass: svgs[1].getAttribute('class'), paths: mine.querySelectorAll('path').length, d: mine.querySelector('path').getAttribute('d') }; });
     assert.equal(icon.mineClass, icon.otherClass); assert.equal(icon.paths, 1); assert(icon.d.startsWith('M9 16.17'), 'check mark shape');
     // an old check without a snapshot (the embed takes its place) and a seeded one with a snapshot, to show the list in both ways
-    await page.evaluate(() => window.chrome.storage.local.set({ xSeen: { ...window.__store.xSeen, 555: 1, 666: 2 }, 'xSeenSnap:666': '<article class="tw">seeded 666</article>' }));
+    await page.evaluate(() => window.chrome.storage.local.set({ xSeen: { ...window.__store.xSeen, 555: 1, 666: 2 }, 'xSeenSnap:666': '<article class="tw" data-testid="tweet"><a href="/u/status/666"><time>1h</time></a>seeded 666<button class="plain">단추</button><div><svg></svg><span>일부 계정만 답글을 쓸 수 있습니다.</span></div></article>' }));
     await page.evaluate(() => { document.querySelector('[role="tablist"]').appendChild(document.createElement('i')); document.querySelector('#tl').append(document.createElement('i')); }); await frame();
     assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, 'still one after a redraw');
     await page.locator('[data-capybara-xseen-tab]').click();
     await page.waitForTimeout(300);
     assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-snap').count(), 2, 'the saved looks (111, 666) take the body place');
-    assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-item iframe').count(), 1, 'an old check without a snapshot: the embed');
+    assert.equal(await page.locator('[data-capybara-xseen-list] iframe').count(), 0, 'no embed on x.com');
+    assert.match(await page.locator('.cxs-nosnap[data-id="555"]').innerText(), /스냅샷 없음 · 원본 열기/, 'an old check without a snapshot: one line');
+    assert.equal(await page.locator('[data-capybara-xseen-list] [data-capybara-xseen-btn]').count(), 0, 'the saved looks are not scanned (no check button added)');
+    assert.equal(await page.locator('.cxs-snap[data-id="666"] button.plain').evaluate(el => getComputedStyle(el).borderTopColor !== 'rgb(255, 212, 0)'), true, 'our button style does not leak into the saved look');
+    assert.equal(await page.locator('.cxs-snap[data-id="666"]').evaluate(el => /일부 계정만/.test(el.textContent)), false, 'the reply limit box is left out when drawn too');
+    const geo = await page.locator('.cxs-snap[data-id="666"]').evaluate(el => { const a = el.querySelector('article').getBoundingClientRect(), u = el.querySelector('.cxs-undo').getBoundingClientRect(); return u.top >= a.bottom - 1 && !el.querySelector('article').contains(el.querySelector('.cxs-undo')); });
+    assert.equal(geo, true, 'the show-again button sits below the tweet, not over its icons');
     // a click on the cell opens the tweet; "다시 보이기" takes it out of the list and the store, snapshot included
     await page.evaluate(() => { window.__opens = []; window.open = (url) => { window.__opens.push(url); }; });
-    await page.locator('.cxs-snap[data-id="666"]').click({ position: { x: 10, y: 10 } });
+    await page.locator('.cxs-snap[data-id="666"] article').click({ position: { x: 10, y: 10 } });
     assert.deepEqual(await page.evaluate(() => window.__opens), ['https://x.com/i/status/666'], 'a click opens the original');
     await page.locator('.cxs-snap[data-id="666"] .cxs-undo').click();
     await page.waitForTimeout(100);
@@ -111,12 +127,22 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'none', 'the page body is hidden');
     assert.equal(await page.locator('[data-capybara-xseen-tab]').getAttribute('data-active'), '1');
     assert.equal(await page.locator('.ul').evaluate(el => getComputedStyle(el).visibility), 'hidden', 'the old tab underline is muted');
+    // an old check shows up on a page: its look is saved
+    await page.evaluate(src => { document.querySelector('#tl').insertAdjacentHTML('beforeend', src); }, tweet('555'));
+    await frame(); await page.waitForTimeout(300);
+    assert.equal(typeof await page.evaluate(() => window.__store['xSeenSnap:555']), 'string', 'saved when it appears');
+    // the tab switch is timed when the flag is on
+    await page.evaluate(() => { localStorage.setItem('xSeenDebug', '1'); delete document.documentElement.dataset.capybaraXseenDebug; });
     // the other tab brings the page back (and its click goes on)
     await page.evaluate(() => { window.__tabClicked = 0; document.querySelector('a[href="/u/likes"]').addEventListener('click', e => { window.__tabClicked += 1; e.preventDefault(); }); });
     await page.locator('a[href="/u/likes"]').click();
     assert.equal(await page.locator('[data-capybara-xseen-list]').count(), 0, 'our list is gone');
     assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'block', 'the page body is back');
     assert.equal(await page.evaluate(() => window.__tabClicked), 1, 'X still gets the click');
+    await page.waitForTimeout(100);
+    const debug = JSON.parse(await page.evaluate(() => document.documentElement.dataset.capybaraXseenDebug || '[]'));
+    assert.equal(debug.length, 1); assert(debug[0].event === 'deactivate' && debug[0].syncSteps.destroy >= 0 && debug[0].toFrame2 >= 0 && debug[0].reason, 'steps timed: ' + JSON.stringify(debug[0]));
+    await page.evaluate(() => localStorage.removeItem('xSeenDebug'));
     assert.equal(await page.locator('.ul').evaluate(el => getComputedStyle(el).visibility), 'visible', 'underline back');
     // the page's policy refuses the embed frames: the extension page is opened instead (once)
     await page.evaluate(() => { window.__sent.length = 0; });

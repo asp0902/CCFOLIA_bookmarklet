@@ -13,13 +13,26 @@
     .cxs .cxs-item iframe { display: block; width: 100%; min-height: 200px; border: 0; color-scheme: dark; }
     .cxs .cxs-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 0; font-size: 13px; color: #71767b; }
     .cxs .cxs-meta a { color: #1d9bf0; }
-    .cxs button { cursor: pointer; border: 1px solid #FFD400; background: transparent; color: #FFD400; border-radius: 16px; padding: 4px 12px; font: inherit; }
+    .cxs .cxs-btn { cursor: pointer; border: 1px solid #FFD400; background: transparent; color: #FFD400; border-radius: 16px; padding: 4px 12px; font: inherit; }
     .cxs .cxs-snap { position: relative; border-bottom: 1px solid #2f3336; cursor: pointer; }
-    .cxs .cxs-snap > .cxs-undo { position: absolute; top: 8px; right: 48px; z-index: 2; }
+    .cxs .cxs-snapbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 0 16px 10px; }
+    .cxs .cxs-nosnap { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #2f3336; color: #71767b; font-size: 14px; }
+    .cxs .cxs-nosnap a { color: #1d9bf0; }
     .cxs .cxs-more { display: block; margin: 8px auto 32px; padding: 8px 20px; }
     .cxs [hidden] { display: none !important; }
     .cxs .cxs-empty, .cxs .cxs-note { color: #71767b; padding: 24px 0; text-align: center; }`;
 
+  // what is not wanted in a saved tweet: the box that tells who may reply, the "관련 있음" button, the "인용 보기" line (the element that holds just that text goes)
+  const UNWANTED = /^(관련 있음|인용 보기|일부 계정만 답글을 쓸 수 있습니다\.?)$/;
+  const clean = root => {
+    for (const el of [...root.querySelectorAll("span, div, a, button")]) {
+      if (el.children.length || !UNWANTED.test(el.textContent.trim()) || !root.contains(el)) continue;
+      let top = el;
+      while (top.parentElement && top.parentElement !== root && top.parentElement.textContent.trim() === el.textContent.trim()) top = top.parentElement;
+      top.remove();
+    }
+    return root;
+  };
   const mount = (container, options = {}) => {
     if (!document.querySelector("style[data-cxs]")) {
       const style = document.createElement("style");
@@ -45,7 +58,7 @@
     const list = document.createElement("div");
     const more = document.createElement("button");
     more.type = "button";
-    more.className = "cxs-more";
+    more.className = "cxs-btn cxs-more";
     more.textContent = "더 보기";
     more.hidden = true;
     container.append(bar, note, list, more);
@@ -68,18 +81,44 @@
       box.dataset.id = id;
       const template = document.createElement("template");
       template.innerHTML = html;
+      clean(template.content);
       box.append(template.content);
+      const bar = document.createElement("div");
+      bar.className = "cxs-snapbar";
       const undo = document.createElement("button");
       undo.type = "button";
-      undo.className = "cxs-undo";
+      undo.className = "cxs-btn cxs-undo";
       undo.textContent = "다시 보이기";
       undo.addEventListener("click", event => { event.stopPropagation(); forget(id, box); });
-      box.addEventListener("click", event => { event.preventDefault(); if (event.target.closest(".cxs-undo")) return; window.open(`https://x.com/i/status/${id}`, "_blank", "noopener"); }, true);
-      box.append(undo);
+      bar.append(undo);
+      box.addEventListener("click", event => { event.preventDefault(); if (event.target.closest(".cxs-snapbar")) return; window.open(`https://x.com/i/status/${id}`, "_blank", "noopener"); }, true);
+      box.append(bar);
+      list.append(box);
+    };
+    // no saved look yet (an old check): a one line cell; the tweet is saved as soon as it shows up on a page
+    const addNoSnapshot = id => {
+      const box = document.createElement("div");
+      box.className = "cxs-nosnap";
+      box.dataset.id = id;
+      const text = document.createElement("span");
+      text.textContent = "스냅샷 없음 · ";
+      const link = document.createElement("a");
+      link.href = `https://x.com/i/status/${id}`;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "원본 열기";
+      text.append(link);
+      const undo = document.createElement("button");
+      undo.type = "button";
+      undo.className = "cxs-btn";
+      undo.textContent = "다시 보이기";
+      undo.addEventListener("click", () => forget(id, box));
+      box.append(text, undo);
       list.append(box);
     };
     const addItem = (id, html) => {
       if (html) { addSnapshot(id, html); return; }
+      if (options.snapshots) { addNoSnapshot(id); return; }
       const box = document.createElement("div");
       box.className = "cxs-item";
       box.dataset.id = id;
@@ -96,6 +135,7 @@
       link.textContent = "원본 열기 (보이지 않으면 삭제·비공개 트윗)";
       const undo = document.createElement("button");
       undo.type = "button";
+      undo.className = "cxs-btn";
       undo.textContent = "다시 보이기";
       undo.addEventListener("click", () => forget(id, box));
       meta.append(link, undo);
@@ -142,5 +182,5 @@
     });
     return { destroy() { window.removeEventListener("message", onMessage); document.removeEventListener("securitypolicyviolation", onViolation); container.textContent = ""; } };
   };
-  window.__capybaraXSeenList = { mount };
+  window.__capybaraXSeenList = { mount, clean };
 })();

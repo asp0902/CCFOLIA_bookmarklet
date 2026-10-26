@@ -13,6 +13,8 @@
   const BTN = "data-capybara-xseen-btn";
   const CELL = "data-capybara-xseen-cell";
   const SNAP = "xSeenSnap:";
+  const snaps = new Set(); // ids that have a saved look
+  const snapPending = new Set();
   const SNAP_MAX = 300000;
   const CHECK_PATH = "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
   const TAB = "data-capybara-xseen-tab";
@@ -47,6 +49,7 @@
     [${TAB}][data-active="1"]::after { content: ""; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 56px; height: 4px; border-radius: 9999px; background: #1d9bf0; }
     [data-capybara-xseen-dim] span { color: #71767b !important; font-weight: 400 !important; }
     [data-capybara-xseen-mute] { visibility: hidden !important; }
+    #capybara-xseen-tip { position: fixed; z-index: 2147483647; pointer-events: none; padding: 2px 4px; border-radius: 4px; background: rgba(91, 112, 131, .9); color: #fff; font: 400 11px/1.3 -apple-system, "Segoe UI", Roboto, sans-serif; white-space: nowrap; transform: translateX(-50%); }
     #capybara-xseen-toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 2147483647; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 8px; background: #1d9bf0; color: #fff; font: 400 14px/1.3 sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
     #capybara-xseen-toast button { all: unset; cursor: pointer; font-weight: 700; text-decoration: underline; }`;
   document.documentElement.append(style);
@@ -77,6 +80,7 @@
         }
         if (el.matches("a[href]")) el.setAttribute("href", new URL(el.getAttribute("href"), location.origin).href);
       }
+      window.__capybaraXSeenList?.clean(copy);
       const html = copy.outerHTML;
       return html.length <= SNAP_MAX ? html : "";
     } catch (_) { return ""; }
@@ -98,7 +102,9 @@
     toastTimer = setTimeout(() => toast.remove(), 5000);
   };
 
+  const inOwnList = el => !!el.closest("[data-capybara-xseen-list]");
   const paint = article => {
+    if (inOwnList(article)) return; // the saved looks of the tab are not tweets of the page
     const id = tweetId(article);
     if (!id) return;
     // the virtual list reuses the elements: the id is read again every time
@@ -120,7 +126,12 @@
     const on = !!seen[id];
     if (button) {
       button.dataset.on = on ? "1" : "0";
-      button.title = on ? "확인함 (누르면 해제)" : "확인함으로 표시";
+      button.setAttribute("aria-label", "확인 완료");
+    }
+    // an old check without a saved look: the tweet is on a page now, keep how it looks
+    if (on && !snaps.has(id) && !snapPending.has(id)) {
+      const html = snapshot(article);
+      if (html && alive()) { snapPending.add(id); chrome.storage.local.set({ [SNAP + id]: html }).catch(() => {}); }
     }
     if (on) article.setAttribute("data-capybara-seen", "1"); else article.removeAttribute("data-capybara-seen");
     const timelineCell = article.closest('[data-testid="cellInnerDiv"]');
@@ -137,18 +148,44 @@
   const onBookmarksPage = () => /^\/i\/(?:bookmarks|history)(?:\/|$)/.test(location.pathname); // the page is /i/history (called 역사), /i/bookmarks too
   const findTablist = () => (onBookmarksPage() ? [...document.querySelectorAll('[role="tablist"]')].find(list => list.querySelectorAll('[role="tab"]').length >= 2 && !list.hasAttribute(TAB_LIST)) : null);
 
-  const deactivate = () => {
+  // localStorage.xSeenDebug = 1: the time of each step of a tab switch is kept (document.documentElement.dataset.capybaraXseenDebug, JSON) and written to the console
+  const debugOn = () => { try { return localStorage.getItem("xSeenDebug") === "1"; } catch (_) { return false; } };
+  const debugLog = entry => {
+    try {
+      const log = JSON.parse(document.documentElement.dataset.capybaraXseenDebug || "[]");
+      log.push(entry);
+      document.documentElement.dataset.capybaraXseenDebug = JSON.stringify(log.slice(-40));
+      console.info("[x-seen]", entry);
+    } catch (_) {}
+  };
+  let paintRuns = 0, paintMs = 0;
+
+  const deactivate = (reason = "") => {
     if (!tabActive && !listBox) return;
+    const debug = debugOn(), t0 = performance.now(), steps = {};
+    const step = name => { if (debug) steps[name] = Math.round((performance.now() - t0) * 10) / 10; };
+    const items = listBox ? listBox.querySelectorAll("*").length : 0;
     tabActive = false;
     try { mounted?.destroy(); } catch (_) {}
     mounted = null;
+    step("destroy");
     listBox?.remove();
     listBox = null;
+    step("removeList");
     for (const el of hiddenBodies.splice(0)) el.removeAttribute("data-capybara-hidden");
+    step("unhideBody");
     for (const el of document.querySelectorAll("[data-capybara-xseen-mute]")) el.removeAttribute("data-capybara-xseen-mute");
     for (const el of document.querySelectorAll("[data-capybara-xseen-dim]")) el.removeAttribute("data-capybara-xseen-dim");
     const mine = document.querySelector(`[${TAB}]`);
     if (mine) mine.dataset.active = "0";
+    step("tabs");
+    if (debug) {
+      const runsBefore = paintRuns, msBefore = paintMs;
+      requestAnimationFrame(() => {
+        const frame1 = Math.round((performance.now() - t0) * 10) / 10;
+        requestAnimationFrame(() => debugLog({ event: "deactivate", reason, listElements: items, syncSteps: steps, toFrame1: frame1, toFrame2: Math.round((performance.now() - t0) * 10) / 10, paintAllRuns: paintRuns - runsBefore, paintAllMs: Math.round((paintMs - msBefore) * 10) / 10, at: new Date().toISOString() }));
+      });
+    }
   };
 
   const activate = tablist => {
@@ -208,10 +245,38 @@
     last.after(copy);
   };
 
-  const paintAll = () => { frame = 0; ensureTab(); document.querySelectorAll('article[data-testid="tweet"]').forEach(paint); };
+  const paintAll = () => {
+    frame = 0;
+    const t0 = performance.now();
+    ensureTab();
+    document.querySelectorAll('article[data-testid="tweet"]').forEach(paint);
+    paintRuns += 1; paintMs += performance.now() - t0;
+  };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(paintAll); };
 
+  // the hover tip of the ✓ button, shaped like the one of the like button (small grey box under the button, after a short delay)
+  let tipTimer = 0;
+  const hideTip = () => { clearTimeout(tipTimer); document.getElementById("capybara-xseen-tip")?.remove(); };
+  document.addEventListener("mouseover", event => {
+    const button = event.target instanceof Element ? event.target.closest(`[${BTN}]`) : null;
+    if (!button) return;
+    hideTip();
+    tipTimer = setTimeout(() => {
+      if (!button.isConnected) return;
+      const rect = button.getBoundingClientRect();
+      const tip = document.createElement("div");
+      tip.id = "capybara-xseen-tip";
+      tip.textContent = "확인 완료";
+      tip.style.left = `${rect.left + rect.width / 2}px`;
+      tip.style.top = `${rect.bottom + 4}px`;
+      document.body.append(tip);
+    }, 300);
+  }, true);
+  document.addEventListener("mouseout", event => { if (event.target instanceof Element && event.target.closest(`[${BTN}]`)) hideTip(); }, true);
+  document.addEventListener("wheel", hideTip, { capture: true, passive: true });
+
   document.addEventListener("click", event => {
+    hideTip();
     const target = event.target instanceof Element ? event.target : null;
     const mineTab = target?.closest(`[${TAB}]`);
     if (mineTab) {
@@ -221,7 +286,7 @@
       return;
     }
     // another tab of the page (or the back button of the page): the page body comes back, X goes on with its own click
-    if (tabActive && target?.closest('[role="tab"]')) deactivate();
+    if (tabActive && target?.closest('[role="tab"]')) deactivate(target.closest('[role="tab"]').textContent.trim().slice(0, 20));
     const toggle = target?.closest(`[${BTN}]`);
     if (toggle) {
       event.stopPropagation();
@@ -238,9 +303,16 @@
     }
   }, true);
 
-  const observer = new MutationObserver(() => { if (!alive()) { observer.disconnect(); return; } schedule(); });
+  // what changes inside our own list is not the page's business (the saved looks hold tweets too)
+  const ours = node => (node instanceof Element ? node : node?.parentElement)?.closest?.("[data-capybara-xseen-list], #capybara-xseen-toast, #capybara-xseen-tip");
+  const observer = new MutationObserver(mutations => {
+    if (!alive()) { observer.disconnect(); return; }
+    if (mutations.every(mutation => ours(mutation.target))) return;
+    schedule();
+  });
 
-  chrome.storage.local.get([KEY, HIDE_KEY]).then(result => {
+  chrome.storage.local.get(null).then(result => {
+    for (const key of Object.keys(result)) if (key.startsWith(SNAP)) snaps.add(key.slice(SNAP.length));
     seen = result[KEY] || {};
     hideOn = result[HIDE_KEY] !== false;
     observer.observe(document.body, { childList: true, subtree: true });
@@ -248,6 +320,7 @@
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
+    for (const key of Object.keys(changes)) if (key.startsWith(SNAP)) { const id = key.slice(SNAP.length); if (changes[key].newValue) snaps.add(id); else { snaps.delete(id); snapPending.delete(id); } }
     if (changes[KEY]) seen = changes[KEY].newValue || {};
     if (changes[HIDE_KEY]) hideOn = changes[HIDE_KEY].newValue !== false;
     if (changes[KEY] || changes[HIDE_KEY]) schedule();
