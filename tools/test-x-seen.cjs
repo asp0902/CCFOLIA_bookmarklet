@@ -9,12 +9,12 @@ const source = fs.readFileSync(path.join(root, 'x-seen.js'), 'utf8');
 const stub = () => {
   const store = {}; const listeners = []; const sent = [];
   const pick = k => (Array.isArray(k) ? Object.fromEntries(k.map(key => [key, store[key]])) : { [k]: store[k] });
-  window.chrome = { runtime: { id: 'x', sendMessage: async m => { sent.push(m); } }, storage: { local: { get: async k => pick(k), set: async o => { const changes = {}; for (const k in o) { changes[k] = { newValue: o[k] }; store[k] = o[k]; } listeners.forEach(fn => fn(changes, 'local')); } }, onChanged: { addListener: fn => listeners.push(fn) } } };
+  window.chrome = { runtime: { id: 'x', sendMessage: async m => { sent.push(m); } }, storage: { local: { get: async k => pick(k), remove: async k => { delete store[k]; }, set: async o => { const changes = {}; for (const k in o) { changes[k] = { newValue: o[k] }; store[k] = o[k]; } listeners.forEach(fn => fn(changes, 'local')); } }, onChanged: { addListener: fn => listeners.push(fn) } } };
   window.__store = store; window.__sent = sent; window.__opened = 0;
 };
-const tweet = (id, { liked = false } = {}) => `<div data-testid="cellInnerDiv"><article data-testid="tweet"><a href="/u/status/${id}"><time>1h</time></a><div role="group" style="display:flex;align-items:center;height:48px"><div class="cell"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button></div><div class="cell"><button data-testid="retweet">⟲</button></div></div></article></div>`;
+const tweet = (id, { liked = false } = {}) => `<div data-testid="cellInnerDiv"><article data-testid="tweet" class="tw"><a href="/u/status/${id}"><time>1h</time></a><div onclick="x()" class="body">본문 ${id}<script>1</script><iframe src="about:blank"></iframe></div><div role="group" style="display:flex;align-items:center;height:48px"><div class="cell"><button data-testid="${liked ? 'unlike' : 'like'}">♥</button></div><div class="cell"><button data-testid="retweet">⟲</button></div></div></article></div>`;
 const unusedNav = '<nav><a href="/home"><svg></svg><span>홈</span></a><a href="/i/bookmarks" aria-current="false" data-testid="AppTabBar_Bookmarks_Link"><div><svg width="26" height="26"></svg><div><span>북마크</span></div></div></a><a href="/profile"><span>프로필</span></a></nav>';
-const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역사</div><div role="tablist"><div role="presentation"><a role="tab" aria-selected="true" href="/i/bookmarks" style="position:relative"><div><svg width="22" height="22"></svg><span style="font-weight:700">북마크</span></div><div class="ul" style="position:absolute;bottom:0;left:0;width:50px;height:4px;background:rgb(29, 155, 240)"></div></a></div><div role="presentation"><a role="tab" aria-selected="false" href="/u/likes"><div><svg width="22" height="22"></svg><span>마음에 들어요</span></div></a></div></div></div><section><div id="tl"></div></section></div>`;
+const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역사</div><div role="tablist"><div role="presentation"><a role="tab" aria-selected="true" href="/i/bookmarks" style="position:relative"><div><svg class="ic" viewBox="0 0 24 24"><g><path d="M1 1h1"></path></g></svg><span style="font-weight:700">북마크</span></div><div class="ul" style="position:absolute;bottom:0;left:0;width:50px;height:4px;background:rgb(29, 155, 240)"></div></a></div><div role="presentation"><a role="tab" aria-selected="false" href="/u/likes"><div><svg class="ic" viewBox="0 0 24 24"><g><path d="M0 0h1"></path><path d="M5 5h1"></path></g></svg><span>마음에 들어요</span></div></a></div></div></div><section><div id="tl"></div></section></div>`;
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
@@ -59,6 +59,10 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     const look = await page.evaluate(() => { const a = document.querySelector('article[data-capybara-seen="1"]'); const b = a.querySelector('[data-capybara-xseen-btn]'); const l = a.querySelector('[data-testid="unlike"], [data-testid="like"]'); const rb = b.getBoundingClientRect(), rl = l.getBoundingClientRect(); return { color: getComputedStyle(b).color, band: getComputedStyle(a).boxShadow, dy: Math.abs((rb.top + rb.height / 2) - (rl.top + rl.height / 2)) }; });
     assert.equal(look.color, 'rgb(255, 212, 0)'); assert(look.band.includes('rgb(255, 212, 0)'), 'yellow band'); assert(look.dy <= 1, 'centred with the other actions: ' + look.dy);
     assert.equal(await page.locator('#capybara-xseen-toast').count(), 0, 'no toast when nothing is hidden');
+    // the markup of the checked tweet is kept (cleaned), for the list
+    const snap = await page.evaluate(() => window.__store['xSeenSnap:111']);
+    assert.equal(typeof snap, 'string'); assert(snap.includes('본문 111') && snap.includes('https://x.com/u/status/111'), 'markup and absolute link');
+    assert(!/<script|<iframe|onclick|data-capybara|xseen/.test(snap), 'cleaned: ' + snap.slice(0, 200));
     // switching back on hides it; a reused element follows its tweet
     await page.evaluate(() => window.chrome.storage.local.set({ xSeenHide: true }));
     await frame();
@@ -85,11 +89,25 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, 'one extra tab');
     assert.equal(await page.locator('[role="tablist"] [role="tab"]').count(), 3);
     assert.match(await page.locator('[data-capybara-xseen-tab]').innerText(), /확인 완료/);
+    // the icon is the other tab's own svg (same class, only the shape is a check mark), one path
+    const icon = await page.evaluate(() => { const svgs = [...document.querySelectorAll('[role="tab"] svg')]; const mine = document.querySelector('[data-capybara-xseen-tab] svg'); return { mineClass: mine.getAttribute('class'), otherClass: svgs[1].getAttribute('class'), paths: mine.querySelectorAll('path').length, d: mine.querySelector('path').getAttribute('d') }; });
+    assert.equal(icon.mineClass, icon.otherClass); assert.equal(icon.paths, 1); assert(icon.d.startsWith('M9 16.17'), 'check mark shape');
+    // an old check without a snapshot (the embed takes its place) and a seeded one with a snapshot, to show the list in both ways
+    await page.evaluate(() => window.chrome.storage.local.set({ xSeen: { ...window.__store.xSeen, 555: 1, 666: 2 }, 'xSeenSnap:666': '<article class="tw">seeded 666</article>' }));
     await page.evaluate(() => { document.querySelector('[role="tablist"]').appendChild(document.createElement('i')); document.querySelector('#tl').append(document.createElement('i')); }); await frame();
     assert.equal(await page.locator('[data-capybara-xseen-tab]').count(), 1, 'still one after a redraw');
     await page.locator('[data-capybara-xseen-tab]').click();
     await page.waitForTimeout(300);
-    assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-item').count() > 0, true, 'the list takes the body place');
+    assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-snap').count(), 2, 'the saved looks (111, 666) take the body place');
+    assert.equal(await page.locator('[data-capybara-xseen-list] .cxs-item iframe').count(), 1, 'an old check without a snapshot: the embed');
+    // a click on the cell opens the tweet; "다시 보이기" takes it out of the list and the store, snapshot included
+    await page.evaluate(() => { window.__opens = []; window.open = (url) => { window.__opens.push(url); }; });
+    await page.locator('.cxs-snap[data-id="666"]').click({ position: { x: 10, y: 10 } });
+    assert.deepEqual(await page.evaluate(() => window.__opens), ['https://x.com/i/status/666'], 'a click opens the original');
+    await page.locator('.cxs-snap[data-id="666"] .cxs-undo').click();
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('.cxs-snap').count(), 1, 'shown again = gone from the list');
+    assert.deepEqual(await page.evaluate(() => ['666' in window.__store.xSeen, 'xSeenSnap:666' in window.__store]), [false, false], 'unchecked, snapshot removed');
     assert.equal(await page.locator('section').evaluate(el => getComputedStyle(el).display), 'none', 'the page body is hidden');
     assert.equal(await page.locator('[data-capybara-xseen-tab]').getAttribute('data-active'), '1');
     assert.equal(await page.locator('.ul').evaluate(el => getComputedStyle(el).visibility), 'hidden', 'the old tab underline is muted');
@@ -124,7 +142,7 @@ const bookmarksPage = `<div data-testid="primaryColumn"><div id="hdr"><div>역�
     await page2.addInitScript(() => {
       const store = { xSeen: Object.fromEntries(Array.from({ length: 25 }, (_, i) => [String(1000 + i), 5000 + i])) };
       window.__store = store;
-      window.chrome = { storage: { local: { get: async k => Object.fromEntries(k.map(key => [key, store[key]])), set: async o => { Object.assign(store, o); } } } };
+      window.chrome = { storage: { local: { get: async k => Object.fromEntries(k.map(key => [key, store[key]])), remove: async k => { delete store[k]; }, set: async o => { Object.assign(store, o); } } } };
     });
     await page2.goto(require('node:url').pathToFileURL(path.join(root, 'x-seen.html')).href);
     await page2.waitForSelector('.cxs-item');
