@@ -1,0 +1,25 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+// The bottom line of the extra room chat: someone typing -> the native "○○ 열심히 입력중..." text, nobody -> the Dicebot line, neither (the link is gone for a moment) -> the previous line stays.
+const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-panel.user.js'), 'utf8').replace(/\r\n/g, '\n');
+const a = source.indexOf('  const TYPING_RE'), b = source.indexOf('  // 네이티브의 입력중 문구를 가진', a);
+assert(a >= 0 && b > a);
+const ctx = vm.createContext({});
+vm.runInContext(`${source.slice(a, b)}\nthis.api = { TYPING_RE, pickFooterLine };`, ctx);
+const { TYPING_RE, pickFooterLine } = ctx.api;
+let r = pickFooterLine('BCDice@3.17.0', '눈깅이 열심히 입력중...', 'BCDice@3.17.0');
+assert.equal(r.kind, 'typing'); assert.equal(r.text, '눈깅이 열심히 입력중...');
+r = pickFooterLine('BCDice@3.17.0', '', '');
+assert.equal(r.kind, 'dicebot'); assert.equal(r.text, 'BCDice@3.17.0');
+r = pickFooterLine('', '', 'BCDice@3.17.0');
+assert.equal(r.keep, true); assert.equal(r.key, 'BCDice@3.17.0');
+r = pickFooterLine('', '', 't:눈깅이 열심히 입력중...');
+assert.equal(r.keep, true, 'typing kept while nothing else shows');
+r = pickFooterLine('BCDice@3.17.0', '그냥 입력중 이라고 쓴 채팅', 'x');
+assert.equal(r.kind, 'dicebot', 'a chat line is not the typing text');
+assert.ok(TYPING_RE.test('A, B 열심히 입력중...'));
+assert.ok(!TYPING_RE.test('입력중'));
+assert.match(source, /dicebotObserver\.observe\(document\.body/);
+console.log('chat panel typing PASS');
