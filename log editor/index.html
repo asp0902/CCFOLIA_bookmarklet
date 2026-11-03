@@ -1363,6 +1363,10 @@
         ? ` style="color:${escapeAttr(entry.baseColor)}"`
         : "";
       const timestamp = formatEntryTimestamp(entry?.timestamp);
+      // the lines of a speaker's run are one entry here: the time of each line is in the hover tip of the time
+      const runLines = Array.isArray(entry?.__mergedEntries) ? entry.__mergedEntries : [];
+      const timestampTitle = runLines.length > 1 ? runLines.map((line, lineIndex) => `${lineIndex + 1}번째 줄 ${formatEntryTimestamp(line?.timestamp) || "-"}`).join("
+") : "";
       const channel = entry?.channel ? escapeHtml(entry.channel) : "";
       const avatarUrl = resolveAvatarUrl(entry, assetMaps);
       const isSystemSpeaker = !!(entry?.__isSystemSpeaker || (state.systemSpeaker && senderText === state.systemSpeaker));
@@ -1390,7 +1394,7 @@
           <div class="head">
             <div class="head-main">
               <span class="speaker"${speakerStyle}>${speaker}</span>
-              ${timestamp ? `<span class="timestamp">${escapeHtml(timestamp)}</span>` : ""}
+              ${timestamp ? `<span class="timestamp"${timestampTitle ? ` title="${escapeAttr(timestampTitle)}"` : ""}>${escapeHtml(timestamp)}</span>` : ""}
             </div>
             <div class="head-aux">
               ${channel ? `<span class="channel">${channel}</span>` : ""}
@@ -2273,6 +2277,8 @@ ${html}
         const d = new Date(numericLike);
         if (Number.isFinite(d.getTime())) return formatTimeOfDay(d);
       }
+      // a time without seconds (the page showed "오늘 14:39" and the collector made it a date): shown as it is, no invented seconds
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(trimmed)) return trimmed;
       const parsed = Date.parse(trimmed);
       if (Number.isFinite(parsed)) {
         return formatTimeOfDay(new Date(parsed));
@@ -2282,12 +2288,10 @@ ${html}
     return "";
   }
 
-  const _fmtTimeOfDay = new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit"
-  });
+  // YYYY-MM-DD HH:mm:ss, 24 hours, local time
   function formatTimeOfDay(d) {
-    return _fmtTimeOfDay.format(d);
+    const two = (number) => String(number).padStart(2, "0");
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
   }
 
   function showEmpty() {
