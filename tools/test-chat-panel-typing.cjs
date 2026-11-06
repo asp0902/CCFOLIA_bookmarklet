@@ -23,3 +23,7 @@ assert.ok(TYPING_RE.test('A, B 열심히 입력중...'));
 assert.ok(!TYPING_RE.test('입력중'));
 assert.match(source, /dicebotObserver\.observe\(document\.body/);
 console.log('chat panel typing PASS');
+const css = source.match(/\.ccf-scp-hint\.is-typing \{[^}]*\}/)[0];
+assert.ok(!/700|bold/.test(css), 'fallback is not bold');
+assert.match(source, /style\.fontWeight = cs\.fontWeight/);
+console.log('typing style PASS');
