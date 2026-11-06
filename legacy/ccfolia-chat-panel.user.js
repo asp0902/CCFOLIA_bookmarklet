@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.68
+// @version      0.2.69
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.68";
+  const VERSION = "0.2.69";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1623,7 +1623,7 @@
       /* 스크롤 없이 캐릭터 수만큼 높이가 늘어난다(위로 자라남). */
       /* 네이티브 캐릭터 선택 메뉴와 같게: 아바타 버튼 왼쪽 위에 맞춰 아래로 펼쳐진다(폭 170, 모서리 4px, MUI elevation 8). */
       .ccf-scp-charlist { position: absolute; left: 0; top: 0; bottom: auto; margin: 0;
-        z-index: 5; overflow: hidden; min-width: 170px;
+        z-index: 5; overflow-x: hidden; overflow-y: auto; max-height: calc(100vh - 32px); min-width: 170px;
         background: rgba(44,44,44,.87); border: 0; border-radius: 4px; padding: 0;
         box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
       .ccf-scp-charitem { display: flex; align-items: center; gap: 12px; width: 100%;
@@ -2043,9 +2043,20 @@
       items.forEach((el, i) => el.classList.toggle("is-active", i === charIdx));
       items[charIdx].scrollIntoView({ block: "nearest" });
     };
+    // 목록이 화면 아래 16px 여백을 넘으면 위로 올려 화면 안에 맞춘다(네이티브 MUI 메뉴처럼).
+    const fitCharList = () => {
+      if (!charList.isConnected) { window.removeEventListener("resize", fitCharList); return; }
+      if (charList.hidden) return;
+      charList.style.top = "0px";
+      const r = charList.getBoundingClientRect();
+      const over = r.bottom - (window.innerHeight - 16);
+      if (over > 0) charList.style.top = `${-Math.min(over, Math.max(0, r.top - 16))}px`;
+    };
+    window.addEventListener("resize", fitCharList);
     const showCharList = () => {
       buildCharList();
       charList.hidden = false;
+      fitCharList();
       const items = charItems();
       const current = selectedChar ? [...charList.querySelectorAll(".ccf-scp-charitem-name")].findIndex((el) => el.textContent === selectedChar.name) : -1;
       highlightChar(current >= 0 ? current : 0);
