@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.69
+// @version      0.2.70
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.69";
+  const VERSION = "0.2.70";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1138,12 +1138,44 @@
     };
   }
 
+  // choice[가,나,다] / choice(가,나,다) / choice 가 나 다: 항목 중 하나를 고른다(BCDice 결과 형식 "(CHOICE[가,나,다]) ＞ 나").
+  // 시크릿(S 접두)은 여기서 굴리지 않는다 — 비밀 판정을 공개 글자로 보내지 않도록 그대로 글자로 보낸다(봉투 없이).
+  function evaluateChoiceCommand(text) {
+    const raw = String(text || "").trim();
+    const listed = raw.match(/^choice\s*(?:\[([^\]]*)\]|\(([^)]*)\))/i);
+    const m = listed || raw.match(/^choice\s+([^\n]+)$/i);
+    if (!m) return null;
+    const body = m[1] ?? m[2] ?? "";
+    const items = (listed ? body.split(",") : body.split(/\s+/)).map((v) => v.trim()).filter(Boolean);
+    if (!items.length) return null;
+    const chosen = items[Math.floor(Math.random() * items.length)];
+    return {
+      roll: {
+        result: `(CHOICE[${items.join(",")}]) ＞ ${chosen}`,
+        success: false, fumble: false, critical: false, failure: false, secret: false,
+        dices: [],
+        skin: { ...DICE_SKIN }
+      }
+    };
+  }
+  // 우리가 굴리지 못해도 판정 명령으로 시작하면 서식 봉투를 붙이지 않는다(봉투가 섞이면 코코포리아가 명령으로 인식 못 함).
+  function looksLikeDiceCommand(text) {
+    const body = String(text || "").replace(/\[\[[^\]]*\]\]/g, "").trim();
+    return /^S?choice\s*[\[(\s]/i.test(body)
+      || /^S?\d*[dD]\d+\b/.test(body)
+      || /^S?CCB?\s*<=/i.test(body)
+      || /^S?(?:ST|FT|BET|RTT[1-6]?|TVT|TET|TPT|TST|TKT|TMT)\b/i.test(body)
+      || /^SC\([1-6]\)/i.test(body);
+  }
+
   // 순수 산술 주사위(NdM±K) + CC<= 판정을 직접 굴린다. 코코포리아는 네이티브 전송 때
   // 미리 굴려 extend.roll 에 넣으므로(diceDiag 로 확인), 같은 구조를 만들어 넣는다.
   // 그 밖의 게임 시스템은 BCDice 엔진이 필요해 여기선 못 굴린다(글자로 감).
   function evaluateDiceCommand(text) {
     const coc = evaluateCocCheck(text);
     if (coc) return coc;
+    const choice = evaluateChoiceCommand(text);
+    if (choice) return choice;
     const raw = String(text || "").trim();
     // 맨 앞이 정확히 주사위 식이어야 한다. 뒤의 코멘트(" 피해(…)")는 허용.
     const m = raw.match(/^(\d*)[dD](\d+)\s*([+\-]\s*\d+)?(?:\s|$)/);
@@ -1212,7 +1244,7 @@
     const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
     const narrate = (narrationOn || parsed.narration === true) && !meta;
-    if (!rolled && !meta?.rawEnvelope && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
+    if (!rolled && !meta?.rawEnvelope && !(!meta && looksLikeDiceCommand(cleanText)) && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
