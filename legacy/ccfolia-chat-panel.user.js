@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.16
+// @version      0.5.17
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.16";
+  const VERSION = "0.5.17";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -287,8 +287,12 @@
     const native = readNativeTabs().map((t) => t.channel);
     const slice = getRoomMessagesSlice();
     const groups = slice?.idsGroupBy || {};
-    const base = native.length ? native : ["main", "info", "other"];
-    // 탭 막대를 못 읽었을 때를 대비해, 메시지가 있는데 빠진 채널은 뒤에 붙인다.
+    // 탭 막대가 정답이다: 지워진 탭의 옛 메시지만 남은 채널은 보여 주지 않는다(오리지널과 같게). 막대를 잠시 못 읽으면 마지막으로 읽은 목록을 쓴다.
+    if (native.length) scpHost.lastNativeChannels = native.slice();
+    const known = native.length ? native : (scpHost.lastNativeChannels || []);
+    if (known.length) return known;
+    // 막대를 한 번도 못 읽었을 때만: 기본 탭 + 메시지가 있는 채널.
+    const base = ["main", "info", "other"];
     const rest = Object.keys(groups).filter((key) => !base.includes(key)).sort();
     return [...base, ...rest];
   }
@@ -669,7 +673,7 @@
     try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.toTabs); return v >= 1 && v <= 60 ? v : -1; } catch (e) { return -1; }
   };
   const saveTailState = () => {
-    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: ccfScpListTail >= 0 ? ccfScpListTail : undefined, toTabs: ccfScpNativeToTabs >= 0 ? ccfScpNativeToTabs : undefined })); } catch (e) { /* 저장 실패는 무시 */ }
+    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: ccfScpListTail >= 0 ? ccfScpListTail : undefined, toTabs: ccfScpNativeToTabs >= 0 ? ccfScpNativeToTabs : undefined, rowGap: ccfScpNativeRowGap >= 0 ? ccfScpNativeRowGap : undefined })); } catch (e) { /* 저장 실패는 무시 */ }
   };
   const adoptTail = (value) => {
     ccfScpListTail = value;
@@ -711,6 +715,57 @@
   // 보정이 스크롤을 흔들지 않게: 사용자 스크롤·전송 직후에는 재지 않고, 채택은 최대 3번(그 뒤로는 새로고침·방 전환까지 고정), 처음 이후엔 1px 이상 차이만 본다. localStorage.ccfScpTailAdjust = "off" 로 끈다.
   let lastUserScrollAt = 0;
   const ADJUST_MAX_ADOPTS = 3;
+  // 메시지 글자 아래 → 줄 바닥(구분선)까지의 간격: 오리지널의 일반 줄에서 재서(3번 같으면) 저장하고, 우리 패널 일반 줄이 그보다 좁으면 줄 아래 패딩에 차이를 더한다.
+  let ccfScpNativeRowGap = -1, rowGapSample = null, panelRowExtra = 0, panelRowGapSample = null, panelRowAdopts = 0;
+  const rowGapDiag = { panel: null, native: null, delta: null, reason: "" };
+  const readSavedRowGap = () => { try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.rowGap); return v >= 0 && v <= 60 ? v : -1; } catch (e) { return -1; } };
+  const medianOf = (list) => { const a = list.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
+  // 구분선이 있는 줄(묶음의 끝·단독)만 잰다: 오리지널은 아래 테두리가 보이는 줄, 패널은 우리가 아래 테두리를 준 줄. 이어지는 줄(선 없음)·나레이션·숨긴 줄은 뺀다.
+  const plainRowGaps = (rows) => rows.filter((li) => {
+    if (!(li instanceof HTMLElement) || li.hasAttribute("data-ccf-prose-cont-leader") || li.hasAttribute("data-ccf-hidden-row") || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return false;
+    return li.closest(".ccf-scp-panel") ? !!li.style.getPropertyValue("border-bottom") : parseFloat(getComputedStyle(li).borderBottomWidth) > 0;
+  })
+    .map((li) => { const p = li.querySelector("p.MuiListItemText-secondary"); if (!p) return null; const lr = li.getBoundingClientRect(), pr = p.getBoundingClientRect(); return lr.height > 0 && pr.height > 0 ? Math.round((lr.bottom - pr.bottom) * 100) / 100 : null; })
+    .filter((g) => g != null && g >= 0 && g <= 60);
+  function measureNativeRowGap(scroller) {
+    const sr = scroller.getBoundingClientRect();
+    const rows = [...scroller.querySelectorAll(".MuiListItem-root")].filter((li) => li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel") && (() => { const r = li.getBoundingClientRect(); return r.bottom <= sr.bottom + 1 && r.top >= sr.top - 1; })());
+    const gap = medianOf(plainRowGaps(rows));
+    rowGapDiag.native = gap;
+    if (gap == null) return;
+    if (rowGapSample && Math.abs(rowGapSample.value - gap) < 0.5) rowGapSample.count += 1; else rowGapSample = { value: gap, count: 1 };
+    if (rowGapSample.count >= 3 && Math.abs(ccfScpNativeRowGap - gap) >= 0.5) { ccfScpNativeRowGap = gap; panelRowGapSample = null; saveTailState(); }
+  }
+  function applyRowExtra() {
+    if (!listEl) return;
+    for (const row of listEl.querySelectorAll("[data-ccf-msg-id]")) {
+      if (row.style.getPropertyValue("border-bottom") && !row.hasAttribute("data-ccf-prose-cont-leader")) row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
+    }
+  }
+  function adjustPanelRowGap() {
+    if (!listEl) return;
+    const skip = (reason) => { rowGapDiag.reason = reason; };
+    try { if (localStorage.getItem("ccfScpTailAdjust") === "off") return skip("disabled-by-switch"); } catch (e) { /* 저장소 없음 */ }
+    if (ccfScpNativeRowGap < 0) { ccfScpNativeRowGap = readSavedRowGap(); if (ccfScpNativeRowGap < 0) return skip("native-gap-unknown"); }
+    if (panelRowAdopts >= 3) return skip("frozen-after-adopts");
+    if (Date.now() - lastUserScrollAt < 1500 || sending) return skip("busy");
+    const lr = listEl.getBoundingClientRect();
+    const rows = [...listEl.querySelectorAll("[data-ccf-msg-id]")].filter((li) => { const r = li.getBoundingClientRect(); return r.bottom <= lr.bottom + 1 && r.top >= lr.top - 1; });
+    const gap = medianOf(plainRowGaps(rows));
+    rowGapDiag.panel = gap;
+    if (gap == null) return skip("no-plain-rows");
+    const delta = Math.round((ccfScpNativeRowGap - gap) * 100) / 100;
+    rowGapDiag.delta = delta;
+    if (Math.abs(delta) < 0.75) { panelRowGapSample = null; return skip("equal"); }
+    if (panelRowGapSample && Math.abs(panelRowGapSample.value - delta) < 0.5) panelRowGapSample.count += 1; else panelRowGapSample = { value: delta, count: 1 };
+    if (panelRowGapSample.count < 3) return skip("waiting-for-3-equal");
+    panelRowGapSample = null;
+    const next = Math.max(0, Math.min(30, panelRowExtra + delta));
+    if (Math.abs(next - panelRowExtra) < 0.25) return skip("cannot-change");
+    panelRowExtra = next; panelRowAdopts += 1; rowGapDiag.reason = "adopted";
+    applyRowExtra();
+    if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight;
+  }
   const adjustDiag = { runs: 0, lastAt: 0, reason: "", actual: null, native: null, delta: null, count: 0, adopted: 0, lastAdoptAt: 0, lastNext: null };
   function adjustPanelTail() {
     adjustDiag.runs += 1; adjustDiag.lastAt = Date.now(); adjustDiag.native = ccfScpNativeToTabs;
@@ -1242,7 +1297,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         row.style.setProperty("background-position", "16px 100%", "important");
         row.style.setProperty("background-repeat", "no-repeat", "important");
         // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
-        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom}px`, "important");
+        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
       }
     });
   }
@@ -3394,7 +3449,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
-    ccfScpListTail = -1; tailSample = null; ccfScpNativeToTabs = -1; toTabsSample = null; panelAdjust = 0; adjustSample = null; adjustDiag.adopted = 0;
+    ccfScpListTail = -1; tailSample = null; ccfScpNativeToTabs = -1; toTabsSample = null; panelAdjust = 0; adjustSample = null; adjustDiag.adopted = 0; ccfScpNativeRowGap = -1; rowGapSample = null; panelRowExtra = 0; panelRowGapSample = null; panelRowAdopts = 0;
     ccfScpInnerUl = null;
     // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
     // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.
@@ -3620,6 +3675,14 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
     }
 
+    try {
+      const a = findChatAnchor();
+      if (a instanceof HTMLElement) {
+        let sc = null;
+        for (let el = a.parentElement; el && el !== document.documentElement; el = el.parentElement) { if (/(?:auto|scroll|overlay)/i.test(getComputedStyle(el).overflowY || "")) { sc = el; break; } }
+        if (sc) measureNativeRowGap(sc);
+      }
+    } catch (e) { /* 못 재면 기존 값 */ }
     // 마지막 메시지 아래 여백을 실제로 잰다: 네이티브 목록이 바닥에 있을 때 "스크롤러 보이는 영역 아래끝 - 마지막 줄(또는 그 뒤 구분선 요소) 아래끝".
     // 읽기만 하고 바닥이 아니거나 못 찾으면 기존 값을 유지한다.
     try {
@@ -3959,6 +4022,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     const native = findNativeChatPanel();
     syncTheme(native);
     adjustPanelTail();
+    adjustPanelRowGap();
     if (handle.floating) {
       // 떠 있는 창: 고정 줄·장면 밀기와 무관하게 자기 위치·크기를 쓴다.
       panelEl.classList.add("is-floating");
@@ -5160,6 +5224,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         const cs = (el) => (el instanceof HTMLElement ? (({ marginBottom, paddingBottom, borderBottomWidth, height }) => ({ marginBottom, paddingBottom, borderBottomWidth, height }))(getComputedStyle(el)) : null);
         return {
           panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
+          rowGap: { ...rowGapDiag, nativeSaved: ccfScpNativeRowGap, extra: panelRowExtra, adopts: panelRowAdopts },
           visibleRows: { panel: visibleTailRows(listEl), native: (() => { try { return visibleTailRows(findNativeChatPanel()); } catch (e) { return String(e); } })() },
           adjust: { ...adjustDiag, lastAgoMs: adjustDiag.lastAt ? Date.now() - adjustDiag.lastAt : null, lastAdoptAgoMs: adjustDiag.lastAdoptAt ? Date.now() - adjustDiag.lastAdoptAt : null, cssAdjust: panelEl ? panelEl.style.getPropertyValue("--scp-list-adjust") : null, cssTail: panelEl ? panelEl.style.getPropertyValue("--scp-list-tail") : null, listScroll: listEl ? { top: Math.round(listEl.scrollTop), client: listEl.clientHeight, height: listEl.scrollHeight } : null, pinnedToBottom, savedStorage: (() => { try { return JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null"); } catch (e) { return null; } })() },
           panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
