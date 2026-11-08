@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.105
+// @version      0.1.106
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.105",
+    version: "0.1.106",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -5421,7 +5421,7 @@
     // 최초 + 지연 재시도 (React 렌더 늦을 수 있음)
     mountIcon();
     [200, 600, 1500, 3000].forEach((ms) => {
-      setTimeout(() => { if (active) mountIcon(); }, ms);
+      setTimeout(() => { if (isActive()) mountIcon(); }, ms);
     });
     // 데이터 로드 완료 후에야 watcher/팝업 시작 — 자동 추가 race 방지
     loadAll().then((d) => {
