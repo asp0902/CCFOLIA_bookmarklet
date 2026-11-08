@@ -1300,11 +1300,15 @@
       const prevSender = String(prev?.sender || "").trim();
       const prevTabId = String(prev?.tabId || "").trim();
 
+      // a narration line and a plain line of the same speaker are not one run: the speaker "changes" (name and avatar come back), like in the chat
+      const lastOfPrev = Array.isArray(prev?.__mergedEntries) && prev.__mergedEntries.length ? prev.__mergedEntries[prev.__mergedEntries.length - 1] : prev;
+      const sameKind = (lastOfPrev?.blockStyle?.narration === true) === (entry.blockStyle?.narration === true);
       const canMerge =
         !!sender &&
         prev &&
         prevSender === sender &&
-        prevTabId === tabId;
+        prevTabId === tabId &&
+        sameKind;
 
       if (!canMerge) {
         out.push({
