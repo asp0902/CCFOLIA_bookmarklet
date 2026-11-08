@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.11
+// @version      0.5.13
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.11";
+  const VERSION = "0.5.13";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -630,7 +630,16 @@
   const lastRowEl = () => {
     if (!listEl) return null;
     const rows = listEl.querySelectorAll(".MuiListItem-root, .ccf-scp-row, [data-index]");
-    if (rows.length) return rows[rows.length - 1];
+    if (rows.length) {
+      // 화면상 마지막 = 글자가 보이는 줄 중 아래끝이 가장 아래인 줄(DOM 순서나 글자 없는 빈 줄에 속지 않는다).
+      let best = null, bestBottom = -Infinity;
+      for (const row of rows) {
+        if (!(row instanceof HTMLElement) || !(row.textContent || "").trim()) continue;
+        const r = row.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > bestBottom) { best = row; bestBottom = r.bottom; }
+      }
+      return best || rows[rows.length - 1];
+    }
     let el = listEl.lastElementChild;
     for (let depth = 0; depth < 3 && el && el.lastElementChild && el.children.length > 0 && !el.querySelector("h6, p"); depth += 1) el = el.lastElementChild;
     return el instanceof HTMLElement && !el.classList.contains("ccf-scp-empty") ? el : null;
@@ -667,6 +676,35 @@
   };
   const adoptToTabs = (value) => { ccfScpNativeToTabs = value; adjustSample = null; saveTailState(); };
   // 우리 패널에서 같은 거리(마지막 줄 아래끝 → 탭 줄 윗끝)를 재서 오리지널 값과의 차이만큼 목록 아래 패딩을 고친다. 목록이 바닥일 때, 같은 차이가 3번 나올 때만.
+  // 진단: 화면에서 실제로 보이는 마지막 줄들 — 스크롤러의 보이는 영역 안에서 아래끝이 가장 아래인 순서로 5개, 각 줄의 rect·선을 그리는 수단(border-bottom 알파, 배경 그라데이션, ::after, 뒤따르는 구분선 요소)·선 y·보이는 글자 유무.
+  function visibleTailRows(root) {
+    if (!(root instanceof Element)) return null;
+    const scrollerOf = (el) => { for (let p = el.parentElement; p; p = p.parentElement) { const o = getComputedStyle(p).overflowY; if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight + 1) return p; } return null; };
+    const items = [...root.querySelectorAll(".MuiListItem-root, .ccf-scp-row, .MuiDivider-root")].filter((el) => el instanceof HTMLElement);
+    if (!items.length) return { count: 0 };
+    const scroller = scrollerOf(items[items.length - 1]) || root;
+    const sr = scroller.getBoundingClientRect(), viewBottom = sr.top + scroller.clientHeight;
+    const r2 = (n) => Math.round(n * 100) / 100;
+    const alpha = (c) => { const m = String(c).match(/rgba?\(([^)]*)\)/); if (!m) return 0; const parts = m[1].split(",").map((x) => parseFloat(x)); return parts.length > 3 ? parts[3] : 1; };
+    const info = (el) => {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el), af = getComputedStyle(el, "::after"), bf = getComputedStyle(el, "::before");
+      const next = el.nextElementSibling, nr = next instanceof HTMLElement ? next.getBoundingClientRect() : null;
+      const bw = parseFloat(cs.borderBottomWidth) || 0, ba = alpha(cs.borderBottomColor);
+      const gradient = /gradient/.test(cs.backgroundImage);
+      const lines = [];
+      if (bw > 0 && ba > 0) lines.push({ by: "border-bottom", y: r2(r.bottom - bw), alpha: r2(ba) });
+      if (gradient) lines.push({ by: "background", pos: cs.backgroundPosition, size: cs.backgroundSize, y: r2(r.bottom - 1 - bw) });
+      if (af.content !== "none" && af.content !== "normal") lines.push({ by: "::after", h: af.height, pos: af.position, bottom: af.bottom });
+      if (bf.content !== "none" && bf.content !== "normal") lines.push({ by: "::before", h: bf.height });
+      if (next instanceof HTMLElement && next.matches(".MuiDivider-root")) lines.push({ by: "next-divider", y: r2(nr.top), h: r2(nr.height) });
+      const textBoxes = [...el.querySelectorAll("p, span, h6")].filter((t) => (t.textContent || "").trim() && t.getBoundingClientRect().height > 0);
+      const lastText = textBoxes.length ? textBoxes[textBoxes.length - 1].getBoundingClientRect() : null;
+      return { tag: `${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/).slice(0, 3).join(".")}`, top: r2(r.top), bottom: r2(r.bottom), h: r2(r.height), padBottom: cs.paddingBottom, marginBottom: cs.marginBottom, lines, visibleText: textBoxes.length, lastTextBottom: lastText ? r2(lastText.bottom) : null, textToRowBottom: lastText ? r2(r.bottom - lastText.bottom) : null, attrs: [...el.attributes].filter((a) => /^data-(index|ccf-prose|ccf-break|ccf-narr)/.test(a.name)).map((a) => a.name + "=" + String(a.value).slice(0, 6)) };
+    };
+    const visible = items.filter((el) => { const r = el.getBoundingClientRect(); return r.height > 0 && r.top < viewBottom && r.bottom > sr.top; }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    const lastInDom = items[items.length - 1];
+    return { count: items.length, viewBottom: r2(viewBottom), lastInDomIsLowest: visible[0] === lastInDom, lowest: visible.slice(0, 5).map(info), lastInDom: info(lastInDom) };
+  }
   // 진단: 마지막 비교가 언제, 어떤 값으로, 왜 건너뛰었거나 채택됐는지(tailDiag 의 adjust).
   const adjustDiag = { runs: 0, lastAt: 0, reason: "", actual: null, native: null, delta: null, count: 0, adopted: 0, lastAdoptAt: 0, lastNext: null };
   function adjustPanelTail() {
@@ -3400,7 +3438,10 @@
         }
         if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 2) {
           const lis = [...scroller.querySelectorAll(".MuiListItem-root")].filter((li) => li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel"));
-          const last = lis[lis.length - 1];
+          // 화면상 마지막 줄: 글자가 보이는 줄 중 아래끝이 가장 아래인 것(가상 목록은 DOM 순서가 화면 순서와 다를 수 있다).
+          let last = null, lastBottom = -Infinity;
+          for (const li of lis) { const r = li.getBoundingClientRect(); if (r.height > 0 && r.bottom > lastBottom && (li.textContent || "").trim()) { last = li; lastBottom = r.bottom; } }
+          if (!last) last = lis[lis.length - 1];
           if (last) {
             let end = last;
             const after = last.nextElementSibling;
@@ -4918,6 +4959,7 @@
         const cs = (el) => (el instanceof HTMLElement ? (({ marginBottom, paddingBottom, borderBottomWidth, height }) => ({ marginBottom, paddingBottom, borderBottomWidth, height }))(getComputedStyle(el)) : null);
         return {
           panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
+          visibleRows: { panel: visibleTailRows(listEl), native: (() => { try { return visibleTailRows(findNativeChatPanel()); } catch (e) { return String(e); } })() },
           adjust: { ...adjustDiag, lastAgoMs: adjustDiag.lastAt ? Date.now() - adjustDiag.lastAt : null, lastAdoptAgoMs: adjustDiag.lastAdoptAt ? Date.now() - adjustDiag.lastAdoptAt : null, cssAdjust: panelEl ? panelEl.style.getPropertyValue("--scp-list-adjust") : null, cssTail: panelEl ? panelEl.style.getPropertyValue("--scp-list-tail") : null, listScroll: listEl ? { top: Math.round(listEl.scrollTop), client: listEl.clientHeight, height: listEl.scrollHeight } : null, pinnedToBottom, savedStorage: (() => { try { return JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null"); } catch (e) { return null; } })() },
           panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
           panelLastToListBottom: last && listEl ? Math.round((listEl.getBoundingClientRect().top + listEl.clientHeight - last.getBoundingClientRect().bottom) * 100) / 100 : null,
