@@ -1330,7 +1330,12 @@
       // Roll20 CSS 매크로 박스(ccf-roll20-bubble, 블록 요소)끼리는 <br> 없이 붙인다. 코코포리아에서도 붙어 보이며,
       // <br> 을 넣으면 박스 사이에 빈 줄이 생긴다.
       const bothBubbles = prevHtml.includes("ccf-roll20-bubble") && nextHtml.includes("ccf-roll20-bubble");
-      const mergedHtml = needsImageGap
+      // a message sent with the divider toggle gets a line above it inside the run (the speaker stays one block; inline style so it survives the exports)
+      const breakHere = entry?.blockStyle?.breakBefore === true && !!prevHtml && !!nextHtml;
+      const breakHtml = '<div class="ccf-break-divider" style="border-top:1px solid rgba(128,128,128,.45);margin:8px 0"></div>';
+      const mergedHtml = breakHere
+        ? `${prevHtml}${breakHtml}${nextHtml}`
+        : needsImageGap
         ? `${prevHtml}<div style="padding-top:8px">${nextHtml}</div>`
         : [prevHtml, nextHtml].filter(Boolean).join(bothBubbles ? "" : "<br>");
       prev.packageHtml = mergedHtml;
