@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.32
+// @version      0.3.33
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.32";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.33";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -477,6 +477,10 @@
   let ccfBgmPlayerB = null;        // 두 번째 플레이어(둘 중 하나가 활성, 하나가 대기)
   let ccfBgmPlayerBReady = false;
   let ccfBgmXfadeTimer = 0;
+  // 정지 버튼으로 끌 때의 페이드 아웃(크로스페이드와 같은 1.5초, 50ms 단계). 끝나면 stopVideo 하고 볼륨을 원래 값으로 되돌린다.
+  let ccfBgmStopFadeEnabled = true;
+  let ccfBgmStopFadeTimer = 0;
+  let ccfBgmStopFadeRestore = null; // { player, volume } — 페이드 중 다시 재생/전환되면 이 볼륨으로 되돌린다
   const ccfBgmPlayerPair = [];     // 두 플레이어를 모두 기억(자리를 바꿔도 잃지 않도록)
   let ccfBgmPlayerDock = null;
   let ccfBgmPlayerVisible = false;
@@ -1570,6 +1574,12 @@
           지속시간ms: CCF_BGM_XFADE_MS,
           안내: ccfBgmCrossfadeEnabled ? "두 번째 플레이어 준비 중 — 몇 초 뒤부터 적용됩니다" : ""
         };
+      },
+      // 정지 버튼 페이드 아웃 — 문제가 생기면 setStopFade(false) 로 끈다.
+      setStopFade(on) {
+        ccfBgmStopFadeEnabled = on !== false;
+        if (!ccfBgmStopFadeEnabled) cancelCcfBgmStopFade();
+        return { 정지페이드: ccfBgmStopFadeEnabled, 지속시간ms: CCF_BGM_XFADE_MS };
       },
       crossfadeDiag() {
         const read = (p) => {
@@ -3390,6 +3400,7 @@
 
     ccfBgmNativeLoadedSlots.delete(normalizedSlotKey);
     ccfBgmLastWebAudio = null;
+    cancelCcfBgmStopFade(); // 정지 페이드 중에 다시 재생하면 페이드를 취소하고 볼륨을 되돌린다
 
     const state = readCcfYoutubeBgmPlaybackState(normalizedSlotKey, entry, button);
     ccfBgmActiveSlotKey = normalizedSlotKey;
@@ -3722,6 +3733,7 @@
     // 크로스페이드 중이 아니면 대기 플레이어는 언제나 조용해야 한다.
     // (이전 시도에서 좀비 재생을 만든 지점이라 재생 여부와 무관하게 매번 확인한다)
     if (!ccfBgmXfadeTimer) silenceCcfBgmStandby();
+    if (ccfBgmStopFadeTimer) return;          // 정지 페이드 아웃 중이면 끝날 때까지 기다린다
     if (ccfBgmActiveSlotKey) return;          // 정상 재생 중이면 관여하지 않는다
     if (ccfBgmPreviewActive) return;          // 미리듣기는 별도 플레이어/흐름
     if (ccfBgmFirestorePlaybackApplying) return;
@@ -3818,6 +3830,53 @@
     startCcfBgmProgressLoop();
   }
 
+  // 페이드 중이면 취소하고 볼륨을 되돌린다(정지하지 않는다). 새 재생이 시작될 때 부른다.
+  function cancelCcfBgmStopFade() {
+    if (ccfBgmStopFadeTimer) {
+      window.clearInterval(ccfBgmStopFadeTimer);
+      ccfBgmStopFadeTimer = 0;
+    }
+    const restore = ccfBgmStopFadeRestore;
+    ccfBgmStopFadeRestore = null;
+    if (restore) {
+      try { restore.player.setVolume?.(restore.volume); } catch (_) { /* 무시 */ }
+    }
+  }
+
+  // 지금 재생 중인 플레이어를 1.5초 동안 줄인 뒤 stopVideo 한다. 페이드를 시작했으면 true.
+  function fadeOutAndStopCcfYoutubePlayer(player) {
+    if (!ccfBgmStopFadeEnabled || !player || typeof player.setVolume !== "function" || typeof player.getVolume !== "function") return false;
+    let playing = false;
+    let volume = 0;
+    try { playing = player.getPlayerState?.() === 1; volume = Math.round(Number(player.getVolume?.()) || 0); } catch (_) { return false; }
+    if (!playing || volume <= 0) return false;
+
+    cancelCcfBgmStopFade();
+    ccfBgmStopFadeRestore = { player, volume };
+    const steps = Math.max(1, Math.round(CCF_BGM_XFADE_MS / CCF_BGM_XFADE_STEP_MS));
+    let step = 0;
+    ccfBgmStopFadeTimer = window.setInterval(() => {
+      step += 1;
+      const ratio = Math.min(1, step / steps);
+      try { player.setVolume(Math.round(volume * (1 - ratio))); } catch (_) { /* 무시 */ }
+      if (ratio < 1) return;
+      window.clearInterval(ccfBgmStopFadeTimer);
+      ccfBgmStopFadeTimer = 0;
+      ccfBgmStopFadeRestore = null;
+      // stopVideo 가 부르는 ENDED 를 반복재생으로 오해하지 않도록 한 번 더 표시한다.
+      ccfBgmStopping = true;
+      window.setTimeout(() => { ccfBgmStopping = false; }, 1200);
+      try {
+        player.stopVideo();
+        player.setVolume(volume); // 다음 재생이 0 으로 시작하지 않게 사용자 볼륨으로 복원
+      } catch (error) {
+        debugLog("bgm-youtube-fade-stop-failed", serializeError(error));
+      }
+      debugLog("bgm-youtube-fade-stopped", { volume });
+    }, CCF_BGM_XFADE_STEP_MS);
+    return true;
+  }
+
   function stopCcfYoutubeBgm(reason = "manual") {
     // stopVideo() 는 ENDED 를 발생시키는데, 반복재생(loop) ON 이면 onStateChange 가
     // 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
@@ -3853,7 +3912,13 @@
     }
 
     try {
-      ccfBgmPlayer.stopVideo();
+      // 사용자가 정지 버튼으로 끈 경우와 다른 화면에서 온 정지 신호(참여자 화면 포함)는 페이드 아웃으로 끈다. 다른 곡이 시작돼서 자동 정지하는 경우는 즉시.
+      if ((MANUAL_STOP_REASONS.has(reason) || reason === "remote-stop") && fadeOutAndStopCcfYoutubePlayer(ccfBgmPlayer)) {
+        debugLog("bgm-youtube-stop-fading", { reason });
+      } else {
+        cancelCcfBgmStopFade();
+        ccfBgmPlayer.stopVideo();
+      }
       debugLog("bgm-youtube-stopped", {
         reason
       });
