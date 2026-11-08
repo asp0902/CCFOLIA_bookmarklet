@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.86
+// @version      0.1.87
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.86"),
+    version: getUserscriptVersion("0.1.87"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -260,6 +260,26 @@
 
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
+    // 구분선 줄이 안 먹을 때: 표식이 붙은 줄마다 줄 요소·조상·계산된 여백·첫 글자까지의 거리와, 규칙이 든 style 이 있는지.
+    breakDiag() {
+      const brief = (el) => el instanceof Element ? { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 80), data: [...el.attributes].filter((a) => /^data-/.test(a.name)).map((a) => `${a.name}=${String(a.value).slice(0, 12)}`) } : null;
+      const rows = [...document.querySelectorAll('.ccf-render-root[data-ccf-break="1"]')].slice(-5).map((root) => {
+        const li = root.closest(".MuiListItem-root, li, [role='listitem'], [data-index]");
+        const cs = li ? getComputedStyle(li) : null;
+        const rr = root.getBoundingClientRect(), lr = li ? li.getBoundingClientRect() : null;
+        return {
+          root: brief(root), row: brief(li), rowParent: brief(li?.parentElement), inPanel: !!root.closest(".ccf-scp-panel"),
+          matchesRule: !!li?.matches?.('.MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"])'), matchesContRule: !!li?.matches?.('.MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"])'),
+          computed: cs ? { paddingTop: cs.paddingTop, marginTop: cs.marginTop, borderTop: `${cs.borderTopWidth} ${cs.borderTopColor}`, position: cs.position, boxSizing: cs.boxSizing, height: cs.height, minHeight: cs.minHeight } : null,
+          textTopFromRowTop: lr ? Math.round(rr.top - lr.top) : null,
+          textRoot: (() => { const c = getComputedStyle(root); return { marginTop: c.marginTop, paddingTop: c.paddingTop, lineHeight: c.lineHeight }; })(),
+          listItemText: (() => { const t = li?.querySelector(".MuiListItemText-root"); if (!t) return null; const c = getComputedStyle(t); return { marginTop: c.marginTop, paddingTop: c.paddingTop }; })()
+        };
+      });
+      const styles = [...document.querySelectorAll("style")].filter((s) => s.textContent.includes('data-ccf-break')).map((s) => ({ id: s.id || null, order: [...document.querySelectorAll("style")].indexOf(s) }));
+      const bridge = [...document.querySelectorAll("style")].filter((s) => s.textContent.includes('data-ccf-prose-cont')).map((s) => ({ id: s.id || null, order: [...document.querySelectorAll("style")].indexOf(s) }));
+      return { rows, formatSyncStyles: styles, bridgeStyles: bridge };
+    },
     withSignal: ccfFsWithSignal,
     registerTeardown: ccfFsRegisterTeardown,
     isActive() { return ccfFsLifecycle.isActive(); },
@@ -837,14 +857,16 @@
 
       /* Group edges are symmetric; continuation rows retain the 6px message gap. */
       /* 구분선: 같은 화자 묶음 안에서도 이 메시지 위에 선을 그린다. 선은 행 자신 안(위쪽 테두리)에 그려 행 높이가 메시지 데이터만으로 정해지게 한다. */
-      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"]) {
+      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"]),
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-break="1"]) {
         border-top: 1px solid transparent !important;
         margin-top: 8px !important;
         padding-top: 16px !important;
         position: relative !important;
       }
       /* 선은 오리지널 메시지 사이 구분선처럼 좌우 16px 들여 그린다(행 전체 폭이 아님). 높이 1px 은 위 테두리(투명)가 지킨다. */
-      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"])::before {
+      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"])::before,
+      .ccf-scp-row:has(.ccf-render-root[data-ccf-break="1"])::before {
         content: "";
         position: absolute;
         top: -1px;
@@ -855,7 +877,8 @@
         pointer-events: none;
       }
       /* 묶음 안(이어지는 행) 규칙(padding-top: 0)보다 확실히 앞서도록 이어지는 행 조건을 같이 쓴다. */
-      .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"]) {
+      .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"]),
+      .ccf-scp-row.is-cont:has(.ccf-render-root[data-ccf-break="1"]) {
         padding-top: 16px !important;
         margin-top: 8px !important;
       }
