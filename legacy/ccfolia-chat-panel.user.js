@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.10
+// @version      0.5.11
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.10";
+  const VERSION = "0.5.11";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -667,22 +667,30 @@
   };
   const adoptToTabs = (value) => { ccfScpNativeToTabs = value; adjustSample = null; saveTailState(); };
   // 우리 패널에서 같은 거리(마지막 줄 아래끝 → 탭 줄 윗끝)를 재서 오리지널 값과의 차이만큼 목록 아래 패딩을 고친다. 목록이 바닥일 때, 같은 차이가 3번 나올 때만.
+  // 진단: 마지막 비교가 언제, 어떤 값으로, 왜 건너뛰었거나 채택됐는지(tailDiag 의 adjust).
+  const adjustDiag = { runs: 0, lastAt: 0, reason: "", actual: null, native: null, delta: null, count: 0, adopted: 0, lastAdoptAt: 0, lastNext: null };
   function adjustPanelTail() {
-    if (!listEl || !tabsEl || ccfScpNativeToTabs < 0) return;
-    if (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 2) return;
-    if (listEl.scrollHeight <= listEl.clientHeight + 2) return; // 줄이 목록을 채우지 못하면(위쪽이 비어 있으면) 마지막 줄 아래 거리를 비교할 수 없다
+    adjustDiag.runs += 1; adjustDiag.lastAt = Date.now(); adjustDiag.native = ccfScpNativeToTabs;
+    const skip = (reason) => { adjustDiag.reason = reason; };
+    if (!listEl || !tabsEl) return skip("no-list-or-tabs");
+    if (ccfScpNativeToTabs < 0) return skip("native-distance-unknown");
+    if (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 3) return skip("list-not-at-bottom");
+    if (listEl.scrollHeight <= listEl.clientHeight + 2) return skip("list-not-full");
     const last = lastRowEl();
-    if (!(last instanceof HTMLElement)) return;
+    if (!(last instanceof HTMLElement)) return skip("no-last-row");
     const actual = tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom;
     const delta = Math.round((actual - ccfScpNativeToTabs) * 100) / 100;
-    if (Math.abs(delta) < 0.75) { adjustSample = null; return; }
+    adjustDiag.actual = Math.round(actual * 100) / 100; adjustDiag.delta = delta;
+    if (Math.abs(delta) < 0.75) { adjustSample = null; adjustDiag.count = 0; return skip("equal"); }
     if (adjustSample && Math.abs(adjustSample.value - delta) < 0.5) adjustSample.count += 1; else adjustSample = { value: delta, count: 1 };
-    if (adjustSample.count < 3) return;
+    adjustDiag.count = adjustSample.count;
+    if (adjustSample.count < 3) return skip("waiting-for-3-equal");
     const base = ccfScpListTail >= 0 ? ccfScpListTail : 8;
     const next = Math.max(-base, Math.min(40, panelAdjust - delta));
     adjustSample = null;
-    if (Math.abs(next - panelAdjust) < 0.25) return; // 더 줄일 수 없다(패딩이 0): 남은 차이는 목록 밖 공간 — tailDiag 로 확인
+    if (Math.abs(next - panelAdjust) < 0.25) return skip("cannot-reduce-more");
     panelAdjust = next;
+    adjustDiag.adopted += 1; adjustDiag.lastAdoptAt = Date.now(); adjustDiag.lastNext = next; adjustDiag.reason = "adopted";
     panelEl?.style.setProperty("--scp-list-adjust", `${panelAdjust}px`);
     // 아래 패딩이 바뀌면 스크롤 범위가 달라지므로 바닥에 있던 목록은 다시 바닥에 맞춘다(안 그러면 다음 측정이 바닥 상태가 아니라 건너뛴다).
     if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight;
@@ -4910,6 +4918,7 @@
         const cs = (el) => (el instanceof HTMLElement ? (({ marginBottom, paddingBottom, borderBottomWidth, height }) => ({ marginBottom, paddingBottom, borderBottomWidth, height }))(getComputedStyle(el)) : null);
         return {
           panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
+          adjust: { ...adjustDiag, lastAgoMs: adjustDiag.lastAt ? Date.now() - adjustDiag.lastAt : null, lastAdoptAgoMs: adjustDiag.lastAdoptAt ? Date.now() - adjustDiag.lastAdoptAt : null, cssAdjust: panelEl ? panelEl.style.getPropertyValue("--scp-list-adjust") : null, cssTail: panelEl ? panelEl.style.getPropertyValue("--scp-list-tail") : null, listScroll: listEl ? { top: Math.round(listEl.scrollTop), client: listEl.clientHeight, height: listEl.scrollHeight } : null, pinnedToBottom, savedStorage: (() => { try { return JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null"); } catch (e) { return null; } })() },
           panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
           panelLastToListBottom: last && listEl ? Math.round((listEl.getBoundingClientRect().top + listEl.clientHeight - last.getBoundingClientRect().bottom) * 100) / 100 : null,
           lastRow: cs(last), lastRowTag: last ? `${last.tagName.toLowerCase()}.${String(last.className).slice(0, 80)}` : null, innerUl: cs(ccfScpInnerUl), list: cs(listEl), tabs: cs(tabsEl),
