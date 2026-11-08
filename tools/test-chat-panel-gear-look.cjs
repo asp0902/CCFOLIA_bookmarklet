@@ -12,12 +12,13 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
     const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
     const page = await context.newPage();
     await context.route('https://ccfolia.test/**', (route) => route.fulfill({ contentType: 'text/html', body: `<style>
-      .MuiPopover-paper{position:fixed;top:60px;left:300px;background:rgb(40,40,40);background-image:linear-gradient(rgba(255,255,255,0.092),rgba(255,255,255,0.092));box-shadow:0 5px 5px -3px rgba(1,2,3,.2);border-radius:6px;min-width:200px;color:rgb(250,250,250)}
+      .MuiPopover-paper{position:fixed;top:60px;left:300px;width:261px;background:rgb(40,40,40);background-image:linear-gradient(rgba(255,255,255,0.092),rgba(255,255,255,0.092));box-shadow:0 5px 5px -3px rgba(1,2,3,.2);border-radius:6px;min-width:200px;color:rgb(250,250,250)}
       ul[role=menu]{margin:0;list-style:none;padding:7px 0}
       .MuiMenuItem-root{min-height:44px;padding:5px 15px;font:15px/1.4 Roboto,sans-serif;display:flex;align-items:center;color:rgb(240,240,240)}
       .nsvg{fill:currentColor}
     </style><div id="root"></div>
-    <button aria-expanded="true" aria-haspopup="menu" style="position:fixed;top:8px;left:1500px;width:48px;height:48px;padding:12px;box-sizing:border-box"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
+    <button aria-expanded="true" style="position:fixed;top:700px;left:10px;width:24px;height:64px"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
+    <button aria-expanded="true" aria-haspopup="menu" style="position:fixed;top:8px;left:540px;width:48px;height:48px;padding:12px;box-sizing:border-box"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
     <div class="MuiPopover-paper"><ul role="menu" class="MuiMenu-list"><li role="menuitem" class="MuiMenuItem-root">네이티브 항목</li></ul></div>` }));
     await page.goto('https://ccfolia.test/rooms/test');
     await page.evaluate(() => {
@@ -32,7 +33,8 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
     assert.ok(saved, 'the native menu look was read and saved');
     assert.equal(saved.paper.backgroundColor, 'rgb(40, 40, 40)'); assert.match(saved.paper.backgroundImage, /linear-gradient/); assert.equal(saved.paper.borderRadius, '6px');
     assert.equal(saved.item.minHeight, '44px'); assert.equal(saved.item.paddingLeft, '15px'); assert.equal(saved.list.paddingTop, '7px');
-    assert.ok(saved.anchor, 'the paper position relative to the opening button icon was saved');
+    assert.ok(saved.anchor && Math.abs(saved.anchor.dTop) < 100, 'the paper position relative to the opening button icon was saved');
+    const diag = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.menuStyleDiag()); assert.ok(diag.saved && diag.lastCapture && diag.lastCapture.accepted, JSON.stringify(diag));
     // the panel's menu uses the values
     await page.locator('#ccf-second-chat-panel .ccf-scp-gear').click();
     const ours = await page.evaluate(() => { const m = document.querySelector('.ccf-scp-menu'), i = m.querySelector('.ccf-scp-menu-item'), pc = getComputedStyle(m), ic = getComputedStyle(i); return { bg: pc.backgroundColor, img: pc.backgroundImage.slice(0, 20), radius: pc.borderRadius, shadow: pc.boxShadow, padTop: pc.paddingTop, itemH: ic.minHeight, itemPadL: ic.paddingLeft, itemFont: ic.fontSize, itemColor: ic.color }; });
