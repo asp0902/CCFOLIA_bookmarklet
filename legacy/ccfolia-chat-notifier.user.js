@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.35
+// @version      0.3.36
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.35";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.36";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -10173,6 +10173,70 @@
     }
   }
 
+  // 늦게 들어온 사람의 재생을 지금 흐르는 위치에 맞춘다. 반복 곡이면 경과 시간 % 길이, 단발 곡이면 남은 구간이 있을 때만(이미 끝났으면 정지).
+  // 브라우저가 소리 재생을 막아(사용자 조작 전) 시작되지 않으면 "클릭하면 BGM 재생" 안내를 띄우고 첫 클릭에 재생한다.
+  let ccfBgmJoinTimer = 0;
+  let ccfBgmClickToPlayBanner = null;
+  function ccfBgmHideClickToPlay() {
+    if (ccfBgmClickToPlayBanner) { ccfBgmClickToPlayBanner.remove(); ccfBgmClickToPlayBanner = null; }
+  }
+  function ccfBgmAlignJoinedPlayback(data, ageMs) {
+    if (ccfBgmJoinTimer) { window.clearInterval(ccfBgmJoinTimer); ccfBgmJoinTimer = 0; }
+    const ageSec = ageMs / 1000;
+    const loop = data.loop !== false;
+    let seeked = false;
+    let tries = 0;
+    const slotKey = data.slotKey, entryKey = data.entryKey || "";
+    const clickToPlay = () => {
+      if (ccfBgmClickToPlayBanner || !document.body) return;
+      const banner = document.createElement("div");
+      banner.textContent = "클릭하면 BGM이 재생됩니다";
+      banner.style.cssText = "position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:2147483000;background:rgba(40,40,40,.96);color:#fff;padding:10px 16px;border-radius:4px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none;";
+      document.body.appendChild(banner);
+      ccfBgmClickToPlayBanner = banner;
+      const onFirstGesture = () => {
+        document.removeEventListener("pointerdown", onFirstGesture, true);
+        document.removeEventListener("keydown", onFirstGesture, true);
+        ccfBgmHideClickToPlay();
+        try { ccfBgmPlayer?.playVideo?.(); } catch (_) { /* 무시 */ }
+        tries = 0; seeked = false; // 재생이 시작되면 위치를 다시 맞춘다
+        if (!ccfBgmJoinTimer) ccfBgmJoinTimer = window.setInterval(step, 300);
+      };
+      document.addEventListener("pointerdown", onFirstGesture, true);
+      document.addEventListener("keydown", onFirstGesture, true);
+    };
+    const step = () => {
+      tries += 1;
+      // 그 사이 다른 곡으로 바뀌었거나 정지했으면 그만둔다.
+      if (!chatNotifierLifecycle.isActive() || ccfBgmActiveSlotKey !== normalizeCcfBgmSlotKey(slotKey) || (entryKey && ccfBgmActiveEntryKey !== entryKey)) {
+        window.clearInterval(ccfBgmJoinTimer); ccfBgmJoinTimer = 0; ccfBgmHideClickToPlay(); return;
+      }
+      let state = null, duration = 0;
+      try { state = ccfBgmPlayer?.getPlayerState?.(); duration = Number(ccfBgmPlayer?.getDuration?.()) || 0; } catch (_) { /* 아직 준비 전 */ }
+      if (state === 1 && duration > 0) {
+        ccfBgmHideClickToPlay();
+        window.clearInterval(ccfBgmJoinTimer); ccfBgmJoinTimer = 0;
+        if (ageSec > 3 && !seeked) {
+          seeked = true;
+          if (loop) {
+            const offset = ageSec % duration;
+            try { ccfBgmPlayer.seekTo(offset, true); debugLog("bgm-join-seek", { offset, duration, ageSec }); } catch (_) { /* 무시 */ }
+          } else if (ageSec >= duration) {
+            ccfBgmFirestorePlaybackApplying = true;
+            try { stopCcfYoutubeBgm("remote-stop"); } finally { ccfBgmFirestorePlaybackApplying = false; }
+            debugLog("bgm-join-oneshot-finished", { ageSec, duration });
+          } else {
+            try { ccfBgmPlayer.seekTo(ageSec, true); debugLog("bgm-join-seek", { offset: ageSec, duration, ageSec }); } catch (_) { /* 무시 */ }
+          }
+        }
+        return;
+      }
+      // 약 4.5초 동안 재생이 시작되지 않으면 자동재생 차단으로 보고 안내한다.
+      if (tries >= 15) { window.clearInterval(ccfBgmJoinTimer); ccfBgmJoinTimer = 0; clickToPlay(); }
+    };
+    ccfBgmJoinTimer = window.setInterval(step, 300);
+  }
+
   async function ccfBgmFirestorePollPlayback() {
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierLifecycle.isActive()) return;
     // 읽기를 시작한 시점의 로컬 의도를 기억해둔다.
@@ -10216,12 +10280,10 @@
         debugLog("bgm-firestore-playback-skip-missing-fields", { videoId: !!data.videoId, slotKey: !!data.slotKey });
         return;
       }
-      // 30분보다 오래된 잔류 신호 무시(누가 옛날에 재생만 하고 정지 안 한 상태일 수 있음).
-      const ageMs = Date.now() - (Number(data.startedAt) || 0);
-      if (ageMs > BGM_FIRESTORE_PLAYBACK_FRESH_MS) {
-        debugLog("bgm-firestore-playback-stale-ignored", { ageMs });
-        return;
-      }
+      // 재생 시작이 오래됐어도(나중에 입장한 사람) 상태가 playing 이면 재생한다: 정지 신호가 없는 한 지금 흐르는 BGM 이다.
+      // 시작 위치는 아래 정렬(ccfBgmAlignJoinedPlayback)이 "경과 시간 % 곡 길이"로 맞추고, 단발 곡이 이미 끝났으면 재생하지 않는다.
+      const ageMs = Math.max(0, Date.now() - (Number(data.startedAt) || 0));
+      if (ageMs > BGM_FIRESTORE_PLAYBACK_FRESH_MS) debugLog("bgm-firestore-playback-old-but-playing", { ageMs });
       // 이미 같은 곡 재생 중이면 스킵.
       if (ccfBgmActiveSlotKey === data.slotKey && ccfBgmActiveEntryKey === data.entryKey) return;
 
@@ -10249,6 +10311,7 @@
         // 동기 호출이 끝났으니 즉시 해제. 비동기 player 콜백은 신호 송신을 안 한다.
         ccfBgmFirestorePlaybackApplying = false;
       }
+      ccfBgmAlignJoinedPlayback(data, ageMs);
       return;
     }
 
