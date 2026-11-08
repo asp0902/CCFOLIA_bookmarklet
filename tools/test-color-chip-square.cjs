@@ -27,3 +27,9 @@ assert.match(sync, /border-width: 1px 0 0 0 !important/); assert.match(sync, /ba
 assert.match(panel, /sizeInput\.placeholder = !fmtState\.size && current > 0 \? String\(current\) : "크기"/);
 assert.doesNotMatch(panel, /ccf-scp-fmt-color\.is-set \{ background/);
 console.log('format row third round PASS');
+// fourth round: B/I/U/S show their glyph styles, the divider is hidden in the base rule too, a vertical line sits on the panel edge, the size box is refilled after the panel is attached
+assert.match(panel, /\{ B: "b", I: "i", U: "u", S: "s" \}\[label\]/);
+assert.match(sync, /\.ccf-inline-divider \{\n        display: none !important;/);
+assert.match(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
+assert.match(panel, /\[300, 1200\]\.forEach/);
+console.log('format row fourth round PASS');

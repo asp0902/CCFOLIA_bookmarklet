@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.74
+// @version      0.2.75
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.74";
+  const VERSION = "0.2.75";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1467,6 +1467,7 @@
         backdrop-filter: var(--scp-backdrop, none);
         color: var(--scp-fg, #f0f0f0);
         border-left: 1px solid var(--scp-line, rgba(128,128,128,.32));
+        border-right: 1px solid rgba(255,255,255,.12); /* 오리지널 패널과 맞닿는 쪽의 세로 외곽선 */
         box-shadow: var(--scp-shadow, none);
         font-family: var(--scp-font, system-ui, -apple-system, "Segoe UI", sans-serif);
         font-size: var(--scp-fontsize, 13px);
@@ -2240,7 +2241,9 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "ccf-scp-fmt-btn";
-      b.textContent = label;
+      // B·I·U·S 는 오리지널 서식 바처럼 글자 모양(굵게·기울임·밑줄·취소선)을 버튼에 그대로 보여 준다.
+      const glyph = { B: "b", I: "i", U: "u", S: "s" }[label];
+      if (glyph) { const g = document.createElement(glyph); g.textContent = label; b.append(g); } else b.textContent = label;
       b.addEventListener("click", (ev) => { ev.preventDefault(); fn(); });
       fmtRow.appendChild(b);
     }
@@ -2471,6 +2474,7 @@
     document.body.appendChild(panel);
     panelEl = panel;
     fmtUiSync?.(); // 화면에 붙은 뒤에야 입력칸 글자 크기를 읽을 수 있으니 크기 칸을 다시 채운다
+    [300, 1200].forEach((ms) => window.setTimeout(() => { if (panelEl === panel) fmtUiSync?.(); }, ms)); // 스타일이 자리잡은 뒤에도 한 번 더
 
     // 팝업(캐릭터 목록·팔레트·색상) 바깥을 클릭하면 닫는다. 각 팝업의 여는 버튼은
     // stopPropagation 하거나 자기 영역 안이라 이 검사에서 제외된다.
