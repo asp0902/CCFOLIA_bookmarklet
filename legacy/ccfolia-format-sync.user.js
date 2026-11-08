@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.85
+// @version      0.1.86
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.85"),
+    version: getUserscriptVersion("0.1.86"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -838,9 +838,21 @@
       /* Group edges are symmetric; continuation rows retain the 6px message gap. */
       /* 구분선: 같은 화자 묶음 안에서도 이 메시지 위에 선을 그린다. 선은 행 자신 안(위쪽 테두리)에 그려 행 높이가 메시지 데이터만으로 정해지게 한다. */
       .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"]) {
-        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-top: 1px solid transparent !important;
         margin-top: 8px !important;
         padding-top: 16px !important;
+        position: relative !important;
+      }
+      /* 선은 오리지널 메시지 사이 구분선처럼 좌우 16px 들여 그린다(행 전체 폭이 아님). 높이 1px 은 위 테두리(투명)가 지킨다. */
+      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"])::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 16px;
+        right: 16px;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.12);
+        pointer-events: none;
       }
       /* 묶음 안(이어지는 행) 규칙(padding-top: 0)보다 확실히 앞서도록 이어지는 행 조건을 같이 쓴다. */
       .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"]) {
