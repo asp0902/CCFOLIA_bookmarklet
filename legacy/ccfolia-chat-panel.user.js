@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.81
+// @version      0.2.82
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.81";
+  const VERSION = "0.2.82";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -2796,7 +2796,13 @@
 
     // 하단 입력 영역(이름·주사위·서식·입력칸)의 "실제 보이는 색"을 입력칸의 조상 체인에서 알파 합성으로 구한다. 못 찾으면 현재 값을 유지한다.
     const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(`#${PANEL_ID}`) && !t.closest('.MuiDialog-root, [role="dialog"]'));
-    if (nativeInput) set("--scp-bottom-bg", visibleBackgroundOf(nativeInput.parentElement || nativeInput, pageBg));
+    // 탭 줄과 입력칸의 가장 가까운 공통 조상 = 탭 줄까지 감싸는 하단 Paper. 그 실제 보이는 색(배경색 + MUI 다크 elevation 오버레이)이 이름·주사위·서식·Dicebot 줄의 바탕이다.
+    // 입력칸 우물(rgba(0,0,0,.2))은 추가 패널의 .ccf-scp-inputwrap 이 따로 얹으므로 여기에 섞이지 않게 입력칸이 아니라 Paper 에서 읽는다.
+    if (nativeInput) {
+      let paper = nativeInput.parentElement;
+      if (nativeTabBar) { while (paper && !paper.contains(nativeTabBar)) paper = paper.parentElement; }
+      if (paper && paper !== document.body) set("--scp-bottom-bg", visibleBackgroundOf(paper, pageBg));
+    }
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
     const header = findNativeChatHeader(native);

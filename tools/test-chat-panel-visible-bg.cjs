@@ -21,4 +21,10 @@ const overlay = 'linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 
 assert.equal(ctx.solid(overlay), 'rgba(255, 255, 255, 0.05)'); assert.equal(ctx.solid('linear-gradient(red, blue)'), null); assert.equal(ctx.solid('none'), null);
 assert.equal(ctx.visible(new Element('rgb(18, 18, 18)', null, overlay), 'rgb(0, 0, 0)'), 'rgb(30, 30, 30)', 'elevation overlay lightens the paper');
 assert.equal(ctx.visible(new Element('rgba(0, 0, 0, 0)', new Element('rgb(18, 18, 18)', null, overlay)), 'rgb(0, 0, 0)'), 'rgb(30, 30, 30)', 'seen through a transparent child');
+// the measured case: rgb(18) paper with an overlay of about .09 looks like rgb(40) (the input well on top of it makes 31 in the original)
+const measured = ctx.visible(new Element('rgb(18, 18, 18)', null, 'linear-gradient(rgba(255, 255, 255, 0.092), rgba(255, 255, 255, 0.092))'), 'rgb(0, 0, 0)');
+assert.equal(measured, 'rgb(40, 40, 40)');
+// the compose color is read from the paper that holds both the tab bar and the input, not from the input well
+assert.match(source, /while \(paper && !paper\.contains\(nativeTabBar\)\) paper = paper\.parentElement;/);
+assert.match(source, /set\("--scp-bottom-bg", visibleBackgroundOf\(paper, pageBg\)\)/);
 console.log('chat panel visible bg PASS');
