@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.82
+// @version      0.3.0
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -14,6 +14,9 @@
 (() => {
   "use strict";
 
+  // 패널 하나를 만드는 함수. 지금은 1번 패널만 만들지만, 패널 상태(DOM·탭·화자·입력·서식·타이머·구독)는 모두 이 클로저 안에 있어 인스턴스마다 따로 갖는다.
+  const createPanelInstance = (INSTANCE_INDEX) => {
+
   // 이 패널은 코코포리아 패널을 복제하지 않는다. 코코포리아 패널은 React 소유이고
   // 보이는 줄만 만들어 쓰는 가상 스크롤이라, 복제해도 원본과 같은 탭·같은 스크롤만
   // 따라간다(= 두 탭을 동시에 못 봄). 대신 같은 원본 데이터(Redux store)를 읽어
@@ -22,15 +25,16 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.82";
-  const PANEL_ID = "ccf-second-chat-panel";
+  const VERSION = "0.3.0";
+  // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
+  const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
   const FIRESTORE_PROJECT_ID = "ccfolia-160aa";
   const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
   const STORAGE_KEY = "ccf-second-chat-panel:v1";
   // 지금은 패널이 하나뿐이라 항상 1. 여러 개를 지원하게 되면 이 값을 늘려 제목에 쓴다.
-  const PANEL_INDEX = 1;
+  const PANEL_INDEX = INSTANCE_INDEX;
   const MAX_RENDER = 300;
 
   const CHANNEL_LABELS = Object.freeze({
@@ -110,7 +114,7 @@
       const text = n.nodeValue;
       if (!text || text.length > 80 || !TYPING_RE.test(text)) continue;
       const el = n.parentElement;
-      if (!el || el.closest(`#${PANEL_ID}`) || el.closest("textarea, [contenteditable]")) continue;
+      if (!el || el.closest(".ccf-scp-panel") || el.closest("textarea, [contenteditable]")) continue;
       return el;
     }
     return null;
@@ -484,7 +488,7 @@
       return li instanceof HTMLElement
         && li.querySelector("h6.MuiListItemText-primary")
         && li.offsetParent !== null
-        && !li.closest(`#${PANEL_ID}`)
+        && !li.closest(".ccf-scp-panel")
         && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root");
     });
     // 나레이션·이어짐 줄을 본보기로 쓰면 그 표식이 모든 복제본에 따라간다.
@@ -646,7 +650,7 @@
 
   function readNativeTabs() {
     const lists = [...document.querySelectorAll('[role="tablist"], .MuiTabs-flexContainer')]
-      .filter((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+      .filter((el) => el instanceof HTMLElement && !el.closest(".ccf-scp-panel"));
     let best = [];
     for (const list of lists) {
       // 자식만으로 부족하면(탭이 한 겹 더 싸여 있는 경우) 후손까지 훑는다.
@@ -670,7 +674,7 @@
 
   function readNativeTabsByLabel() {
     const lists = [...document.querySelectorAll('[role="tablist"], .MuiTabs-flexContainer')]
-      .filter((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+      .filter((el) => el instanceof HTMLElement && !el.closest(".ccf-scp-panel"));
     let labels = [];
     for (const list of lists) {
       const texts = [...list.children]
@@ -1296,7 +1300,7 @@
   function captureNativeDiceIcons() {
     const map = new Map();
     for (const b of document.querySelectorAll("button")) {
-      if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+      if (!(b instanceof HTMLElement) || b.closest(".ccf-scp-panel")) continue;
       const svg = b.querySelector("svg");
       if (!svg) continue;
       const label = (b.getAttribute("aria-label") || b.title || b.textContent || "").trim();
@@ -1312,7 +1316,7 @@
   // aria 가 없어 위치로 복제한다(사용자 제공 셀렉터 기준).
   function captureNativeSpeakerIcons() {
     const form = [...document.querySelectorAll("form")].find((f) =>
-      f instanceof HTMLElement && !f.closest(`#${PANEL_ID}`) && f.querySelector("button svg"));
+      f instanceof HTMLElement && !f.closest(".ccf-scp-panel") && f.querySelector("button svg"));
     if (!form) return {};
     // 이름 바 = 아바타·이름 input·팔레트·색상 버튼을 담은 div. name input(MuiInputBase)이
     // 있는 자식으로 찾는다(nth-child 하드코딩보다 견고).
@@ -1765,6 +1769,7 @@
     injectStyle();
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
+    panel.classList.add("ccf-scp-panel");
     panel.setAttribute(SAFE_ATTR, "1");
 
     const bar = document.createElement("div");
@@ -2444,7 +2449,7 @@
     // 네이티브 하단 줄은 평소 Dicebot 링크, 누가 입력 중이면 "○○ 열심히 입력중..."(링크가 사라짐)으로 바뀐다. 입력중 문구는 네이티브 문구를 그대로 따라가고,
     // 둘 다 없으면(링크가 잠깐 사라진 때) 직전 줄을 유지한다.
     const syncDicebot = () => {
-      const link = [...document.querySelectorAll('a[href*="bcdice"]')].find((a) => !a.closest(`#${PANEL_ID}`) && /BCDice@[\w.\-]+/.test(a.textContent));
+      const link = [...document.querySelectorAll('a[href*="bcdice"]')].find((a) => !a.closest(".ccf-scp-panel") && /BCDice@[\w.\-]+/.test(a.textContent));
       const typing = link ? null : findNativeTypingNode();
       const pick = pickFooterLine(link ? link.textContent.trim() : "", typing ? typing.textContent.trim() : "", dicebotLine.dataset.v || "");
       if (pick.keep) return;
@@ -2629,10 +2634,10 @@
         && li.querySelector("h6.MuiListItemText-primary")
         && li.offsetParent !== null
         && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")
-        && !li.closest(`#${PANEL_ID}`));
+        && !li.closest(".ccf-scp-panel"));
     if (item) return item;
     return [...document.querySelectorAll('[role="log"]')]
-      .find((el) => el instanceof HTMLElement && isVisible(el) && !el.closest(`#${PANEL_ID}`)) || null;
+      .find((el) => el instanceof HTMLElement && isVisible(el) && !el.closest(".ccf-scp-panel")) || null;
   }
 
   function findNativeChatPanel() {
@@ -2764,7 +2769,7 @@
     set("--scp-shadow", cs.boxShadow && cs.boxShadow !== "none" ? cs.boxShadow : "");
     // 탭 모양도 네이티브에서 읽는다 — 선택 표시 색은 테마마다 다르다.
     const nativeTabBar = [...document.querySelectorAll(".MuiTabs-flexContainer, [role='tablist']")]
-      .find((el) => el instanceof HTMLElement && !el.closest(`#${PANEL_ID}`));
+      .find((el) => el instanceof HTMLElement && !el.closest(".ccf-scp-panel"));
     if (nativeTabBar) {
       const kids = [...nativeTabBar.children].filter((el) => el instanceof HTMLElement);
       const selected = kids.find((el) => el.classList.contains("Mui-selected")) || kids[0];
@@ -2795,7 +2800,7 @@
     }
 
     // 하단 입력 영역(이름·주사위·서식·입력칸)의 "실제 보이는 색"을 입력칸의 조상 체인에서 알파 합성으로 구한다. 못 찾으면 현재 값을 유지한다.
-    const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(`#${PANEL_ID}`) && !t.closest('.MuiDialog-root, [role="dialog"]'));
+    const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel") && !t.closest('.MuiDialog-root, [role="dialog"]'));
     // 탭 줄과 입력칸의 가장 가까운 공통 조상 = 탭 줄까지 감싸는 하단 Paper. 그 실제 보이는 색(배경색 + MUI 다크 elevation 오버레이)이 이름·주사위·서식·Dicebot 줄의 바탕이다.
     // 입력칸 우물(rgba(0,0,0,.2))은 추가 패널의 .ccf-scp-inputwrap 이 따로 얹으므로 여기에 섞이지 않게 입력칸이 아니라 Paper 에서 읽는다.
     if (nativeInput) {
@@ -2841,7 +2846,7 @@
 
     // 하단 전송 버튼 색을 네이티브에서 읽어 맞춘다("전송" 글자를 가진 버튼).
     const sendBtn = [...document.querySelectorAll("button")].find((b) =>
-      b instanceof HTMLElement && !b.closest(`#${PANEL_ID}`)
+      b instanceof HTMLElement && !b.closest(".ccf-scp-panel")
       && normalizeSpace(b.textContent || "") === "전송");
     if (sendBtn) {
       const ss = getComputedStyle(sendBtn);
@@ -2854,14 +2859,14 @@
 
     // 메시지 글꼴/크기/색도 네이티브 메시지에서 그대로 읽어야 같아 보인다.
     const nameEl = document.querySelector(`h6.MuiListItemText-primary`);
-    if (nameEl && !nameEl.closest(`#${PANEL_ID}`)) {
+    if (nameEl && !nameEl.closest(".ccf-scp-panel")) {
       const ns = getComputedStyle(nameEl);
       set("--scp-name-size", ns.fontSize);
       set("--scp-name-weight", ns.fontWeight);
       set("--scp-name-color", ns.color);
     }
     const textEl = document.querySelector(`p.MuiListItemText-secondary`);
-    if (textEl && !textEl.closest(`#${PANEL_ID}`)) {
+    if (textEl && !textEl.closest(".ccf-scp-panel")) {
       const ts = getComputedStyle(textEl);
       set("--scp-text-size", ts.fontSize);
       set("--scp-text-line", ts.lineHeight);
@@ -2877,7 +2882,7 @@
     const nodes = document.querySelectorAll('button, [role="button"], [role="toolbar"]');
     for (const el of nodes) {
       if (!(el instanceof HTMLElement)) continue;
-      if (el.closest(`#${PANEL_ID}`)) continue;
+      if (el.closest(".ccf-scp-panel")) continue;
       if (native instanceof HTMLElement && native.contains(el)) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) continue;
@@ -2939,7 +2944,7 @@
       const next = [];
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
-        if (el.closest(`#${PANEL_ID}`)) continue;
+        if (el.closest(".ccf-scp-panel")) continue;
         // ⚠ 여백을 준 막대(상단바)와 그 안쪽은 건드리지 않는다. 여백을 주면 안쪽 툴바의
         //   오른쪽 끝이 패널 경계와 같아져 다음 순번에 "좁힐 대상"으로 걸리고,
         //   여백 + 폭축소가 이중으로 먹어 아이콘이 왼쪽으로 몰린다(v0.1.24 에서 그랬다).
@@ -2973,7 +2978,7 @@
       const next = [];
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
-        if (el.closest(`#${PANEL_ID}`)) continue;
+        if (el.closest(".ccf-scp-panel")) continue;
         if (el.hasAttribute(INSET_ATTR)) { out.push(el); continue; }
         const cs = getComputedStyle(el);
         if (cs.position === "fixed") {
@@ -3000,7 +3005,7 @@
       const next = [];
       for (const el of level) {
         if (!(el instanceof HTMLElement)) continue;
-        if (el.closest(`#${PANEL_ID}`)) continue;
+        if (el.closest(".ccf-scp-panel")) continue;
         // 위와 같은 이유로, 이미 좁힌 것은 조건을 다시 재지 않고 계속 대상으로 둔다.
         if (el.hasAttribute(SQUEEZE_ATTR)) { out.push(el); continue; }
         const cs = getComputedStyle(el);
@@ -3281,7 +3286,7 @@
       if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       if (e.code !== "Backquote" && e.key !== "`" && e.key !== "₩" && e.key !== "｀") return;
       const target = e.target instanceof Element ? e.target : null;
-      if (!target || target.closest(`#${PANEL_ID}`) || target.closest('[role="dialog"], .MuiDialog-root')) return;
+      if (!target || target.closest(".ccf-scp-panel") || target.closest('[role="dialog"], .MuiDialog-root')) return;
       if (target.tagName !== "TEXTAREA") return;
       const form = target.closest("form");
       if (!form || !form.querySelector('button[type="submit"]')) return; // 네이티브 채팅 입력창만
@@ -3402,7 +3407,7 @@
   function mirrorChatTemplates() {
     // 본보기 줄: 나레이션·이어짐이 아닌 보통 줄(chat-panel 의 captureNativeRowTemplate 와 같은 기준).
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement
-      && li.querySelector("h6.MuiListItemText-primary") && li.offsetParent !== null && !li.closest(`#${PANEL_ID}`)
+      && li.querySelector("h6.MuiListItemText-primary") && li.offsetParent !== null && !li.closest(".ccf-scp-panel")
       && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")
       && !li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]') && !li.querySelector('[data-ccf-narration="1"]')
       && li.querySelector(".MuiListItemAvatar-root img"));
@@ -3482,7 +3487,7 @@
     if (helpProbing || (relayHelpCache && relayHelpCache.system === helpSystem())) return;
     const active = document.activeElement;
     if (active && active !== document.body && /^(INPUT|TEXTAREA)$/.test(active.tagName) || active?.isContentEditable) return;
-    const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(`#${PANEL_ID}`));
+    const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(".ccf-scp-panel"));
     if (!button || helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"))) return;
     helpProbing = true;
     const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;transition:none !important;pointer-events:none !important}";
@@ -3857,7 +3862,7 @@
           const seen = new Set();
           for (const el of document.querySelectorAll("div, header, nav")) {
             if (!(el instanceof HTMLElement)) continue;
-            if (el.closest(`#${PANEL_ID}`)) continue;
+            if (el.closest(".ccf-scp-panel")) continue;
             const r = el.getBoundingClientRect();
             // 화면 위쪽에서 우리 패널 영역을 침범하는 것만.
             if (r.top > 90 || r.height < 20 || r.width < 60) continue;
@@ -3906,7 +3911,7 @@
       // 꺼낼 수 있는지 확인용(React 가 붙여 둔 속성 이름은 버전마다 다르다).
       tabDiag() {
         const lists = [...document.querySelectorAll('[role="tablist"]')]
-          .filter((el) => !el.closest(`#${PANEL_ID}`));
+          .filter((el) => !el.closest(".ccf-scp-panel"));
         return {
           탭막대수: lists.length,
           우리가읽은것: readNativeTabs(),
@@ -3928,7 +3933,7 @@
           이름순대안: readNativeTabsByLabel(),
           // 탭 막대 밖에 흩어져 있을 가능성까지 확인한다.
           id있는탭후보: [...document.querySelectorAll('[role="tab"], .MuiTab-root')]
-            .filter((el) => !el.closest(`#${PANEL_ID}`))
+            .filter((el) => !el.closest(".ccf-scp-panel"))
             .map((el) => ({
               id: el.id || null,
               글자: normalizeSpace(el.textContent).slice(0, 16),
@@ -4033,7 +4038,7 @@
       toolIconsDiag() {
         const out = [];
         for (const b of document.querySelectorAll("button")) {
-          if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+          if (!(b instanceof HTMLElement) || b.closest(".ccf-scp-panel")) continue;
           const svg = b.querySelector("svg");
           if (!svg) continue;
           const r = b.getBoundingClientRect();
@@ -4052,7 +4057,7 @@
       // 어느 요소인지 찾는다(첫 불투명 조상이 #1D1D1D 라 그걸 잡고 있었다).
       composerBgDiag() {
         const die = [...document.querySelectorAll("button")].find((b) =>
-          b instanceof HTMLElement && !b.closest(`#${PANEL_ID}`) && b.querySelector("svg")
+          b instanceof HTMLElement && !b.closest(".ccf-scp-panel") && b.querySelector("svg")
           && /[dD]\s*\d+|\d+\s*면/.test(b.getAttribute("aria-label") || b.title || b.textContent || ""));
         if (!die) return "네이티브 주사위 버튼 못 찾음";
         const chain = [];
@@ -4070,7 +4075,7 @@
       diceButtonsDiag() {
         const out = [];
         for (const b of document.querySelectorAll("button")) {
-          if (!(b instanceof HTMLElement) || b.closest(`#${PANEL_ID}`)) continue;
+          if (!(b instanceof HTMLElement) || b.closest(".ccf-scp-panel")) continue;
           const svg = b.querySelector("svg");
           if (!svg) continue;
           const label = (b.getAttribute("aria-label") || b.title || b.textContent || "").trim();
@@ -4138,7 +4143,7 @@
         const out = [];
         for (const el of document.querySelectorAll("button, [role='button'], svg, a")) {
           if (!(el instanceof Element)) continue;
-          if (el.closest(`#${PANEL_ID}`)) continue;
+          if (el.closest(".ccf-scp-panel")) continue;
           const r = el.getBoundingClientRect();
           if (r.width < 8 || r.width > 80 || r.height < 8) continue;
           // 우리 패널 오른쪽 경계 ±40px 안에 있는 것(= 이음새에 걸친 것).
@@ -4203,7 +4208,7 @@
           .filter((li) => li instanceof HTMLElement
             && li.querySelector("h6.MuiListItemText-primary")
             && li.offsetParent !== null
-            && !li.closest(`#${PANEL_ID}`)
+            && !li.closest(".ccf-scp-panel")
             && !li.closest(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
         const mine = panelEl?.querySelectorAll(".MuiListItem-root") || [];
         return {
@@ -4241,4 +4246,7 @@
   } else {
     init();
   }
+  };
+
+  createPanelInstance(1);
 })();
