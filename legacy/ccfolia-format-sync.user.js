@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.81
+// @version      0.1.82
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.81"),
+    version: getUserscriptVersion("0.1.82"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3308,8 +3308,8 @@
       }
 
       .ccf-align-toggle svg {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         display: block;
         pointer-events: none;
       }
@@ -3913,8 +3913,8 @@
       }
 
       .ccf-inline-toolbar .ccf-align-toggle svg {
-        width: 15px;
-        height: 15px;
+        width: 18px;
+        height: 18px;
       }
 
       .ccf-inline-divider {
@@ -5140,13 +5140,13 @@
       <button type="button" class="ccf-toggle" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg>
       </button>
       <button type="button" class="ccf-toggle ccf-align-toggle" data-inline-command="align" data-align="center" title="Align center" aria-label="Align center">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg>
       </button>
       <button type="button" class="ccf-toggle ccf-align-toggle" data-inline-command="align" data-align="right" title="Align right" aria-label="Align right">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg>
       </button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
       <label class="ccf-inline-tool ccf-color-tool" title="Text color" aria-label="Text color">
@@ -6989,18 +6989,18 @@
             </div>
             <button type="button" class="ccf-toggle" id="ccf-parenthetical-gray" title="\uAD04\uD638 \uD68C\uC0C9" aria-label="\uAD04\uD638 \uD68C\uC0C9" aria-pressed="false">()</button>
             <button type="button" class="ccf-toggle ccf-align-toggle active" data-align="left" title="\uC67C\uCABD \uC815\uB82C" aria-label="\uC67C\uCABD \uC815\uB82C">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/>
               </svg>
             </button>
             <button type="button" class="ccf-toggle ccf-align-toggle" data-align="center" title="\uAC00\uC6B4\uB370 \uC815\uB82C" aria-label="\uAC00\uC6B4\uB370 \uC815\uB82C">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path fill="currentColor" d="M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"/>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/>
               </svg>
             </button>
             <button type="button" class="ccf-toggle ccf-align-toggle" data-align="right" title="\uC624\uB978\uCABD \uC815\uB82C" aria-label="\uC624\uB978\uCABD \uC815\uB82C">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path fill="currentColor" d="M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"/>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/>
               </svg>
             </button>
             <div class="ccf-inline-tool ccf-color-tool" title="\uAE00\uC790\uC0C9">
