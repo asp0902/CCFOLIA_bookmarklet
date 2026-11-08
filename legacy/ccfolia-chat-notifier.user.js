@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.33
+// @version      0.3.34
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.33";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.34";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1987,10 +1987,37 @@
     ccfBgmCountLog.push({ t: Math.round(performance.now() - ccfBgmCountStartedAt), kind, ...detail });
     if (ccfBgmCountLog.length > 200) ccfBgmCountLog.shift();
   }
+  // WebAudio 그래프 진단(기록만, 동작 변화 없음): AudioBufferSourceNode 가 어떤 노드들을 거쳐 나가는지, 같은 GainNode 를 여러 소스가 공유하는지, 정지 직후 소스가 다시 만들어지는지.
+  const ccfAudioNodeIds = new WeakMap();
+  const ccfAudioEdges = new WeakMap();
+  const ccfAudioSourceRecords = new WeakMap();
+  const ccfAudioSourceLog = [];
+  let ccfAudioNodeSeq = 0;
+  const ccfAudioIdOf = (node) => {
+    let id = ccfAudioNodeIds.get(node);
+    if (!id) { id = ++ccfAudioNodeSeq; ccfAudioNodeIds.set(node, id); }
+    return id;
+  };
+  const ccfAudioChainOf = (node) => {
+    const chain = [];
+    let current = node;
+    for (let i = 0; i < 6 && current; i += 1) {
+      const next = (ccfAudioEdges.get(current) || [])[0];
+      if (!next) break;
+      const entry = { type: next.constructor?.name || "?", id: ccfAudioIdOf(next) };
+      try { if (next.gain && typeof next.gain.value === "number") entry.gain = Math.round(next.gain.value * 1000) / 1000; } catch (_) {}
+      chain.push(entry);
+      current = next;
+    }
+    return chain;
+  };
   window.__ccfBgmCounts = () => {
     const media = [...document.querySelectorAll("audio, video")].map((m) => ({ tag: m.tagName, paused: m.paused, t: Math.round(m.currentTime), src: String(m.currentSrc || m.src || "").slice(-60), inPanel: !!m.closest("#ccf-second-chat-panel") }));
     const ytState = (player) => { try { return player?.getPlayerState?.() ?? null; } catch (_) { return "err"; } };
+    const gainUse = {};
+    for (const rec of ccfAudioSourceLog) for (const node of rec.chain) if (node.type === "GainNode") gainUse[node.id] = (gainUse[node.id] || 0) + 1;
     const out = {
+      webAudioGraph: { sources: ccfAudioSourceLog.slice(-20), gainUsedBySourceCount: gainUse },
       totals: { ...ccfBgmCountTotals }, media, log: ccfBgmCountLog.slice(-60), panelOpen: !!document.getElementById("ccf-second-chat-panel"),
       youtube: { activeSlot: ccfBgmActiveSlotKey, restoreConsumed: ccfBgmRestoreConsumed, videoId: ccfBgmPlayerVideoId, stateA: ytState(ccfBgmPlayer), stateB: ytState(ccfBgmPlayerB), persisted: (() => { try { return readCcfBgmPersistedActiveSlot(); } catch (_) { return null; } })() },
       lastWebAudio: ccfBgmLastWebAudio ? { stopped: ccfBgmLastWebAudio.stopped, total: ccfBgmLastWebAudio.total, loop: ccfBgmLastWebAudio.loop } : null
@@ -2069,10 +2096,34 @@
 
     window.__ccfBgmWebAudioProgressHooked = true;
 
+    // 연결 경로 기록용 connect 패치 — 원본을 그대로 부른다.
+    const nodeProto = window.AudioNode?.prototype;
+    const originalConnect = nodeProto?.connect;
+    if (typeof originalConnect === "function") {
+      const patchedConnect = function patchedCcfAudioConnect(destination) {
+        try {
+          if (this instanceof window.AudioBufferSourceNode || this instanceof window.GainNode) {
+            const list = ccfAudioEdges.get(this) || [];
+            if (destination && typeof destination === "object" && list.length < 8) list.push(destination);
+            ccfAudioEdges.set(this, list);
+          }
+        } catch (_) { /* 기록 실패는 무시 */ }
+        return originalConnect.apply(this, arguments);
+      };
+      nodeProto.connect = patchedConnect;
+      registerTeardown(() => { if (nodeProto.connect === patchedConnect) nodeProto.connect = originalConnect; });
+    }
+
     const patchedWebAudioStart = function patchedCcfBgmWebAudioStart(when = 0, offset = 0, duration) {
       if (!chatNotifierLifecycle.isActive()) {
         return originalStart.apply(this, arguments);
       }
+      try {
+        const record = { id: ccfAudioIdOf(this), startMs: Math.round(performance.now() - ccfBgmCountStartedAt), dur: Math.round((this.buffer?.duration || 0) * 10) / 10, loop: !!this.loop, chain: ccfAudioChainOf(this) };
+        ccfAudioSourceRecords.set(this, record);
+        ccfAudioSourceLog.push(record);
+        if (ccfAudioSourceLog.length > 60) ccfAudioSourceLog.shift();
+      } catch (_) { /* 기록 실패는 무시 */ }
       try { noteCcfBgmCount("webAudioStart", { dur: Math.round((this.buffer?.duration || 0) * 10) / 10, loop: this.loop, ctx: this.context?.state }); } catch (_) {}
       let trackingState = null;
       try {
@@ -2116,6 +2167,7 @@
       if (!chatNotifierLifecycle.isActive()) {
         return originalStop.apply(this, arguments);
       }
+      try { const record = ccfAudioSourceRecords.get(this); if (record) record.stopMs = Math.round(performance.now() - ccfBgmCountStartedAt); } catch (_) { /* 무시 */ }
       try { noteCcfBgmCount("webAudioStop", { dur: Math.round((this.buffer?.duration || 0) * 10) / 10 }); } catch (_) {}
       try {
         if (ccfBgmLastWebAudio?.source === this) {
