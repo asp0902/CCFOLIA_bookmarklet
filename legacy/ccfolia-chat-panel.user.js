@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.13
+// @version      0.5.14
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.13";
+  const VERSION = "0.5.14";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -706,11 +706,18 @@
     return { count: items.length, viewBottom: r2(viewBottom), lastInDomIsLowest: visible[0] === lastInDom, lowest: visible.slice(0, 5).map(info), lastInDom: info(lastInDom) };
   }
   // 진단: 마지막 비교가 언제, 어떤 값으로, 왜 건너뛰었거나 채택됐는지(tailDiag 의 adjust).
+  // 보정이 스크롤을 흔들지 않게: 사용자 스크롤·전송 직후에는 재지 않고, 채택은 최대 3번(그 뒤로는 새로고침·방 전환까지 고정), 처음 이후엔 1px 이상 차이만 본다. localStorage.ccfScpTailAdjust = "off" 로 끈다.
+  let lastUserScrollAt = 0;
+  const ADJUST_MAX_ADOPTS = 3;
   const adjustDiag = { runs: 0, lastAt: 0, reason: "", actual: null, native: null, delta: null, count: 0, adopted: 0, lastAdoptAt: 0, lastNext: null };
   function adjustPanelTail() {
     adjustDiag.runs += 1; adjustDiag.lastAt = Date.now(); adjustDiag.native = ccfScpNativeToTabs;
     const skip = (reason) => { adjustDiag.reason = reason; };
     if (!listEl || !tabsEl) return skip("no-list-or-tabs");
+    try { if (localStorage.getItem("ccfScpTailAdjust") === "off") return skip("disabled-by-switch"); } catch (e) { /* 저장소 없음 */ }
+    if (adjustDiag.adopted >= ADJUST_MAX_ADOPTS) return skip("frozen-after-adopts");
+    if (Date.now() - lastUserScrollAt < 1500) return skip("user-scrolling");
+    if (sending) return skip("sending");
     if (ccfScpNativeToTabs < 0) return skip("native-distance-unknown");
     if (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 3) return skip("list-not-at-bottom");
     if (listEl.scrollHeight <= listEl.clientHeight + 2) return skip("list-not-full");
@@ -719,7 +726,7 @@
     const actual = tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom;
     const delta = Math.round((actual - ccfScpNativeToTabs) * 100) / 100;
     adjustDiag.actual = Math.round(actual * 100) / 100; adjustDiag.delta = delta;
-    if (Math.abs(delta) < 0.75) { adjustSample = null; adjustDiag.count = 0; return skip("equal"); }
+    if (Math.abs(delta) < (adjustDiag.adopted > 0 ? 1 : 0.75)) { adjustSample = null; adjustDiag.count = 0; return skip("equal"); }
     if (adjustSample && Math.abs(adjustSample.value - delta) < 0.5) adjustSample.count += 1; else adjustSample = { value: delta, count: 1 };
     adjustDiag.count = adjustSample.count;
     if (adjustSample.count < 3) return skip("waiting-for-3-equal");
@@ -2218,7 +2225,9 @@
     listEl.addEventListener("mouseout", (e) => {
       if (e.target.closest?.(".ccf-tooltip-frag[data-tooltip]")) tipEl.hidden = true;
     });
+    for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) listEl.addEventListener(type, () => { lastUserScrollAt = Date.now(); }, { passive: true });
     listEl.addEventListener("scroll", () => {
+      if (!suppressScrollEval) lastUserScrollAt = Date.now();
       // 우리가 프로그램적으로 내린 스크롤은 무시한다. 안 그러면 높이가 아직 안 찬
       // 순간의 스크롤 이벤트가 "바닥 아님"으로 오판해 고정을 풀어 버린다(시작 시 튐).
       if (suppressScrollEval) return;
@@ -3201,7 +3210,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
-    ccfScpListTail = -1; tailSample = null; ccfScpNativeToTabs = -1; toTabsSample = null; panelAdjust = 0; adjustSample = null;
+    ccfScpListTail = -1; tailSample = null; ccfScpNativeToTabs = -1; toTabsSample = null; panelAdjust = 0; adjustSample = null; adjustDiag.adopted = 0;
     ccfScpInnerUl = null;
     // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
     // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.

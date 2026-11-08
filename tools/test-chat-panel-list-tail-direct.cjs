@@ -33,6 +33,7 @@ const NATIVE = `<style>#nat{position:fixed;top:0;right:0;width:340px;height:640p
     const diag = await page.evaluate(() => (window.__CCF_SECOND_CHAT_PANEL__.tailDiag ? window.__CCF_SECOND_CHAT_PANEL__.tailDiag() : null));
     assert.ok(diag.adjust && diag.adjust.adopted >= 1 && diag.adjust.reason && diag.adjust.runs > 0, "the comparison diagnostics report an adopted adjustment: " + JSON.stringify(diag.adjust));
     assert.ok(diag.visibleRows && diag.visibleRows.panel && diag.visibleRows.panel.lowest.length >= 1 && diag.visibleRows.native && diag.visibleRows.native.lowest.length >= 1, "visible rows diagnostics for both lists: " + JSON.stringify(diag.visibleRows).slice(0, 300));
+    assert.ok(diag.adjust.adopted >= 1 && diag.adjust.adopted <= 3, "adoptions are capped: " + diag.adjust.adopted);
     const nativeToTabs = await page.evaluate(() => { const rows = [...document.querySelectorAll('#nlist .MuiListItem-root')]; return Math.round((document.querySelector('.MuiTabs-root').getBoundingClientRect().top - rows[rows.length - 1].getBoundingClientRect().bottom) * 100) / 100; });
     console.log('diag:', JSON.stringify(diag && { nativeToTabs: diag.nativeToTabs, panelLastToTabs: diag.panelLastToTabs, adjust: diag.panelAdjust, lastRowTag: diag.lastRowTag, rowCount: diag.rowCount, structure: diag.structure }));
     if (process.env.PANEL_SOURCE) return;
