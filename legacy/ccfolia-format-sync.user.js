@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.79
+// @version      0.1.80
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.79"),
+    version: getUserscriptVersion("0.1.80"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -836,6 +836,12 @@
       }
 
       /* Group edges are symmetric; continuation rows retain the 6px message gap. */
+      /* 구분선: 같은 화자 묶음 안에서도 이 메시지 위에 선을 그린다. 선은 행 자신 안(위쪽 테두리)에 그려 행 높이가 메시지 데이터만으로 정해지게 한다. */
+      .MuiListItem-root:has(.ccf-render-root[data-ccf-break="1"]) {
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+        margin-top: 8px !important;
+        padding-top: 8px !important;
+      }
       .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
         padding-top: 16px !important;
         padding-bottom: 16px !important;
@@ -1036,6 +1042,7 @@
     el.classList.remove("ccf-render-root");
     el.removeAttribute(CCF_RENDERED_ATTR);
     el.removeAttribute(CCF_RAW_ATTR);
+    el.removeAttribute("data-ccf-break");
     applyNarrationMessageLayout(el, false);
     return true;
   }
@@ -1339,10 +1346,11 @@
     const macro = envelope.roll20Macro === true;
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
+    const breakBefore = cleanupBlockStyle(envelope.blockStyle).breakBefore === true;
 
     // 서식이 하나도 없는 봉투(예: 롤20에서 넘어온 메시지의 출처 표시만 담은 것)는 오버레이도 바닥 고정도 하지 않는다.
     // 네이티브 텍스트에 보이지 않는 문자만 붙어 있어 화면은 같고, 오버레이를 만들면 줄 높이가 바뀌어 네이티브 가상 리스트가 깜박이거나 스크롤이 중간에 멈춘다.
-    if (!runs.length && !alignRuns.length && !narration && !macro) {
+    if (!runs.length && !alignRuns.length && !narration && !macro && !breakBefore) {
       removeRenderOverlay(el); // 가상 리스트가 서식 있던 노드를 재사용한 경우 이전 오버레이를 걷어낸다
       el.setAttribute(CCF_RAW_ATTR, text);
       el.setAttribute(CCF_RENDERED_ATTR, "1");
@@ -1355,6 +1363,8 @@
 
     const overlay = ensureRenderOverlay(el);
     applyNarrationMessageLayout(el, narration);
+    if (breakBefore) el.setAttribute("data-ccf-break", "1");
+    else el.removeAttribute("data-ccf-break");
     if (macro) el.setAttribute("data-ccf-macro", "1");
     else el.removeAttribute("data-ccf-macro");
 
@@ -1406,6 +1416,7 @@
     }
     el.classList.remove("ccf-render-root");
     el.removeAttribute("data-ccf-macro");
+    el.removeAttribute("data-ccf-break");
     applyNarrationMessageLayout(el, false);
   }
 
@@ -2150,6 +2161,10 @@
     }
     if (style?.narration === true) {
       out.narration = true;
+    }
+    // 같은 화자 묶음 안에서도 이 메시지 앞에 구분선을 그린다(한 번 보내면 꺼진다).
+    if (style?.breakBefore === true) {
+      out.breakBefore = true;
     }
     return out;
   }
@@ -5111,6 +5126,7 @@
       <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
       <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
       <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false">Nr</button>
+      <button type="button" class="ccf-toggle" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></button>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"/></svg>
@@ -5401,6 +5417,16 @@
     const command = commandButton.getAttribute("data-inline-command") || "";
     const editor = activateInlineToolbarEditor(toolbar);
     if (!editor) return;
+
+    if (command === "break") {
+      const state = ensureEditorState(editor);
+      const nextActive = state.blockStyle?.breakBefore !== true;
+      state.blockStyle = { ...(state.blockStyle || {}), ...(nextActive ? { breakBefore: true } : {}) };
+      if (!nextActive) delete state.blockStyle.breakBefore;
+      commandButton.classList.toggle("active", nextActive);
+      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      return;
+    }
 
     if (command === "keep") {
       const nextActive = !commandButton.classList.contains("active");
@@ -5984,6 +6010,8 @@
     state.alignRuns = [];
     if (!keepOn) state.lastStyle = null;
     state.blockStyle = preservedNarration ? { narration: true } : {};
+    // 구분선은 한 번만(유지가 켜져 있어도): 단추를 끈다.
+    document.querySelectorAll('[data-inline-command="break"]').forEach((btn) => { btn.classList.remove("active"); btn.setAttribute("aria-pressed", "false"); });
     state.parentheticalGray = preservedParentheticalGray;
     state.roll20Source = null;
 
@@ -13227,7 +13255,7 @@
     const runs = preparedRuns.runs;
     const alignRuns = getEffectiveAlignRuns(sendText, state.alignRuns, blockStyle);
 
-    if (!runs.length && !alignRuns.length && !blockStyle.narration && sendText === rawText) return true;
+    if (!runs.length && !alignRuns.length && !blockStyle.narration && !blockStyle.breakBefore && sendText === rawText) return true;
     const roll20Source = state.roll20Source;
     state.text = sendText;
     state.runs = runs;
@@ -14313,6 +14341,10 @@
     }
     if (style?.narration === true) {
       out.narration = true;
+    }
+    // 같은 화자 묶음 안에서도 이 메시지 앞에 구분선을 그린다(한 번 보내면 꺼진다).
+    if (style?.breakBefore === true) {
+      out.breakBefore = true;
     }
     return out;
   }

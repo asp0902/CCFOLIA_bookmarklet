@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.3.0
+// @version      0.3.1
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -25,7 +25,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.3.0";
+  const VERSION = "0.3.1";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -81,6 +81,8 @@
   let onDocDragUp = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let narrationOn = false; // 나레이션(Nr) 토글
+  let breakNext = false; // 구분선 토글: 다음 메시지 하나 앞에 구분선(보내면 꺼진다)
+  let breakBtnEl = null;
   // 서식 두 번째 줄(정렬·글자색·배경색·크기·유지·()) 상태. 메시지 전체에 적용된다. 유지(keep)가 꺼져 있으면 전송 뒤 초기화.
   const FMT_SAVED_KEY = "ccf-scp-fmt-saved";
   const FMT_PAREN_GRAY = "#878787";
@@ -1248,11 +1250,14 @@
     const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
     const narrate = (narrationOn || parsed.narration === true) && !meta;
-    if (!rolled && !meta?.rawEnvelope && !(!meta && looksLikeDiceCommand(cleanText)) && (meta || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
+    // 구분선은 이 메시지 하나에만: 판정 명령·롤20 중계 메시지에는 붙지 않고, 어느 경우든 보내면 꺼진다.
+    const breakHere = breakNext && !meta;
+    if (breakNext) { breakNext = false; breakBtnEl?.classList.remove("is-active"); }
+    if (!rolled && !meta?.rawEnvelope && !(!meta && looksLikeDiceCommand(cleanText)) && (meta || breakHere || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
-        blockStyle: narrate ? { narration: true } : {},
+        blockStyle: { ...(narrate ? { narration: true } : {}), ...(breakHere ? { breakBefore: true } : {}) },
         ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {})
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
@@ -2272,6 +2277,21 @@
       inputEl?.focus();
     });
     fmtRow.appendChild(nrBtn);
+    // 구분선: 같은 화자 묶음 안에서도 다음 메시지 위에 선을 넣는다(한 번 보내면 꺼짐). 위 줄 Nr 다음 칸.
+    const breakBtn = document.createElement("button");
+    breakBtn.type = "button";
+    breakBtn.className = "ccf-scp-fmt-btn";
+    breakBtn.title = "구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)";
+    breakBtn.setAttribute("aria-label", "구분선");
+    breakBtn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg>';
+    breakBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      breakNext = !breakNext;
+      breakBtn.classList.toggle("is-active", breakNext);
+      inputEl?.focus();
+    });
+    breakBtnEl = breakBtn;
+    fmtRow.appendChild(breakBtn);
 
     // 두 번째 줄: 정렬 · 글자색 · 배경색 · 크기 · 유지 · Sv · ().
     const rowBreak = document.createElement("span");
