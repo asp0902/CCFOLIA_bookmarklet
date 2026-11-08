@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.102
+// @version      0.3.103
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.102"),
+    version: getUserscriptVersion("0.3.103"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5851,16 +5851,42 @@
   // 나레이션 여부를 메시지 데이터(원본 글자에 붙은 보이지 않는 서식 봉투)로 판정한다. 렌더 표식(data-ccf-narration)은 format-sync 가 늦게 달 수 있고
   // 이웃 DOM 에 좌우되므로, 표식이 없어도 봉투에서 바로 읽는다(가상 목록 높이 안정). 같은 글자면 다시 풀지 않는다.
   const narrationByText = new WeakMap();
+  // 이 구역(두 번째 IIFE)은 첫 번째 IIFE 의 INVIS_START·extractEnvelope 를 참조할 수 없다 — 봉투에서 나레이션 여부만 읽는 작은 해독기를 여기에 따로 둔다.
+  const PROSE_INVIS_START = "\u2063\u2063\u2063";
+  const PROSE_INVIS_END = "\u2062\u2062\u2062";
+  const PROSE_INVIS_REVERSE = new Map(["\u200B", "\u200C", "\u200D", "\u2060"].map((ch, index) => [ch, index]));
+  function proseEnvelopeNarration(text) {
+    const start = text.indexOf(PROSE_INVIS_START);
+    if (start < 0) return false;
+    const end = text.indexOf(PROSE_INVIS_END, start + PROSE_INVIS_START.length);
+    if (end < 0) return false;
+    let bits = "";
+    for (const ch of text.slice(start + PROSE_INVIS_START.length, end)) {
+      const index = PROSE_INVIS_REVERSE.get(ch);
+      if (index == null) continue;
+      bits += index.toString(2).padStart(2, "0");
+    }
+    let base64 = "";
+    for (let i = 0; i + 8 <= bits.length; i += 8) base64 += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2));
+    base64 = base64.replace(/\0+$/g, "");
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes))?.blockStyle?.narration === true;
+  }
   function rowIsNarration(li) {
-    if (li.getAttribute("data-ccf-narration") === "1" || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return true;
-    const text = li.querySelector("p.MuiListItemText-secondary")?.textContent || "";
-    if (!text || text.indexOf(INVIS_START) < 0) return false;
-    const cached = narrationByText.get(li);
-    if (cached && cached.text === text) return cached.value;
-    let value = false;
-    try { value = extractEnvelope(text)?.envelope?.blockStyle?.narration === true; } catch (_) { value = false; }
-    narrationByText.set(li, { text, value });
-    return value;
+    try {
+      if (li.getAttribute("data-ccf-narration") === "1" || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return true;
+      const text = li.querySelector("p.MuiListItemText-secondary")?.textContent || "";
+      if (!text || text.indexOf(PROSE_INVIS_START) < 0) return false;
+      const cached = narrationByText.get(li);
+      if (cached && cached.text === text) return cached.value;
+      let value = false;
+      try { value = proseEnvelopeNarration(text); } catch (_) { value = false; }
+      narrationByText.set(li, { text, value });
+      return value;
+    } catch (_) {
+      return false; // 판정에 실패해도 묶음 처리 전체가 멈추지 않게 한다
+    }
   }
 
   function processList(options = {}) {
@@ -6182,7 +6208,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.102",
+    version: "0.3.103",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
