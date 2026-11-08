@@ -62,3 +62,9 @@ assert.match(panel, /\.ccf-scp-list \{ padding: 0 0 var\(--scp-list-tail, 8px\);
 assert.match(panel, /\.ccf-scp-list:has\(\[data-ccr20-band\]\) \{ padding-bottom: 24px; \}/);
 assert.match(panel, /--scp-list-tail/);
 console.log('list tail PASS');
+// the lines between messages are inset 16px on both sides like the original (drawn as a background line under a transparent 1px border), the space under the last line is measured
+assert.match(panel, /row\.style\.setProperty\("border-bottom", "1px solid transparent", "important"\);/);
+assert.match(panel, /background-size", "calc\(100% - 32px\) 1px", "important"/); assert.match(panel, /background-position", "16px 100%", "important"/);
+assert.equal('1px solid rgba(255, 255, 255, 0.12)'.replace(/^\S+\s+\S+\s+/, ''), 'rgba(255, 255, 255, 0.12)');
+assert.match(panel, /const tail = Math\.round\(\(viewBottom - end\.getBoundingClientRect\(\)\.bottom\) \* 100\) \/ 100;/);
+console.log('inset line PASS');
