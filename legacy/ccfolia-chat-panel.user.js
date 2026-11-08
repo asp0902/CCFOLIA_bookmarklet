@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.71
+// @version      0.2.72
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.71";
+  const VERSION = "0.2.72";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1704,9 +1704,9 @@
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
       #${PANEL_ID} .ccf-scp-tab { box-sizing: border-box; min-width: 48px; height: 48px; padding: 12px 16px;
         font-size: 14px; font-weight: 700; letter-spacing: .02857em; line-height: 1.75; }
-      #${PANEL_ID} .ccf-scp-fmt { gap: 4px 6px; margin: 0; padding: 6px; background: rgba(32,32,32,.94); }
+      #${PANEL_ID} .ccf-scp-fmt { gap: 0; margin: 0; padding: 6px; background: rgba(32,32,32,.94); }
       #${PANEL_ID} .ccf-scp-fmt-btn { width: 30px; min-width: 30px; height: 30px; padding: 0; border-radius: 0;
-        background: rgb(40,40,40); border: 1px solid rgba(255,255,255,.12); font-size: 12px; font-weight: 400; }
+        background: rgb(40,40,40); border: 0; font-size: 12px; font-weight: 400; }
       #${PANEL_ID} .ccf-scp-fmt-btn:hover { background: rgb(55,55,55); }
       #${PANEL_ID} .ccf-scp-inputwrap { margin: 0; padding: 4px 8px; background: rgba(0,0,0,.2); }
       #${PANEL_ID} .ccf-scp-input { min-height: 72px; padding: 0; border: 0; border-radius: 0; background: transparent;
@@ -1722,15 +1722,17 @@
       #${PANEL_ID} .ccf-scp-status { min-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
       #${PANEL_ID} .ccf-scp-status:empty { display: none; }
       #${PANEL_ID} .ccf-scp-fmt-break { flex-basis: 100%; height: 0; }
-      #${PANEL_ID} .ccf-scp-fmt-btn.is-active { background: rgb(66,66,66); border-color: rgba(255,255,255,.5); }
+      #${PANEL_ID} .ccf-scp-fmt-btn.is-active { background: rgb(66,66,66); }
       #${PANEL_ID} .ccf-scp-fmt-align svg { display: block; margin: auto; }
       /* 색 미리보기: 오리지널 패널과 같게 버튼(30×30)은 고정, 칸은 16×16 정사각형(::before), color 입력은 투명 덮개. */
       #${PANEL_ID} .ccf-scp-fmt-color { position: relative; display: block; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; box-sizing: border-box; overflow: hidden; cursor: pointer; }
       #${PANEL_ID} .ccf-scp-fmt-color::before { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); box-sizing: border-box;
-        border: 1px solid rgba(255,255,255,.18); background: var(--ccf-chip-color, #fff); pointer-events: none; }
+        border: 1px solid rgba(255,255,255,.5); background: var(--ccf-chip-color, #fff); pointer-events: none; }
       #${PANEL_ID} .ccf-scp-fmt-color input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
-      #${PANEL_ID} .ccf-scp-fmt-color.is-set { border-color: rgba(255,255,255,.5); }
-      #${PANEL_ID} .ccf-scp-fmt-size { width: 56px; min-width: 56px; padding: 0 6px; text-align: center; color: inherit; font-size: 13px; }
+      #${PANEL_ID} .ccf-scp-fmt-color.is-set { background: rgb(66,66,66); }
+      /* 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
+      #${PANEL_ID} .ccf-scp-fmt-keep { width: 44px; min-width: 44px; flex: 0 0 44px; }
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 44px; min-width: 44px; flex: 0 0 44px; padding: 0 4px; text-align: center; color: inherit; font-size: 13px; }
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.5); }
       #${PANEL_ID} .ccf-scp-fmt-toggle { font-weight: 700; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
@@ -2311,7 +2313,7 @@
       fmtState.size = sizeInput.value;
     });
     fmtRow.appendChild(sizeInput);
-    const keepBtn = mkBtn("유지", "이전 서식 유지", () => { fmtState.keep = !fmtState.keep; syncFmtUi(); }, "ccf-scp-fmt-toggle");
+    const keepBtn = mkBtn("유지", "이전 서식 유지", () => { fmtState.keep = !fmtState.keep; syncFmtUi(); }, "ccf-scp-fmt-toggle ccf-scp-fmt-keep");
     const saveBtn = mkBtn("Sv", "서식 저장", () => {
       try { window.localStorage.setItem(FMT_SAVED_KEY, JSON.stringify({ align: fmtState.align, color: fmtState.color, bg: fmtState.bg, size: fmtState.size, paren: fmtState.paren, keep: fmtState.keep })); } catch (e) { /* noop */ }
       setStatus("서식을 저장했습니다. 다음에 패널을 열면 이 서식으로 시작합니다.");

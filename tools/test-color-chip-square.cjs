@@ -11,3 +11,11 @@ assert.match(pb, /width: 30px; height: 30px/); assert.match(pb, /flex: 0 0 30px/
 assert.match(sb, /flex: 0 0 30px/); assert.match(sb, /aspect-ratio: 1 \/ 1/); assert.match(sc, /width: 16px/); assert.match(sc, /height: 16px/);
 assert.match(panel, /--ccf-chip-color/);
 console.log('color chip square PASS');
+// the chip has the same visible border on both colors, the size box and the keep button have the same width, the format buttons have no outline and no gap
+assert.match(pc, /border: 1px solid rgba\(255,255,255,\.5\)/); assert.match(sc, /border: 1px solid rgba\(255, 255, 255, 0\.5\)/);
+assert.match(pc, /box-sizing: border-box/); assert.match(sc, /box-sizing: border-box/);
+assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-size'), /width: 44px/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-keep'), /width: 44px/);
+const sk = rule(sync, '.ccf-inline-toolbar .ccf-inline-size-input,\n      .ccf-inline-toolbar .ccf-keep-toggle'); assert.match(sk, /width: 44px/);
+assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt'), /gap: 0/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-btn'), /border: 0/);
+assert.match(rule(sync, '.ccf-inline-toolbar'), /column-gap: 0/); assert.match(sync, /border-width: 0 !important/);
+console.log('format row follow-up PASS');
