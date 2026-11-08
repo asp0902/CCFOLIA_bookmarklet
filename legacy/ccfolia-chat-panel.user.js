@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.79
+// @version      0.2.80
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.79";
+  const VERSION = "0.2.80";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1473,6 +1473,9 @@
         line-height: 1.5;
       }
       #${PANEL_ID} * { box-sizing: border-box; }
+      /* 두 패널 사이 세로선: 추가 패널 오른쪽 바깥에 1px 을 얹어 오리지널의 흐린 왼쪽 선(0.667px)을 덮는다(겹쳐 2줄이 되지 않게). */
+      #${PANEL_ID}::after { content: ""; position: absolute; top: 0; bottom: 0; right: -1px; width: 1px;
+        background: rgba(255,255,255,.22); pointer-events: none; }
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
          걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다.

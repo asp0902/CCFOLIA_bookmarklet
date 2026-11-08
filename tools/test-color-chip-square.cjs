@@ -54,3 +54,6 @@ const lower = colWidths(45, 45); assert.equal(x(lower, 7), 30 * 5 + 90); assert.
 assert.match(panel, /ccf-scp-fmt-size \{ width: 45px; min-width: 45px; flex: 0 0 45px;/); assert.match(panel, /ccf-scp-fmt-keep \{ width: 45px; min-width: 45px; flex: 0 0 45px;/);
 assert.match(sync, /width: 45px;\n\s+min-width: 45px;\n\s+flex: 0 0 45px;/);
 console.log('format row grid PASS');
+// the line between the panels is drawn by the extra panel: 1px outside its right edge, over the faint native line
+assert.match(panel, /#\$\{PANEL_ID\}::after \{ content: ""; position: absolute; top: 0; bottom: 0; right: -1px; width: 1px;/);
+console.log('panel edge line PASS');
