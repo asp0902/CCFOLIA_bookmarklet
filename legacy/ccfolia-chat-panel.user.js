@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.8
+// @version      0.5.9
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.8";
+  const VERSION = "0.5.9";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -3031,8 +3031,10 @@
     const ar = (anchor.querySelector("svg") || anchor).getBoundingClientRect();
     const rel = look && look.anchor;
     const br = anchor.getBoundingClientRect(); // 저장값이 없을 때: MUI 처럼 종이 오른쪽 = 버튼 오른쪽, 종이 위 = 버튼 아래
-    const top = rel ? ar.top + rel.dTop : br.bottom;
-    const right = rel ? ar.right - rel.dRight : br.right;
+    // 저장값이 없을 때: 오리지널 48px 버튼(아이콘 24px, 안쪽 12px)에 붙은 종이처럼 아이콘 오른쪽+12px 에 종이 오른쪽, 아이콘 아래+12px 에 종이 위쪽.
+    const top = rel ? ar.top + rel.dTop : ar.bottom + 12;
+    const right = rel ? ar.right - rel.dRight : ar.right + 12;
+    void br;
     menu.style.top = `${Math.round(Math.max(8, top))}px`;
     menu.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, right - menu.offsetWidth)))}px`;
     // 열림 애니메이션: MUI Grow 처럼 위(오른쪽) 원점에서 scale + opacity (opacity 338ms, transform 225ms).
@@ -4877,7 +4879,15 @@
       },
       menuStyleDiag() {
         let saved = null; try { saved = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); } catch (e) { /* none */ }
-        return { saved, lastCapture: lastMenuCapture };
+        const rect = (el) => { if (!(el instanceof Element)) return null; const r = el.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) }; };
+        const g = scpHost.nativeGearBtn;
+        const ours = document.querySelector(".ccf-scp-gear");
+        return {
+          saved, lastCapture: lastMenuCapture,
+          nativeGear: g ? { connected: g.isConnected, rect: rect(g), icon: rect(g.querySelector?.("svg")), expanded: g.getAttribute("aria-expanded"), controls: g.getAttribute("aria-controls"), label: g.getAttribute("aria-label") } : null,
+          ourGear: ours ? { rect: rect(ours), icon: rect(ours.querySelector("svg")) } : null,
+          openMenu: rect(document.querySelector(".ccf-scp-menu"))
+        };
       },
       tailDiag() {
         const last = lastRowEl();
