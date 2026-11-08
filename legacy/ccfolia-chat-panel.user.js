@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.5
+// @version      0.5.6
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.5";
+  const VERSION = "0.5.6";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -2928,6 +2928,14 @@
   // 오리지널 MUI 메뉴의 실제 모양: 사용자가 오리지널 메뉴(톱니 등)를 열면 그 종이·항목의 computed 스타일을 읽어 저장해 두고, 우리 메뉴가 같은 값을 쓴다(추측값은 저장이 없을 때만).
   const SCP_MENU_STYLE_KEY = "ccf-scp-menu-style:v1";
   const readMenuStyle = () => { try { const v = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); return v && typeof v === "object" ? v : null; } catch (e) { return null; } };
+  // 가장 최근에 눌린 오리지널 버튼(메뉴를 연 톱니를 특정하는 데 쓴다)과 마지막 캡처 결과(진단용).
+  const lastNativeClick = { btn: null, at: 0 };
+  let lastMenuCapture = null;
+  document.addEventListener("click", (event) => {
+    const t = event.target;
+    const b = t instanceof Element ? t.closest("button") : null;
+    if (b && !b.closest(".ccf-scp-panel")) { lastNativeClick.btn = b; lastNativeClick.at = Date.now(); }
+  }, true);
   function captureNativeMenuStyle(menu) {
     try {
       const paper = menu.closest(".MuiMenu-paper, .MuiPopover-paper, .MuiPaper-root") || menu;
@@ -2942,10 +2950,17 @@
       };
       snapshot.paper.transformOrigin = pc.transformOrigin; snapshot.paper.transition = pc.transition;
       // 메뉴를 연 오리지널 버튼(MUI 가 aria-expanded="true" 를 단다)의 아이콘 기준으로 종이의 위치를 잰다: 아이콘 위쪽 → 종이 위쪽, 종이 오른쪽 → 아이콘 오른쪽.
-      const anchorBtn = [...document.querySelectorAll('[aria-expanded="true"]')].find((b) => b instanceof HTMLElement && !b.closest(".ccf-scp-panel") && b.querySelector("svg"));
+      // 후보가 여럿이면(채팅창 접기 줄 등 다른 aria-expanded 버튼) 방금 눌린 버튼을 먼저, 없으면 종이 오른쪽 위 모서리에 가장 가까운 아이콘을 고른다. 종이에서 너무 먼 값은 잘못 잡은 것이므로 버린다.
+      const pr = paper.getBoundingClientRect();
+      const cands = [...document.querySelectorAll('[aria-expanded="true"]')].filter((b) => b instanceof HTMLElement && !b.closest(".ccf-scp-panel") && b.querySelector("svg"));
+      const pressed = lastNativeClick.btn && Date.now() - lastNativeClick.at < 30000 ? cands.find((b) => b === lastNativeClick.btn || b.contains(lastNativeClick.btn)) : null;
+      const near = (b) => { const r = b.querySelector("svg").getBoundingClientRect(); return Math.hypot(r.right - pr.right, r.top - pr.top); };
+      const anchorBtn = pressed || cands.sort((a, b) => near(a) - near(b))[0] || null;
       if (anchorBtn) {
-        const ir = anchorBtn.querySelector("svg").getBoundingClientRect(), pr = paper.getBoundingClientRect();
-        if (ir.width > 0 && pr.width > 0) snapshot.anchor = { dTop: Math.round((pr.top - ir.top) * 10) / 10, dRight: Math.round((ir.right - pr.right) * 10) / 10 };
+        const ir = anchorBtn.querySelector("svg").getBoundingClientRect();
+        const dTop = pr.top - ir.top, dRight = ir.right - pr.right;
+        if (ir.width > 0 && pr.width > 0 && Math.abs(dTop) <= 100 && Math.abs(dRight) <= 100) snapshot.anchor = { dTop: Math.round(dTop * 10) / 10, dRight: Math.round(dRight * 10) / 10 };
+        lastMenuCapture = { btn: `${anchorBtn.tagName.toLowerCase()}[${Math.round(ir.width)}x${Math.round(ir.height)}]`, dTop: Math.round(dTop), dRight: Math.round(dRight), accepted: !!snapshot.anchor, pressed: !!pressed, candidates: cands.length };
       }
       if (!snapshot.paper.backgroundColor || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(snapshot.paper.backgroundColor)) return;
       localStorage.setItem(SCP_MENU_STYLE_KEY, JSON.stringify(snapshot));
@@ -4828,6 +4843,11 @@
       // 메뉴 항목을 못 찾을 때 원인 확인용.
       // 다른 탭이 비어 보일 때: 저장소가 가진 채널별 개수, 따로 불러온 이전 대화, 불러오기 상태와 실패 이유.
       // 마지막 선 아래 여백이 오리지널과 다를 때: 오리지널 실측값, 우리 패널의 실제 거리와 보정, 마지막 줄·목록·탭의 여백 속성.
+      // 메뉴 위치/모양이 이상할 때: 저장된 오리지널 메뉴 값과 마지막 캡처가 잡은 버튼·오프셋.
+      menuStyleDiag() {
+        let saved = null; try { saved = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); } catch (e) { /* none */ }
+        return { saved, lastCapture: lastMenuCapture };
+      },
       tailDiag() {
         const last = lastRowEl();
         const cs = (el) => (el instanceof HTMLElement ? (({ marginBottom, paddingBottom, borderBottomWidth, height }) => ({ marginBottom, paddingBottom, borderBottomWidth, height }))(getComputedStyle(el)) : null);
