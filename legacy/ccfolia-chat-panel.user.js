@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.17
+// @version      0.5.19
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.17";
+  const VERSION = "0.5.19";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1122,6 +1122,19 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] > :not(.ccf-hide-btn) { opacity:
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; position: absolute; right: 12px; bottom: 4px; font-size: 11px; opacity: .6; pointer-events: none; }
     `;
     (document.head || document.documentElement).appendChild(style);
+    // 눈 버튼 위치: 줄에 마우스를 올리면 나오는 네이티브 호버 버튼(답장·수정) 묶음의 바로 왼쪽, 같은 세로 가운데에 붙인다(그 묶음의 실제 위치를 읽는다). 못 읽으면 CSS 기본 위치.
+    document.addEventListener("mouseover", (event) => {
+      const li = event.target instanceof Element ? event.target.closest(".ccf-hide-host") : null;
+      const eye = li?.querySelector(":scope > .ccf-hide-btn");
+      if (!li || !eye) return;
+      const lr = li.getBoundingClientRect();
+      const others = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn"))
+        .map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.left > lr.left + lr.width * 0.4);
+      if (!others.length) return;
+      const left = Math.min(...others.map((r) => r.left)), top = Math.min(...others.map((r) => r.top)), bottom = Math.max(...others.map((r) => r.bottom));
+      eye.style.right = `${Math.max(0, Math.round(lr.right - left + 2))}px`;
+      eye.style.top = `${Math.max(0, Math.round((top + bottom) / 2 - lr.top - 15))}px`;
+    }, true);
   }
   async function refreshGm() {
     ensureHideStyle();
@@ -3060,6 +3073,16 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       e.preventDefault();
       openCharListFn();
     });
+
+    // 서식 단축키(오리지널 서식 도구와 같다): Ctrl/Cmd+B 굵게, +I 기울임, +U 밑줄, +` 취소선. 선택한 글을 마커로 감싼다(보낼 때 서식으로 바뀐다). 한글 입력 상태에서도 되도록 물리 키(code)로 판단한다.
+    inputEl.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const marker = { KeyB: "**", KeyI: "*", KeyU: "__", Backquote: "~~" }[e.code] || ({ b: "**", i: "*", u: "__", "`": "~~" })[String(e.key || "").toLowerCase()];
+      if (!marker) return;
+      e.preventDefault();
+      e.stopPropagation();
+      wrapSel(marker);
+    }, true);
 
     let suggestActive = -1;
     const buildSuggest = () => {

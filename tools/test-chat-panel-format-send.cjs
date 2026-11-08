@@ -54,6 +54,11 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
         assert.equal(await page.locator(sel + ' .ccf-scp-input').inputValue(), '선택 **굵게**', label + ': the B button wrapped the selection');
       });
       assert.ok(viaBtn.startsWith('선택 굵게') && INVIS.test(viaBtn), label + ': button marker became an envelope');
+      // keyboard shortcuts wrap the selection like the buttons: Ctrl+B bold, Ctrl+I italic, Ctrl+U underline
+      for (const [key, marker] of [['KeyB', '**'], ['KeyI', '*'], ['KeyU', '__']]) {
+        const wrapped = await page.evaluate(({ q, code }) => { const i = document.querySelector(q + ' .ccf-scp-input'); i.focus(); i.value = '단축 키'; i.setSelectionRange(3, 4); const ev = new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), ctrlKey: true, bubbles: true, cancelable: true }); i.dispatchEvent(ev); return { v: i.value, prevented: ev.defaultPrevented }; }, { q: sel, code: key });
+        assert.deepEqual(wrapped, { v: '단축 ' + marker + '키' + marker, prevented: true }, label + ': Ctrl+' + key.slice(3) + ' wraps the selection');
+      }
       const styled = await send(sel, '색과 정렬', async () => {
         await page.evaluate((s) => { const c = document.querySelector(s + ' .ccf-scp-fmt-color input'); c.value = '#ff0000'; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new Event('change', { bubbles: true })); }, sel);
         await page.locator(sel + ' .ccf-scp-fmt-align[data-align="center"]').click();
