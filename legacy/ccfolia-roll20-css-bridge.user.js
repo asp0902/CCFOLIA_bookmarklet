@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.104
+// @version      0.3.105
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.104"),
+    version: getUserscriptVersion("0.3.105"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5873,19 +5873,25 @@
     const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
     return JSON.parse(new TextDecoder().decode(bytes))?.blockStyle?.narration === true;
   }
+  // 나레이션 판정: 줄마다 마지막으로 "알 수 있었던" 값을 기억한다. 서식 렌더가 본문(p)을 비웠다가 렌더 루트를 만드는 중간 순간처럼 판정할 근거가 없을 때는 직전 값을 그대로 쓴다(판정 불가 = 변경 없음).
+  // 그렇지 않으면 그 순간만 false 가 돼 묶음 경계(cont/leader/last)가 깜박이고 높이가 흔들린다.
+  const narrationLastKnown = new WeakMap();
   function rowIsNarration(li) {
+    const known = (value) => { narrationLastKnown.set(li, value); return value; };
     try {
-      if (li.getAttribute("data-ccf-narration") === "1" || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return true;
+      if (li.getAttribute("data-ccf-narration") === "1" || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return known(true);
+      if (li.querySelector(".ccf-render-root")) return known(false); // 렌더가 끝났고 나레이션이 아니다
       const text = li.querySelector("p.MuiListItemText-secondary")?.textContent || "";
-      if (!text || text.indexOf(PROSE_INVIS_START) < 0) return false;
+      if (!text.trim()) return narrationLastKnown.get(li) === true; // 본문이 비어 있는 순간: 근거 없음 → 직전 값
+      if (text.indexOf(PROSE_INVIS_START) < 0) return known(false);
       const cached = narrationByText.get(li);
-      if (cached && cached.text === text) return cached.value;
+      if (cached && cached.text === text) return known(cached.value);
       let value = false;
-      try { value = proseEnvelopeNarration(text); } catch (_) { value = false; }
+      try { value = proseEnvelopeNarration(text); } catch (_) { return narrationLastKnown.get(li) === true; }
       narrationByText.set(li, { text, value });
-      return value;
+      return known(value);
     } catch (_) {
-      return false; // 판정에 실패해도 묶음 처리 전체가 멈추지 않게 한다
+      return narrationLastKnown.get(li) === true; // 판정에 실패해도 묶음 처리 전체가 멈추지 않게 하고, 값은 바꾸지 않는다
     }
   }
 
@@ -6238,7 +6244,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.104",
+    version: "0.3.105",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
