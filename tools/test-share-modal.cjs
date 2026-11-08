@@ -77,6 +77,8 @@ const flush = page => page.waitForTimeout(80);
       assert(gaps.before.socketToRoom >= 12, 'sanity: default p margin is larger ' + JSON.stringify(gaps));
       assert.equal(gaps.now.healthDisplay, 'none'); assert.equal(gaps.now.errorsDisplay, 'none');
       assert.notEqual(gaps.now.ntfyMargin, '2px', 'ntfy paragraph keeps its own look');
+      assert.equal(await q(page, 'hr').count(), 0, 'no divider lines');
+      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('capybara-share-modal-host').shadowRoot.querySelector('.body > .field')).marginTop), '4px', 'first field sits close to the header');
       console.log('approval spacing', JSON.stringify(gaps));
       assert.deepEqual(await q(page, 'button[data-decision]').evaluateAll(b => b.map(x => `${x.dataset.id}:${x.dataset.decision}`)), ['p1:approve', 'p1:reject', 'p2:revoke']);
       // Approve: authenticated POST for that participant.

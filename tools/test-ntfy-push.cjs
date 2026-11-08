@@ -96,6 +96,13 @@ async function backgroundPart() {
     assert.equal((await sent()).length, 0, 'held back');
     await page.clock.runFor(10_500);
     out = await sent(); assert.equal(out.length, 1, 'one summary'); assert.equal(out[0].title, '둘 외 2건 · 테스트룸');
+    // room name: the site's default tab title (with unread count) is not a room name; the room heading wins when present
+    const titleOf = async (docTitle, heading) => { await page.evaluate(([t, h]) => { document.title = t; document.querySelectorAll('h6').forEach((e) => e.remove()); if (h) { const e = document.createElement('h6'); e.className = 'MuiTypography-subtitle2'; e.textContent = h; e.style.display = 'block'; document.body.append(e); } }, [docTitle, heading]); await page.clock.runFor(61_000); await hook({ name: '에르네스토', text: 'x' }); await page.clock.runFor(10_000); const o = await sent(); return o[0]?.title; };
+    assert.equal(await titleOf('(1) CCFOLIA 1.37.6 – TRPGオンラインセッションツール', ''), '에르네스토님 메시지 · 코코포리아');
+    assert.equal(await titleOf('(3) 테스트룸 - CCFOLIA', ''), '에르네스토님 메시지 · 테스트룸');
+    assert.equal(await titleOf('(1) CCFOLIA 1.37.6 – TRPGオンラインセッションツール', '진짜 룸'), '에르네스토님 메시지 · 진짜 룸');
+    await page.evaluate(() => { document.title = '테스트룸 - CCFOLIA'; document.querySelectorAll('h6').forEach((e) => e.remove()); });
+    await page.clock.runFor(20_000); await sent();
     // my own message is left out (the speaker name field), keywords narrow it, the text can be added
     await page.clock.runFor(11_000);
     assert.equal(await hook({ name: '내 캐릭터', text: '내가 보냄' }), false, 'own message');
