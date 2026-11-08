@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.89
+// @version      0.1.90
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.89"),
+    version: getUserscriptVersion("0.1.90"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -889,6 +889,13 @@
         padding-top: 16px !important;
         margin-top: 8px !important;
       }
+      /* 숨긴 메시지(메시지 숨기기): GM 화면은 흐리게 남기고, 확장을 쓰는 다른 화면은 줄을 감춘다. */
+      html[data-ccf-gm="1"] .MuiListItem-root:not([data-ccf-hidden-row]):has(.ccf-render-root[data-ccf-hidden="1"]) > :not(.ccf-hide-btn) {
+        opacity: 0.38;
+      }
+      html[data-ccf-gm="0"] .MuiListItem-root:has(.ccf-render-root[data-ccf-hidden="1"]) {
+        display: none !important;
+      }
       .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
         padding-top: 16px !important;
         padding-bottom: 16px !important;
@@ -1090,6 +1097,7 @@
     el.removeAttribute(CCF_RENDERED_ATTR);
     el.removeAttribute(CCF_RAW_ATTR);
     el.removeAttribute("data-ccf-break");
+    el.removeAttribute("data-ccf-hidden");
     applyNarrationMessageLayout(el, false);
     return true;
   }
@@ -1412,6 +1420,8 @@
     applyNarrationMessageLayout(el, narration);
     if (breakBefore) { el.setAttribute("data-ccf-break", "1"); refreshDividerColor(); }
     else el.removeAttribute("data-ccf-break");
+    if (cleanupBlockStyle(envelope.blockStyle).hidden === true) el.setAttribute("data-ccf-hidden", "1");
+    else el.removeAttribute("data-ccf-hidden");
     if (macro) el.setAttribute("data-ccf-macro", "1");
     else el.removeAttribute("data-ccf-macro");
 
@@ -2233,6 +2243,10 @@
     // 같은 화자 묶음 안에서도 이 메시지 앞에 구분선을 그린다(한 번 보내면 꺼진다).
     if (style?.breakBefore === true) {
       out.breakBefore = true;
+    }
+    // GM 이 숨긴 메시지(메시지 숨기기). 화면 처리는 data-ccf-hidden 표식과 CSS 가 맡는다.
+    if (style?.hidden === true) {
+      out.hidden = true;
     }
     return out;
   }
@@ -14496,6 +14510,10 @@
     // 같은 화자 묶음 안에서도 이 메시지 앞에 구분선을 그린다(한 번 보내면 꺼진다).
     if (style?.breakBefore === true) {
       out.breakBefore = true;
+    }
+    // GM 이 숨긴 메시지(메시지 숨기기). 화면 처리는 data-ccf-hidden 표식과 CSS 가 맡는다.
+    if (style?.hidden === true) {
+      out.hidden = true;
     }
     return out;
   }

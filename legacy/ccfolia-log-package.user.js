@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.50
+// @version      0.0.51
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.50"),
+  version: getUserscriptVersion("0.0.51"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -2745,6 +2745,14 @@
     };
   }
 
+  function isHiddenLogEntry(entry) {
+    try {
+      if (entry?.blockStyle?.hidden === true) return true;
+      const raw = String(entry?.rawText || "");
+      return !!raw && extractEnvelope(raw)?.envelope?.blockStyle?.hidden === true;
+    } catch (error) { return false; }
+  }
+
   async function collectLogPayload(originButton = null, options = null) {
     // includeDerivedHtml=false: 편집기 핸드오프 경로에서는 zip 내보내기용 대형 산출물
     // (logJson/indexHtml/tistoryContentHtml — 이미지 base64 인라인)을 만들지 않는다.
@@ -2802,6 +2810,8 @@
       });
     }
 
+    // GM 이 숨긴 메시지(메시지 숨기기)는 로그에서 뺀다.
+    tabGroups = tabGroups.map((tab) => (Array.isArray(tab?.entries) ? { ...tab, entries: tab.entries.filter((entry) => !isHiddenLogEntry(entry)) } : tab));
     tabGroups = finalizeAllPackageTabGroups(tabGroups, roomTitle);
 
     const tabs = tabGroups.map((tab, index) => ({

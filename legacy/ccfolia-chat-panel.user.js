@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.14
+// @version      0.5.15
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.14";
+  const VERSION = "0.5.15";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -307,6 +307,7 @@
       id,
       name: String(pick(msg, ["name", "character.name", "sender.name"]) || "이름 없음"),
       text: String(pick(msg, ["text", "message", "body"]) || ""),
+      hidden: isHiddenText(String(pick(msg, ["text", "message", "body"]) || "")),
       roll: String(pick(msg, ["extend.roll.result"]) || ""),
       color: String(pick(msg, ["color", "character.color"]) || ""),
       icon: String(pick(msg, ["iconUrl", "character.iconUrl", "sender.iconUrl"]) || ""),
@@ -357,6 +358,7 @@
   // 참여자에게 내보내는 모양: GM에게 온 귓속말은 빼고, 시크릿 다이스는 결과를 지운다(네이티브도 다른 사람에게는 숨김).
   function relayView(message, channel) {
     if (message.whisper) return null;
+    if (message.hidden) return null; // GM이 숨긴 메시지는 참여자 화면으로 보내지 않는다(이미 보낸 것은 present 목록에서 빠져 삭제 동기화가 지운다)
     if (message.rollInfo?.secret) return { ...message, text: "시크릿 다이스", roll: "", rollInfo: { secret: true }, channel };
     return { ...message, channel };
   }
@@ -1001,7 +1003,180 @@
   }
 
   // 한 메시지의 줄 요소를 만든다(네이티브 복제 우선, 없으면 자체 li 구성).
+  /* ---------------- 메시지 숨기기 (GM 전용) ----------------
+     숨김 표시는 메시지 본문 봉투의 blockStyle.hidden 에 둔다(보이는 글은 그대로, 코코포리아의 메시지 수정과 같은 쓰기라 별도 규칙이 필요 없다).
+     GM 화면은 흐리게 + 눈 버튼, 그 밖의 확장 사용자 화면은 줄을 감추고, 참여자 중계·로그에서는 빠진다. 확장을 안 쓰는 계정에는 그대로 보인다. */
+  const CCF_INVIS_REV = { "\u200B": "00", "\u200C": "01", "\u200D": "10", "\u2060": "11" };
+  function splitEnvelope(text) {
+    const str = String(text || "");
+    const start = str.indexOf(CCF_INVIS_START);
+    if (start < 0) return { visible: str, envelope: null };
+    const end = str.indexOf(CCF_INVIS_END, start + CCF_INVIS_START.length);
+    if (end < 0) return { visible: str, envelope: null };
+    let bits = "";
+    for (const ch of str.slice(start + CCF_INVIS_START.length, end)) bits += CCF_INVIS_REV[ch] ?? "";
+    let envelope = null;
+    try {
+      const chars = (bits.match(/.{8}/g) || []).map((b) => String.fromCharCode(parseInt(b, 2))).join("");
+      const parsed = JSON.parse(decodeURIComponent(escape(atob(chars))));
+      envelope = parsed && typeof parsed === "object" ? parsed : null;
+    } catch (error) { envelope = null; }
+    return { visible: str.slice(0, start) + str.slice(end + CCF_INVIS_END.length), envelope };
+  }
+  function isHiddenText(text) {
+    if (!text || String(text).indexOf(CCF_INVIS_START) < 0) return false;
+    return splitEnvelope(text).envelope?.blockStyle?.hidden === true;
+  }
+  // 숨김/보이기를 반영한 새 본문(보이는 글은 그대로). 봉투에 다른 내용이 없으면 보이기 때 봉투를 통째로 없앤다.
+  function textWithHidden(text, hidden) {
+    const { visible, envelope } = splitEnvelope(text);
+    const env = envelope ? { ...envelope, blockStyle: { ...(envelope.blockStyle || {}) } } : { v: 1, text: visible, formatRuns: [], alignRuns: [], blockStyle: {} };
+    if (hidden) env.blockStyle.hidden = true; else delete env.blockStyle.hidden;
+    const trivial = !(env.formatRuns && env.formatRuns.length) && !(env.alignRuns && env.alignRuns.length) && !Object.keys(env.blockStyle).length && !env.source && !env.roll20Macro;
+    return !hidden && trivial ? visible : visible + encodeEnvelopeToInvisible(env);
+  }
+  async function readAllAuthUids() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open("firebaseLocalStorageDb"); } catch (e) { resolve([]); return; }
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        try {
+          const all = req.result.transaction("firebaseLocalStorage", "readonly").objectStore("firebaseLocalStorage").getAll();
+          all.onsuccess = () => resolve((all.result || []).map((r) => r?.value?.uid).filter(Boolean).map(String));
+          all.onerror = () => resolve([]);
+        } catch (e) { resolve([]); }
+      };
+    });
+  }
+  // GM = 코코포리아의 방장. 저장소의 방 owner 가 로그인한 계정 중 하나의 uid 와 같으면 GM 이다(핸드아웃과 같은 판별).
+  // 숨기기 버튼/흐림 스타일은 패널을 열지 않아도(오리지널 줄에 단 버튼) 필요해서 따로 한 번 넣는다.
+  function ensureHideStyle() {
+    if (document.getElementById("ccf-hide-style")) return;
+    const style = document.createElement("style");
+    style.id = "ccf-hide-style";
+    style.setAttribute(SAFE_ATTR, "1");
+    style.textContent = `
+/* 메시지 숨기기: GM 의 눈 버튼은 줄에 마우스를 올릴 때만 나온다. 숨긴 줄은 GM 화면에서 흐리게. */
+.ccf-hide-host { position: relative; }
+.ccf-hide-btn { display: none; position: absolute; top: 4px; right: 84px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+background: transparent; color: inherit; cursor: pointer; opacity: .7; align-items: center; justify-content: center; z-index: 3; }
+.ccf-hide-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
+.ccf-hide-host:hover > .ccf-hide-btn, .ccf-hide-btn:focus-visible { display: inline-flex; }
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] > :not(.ccf-hide-btn) { opacity: .38; }
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; position: absolute; right: 12px; bottom: 4px; font-size: 11px; opacity: .6; pointer-events: none; }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+  async function refreshGm() {
+    ensureHideStyle();
+    try {
+      const room = Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0];
+      if (!room?.owner) return scpHost.isGm ?? null;
+      const uids = await readAllAuthUids();
+      if (!uids.length) return scpHost.isGm ?? null;
+      const isGm = uids.includes(String(room.owner));
+      if (scpHost.isGm !== isGm) { scpHost.isGm = isGm; lastSignature = null; }
+      document.documentElement.setAttribute("data-ccf-gm", isGm ? "1" : "0");
+      return isGm;
+    } catch (error) { return scpHost.isGm ?? null; }
+  }
+  async function setMessageHidden(id, hidden) {
+    if (!id) throw new Error("메시지를 찾지 못했습니다.");
+    if (scpHost.isGm !== true) throw new Error("GM(방장)만 메시지를 숨길 수 있습니다.");
+    const entity = getRoomMessagesSlice()?.entities?.[id];
+    const text = entity ? String(entity.text || "") : (olderMessages.get(id)?.text || "");
+    const next = textWithHidden(text, !!hidden);
+    if (next === text) return false;
+    const ctx = await getAuthContext();
+    const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/messages/${encodeURIComponent(id)}?updateMask.fieldPaths=text&updateMask.fieldPaths=updatedAt`;
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: { text: { stringValue: next }, updatedAt: { timestampValue: new Date().toISOString() } } })
+    });
+    if (!response.ok) throw new Error(`${hidden ? "숨기기" : "다시 보이기"} 실패 (${response.status})`);
+    lastSignature = null;
+    return true;
+  }
+  const EYE_ON = "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z";
+  const EYE_OFF = "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z";
+  // 눈 버튼(GM 에게만): 호버하면 줄 오른쪽 위에 나온다. 숨겨진 줄에서는 '다시 보이기'(사선 눈).
+  function makeHideButton(getId, hiddenNow, onDone) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ccf-hide-btn";
+    btn.setAttribute(SAFE_ATTR, "1");
+    const label = hiddenNow ? "다시 보이기" : "숨기기";
+    btn.title = label; btn.setAttribute("aria-label", label);
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="${hiddenNow ? EYE_OFF : EYE_ON}"/></svg>`;
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault(); event.stopPropagation();
+      btn.disabled = true;
+      try { await setMessageHidden(getId(), !hiddenNow); onDone?.(); }
+      catch (error) { scpHost.toast?.(error?.message || "처리하지 못했습니다.", "error"); }
+      finally { btn.disabled = false; }
+    });
+    return btn;
+  }
+  function decorateHideState(row, msg) {
+    if (!(row instanceof HTMLElement) || !msg) return row;
+    row.setAttribute("data-ccf-msg-id", String(msg.id || ""));
+    if (msg.hidden) row.setAttribute("data-ccf-hidden-row", "1");
+    if (scpHost.isGm === true && msg.id) {
+      row.classList.add("ccf-hide-host");
+      row.appendChild(makeHideButton(() => msg.id, !!msg.hidden, () => renderListInner()));
+    }
+    return row;
+  }
+  // 오리지널 채팅 줄에도 눈 버튼을 달기 위한 줄 ↔ 메시지 짝짓기: 줄의 원문(숨은 봉투 포함)이 같은 메시지를 찾고, 같은 글이 여럿이면 화면 아래(최근)부터 짝짓는다.
+  function nativeRowKey(li) {
+    const p = li.querySelector("p.MuiListItemText-secondary");
+    if (!p) return "";
+    const hiddenSpan = p.querySelector(".ccf-original-hidden");
+    return (hiddenSpan ? hiddenSpan.textContent : p.textContent) || "";
+  }
+  function decorateNativeRows() {
+    if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root > .ccf-hide-btn")) b.remove(); return; }
+    const slice = getRoomMessagesSlice();
+    if (!slice) return;
+    const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement && li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel, .MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
+    if (!rows.length) return;
+    const byKey = new Map();
+    for (const [id, msg] of Object.entries(slice.entities || {})) {
+      if (!msg || msg.removed) continue;
+      const text = String(msg.text || "");
+      if (!text) continue;
+      const list = byKey.get(text) || [];
+      list.push({ id, at: readCreatedAt(msg) });
+      byKey.set(text, list);
+    }
+    for (const list of byKey.values()) list.sort((a, b) => a.at - b.at);
+    const keys = rows.map(nativeRowKey);
+    const total = new Map();
+    for (const key of keys) total.set(key, (total.get(key) || 0) + 1);
+    const seen = new Map();
+    rows.forEach((li, i) => {
+      const key = keys[i];
+      const list = byKey.get(key);
+      const n = seen.get(key) || 0;
+      seen.set(key, n + 1);
+      const existing = li.querySelector(":scope > .ccf-hide-btn");
+      if (!list) { existing?.remove(); return; }
+      const id = (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
+      const hiddenNow = isHiddenText(key);
+      if (existing && existing.dataset.id === id && existing.dataset.hidden === String(hiddenNow)) return;
+      existing?.remove();
+      li.classList.add("ccf-hide-host");
+      const btn = makeHideButton(() => id, hiddenNow, () => {});
+      btn.dataset.id = id; btn.dataset.hidden = String(hiddenNow);
+      li.appendChild(btn);
+    });
+  }
   function buildRow(msg, prevName) {
+    return decorateHideState(buildRowCore(msg, prevName), msg);
+  }
+  function buildRowCore(msg, prevName) {
     const cloned = buildRowFromNativeTemplate(msg, prevName);
     if (cloned) return cloned;
 
@@ -1111,7 +1286,10 @@
       return;
     }
 
-    const signature = messages.map((m) => m.id).join(",");
+    // 숨긴 메시지: GM 이 아닌 화면에서는 줄 자체를 빼고, GM 에게는 흐리게 남긴다.
+    const visibleMessages = scpHost.isGm === true ? messages.slice() : messages.filter((m) => !m.hidden);
+    const signature = (scpHost.isGm === true ? "gm:" : "") + visibleMessages.map((m) => (m.hidden ? `${m.id}!` : m.id)).join(",");
+    messages.length = 0; messages.push(...visibleMessages);
     if (signature === lastSignature) return;
 
     const wasPinned = pinnedToBottom;
@@ -2975,6 +3153,12 @@
     // 아직 메시지가 안 실렸고 그 뒤로 방이 조용하면 영영 빈 화면으로 남는다.
     layoutTimer = window.setInterval(() => {
       safeLayout();
+      // 메시지 숨기기: GM 여부를 5초마다 다시 확인하고(방 정보가 늦게 오기도 한다), GM 이면 오리지널 줄에 눈 버튼을 단다(1번 패널만 맡는다).
+      if (INSTANCE_INDEX === 1) {
+        const now = Date.now();
+        if (now - (scpHost.gmCheckedAt || 0) > (scpHost.isGm == null ? 1500 : 5000)) { scpHost.gmCheckedAt = now; refreshGm().then(() => decorateNativeRows()).catch(() => {}); }
+        else decorateNativeRows();
+      }
       // 본보기를 아직 못 잡았으면(룸 채팅이 닫혀 있었다 등) 계속 시도한다.
       if (!ccfScpRowTemplate) {
         captureNativeRowTemplate();
@@ -4951,6 +5135,10 @@
         const panels = [...scpHost.instances.values()].map((h) => h.formatDiag?.() || { panel: h.index, sent: false });
         return { panels, loaded: { formatSyncRuntime: !!window.__CCF_FORMAT_SYNC_RUNTIME__, formatSyncDebug: !!window.__CCF_FORMAT_SYNC_DEBUG__, cssBridge: !!window.__CCF_ROLL20_BRIDGE_DEBUG__, imagePaste: !!window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ }, panelVersion: VERSION };
       },
+      // 메시지 숨기기: 숨기거나 되돌린다(GM 만). id 는 메시지 id.
+      setMessageHidden: (id, hidden) => setMessageHidden(id, hidden !== false),
+      isGm: () => scpHost.isGm ?? null,
+      hideDiag() { return { isGm: scpHost.isGm ?? null, gmAttr: document.documentElement.getAttribute("data-ccf-gm"), hiddenInStore: Object.entries(getRoomMessagesSlice()?.entities || {}).filter(([, m]) => m && isHiddenText(String(m.text || ""))).map(([id]) => id), buttons: document.querySelectorAll(".ccf-hide-btn").length }; },
       menuStyleDiag() {
         let saved = null; try { saved = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); } catch (e) { /* none */ }
         const rect = (el) => { if (!(el instanceof Element)) return null; const r = el.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) }; };
