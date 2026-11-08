@@ -85,7 +85,7 @@
     footer .spacer, header .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
     .toast.error { color: #f44336; }
-    select, input[type=text].short { height: 36px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px; background: #222; color: #fff; font: inherit; font-size: .9rem; padding: 4px 8px; }
+    select, input[type=text].short, input[type=number].short { height: 36px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px; background: #222; color: #fff; font: inherit; font-size: .9rem; padding: 4px 8px; }
     .check { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: .9rem; cursor: pointer; }
     .check input { margin-top: 3px; }
     .warn { color: #ffb74d; font-size: .8rem; margin: 4px 0 0 24px; }
@@ -322,6 +322,7 @@
   const nScope = el("select", { id: "ntfy-scope" }, el("option", { value: "all", text: "다른 사람의 모든 메시지" }), el("option", { value: "keywords", text: "키워드가 들어간 메시지만" }));
   const nKeywords = el("input", { type: "text", id: "ntfy-keywords", autocomplete: "off", placeholder: "키워드(쉼표로 구분): 내 캐릭터 이름 등" });
   const nAway = el("input", { type: "checkbox", id: "ntfy-away" });
+  const nAwayMin = el("input", { type: "number", id: "ntfy-away-min", min: "1", max: "60", step: "1", value: "2", class: "short", style: "width:64px" });
   const nText = el("input", { type: "checkbox", id: "ntfy-text" });
   const nLink = el("a", { class: "link", id: "ntfy-link", href: "#", text: "" });
   const nToast = el("div", { class: "toast", id: "ntfy-toast", role: "status" });
@@ -333,7 +334,7 @@
   const readNtfy = () => ({
     enabled: nEnabled.checked, topic: nTopic.value.trim(), server: ntfyServerOrigin() || NTFY_DEFAULT_SERVER,
     scope: nScope.value, keywords: nKeywords.value.split(",").map(k => k.trim()).filter(Boolean).slice(0, 10),
-    onlyAway: nAway.checked, includeText: nText.checked
+    onlyAway: nAway.checked, awayMinutes: Math.min(60, Math.max(1, Math.round(Number(nAwayMin.value) || 2))), includeText: nText.checked
   });
   const saveNtfy = async () => {
     const config = readNtfy();
@@ -372,7 +373,7 @@
     el("label", { class: "check" }, nEnabled, el("span", { text: "핸드폰 알림 사용" })),
     el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
     el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알릴 메시지" }), nScope, nKeywords),
-    el("label", { class: "check" }, nAway, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (창이 비활성이거나 다른 탭일 때)" })),
+    el("label", { class: "check" }, nAway, el("span", {}, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (다른 탭·창이거나, 조작이 없을 때 — 조작 없는 시간: " }), nAwayMin, el("span", { text: " 분)" }))),
     el("label", { class: "check" }, nText, el("span", { text: "알림에 메시지 앞부분(60자)도 넣기" })),
     el("p", { class: "warn", text: "켜면 메시지 내용이 공개 서버(ntfy.sh)를 거칩니다. 기본은 보낸 사람 이름과 룸 이름만 보냅니다." }),
     el("div", { class: "field" }, el("label", { for: "ntfy-server", text: "서버 주소 (비우면 https://ntfy.sh · 자체 서버는 사이트 접근 허용이 따로 필요합니다)" }), nServer),
@@ -418,6 +419,7 @@
     nScope.value = n.scope === "keywords" ? "keywords" : "all";
     nKeywords.value = (n.keywords || []).join(", ");
     nAway.checked = n.onlyAway !== false;
+    nAwayMin.value = String(Math.min(60, Math.max(1, Math.round(Number(n.awayMinutes) || 2))));
     nText.checked = n.includeText === true;
     refreshNtfyLink();
   });
