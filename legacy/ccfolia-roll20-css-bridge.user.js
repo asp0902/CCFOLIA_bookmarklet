@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.101
+// @version      0.3.102
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.101"),
+    version: getUserscriptVersion("0.3.102"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5848,6 +5848,21 @@
     return null;
   }
 
+  // 나레이션 여부를 메시지 데이터(원본 글자에 붙은 보이지 않는 서식 봉투)로 판정한다. 렌더 표식(data-ccf-narration)은 format-sync 가 늦게 달 수 있고
+  // 이웃 DOM 에 좌우되므로, 표식이 없어도 봉투에서 바로 읽는다(가상 목록 높이 안정). 같은 글자면 다시 풀지 않는다.
+  const narrationByText = new WeakMap();
+  function rowIsNarration(li) {
+    if (li.getAttribute("data-ccf-narration") === "1" || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return true;
+    const text = li.querySelector("p.MuiListItemText-secondary")?.textContent || "";
+    if (!text || text.indexOf(INVIS_START) < 0) return false;
+    const cached = narrationByText.get(li);
+    if (cached && cached.text === text) return cached.value;
+    let value = false;
+    try { value = extractEnvelope(text)?.envelope?.blockStyle?.narration === true; } catch (_) { value = false; }
+    narrationByText.set(li, { text, value });
+    return value;
+  }
+
   function processList(options = {}) {
     if (!active) return;
     const WRAP = CONT_ATTR + "-wrap";
@@ -5877,9 +5892,7 @@
       const author = extractAuthor(li);
       if (!author) return author;
       // #69 — 나레이션 메시지는 같은 화자라도 일반 발화와 묶지 않음 (별도 그룹 키)
-      const isNarration = li.getAttribute("data-ccf-narration") === "1" ||
-        !!li.querySelector('.ccf-render-root[data-ccf-narration="1"]');
-      return isNarration ? author + "\\u0000nr" : author;
+      return rowIsNarration(li) ? author + "\\u0000nr" : author;
     });
     let changed = false;
     for (let i = 0; i < messages.length; i++) {
@@ -6169,7 +6182,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.101",
+    version: "0.3.102",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
