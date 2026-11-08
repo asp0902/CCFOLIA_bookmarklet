@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
-    await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div role="log"><ul id="list"><li class="MuiListItem-root"><p>a</p></li></ul></div><div class="ccf-scp-panel" id="pn"><ul id="pl"></ul></div><form id="composer"><textarea name="text"></textarea><button type="submit">전송</button><button type="button">D100</button></form><div id="other"></div></body>' }));
+    await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div role="log"><ul id="list"><li class="MuiListItem-root"><p>a</p></li></ul></div><div class="ccf-scp-panel" id="pn"><ul id="pl"></ul></div><form id="composer"><textarea name="text" class="MuiInputBase-input"></textarea><button type="submit">전송</button><button type="button">D100</button></form><div id="other"></div></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
     await page.addScriptTag({ content: source });
     await page.waitForTimeout(1500);
@@ -19,6 +19,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     assert.equal(await queries("document.querySelector('#list li').setAttribute('data-x', '1');"), 0, 'a row attribute change neither');
     assert.equal(await queries("document.getElementById('pl').append(document.createElement('li'));"), 0, 'nor a row of the extra panel');
     assert((await queries("document.getElementById('other').append(document.createElement('div'));")) > 0, 'a change next to the composer still triggers it');
+    // a field with text in it must not keep the page busy: no document changes while idle (an unchanged attribute write used to re-trigger the sweep every frame)
+    await page.locator('textarea[name=text]').click(); await page.locator('textarea[name=text]').fill('안녕하세요'); await page.waitForTimeout(400);
+    const idleRecords = await page.evaluate(() => new Promise((resolve) => { let n = 0; const mo = new MutationObserver((r) => { n += r.length; }); mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true }); setTimeout(() => { mo.disconnect(); resolve(n); }, 1500); }));
+    assert(idleRecords < 10, `idle with text typed: ${idleRecords} document changes in 1.5 s (was ~180)`);
     console.log('format-sync log mutations PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
