@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.24
+// @version      0.5.25
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.24";
+  const VERSION = "0.5.25";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -2161,12 +2161,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       #${PANEL_ID}.is-floating { border: 1px solid rgba(255,255,255,.2); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
       #${PANEL_ID}.is-floating::after { display: none; }
       #${PANEL_ID}.is-floating .ccf-scp-bar { cursor: move; }
-      .ccf-scp-rz { position: absolute; display: none; z-index: 6; }
+      /* 크기 조절 손잡이: 가장자리 10px(바깥 4px + 안쪽 6px), 모서리 16px. 포인터를 잡아(setPointerCapture) 끌어서 목록·iframe 위에서도 끊기지 않는다. 마우스를 올리면 그 가장자리가 옅게 보인다. */
+      .ccf-scp-rz { position: absolute; display: none; z-index: 30; touch-action: none; user-select: none; }
       #${PANEL_ID}.is-floating .ccf-scp-rz { display: block; }
-      .ccf-scp-rz-n, .ccf-scp-rz-s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; } .ccf-scp-rz-n { top: -3px; } .ccf-scp-rz-s { bottom: -3px; }
-      .ccf-scp-rz-e, .ccf-scp-rz-w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; } .ccf-scp-rz-e { right: -3px; } .ccf-scp-rz-w { left: -3px; }
-      .ccf-scp-rz-ne, .ccf-scp-rz-nw, .ccf-scp-rz-se, .ccf-scp-rz-sw { width: 12px; height: 12px; }
-      .ccf-scp-rz-ne { top: -3px; right: -3px; cursor: nesw-resize; } .ccf-scp-rz-nw { top: -3px; left: -3px; cursor: nwse-resize; }
+      .ccf-scp-rz:hover, .ccf-scp-rz.is-active { background: rgba(120, 170, 255, .28); }
+      .ccf-scp-rz-n, .ccf-scp-rz-s { left: 12px; right: 12px; height: 10px; cursor: ns-resize; } .ccf-scp-rz-n { top: -4px; } .ccf-scp-rz-s { bottom: -4px; }
+      .ccf-scp-rz-e, .ccf-scp-rz-w { top: 12px; bottom: 12px; width: 10px; cursor: ew-resize; } .ccf-scp-rz-e { right: -4px; } .ccf-scp-rz-w { left: -4px; }
+      .ccf-scp-rz-ne, .ccf-scp-rz-nw, .ccf-scp-rz-se, .ccf-scp-rz-sw { width: 16px; height: 16px; }
+      .ccf-scp-rz-ne { top: -4px; right: -4px; cursor: nesw-resize; } .ccf-scp-rz-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+      .ccf-scp-rz-se { bottom: -4px; right: -4px; cursor: nwse-resize; } .ccf-scp-rz-sw { bottom: -4px; left: -4px; cursor: nesw-resize; } .ccf-scp-rz-nw { top: -3px; left: -3px; cursor: nwse-resize; }
       .ccf-scp-rz-se { bottom: -3px; right: -3px; cursor: nwse-resize; } .ccf-scp-rz-sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       /* 탭 바 — 네이티브처럼 위아래 구분선 없이 배경색만. */
@@ -2482,7 +2485,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const grip = document.createElement("div");
       grip.className = `ccf-scp-rz ccf-scp-rz-${dir}`;
       grip.dataset.dir = dir;
-      grip.addEventListener("mousedown", (event) => { if (event.button === 0) startFloatResize(event, dir); });
+      grip.addEventListener("pointerdown", (event) => { if (event.button === 0) startFloatResize(event, dir, grip); });
       panel.appendChild(grip);
     }
     panel.addEventListener("mousedown", () => { if (handle.floating) bringFloatToFront(); }, true);
@@ -3487,11 +3490,17 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     document.addEventListener("mousemove", move, true);
     document.addEventListener("mouseup", up, true);
   }
-  function startFloatResize(event, dir) {
+  function startFloatResize(event, dir, grip) {
     if (!handle.floating || !floatRect) return;
     event.preventDefault(); event.stopPropagation();
     const start = { x: event.clientX, y: event.clientY, ...floatRect };
+    const pointerId = event.pointerId;
+    try { grip.setPointerCapture(pointerId); } catch (e) { /* 캡처 못 해도 아래 이동 처리는 동작 */ }
+    grip.classList.add("is-active");
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
     const move = (e) => {
+      if (e.pointerId !== pointerId) return;
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
       let { left, top, width, height } = start;
       if (dir.includes("e")) width = start.width + dx;
@@ -3503,9 +3512,17 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       floatRect = clampFloatRect({ left, top, width, height });
       applyFloatLayout();
     };
-    const up = () => { document.removeEventListener("mousemove", move, true); document.removeEventListener("mouseup", up, true); savePrefs(); };
-    document.addEventListener("mousemove", move, true);
-    document.addEventListener("mouseup", up, true);
+    const up = (e) => {
+      if (e.pointerId !== pointerId) return;
+      grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
+      try { grip.releasePointerCapture(pointerId); } catch (err) { /* noop */ }
+      grip.classList.remove("is-active");
+      document.body.style.userSelect = prevSelect;
+      savePrefs();
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+    grip.addEventListener("pointercancel", up);
   }
   window.addEventListener("resize", () => { if (panelEl && handle.floating) applyFloatLayout(); });
 
