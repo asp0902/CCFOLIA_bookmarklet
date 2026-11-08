@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.91
+// @version      0.1.92
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.91"),
+    version: getUserscriptVersion("0.1.92"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4532,6 +4532,11 @@
       const shouldRefresh = mutations.some((mutation) => {
         const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
         if (target?.closest?.(`[${SAFE_UI_ATTR}="1"]`)) {
+          return false;
+        }
+        // 채팅 목록(오리지널 로그, 추가 패널)의 줄 변화는 입력칸·툴바와 상관이 없다. 새 메시지가 올 때마다(= 내가 보낸 직후에도)
+        // ensureUi 가 문서 전체를 훑으면 큰 방에서 전송 직후가 눈에 띄게 느려지므로 건너뛴다.
+        if (target?.closest?.('[role="log"], .ccf-scp-panel')) {
           return false;
         }
 
