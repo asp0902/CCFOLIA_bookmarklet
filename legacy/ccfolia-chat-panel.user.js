@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.19
+// @version      0.5.24
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.19";
+  const VERSION = "0.5.24";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -683,12 +683,12 @@
   const adoptToTabs = (value) => { ccfScpNativeToTabs = value; adjustSample = null; saveTailState(); };
   // 우리 패널에서 같은 거리(마지막 줄 아래끝 → 탭 줄 윗끝)를 재서 오리지널 값과의 차이만큼 목록 아래 패딩을 고친다. 목록이 바닥일 때, 같은 차이가 3번 나올 때만.
   // 진단: 화면에서 실제로 보이는 마지막 줄들 — 스크롤러의 보이는 영역 안에서 아래끝이 가장 아래인 순서로 5개, 각 줄의 rect·선을 그리는 수단(border-bottom 알파, 배경 그라데이션, ::after, 뒤따르는 구분선 요소)·선 y·보이는 글자 유무.
-  function visibleTailRows(root) {
+  function visibleTailRows(root, scrollerHint = null) {
     if (!(root instanceof Element)) return null;
     const scrollerOf = (el) => { for (let p = el.parentElement; p; p = p.parentElement) { const o = getComputedStyle(p).overflowY; if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight + 1) return p; } return null; };
     const items = [...root.querySelectorAll(".MuiListItem-root, .ccf-scp-row, .MuiDivider-root")].filter((el) => el instanceof HTMLElement);
     if (!items.length) return { count: 0 };
-    const scroller = scrollerOf(items[items.length - 1]) || root;
+    const scroller = scrollerHint instanceof Element ? scrollerHint : (scrollerOf(items[items.length - 1]) || root);
     const sr = scroller.getBoundingClientRect(), viewBottom = sr.top + scroller.clientHeight;
     const r2 = (n) => Math.round(n * 100) / 100;
     const alpha = (c) => { const m = String(c).match(/rgba?\(([^)]*)\)/); if (!m) return 0; const parts = m[1].split(",").map((x) => parseFloat(x)); return parts.length > 3 ? parts[3] : 1; };
@@ -720,13 +720,28 @@
   const rowGapDiag = { panel: null, native: null, delta: null, reason: "" };
   const readSavedRowGap = () => { try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.rowGap); return v >= 0 && v <= 60 ? v : -1; } catch (e) { return -1; } };
   const medianOf = (list) => { const a = list.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
-  // 구분선이 있는 줄(묶음의 끝·단독)만 잰다: 오리지널은 아래 테두리가 보이는 줄, 패널은 우리가 아래 테두리를 준 줄. 이어지는 줄(선 없음)·나레이션·숨긴 줄은 뺀다.
-  const plainRowGaps = (rows) => rows.filter((li) => {
-    if (!(li instanceof HTMLElement) || li.hasAttribute("data-ccf-prose-cont-leader") || li.hasAttribute("data-ccf-hidden-row") || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return false;
-    return li.closest(".ccf-scp-panel") ? !!li.style.getPropertyValue("border-bottom") : parseFloat(getComputedStyle(li).borderBottomWidth) > 0;
-  })
-    .map((li) => { const p = li.querySelector("p.MuiListItemText-secondary"); if (!p) return null; const lr = li.getBoundingClientRect(), pr = p.getBoundingClientRect(); return lr.height > 0 && pr.height > 0 ? Math.round((lr.bottom - pr.bottom) * 100) / 100 : null; })
-    .filter((g) => g != null && g >= 0 && g <= 60);
+  // 구분선이 있는 줄(묶음의 끝·단독)만 잰다. 선의 위치: 줄 자신의 아래 테두리(윗끝 = 줄 아래끝 - 테두리 두께) 또는 줄 바로 뒤의 구분선 요소(hr, 보이는 것만)의 윗끝.
+  // 패널은 우리가 아래 테두리(투명 1px)를 준 줄이고 선은 그 안쪽 맨 아래 1px 이다. 이어지는 줄(선 없음)·묶음 첫 줄·나레이션·숨긴 줄은 뺀다.
+  const plainRowGaps = (rows) => rows.map((li) => {
+    if (!(li instanceof HTMLElement) || li.hasAttribute("data-ccf-prose-cont-leader") || li.hasAttribute("data-ccf-hidden-row") || li.querySelector('.ccf-render-root[data-ccf-narration="1"]')) return null;
+    const p = li.querySelector("p.MuiListItemText-secondary");
+    if (!p) return null;
+    const lr = li.getBoundingClientRect(), pr = p.getBoundingClientRect();
+    if (!(lr.height > 0 && pr.height > 0)) return null;
+    let lineTop;
+    if (li.closest(".ccf-scp-panel")) {
+      if (!li.style.getPropertyValue("border-bottom")) return null;
+      lineTop = lr.bottom - 1;
+    } else {
+      const border = parseFloat(getComputedStyle(li).borderBottomWidth) || 0;
+      const next = li.nextElementSibling;
+      const nr = next instanceof HTMLElement && next.classList.contains("MuiDivider-root") ? next.getBoundingClientRect() : null;
+      if (border > 0) lineTop = lr.bottom - border;
+      else if (nr && nr.height > 0) lineTop = nr.top;
+      else return null;
+    }
+    return Math.round((lineTop - pr.bottom) * 100) / 100;
+  }).filter((g) => g != null && g >= 0 && g <= 60);
   function measureNativeRowGap(scroller) {
     const sr = scroller.getBoundingClientRect();
     const rows = [...scroller.querySelectorAll(".MuiListItem-root")].filter((li) => li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel") && (() => { const r = li.getBoundingClientRect(); return r.bottom <= sr.bottom + 1 && r.top >= sr.top - 1; })());
@@ -810,7 +825,8 @@
     });
     // 나레이션·이어짐 줄을 본보기로 쓰면 그 표식이 모든 복제본에 따라간다.
     const plain = rows.filter((li) => {
-      if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"]')) return false;
+      // 이어짐 줄뿐 아니라 묶음의 첫 줄(leader)도 본보기로 쓰지 않는다: 브리지가 그 줄의 아래 패딩을 5px 로, 아래 테두리를 0 으로 바꿔 두어서 거기서 읽으면 패널 줄의 아래 패딩·구분선이 틀어진다(실측: 오리지널 단독 줄은 16px).
+      if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"], [data-ccf-prose-cont-leader="1"]')) return false;
       if (li.querySelector('[data-ccf-narration="1"]')) return false;
       return !!li.querySelector(".MuiListItemAvatar-root img");
     });
@@ -1078,6 +1094,16 @@
     } catch (error) { envelope = null; }
     return { visible: str.slice(0, start) + str.slice(end + CCF_INVIS_END.length), envelope };
   }
+  // 보이지 않는 봉투를 모두 떼어 낸 보이는 글. 다른 메시지를 복사해 붙여넣으면 그 메시지의 봉투 문자가 같이 들어오는데, 그대로 보내면 봉투가 이중(옛 서식 + 새 서식)이 돼 전송 길이만 커지고 서식이 엉킨다.
+  function stripEnvelopes(text) {
+    let out = String(text || "");
+    for (let i = 0; i < 5 && out.indexOf(CCF_INVIS_START) >= 0; i += 1) {
+      const next = splitEnvelope(out).visible;
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  }
   function isHiddenText(text) {
     if (!text || String(text).indexOf(CCF_INVIS_START) < 0) return false;
     return splitEnvelope(text).envelope?.blockStyle?.hidden === true;
@@ -1118,6 +1144,7 @@
 background: transparent; color: inherit; cursor: pointer; opacity: .7; align-items: center; justify-content: center; z-index: 3; }
 .ccf-hide-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
 .ccf-hide-host:hover > .ccf-hide-btn, .ccf-hide-btn:focus-visible { display: inline-flex; }
+.ccf-hide-btn.ccf-hide-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] > :not(.ccf-hide-btn) { opacity: .38; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; position: absolute; right: 12px; bottom: 4px; font-size: 11px; opacity: .6; pointer-events: none; }
     `;
@@ -1125,11 +1152,21 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     // 눈 버튼 위치: 줄에 마우스를 올리면 나오는 네이티브 호버 버튼(답장·수정) 묶음의 바로 왼쪽, 같은 세로 가운데에 붙인다(그 묶음의 실제 위치를 읽는다). 못 읽으면 CSS 기본 위치.
     document.addEventListener("mouseover", (event) => {
       const li = event.target instanceof Element ? event.target.closest(".ccf-hide-host") : null;
-      const eye = li?.querySelector(":scope > .ccf-hide-btn");
+      const eye = li?.querySelector(".ccf-hide-btn");
       if (!li || !eye) return;
+      const natives = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn"));
+      // 네이티브 호버 버튼 묶음 안, 첫 버튼(수정) 바로 앞에 같은 클래스(크기·간격·호버 모양)로 끼워 넣는다.
+      if (natives.length && !eye.classList.contains("ccf-hide-inline")) {
+        const first = natives[0];
+        eye.className = `${first.className} ccf-hide-btn ccf-hide-inline`;
+        eye.style.cssText = "";
+        first.parentElement.insertBefore(eye, first);
+        return;
+      }
+      if (eye.classList.contains("ccf-hide-inline")) return;
+      // 묶음을 못 찾으면 줄 오른쪽 위에 절대배치(읽을 수 있는 버튼 위치가 있으면 그 왼쪽 가운데).
       const lr = li.getBoundingClientRect();
-      const others = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn"))
-        .map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.left > lr.left + lr.width * 0.4);
+      const others = natives.map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.left > lr.left + lr.width * 0.4);
       if (!others.length) return;
       const left = Math.min(...others.map((r) => r.left)), top = Math.min(...others.map((r) => r.top)), bottom = Math.max(...others.map((r) => r.bottom));
       eye.style.right = `${Math.max(0, Math.round(lr.right - left + 2))}px`;
@@ -1205,7 +1242,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     return (hiddenSpan ? hiddenSpan.textContent : p.textContent) || "";
   }
   function decorateNativeRows() {
-    if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root > .ccf-hide-btn")) b.remove(); return; }
+    if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root .ccf-hide-btn")) b.remove(); return; }
     const slice = getRoomMessagesSlice();
     if (!slice) return;
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement && li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel, .MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
@@ -1229,7 +1266,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const list = byKey.get(key);
       const n = seen.get(key) || 0;
       seen.set(key, n + 1);
-      const existing = li.querySelector(":scope > .ccf-hide-btn");
+      const existing = li.querySelector(".ccf-hide-btn");
       if (!list) { existing?.remove(); return; }
       const id = (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
       const hiddenNow = isHiddenText(key);
@@ -1816,7 +1853,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     // 서식: 마크다운 마커를 파싱해 봉투(invisible envelope)를 만든다. 다이스 판정이면
     // 서식은 무시하고 명령 원문만 보낸다(판정 카드에 서식은 의미 없음).
     // meta(다른 곳에서 넘어온 메시지, 예: 롤20)는 서식·판정 해석 없이 그대로 보내고, 출처만 봉투에 보이지 않게 싣는다.
-    const parsed = meta ? { text: String(text), runs: [], alignRuns: [] } : parseFormatMarkers(text);
+    const parsed = meta ? { text: String(text), runs: [], alignRuns: [] } : parseFormatMarkers(stripEnvelopes(text));
     const cleanText = parsed.text;
     const rolled = rollExtend || (meta ? null : evaluateDiceCommand(cleanText));
     let outText = cleanText;
@@ -3049,6 +3086,16 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     inputEl.setAttribute(SAFE_ATTR, "1");
     // 이미지 붙여넣기: 오리지널 입력칸과 같은 처리(서식 연동의 공개 함수)를 쓴다. 이미지 파일은 Firestore 에 저장해 표식 {i:주소|설명|} 를 커서 위치에 넣고, 일반 글자 붙여넣기는 그대로 둔다.
     inputEl.addEventListener("paste", (e) => {
+      // 복사한 메시지의 보이지 않는 봉투 문자는 붙여넣지 않는다(보이는 글만).
+      const pasted = e.clipboardData?.getData("text/plain") || "";
+      if (pasted.indexOf(CCF_INVIS_START) >= 0) {
+        e.preventDefault();
+        const clean = stripEnvelopes(pasted);
+        const a = inputEl.selectionStart ?? inputEl.value.length, b = inputEl.selectionEnd ?? a;
+        inputEl.setRangeText(clean, a, b, "end");
+        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
       const api = window.__CCF_FORMAT_SYNC_IMAGE_PASTE__;
       if (!api || typeof api.handle !== "function") return;
       const target = inputEl;
@@ -3280,6 +3327,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   // 가장 최근에 눌린 오리지널 버튼(메뉴를 연 톱니를 특정하는 데 쓴다)과 마지막 캡처 결과(진단용).
   const lastNativeClick = { btn: null, at: 0 };
   let lastMenuCapture = null;
+  let lastOpenedMenu = null; // 우리 메뉴를 마지막으로 연 때의 계산 입력과 결과(진단용)
   for (const type of ["pointerdown", "mousedown", "click"]) document.addEventListener(type, (event) => {
     const t = event.target;
     const b = t instanceof Element ? t.closest("button") : null;
@@ -3317,7 +3365,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         const ir = anchorBtn.querySelector("svg").getBoundingClientRect();
         const dTop = pr.top - ir.top, dRight = ir.right - pr.right;
         if (ir.width > 0 && pr.width > 0 && Math.abs(dTop) <= 100 && Math.abs(dRight) <= 100) snapshot.anchor = { dTop: Math.round(dTop * 10) / 10, dRight: Math.round(dRight * 10) / 10 };
-        lastMenuCapture = { btn: `${anchorBtn.tagName.toLowerCase()}[${Math.round(ir.width)}x${Math.round(ir.height)}]`, dTop: Math.round(dTop), dRight: Math.round(dRight), accepted: !!snapshot.anchor, pressed: !!pressed, candidates: cands.length };
+        lastMenuCapture = { paperRect: { left: Math.round(pr.left), top: Math.round(pr.top), right: Math.round(pr.right), width: Math.round(pr.width), height: Math.round(pr.height) },
+          items: [...menu.querySelectorAll('[role="menuitem"]')].slice(0, 12).map((el) => (el.textContent || "").trim().slice(0, 20)),
+          gearIcon: { left: Math.round(ir.left), top: Math.round(ir.top), right: Math.round(ir.right), bottom: Math.round(ir.bottom) },
+          btn: `${anchorBtn.tagName.toLowerCase()}[${Math.round(ir.width)}x${Math.round(ir.height)}]`, dTop: Math.round(dTop), dRight: Math.round(dRight), accepted: !!snapshot.anchor, pressed: !!pressed, candidates: cands.length };
       }
       if (!snapshot.paper.backgroundColor || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(snapshot.paper.backgroundColor)) return;
       localStorage.setItem(SCP_MENU_STYLE_KEY, JSON.stringify(snapshot));
@@ -3376,7 +3427,12 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     menu.style.opacity = "0"; menu.style.transform = "scale(0.75, 0.5625)";
     menu.style.transition = "opacity 338ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)";
     gearMenuEl = menu;
-    requestAnimationFrame(() => { if (gearMenuEl === menu) { menu.style.opacity = "1"; menu.style.transform = "none"; } });
+    lastOpenedMenu = { at: Date.now(), usedSaved: !!rel, savedAnchor: rel || null, ourIcon: { left: Math.round(ar.left), top: Math.round(ar.top), right: Math.round(ar.right), bottom: Math.round(ar.bottom) }, wantedTop: Math.round(top), wantedRight: Math.round(right), width: menu.offsetWidth };
+    requestAnimationFrame(() => {
+      if (gearMenuEl !== menu) return;
+      menu.style.opacity = "1"; menu.style.transform = "none";
+      window.setTimeout(() => { if (lastOpenedMenu && gearMenuEl === menu) { const r = menu.getBoundingClientRect(); lastOpenedMenu.actual = { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) }; } }, 450); // 열림 애니메이션(0.34초)이 끝난 뒤의 실제 위치
+    });
     document.addEventListener("mousedown", onGearMenuOutside, true);
     document.addEventListener("keydown", onGearMenuKey, true);
   }
@@ -5239,7 +5295,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
           saved, lastCapture: lastMenuCapture,
           nativeGear: g ? { connected: g.isConnected, rect: rect(g), icon: rect(g.querySelector?.("svg")), expanded: g.getAttribute("aria-expanded"), controls: g.getAttribute("aria-controls"), label: g.getAttribute("aria-label") } : null,
           ourGear: ours ? { rect: rect(ours), icon: rect(ours.querySelector("svg")) } : null,
-          openMenu: rect(document.querySelector(".ccf-scp-menu"))
+          openMenu: rect(document.querySelector(".ccf-scp-menu")),
+          lastOpened: lastOpenedMenu && { ...lastOpenedMenu, actualAtOpen: lastOpenedMenu.actual }
         };
       },
       tailDiag() {
@@ -5248,7 +5305,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         return {
           panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
           rowGap: { ...rowGapDiag, nativeSaved: ccfScpNativeRowGap, extra: panelRowExtra, adopts: panelRowAdopts },
-          visibleRows: { panel: visibleTailRows(listEl), native: (() => { try { return visibleTailRows(findNativeChatPanel()); } catch (e) { return String(e); } })() },
+          visibleRows: { panel: visibleTailRows(listEl), native: (() => { try { const a = findChatAnchor(); let sc = null; for (let el = a?.parentElement; el && el !== document.documentElement; el = el.parentElement) { if (/(?:auto|scroll|overlay)/i.test(getComputedStyle(el).overflowY || "")) { sc = el; break; } } return visibleTailRows(sc || findNativeChatPanel(), sc); } catch (e) { return String(e); } })() },
           adjust: { ...adjustDiag, lastAgoMs: adjustDiag.lastAt ? Date.now() - adjustDiag.lastAt : null, lastAdoptAgoMs: adjustDiag.lastAdoptAt ? Date.now() - adjustDiag.lastAdoptAt : null, cssAdjust: panelEl ? panelEl.style.getPropertyValue("--scp-list-adjust") : null, cssTail: panelEl ? panelEl.style.getPropertyValue("--scp-list-tail") : null, listScroll: listEl ? { top: Math.round(listEl.scrollTop), client: listEl.clientHeight, height: listEl.scrollHeight } : null, pinnedToBottom, savedStorage: (() => { try { return JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null"); } catch (e) { return null; } })() },
           panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
           panelLastToListBottom: last && listEl ? Math.round((listEl.getBoundingClientRect().top + listEl.clientHeight - last.getBoundingClientRect().bottom) * 100) / 100 : null,

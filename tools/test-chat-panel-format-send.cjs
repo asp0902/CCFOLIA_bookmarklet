@@ -64,6 +64,11 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
         await page.locator(sel + ' .ccf-scp-fmt-align[data-align="center"]').click();
       });
       assert.ok(styled.startsWith('색과 정렬') && styled.length > '색과 정렬'.length + 20 && INVIS.test(styled), label + ': colour/alignment envelope: ' + styled.length);
+      // a copied message brings its invisible envelope: pasting drops it, and a text that already carries one is stripped before it is sent (no double envelope)
+      const pasted = await page.evaluate(({ q, text }) => { const i = document.querySelector(q + ' .ccf-scp-input'); i.focus(); i.value = ''; const dt = new DataTransfer(); dt.setData('text/plain', text); i.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return i.value; }, { q: sel, text: bold });
+      assert.equal(pasted, '굵게 일반', label + ': pasting a copied message gives the visible text only');
+      const twice = await send(sel, bold);
+      assert.equal(twice, '굵게 일반', label + ': the old envelope is dropped, the visible text goes out plain (no double envelope): ' + twice.length);
       const plain = await send(sel, '그냥 글');
       assert.equal(plain, '그냥 글', label + ': plain text stays plain');
     };
