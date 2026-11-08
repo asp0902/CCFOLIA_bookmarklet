@@ -907,14 +907,16 @@ function renderRich(container, full, toolkit = false) {
   const runs = (Array.isArray(env.formatRuns) ? env.formatRuns : []).map(r => ({ start: Math.max(0, Number(r.start) || 0), end: Math.min(text.length, Number(r.end) || 0), style: r.style && typeof r.style === "object" ? r.style : {} })).filter(r => r.end > r.start);
   const align = Array.isArray(env.alignRuns) ? env.alignRuns : [];
   const narration = !!env.blockStyle?.narration;
+  const breakBefore = env.blockStyle?.breakBefore === true; // a line above this message even inside a run of the same speaker (the toolkit's CSS in mirror.css draws it from data-ccf-break)
   info.narration = narration; info.macro = env.roll20Macro === true;
   // formatting-free envelopes are not drawn over (the toolkit does the same): plain text
-  if (toolkit && !runs.length && !align.length && !narration && !info.macro) { container.textContent = text; info.narration = false; return info; }
+  if (toolkit && !runs.length && !align.length && !narration && !info.macro && !breakBefore) { container.textContent = text; info.narration = false; return info; }
   const target = toolkit ? document.createElement("div") : container;
   if (toolkit) {
     target.className = "ccf-render-overlay";
     container.classList.add("ccf-render-root"); container.dataset.ccfRendered = "1";
     if (narration) container.dataset.ccfNarration = "1";
+    if (breakBefore) container.dataset.ccfBreak = "1";
     if (info.macro) container.dataset.ccfMacro = "1";
     container.append(target);
   }
