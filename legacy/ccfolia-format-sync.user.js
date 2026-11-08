@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.75
+// @version      0.1.76
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.75"),
+    version: getUserscriptVersion("0.1.76"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2764,6 +2764,8 @@
   // 캐릭터 선택 드롭다운에서 읽은 이름들. 읽을 때 네이티브 드롭다운을 열었다 닫아야 해서
   // 매번 하면 화면이 번쩍이므로 캐시한다 ("새로고침" 누를 때만 갱신).
   let ccfCachedSelectableNames = [];
+  // 캐릭터 선택 목록을 읽을 때 본 아이콘(이름 → 주소). 나레이션 캐릭터 목록에 사진을 보여 주는 데 쓴다. 같은 이름이 여럿이면 먼저 본 것.
+  const ccfSelectableIconByName = new Map();
   let ccfSelectableWarmStarted = false;
   let lastObservedSpeakerName = "";
   let characterSpeakerObserverStarted = false;
@@ -4203,6 +4205,35 @@
         text-align: center;
         color: rgba(120, 200, 120, 0.92);
         font-weight: 700;
+      }
+
+      .ccf-narrator-item .ccf-narrator-icon {
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        overflow: hidden;
+        box-sizing: border-box;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.08);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        line-height: 1;
+      }
+
+      .ccf-narrator-item .ccf-narrator-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item .ccf-narrator-icon {
+        border-color: var(--ccf-theme-border, rgba(255, 255, 255, 0.12));
+        background: var(--ccf-theme-surface-strong, rgba(255, 255, 255, 0.08));
+        color: var(--ccf-theme-text, #fff);
       }
 
       .ccf-narrator-item .ccf-narrator-name {
@@ -6212,6 +6243,15 @@
     });
   }
 
+  // 이름 왼쪽의 원형 캐릭터 아이콘: 사진이 있으면 사진, 없으면 이름 첫 글자, 목록에 없는(고아) 항목은 빈 원.
+  function buildNarratorIconMarkup(name, isOrphan) {
+    if (isOrphan) return `<span class="ccf-narrator-icon" aria-hidden="true"></span>`;
+    const icon = ccfSelectableIconByName.get(name);
+    if (icon) return `<span class="ccf-narrator-icon" aria-hidden="true"><img src="${escapeHtml(icon)}" alt=""></span>`;
+    const letter = escapeHtml(Array.from(String(name).trim())[0] || "");
+    return `<span class="ccf-narrator-icon" aria-hidden="true">${letter}</span>`;
+  }
+
   function buildInlineNarratorListMarkup(names, narratorSet, currentSpeaker) {
     const trimmedSpeaker = normalizeMyCharacterName(currentSpeaker);
     const normalizedNames = uniqueCharacterNames(names);
@@ -6239,7 +6279,7 @@
         const suffix = suffixParts.length
           ? ` <span class="ccf-narrator-tag">${suffixParts.join(" · ")}</span>`
           : "";
-        return `<button type="button" class="${classes.join(" ")}" role="option" aria-selected="${isActive ? "true" : "false"}" data-inline-narrator-action="toggle" data-inline-narrator-name="${escapedName}"><span class="ccf-narrator-check" aria-hidden="true">${isActive ? "✓" : ""}</span><span class="ccf-narrator-name">${escapedName}</span>${suffix}</button>`;
+        return `<button type="button" class="${classes.join(" ")}" role="option" aria-selected="${isActive ? "true" : "false"}" data-inline-narrator-action="toggle" data-inline-narrator-name="${escapedName}"><span class="ccf-narrator-check" aria-hidden="true">${isActive ? "✓" : ""}</span>${buildNarratorIconMarkup(name, isOrphan)}<span class="ccf-narrator-name">${escapedName}</span>${suffix}</button>`;
       }).join("")}
     </div>`;
   }
@@ -10448,6 +10488,8 @@
       if (!raw || seen.has(raw)) continue;
       seen.add(raw);
       names.push(raw);
+      const icon = item.querySelector("img")?.getAttribute("src") || "";
+      if (/^(?:https?:|data:image\/)/i.test(icon) && !ccfSelectableIconByName.has(raw)) ccfSelectableIconByName.set(raw, icon);
     }
     return names;
   }
