@@ -83,6 +83,11 @@
     footer .spacer, header .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
     .toast.error { color: #f44336; }
+    select, input[type=text].short { height: 36px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px; background: #222; color: #fff; font: inherit; font-size: .9rem; padding: 4px 8px; }
+    .check { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: .9rem; cursor: pointer; }
+    .check input { margin-top: 3px; }
+    .warn { color: #ffb74d; font-size: .8rem; margin: 4px 0 0 24px; }
+    a.link { color: #64b5f6; word-break: break-all; font-size: .85rem; }
     @media (max-width: 480px) { .paper { width: calc(100vw - 32px); } header, .body { padding-left: 16px; padding-right: 16px; } }
   `;
 
@@ -302,6 +307,83 @@
   const x = el("button", { type: "button", class: "icon", id: "x", "aria-label": "닫기", text: "✕" });
   x.addEventListener("click", closeModal);
 
+  // ---- 핸드폰 알림 (ntfy): 새 메시지를 안드로이드 ntfy 앱으로. 설정은 chrome.storage.local.ntfy, 전송은 background.js, 판정은 ntfy-page.js.
+  const NTFY_DEFAULT_SERVER = "https://ntfy.sh";
+  const randomTopic = () => {
+    const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    return "capy-" + Array.from(bytes, byte => alphabet[byte % 32]).join("");
+  };
+  const nEnabled = el("input", { type: "checkbox", id: "ntfy-enabled" });
+  const nTopic = el("input", { type: "text", id: "ntfy-topic", autocomplete: "off", spellcheck: "false" });
+  const nServer = el("input", { type: "text", id: "ntfy-server", autocomplete: "off", spellcheck: "false", placeholder: NTFY_DEFAULT_SERVER });
+  const nScope = el("select", { id: "ntfy-scope" }, el("option", { value: "all", text: "다른 사람의 모든 메시지" }), el("option", { value: "keywords", text: "키워드가 들어간 메시지만" }));
+  const nKeywords = el("input", { type: "text", id: "ntfy-keywords", autocomplete: "off", placeholder: "키워드(쉼표로 구분): 내 캐릭터 이름 등" });
+  const nAway = el("input", { type: "checkbox", id: "ntfy-away" });
+  const nText = el("input", { type: "checkbox", id: "ntfy-text" });
+  const nLink = el("a", { class: "link", id: "ntfy-link", href: "#", text: "" });
+  const nToast = el("div", { class: "toast", id: "ntfy-toast", role: "status" });
+  const nSay = (text, error = false) => { nToast.textContent = text; nToast.classList.toggle("error", error); };
+  const ntfyServerOrigin = () => { try { const u = new URL(nServer.value.trim() || NTFY_DEFAULT_SERVER); return u.protocol === "https:" || (u.protocol === "http:" && u.hostname === "127.0.0.1") ? u.origin : ""; } catch (_) { return ""; } };
+  const ntfyLink = () => { try { const u = new URL(ntfyServerOrigin() || NTFY_DEFAULT_SERVER); return `ntfy://${u.host}/${nTopic.value.trim()}`; } catch (_) { return ""; } };
+  const refreshNtfyLink = () => { const value = nTopic.value.trim() ? ntfyLink() : ""; nLink.textContent = value; nLink.setAttribute("href", value || "#"); };
+  nTopic.addEventListener("input", refreshNtfyLink); nServer.addEventListener("input", refreshNtfyLink);
+  const readNtfy = () => ({
+    enabled: nEnabled.checked, topic: nTopic.value.trim(), server: ntfyServerOrigin() || NTFY_DEFAULT_SERVER,
+    scope: nScope.value, keywords: nKeywords.value.split(",").map(k => k.trim()).filter(Boolean).slice(0, 10),
+    onlyAway: nAway.checked, includeText: nText.checked
+  });
+  const saveNtfy = async () => {
+    const config = readNtfy();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(config.topic)) { nSay("topic 이름은 영문·숫자·-·_ 만 쓸 수 있습니다(비우면 새로 만듭니다).", true); return false; }
+    if (nServer.value.trim() && !ntfyServerOrigin()) { nSay("서버 주소는 https 여야 합니다.", true); return false; }
+    await chrome.storage.local.set({ ntfy: config });
+    nServer.value = config.server === NTFY_DEFAULT_SERVER ? "" : config.server;
+    refreshNtfyLink();
+    nSay("알림 설정을 저장했습니다. 켜져 있으면 룸 탭에 바로 적용됩니다.");
+    return true;
+  };
+  const ntfySave = el("button", { type: "button", class: "contained", id: "ntfy-save", text: "알림 설정 저장" });
+  ntfySave.addEventListener("click", () => { if (!nTopic.value.trim()) nTopic.value = randomTopic(); refreshNtfyLink(); saveNtfy(); });
+  const ntfyNew = el("button", { type: "button", id: "ntfy-new", text: "새로 만들기" });
+  ntfyNew.addEventListener("click", () => { nTopic.value = randomTopic(); refreshNtfyLink(); nSay("새 topic 입니다. 저장한 뒤 핸드폰 앱에서 다시 구독하세요."); });
+  const ntfyCopy = el("button", { type: "button", id: "ntfy-copy", text: "복사" });
+  ntfyCopy.addEventListener("click", async () => {
+    if (!nTopic.value.trim()) { nSay("먼저 저장해서 topic 을 만드세요.", true); return; }
+    try { await navigator.clipboard.writeText(nTopic.value.trim()); nSay("topic 이름을 복사했습니다. ntfy 앱의 + 에 붙여넣으세요."); }
+    catch (_) { nTopic.select(); nSay("복사하지 못했습니다. 선택된 이름을 직접 복사하세요.", true); }
+  });
+  const ntfyTest = el("button", { type: "button", id: "ntfy-test", text: "테스트 알림 보내기" });
+  ntfyTest.addEventListener("click", async () => {
+    if (!nTopic.value.trim()) nTopic.value = randomTopic();
+    refreshNtfyLink();
+    if (!(await saveNtfy())) return;
+    nSay("보내는 중…");
+    try {
+      const answer = await chrome.runtime.sendMessage({ type: "ntfy-test", payload: { title: "카피바라 테스트 알림", message: "핸드폰에 이 알림이 보이면 연결된 것입니다.", click: location.origin + "/" } });
+      nSay(answer?.ok ? "테스트 알림을 보냈습니다. 핸드폰 ntfy 앱에서 확인하세요." : `보내지 못했습니다: ${answer?.error || "알 수 없는 오류"}`, !answer?.ok);
+    } catch (error) { nSay(`보내지 못했습니다: ${error.message}`, true); }
+  });
+  const ntfySection = el("div", { class: "ntfy" },
+    el("hr"),
+    el("h3", { text: "핸드폰 알림 (ntfy)" }),
+    el("p", { class: "muted", text: "코코포리아 새 메시지를 안드로이드 ntfy 앱으로 알려 줍니다. PC에서 이 룸 탭이 열려 있어야 알림이 갑니다." }),
+    el("label", { class: "check" }, nEnabled, el("span", { text: "핸드폰 알림 사용" })),
+    el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
+    el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알릴 메시지" }), nScope, nKeywords),
+    el("label", { class: "check" }, nAway, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (창이 비활성이거나 다른 탭일 때)" })),
+    el("label", { class: "check" }, nText, el("span", { text: "알림에 메시지 앞부분(60자)도 넣기" })),
+    el("p", { class: "warn", text: "켜면 메시지 내용이 공개 서버(ntfy.sh)를 거칩니다. 기본은 보낸 사람 이름과 룸 이름만 보냅니다." }),
+    el("div", { class: "field" }, el("label", { for: "ntfy-server", text: "서버 주소 (비우면 https://ntfy.sh · 자체 서버는 사이트 접근 허용이 따로 필요합니다)" }), nServer),
+    el("h3", { text: "핸드폰에 연결하는 방법" }),
+    el("ol", { class: "muted", style: "margin:4px 0 0 18px;padding:0" },
+      el("li", { text: "Play 스토어에서 ntfy 앱(무료)을 설치합니다." }),
+      el("li", { text: "앱의 + 를 눌러 위 topic 이름을 입력하고 구독합니다. (서버를 바꿨다면 앱의 서버 주소도 같게)" }),
+      el("li", { text: "여기서 ‘테스트 알림 보내기’를 눌러 핸드폰에 알림이 오는지 확인합니다." })),
+    el("div", { class: "field" }, el("label", { text: "핸드폰에서 열면 바로 구독되는 링크" }), nLink),
+    nToast,
+    el("div", { class: "row", style: "margin-top:12px" }, ntfySave, ntfyTest));
+
   const paper = el("div", { class: "paper", role: "dialog", "aria-modal": "true", "aria-labelledby": "title" },
     el("header", {}, el("h2", { id: "title", text: "웹 공유" }),
       el("label", { class: "switch", title: "웹 공유 사용" }, enabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
@@ -313,7 +395,8 @@
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
       toast,
       el("hr"),
-      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants),
+      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants,
+      ntfySection),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);
   backdrop.addEventListener("mousedown", event => { if (event.target === backdrop) closeModal(); });
@@ -327,6 +410,17 @@
   document.addEventListener("keydown", onKey, true);
   document.documentElement.append(host);
 
+  chrome.storage.local.get(["ntfy"], value => {
+    const n = value.ntfy || {};
+    nEnabled.checked = n.enabled === true;
+    nTopic.value = n.topic || "";
+    nServer.value = n.server && n.server !== NTFY_DEFAULT_SERVER ? n.server : "";
+    nScope.value = n.scope === "keywords" ? "keywords" : "all";
+    nKeywords.value = (n.keywords || []).join(", ");
+    nAway.checked = n.onlyAway !== false;
+    nText.checked = n.includeText === true;
+    refreshNtfyLink();
+  });
   chrome.storage.local.get(["relayEnabled", "relayUrl", "relayGmToken", "relayInvites", "r20Links"], value => {
     const linked = Object.entries(value.r20Links || {}).find(([, link]) => link.roomId === roomId)?.[0];
     r20.value = linked ? `캠페인 ${linked}` : "";

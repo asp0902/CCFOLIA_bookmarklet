@@ -88,3 +88,43 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== "x-seen-open" || !/^https:\/\/(x|twitter)\.com\//.test(sender.tab?.url || "")) return;
   chrome.tabs.create({ url: chrome.runtime.getURL("x-seen.html") }).catch(() => {});
 });
+
+// 새 메시지 → 핸드폰 푸시(ntfy). 룸 탭(ntfy-page/ntfy-bridge)이 보내 달라고 하면, 저장된 설정(서버·topic)으로 ntfy 에 JSON 으로 발행한다.
+// 서버·topic 은 저장소에서 직접 읽는다(페이지가 정할 수 없다). 보내는 것은 제목·짧은 본문·클릭 주소뿐이고 계정 정보는 없다.
+const NTFY_DEFAULT_SERVER = "https://ntfy.sh";
+const NTFY_TOPIC_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const ntfySent = [];
+const buildNtfyRequest = (config, payload) => {
+  if (!config || typeof config !== "object") throw new Error("알림 설정이 없습니다.");
+  const topic = String(config.topic || "");
+  if (!NTFY_TOPIC_RE.test(topic)) throw new Error("topic 이름은 영문·숫자·-·_ 만 쓸 수 있습니다.");
+  let server;
+  try { server = new URL(String(config.server || NTFY_DEFAULT_SERVER)); } catch (_) { throw new Error("서버 주소가 올바르지 않습니다."); }
+  if (!(server.protocol === "https:" || (server.protocol === "http:" && server.hostname === "127.0.0.1"))) throw new Error("서버 주소는 https 여야 합니다.");
+  const clickOk = (value) => { try { return new URL(value).origin === "https://ccfolia.com" ? new URL(value).href : ""; } catch (_) { return ""; } };
+  const body = { topic, title: String(payload?.title || "").slice(0, 100) || "카피바라", message: String(payload?.message || "").slice(0, 200) || "새 메시지", tags: ["speech_balloon"] };
+  const click = clickOk(payload?.click);
+  if (click) body.click = click;
+  return { url: server.origin + "/", origin: server.origin, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } };
+};
+const sendNtfy = async (payload, { test = false } = {}) => {
+  const { ntfy } = await chrome.storage.local.get(["ntfy"]);
+  if (!test && !ntfy?.enabled) return { ok: false, error: "꺼져 있음" };
+  const request = buildNtfyRequest(ntfy, payload);
+  // 기본 서버는 manifest 의 host_permissions 로 허용돼 있고, 다른 서버는 설정에서 사용자가 허용한 것만 쓴다.
+  if (request.origin !== NTFY_DEFAULT_SERVER && !(await chrome.permissions.contains({ origins: [request.origin + "/*"] }))) throw new Error("이 서버로 보내려면 설정에서 서버 접근을 허용해야 합니다.");
+  const now = Date.now();
+  while (ntfySent.length && now - ntfySent[0] > 60_000) ntfySent.shift();
+  if (ntfySent.length >= 12) return { ok: false, error: "분당 전송 상한" };
+  ntfySent.push(now);
+  const response = await fetch(request.url, request.init);
+  if (!response.ok) throw new Error(`ntfy 서버가 거절했습니다 (${response.status})`);
+  return { ok: true };
+};
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if ((message?.type !== "ntfy-send" && message?.type !== "ntfy-test") || !isRoomTab(sender.tab || {})) return;
+  sendNtfy(message.payload, { test: message.type === "ntfy-test" })
+    .then((result) => sendResponse(result))
+    .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+  return true; // 응답은 비동기
+});

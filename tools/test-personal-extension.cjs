@@ -7,16 +7,16 @@ const root = path.resolve(__dirname, '..');
 const extension = path.join(root, 'extension/personal');
 const bootstrap = fs.readFileSync(path.join(extension, 'bootstrap.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
-assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*', 'https://app.roll20.net/*', 'http://127.0.0.1:8787/*', 'https://capybara-iv.for-trpg.workers.dev/*']);
+assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*', 'https://app.roll20.net/*', 'http://127.0.0.1:8787/*', 'https://capybara-iv.for-trpg.workers.dev/*', 'https://ntfy.sh/*']); // ntfy.sh: phone push
 assert.deepEqual(manifest.permissions, ['scripting', 'storage', 'unlimitedStorage']); // unlimitedStorage: the x-seen tab keeps the cleaned tweets (#332)
 // Pinned key: the extension id (and so chrome.storage) must not depend on the folder path.
 const derivedId = [...require('node:crypto').createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32)].map(char => String.fromCharCode(97 + parseInt(char, 16))).join('');
 assert.equal(derivedId, 'dhogfdgmikpinakhcofcddmcmoaenpjc');
 assert.equal(manifest.content_scripts[0].world, 'MAIN');
 assert.equal(manifest.content_scripts[0].all_frames, false);
-assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js']);
+assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js', 'ntfy-page.js']);
 assert.equal(manifest.content_scripts[1].world, 'ISOLATED');
-assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js', 'home-bookmarks.js']); // the home page bookmarks tab
+assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js', 'home-bookmarks.js', 'ntfy-bridge.js']); // the home page bookmarks tab
 assert.equal(manifest.options_page, undefined, 'settings live in the icon modal, not an options page');
 assert(fs.existsSync(path.join(extension, 'share-modal.js')));
 
