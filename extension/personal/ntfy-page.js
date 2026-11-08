@@ -11,7 +11,16 @@
   const state = { config: null, windowEnd: 0, pending: [], flushTimer: 0, sent: [], lastSkip: "", total: 0 };
   window.__CCF_NTFY_STATE__ = state;
 
-  const roomName = () => String(document.title || "").replace(/\s*[-|–—]\s*(?:CCFOLIA|ココフォリア|코코포리아).*$/i, "").trim().slice(0, 40) || "코코포리아";
+  // 룸 이름: 룸 화면 상단의 룸 이름(relay-page.js 와 같은 요소)을 먼저, 없으면 탭 제목에서 앞의 "(안읽음 수) "를 뗀 것.
+  // 탭 제목이 "CCFOLIA 1.37.6 – TRPGオンラインセッションツール" 같은 사이트 기본 제목이면 룸 이름이 아니므로 쓰지 않는다.
+  const roomName = () => {
+    const ownText = (el) => [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join("").trim();
+    const heading = [...document.querySelectorAll('h6.MuiTypography-subtitle2, h6[class*="MuiTypography-subtitle2"]')].find((el) => el.offsetParent !== null && ownText(el));
+    if (heading) return ownText(heading).slice(0, 40);
+    const title = String(document.title || "").replace(/^\s*\(\d+\)\s*/, "").trim();
+    if (/^(?:CCFOLIA|ココフォリア|코코포리아)(?:\s|$)/i.test(title)) return "코코포리아";
+    return title.replace(/\s*[-|–—]\s*(?:CCFOLIA|ココフォリア|코코포리아).*$/i, "").trim().slice(0, 40) || "코코포리아";
+  };
   const roomUrl = () => (/^\/rooms\//.test(location.pathname) ? `${location.origin}${location.pathname}` : location.origin);
   const away = () => document.visibilityState !== "visible" || !document.hasFocus();
   const mySpeakerName = () => String(document.querySelector('input[name="name"]')?.value || "").trim();

@@ -61,7 +61,7 @@
     .switch input:checked + .sw .base { transform: translateX(20px); color: #2196f3; }
     .switch input:checked + .sw .track { background-color: #2196f3; opacity: .5; }
     .switch input:focus-visible + .sw { outline: 2px solid #fff; outline-offset: -4px; border-radius: 19px; }
-    hr { border: 0; border-top: 1px solid rgba(255,255,255,.12); margin: 20px 0 0; }
+    .body > .field:first-child { margin-top: 4px; }
     h3 { margin: 16px 0 4px; font-size: 1rem; font-weight: 500; }
     button { font: inherit; font-size: .875rem; font-weight: 500; letter-spacing: .02857em; min-width: 64px; height: 36px; padding: 6px 12px; border: 0; border-radius: 4px;
       background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
@@ -367,7 +367,6 @@
     } catch (error) { nSay(`보내지 못했습니다: ${error.message}`, true); }
   });
   const ntfySection = el("div", { class: "ntfy" },
-    el("hr"),
     el("h3", { text: "핸드폰 알림 (ntfy)" }),
     el("p", { class: "muted", text: "코코포리아 새 메시지를 안드로이드 ntfy 앱으로 알려 줍니다. PC에서 이 룸 탭이 열려 있어야 알림이 갑니다." }),
     el("label", { class: "check" }, nEnabled, el("span", { text: "핸드폰 알림 사용" })),
@@ -396,7 +395,6 @@
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
       toast,
-      el("hr"),
       el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants,
       ntfySection),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
