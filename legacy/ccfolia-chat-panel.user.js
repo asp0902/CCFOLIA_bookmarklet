@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.9
+// @version      0.5.0
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -30,11 +30,29 @@
     window.setTimeout(() => el.remove(), 2600);
   };
   // "채팅 패널 추가": 닫혀 있는 패널이 있으면 그것을 다시 열고, 없으면 새 패널을 만든다. 화면이 모자라면 알리고 멈춘다(떠 있는 창 전환은 다음 단계).
+  scpHost.z = 1200; // 떠 있는 창의 겹침 순서(클릭한 창이 맨 앞). MUI 대화창(1300) 아래에 둔다.
+  scpHost.nextZ = () => { scpHost.z = Math.min(1290, scpHost.z + 1); return scpHost.z; };
+  // 저장소 구독은 한 번만: 패널들은 리스너로 등록하고 호스트가 모두에게 알린다.
+  scpHost.storeListeners = new Set();
+  scpHost.storeUnsub = null;
+  scpHost.subscribe = (store, listener) => {
+    scpHost.storeListeners.add(listener);
+    if (!scpHost.storeUnsub) scpHost.storeUnsub = store.subscribe(() => { for (const fn of [...scpHost.storeListeners]) { try { fn(); } catch (e) { /* 한 패널의 오류가 다른 패널을 막지 않게 */ } } });
+    return () => {
+      scpHost.storeListeners.delete(listener);
+      if (!scpHost.storeListeners.size && scpHost.storeUnsub) { try { scpHost.storeUnsub(); } catch (e) { /* 무시 */ } scpHost.storeUnsub = null; }
+    };
+  };
   scpHost.addPanel = () => {
     const closed = [...scpHost.instances.values()].sort((a, b) => a.index - b.index).find((h) => !h.isOpen());
     const width = scpHost.openDocked()[0]?.width || 340;
     const capacity = Math.max(1, Math.floor((window.innerWidth - 360) / width) - 1);
-    if (scpHost.openDocked().length >= capacity) { scpHost.toast("화면이 좁아 채팅 패널을 더 열 수 없습니다."); return null; }
+    // 자리가 모자라면 가장 왼쪽(가장 나중에 연) 고정 패널을 떠 있는 창으로 분리해 자리를 만든다.
+    while (scpHost.openDocked().length >= capacity) {
+      const leftmost = scpHost.openDocked().slice(-1)[0];
+      if (!leftmost) break;
+      leftmost.setFloating(true);
+    }
     if (closed) { closed.open(); return closed; }
     const index = Math.max(0, ...scpHost.instances.keys()) + 1;
     return createPanelInstance(index);
@@ -50,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.9";
+  const VERSION = "0.5.0";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -63,8 +81,12 @@
   // 호스트에 등록하는 이 패널의 손잡이(다른 패널들이 열림 여부·순번·폭을 보고 배치한다).
   const handle = {
     index: INSTANCE_INDEX, seq: 0, floating: false, width: 340,
-    isOpen: () => !!panelEl, open: () => openPanel(), close: () => closePanel(), relayout: () => safeLayout()
+    isOpen: () => !!panelEl, open: () => openPanel(), close: () => closePanel(), relayout: () => safeLayout(),
+    setFloating: (on) => setFloating(on), isFloating: () => handle.floating
   };
+  let floatRect = null; // 떠 있을 때의 위치·크기 { left, top, width, height }
+  let floatZ = 0;
+  const FLOAT_MIN_W = 300, FLOAT_MIN_H = 360;
   scpHost.instances.set(INSTANCE_INDEX, handle);
   const MAX_RENDER = 300;
 
@@ -1627,6 +1649,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg,
+        floating: handle.floating, rect: floatRect,
         selectedCharByRoom: getCharByRoom()
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
@@ -1669,7 +1692,7 @@
       /* 색·글꼴·테두리는 네이티브 패널에서 읽어와 변수로 주입한다(syncTheme).
          하드코딩하면 테마 커스텀 기능을 쓸 때 혼자 다른 색이 된다. */
       #${PANEL_ID} {
-        position: fixed; top: 0; height: 100%; width: 340px;
+        position: fixed; top: 0; height: 100%; width: 340px; box-sizing: border-box;
         display: flex; flex-direction: column; z-index: 1200;
         background: var(--scp-bg-image, none), var(--scp-bg, rgba(24,24,26,.96));
         -webkit-backdrop-filter: var(--scp-backdrop, none);
@@ -1706,6 +1729,22 @@
         color: var(--scp-close-color, #fff); cursor: pointer; padding: 0; border-radius: 50%; }
       .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       .ccf-scp-close svg { display: block; }
+      /* 메뉴(오리지널 채팅 메뉴와 같은 MUI Menu 모양): 어두운 종이, 둥근 모서리 4px, 높은 그림자. */
+      .ccf-scp-menu { position: fixed; z-index: 2147483000; min-width: 180px; padding: 8px 0; background: rgb(66,66,66); color: #fff; border-radius: 4px;
+        box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .ccf-scp-menu-item { padding: 6px 16px; min-height: 48px; box-sizing: border-box; display: flex; align-items: center; cursor: pointer; white-space: nowrap; }
+      .ccf-scp-menu-item:hover { background: rgba(255,255,255,.08); }
+      /* 떠 있는 창: 그림자와 테두리로 떠 있음을 보이고, 가장자리·모서리 손잡이로 크기를 바꾼다. */
+      #${PANEL_ID}.is-floating { border: 1px solid rgba(255,255,255,.2); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+      #${PANEL_ID}.is-floating::after { display: none; }
+      #${PANEL_ID}.is-floating .ccf-scp-bar { cursor: move; }
+      .ccf-scp-rz { position: absolute; display: none; z-index: 6; }
+      #${PANEL_ID}.is-floating .ccf-scp-rz { display: block; }
+      .ccf-scp-rz-n, .ccf-scp-rz-s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; } .ccf-scp-rz-n { top: -3px; } .ccf-scp-rz-s { bottom: -3px; }
+      .ccf-scp-rz-e, .ccf-scp-rz-w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; } .ccf-scp-rz-e { right: -3px; } .ccf-scp-rz-w { left: -3px; }
+      .ccf-scp-rz-ne, .ccf-scp-rz-nw, .ccf-scp-rz-se, .ccf-scp-rz-sw { width: 12px; height: 12px; }
+      .ccf-scp-rz-ne { top: -3px; right: -3px; cursor: nesw-resize; } .ccf-scp-rz-nw { top: -3px; left: -3px; cursor: nwse-resize; }
+      .ccf-scp-rz-se { bottom: -3px; right: -3px; cursor: nwse-resize; } .ccf-scp-rz-sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
       /* 코코포리아 탭: 알약이 아니라 밑줄 표시 */
       /* 탭 바 — 네이티브처럼 위아래 구분선 없이 배경색만. */
       .ccf-scp-tabs { display: flex; gap: 0; padding: 0 8px; flex: 0 0 auto;
@@ -1976,6 +2015,12 @@
   function openPanel() {
     if (panelEl) return;
     handle.seq = ++scpHost.seq;
+    {
+      const saved = readPrefs();
+      const r = saved.rect;
+      if (saved.floating === true && r && [r.left, r.top, r.width, r.height].every((v) => Number.isFinite(v))) { handle.floating = true; floatRect = { left: r.left, top: r.top, width: r.width, height: r.height }; floatZ = scpHost.nextZ(); }
+      else { handle.floating = false; floatRect = null; }
+    }
     injectStyle();
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
@@ -1993,16 +2038,31 @@
     // 추후 패널을 더 띄우면 #2, #3… 이 되도록 번호를 붙인다(지금은 1개라 #1).
     title.textContent = `룸 채팅 #${PANEL_INDEX}`;
     bar.appendChild(title);
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "ccf-scp-close";
-    close.setAttribute("aria-label", "닫기");
-    // 코코포리아 설정 버튼과 비슷한 크기의 굵은 X 아이콘(선 두께 2.6).
-    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
-    close.title = "닫기";
-    close.addEventListener("click", closePanel);
-    bar.appendChild(close);
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.className = "ccf-scp-close ccf-scp-gear";
+    gear.setAttribute("aria-label", "채팅 메뉴");
+    gear.setAttribute("aria-haspopup", "menu");
+    gear.title = "채팅 메뉴";
+    // 오리지널 채팅 헤더의 톱니 아이콘을 syncTheme 가 읽어 두면 그대로 쓰고, 아직이면 Material 의 Settings 모양을 쓴다.
+    gear.innerHTML = gearIconHtml();
+    gear.addEventListener("click", (event) => { event.stopPropagation(); toggleGearMenu(gear); });
+    bar.appendChild(gear);
+    // 떠 있는 창은 헤더를 끌어 옮긴다.
+    bar.addEventListener("mousedown", (event) => {
+      if (!handle.floating || event.button !== 0 || event.target.closest("button")) return;
+      startFloatDrag(event);
+    });
     panel.appendChild(bar);
+    // 떠 있을 때만 쓰는 크기 조절 손잡이(가장자리·모서리).
+    for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+      const grip = document.createElement("div");
+      grip.className = `ccf-scp-rz ccf-scp-rz-${dir}`;
+      grip.dataset.dir = dir;
+      grip.addEventListener("mousedown", (event) => { if (event.button === 0) startFloatResize(event, dir); });
+      panel.appendChild(grip);
+    }
+    panel.addEventListener("mousedown", () => { if (handle.floating) bringFloatToFront(); }, true);
 
     // 커스텀 툴팁 — format-sync 의 ::after 툴팁은 우리 스크롤 목록에 잘리므로, 잘림 없이
     // 패널 위에 직접 띄운다.
@@ -2804,7 +2864,120 @@
     scpHost.persist();
   }
 
+  /* ---------------- 톱니 메뉴 · 떠 있는 창 ---------------- */
+
+  const GEAR_PATH = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
+  function gearIconHtml() {
+    return scpHost.gearSvg || `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="${GEAR_PATH}"/></svg>`;
+  }
+  let gearMenuEl = null;
+  function closeGearMenu() {
+    if (gearMenuEl) { gearMenuEl.remove(); gearMenuEl = null; }
+    document.removeEventListener("mousedown", onGearMenuOutside, true);
+    document.removeEventListener("keydown", onGearMenuKey, true);
+  }
+  function onGearMenuOutside(event) { if (gearMenuEl && !gearMenuEl.contains(event.target) && !event.target.closest?.(".ccf-scp-gear")) closeGearMenu(); }
+  function onGearMenuKey(event) { if (event.key === "Escape") { event.stopPropagation(); closeGearMenu(); } }
+  function toggleGearMenu(anchor) {
+    if (gearMenuEl) { closeGearMenu(); return; }
+    const menu = document.createElement("div");
+    menu.className = "ccf-scp-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute(SAFE_ATTR, "1");
+    const addItem = (label, action) => {
+      const item = document.createElement("div");
+      item.className = "ccf-scp-menu-item";
+      item.setAttribute("role", "menuitem");
+      item.tabIndex = -1;
+      item.textContent = label;
+      item.addEventListener("click", (event) => { event.stopPropagation(); closeGearMenu(); action(); });
+      menu.appendChild(item);
+    };
+    addItem(handle.floating ? "고정" : "분리", () => setFloating(!handle.floating));
+    addItem("이 채팅 패널 닫기", () => closePanel());
+    document.body.appendChild(menu);
+    const r = anchor.getBoundingClientRect();
+    menu.style.top = `${Math.round(r.bottom + 4)}px`;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)))}px`;
+    gearMenuEl = menu;
+    document.addEventListener("mousedown", onGearMenuOutside, true);
+    document.addEventListener("keydown", onGearMenuKey, true);
+  }
+
+  const clampFloatRect = (r) => {
+    const width = Math.max(FLOAT_MIN_W, Math.min(r.width, window.innerWidth));
+    const height = Math.max(FLOAT_MIN_H, Math.min(r.height, window.innerHeight));
+    return { width, height, left: Math.max(0, Math.min(r.left, window.innerWidth - width)), top: Math.max(0, Math.min(r.top, window.innerHeight - height)) };
+  };
+  function applyFloatLayout() {
+    if (!panelEl || !floatRect) return;
+    floatRect = clampFloatRect(floatRect);
+    Object.assign(panelEl.style, { left: `${Math.round(floatRect.left)}px`, top: `${Math.round(floatRect.top)}px`, width: `${Math.round(floatRect.width)}px`, height: `${Math.round(floatRect.height)}px`, right: "", bottom: "", zIndex: String(floatZ || 1201) });
+  }
+  function bringFloatToFront() {
+    if (!panelEl || !handle.floating) return;
+    if (floatZ && floatZ === scpHost.z) return;
+    floatZ = scpHost.nextZ();
+    panelEl.style.zIndex = String(floatZ);
+  }
+  function setFloating(on) {
+    if (!panelEl || handle.floating === !!on) return;
+    if (on) {
+      const r = panelEl.getBoundingClientRect();
+      // 같은 크기로, 이미 떠 있는 다른 창이 있으면 그 수만큼 계단식으로 비켜 놓는다(겹쳐서 가려지지 않게).
+      const others = [...scpHost.instances.values()].filter((h) => h !== handle && h.isOpen() && h.floating).length;
+      const step = 24 + others * 32;
+      floatRect = clampFloatRect({ left: r.left - step, top: r.top + step, width: r.width, height: r.height });
+      handle.floating = true;
+      floatZ = scpHost.nextZ();
+      panelEl.classList.add("is-floating");
+      applyFloatLayout();
+    } else {
+      handle.floating = false;
+      handle.seq = ++scpHost.seq; // 다시 고정하면 줄의 맨 왼쪽에 붙는다
+      floatRect = null;
+      panelEl.classList.remove("is-floating");
+      panelEl.style.zIndex = "";
+    }
+    // 고정 패널이 하나도 안 남으면 밀어낸 화면을 되돌리고, 남아 있으면 새 폭으로 다시 맞춘다.
+    const docked = scpHost.openDocked();
+    if (!docked.length) { clearNativeShift(); clearSqueeze(); try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ } }
+    for (const h of [...scpHost.instances.values()]) if (h.isOpen()) h.relayout();
+    savePrefs();
+  }
+  function startFloatDrag(event) {
+    if (!floatRect) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY, left: floatRect.left, top: floatRect.top };
+    const move = (e) => { floatRect = clampFloatRect({ ...floatRect, left: start.left + e.clientX - start.x, top: start.top + e.clientY - start.y }); applyFloatLayout(); };
+    const up = () => { document.removeEventListener("mousemove", move, true); document.removeEventListener("mouseup", up, true); savePrefs(); };
+    document.addEventListener("mousemove", move, true);
+    document.addEventListener("mouseup", up, true);
+  }
+  function startFloatResize(event, dir) {
+    if (!handle.floating || !floatRect) return;
+    event.preventDefault(); event.stopPropagation();
+    const start = { x: event.clientX, y: event.clientY, ...floatRect };
+    const move = (e) => {
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      let { left, top, width, height } = start;
+      if (dir.includes("e")) width = start.width + dx;
+      if (dir.includes("s")) height = start.height + dy;
+      if (dir.includes("w")) { width = start.width - dx; left = start.left + dx; }
+      if (dir.includes("n")) { height = start.height - dy; top = start.top + dy; }
+      if (width < FLOAT_MIN_W) { if (dir.includes("w")) left -= FLOAT_MIN_W - width; width = FLOAT_MIN_W; }
+      if (height < FLOAT_MIN_H) { if (dir.includes("n")) top -= FLOAT_MIN_H - height; height = FLOAT_MIN_H; }
+      floatRect = clampFloatRect({ left, top, width, height });
+      applyFloatLayout();
+    };
+    const up = () => { document.removeEventListener("mousemove", move, true); document.removeEventListener("mouseup", up, true); savePrefs(); };
+    document.addEventListener("mousemove", move, true);
+    document.addEventListener("mouseup", up, true);
+  }
+  window.addEventListener("resize", () => { if (panelEl && handle.floating) applyFloatLayout(); });
+
   function closePanel() {
+    closeGearMenu();
     olderMessages.clear(); olderExhausted = false; olderLoading = false; chanState.clear(); channelQueryUnsupported = false;
     unsubscribeStore();
     window.removeEventListener("resize", safeLayout);
@@ -2861,7 +3034,7 @@
       window.setTimeout(() => { if (panelEl) subscribeStore(); }, 800);
       return;
     }
-    unsubscribe = store.subscribe(() => { if (refreshSelectedChar()) renderSpeakerHook?.(); queueRender(); });
+    unsubscribe = scpHost.subscribe(store, () => { if (refreshSelectedChar()) renderSpeakerHook?.(); queueRender(); });
   }
 
   function unsubscribeStore() {
@@ -3111,6 +3284,16 @@
         set("--scp-header-padx", `${gap}px`);
         const iconColor = getComputedStyle(rightIcon).color;
         set("--scp-close-color", iconColor);
+        // 오리지널 헤더 맨 오른쪽 톱니의 아이콘을 모든 패널 헤더에 그대로 쓴다(한 번 읽어 두면 된다).
+        const nativeSvg = rightIcon instanceof SVGElement ? rightIcon : rightIcon.querySelector?.("svg");
+        if (nativeSvg && !scpHost.gearSvg) {
+          const copy = nativeSvg.cloneNode(true);
+          copy.removeAttribute("class"); copy.setAttribute("width", "24"); copy.setAttribute("height", "24"); copy.setAttribute("aria-hidden", "true");
+          if (copy.querySelector("path")) {
+            scpHost.gearSvg = copy.outerHTML;
+            for (const g of document.querySelectorAll(".ccf-scp-gear")) g.innerHTML = scpHost.gearSvg;
+          }
+        }
       } else {
         set("--scp-header-padx", hs.paddingRight !== "0px" ? hs.paddingRight : "12px");
       }
@@ -3359,6 +3542,13 @@
     if (!panelEl) return;
     const native = findNativeChatPanel();
     syncTheme(native);
+    if (handle.floating) {
+      // 떠 있는 창: 고정 줄·장면 밀기와 무관하게 자기 위치·크기를 쓴다.
+      panelEl.classList.add("is-floating");
+      applyFloatLayout();
+      return;
+    }
+    if (panelEl.classList.contains("is-floating")) { panelEl.classList.remove("is-floating"); panelEl.style.zIndex = ""; }
 
     if (!native) {
       // 패널을 못 찾으면(닫혀 있음 등) 화면 우측에 기본 배치.
