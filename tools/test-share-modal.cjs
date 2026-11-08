@@ -63,6 +63,7 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(rows.length, 3);
       assert(rows[0].includes('<b>x</b> 대기') && rows[0].includes('대기 중'), 'HTML in names stays text');
       assert.equal(await q(page, '.participant b').count(), 0);
+      assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.getElementById('room')).fontSize, getComputedStyle(r.querySelector('.ntfy p.muted')).fontSize, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['13px', '14px', '15px'], 'status lines 13px; ntfy paragraph and participant rows unchanged');
       // '참가 승인' status lines: tight spacing, empty lines take no room, other muted paragraphs (ntfy) keep the default margin.
       const gaps = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;

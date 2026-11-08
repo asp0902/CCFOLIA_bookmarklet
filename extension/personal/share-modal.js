@@ -37,7 +37,7 @@
     h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
     .body { padding: 20px 24px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
-    p.status-line { margin: 2px 0; line-height: 1.4; }
+    p.status-line { margin: 2px 0; line-height: 1.4; font-size: 13px; }
     p.status-line:empty { display: none; }
     .field { margin-top: 16px; }
     .field > label { display: block; margin-bottom: 4px; color: rgba(255,255,255,.7); font-size: .75rem; }
