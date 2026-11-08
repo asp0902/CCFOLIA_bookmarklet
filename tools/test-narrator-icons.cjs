@@ -15,7 +15,16 @@ assert.match(icon('카피바라', false), />카<\/span>$/, 'first letter without
 assert.equal(icon('없는이', true), '<span class="ccf-narrator-icon" aria-hidden="true"></span>', 'orphan: empty circle');
 assert.match(icon('<b>x', false), />&lt;<\/span>$/, 'escaped');
 // the list markup puts the icon between the check mark and the name; the icons are read from the selection list; the theme has its own style
-assert.match(source, /ccf-narrator-check" aria-hidden="true">\$\{isActive \? "✓" : ""\}<\/span>\$\{buildNarratorIconMarkup\(name, isOrphan\)\}<span class="ccf-narrator-name">/);
+const markupLine = source.split('\n').find((l) => l.includes('buildNarratorIconMarkup(name, isOrphan)}<span class=')) || '';
+const posIcon = markupLine.indexOf('buildNarratorIconMarkup(name, isOrphan)}'), posName = markupLine.indexOf('ccf-narrator-name'), posCheck = markupLine.indexOf('ccf-narrator-check'), posTag = markupLine.indexOf('${suffix}');
+assert.ok(posIcon > 0 && posIcon < posName && posName < posCheck && posCheck < posTag, 'icon first (no empty check column), the check mark after the name and before the tag');
+assert.equal(markupLine.indexOf('ccf-narrator-check'), markupLine.lastIndexOf('ccf-narrator-check'), 'one check span, after the name');
 assert.match(source, /ccfSelectableIconByName\.set\(raw, icon\)/);
 assert.match(source, /html\[data-ccf-theme-active="1"\] \.ccf-inline-toolbar \.ccf-narrator-item \.ccf-narrator-icon/);
+// the polish of the narrator window: title +1px, padding +1px, the close button has no background (only on hover)
+assert.match(source, /\.ccf-inline-popover\.ccf-inline-narrator-popover \{\n\s+padding: 11px;/);
+assert.match(source, /\.ccf-inline-narrator-popover \.ccf-inline-popover-title \{\n\s+font-size: 13px;/);
+assert.match(source, /\.ccf-inline-narrator-popover \[data-inline-popover-action="cancel"\] \{\n\s+background: transparent;/);
+assert.match(source, /html\[data-ccf-theme-active="1"\] \.ccf-inline-toolbar \.ccf-inline-narrator-popover \[data-inline-popover-action="cancel"\] \{\n\s+background: transparent;/);
+assert.doesNotMatch(source, /class="ccf-narrator-check" aria-hidden="true">\$\{isActive \? "✓" : ""\}<\/span>\$\{buildNarratorIconMarkup/);
 console.log('narrator icons PASS');

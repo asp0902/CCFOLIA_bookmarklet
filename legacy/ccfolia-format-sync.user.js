@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.83
+// @version      0.1.84
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.83"),
+    version: getUserscriptVersion("0.1.84"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4063,6 +4063,21 @@
         font-weight: 700;
       }
 
+      /* 나레이션 캐릭터 창 다듬기: 제목 +1px, 안쪽 여백 +1px, 닫기는 배경 없는 글자 단추(호버 때만 음영). */
+      .ccf-inline-popover.ccf-inline-narrator-popover {
+        padding: 11px;
+      }
+      .ccf-inline-narrator-popover .ccf-inline-popover-title {
+        font-size: 13px;
+      }
+      .ccf-inline-narrator-popover [data-inline-popover-action="cancel"] {
+        background: transparent;
+      }
+      .ccf-inline-narrator-popover [data-inline-popover-action="cancel"]:hover,
+      .ccf-inline-narrator-popover [data-inline-popover-action="cancel"]:active {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
       .ccf-inline-popover-field {
         width: 100%;
         min-height: 34px;
@@ -4170,6 +4185,14 @@
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-display:active,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option:hover,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-narrator-popover [data-inline-popover-action="cancel"] {
+        background: transparent;
+      }
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-narrator-popover [data-inline-popover-action="cancel"]:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-narrator-popover [data-inline-popover-action="cancel"]:active {
+        background: var(--ccf-theme-surface-strong, rgba(255, 255, 255, 0.08));
+      }
+
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn:hover,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn:active,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-preset-apply:hover,
@@ -4228,6 +4251,7 @@
       }
 
       .ccf-narrator-item .ccf-narrator-check {
+        flex: 0 0 auto;
         width: 14px;
         text-align: center;
         color: rgba(120, 200, 120, 0.92);
@@ -6320,7 +6344,7 @@
         const suffix = suffixParts.length
           ? ` <span class="ccf-narrator-tag">${suffixParts.join(" · ")}</span>`
           : "";
-        return `<button type="button" class="${classes.join(" ")}" role="option" aria-selected="${isActive ? "true" : "false"}" data-inline-narrator-action="toggle" data-inline-narrator-name="${escapedName}"><span class="ccf-narrator-check" aria-hidden="true">${isActive ? "✓" : ""}</span>${buildNarratorIconMarkup(name, isOrphan)}<span class="ccf-narrator-name">${escapedName}</span>${suffix}</button>`;
+        return `<button type="button" class="${classes.join(" ")}" role="option" aria-selected="${isActive ? "true" : "false"}" data-inline-narrator-action="toggle" data-inline-narrator-name="${escapedName}">${buildNarratorIconMarkup(name, isOrphan)}<span class="ccf-narrator-name">${escapedName}</span>${isActive ? '<span class="ccf-narrator-check" aria-hidden="true">✓</span>' : ""}${suffix}</button>`;
       }).join("")}
     </div>`;
   }
