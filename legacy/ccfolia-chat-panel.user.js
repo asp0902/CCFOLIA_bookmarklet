@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.3.1
+// @version      0.4.0
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -15,6 +15,31 @@
   "use strict";
 
   // 패널 하나를 만드는 함수. 지금은 1번 패널만 만들지만, 패널 상태(DOM·탭·화자·입력·서식·타이머·구독)는 모두 이 클로저 안에 있어 인스턴스마다 따로 갖는다.
+  // 패널들이 함께 쓰는 곳: 열려 있는 패널 목록(열린 순서 = 오리지널 쪽에서 왼쪽으로 쌓이는 순서), 저장, 알림.
+  const scpHost = (window.__ccfScpHost = { seq: 0, instances: new Map() });
+  const SCP_LIST_KEY = "ccf-scp-instances:v1";
+  scpHost.openDocked = () => [...scpHost.instances.values()].filter((h) => h.isOpen() && !h.floating).sort((a, b) => a.seq - b.seq);
+  scpHost.persist = () => {
+    try { localStorage.setItem(SCP_LIST_KEY, JSON.stringify({ open: [...scpHost.instances.values()].filter((h) => h.isOpen()).map((h) => h.index).sort((a, b) => a - b) })); } catch (e) { /* 저장 실패는 무시 */ }
+  };
+  scpHost.toast = (message) => {
+    const el = document.createElement("div");
+    el.textContent = message;
+    el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;background:rgba(40,40,40,.96);color:#fff;padding:10px 16px;border-radius:4px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none;";
+    document.body.appendChild(el);
+    window.setTimeout(() => el.remove(), 2600);
+  };
+  // "채팅 패널 추가": 닫혀 있는 패널이 있으면 그것을 다시 열고, 없으면 새 패널을 만든다. 화면이 모자라면 알리고 멈춘다(떠 있는 창 전환은 다음 단계).
+  scpHost.addPanel = () => {
+    const closed = [...scpHost.instances.values()].sort((a, b) => a.index - b.index).find((h) => !h.isOpen());
+    const width = scpHost.openDocked()[0]?.width || 340;
+    const capacity = Math.max(1, Math.floor((window.innerWidth - 360) / width) - 1);
+    if (scpHost.openDocked().length >= capacity) { scpHost.toast("화면이 좁아 채팅 패널을 더 열 수 없습니다."); return null; }
+    if (closed) { closed.open(); return closed; }
+    const index = Math.max(0, ...scpHost.instances.keys()) + 1;
+    return createPanelInstance(index);
+  };
+
   const createPanelInstance = (INSTANCE_INDEX) => {
 
   // 이 패널은 코코포리아 패널을 복제하지 않는다. 코코포리아 패널은 React 소유이고
@@ -25,16 +50,22 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.3.1";
+  const VERSION = "0.4.0";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
   const FIRESTORE_PROJECT_ID = "ccfolia-160aa";
   const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents`;
-  const STORAGE_KEY = "ccf-second-chat-panel:v1";
+  const STORAGE_KEY = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel:v1" : `ccf-second-chat-panel:v1:p${INSTANCE_INDEX}`;
   // 지금은 패널이 하나뿐이라 항상 1. 여러 개를 지원하게 되면 이 값을 늘려 제목에 쓴다.
   const PANEL_INDEX = INSTANCE_INDEX;
+  // 호스트에 등록하는 이 패널의 손잡이(다른 패널들이 열림 여부·순번·폭을 보고 배치한다).
+  const handle = {
+    index: INSTANCE_INDEX, seq: 0, floating: false, width: 340,
+    isOpen: () => !!panelEl, open: () => openPanel(), close: () => closePanel(), relayout: () => safeLayout()
+  };
+  scpHost.instances.set(INSTANCE_INDEX, handle);
   const MAX_RENDER = 300;
 
   const CHANNEL_LABELS = Object.freeze({
@@ -1443,9 +1474,10 @@
   /* ---------------- 패널 ---------------- */
 
   function injectStyle() {
-    if (document.getElementById("ccf-scp-style")) return;
+    const styleId = INSTANCE_INDEX === 1 ? "ccf-scp-style" : `ccf-scp-style-${INSTANCE_INDEX}`;
+    if (document.getElementById(styleId)) return;
     const style = document.createElement("style");
-    style.id = "ccf-scp-style";
+    style.id = styleId;
     style.setAttribute(SAFE_ATTR, "1");
     style.textContent = `
       /* 본문 컨테이너를 우리 폭만큼 좁혀 화면을 밀어낸다. 클래스가 아니라 우리가
@@ -1771,6 +1803,7 @@
 
   function openPanel() {
     if (panelEl) return;
+    handle.seq = ++scpHost.seq;
     injectStyle();
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
@@ -2576,6 +2609,7 @@
       renderList();
     }, 500);
     savePrefs();
+    scpHost.persist();
   }
 
   function closePanel() {
@@ -2588,10 +2622,11 @@
     if (layoutTimer) { window.clearInterval(layoutTimer); layoutTimer = 0; }
     if (dicebotTimer) { window.clearInterval(dicebotTimer); dicebotTimer = 0; }
     if (dicebotObserver) { dicebotObserver.disconnect(); dicebotObserver = null; }
-    clearNativeShift();
-    // 밀어낸 화면은 반드시 되돌린다. 남으면 패널이 없는데 지도만 좁아진 채로 남는다.
-    clearSqueeze();
+    // 밀어낸 화면은 반드시 되돌린다. 남으면 패널이 없는데 지도만 좁아진 채로 남는다. 다른 패널이 열려 있으면 그쪽이 새 폭으로 다시 맞춘다.
+    const othersOpen = [...scpHost.instances.values()].filter((h) => h !== handle && h.isOpen());
+    if (!othersOpen.length) { clearNativeShift(); clearSqueeze(); }
     try { window.dispatchEvent(new Event("resize")); } catch (e) { /* noop */ }
+    othersOpen.forEach((h) => h.relayout());
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
@@ -2604,6 +2639,7 @@
     panelEl?.remove();
     panelEl = null; listEl = null; tabsEl = null; inputEl = null; statusEl = null;
     savePrefs();
+    scpHost.persist();
   }
 
   function togglePanel() {
@@ -3103,8 +3139,9 @@
 
     if (!native) {
       // 패널을 못 찾으면(닫혀 있음 등) 화면 우측에 기본 배치.
+      const fallbackRank = Math.max(0, scpHost.openDocked().findIndex((h) => h === handle));
       Object.assign(panelEl.style, {
-        top: "0px", bottom: "0px", height: "", right: "0px", left: "", width: "340px"
+        top: "0px", bottom: "0px", height: "", right: `${fallbackRank * 340}px`, left: "", width: "340px"
       });
       return;
     }
@@ -3115,19 +3152,24 @@
     const base = native.getBoundingClientRect();
     const width = Math.max(260, Math.min(base.width || 340, 460));
     const gapRight = window.innerWidth - base.right;
+    handle.width = width;
+    // 열려 있는 고정 패널들은 오리지널 왼쪽으로 열린 순서대로 쌓인다: 내 순번(rank)만큼 더 왼쪽, 장면은 폭의 합만큼 좁힌다.
+    const docked = scpHost.openDocked();
+    const rank = Math.max(0, docked.findIndex((h) => h === handle));
+    const total = width * Math.max(1, docked.length);
 
     // 화면 밀기: 본문 컨테이너를 우리 폭만큼 좁히고 그 자리에 들어간다.
     // 상단바·BGM 이 함께 왼쪽으로 오므로 가릴 것이 없어 위아래를 꽉 채운다.
     if (pushEnabled) {
       const edge = Math.round(base.left);
       const containers = findContentContainer(edge);
-      if (containers.squeeze.length && applySqueeze(containers, edge - width, width)) {
+      if (containers.squeeze.length && applySqueeze(containers, edge - total, total)) {
         Object.assign(panelEl.style, {
           top: `${Math.round(base.top)}px`,
           height: `${Math.round(base.height)}px`,
           bottom: "",
           right: "",
-          left: `${Math.round(edge - width)}px`,
+          left: `${Math.round(edge - width * (rank + 1))}px`,
           width: `${Math.round(width)}px`
         });
         return;
@@ -3144,7 +3186,7 @@
       applyNativeShift(native, width);
       left = base.right - width;
     } else if (base.left >= MIN_WIDTH) {
-      left = base.left - Math.min(width, base.left);
+      left = Math.max(0, base.left - Math.min(width, base.left) - rank * width);
     } else {
       left = Math.max(0, window.innerWidth - width);
     }
@@ -3203,7 +3245,7 @@
   }
 
   function menuItemLabel() {
-    return panelEl ? "채팅 패널 닫기" : "채팅 패널 추가";
+    return "채팅 패널 추가";
   }
 
   function createMenuItem(reference) {
@@ -3222,7 +3264,7 @@
     item.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      togglePanel();
+      scpHost.addPanel();
       closeOpenMenus();
     });
     return item;
@@ -3259,6 +3301,13 @@
   }
 
   function init() {
+    if (INSTANCE_INDEX > 1) {
+      // 추가로 만든 패널: 메뉴·키 처리·미러·API 는 1번 패널이 하나만 갖는다. 여기서는 자기 설정만 읽고 패널을 연다.
+      const own = readPrefs();
+      if (own.channel) currentChannel = own.channel;
+      openPanel();
+      return;
+    }
     const prefs = readPrefs();
     if (prefs.channel) currentChannel = prefs.channel;
     // 기본값이 바뀌기 전에 저장된 값은 무시하고 새 기본값(왼쪽)으로 시작한다.
@@ -3266,7 +3315,14 @@
       panelSide = prefs.side;
     }
     if (typeof prefs.opaqueBg === "boolean") opaqueBg = prefs.opaqueBg;
+    // 지난번에 열려 있던 다른 패널 목록은 1번 패널을 열기 전에 읽는다(열면서 목록을 다시 저장하기 때문).
+    let savedOpen = [];
+    try { const saved = JSON.parse(localStorage.getItem(SCP_LIST_KEY) || "{}"); savedOpen = Array.isArray(saved.open) ? saved.open : []; } catch (e) { /* 저장된 목록이 깨졌으면 무시 */ }
     if (prefs.open) openPanel();
+    // 다른 패널들도 되살린다(번호 순).
+    try {
+      savedOpen.filter((n) => Number.isInteger(n) && n > 1 && n <= 12).sort((a, b) => a - b).forEach((n) => { if (!scpHost.instances.has(n)) createPanelInstance(n); });
+    } catch (e) { /* 저장된 목록이 깨졌으면 무시 */ }
 
     // 코코포리아 네이티브 채팅 입력칸에서도 백틱(`) 키로 "캐릭터 선택" 창을 연다. 네이티브 이름 줄의 "캐릭터 선택" 버튼을 대신 눌러 준다.
     // 추가 채팅 패널 입력칸은 패널이 자체 목록으로 처리하고, 다른 스크립트(스탠딩 선택기 등)가 이미 처리한 키는 건너뛴다.
@@ -4250,6 +4306,7 @@
       },
       disable() {
         active = false;
+        [...scpHost.instances.values()].filter((h) => h !== handle).forEach((h) => h.close());
         observer.disconnect();
         window.clearInterval(timer);
         closePanel();
@@ -4266,6 +4323,7 @@
   } else {
     init();
   }
+  return handle;
   };
 
   createPanelInstance(1);
