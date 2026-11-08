@@ -33,3 +33,8 @@
 공식 참고: [로컬 확장 설치](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked),
 [MAIN 실행 환경](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts),
 [원격 코드 제한](https://developer.chrome.com/docs/extensions/develop/migrate/remote-hosted-code).
+
+## 핸드폰 알림 (ntfy)
+- 툴바 아이콘 → 설정 창의 맨 아래 "핸드폰 알림 (ntfy)": 켜기, topic(처음 저장할 때 `capy-…` 무작위 이름 자동 생성), 알릴 메시지, 룸을 안 보고 있을 때만, 내용 포함 여부, 서버 주소, 테스트 알림.
+- 구조: 노티파이어가 새 메시지를 등록하면 `ntfy-page.js`(판정·묶음·분당 상한)가 `ntfy-bridge.js`를 거쳐 `background.js`에 전송을 부탁하고, 백그라운드가 `https://ntfy.sh/`에 JSON 으로 발행한다. 보내는 것은 제목(보낸 사람 + 룸 이름)·짧은 본문·룸 주소뿐이다.
+- PC에서 룸 탭이 열려 있어야 알림이 간다. topic 을 아는 사람은 누구나 그 알림을 볼 수 있다. 자체 ntfy 서버는 사이트 접근 허용이 따로 필요하다.
