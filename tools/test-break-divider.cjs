@@ -32,3 +32,8 @@ assert.match(panel, /!\(!meta && looksLikeDiceCommand\(cleanText\)\) && \(meta \
 assert.match(participant, /const breakBefore = env\.blockStyle\?\.breakBefore === true;/);
 assert.match(participant, /container\.dataset\.ccfBreak = "1"/);
 console.log('break divider PASS');
+// the line of the toggle sits in the middle of the button: the icon is a block centred in a flex button (original) / a block with auto margins (extra panel)
+assert.match(panel, /ccf-scp-fmt-btn svg \{ display: block; margin: auto; \}/);
+assert.match(sync, /\[data-inline-command="break"\] \{\n\s+display: inline-flex;\n\s+align-items: center;/);
+assert.match(sync, /d="M2 7\.5h12v1H2z"/);
+console.log('break icon centred PASS');
