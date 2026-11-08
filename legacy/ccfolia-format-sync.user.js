@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.71
+// @version      0.1.72
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.71"),
+    version: getUserscriptVersion("0.1.72"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3418,7 +3418,7 @@
         transform: translate(-50%, -50%);
         box-sizing: border-box;
         border-radius: 0;
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.5);
         background: var(--ccf-chip-color, #ffffff);
         pointer-events: none;
       }
@@ -3810,8 +3810,8 @@
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        row-gap: 4px;
-        column-gap: 6px;
+        row-gap: 0;
+        column-gap: 0;
         width: 100%;
         box-sizing: border-box;
         margin: 0 0 6px;
@@ -3837,6 +3837,20 @@
         width: 30px;
         height: 30px;
         border-radius: 0;
+      }
+
+      /* 서식 버튼은 외곽선 없이 붙여 둔다(호버·활성은 배경으로 구분). 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
+      .ccf-inline-toolbar .ccf-toggle,
+      .ccf-inline-toolbar .ccf-inline-tool,
+      .ccf-inline-toolbar .ccf-inline-size-input {
+        border-width: 0 !important;
+      }
+      .ccf-inline-toolbar .ccf-inline-size-input,
+      .ccf-inline-toolbar .ccf-keep-toggle {
+        width: 44px;
+        min-width: 44px;
+        flex: 0 0 44px;
+        padding: 0 4px;
       }
 
       /* 글자색·배경색 칸은 항상 같은 30×30 정사각형(줄이 좁아도 줄어들지 않는다). */
