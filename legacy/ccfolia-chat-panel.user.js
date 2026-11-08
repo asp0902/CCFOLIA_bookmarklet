@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.7
+// @version      0.4.8
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.7";
+  const VERSION = "0.4.8";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -426,6 +426,76 @@
     const out = {};
     for (const [key, value] of Object.entries(fields || {})) out[key] = decodeFsValue(value);
     return out;
+  }
+
+  // 탭(채널) 하나만 바로 받는다: where channel == X, orderBy createdAt desc, limit. 처음엔 한 화면 분량(30)만 받아 먼저 보여 주고, 모자라면 100건씩 더 받는다.
+  // 탭별로 어디까지 받았는지 기억하므로 이미 받은 탭을 다시 고르면 바로 보인다. 이 쿼리는 복합 색인이 필요해서, 서버가 거절하면(400) 예전 방식(전체 페이지 훑기)으로 돌아간다.
+  const chanState = new Map(); // channel -> { exhausted, rounds }
+  let channelQueryUnsupported = false;
+  const exhaustedNow = () => (channelQueryUnsupported ? olderExhausted : !!chanState.get(currentChannel)?.exhausted);
+  async function loadMoreMessages() {
+    if (channelQueryUnsupported) return loadOlderMessages();
+    const result = await loadOlderForChannel(currentChannel);
+    if (result === "unsupported") { channelQueryUnsupported = true; return loadOlderMessages(); }
+    return result;
+  }
+  async function loadOlderForChannel(channel) {
+    if (olderLoading) return false;
+    const st = chanState.get(channel) || { exhausted: false, rounds: 0 };
+    chanState.set(channel, st);
+    if (st.exhausted) return false;
+    const slice = getRoomMessagesSlice();
+    if (!slice) return false;
+    olderLoading = true;
+    try {
+      const ctx = await getAuthContext();
+      const entities = slice.entities || {};
+      let oldest = null;
+      for (const id of Array.isArray(slice.idsGroupBy?.[channel]) ? slice.idsGroupBy[channel] : []) {
+        const msg = entities[id];
+        const at = msg ? readCreatedAt(msg) : 0;
+        if (at && (!oldest || at < oldest.at)) oldest = { at, raw: msg.createdAt };
+      }
+      for (const old of olderMessages.values()) if (old.channel === channel && old.at && (!oldest || old.at < oldest.at)) oldest = { at: old.at, raw: old.rawCreatedAt };
+      const limit = st.rounds === 0 ? 30 : OLDER_PAGE;
+      const query = {
+        from: [{ collectionId: "messages" }],
+        where: { fieldFilter: { field: { fieldPath: "channel" }, op: "EQUAL", value: { stringValue: channel } } },
+        orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
+        limit
+      };
+      if (oldest) query.startAt = { values: [typeof oldest.raw === "number" ? { integerValue: String(oldest.raw) } : { timestampValue: new Date(oldest.at).toISOString() }], before: false };
+      const response = await fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}:runQuery`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ structuredQuery: query })
+      });
+      if (response.status === 400) return "unsupported"; // 색인이 없는 룸/프로젝트: 예전 방식으로
+      if (!response.ok) throw new Error(`이전 대화를 읽지 못했습니다 (${response.status})`);
+      const rows = (await response.json()).filter((row) => row && row.document);
+      let added = 0;
+      for (const row of rows) {
+        const id = String(row.document.name || "").split("/").pop();
+        if (!id || entities[id] || olderMessages.has(id)) continue;
+        const data = decodeFsFields(row.document.fields);
+        if (data.removed) continue;
+        const message = toPanelMessage(id, data);
+        message.channel = String(data.channel || "main");
+        message.rawCreatedAt = data.createdAt;
+        olderMessages.set(id, message);
+        added += 1;
+      }
+      st.rounds += 1;
+      if (rows.length < limit) st.exhausted = true;
+      olderError = "";
+      return added > 0;
+    } catch (error) {
+      console.warn("[ccf-chat-panel] older messages failed", error);
+      olderError = String(error?.message || error).slice(0, 120);
+      return false;
+    } finally {
+      olderLoading = false;
+    }
   }
 
   async function loadOlderMessages() {
@@ -851,13 +921,16 @@
   let fillRounds = 0;
   let fillChannel = "";
   function fillIfShort() {
-    if (!listEl || olderLoading || olderExhausted) return;
-    if (fillChannel !== currentChannel) { fillChannel = currentChannel; fillRounds = 0; if (olderError) olderExhausted = false; }
+    if (!listEl || olderLoading || exhaustedNow()) return;
+    if (fillChannel !== currentChannel) {
+      fillChannel = currentChannel; fillRounds = 0;
+      if (olderError) { olderExhausted = false; const st = chanState.get(currentChannel); if (st) st.exhausted = false; }
+    }
     const short = listEl.scrollHeight <= listEl.clientHeight + 40;
     if (!short || fillRounds >= 15) return;
     fillRounds += 1;
     const list = listEl;
-    loadOlderMessages().then((changed) => {
+    loadMoreMessages().then((changed) => {
       if (!changed || listEl !== list) { if (listEl === list) window.setTimeout(fillIfShort, 50); return; }
       lastSignature = "";
       renderList();
@@ -1945,12 +2018,12 @@
       tipEl.hidden = true;
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
-      if (listEl.scrollTop < 80 && !olderExhausted && !olderLoading) {
+      if (listEl.scrollTop < 80 && !exhaustedNow() && !olderLoading) {
         const list = listEl;
         const heightBefore = list.scrollHeight;
         const topBefore = list.scrollTop;
         setStatus("이전 대화를 불러오는 중…");
-        loadOlderMessages().then((changed) => {
+        loadMoreMessages().then((changed) => {
           setStatus("");
           if (!changed || listEl !== list) return;
           lastSignature = ""; // 위쪽에 끼워 넣으므로 전체를 다시 그린다
@@ -2718,7 +2791,7 @@
   }
 
   function closePanel() {
-    olderMessages.clear(); olderExhausted = false; olderLoading = false;
+    olderMessages.clear(); olderExhausted = false; olderLoading = false; chanState.clear(); channelQueryUnsupported = false;
     unsubscribeStore();
     window.removeEventListener("resize", safeLayout);
     if (onDocClickHandler) { document.removeEventListener("click", onDocClickHandler); onDocClickHandler = null; }
@@ -4438,7 +4511,8 @@
         for (const old of olderMessages.values()) olderByChannel[old.channel] = (olderByChannel[old.channel] || 0) + 1;
         return {
           panel: INSTANCE_INDEX, currentChannel, storeChannels: groups, olderByChannel, olderTotal: olderMessages.size,
-          olderExhausted, olderLoading, olderError, fillRounds, fillChannel,
+          olderExhausted, olderLoading, olderError, fillRounds, fillChannel, channelQueryUnsupported,
+          channelState: Object.fromEntries([...chanState.entries()].map(([k, v]) => [k, { ...v }])),
           list: listEl ? { client: listEl.clientHeight, scroll: listEl.scrollHeight } : null,
           nativeTabs: readNativeTabs().map((t) => t.channel)
         };
