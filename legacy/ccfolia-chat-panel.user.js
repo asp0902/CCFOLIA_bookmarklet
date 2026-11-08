@@ -2673,11 +2673,23 @@
   }
 
   // 요소가 실제로 보이는 배경색: 조상 체인의 반투명 배경들을 불투명한 층을 만날 때까지 위에서 아래로 알파 합성한다(rgba(0,0,0,.1) 위에 rgb(18,18,18) 같은 구조).
+  // MUI 다크 Paper 의 elevation 오버레이는 단색 linear-gradient(rgba(255,255,255,a), rgba(255,255,255,a)) 를 배경 이미지로 얹는다.
+  // 두 정지점 색이 같은 gradient 만 단색 층으로 읽고, 그 밖의 이미지는 무시한다(null).
+  function solidGradientColorOf(backgroundImage) {
+    const m = String(backgroundImage || "").match(/^linear-gradient\(\s*(rgba?\([^)]*\))\s*,\s*(rgba?\([^)]*\))\s*\)$/);
+    return m && m[1].replace(/\s+/g, "") === m[2].replace(/\s+/g, "") ? m[1] : null;
+  }
+
   function visibleBackgroundOf(el, pageBg) {
     const layers = [];
     for (let e = el; e instanceof Element; e = e.parentElement) {
-      const c = getComputedStyle(e).backgroundColor;
-      if (!c || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) continue;
+      const cs = getComputedStyle(e);
+      const c = cs.backgroundColor;
+      // 오버레이(배경 이미지)는 같은 요소의 배경색 위에 얹힌다 → 색 다음 층으로 먼저 넣는다(아래에서 위 순서로 쌓인다).
+      const overlay = solidGradientColorOf(cs.backgroundImage);
+      const transparentColor = !c || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c);
+      if (overlay) layers.push(overlay);
+      if (transparentColor) continue;
       layers.push(c);
       const m = String(c).match(/[\d.]+/g) || [];
       if (m.length < 4 || Number(m[3]) >= 1) break; // 불투명 층을 만났으면 그 아래는 안 보인다
