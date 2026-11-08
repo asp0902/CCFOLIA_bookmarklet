@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.99
+// @version      0.3.100
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.99"),
+    version: getUserscriptVersion("0.3.100"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5969,9 +5969,22 @@
   // 콘텐츠 높이가 어떤 이유로든 변하면(새 메시지/이미지 로드/여백 압축/CCFolia
   // smooth 애니메이션 잔차) 즉시 바닥을 유지한다. 사용자가 위로 휠/터치/스크롤바
   // 드래그하면 고정이 풀리고, 바닥(2px 이내)으로 돌아오면 다시 고정된다.
+  // 코코포리아의 가상 목록도 같은 스크롤러에 scrollTo 를 쓴다. 그 직후(NATIVE_SCROLL_QUIET_MS 안)에 우리가 끼어들어 반대로 끌면 둘이 번갈아 되돌리며 흔들린다
+  // (전송 직후 3회 진동, 실측 v2). 코코포리아가 잠잠해진 뒤 한 번만 바닥으로 보정한다.
+  const NATIVE_SCROLL_QUIET_MS = 200;
   function snapScrollerToBottom(scroller) {
     if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
     if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 1) return;
+    const sinceNative = Date.now() - (scroller.__ccr20NativeScrollAt || 0);
+    if (sinceNative < NATIVE_SCROLL_QUIET_MS) {
+      if (!scroller.__ccr20DeferredSnap) {
+        scroller.__ccr20DeferredSnap = window.setTimeout(() => {
+          scroller.__ccr20DeferredSnap = 0;
+          if (active && scroller.__ccr20Pinned) snapScrollerToBottom(scroller);
+        }, NATIVE_SCROLL_QUIET_MS - sinceNative + 20);
+      }
+      return;
+    }
     const prevBehavior = scroller.style.scrollBehavior;
     scroller.style.scrollBehavior = "auto";
     scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
@@ -5988,6 +6001,14 @@
     const listenerOptions = { passive: true, signal: controller.signal };
     scroller.__ccr20BottomFinisher = true;
     scroller.__ccr20Pinned = true;
+    // 코코포리아(가상 목록)의 scrollTo 호출 시각을 기록한다(원본은 그대로 호출). 우리 snap 은 scrollTop 대입이라 여기에 잡히지 않는다.
+    const nativeScrollTo = scroller.scrollTo;
+    if (typeof nativeScrollTo === "function" && !Object.prototype.hasOwnProperty.call(scroller, "scrollTo")) {
+      scroller.scrollTo = function ccr20ScrollTo() {
+        scroller.__ccr20NativeScrollAt = Date.now();
+        return nativeScrollTo.apply(this, arguments);
+      };
+    }
     scroller.setAttribute("data-ccr20-scroller", "1");
     let lastUserIntentAt = 0;
     const markUserIntent = () => { lastUserIntentAt = Date.now(); };
@@ -6043,6 +6064,9 @@
       if (loadFrame) cancelAnimationFrame(loadFrame);
       delete scroller.__ccr20BottomFinisher;
       delete scroller.__ccr20Pinned;
+      delete scroller.scrollTo;
+      delete scroller.__ccr20NativeScrollAt;
+      if (scroller.__ccr20DeferredSnap) { window.clearTimeout(scroller.__ccr20DeferredSnap); scroller.__ccr20DeferredSnap = 0; }
       scroller.removeAttribute("data-ccr20-scroller");
       bottomFinishers.delete(scroller);
     } });
@@ -6145,7 +6169,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.99",
+    version: "0.3.100",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
