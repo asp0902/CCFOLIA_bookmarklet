@@ -35,7 +35,7 @@ const NATIVE = `<style>#nat{position:fixed;top:0;right:0;width:340px;height:600p
     assert.equal(await saved(), null, 'nothing is saved after one or two measurements');
     await page.waitForTimeout(2200); // three equal measurements (the layout runs every 500 ms)
     assert.equal(await tailVar(), '9px', 'the stable measurement is taken: ' + await tailVar());
-    assert.deepEqual(JSON.parse(await saved()), { tail: 9 }, 'and saved');
+    { const { rowGap, ...rest } = JSON.parse(await saved()); assert.deepEqual(rest, { tail: 9 }, 'and saved (the row gap is saved next to it)'); }
     // after a reload the saved value is used at once (the native list is not at the bottom yet, so nothing can be measured)
     await page.goto('https://ccfolia.test/rooms/test');
     await page.evaluate(() => {
