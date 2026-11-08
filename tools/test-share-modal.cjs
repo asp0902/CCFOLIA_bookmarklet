@@ -34,7 +34,7 @@ const base = { relayEnabled: true, relayUrl: 'https://relay.example.test', relay
 const flush = page => page.waitForTimeout(80);
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
+  const browser = await chromium.launch({ headless: true, ...(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}), ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   const open = async options => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     // The modal follows the room in the page URL (each CCFOLIA room has its own invite URL).
@@ -63,6 +63,21 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(rows.length, 3);
       assert(rows[0].includes('<b>x</b> 대기') && rows[0].includes('대기 중'), 'HTML in names stays text');
       assert.equal(await q(page, '.participant b').count(), 0);
+      // '참가 승인' status lines: tight spacing, empty lines take no room, other muted paragraphs (ntfy) keep the default margin.
+      const gaps = await page.evaluate(() => {
+        const r = document.getElementById('capybara-share-modal-host').shadowRoot;
+        const top = id => r.getElementById(id).getBoundingClientRect();
+        const measure = () => ({ socketToRoom: Math.round(top('socket').top - top('room').bottom), healthDisplay: getComputedStyle(r.getElementById('health')).display, errorsDisplay: getComputedStyle(r.getElementById('relay-errors')).display, ntfyMargin: getComputedStyle(r.querySelector('.ntfy p.muted')).marginTop });
+        const now = measure();
+        r.querySelectorAll('p.status-line').forEach(p => p.classList.remove('status-line'));
+        const before = measure();
+        return { now, before };
+      });
+      assert(gaps.now.socketToRoom <= 4, `status lines are tight (${gaps.now.socketToRoom}px; was ${gaps.before.socketToRoom}px)`);
+      assert(gaps.before.socketToRoom >= 12, 'sanity: default p margin is larger ' + JSON.stringify(gaps));
+      assert.equal(gaps.now.healthDisplay, 'none'); assert.equal(gaps.now.errorsDisplay, 'none');
+      assert.notEqual(gaps.now.ntfyMargin, '2px', 'ntfy paragraph keeps its own look');
+      console.log('approval spacing', JSON.stringify(gaps));
       assert.deepEqual(await q(page, 'button[data-decision]').evaluateAll(b => b.map(x => `${x.dataset.id}:${x.dataset.decision}`)), ['p1:approve', 'p1:reject', 'p2:revoke']);
       // Approve: authenticated POST for that participant.
       assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.querySelector('button[data-decision="approve"]')).color, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['rgb(33, 150, 243)', '15px'], 'approve button is blue, participant name is 15px');
