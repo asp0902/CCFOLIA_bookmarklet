@@ -36,9 +36,14 @@ console.log('format row fourth round PASS');
 // fifth round (user measurement 1.48.31): no header bottom border, no list padding, no right border, bar padding 0 and 60.67 high, bottom area rgb(18,18,18)
 assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-bar \{ border-bottom: 0; \}/); assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-list \{ padding: 0; \}/);
 assert.doesNotMatch(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
-assert.match(panel, /\.ccf-scp-fmt \{ gap: 0; margin: 0; padding: 0; background: #282828; \}/); assert.match(panel, /min-height: 60\.67px/);
-assert.match(panel, /\.ccf-scp-tabs, #\$\{PANEL_ID\} \.ccf-scp-compose \{ background: rgb\(18,18,18\); \}/);
+assert.match(panel, /\.ccf-scp-fmt \{ gap: 0; margin: 0; padding: 6px; background: #282828; \}/); assert.match(panel, /min-height: 72\.67px/);
+assert.match(panel, /\.ccf-scp-tabs, #\$\{PANEL_ID\} \.ccf-scp-compose \{ background-color: var\(--scp-bottom-bg, rgb\(18,18,18\)\); background-image: var\(--scp-bottom-img, none\); \}/);
 console.log('panel match round 2 PASS');
 // the toolkit popovers of the native format bar (narrator characters, saved styles) are not hidden behind the extra panel
 assert.match(panel, /body:has\(\.ccf-inline-popover\.open\) #\$\{PANEL_ID\} \{ z-index: 1; \}/);
 console.log('popover over panel PASS');
+// sixth round: the bottom Paper color and image are read at run time, 6px around the buttons of the bar (both panels), the narrator icon is a square without an outline
+assert.match(panel, /set\("--scp-bottom-bg"/); assert.match(panel, /--scp-bottom-img/);
+assert.match(sync, /padding: 6px;\n\s+margin: 0 !important;/);
+assert.match(sync, /\.ccf-narrator-icon \{[^}]*border-radius: 0;[^}]*border: 0;/);
+console.log('format row sixth round PASS');

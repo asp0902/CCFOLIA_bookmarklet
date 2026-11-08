@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.76
+// @version      0.1.77
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.76"),
+    version: getUserscriptVersion("0.1.77"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3847,7 +3847,8 @@
         border-width: 1px 0 0 0 !important;
         border-style: solid !important;
         box-shadow: none !important;
-        padding: 0;
+        padding: 6px;
+        margin: 0 !important;
       }
       .ccf-inline-toolbar .ccf-inline-divider { display: none !important; }
       /* 서식 버튼은 외곽선 없이 붙여 둔다(호버·활성은 배경으로 구분). 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
@@ -4211,10 +4212,10 @@
         flex: 0 0 24px;
         width: 24px;
         height: 24px;
-        border-radius: 50%;
+        border-radius: 0;
         overflow: hidden;
         box-sizing: border-box;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 0;
         background: rgba(255, 255, 255, 0.08);
         display: inline-flex;
         align-items: center;
@@ -4231,7 +4232,8 @@
       }
 
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-narrator-item .ccf-narrator-icon {
-        border-color: var(--ccf-theme-border, rgba(255, 255, 255, 0.12));
+        border: 0;
+        border-radius: 0;
         background: var(--ccf-theme-surface-strong, rgba(255, 255, 255, 0.08));
         color: var(--ccf-theme-text, #fff);
       }
