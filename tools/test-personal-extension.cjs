@@ -14,7 +14,7 @@ const derivedId = [...require('node:crypto').createHash('sha256').update(Buffer.
 assert.equal(derivedId, 'dhogfdgmikpinakhcofcddmcmoaenpjc');
 assert.equal(manifest.content_scripts[0].world, 'MAIN');
 assert.equal(manifest.content_scripts[0].all_frames, false);
-assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js', 'ntfy-page.js']);
+assert.deepEqual(manifest.content_scripts[0].js, ['send-profiler.js', 'bootstrap.js', 'relay-page.js', 'ntfy-page.js']);
 assert.equal(manifest.content_scripts[1].world, 'ISOLATED');
 assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js', 'home-bookmarks.js', 'ntfy-bridge.js']); // the home page bookmarks tab
 assert.equal(manifest.options_page, undefined, 'settings live in the icon modal, not an options page');

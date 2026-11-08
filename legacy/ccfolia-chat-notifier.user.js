@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.38
+// @version      0.3.39
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.38";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.39";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -946,7 +946,15 @@
 
   function primeKnownMessageKeys() {
     const items = findCurrentMessageItems();
+    // 창 포커스가 돌아올 때마다(= 채팅을 쓰려고 클릭한 직후, 보통 첫 전송과 겹친다) 모든 줄을 다시 등록하면
+    // 큰 방에서 수백 ms~초 멈춘다. 줄 노드와 글이 지난번과 같으면 이미 등록된 것이므로 건너뛴다(새 줄·바뀐 줄만 등록).
+    const primed = primeKnownMessageKeys.primed || (primeKnownMessageKeys.primed = new WeakMap());
     items.forEach((itemRoot) => {
+      const text = itemRoot.textContent || "";
+      if (primed.get(itemRoot) === text) {
+        return;
+      }
+      primed.set(itemRoot, text);
       registerMessageItem(itemRoot, false);
     });
     debugLog("prime-known-messages", {
@@ -1030,7 +1038,25 @@
     return looksLikeChatDrawer(scope);
   }
 
+  // 메시지 줄마다(isChatMessageScope) 같은 서랍을 다시 판정하면 줄 수만큼 제목을 훑어 O(줄²) 가 된다
+  // (800줄 복제 방에서 첫 전송 때 약 1초, 큰 방은 더 길다). 같은 서랍의 판정은 잠깐 기억한다.
+  // (함수 선언은 끌어올려지므로, 초기화 순서 문제를 피하려고 캐시를 함수의 속성으로 둔다)
   function looksLikeChatDrawer(root) {
+    if (!(root instanceof HTMLElement)) {
+      return false;
+    }
+    const now = performance.now();
+    const cache = looksLikeChatDrawer.cache || (looksLikeChatDrawer.cache = new WeakMap());
+    const hit = cache.get(root);
+    if (hit && now - hit.at < 1500) {
+      return hit.value;
+    }
+    const value = looksLikeChatDrawerUncached(root);
+    cache.set(root, { at: now, value });
+    return value;
+  }
+
+  function looksLikeChatDrawerUncached(root) {
     if (!(root instanceof HTMLElement) || !isVisible(root)) {
       return false;
     }
