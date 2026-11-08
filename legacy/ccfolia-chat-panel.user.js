@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.77
+// @version      0.2.78
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.77";
+  const VERSION = "0.2.78";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1706,11 +1706,11 @@
       /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
       body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
       #${PANEL_ID} .ccf-scp-list { padding: 0; }
-      #${PANEL_ID} .ccf-scp-tabs, #${PANEL_ID} .ccf-scp-compose { background: rgb(18,18,18); }
+      #${PANEL_ID} .ccf-scp-tabs, #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); background-image: var(--scp-bottom-img, none); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
       #${PANEL_ID} .ccf-scp-tab { box-sizing: border-box; min-width: 48px; height: 48px; padding: 12px 16px;
         font-size: 14px; font-weight: 700; letter-spacing: .02857em; line-height: 1.75; }
-      #${PANEL_ID} .ccf-scp-fmt { gap: 0; margin: 0; padding: 0; background: #282828; }
+      #${PANEL_ID} .ccf-scp-fmt { gap: 0; margin: 0; padding: 6px; background: #282828; }
       #${PANEL_ID} .ccf-scp-fmt-btn { width: 30px; min-width: 30px; height: 30px; padding: 0; border-radius: 0;
         background: rgb(40,40,40); border: 0; font-size: 12px; font-weight: 400; }
       #${PANEL_ID} .ccf-scp-fmt-btn:hover { background: rgb(55,55,55); }
@@ -1721,7 +1721,7 @@
       #${PANEL_ID} .ccf-scp-input::placeholder { color: rgba(255,255,255,.5); font-size: 14px; }
       /* 높이를 네이티브 입력 영역(탭 48 + 이름 56 + 주사위 39 + 서식 81 + 입력 100 + 구분선 1 + 하단 37)에 맞춘다. */
       #${PANEL_ID} .ccf-scp-compose { padding-bottom: 0; }
-      #${PANEL_ID} .ccf-scp-fmt { box-sizing: border-box; min-height: 60.67px; margin-bottom: 6px; align-content: flex-start;
+      #${PANEL_ID} .ccf-scp-fmt { box-sizing: border-box; min-height: 72.67px; margin-bottom: 0; align-content: flex-start;
         border-top: 1px solid rgba(255,255,255,.12); border-bottom: 0; }
       #${PANEL_ID} .ccf-scp-inputwrap { box-sizing: border-box; min-height: 100px; }
       #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; border-top: 1px solid rgba(255,255,255,.12); box-sizing: border-box; }
@@ -2761,6 +2761,23 @@
         tabsBg = getComputedStyle(el).backgroundColor;
       }
       set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
+    }
+
+    // 하단 영역(탭 줄 포함 한 덩어리 Paper)의 실제 배경색·배경 이미지(MUI 다크 elevation 덧칠)를 입력칸 조상에서 읽는다. 못 찾으면 현재 값을 유지한다.
+    const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(`#${PANEL_ID}`) && !t.closest('.MuiDialog-root, [role="dialog"]'));
+    let bottomPaper = nativeInput;
+    while (bottomPaper && bottomPaper.parentElement) {
+      const h = bottomPaper.getBoundingClientRect().height;
+      if (h > 250 && h < 450) break;
+      bottomPaper = bottomPaper.parentElement;
+    }
+    if (bottomPaper && bottomPaper !== nativeInput && bottomPaper !== document.body) {
+      const ps = getComputedStyle(bottomPaper);
+      if (!/^(transparent|rgba\(0, 0, 0, 0\))$/.test(ps.backgroundColor)) {
+        set("--scp-bottom-bg", toOpaqueColor(ps.backgroundColor, pageBg));
+        if (ps.backgroundImage && ps.backgroundImage !== "none") panelEl.style.setProperty("--scp-bottom-img", ps.backgroundImage);
+        else panelEl.style.removeProperty("--scp-bottom-img");
+      }
     }
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
