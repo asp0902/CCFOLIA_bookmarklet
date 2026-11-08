@@ -35,6 +35,7 @@ const NATIVE = `<style>#nat{position:fixed;top:0;right:0;width:340px;height:640p
     assert.ok(diag.visibleRows && diag.visibleRows.panel && diag.visibleRows.panel.lowest.length >= 1 && diag.visibleRows.native && diag.visibleRows.native.lowest.length >= 1, "visible rows diagnostics for both lists: " + JSON.stringify(diag.visibleRows).slice(0, 300));
     assert.ok(diag.adjust.adopted >= 1 && diag.adjust.adopted <= 3, "adoptions are capped: " + diag.adjust.adopted);
     const nativeToTabs = await page.evaluate(() => { const rows = [...document.querySelectorAll('#nlist .MuiListItem-root')]; return Math.round((document.querySelector('.MuiTabs-root').getBoundingClientRect().top - rows[rows.length - 1].getBoundingClientRect().bottom) * 100) / 100; });
+    console.log('rowGap:', JSON.stringify(diag.rowGap)); assert.ok(diag.rowGap.extra === 0, 'rows already match the original: the row gap needs no extra (' + diag.rowGap.extra + ')');
     console.log('diag:', JSON.stringify(diag && { nativeToTabs: diag.nativeToTabs, panelLastToTabs: diag.panelLastToTabs, adjust: diag.panelAdjust, lastRowTag: diag.lastRowTag, rowCount: diag.rowCount, structure: diag.structure }));
     if (process.env.PANEL_SOURCE) return;
     assert.ok(diag.lastRowTag && /^div\.MuiListItem-root/.test(diag.lastRowTag), 'the last row is found although it is a div: ' + JSON.stringify(diag));
