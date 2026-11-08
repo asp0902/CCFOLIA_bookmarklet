@@ -59,6 +59,9 @@ const profiler = fs.readFileSync(path.join(__dirname, '../extension/personal/sen
       assert(Array.isArray(last.top) && last.windowMs > 300, 'profiler window recorded');
       assert(logs.some((t) => t.includes('[CCF send timing]')), 'also logged to the console');
       assert.equal((await page.evaluate(() => window.__sends)).length, 6, 'still exactly one send per Enter');
+      assert(last.top.every((t) => /d/.test(t.label) && t.n >= 1 && t.total >= t.max), 'top entries carry the registration site (function:line) and are merged');
+      const idle = await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.idleProfile(600));
+      assert(typeof idle.mutations === 'number' && Array.isArray(idle.mutationTop) && idle.byScript && idle.windowMs >= 500, `idleProfile reports scripts and document changes: ${JSON.stringify(idle)}`);
       console.log('send timing sample', JSON.stringify(last));
       await page.close();
     }

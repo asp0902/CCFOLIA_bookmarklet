@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.93
+// @version      0.1.94
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.93"),
+    version: getUserscriptVersion("0.1.94"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4544,6 +4544,11 @@
         // 가 0 → layout 완료 시 style/class 변경으로 가시화되는 시점을 캐치.
         // childList 변동 없이 display:none→block 만 토글되는 경우 기존 옵저버가 놓침.
         if (mutation.type === "attributes") {
+          // 값이 그대로인 속성 쓰기(classList.add 로 이미 있는 클래스를 또 넣는 등)도 변화 기록이 남는다.
+          // ensureUi 가 매번 그런 쓰기를 하므로 그냥 두면 스스로를 다시 불러 프레임마다 돈다(글이 든 입력칸에서 초당 60회) → 실제로 값이 바뀐 것만 센다.
+          if (mutation.oldValue != null && mutation.attributeName && target?.getAttribute?.(mutation.attributeName) === mutation.oldValue) {
+            return false;
+          }
           return true;
         }
 
@@ -4566,7 +4571,8 @@
     mo.observe(document.documentElement || document.body, {
       childList: true,
       subtree: true,
-      attributes: true
+      attributes: true,
+      attributeOldValue: true
     });
     ccfFsRegisterTeardown(() => {
       if (scheduled) {
@@ -10487,7 +10493,20 @@
     return !getMyCharacterPanel();
   }
 
+  // 같은 프레임 근처의 반복 호출(입력칸마다 getCurrentSpeakerName → 버튼 후보 전부 isVisible)을 줄이려고 잠깐 기억한다.
+  // (함수 선언은 끌어올려져 const/let 초기화보다 먼저 불릴 수 있으므로 캐시는 함수 속성에 둔다)
   function findCharacterSelectButton() {
+    const nowTs = performance.now();
+    const cache = findCharacterSelectButton.cache;
+    if (cache && cache.btn && nowTs - cache.at < 250 && cache.btn.isConnected) {
+      return cache.btn;
+    }
+    const found = findCharacterSelectButtonUncached();
+    findCharacterSelectButton.cache = { at: nowTs, btn: found };
+    return found;
+  }
+
+  function findCharacterSelectButtonUncached() {
     for (const selector of CHARACTER_SELECT_BUTTON_SELECTORS) {
       const matches = document.querySelectorAll(selector);
       for (const btn of matches) {
@@ -14880,7 +14899,9 @@
     console.info("[CCF send timing] Enter pressed (", entry.chars, "chars )");
     return { mark: step, finishKeydown: (kind) => { step("keydown"); entry.kind = kind; } };
   }
-  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag = () => SEND_TIMING_LOG.map((e) => JSON.parse(JSON.stringify(e)));
+  // 유휴 진단: 입력·전송 없이 ms(기본 5000) 동안 툴킷이 계속 일하는지 — 스크립트별 시간(byScript/top)과 문서 변화 기록(mutationTop). 룸을 ccfNativeSendTiming="1" 로 로드해야 한다.
+  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.idleProfile = (ms = 5000) => (window.__CCF_SEND_PROFILE__ ? window.__CCF_SEND_PROFILE__.idle(Math.min(30000, Math.max(500, Number(ms) || 5000))) : Promise.resolve({ error: "send-profiler 없음: 확장을 새로고침하고 localStorage.ccfNativeSendTiming=\"1\" 로 룸을 다시 열어 주세요." }));
+  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag =() => SEND_TIMING_LOG.map((e) => JSON.parse(JSON.stringify(e)));
 
   function triggerComposerSubmit(editor, sendTiming = null, immediate = false) {
     const composer = findClosestComposerBar(editor);
