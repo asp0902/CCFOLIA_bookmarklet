@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.39
+// @version      0.3.40
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.39";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.40";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -6303,7 +6303,11 @@
     for (const player of players) {
       let frame = null;
       try { frame = player.getIframe?.(); } catch (_) { frame = null; }
-      if (frame instanceof HTMLElement) frame.setAttribute("data-ccf-bgm-standby", player === ccfBgmPlayer ? "0" : "1");
+      if (frame instanceof HTMLElement) {
+        // 값이 같으면 쓰지 않는다(같은 값 쓰기도 변화 기록을 남겨 다른 스크립트의 observer 를 깨운다).
+        const want = player === ccfBgmPlayer ? "0" : "1";
+        if (frame.getAttribute("data-ccf-bgm-standby") !== want) frame.setAttribute("data-ccf-bgm-standby", want);
+      }
     }
   }
 

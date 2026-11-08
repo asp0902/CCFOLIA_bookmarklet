@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.95
+// @version      0.1.96
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.95"),
+    version: getUserscriptVersion("0.1.96"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -12963,13 +12963,6 @@
       return;
     }
 
-    const entry = ensureEditorVisualPreview(editor);
-    if (!entry) {
-      sweepOrphanedEditorOverlays();
-      return;
-    }
-    sweepOrphanedEditorOverlays(entry.overlay);
-
     const text = stripInvisibleEnvelope(getEditorText(editor));
     const state = ensureEditorState(editor);
     // #68 — 입력칸 미리보기에는 나레이션(이탤릭+가운데) 미적용. 커서 위치 확인 가능해야 함.
@@ -12980,10 +12973,21 @@
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
     const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
 
+    // 보여 줄 게 없으면 오버레이를 만들지 않는다. 예전에는 모든 입력칸(색 입력칸·팝오버 안 입력칸 등 안 보이는 것 포함)에
+    // 매번 오버레이를 만들었다가 바로 고아로 지우는 일을 ensureUi 마다 반복해 문서 변화가 끊이지 않았다.
     if (!shouldShow) {
-      hideEditorVisualPreview(editor, entry);
+      const existing = EDITOR_VISUAL_PREVIEW.get(editor);
+      if (existing) hideEditorVisualPreview(editor, existing);
+      sweepOrphanedEditorOverlays();
       return;
     }
+
+    const entry = ensureEditorVisualPreview(editor);
+    if (!entry) {
+      sweepOrphanedEditorOverlays();
+      return;
+    }
+    sweepOrphanedEditorOverlays(entry.overlay);
 
     const computed = getComputedStyle(editor);
     layoutEditorVisualPreview(editor, entry, computed, alignRuns);
@@ -12994,8 +12998,8 @@
       "--ccf-editor-caret-color",
       computed.caretColor && computed.caretColor !== "auto" ? computed.caretColor : computed.color
     );
-    editor.classList.add("ccf-editor-preview-source");
-    entry.overlay.style.display = "block";
+    if (!editor.classList.contains("ccf-editor-preview-source")) editor.classList.add("ccf-editor-preview-source");
+    if (entry.overlay.style.display !== "block") entry.overlay.style.display = "block";
   }
 
   function clearEditorVisualPreview(editor) {
@@ -13005,15 +13009,16 @@
       entry.overlay.remove();
     }
     EDITOR_VISUAL_PREVIEW.delete(editor);
-    editor.classList.remove("ccf-editor-preview-source");
-    editor.style.removeProperty("--ccf-editor-caret-color");
+    if (editor.classList.contains("ccf-editor-preview-source")) editor.classList.remove("ccf-editor-preview-source");
+    if (editor.style.getPropertyValue("--ccf-editor-caret-color")) editor.style.removeProperty("--ccf-editor-caret-color");
   }
 
   function hideEditorVisualPreview(editor, entry = EDITOR_VISUAL_PREVIEW.get(editor)) {
     if (!entry) return;
-    entry.overlay.style.display = "none";
-    editor.classList.remove("ccf-editor-preview-source");
-    editor.style.removeProperty("--ccf-editor-caret-color");
+    if (entry.overlay.style.display !== "none") entry.overlay.style.display = "none";
+    // 값이 그대로인 쓰기도 변화 기록을 남겨 다른 스크립트의 observer 를 깨우므로, 바뀔 때만 쓴다.
+    if (editor.classList.contains("ccf-editor-preview-source")) editor.classList.remove("ccf-editor-preview-source");
+    if (editor.style.getPropertyValue("--ccf-editor-caret-color")) editor.style.removeProperty("--ccf-editor-caret-color");
   }
 
   function layoutEditorVisualPreview(editor, entry, computed = getComputedStyle(editor), alignRuns = []) {
@@ -14899,6 +14904,16 @@
   if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.idleProfile = (ms = 5000) => (window.__CCF_SEND_PROFILE__ ? window.__CCF_SEND_PROFILE__.idle(Math.min(30000, Math.max(500, Number(ms) || 5000))) : Promise.resolve({ error: "send-profiler 없음: 확장을 새로고침하고 localStorage.ccfNativeSendTiming=\"1\" 로 룸을 다시 열어 주세요." }));
   if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag =() => SEND_TIMING_LOG.map((e) => JSON.parse(JSON.stringify(e)));
 
+  function reactHasEditorValue(editor) {
+    try {
+      const key = Object.keys(editor).find((name) => name.startsWith("__reactProps$"));
+      const props = key ? editor[key] : null;
+      return !!props && typeof props.value === "string" && props.value === editor.value;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function triggerComposerSubmit(editor, sendTiming = null, immediate = false) {
     const composer = findClosestComposerBar(editor);
     const submitBtn = composer?.querySelector('button[type="submit"]');
@@ -14916,8 +14931,16 @@
         console.warn("[CCF NAR] triggerComposerSubmit: click failed", error);
       }
     };
-    if (immediate) queueMicrotask(click);
-    else setTimeout(click, 0);
+    if (immediate) {
+      queueMicrotask(click);
+    } else {
+      // 봉투를 입력칸에 새로 썼다: React 가 그 값을 받아 다시 그린 뒤에 눌러야 한다. React 가 이미 받았다면(props.value 가 입력칸 값과 같음) 다음 태스크를
+      // 기다릴 필요가 없다 — 다른 긴 작업 뒤로 밀리면 서식 있는/자동 나레이션 전송이 100ms 넘게 늦어졌다. 확인이 안 되면 예전처럼 setTimeout.
+      queueMicrotask(() => {
+        if (reactHasEditorValue(editor)) click();
+        else setTimeout(click, 0);
+      });
+    }
   }
 
   function looksLikeComposerBar(el) {
