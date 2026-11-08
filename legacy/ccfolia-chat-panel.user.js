@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.0
+// @version      0.5.1
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.0";
+  const VERSION = "0.5.1";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -613,14 +613,52 @@
   // 같은 값이 연속으로 나온 뒤에만 쓰고, 채택한 값은 저장해 다음 새로고침 직후부터 그 값으로 시작한다. 범위(1~30px) 밖은 이상치로 본다.
   const SCP_TAIL_KEY = "ccf-scp-list-tail:v1";
   let tailSample = null; // { value, count }
+  // 목록의 마지막 줄(내부 ul 이 있으면 그 안, 없으면 목록 직속).
+  const lastRowEl = () => {
+    const rows = (ccfScpInnerUl && ccfScpInnerUl.isConnected ? ccfScpInnerUl : listEl)?.querySelectorAll?.(":scope > li");
+    return rows && rows.length ? rows[rows.length - 1] : null;
+  };
+  // 직접 비교용: 오리지널에서 "마지막 선 → 탭 줄 시작"까지의 거리. 우리 패널의 같은 거리를 이 값에 맞춘다(여분 공간의 원인이 목록 안이든 목록과 탭 사이든 상관없이).
+  let ccfScpNativeToTabs = -1;
+  let toTabsSample = null;
+  let panelAdjust = 0; // 우리 목록 아래 패딩에 더하는 보정(px, 음수 가능)
+  let adjustSample = null;
   const readSavedTail = () => {
     try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.tail); return v >= 1 && v <= 30 ? v : -1; } catch (e) { return -1; }
   };
+  const readSavedToTabs = () => {
+    try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.toTabs); return v >= 1 && v <= 60 ? v : -1; } catch (e) { return -1; }
+  };
+  const saveTailState = () => {
+    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: ccfScpListTail >= 0 ? ccfScpListTail : undefined, toTabs: ccfScpNativeToTabs >= 0 ? ccfScpNativeToTabs : undefined })); } catch (e) { /* 저장 실패는 무시 */ }
+  };
   const adoptTail = (value) => {
     ccfScpListTail = value;
-    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: value })); } catch (e) { /* 저장 실패는 무시 */ }
+    saveTailState();
     if (panelEl) panelEl.style.setProperty("--scp-list-tail", `${value}px`);
   };
+  const adoptToTabs = (value) => { ccfScpNativeToTabs = value; adjustSample = null; saveTailState(); };
+  // 우리 패널에서 같은 거리(마지막 줄 아래끝 → 탭 줄 윗끝)를 재서 오리지널 값과의 차이만큼 목록 아래 패딩을 고친다. 목록이 바닥일 때, 같은 차이가 3번 나올 때만.
+  function adjustPanelTail() {
+    if (!listEl || !tabsEl || ccfScpNativeToTabs < 0) return;
+    if (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 2) return;
+    if (listEl.scrollHeight <= listEl.clientHeight + 2) return; // 줄이 목록을 채우지 못하면(위쪽이 비어 있으면) 마지막 줄 아래 거리를 비교할 수 없다
+    const last = lastRowEl();
+    if (!(last instanceof HTMLElement)) return;
+    const actual = tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom;
+    const delta = Math.round((actual - ccfScpNativeToTabs) * 100) / 100;
+    if (Math.abs(delta) < 0.75) { adjustSample = null; return; }
+    if (adjustSample && Math.abs(adjustSample.value - delta) < 0.5) adjustSample.count += 1; else adjustSample = { value: delta, count: 1 };
+    if (adjustSample.count < 3) return;
+    const base = ccfScpListTail >= 0 ? ccfScpListTail : 8;
+    const next = Math.max(-base, Math.min(40, panelAdjust - delta));
+    adjustSample = null;
+    if (Math.abs(next - panelAdjust) < 0.25) return; // 더 줄일 수 없다(패딩이 0): 남은 차이는 목록 밖 공간 — tailDiag 로 확인
+    panelAdjust = next;
+    panelEl?.style.setProperty("--scp-list-adjust", `${panelAdjust}px`);
+    // 아래 패딩이 바뀌면 스크롤 범위가 달라지므로 바닥에 있던 목록은 다시 바닥에 맞춘다(안 그러면 다음 측정이 바닥 상태가 아니라 건너뛴다).
+    if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight;
+  }
   let ccfScpRowPadBottom = 0; // 네이티브 줄의 아래 패딩(구분선 위 여백 +1px 계산용)
   let ccfScpInnerUl = null; // 증분 렌더용: 현재 줄들이 담긴 내부 ul
 
@@ -928,6 +966,7 @@
   function applyRowMarkers(rows) {
     const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
     if (ccfScpListTail < 0) ccfScpListTail = readSavedTail();
+    if (ccfScpNativeToTabs < 0) ccfScpNativeToTabs = readSavedToTabs();
     if (panelEl && ccfScpListTail >= 0) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
     rows.forEach((row, i) => {
       if (!(row instanceof HTMLElement)) return;
@@ -1957,7 +1996,7 @@
       /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
       body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
       /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
-      #${PANEL_ID} .ccf-scp-list { padding: 0 0 var(--scp-list-tail, 8px); }
+      #${PANEL_ID} .ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }
       #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
@@ -2995,7 +3034,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
-    ccfScpListTail = -1; tailSample = null;
+    ccfScpListTail = -1; tailSample = null; ccfScpNativeToTabs = -1; toTabsSample = null; panelAdjust = 0; adjustSample = null;
     ccfScpInnerUl = null;
     // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
     // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.
@@ -3239,6 +3278,15 @@
             if (after instanceof HTMLElement && after.classList.contains("MuiDivider-root")) end = after;
             const viewBottom = scroller.getBoundingClientRect().top + scroller.clientHeight;
             const tail = Math.round((viewBottom - end.getBoundingClientRect().bottom) * 100) / 100;
+            // 같은 때에 "마지막 선 → 탭 줄 윗끝" 거리도 재서(3번 같으면) 채택한다.
+            const nativeTabsRow = nativeTabBar ? (nativeTabBar.closest(".MuiTabs-root") || nativeTabBar) : null;
+            if (nativeTabsRow instanceof HTMLElement) {
+              const toTabs = Math.round((nativeTabsRow.getBoundingClientRect().top - end.getBoundingClientRect().bottom) * 100) / 100;
+              if (toTabs >= 1 && toTabs <= 60) {
+                if (toTabsSample && Math.abs(toTabsSample.value - toTabs) < 0.5) toTabsSample.count += 1; else toTabsSample = { value: toTabs, count: 1 };
+                if (toTabsSample.count >= 3 && Math.abs(ccfScpNativeToTabs - toTabs) >= 0.5) adoptToTabs(toTabs);
+              } else toTabsSample = null;
+            }
             // 연속 3번(약 1.5초) 같은 값이 나올 때만 채택한다. 범위 밖(0 또는 30 초과)은 이상치로 무시하고 센 횟수를 지운다.
             if (tail >= 1 && tail <= 30) {
               if (tailSample && Math.abs(tailSample.value - tail) < 0.5) tailSample.count += 1; else tailSample = { value: tail, count: 1 };
@@ -3542,6 +3590,7 @@
     if (!panelEl) return;
     const native = findNativeChatPanel();
     syncTheme(native);
+    adjustPanelTail();
     if (handle.floating) {
       // 떠 있는 창: 고정 줄·장면 밀기와 무관하게 자기 위치·크기를 쓴다.
       panelEl.classList.add("is-floating");
@@ -4710,6 +4759,18 @@
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
       // 다른 탭이 비어 보일 때: 저장소가 가진 채널별 개수, 따로 불러온 이전 대화, 불러오기 상태와 실패 이유.
+      // 마지막 선 아래 여백이 오리지널과 다를 때: 오리지널 실측값, 우리 패널의 실제 거리와 보정, 마지막 줄·목록·탭의 여백 속성.
+      tailDiag() {
+        const last = lastRowEl();
+        const cs = (el) => (el instanceof HTMLElement ? (({ marginBottom, paddingBottom, borderBottomWidth, height }) => ({ marginBottom, paddingBottom, borderBottomWidth, height }))(getComputedStyle(el)) : null);
+        return {
+          panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
+          panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
+          panelLastToListBottom: last && listEl ? Math.round((listEl.getBoundingClientRect().top + listEl.clientHeight - last.getBoundingClientRect().bottom) * 100) / 100 : null,
+          lastRow: cs(last), innerUl: cs(ccfScpInnerUl), list: cs(listEl), tabs: cs(tabsEl),
+          between: listEl && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - listEl.getBoundingClientRect().bottom) * 100) / 100 : null
+        };
+      },
       olderDiag() {
         const slice = getRoomMessagesSlice();
         const groups = {};

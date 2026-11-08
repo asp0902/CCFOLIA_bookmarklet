@@ -58,7 +58,7 @@ console.log('format row grid PASS');
 assert.match(panel, /::after \{ content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;/);
 console.log('panel edge line PASS');
 // the end of the list: the same space under the last message's divider as the original (read at run time), more where a band shadow needs it
-assert.match(panel, /\.ccf-scp-list \{ padding: 0 0 var\(--scp-list-tail, 8px\); \}/);
+assert.ok(panel.includes('.ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }'), 'the list end space = the original tail + the direct comparison adjustment');
 assert.match(panel, /\.ccf-scp-list:has\(\[data-ccr20-band\]\) \{ padding-bottom: 24px; \}/);
 assert.match(panel, /--scp-list-tail/);
 console.log('list tail PASS');
