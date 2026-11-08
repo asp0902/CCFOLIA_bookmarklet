@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.3
+// @version      0.4.4
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.3";
+  const VERSION = "0.4.4";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -827,9 +827,16 @@
       if (nextIsCont) {
         row.setAttribute("data-ccf-prose-cont-leader", "1");
         row.style.removeProperty("border-bottom");
+        row.style.removeProperty("background-image");
       } else {
         row.removeAttribute("data-ccf-prose-cont-leader");
-        row.style.setProperty("border-bottom", divider, "important");
+        // 오리지널의 구분선은 좌우로 16px 들여 있다(실측). 줄 자신의 아래 테두리는 투명으로 두어 높이(1px)를 지키고, 그 자리에 들여쓴 선을 배경으로 그린다.
+        const lineColor = divider.replace(/^\S+\s+\S+\s+/, "");
+        row.style.setProperty("border-bottom", "1px solid transparent", "important");
+        row.style.setProperty("background-image", `linear-gradient(${lineColor}, ${lineColor})`, "important");
+        row.style.setProperty("background-size", "calc(100% - 32px) 1px", "important");
+        row.style.setProperty("background-position", "16px 100%", "important");
+        row.style.setProperty("background-repeat", "no-repeat", "important");
         // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
         row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom}px`, "important");
       }
@@ -2870,6 +2877,33 @@
       }
       set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
     }
+
+    // 마지막 메시지 아래 여백을 실제로 잰다: 네이티브 목록이 바닥에 있을 때 "스크롤러 보이는 영역 아래끝 - 마지막 줄(또는 그 뒤 구분선 요소) 아래끝".
+    // 읽기만 하고 바닥이 아니거나 못 찾으면 기존 값을 유지한다.
+    try {
+      const anchorLi = findChatAnchor();
+      if (anchorLi instanceof HTMLElement) {
+        let scroller = null;
+        for (let el = anchorLi.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+          if (/(?:auto|scroll|overlay)/i.test(getComputedStyle(el).overflowY || "")) { scroller = el; break; }
+        }
+        if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 2) {
+          const lis = [...scroller.querySelectorAll(".MuiListItem-root")].filter((li) => li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel"));
+          const last = lis[lis.length - 1];
+          if (last) {
+            let end = last;
+            const after = last.nextElementSibling;
+            if (after instanceof HTMLElement && after.classList.contains("MuiDivider-root")) end = after;
+            const viewBottom = scroller.getBoundingClientRect().top + scroller.clientHeight;
+            const tail = Math.round((viewBottom - end.getBoundingClientRect().bottom) * 100) / 100;
+            if (tail >= 0 && tail <= 60) {
+              ccfScpListTail = tail;
+              panelEl.style.setProperty("--scp-list-tail", `${tail}px`);
+            }
+          }
+        }
+      }
+    } catch (e) { /* 못 재면 기존 값 */ }
 
     // 하단 입력 영역(이름·주사위·서식·입력칸)의 "실제 보이는 색"을 입력칸의 조상 체인에서 알파 합성으로 구한다. 못 찾으면 현재 값을 유지한다.
     const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel") && !t.closest('.MuiDialog-root, [role="dialog"]'));
