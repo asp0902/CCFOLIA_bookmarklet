@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.78
+// @version      0.2.79
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.78";
+  const VERSION = "0.2.79";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1737,9 +1737,9 @@
       #${PANEL_ID} .ccf-scp-fmt-color input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.55); }
       #${PANEL_ID} .ccf-scp-fmt-size.is-current::placeholder { color: rgba(255,255,255,.92); opacity: 1; }
-      /* 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
-      #${PANEL_ID} .ccf-scp-fmt-keep { width: 44px; min-width: 44px; flex: 0 0 44px; }
-      #${PANEL_ID} .ccf-scp-fmt-size { width: 44px; min-width: 44px; flex: 0 0 44px; padding: 0 4px; text-align: center; color: inherit; font-size: 13px; }
+      /* 글자 크기 칸과 유지 버튼은 같은 가로 길이(45+45 = 30px 열 3칸) — 위 줄 Tip·Bl·</> 아래를 정확히 채워 Sv 가 Nr 바로 아래에 온다. */
+      #${PANEL_ID} .ccf-scp-fmt-keep { width: 45px; min-width: 45px; flex: 0 0 45px; }
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 45px; min-width: 45px; flex: 0 0 45px; padding: 0 4px; text-align: center; color: inherit; font-size: 13px; }
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.5); }
       #${PANEL_ID} .ccf-scp-fmt-toggle { font-weight: 700; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */

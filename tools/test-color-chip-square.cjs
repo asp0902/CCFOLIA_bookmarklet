@@ -14,8 +14,8 @@ console.log('color chip square PASS');
 // the chip has the same visible border on both colors, the size box and the keep button have the same width, the format buttons have no outline and no gap
 assert.match(pc, /box-shadow: inset 0 0 0 1px #808080/); assert.match(sc, /box-shadow: inset 0 0 0 1px #808080/);
 assert.match(pc, /box-sizing: border-box/); assert.match(sc, /box-sizing: border-box/);
-assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-size'), /width: 44px/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-keep'), /width: 44px/);
-const sk = rule(sync, '.ccf-inline-toolbar .ccf-inline-size-input,\n      .ccf-inline-toolbar .ccf-keep-toggle'); assert.match(sk, /width: 44px/);
+assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-size'), /width: 45px/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-keep'), /width: 45px/);
+const sk = rule(sync, '.ccf-inline-toolbar .ccf-inline-size-input,\n      .ccf-inline-toolbar .ccf-keep-toggle'); assert.match(sk, /width: 45px/);
 assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt'), /gap: 0/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-btn'), /border: 0/);
 assert.match(rule(sync, '.ccf-inline-toolbar'), /column-gap: 0/); assert.match(sync, /border-width: 0 !important/);
 console.log('format row follow-up PASS');
@@ -47,3 +47,10 @@ assert.match(panel, /set\("--scp-bottom-bg"/); assert.match(panel, /--scp-bottom
 assert.match(sync, /padding: 6px;\n\s+margin: 0 !important;/);
 assert.match(sync, /\.ccf-narrator-icon \{[^}]*border-radius: 0;[^}]*border: 0;/);
 console.log('format row sixth round PASS');
+// seventh round: the lower row lines up with the upper row on a 30px column grid: 3 align + 2 color = 5 columns, size 45 + keep 45 = 3 columns, Sv is column 9 (under Nr), () column 10
+const colWidths = (sizeW, keepW) => [30, 30, 30, 30, 30, sizeW, keepW];
+const x = (widths, index) => widths.slice(0, index).reduce((a, b) => a + b, 0);
+const lower = colWidths(45, 45); assert.equal(x(lower, 7), 30 * 5 + 90); assert.equal(x(lower, 7) % 30, 0, 'Sv starts on a column line'); assert.equal(x(lower, 7), 30 * 8, 'Sv is in column 9, under Nr');
+assert.match(panel, /ccf-scp-fmt-size \{ width: 45px; min-width: 45px; flex: 0 0 45px;/); assert.match(panel, /ccf-scp-fmt-keep \{ width: 45px; min-width: 45px; flex: 0 0 45px;/);
+assert.match(sync, /width: 45px;\n\s+min-width: 45px;\n\s+flex: 0 0 45px;/);
+console.log('format row grid PASS');
