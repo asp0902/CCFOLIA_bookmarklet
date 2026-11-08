@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.94
+// @version      0.1.95
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.94"),
+    version: getUserscriptVersion("0.1.95"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -653,13 +653,9 @@
         overflow: visible;
       }
 
-      /* 루비는 글자 위쪽 공간에 그려지는데, 그 줄이 메시지 첫 줄이면 공간이 행 밖이라
-         위가 잘린다. 루비가 있는 "줄"에만 위 여백을 준다.
-         (.ccf-line 은 display:block 이라 padding 이 실제로 자리를 만든다 —
-          render-root 는 inline 이라 padding 을 줘도 밀리지 않는다) */
-      .ccf-render-root .ccf-line:has(.ccf-ruby-frag) {
-        padding-top: 0.5em;
-      }
+      /* 루비는 루비 조각(.ccf-ruby-frag) 자신의 위 여백(루비 글자 높이만큼) 안에 그려진다 — 조각이 줄 안에 있으므로
+         첫 줄이어도 행 밖으로 잘리지 않는다. 예전에는 줄에도 0.5em 을 더 줘서(0.82em 과 겹쳐 합 1.32em) 루비 글자(0.62em)보다
+         훨씬 큰 빈 공간이 생겼다 → 줄 여백은 없앤다. */
 
       .MuiListItemText-secondary:has(.ccf-ruby-frag),
       li:has(.ccf-ruby-frag) p,
@@ -674,7 +670,7 @@
         white-space: pre-wrap;
         overflow: visible;
         box-sizing: border-box;
-        padding-top: 0.82em;
+        padding-top: calc(0.62em + 1px);
       }
 
       .ccf-render-root .ccf-ruby-frag::before {
@@ -3420,7 +3416,7 @@
         white-space: pre-wrap;
         overflow: visible;
         box-sizing: border-box;
-        padding-top: 0.82em;
+        padding-top: calc(0.62em + 1px);
       }
 
       .ccf-ruby-frag::before {
