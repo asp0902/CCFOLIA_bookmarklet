@@ -30,6 +30,12 @@ console.log('format row third round PASS');
 // fourth round: B/I/U/S show their glyph styles, the divider is hidden in the base rule too, a vertical line sits on the panel edge, the size box is refilled after the panel is attached
 assert.match(panel, /\{ B: "b", I: "i", U: "u", S: "s" \}\[label\]/);
 assert.match(sync, /\.ccf-inline-divider \{\n        display: none !important;/);
-assert.match(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
+// (the right border of round 4 was removed again in round 5)
 assert.match(panel, /\[300, 1200\]\.forEach/);
 console.log('format row fourth round PASS');
+// fifth round (user measurement 1.48.31): no header bottom border, no list padding, no right border, bar padding 0 and 60.67 high, bottom area rgb(18,18,18)
+assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-bar \{ border-bottom: 0; \}/); assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-list \{ padding: 0; \}/);
+assert.doesNotMatch(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
+assert.match(panel, /\.ccf-scp-fmt \{ gap: 0; margin: 0; padding: 0; background: #282828; \}/); assert.match(panel, /min-height: 60\.67px/);
+assert.match(panel, /\.ccf-scp-tabs, #\$\{PANEL_ID\} \.ccf-scp-compose \{ background: rgb\(18,18,18\); \}/);
+console.log('panel match round 2 PASS');
