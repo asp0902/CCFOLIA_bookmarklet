@@ -11,7 +11,7 @@ class HTMLElement extends El {} class HTMLTextAreaElement extends HTMLElement {}
 const ctx = vm.createContext({ HTMLElement, HTMLTextAreaElement });
 vm.runInContext(`${source.slice(a, b)}\nthis.fn = isCcfChatMessageInput;`, ctx);
 const fn = ctx.fn;
-assert.equal(fn(new HTMLTextAreaElement({ '#ccf-second-chat-panel': {} })), true, 'extra panel input');
+assert.equal(fn(new HTMLTextAreaElement({ '.ccf-scp-panel': {} })), true, 'extra panel input');
 assert.equal(fn(new HTMLTextAreaElement({}, { name: 'text' })), true, 'native chat textarea');
 assert.equal(fn(new HTMLTextAreaElement({ '.MuiDialog-root, [role="dialog"]': {} }, { name: 'text' })), false, 'a dialog textarea can be the BGM address');
 assert.equal(fn(new HTMLElement({}, {})), false, 'other input');
