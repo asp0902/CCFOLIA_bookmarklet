@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.1
+// @version      0.4.2
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.1";
+  const VERSION = "0.4.2";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -1788,6 +1788,8 @@
       #${PANEL_ID} .ccf-scp-fmt-break { flex-basis: 100%; height: 0; }
       #${PANEL_ID} .ccf-scp-fmt-btn.is-active { background: rgb(66,66,66); }
       #${PANEL_ID} .ccf-scp-fmt-align svg { display: block; margin: auto; }
+      /* 구분선 단추의 가로줄: 글자 기준선에 얹히지 않게 블록으로 두고 단추 정중앙에 놓는다(선은 viewBox 정중앙 y 7.5~8.5). */
+      #${PANEL_ID} .ccf-scp-fmt-btn svg { display: block; margin: auto; }
       /* 색 미리보기: 오리지널 패널과 같게 버튼(30×30)은 고정, 칸은 16×16 정사각형(::before), color 입력은 투명 덮개. */
       #${PANEL_ID} .ccf-scp-fmt-color { position: relative; display: block; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; box-sizing: border-box; overflow: hidden; cursor: pointer; }
       #${PANEL_ID} .ccf-scp-fmt-color::before { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); box-sizing: border-box;
