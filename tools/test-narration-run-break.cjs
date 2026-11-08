@@ -6,17 +6,13 @@ const vm = require('node:vm');
 // (the envelope on the raw text), not from a render mark that may come late or from the neighbours; the log editor follows the same rule.
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
 const bridge = read('legacy/ccfolia-roll20-css-bridge.user.js'), editor = read('log editor/index.html'), logPackage = read('legacy/ccfolia-log-package.user.js');
-const a = bridge.indexOf('  const narrationByText = new WeakMap();'), b = bridge.indexOf('  function processList(', a);
-assert(a >= 0 && b > a);
-const START = '\u2063\u2063\u2063';
-const ctx = vm.createContext({ WeakMap, INVIS_START: START, extractEnvelope: (t) => { const m = t.match(/\u2063\u2063\u2063(.*)$/s); return m ? { envelope: JSON.parse(m[1]) } : null; } });
-vm.runInContext(`${bridge.slice(a, b)}\nthis.isNarr = rowIsNarration;`, ctx);
-const li = (text, marked = false) => ({ getAttribute: () => (marked ? '1' : null), querySelector: (sel) => (sel === 'p.MuiListItemText-secondary' ? { textContent: text } : null) });
-assert.equal(ctx.isNarr(li('바라바라' + START + JSON.stringify({ blockStyle: { narration: true } }))), true, 'narration found in the envelope without any render mark');
-assert.equal(ctx.isNarr(li('그냥 말' + START + JSON.stringify({ blockStyle: {} }))), false);
-assert.equal(ctx.isNarr(li('봉투 없음')), false);
-assert.equal(ctx.isNarr(li('x', true)), true, 'the render mark still counts');
+// the bridge part (a real page with the second IIFE of the script, no stubs) is tools/test-bridge-group-runs.cjs; here only the wiring
 assert.ok(bridge.includes('return rowIsNarration(li) ? author + "\\\\u0000nr" : author;'), 'the group key uses the data based check');
+// the helper lives in the second IIFE (where processList is): it must not use names of the first IIFE (INVIS_START, extractEnvelope)
+const second = bridge.slice(bridge.indexOf('// ===== Prose Mode'));
+const helper = second.slice(second.indexOf('const narrationByText'), second.indexOf('function processList('));
+const helperCode = helper.split("\n").filter((line) => !/^\s*\/\//.test(line)).join("\n"); // without the comment lines
+assert.ok(helper.length > 200 && !/\bINVIS_START\b|\bextractEnvelope\b/.test(helperCode), 'self contained helper');
 // the log editor
 const m1 = editor.indexOf('  function mergeConsecutiveSpeakerEntries('), m2 = editor.indexOf('  function renderSelectedTabEntries(', m1);
 const ectx = vm.createContext({ Array, String, Boolean });
