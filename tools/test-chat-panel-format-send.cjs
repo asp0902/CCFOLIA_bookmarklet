@@ -74,6 +74,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     await page.evaluate(() => { for (const h of Object.values(window.__ccfScpHost.instances || {})) h.setFloating?.(true); });
     await page.waitForTimeout(400);
     console.log('floating covered:', JSON.stringify(await covered()));
+    const fd = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.formatDiag());
+    assert.equal(fd.panels.length, 2); for (const d of fd.panels) { assert.equal(d.sent, true); assert.equal(d.envelope, false, 'the last message of each panel was plain: ' + JSON.stringify(d)); assert.equal(d.input, '그냥 글'); }
+    assert.equal(fd.loaded.formatSyncRuntime, true);
     console.log('chat panel format send PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

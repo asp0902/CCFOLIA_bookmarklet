@@ -12,13 +12,13 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
     const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
     const page = await context.newPage();
     await context.route('https://ccfolia.test/**', (route) => route.fulfill({ contentType: 'text/html', body: `<style>
-      .MuiPopover-paper{position:fixed;top:60px;left:300px;width:261px;background:rgb(40,40,40);background-image:linear-gradient(rgba(255,255,255,0.092),rgba(255,255,255,0.092));box-shadow:0 5px 5px -3px rgba(1,2,3,.2);border-radius:6px;min-width:200px;color:rgb(250,250,250)}
+      .MuiPopover-paper{position:fixed;top:60px;left:1300px;width:261px;background:rgb(40,40,40);background-image:linear-gradient(rgba(255,255,255,0.092),rgba(255,255,255,0.092));box-shadow:0 5px 5px -3px rgba(1,2,3,.2);border-radius:6px;min-width:200px;color:rgb(250,250,250)}
       ul[role=menu]{margin:0;list-style:none;padding:7px 0}
       .MuiMenuItem-root{min-height:44px;padding:5px 15px;font:15px/1.4 Roboto,sans-serif;display:flex;align-items:center;color:rgb(240,240,240)}
       .nsvg{fill:currentColor}
     </style><div id="root"></div>
     <button aria-expanded="true" style="position:fixed;top:700px;left:10px;width:24px;height:64px"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
-    <button aria-expanded="true" aria-haspopup="menu" style="position:fixed;top:8px;left:540px;width:48px;height:48px;padding:12px;box-sizing:border-box"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
+    <div id="nat" class="MuiDrawer-paper" style="color:#fff;background:#222;position:fixed;top:0;left:1260px;width:340px;height:600px"><div class="MuiToolbar-root" style="height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 16px;box-sizing:border-box"><h6 style="margin:0;font-size:20px">룸 채팅</h6><button id="gearbtn" aria-expanded="true" aria-haspopup="menu" style="color:#fff;width:48px;height:48px;padding:12px;box-sizing:border-box"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button></div><div style="height:500px;overflow:auto"><ul class="MuiList-root" style="margin:0;padding:0"><li class="MuiListItem-root"><h6 class="MuiListItemText-primary">눈깅이</h6><p>안녕</p></li></ul></div><textarea name="text" style="width:300px;height:40px"></textarea></div>
     <div class="MuiPopover-paper"><ul role="menu" class="MuiMenu-list"><li role="menuitem" class="MuiMenuItem-root">네이티브 항목</li></ul></div>` }));
     await page.goto('https://ccfolia.test/rooms/test');
     await page.evaluate(() => {
@@ -33,6 +33,12 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
     assert.ok(saved, 'the native menu look was read and saved');
     assert.equal(saved.paper.backgroundColor, 'rgb(40, 40, 40)'); assert.match(saved.paper.backgroundImage, /linear-gradient/); assert.equal(saved.paper.borderRadius, '6px');
     assert.equal(saved.item.minHeight, '44px'); assert.equal(saved.item.paddingLeft, '15px'); assert.equal(saved.list.paddingTop, '7px');
+    // another MUI menu (the gear is not expanded) is not read and does not overwrite the saved look
+    await page.evaluate(() => { document.getElementById('gearbtn').setAttribute('aria-expanded', 'false'); const p = document.querySelector('.MuiPopover-paper'); p.style.backgroundColor = 'rgb(200, 0, 0)'; p.style.width = '196px'; });
+    await page.waitForTimeout(1600);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('ccf-scp-menu-style:v1')).paper.backgroundColor), 'rgb(40, 40, 40)', 'a menu of another opener did not overwrite the look');
+    await page.evaluate(() => { document.getElementById('gearbtn').setAttribute('aria-expanded', 'true'); const p = document.querySelector('.MuiPopover-paper'); p.style.backgroundColor = 'rgb(40, 40, 40)'; p.style.width = '261px'; });
+    await page.waitForTimeout(1600);
     assert.ok(saved.anchor && Math.abs(saved.anchor.dTop) < 100, 'the paper position relative to the opening button icon was saved');
     const diag = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.menuStyleDiag()); assert.ok(diag.saved && diag.lastCapture && diag.lastCapture.accepted, JSON.stringify(diag));
     // the panel's menu uses the values
