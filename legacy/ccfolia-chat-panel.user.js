@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.1
+// @version      0.5.2
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.1";
+  const VERSION = "0.5.2";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -613,10 +613,26 @@
   // 같은 값이 연속으로 나온 뒤에만 쓰고, 채택한 값은 저장해 다음 새로고침 직후부터 그 값으로 시작한다. 범위(1~30px) 밖은 이상치로 본다.
   const SCP_TAIL_KEY = "ccf-scp-list-tail:v1";
   let tailSample = null; // { value, count }
-  // 목록의 마지막 줄(내부 ul 이 있으면 그 안, 없으면 목록 직속).
+  // 목록의 마지막 줄. 줄은 네이티브 행 본보기의 복제라 li 가 아니라 div.MuiListItem-root 일 수 있고(또는 본보기 없는 .ccf-scp-row), 래퍼도 ul 이 아닐 수 있다.
+  // 그래서 태그에 기대지 않고 줄의 클래스로 목록 안 어디서든 마지막 것을 찾고, 그것도 없으면 목록의 마지막 자식을 3단계까지 따라 내려간다.
   const lastRowEl = () => {
-    const rows = (ccfScpInnerUl && ccfScpInnerUl.isConnected ? ccfScpInnerUl : listEl)?.querySelectorAll?.(":scope > li");
-    return rows && rows.length ? rows[rows.length - 1] : null;
+    if (!listEl) return null;
+    const rows = listEl.querySelectorAll(".MuiListItem-root, .ccf-scp-row, [data-index]");
+    if (rows.length) return rows[rows.length - 1];
+    let el = listEl.lastElementChild;
+    for (let depth = 0; depth < 3 && el && el.lastElementChild && el.children.length > 0 && !el.querySelector("h6, p"); depth += 1) el = el.lastElementChild;
+    return el instanceof HTMLElement && !el.classList.contains("ccf-scp-empty") ? el : null;
+  };
+  // 목록 안 구조(앞 3단계의 태그.클래스)를 진단에 내보낸다: 줄을 못 찾을 때 실제 구조를 알 수 있게.
+  const listStructure = () => {
+    const describe = (el) => (el ? `${el.tagName.toLowerCase()}.${String(el.className || "").toString().split(/\s+/).slice(0, 3).join(".")}` : null);
+    const out = [];
+    let level = listEl ? [...listEl.children].slice(-2) : [];
+    for (let depth = 0; depth < 3 && level.length; depth += 1) {
+      out.push(level.map(describe));
+      level = level.flatMap((el) => [...el.children].slice(-2));
+    }
+    return out;
   };
   // 직접 비교용: 오리지널에서 "마지막 선 → 탭 줄 시작"까지의 거리. 우리 패널의 같은 거리를 이 값에 맞춘다(여분 공간의 원인이 목록 안이든 목록과 탭 사이든 상관없이).
   let ccfScpNativeToTabs = -1;
@@ -4767,7 +4783,8 @@
           panel: INSTANCE_INDEX, nativeTail: ccfScpListTail, nativeToTabs: ccfScpNativeToTabs, panelAdjust,
           panelLastToTabs: last && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - last.getBoundingClientRect().bottom) * 100) / 100 : null,
           panelLastToListBottom: last && listEl ? Math.round((listEl.getBoundingClientRect().top + listEl.clientHeight - last.getBoundingClientRect().bottom) * 100) / 100 : null,
-          lastRow: cs(last), innerUl: cs(ccfScpInnerUl), list: cs(listEl), tabs: cs(tabsEl),
+          lastRow: cs(last), lastRowTag: last ? `${last.tagName.toLowerCase()}.${String(last.className).slice(0, 80)}` : null, innerUl: cs(ccfScpInnerUl), list: cs(listEl), tabs: cs(tabsEl),
+          structure: listStructure(), rowCount: listEl ? listEl.querySelectorAll(".MuiListItem-root, .ccf-scp-row, [data-index]").length : 0,
           between: listEl && tabsEl ? Math.round((tabsEl.getBoundingClientRect().top - listEl.getBoundingClientRect().bottom) * 100) / 100 : null
         };
       },
