@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.31
+// @version      0.3.32
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.31";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.32";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -2592,6 +2592,15 @@
     }
   }
 
+  // 채팅 입력칸(네이티브 textarea[name="text"], 추가 룸 채팅 패널)은 BGM 주소 칸이 아니다. 유튜브 주소를 채팅으로 보내려 할 때 막거나 지우지 않도록 가로채기에서 뺀다.
+  // 대화창(MUI Dialog) 안의 입력칸은 BGM 설정 주소 칸일 수 있으니 여기서 제외하지 않는다.
+  function isCcfChatMessageInput(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    if (el.closest?.("#ccf-second-chat-panel")) return true;
+    if (el instanceof HTMLTextAreaElement && el.getAttribute("name") === "text" && !el.closest?.('.MuiDialog-root, [role="dialog"]')) return true;
+    return false;
+  }
+
   function handleCcfBgmUrlKeydown(event) {
     if (event.key !== "Enter") {
       return;
@@ -2599,6 +2608,10 @@
 
     const target = event.target;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    if (isCcfChatMessageInput(target)) {
       return;
     }
 
@@ -2655,6 +2668,10 @@
     const input = [...form.querySelectorAll("input, textarea")]
       .find((candidate) => {
         if (!(candidate instanceof HTMLInputElement) && !(candidate instanceof HTMLTextAreaElement)) {
+          return false;
+        }
+
+        if (isCcfChatMessageInput(candidate)) {
           return false;
         }
 
@@ -2740,7 +2757,7 @@
       return false;
     }
 
-    if (isCcfNativeBgmEditGraceActive()) {
+    if (isCcfNativeBgmEditGraceActive() || isCcfChatMessageInput(input)) {
       return false;
     }
 
@@ -2767,7 +2784,7 @@
       return null;
     }
 
-    if (isCcfNativeBgmEditGraceActive()) {
+    if (isCcfNativeBgmEditGraceActive() || isCcfChatMessageInput(input)) {
       return null;
     }
 
