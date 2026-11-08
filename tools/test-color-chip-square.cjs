@@ -19,3 +19,11 @@ const sk = rule(sync, '.ccf-inline-toolbar .ccf-inline-size-input,\n      .ccf-i
 assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt'), /gap: 0/); assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt-btn'), /border: 0/);
 assert.match(rule(sync, '.ccf-inline-toolbar'), /column-gap: 0/); assert.match(sync, /border-width: 0 !important/);
 console.log('format row follow-up PASS');
+// third round: the bar is #282828 with only a top line, no divider between the buttons, the size box shows the current font size like the original
+assert.match(rule(panel, '#${PANEL_ID} .ccf-scp-fmt'), /background: #282828/);
+assert.match(panel, /border-top: 1px solid rgba\(255,255,255,\.12\); border-bottom: 0/);
+assert.match(sync, /\.ccf-inline-toolbar \.ccf-inline-divider \{ display: none !important; \}/);
+assert.match(sync, /border-width: 1px 0 0 0 !important/); assert.match(sync, /background: #282828;\n        color: #fff;\n        box-shadow: none;/);
+assert.match(panel, /sizeInput\.placeholder = !fmtState\.size && current > 0 \? String\(current\) : "크기"/);
+assert.doesNotMatch(panel, /ccf-scp-fmt-color\.is-set \{ background/);
+console.log('format row third round PASS');

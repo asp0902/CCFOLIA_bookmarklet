@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.72
+// @version      0.1.73
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.72"),
+    version: getUserscriptVersion("0.1.73"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3818,9 +3818,9 @@
         padding: 6px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 0;
-        background: rgba(32, 32, 32, 0.94);
+        background: #282828;
         color: #fff;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+        box-shadow: none;
         font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
@@ -3839,6 +3839,14 @@
         border-radius: 0;
       }
 
+      /* 서식 줄 바: 배경 #282828, 외곽선은 맨 위 한 줄만(네이티브 입력 영역 구분선 색). 버튼 사이 구분선도 없앤다. */
+      .ccf-inline-toolbar[data-ccf-inline-toolbar="1"] {
+        border-width: 1px 0 0 0 !important;
+        border-style: solid !important;
+        box-shadow: none !important;
+        padding: 0;
+      }
+      .ccf-inline-toolbar .ccf-inline-divider { display: none !important; }
       /* 서식 버튼은 외곽선 없이 붙여 둔다(호버·활성은 배경으로 구분). 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
       .ccf-inline-toolbar .ccf-toggle,
       .ccf-inline-toolbar .ccf-inline-tool,

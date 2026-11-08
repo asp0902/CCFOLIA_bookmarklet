@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.72
+// @version      0.2.73
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.72";
+  const VERSION = "0.2.73";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1704,7 +1704,7 @@
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
       #${PANEL_ID} .ccf-scp-tab { box-sizing: border-box; min-width: 48px; height: 48px; padding: 12px 16px;
         font-size: 14px; font-weight: 700; letter-spacing: .02857em; line-height: 1.75; }
-      #${PANEL_ID} .ccf-scp-fmt { gap: 0; margin: 0; padding: 6px; background: rgba(32,32,32,.94); }
+      #${PANEL_ID} .ccf-scp-fmt { gap: 0; margin: 0; padding: 6px; background: #282828; }
       #${PANEL_ID} .ccf-scp-fmt-btn { width: 30px; min-width: 30px; height: 30px; padding: 0; border-radius: 0;
         background: rgb(40,40,40); border: 0; font-size: 12px; font-weight: 400; }
       #${PANEL_ID} .ccf-scp-fmt-btn:hover { background: rgb(55,55,55); }
@@ -1716,7 +1716,7 @@
       /* 높이를 네이티브 입력 영역(탭 48 + 이름 56 + 주사위 39 + 서식 81 + 입력 100 + 구분선 1 + 하단 37)에 맞춘다. */
       #${PANEL_ID} .ccf-scp-compose { padding-bottom: 0; }
       #${PANEL_ID} .ccf-scp-fmt { box-sizing: border-box; min-height: 81px; margin-bottom: 6px; align-content: flex-start;
-        border-top: .67px solid rgba(255,255,255,.12); border-bottom: .67px solid rgba(255,255,255,.12); }
+        border-top: 1px solid rgba(255,255,255,.12); border-bottom: 0; }
       #${PANEL_ID} .ccf-scp-inputwrap { box-sizing: border-box; min-height: 100px; }
       #${PANEL_ID} .ccf-scp-actions { margin-top: 0; padding: 4px 16px 8px; border-top: 1px solid rgba(255,255,255,.12); box-sizing: border-box; }
       #${PANEL_ID} .ccf-scp-status { min-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
@@ -1729,7 +1729,8 @@
       #${PANEL_ID} .ccf-scp-fmt-color::before { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); box-sizing: border-box;
         border: 1px solid rgba(255,255,255,.5); background: var(--ccf-chip-color, #fff); pointer-events: none; }
       #${PANEL_ID} .ccf-scp-fmt-color input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
-      #${PANEL_ID} .ccf-scp-fmt-color.is-set { background: rgb(66,66,66); }
+      #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.55); }
+      #${PANEL_ID} .ccf-scp-fmt-size.is-current::placeholder { color: rgba(255,255,255,.92); opacity: 1; }
       /* 글자 크기 칸과 유지 버튼은 같은 가로 길이. */
       #${PANEL_ID} .ccf-scp-fmt-keep { width: 44px; min-width: 44px; flex: 0 0 44px; }
       #${PANEL_ID} .ccf-scp-fmt-size { width: 44px; min-width: 44px; flex: 0 0 44px; padding: 0 4px; text-align: center; color: inherit; font-size: 13px; }
@@ -2327,6 +2328,11 @@
       colorInput.parentElement.style.setProperty("--ccf-chip-color", colorInput.value); bgInput.parentElement.style.setProperty("--ccf-chip-color", bgInput.value);
       colorInput.parentElement.classList.toggle("is-set", !!fmtState.color); bgInput.parentElement.classList.toggle("is-set", !!fmtState.bg);
       sizeInput.value = fmtState.size;
+      // 오리지널처럼: 크기를 지정하지 않았으면 지금 글자 크기(입력칸의 글자 크기)를 흐리지 않게 보여 준다.
+      const current = inputEl ? Math.round(parseFloat(getComputedStyle(inputEl).fontSize)) : 0;
+      sizeInput.classList.toggle("is-current", !fmtState.size && current > 0);
+      sizeInput.placeholder = !fmtState.size && current > 0 ? String(current) : "크기";
+      sizeInput.title = fmtState.size ? `글자 크기: ${fmtState.size}` : (current > 0 ? `현재 글자 크기: ${current}px (기본)` : "글자 크기");
       keepBtn.classList.toggle("is-active", fmtState.keep); parenBtn.classList.toggle("is-active", fmtState.paren);
     };
     try {
@@ -2464,6 +2470,7 @@
 
     document.body.appendChild(panel);
     panelEl = panel;
+    fmtUiSync?.(); // 화면에 붙은 뒤에야 입력칸 글자 크기를 읽을 수 있으니 크기 칸을 다시 채운다
 
     // 팝업(캐릭터 목록·팔레트·색상) 바깥을 클릭하면 닫는다. 각 팝업의 여는 버튼은
     // stopPropagation 하거나 자기 영역 안이라 이 검사에서 제외된다.
