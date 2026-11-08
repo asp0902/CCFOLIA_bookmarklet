@@ -17,6 +17,7 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
       .MuiMenuItem-root{min-height:44px;padding:5px 15px;font:15px/1.4 Roboto,sans-serif;display:flex;align-items:center;color:rgb(240,240,240)}
       .nsvg{fill:currentColor}
     </style><div id="root"></div>
+    <button aria-expanded="true" aria-haspopup="menu" style="position:fixed;top:8px;left:1500px;width:48px;height:48px;padding:12px;box-sizing:border-box"><svg class="nsvg" viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg></button>
     <div class="MuiPopover-paper"><ul role="menu" class="MuiMenu-list"><li role="menuitem" class="MuiMenuItem-root">네이티브 항목</li></ul></div>` }));
     await page.goto('https://ccfolia.test/rooms/test');
     await page.evaluate(() => {
@@ -31,11 +32,17 @@ assert.match(source, /copy\.setAttribute\("fill", "currentColor"\)/);
     assert.ok(saved, 'the native menu look was read and saved');
     assert.equal(saved.paper.backgroundColor, 'rgb(40, 40, 40)'); assert.match(saved.paper.backgroundImage, /linear-gradient/); assert.equal(saved.paper.borderRadius, '6px');
     assert.equal(saved.item.minHeight, '44px'); assert.equal(saved.item.paddingLeft, '15px'); assert.equal(saved.list.paddingTop, '7px');
+    assert.ok(saved.anchor, 'the paper position relative to the opening button icon was saved');
     // the panel's menu uses the values
     await page.locator('#ccf-second-chat-panel .ccf-scp-gear').click();
     const ours = await page.evaluate(() => { const m = document.querySelector('.ccf-scp-menu'), i = m.querySelector('.ccf-scp-menu-item'), pc = getComputedStyle(m), ic = getComputedStyle(i); return { bg: pc.backgroundColor, img: pc.backgroundImage.slice(0, 20), radius: pc.borderRadius, shadow: pc.boxShadow, padTop: pc.paddingTop, itemH: ic.minHeight, itemPadL: ic.paddingLeft, itemFont: ic.fontSize, itemColor: ic.color }; });
     assert.equal(ours.bg, 'rgb(40, 40, 40)'); assert.match(ours.img, /linear-gradient/); assert.equal(ours.radius, '6px'); assert.match(ours.shadow, /rgba\(1, 2, 3/); assert.equal(ours.padTop, '7px');
     assert.equal(ours.itemH, '44px'); assert.equal(ours.itemPadL, '15px'); assert.equal(ours.itemFont, '15px'); assert.equal(ours.itemColor, 'rgb(240, 240, 240)');
+    // placed like the original: paper top = icon top + dTop, paper right = icon right - dRight; opens from the top-right with a scale+opacity transition
+    const pos = await page.evaluate(() => { const m = document.querySelector('.ccf-scp-menu'), g = document.querySelector('.ccf-scp-gear svg').getBoundingClientRect(), r = m.getBoundingClientRect(); return { top: r.top, right: r.right, gTop: g.top, gRight: g.right, tr: getComputedStyle(m).transitionProperty, to: m.style.transformOrigin }; });
+    assert.ok(Math.abs(pos.top - (pos.gTop + saved.anchor.dTop)) <= 1.5, JSON.stringify(pos));
+    assert.ok(Math.abs(pos.right - (pos.gRight - saved.anchor.dRight)) <= 1.5 || pos.right >= 1600 - 8, JSON.stringify(pos));
+    assert.match(pos.tr, /opacity/); assert.match(pos.tr, /transform/); assert.ok(pos.to);
     // the gear icon: white, not black (an svg without its own fill takes the button colour)
     const fill = await page.evaluate(() => { const g = document.querySelector('.ccf-scp-gear'); g.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M2 2h20v20H2z"/></svg>'; return { fill: getComputedStyle(g.querySelector('path')).fill, color: getComputedStyle(g).color }; });
     assert.equal(fill.fill, fill.color, 'the icon takes the button colour: ' + JSON.stringify(fill));

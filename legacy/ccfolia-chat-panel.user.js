@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.4
+// @version      0.5.5
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.4";
+  const VERSION = "0.5.5";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -2940,6 +2940,13 @@
         item: { minHeight: ic.minHeight, paddingTop: ic.paddingTop, paddingRight: ic.paddingRight, paddingBottom: ic.paddingBottom, paddingLeft: ic.paddingLeft, fontFamily: ic.fontFamily, fontSize: ic.fontSize, fontWeight: ic.fontWeight, lineHeight: ic.lineHeight, letterSpacing: ic.letterSpacing, color: ic.color },
         width: Math.round(paper.getBoundingClientRect().width)
       };
+      snapshot.paper.transformOrigin = pc.transformOrigin; snapshot.paper.transition = pc.transition;
+      // 메뉴를 연 오리지널 버튼(MUI 가 aria-expanded="true" 를 단다)의 아이콘 기준으로 종이의 위치를 잰다: 아이콘 위쪽 → 종이 위쪽, 종이 오른쪽 → 아이콘 오른쪽.
+      const anchorBtn = [...document.querySelectorAll('[aria-expanded="true"]')].find((b) => b instanceof HTMLElement && !b.closest(".ccf-scp-panel") && b.querySelector("svg"));
+      if (anchorBtn) {
+        const ir = anchorBtn.querySelector("svg").getBoundingClientRect(), pr = paper.getBoundingClientRect();
+        if (ir.width > 0 && pr.width > 0) snapshot.anchor = { dTop: Math.round((pr.top - ir.top) * 10) / 10, dRight: Math.round((ir.right - pr.right) * 10) / 10 };
+      }
       if (!snapshot.paper.backgroundColor || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(snapshot.paper.backgroundColor)) return;
       localStorage.setItem(SCP_MENU_STYLE_KEY, JSON.stringify(snapshot));
     } catch (e) { /* 못 읽으면 기본 모양 */ }
@@ -2982,10 +2989,19 @@
       }
     }
     document.body.appendChild(menu);
-    const r = anchor.getBoundingClientRect();
-    menu.style.top = `${Math.round(r.bottom + 4)}px`;
-    menu.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)))}px`;
+    const ar = (anchor.querySelector("svg") || anchor).getBoundingClientRect();
+    const rel = look && look.anchor;
+    const top = rel ? ar.top + rel.dTop : ar.bottom + 4 + 4;
+    const right = rel ? ar.right - rel.dRight : ar.right;
+    menu.style.top = `${Math.round(Math.max(8, top))}px`;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, right - menu.offsetWidth)))}px`;
+    // 열림 애니메이션: MUI Grow 처럼 위(오른쪽) 원점에서 scale + opacity (opacity 338ms, transform 225ms).
+    const origin = look && look.paper && look.paper.transformOrigin;
+    menu.style.transformOrigin = origin && /px/.test(origin) ? origin : "100% 0";
+    menu.style.opacity = "0"; menu.style.transform = "scale(0.75, 0.5625)";
+    menu.style.transition = "opacity 338ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)";
     gearMenuEl = menu;
+    requestAnimationFrame(() => { if (gearMenuEl === menu) { menu.style.opacity = "1"; menu.style.transform = "none"; } });
     document.addEventListener("mousedown", onGearMenuOutside, true);
     document.addEventListener("keydown", onGearMenuKey, true);
   }
@@ -3374,8 +3390,10 @@
         if (!rightIcon || r.right > rightIcon.getBoundingClientRect().right) rightIcon = el;
       }
       if (rightIcon) {
-        const ir = rightIcon.getBoundingClientRect();
-        const gap = Math.max(8, Math.round(barRect.right - ir.right));
+        // 간격은 버튼이 아니라 그 안의 아이콘(svg) 오른쪽 끝에서 잰다. 우리 톱니는 32px 버튼에 24px 아이콘이 가운데라 버튼 안쪽 여백 4px 를 뺀다.
+        const iconBox = rightIcon instanceof SVGElement ? rightIcon : (rightIcon.querySelector?.("svg") || rightIcon);
+        const ir = iconBox.getBoundingClientRect();
+        const gap = Math.max(4, Math.round(barRect.right - ir.right - 4));
         set("--scp-header-padx", `${gap}px`);
         const iconColor = getComputedStyle(rightIcon).color;
         set("--scp-close-color", iconColor);
