@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.34";
-  const BUILD_ID = "2026-10-20-onoff-centered-207";
+  const VERSION = "0.3.35";
+  const BUILD_ID = "2026-11-08-toolkit-diag-208";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -213,6 +213,8 @@
     closePanel,
     togglePanel,
     loadFeature: (featureOrId) => featureRuntime.load(featureOrId),
+    // 어떤 스크립트가 어느 버전으로, 어디서 받아져 돌고 있는지: 로더 버전·빌드, 스크립트별 받은 경로(네트워크/IndexedDB 백업)·응답, 각 스크립트가 스스로 등록한 버전(registry), 주입된 script 태그.
+    diag: () => collectToolkitDiag(),
     refreshCache: () => featureRuntime.refreshCache(),
     storage: {
       getSetting,
@@ -233,6 +235,23 @@
   closePanel();
   persistMeta().catch(() => {});
   restoreFeatureStates().catch(reportError);
+
+  function collectToolkitDiag() {
+    let registry = {};
+    try {
+      const scripts = JSON.parse(localStorage.getItem("ccf-suite-registry-v1") || "{}").scripts || {};
+      for (const [id, info] of Object.entries(scripts)) registry[id] = { version: info?.version || null, lastSeenAt: info?.lastSeenAt || null, lastSeenUrl: String(info?.lastSeenUrl || "").slice(0, 60) };
+    } catch (error) { registry = { error: String(error) }; }
+    return {
+      loader: { version: VERSION, buildId: BUILD_ID, baseUrl: state.baseUrl.href, sessionId: SESSION_ID },
+      loadLog: (window.__CAPYBARA_LOAD_LOG__ || []).slice(-60),
+      registry,
+      scriptTags: [...document.querySelectorAll("script[data-capybara-toolkit-script]")].map((s) => ({ marker: s.dataset.capybaraToolkitScript, src: s.src })),
+      loaderTags: [...document.querySelectorAll("script[data-capybara-toolkit-loader]")].map((s) => s.src),
+      extension: !!document.querySelector("script[data-capybara-toolkit-loader]") ? "script tag present" : "no loader tag (bookmarklet or inline)"
+    };
+  }
+  window.__CCF_TOOLKIT_VERSIONS__ = () => collectToolkitDiag();
 
   function resetExistingToolkit(existing) {
     try {
@@ -1351,11 +1370,14 @@
 
       const baseUrl = env.urlFor(path);
       const url = withCacheBuster(baseUrl);
+      const log = (entry) => { try { (window.__CAPYBARA_LOAD_LOG__ = window.__CAPYBARA_LOAD_LOG__ || []).push({ at: new Date().toISOString(), featureId, path, ...entry }); } catch (e) { /* diag only */ } };
       try {
         await env.addScript(url, marker);
+        log({ via: "network", url });
         return;
       } catch (scriptError) {
         const cached = await env.storeGet(STORE_BUNDLES, `bundle:script:${path}`);
+        log({ via: "network-failed", url, error: String(scriptError?.message || scriptError).slice(0, 120), idbFallback: !!cached?.source, idbCachedAt: cached?.cachedAt || null, idbToolkitVersion: cached?.toolkitVersion || null });
         if (!cached?.source) throw scriptError;
         try {
           env.runSource(cached.source, baseUrl);

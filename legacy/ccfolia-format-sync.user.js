@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.87
+// @version      0.1.88
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.87"),
+    version: getUserscriptVersion("0.1.88"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -879,6 +879,12 @@
       /* 묶음 안(이어지는 행) 규칙(padding-top: 0)보다 확실히 앞서도록 이어지는 행 조건을 같이 쓴다. */
       .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"]),
       .ccf-scp-row.is-cont:has(.ccf-render-root[data-ccf-break="1"]) {
+        padding-top: 16px !important;
+        margin-top: 8px !important;
+      }
+      /* 나레이션이기도 한 구분선 줄: 나레이션 이어짐 규칙(padding-top: 0, 명시도 0,4,0)보다 앞서야 한다. */
+      .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[data-ccf-break="1"][data-ccf-narration="1"]),
+      .ccf-scp-row.is-cont:has(.ccf-render-root[data-ccf-break="1"][data-ccf-narration="1"]) {
         padding-top: 16px !important;
         margin-top: 8px !important;
       }
