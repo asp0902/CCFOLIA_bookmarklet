@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.4
+// @version      0.4.5
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.4";
+  const VERSION = "0.4.5";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -1103,6 +1103,15 @@
     let i = 0;
     while (i < input.length) {
       if (input[i] === "{") {
+        // 이미지: {i:주소|설명|} — 붙여넣은 이미지. 보이는 글자는 설명(없으면 "이미지"), 이미지는 서식 run 으로 싣는다(format-sync 가 그린다).
+        const image = /^\{i:([^|{}\n]{1,4000})\|([^|{}\n]{0,80})\|\}/.exec(input.slice(i, i + 4100));
+        if (image) {
+          const alt = image[2].trim().slice(0, 80) || "이미지";
+          runs.push({ start: text.length, end: text.length + alt.length, style: { imageUrl: image[1], imageAlt: alt } });
+          text += alt;
+          i += image[0].length;
+          continue;
+        }
         const head = /^\{([cbsan]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
         if (head) { spans.push({ key: head[1], value: head[2], start: text.length }); i += head[0].length; continue; }
       }
@@ -2449,6 +2458,24 @@
     inputEl.placeholder = "메시지를 입력";
     // 다른 스크립트가 이 입력창을 채팅 입력창으로 오인해 가공하지 않도록 표시.
     inputEl.setAttribute(SAFE_ATTR, "1");
+    // 이미지 붙여넣기: 오리지널 입력칸과 같은 처리(서식 연동의 공개 함수)를 쓴다. 이미지 파일은 Firestore 에 저장해 표식 {i:주소|설명|} 를 커서 위치에 넣고, 일반 글자 붙여넣기는 그대로 둔다.
+    inputEl.addEventListener("paste", (e) => {
+      const api = window.__CCF_FORMAT_SYNC_IMAGE_PASTE__;
+      if (!api || typeof api.handle !== "function") return;
+      const target = inputEl;
+      try {
+        api.handle(e, (imageUrl, alt) => {
+          if (!target || !target.isConnected) return;
+          const clean = (value, max) => String(value || "").replace(/[|{}\r\n]+/g, " ").trim().slice(0, max);
+          const marker = `{i:${String(imageUrl).replace(/[|{}\s]/g, "")}|${clean(alt, 40)}|}`;
+          const start = target.selectionStart ?? target.value.length, end = target.selectionEnd ?? start;
+          target.value = target.value.slice(0, start) + marker + target.value.slice(end);
+          target.setSelectionRange(start + marker.length, start + marker.length);
+          target.dispatchEvent(new Event("input", { bubbles: true }));
+          target.focus();
+        });
+      } catch (error) { console.warn("[ccf-chat-panel] image paste failed", error); }
+    }, true);
     // ` 키: 글자를 넣지 않고 캐릭터 선택 목록을 연다(코코포리아의 단축키와 같은 동작).
     inputEl.addEventListener("keydown", (e) => {
       // 한글 입력 상태에서는 e.key 가 "Process"/"ㅂ" 등으로 오므로 물리 키(code)로 판단한다.
