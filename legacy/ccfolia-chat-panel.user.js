@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.5
+// @version      0.4.6
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.5";
+  const VERSION = "0.4.6";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -407,6 +407,7 @@
   const olderMessages = new Map();
   let olderExhausted = false;
   let olderLoading = false;
+  let olderError = ""; // 마지막 이전 대화 불러오기 실패 이유(빈 탭 안내에 보여 주고, 탭을 다시 고르면 재시도한다)
   const OLDER_PAGE = 100;
 
   function decodeFsValue(v) {
@@ -470,9 +471,11 @@
         added += 1;
       }
       if (rows.length < OLDER_PAGE) olderExhausted = true;
+      olderError = "";
       return added > 0;
     } catch (error) {
       console.warn("[ccf-chat-panel] older messages failed", error);
+      olderError = String(error?.message || error).slice(0, 120);
       return false;
     } finally {
       olderLoading = false;
@@ -849,7 +852,7 @@
   let fillChannel = "";
   function fillIfShort() {
     if (!listEl || olderLoading || olderExhausted) return;
-    if (fillChannel !== currentChannel) { fillChannel = currentChannel; fillRounds = 0; }
+    if (fillChannel !== currentChannel) { fillChannel = currentChannel; fillRounds = 0; if (olderError) olderExhausted = false; }
     const short = listEl.scrollHeight <= listEl.clientHeight + 40;
     if (!short || fillRounds >= 15) return;
     fillRounds += 1;
@@ -928,7 +931,9 @@
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "ccf-scp-empty";
-      empty.textContent = "이 탭에는 아직 메시지가 없습니다.";
+      empty.textContent = olderError
+        ? `이 탭에는 아직 메시지가 없습니다. (이전 대화를 불러오지 못했습니다: ${olderError})`
+        : (olderLoading ? "이전 대화를 불러오는 중…" : "이 탭에는 아직 메시지가 없습니다.");
       listEl.appendChild(empty);
       return;
     }
@@ -4373,6 +4378,20 @@
         };
       },
       // 메뉴 항목을 못 찾을 때 원인 확인용.
+      // 다른 탭이 비어 보일 때: 저장소가 가진 채널별 개수, 따로 불러온 이전 대화, 불러오기 상태와 실패 이유.
+      olderDiag() {
+        const slice = getRoomMessagesSlice();
+        const groups = {};
+        for (const [key, ids] of Object.entries(slice?.idsGroupBy || {})) groups[key] = Array.isArray(ids) ? ids.length : null;
+        const olderByChannel = {};
+        for (const old of olderMessages.values()) olderByChannel[old.channel] = (olderByChannel[old.channel] || 0) + 1;
+        return {
+          panel: INSTANCE_INDEX, currentChannel, storeChannels: groups, olderByChannel, olderTotal: olderMessages.size,
+          olderExhausted, olderLoading, olderError, fillRounds, fillChannel,
+          list: listEl ? { client: listEl.clientHeight, scroll: listEl.scrollHeight } : null,
+          nativeTabs: readNativeTabs().map((t) => t.channel)
+        };
+      },
       menuDiag() {
         return [...document.querySelectorAll('[role="menu"]')]
           .filter(isVisible)
