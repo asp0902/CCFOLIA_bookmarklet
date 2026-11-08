@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.29
+// @version      0.3.30
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.29";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.30";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1967,6 +1967,23 @@
     });
   }
 
+  // 새로고침 직후 같은 곡이 두 겹으로 들리는 문제 진단용 집계(재생 호출만 세고 동작은 바꾸지 않는다).
+  // 콘솔에서 __ccfBgmCounts() 로 읽는다: 미디어 play 호출·WebAudio start/stop 횟수와 최근 기록.
+  const ccfBgmCountLog = [];
+  const ccfBgmCountTotals = { mediaPlay: 0, webAudioStart: 0, webAudioStop: 0 };
+  const ccfBgmCountStartedAt = performance.now();
+  function noteCcfBgmCount(kind, detail) {
+    ccfBgmCountTotals[kind] += 1;
+    ccfBgmCountLog.push({ t: Math.round(performance.now() - ccfBgmCountStartedAt), kind, ...detail });
+    if (ccfBgmCountLog.length > 200) ccfBgmCountLog.shift();
+  }
+  window.__ccfBgmCounts = () => {
+    const media = [...document.querySelectorAll("audio, video")].map((m) => ({ tag: m.tagName, paused: m.paused, t: Math.round(m.currentTime), src: String(m.currentSrc || m.src || "").slice(-60), inPanel: !!m.closest("#ccf-second-chat-panel") }));
+    const out = { totals: { ...ccfBgmCountTotals }, media, log: ccfBgmCountLog.slice(-60), panelOpen: !!document.getElementById("ccf-second-chat-panel") };
+    try { window.copy?.(JSON.stringify(out)); } catch (_) {}
+    return out;
+  };
+
   function hookCcfBgmNativeMediaProgress() {
     if (!window.HTMLMediaElement?.prototype) {
       return;
@@ -1986,6 +2003,7 @@
 
     const patchedMediaPlay = function patchedCcfBgmMediaPlay() {
       const media = this;
+      try { noteCcfBgmCount("mediaPlay", { tag: media.tagName, src: String(media.currentSrc || media.src || "").slice(-60), loop: media.loop, inDoc: media.isConnected }); } catch (_) {}
       const playResult = originalPlay.apply(media, arguments);
       if (!chatNotifierLifecycle.isActive()) {
         return playResult;
@@ -2040,6 +2058,7 @@
       if (!chatNotifierLifecycle.isActive()) {
         return originalStart.apply(this, arguments);
       }
+      try { noteCcfBgmCount("webAudioStart", { dur: Math.round((this.buffer?.duration || 0) * 10) / 10, loop: this.loop, ctx: this.context?.state }); } catch (_) {}
       let trackingState = null;
       try {
         trackingState = createCcfWebAudioTrackingState(this, when, offset, duration);
@@ -2082,6 +2101,7 @@
       if (!chatNotifierLifecycle.isActive()) {
         return originalStop.apply(this, arguments);
       }
+      try { noteCcfBgmCount("webAudioStop", { dur: Math.round((this.buffer?.duration || 0) * 10) / 10 }); } catch (_) {}
       try {
         if (ccfBgmLastWebAudio?.source === this) {
           ccfBgmLastWebAudio.stopped = true;
