@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.90
+// @version      0.1.91
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -13,11 +13,13 @@
 
 (() => {
   "use strict";
+  // "[CCF NAR]" 진단 로그는 줄 렌더·Enter마다 DOM 노드(%o)를 찍어 콘솔이 열려 있으면 크게 느려진다 → 기본은 끄고 localStorage.ccfNarLog="1" 일 때만 낸다.
+  const ccfNarInfo = (...args) => { try { if (localStorage.getItem("ccfNarLog") === "1") console.info(...args); } catch (_) { /* 저장소 접근 불가 */ } };
 
   // 스크립트 로드 자체 확인용 - IIFE 진입 직후 무조건 실행.
   // ⚠ 여기서 CCF_FORMAT_SYNC_SCRIPT_INFO 를 참조하면 안 된다(아래에서 const 선언 → TDZ).
   //   버전은 리터럴로 두고 상단 @version 과 함께 올릴 것.
-  console.info("[CCF NAR] format-sync IIFE entry v0.1.54 @", new Date().toISOString());
+  ccfNarInfo("[CCF NAR] format-sync IIFE entry v0.1.54 @", new Date().toISOString());
 
   // ensureRenderOverlay가 React 소유 text node를 .ccf-original-hidden 래퍼로
   // 재부모화하므로, React가 원래 부모 기준으로 removeChild/insertBefore를 호출하면
@@ -97,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.90"),
+    version: getUserscriptVersion("0.1.91"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -297,16 +299,16 @@
   const NARRATION_GUARDIANS = new WeakMap();
 
   const _ccfEnabled = isCcfSuiteScriptEnabled(CCF_FORMAT_SYNC_SCRIPT_INFO.id);
-  console.info("[CCF NAR] suite-script-enabled gate: %o, scriptId=%o", _ccfEnabled, CCF_FORMAT_SYNC_SCRIPT_INFO.id);
+  ccfNarInfo("[CCF NAR] suite-script-enabled gate: %o, scriptId=%o", _ccfEnabled, CCF_FORMAT_SYNC_SCRIPT_INFO.id);
   if (!_ccfEnabled) {
     return;
   }
-  console.info("[CCF NAR] initRenderer about to run");
+  ccfNarInfo("[CCF NAR] initRenderer about to run");
   // initRenderer() throw 가 같은 <script> tag 안 다음 IIFE 들을 차단하지 않도록 격리.
   // throw 가 발생해도 stack trace 를 console.error 로 남겨 진단 가능하게 유지.
   try {
     initRenderer();
-    console.info("[CCF NAR] initRenderer completed");
+    ccfNarInfo("[CCF NAR] initRenderer completed");
   } catch (error) {
     console.error("[CCF NAR] initRenderer threw, continuing to next IIFE", error);
   }
@@ -1625,12 +1627,12 @@
     if (!(el instanceof HTMLElement)) return;
 
     // [CCF NAR] 진입 즉시 무조건 로그
-    console.info("[CCF NAR] applyNarrationMessageLayout ENTRY: narration=%o, el=%o", narration, el);
+    ccfNarInfo("[CCF NAR] applyNarrationMessageLayout ENTRY: narration=%o, el=%o", narration, el);
 
     if (narration) {
       el.setAttribute(CCF_NARRATION_ATTR, "1");
       // [CCF NAR] render-root에 narration 어트리뷰트 부착
-      console.info("[CCF NAR] render-root attr SET, el=%o", el);
+      ccfNarInfo("[CCF NAR] render-root attr SET, el=%o", el);
     } else {
       el.removeAttribute(CCF_NARRATION_ATTR);
     }
@@ -1656,7 +1658,7 @@
 
     if (narration) {
       item.setAttribute(CCF_NARRATION_ATTR, "1");
-      console.info("[CCF NAR] LI item attr SET, item=%o", item);
+      ccfNarInfo("[CCF NAR] LI item attr SET, item=%o", item);
 
       // [v0.0.42] 인라인 스타일 강제 주입 - CSS 미적용 케이스에도 동작
       forceInlineNarrationStyles(item, el);
@@ -1718,7 +1720,7 @@
       node.style.setProperty("padding-right", "0", "important");
     });
 
-    console.info("[CCF NAR] forceInlineNarrationStyles: hidden=%o, item=%o", hiddenCount, item);
+    ccfNarInfo("[CCF NAR] forceInlineNarrationStyles: hidden=%o, item=%o", hiddenCount, item);
   }
 
   function clearForcedInlineNarrationStyles(item) {
@@ -1772,7 +1774,7 @@
     });
 
     NARRATION_GUARDIANS.set(item, observer);
-    console.info("[CCF NAR] guardian installed on item=%o", item);
+    ccfNarInfo("[CCF NAR] guardian installed on item=%o", item);
   }
 
   function uninstallNarrationGuardian(item) {
@@ -2693,6 +2695,8 @@
 
 (() => {
   "use strict";
+  // "[CCF NAR]" 진단 로그는 줄 렌더·Enter마다 DOM 노드(%o)를 찍어 콘솔이 열려 있으면 크게 느려진다 → 기본은 끄고 localStorage.ccfNarLog="1" 일 때만 낸다.
+  const ccfNarInfo = (...args) => { try { if (localStorage.getItem("ccfNarLog") === "1") console.info(...args); } catch (_) { /* 저장소 접근 불가 */ } };
 
   const CCF_FS_RUNTIME = window.__CCF_FORMAT_SYNC_RUNTIME__ || null;
   const ccfFsWithSignal = CCF_FS_RUNTIME?.withSignal || ((options) => {
@@ -2918,7 +2922,7 @@
   }
 
   function init() {
-    console.info("[CCF NAR] init() called");
+    ccfNarInfo("[CCF NAR] init() called");
     injectStyles();
     cleanupKnownArtifacts();
     ensureUi();
@@ -2932,12 +2936,12 @@
         if (!ccfFsIsActive()) return;
         const toolbars = document.querySelectorAll(INLINE_TOOLBAR_SELECTOR);
         if (toolbars.length === 0) {
-          console.info("[CCF NAR] init retry at %oms: no toolbar found, calling ensureUi()", delay);
+          ccfNarInfo("[CCF NAR] init retry at %oms: no toolbar found, calling ensureUi()", delay);
           ensureUi();
         }
       }, delay);
     });
-    console.info("[CCF NAR] init() complete - toolbar should now exist");
+    ccfNarInfo("[CCF NAR] init() complete - toolbar should now exist");
     console.info("[CCF] formatter userscript loaded (v0.0.5: %NEWLINE% + direct image URL)");
   }
 
@@ -4719,7 +4723,7 @@
     bindEditorInputSync();
     // [CCF NAR] ensureUi가 호출됐는지 확인. 호출되면 bindEnterSendForEditors도 매번 실행됨
     if (!window.__CCF_NAR_ENSUREUI_LOGGED) {
-      console.info("[CCF NAR] ensureUi() FIRST PASS — bindEnterSendForEditors invoked");
+      ccfNarInfo("[CCF NAR] ensureUi() FIRST PASS — bindEnterSendForEditors invoked");
       window.__CCF_NAR_ENSUREUI_LOGGED = true;
     }
   }
@@ -4740,7 +4744,7 @@
 
     const composers = findComposerBars();
     if (composers.length === 0) {
-      console.info("[CCF NAR] ensureFormatButtons: no visible composer bars found (submit buttons=%o)",
+      ccfNarInfo("[CCF NAR] ensureFormatButtons: no visible composer bars found (submit buttons=%o)",
         document.querySelectorAll('button[type="submit"]').length);
     }
     for (const composer of composers) {
@@ -12806,25 +12810,28 @@
       editor.addEventListener("keydown", (event) => {
         // [CCF NAR] keydown 진입 가장 윗단 - 가드 통과 전이라도 무조건 로그
         if (event.key === "Enter") {
-          console.info("[CCF NAR] keydown ENTER on bound editor: isComposing=%o, shiftKey=%o, macroMenu=%o, editor=%o",
+          ccfNarInfo("[CCF NAR] keydown ENTER on bound editor: isComposing=%o, shiftKey=%o, macroMenu=%o, editor=%o",
             event.isComposing, event.shiftKey, isVisibleChatMacroMenuForEditor(editor), editor);
         }
         if (event.isComposing) return;
         if (event.key !== "Enter") return;
         if (event.shiftKey) return;
         if (isVisibleChatMacroMenuForEditor(editor)) return;
-        console.info("[CCF NAR] keydown ENTER passed guards — calling preparePayloadForSend");
+        const sendTiming = beginSendTiming(editor);
         const composer = findComposerForEditor(editor);
         activeComposer = composer;
         activeEditor = editor;
         lastFocusedEditor = editor;
         const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
+        sendTiming?.mark("guards");
         if (preparePayloadForSend(editor, { composer }) === false) {
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation?.();
+          sendTiming?.finishKeydown("aborted");
           return;
         }
+        sendTiming?.mark("prepared");
 
         if (hadMessage) {
           // CCFOLIA removed native Enter→send binding; manually trigger the composer submit
@@ -12833,12 +12840,13 @@
           event.stopPropagation();
           event.stopImmediatePropagation?.();
           scheduleInlineFormatResetAfterSend(editor);
-          triggerComposerSubmit(editor);
+          triggerComposerSubmit(editor, sendTiming);
         }
+        sendTiming?.finishKeydown(hadMessage ? "intercepted" : "empty");
       });
     });
     if (newBindings > 0) {
-      console.info("[CCF NAR] bindEnterSendForEditors: newBindings=%o (total editors=%o)", newBindings, editors.length);
+      ccfNarInfo("[CCF NAR] bindEnterSendForEditors: newBindings=%o (total editors=%o)", newBindings, editors.length);
     }
   }
 
@@ -14813,7 +14821,49 @@
     return null;
   }
 
-  function triggerComposerSubmit(editor) {
+  // ---- 오리지널 입력칸 Enter → 전송 지연 진단 (localStorage.ccfNativeSendTiming="1" 일 때만 동작) ----
+  // 단계(ms, Enter 시작 기준): guards(가드 통과) · prepared(서식 봉투 준비 끝) · keydown(핸들러 종료) · click(전송 버튼 클릭 직전)
+  //   · cleared(입력칸이 비워짐 = 전송 접수) · row(화면에 새 행이 생김) · longtasks(그 사이 50ms 넘는 작업 길이들)
+  const SEND_TIMING_LOG = [];
+  function beginSendTiming(editor) {
+    let enabled = false;
+    try { enabled = localStorage.getItem("ccfNativeSendTiming") === "1"; } catch (_) { enabled = false; }
+    if (!enabled) return null;
+    const t0 = performance.now();
+    const text = stripInvisibleEnvelope(getEditorText(editor)).trim();
+    const entry = { at: new Date().toISOString(), chars: text.length, steps: {}, longtasks: [] };
+    SEND_TIMING_LOG.push(entry);
+    while (SEND_TIMING_LOG.length > 5) SEND_TIMING_LOG.shift();
+    const step = (name) => { if (entry.steps[name] == null) entry.steps[name] = Math.round((performance.now() - t0) * 10) / 10; };
+    let observer = null;
+    try {
+      observer = new PerformanceObserver((list) => list.getEntries().forEach((e) => entry.longtasks.push(Math.round(e.duration))));
+      observer.observe({ entryTypes: ["longtask"] });
+    } catch (_) { observer = null; }
+    const probe = text.slice(0, 20);
+    let mutation = null;
+    if (probe) {
+      mutation = new MutationObserver(() => {
+        if (entry.steps.row != null) return;
+        const log = document.querySelector('[role="log"]') || document.body;
+        if ((log.innerText || "").includes(probe) && !(editor.value || "").includes(probe)) step("row");
+      });
+      mutation.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+    const poll = window.setInterval(() => {
+      if (entry.steps.cleared == null && !stripInvisibleEnvelope(getEditorText(editor)).trim()) step("cleared");
+      if (performance.now() - t0 > 6000 || (entry.steps.cleared != null && entry.steps.row != null)) {
+        window.clearInterval(poll); observer?.disconnect(); mutation?.disconnect();
+        entry.done = true;
+        console.info("[CCF send timing]", JSON.stringify({ chars: entry.chars, steps: entry.steps, longtasks: entry.longtasks }));
+      }
+    }, 20);
+    console.info("[CCF send timing] Enter pressed (", entry.chars, "chars )");
+    return { mark: step, finishKeydown: (kind) => { step("keydown"); entry.kind = kind; } };
+  }
+  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag = () => SEND_TIMING_LOG.map((e) => ({ ...e, steps: { ...e.steps }, longtasks: e.longtasks.slice() }));
+
+  function triggerComposerSubmit(editor, sendTiming = null) {
     const composer = findClosestComposerBar(editor);
     const submitBtn = composer?.querySelector('button[type="submit"]');
     if (!submitBtn) {
@@ -14824,6 +14874,7 @@
     // before the submit click reads the current value.
     setTimeout(() => {
       try {
+        sendTiming?.mark("click");
         submitBtn.click();
       } catch (error) {
         console.warn("[CCF NAR] triggerComposerSubmit: click failed", error);
