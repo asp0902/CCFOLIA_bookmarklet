@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.0
+// @version      0.4.1
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.0";
+  const VERSION = "0.4.1";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -513,6 +513,7 @@
   let ccfScpRowTemplate = null;
   let ccfScpListClass = "";
   let ccfScpRowDivider = "";
+  let ccfScpListTail = -1; // 네이티브 마지막 줄 아래 여백(px), -1 = 아직 못 읽음
   let ccfScpRowPadBottom = 0; // 네이티브 줄의 아래 패딩(구분선 위 여백 +1px 계산용)
   let ccfScpInnerUl = null; // 증분 렌더용: 현재 줄들이 담긴 내부 ul
 
@@ -558,6 +559,15 @@
       ? `${sourceStyle.borderBottomWidth} ${sourceStyle.borderBottomStyle} ${sourceStyle.borderBottomColor}`
       : "";
     if (panelEl && ccfScpRowDivider) panelEl.style.setProperty("--scp-row-divider", ccfScpRowDivider);
+    // 마지막 줄 아래: 네이티브는 마지막 메시지 아래 구분선 뒤에 몇 px 여백을 두고 목록이 끝난다. 그 여백(목록 아래 패딩 + 구분선 요소의 아래 마진)을 읽어 우리 목록 끝에도 준다.
+    try {
+      const nativeList = source.parentElement;
+      let tail = nativeList instanceof HTMLElement ? (parseFloat(getComputedStyle(nativeList).paddingBottom) || 0) : 0;
+      const after = source.nextElementSibling;
+      if (after instanceof HTMLElement && after.classList.contains("MuiDivider-root")) tail += parseFloat(getComputedStyle(after).marginBottom) || 0;
+      ccfScpListTail = Math.round(tail * 100) / 100;
+      if (panelEl) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
+    } catch (e) { /* 못 읽으면 기본 여백 */ }
 
     // 줄을 담고 있던 목록의 클래스도 함께 기억한다.
     const parent = source.parentElement;
@@ -809,6 +819,7 @@
   // CSS 규칙은 어딘가에 눌려 0px 가 되므로 줄에 직접·강제로 넣는다.
   function applyRowMarkers(rows) {
     const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
+    if (panelEl && ccfScpListTail >= 0) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
     rows.forEach((row, i) => {
       if (!(row instanceof HTMLElement)) return;
       const next = rows[i + 1];
@@ -1749,7 +1760,9 @@
       #${PANEL_ID} .ccf-scp-bar { border-bottom: 0; }
       /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
       body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
-      #${PANEL_ID} .ccf-scp-list { padding: 0; }
+      /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
+      #${PANEL_ID} .ccf-scp-list { padding: 0 0 var(--scp-list-tail, 8px); }
+      #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
@@ -2630,6 +2643,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
+    ccfScpListTail = -1;
     ccfScpInnerUl = null;
     // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
     // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.
