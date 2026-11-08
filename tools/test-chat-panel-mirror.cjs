@@ -2,13 +2,13 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/asp92/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-chat-panel.user.js'), 'utf8');
 const a = source.indexOf('  const MIRROR_CSS_LIMIT'), b = source.indexOf('    window.__CCF_SECOND_CHAT_PANEL__ = {');
 assert(a > 0 && b > a, 'mirror code not found');
 const code = source.slice(a, b);
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
+  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   const page = await browser.newPage();
   await page.setContent(`<style>.css-row{display:flex;padding:8px}</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400"><link rel="stylesheet" href="https://evil.test/a.css">
     <header class="MuiAppBar-root tb" style="position:fixed;top:0;width:1000px;height:64px"><div class="MuiToolbar-root"><button aria-label="룸 메뉴" style="text-transform:none"><h6>비밀 룸 이름<span>시스템명</span></h6><span><svg viewBox="0 0 24 24"><path d="M3 3"/></svg></span></button><button aria-label="내 캐릭터 목록"><svg viewBox="0 0 24 24"><path d="M4 4"/></svg></button><button aria-label="[GM] 스크린 패널 목록"><svg viewBox="0 0 24 24"><path d="M5 5"/></svg></button><button aria-label="[GM] 장면 목록"></button><button aria-label="메뉴"></button><button><div><img src="https://storage.ccfolia-cdn.net/me.png"></div></button><button aria-label="채팅창 열기"><svg viewBox="0 0 24 24"><path d="M6 6"/></svg></button></div></header>
@@ -24,12 +24,14 @@ const code = source.slice(a, b);
     const PANEL_ID = 'ccf-second-chat-panel';
     const fn = new Function('PANEL_ID', `${code}; return { relayMirror, mirrorChatTemplates };`);
     const api = fn(PANEL_ID);
+    document.documentElement.style.setProperty('--ccf-divider-color', 'rgba(255, 255, 255, 0.082)');
     const first = api.relayMirror({});
     const again = api.relayMirror({ cssHash: first.cssHash, tplHash: first.tplHash });
     return { first, again };
   }, code);
   const { first, again } = result;
   assert(first.css.includes('.css-row'), 'the page CSS is collected from cssRules');
+  assert(/:root \{ --ccf-divider-color: rgba\(255, 255, 255, 0\.082\); \}/.test(first.css), 'the divider colour read by the GM page goes to the participants with the CSS');
   assert.deepEqual(first.fontLinks, ['https://fonts.googleapis.com/css2?family=Roboto:wght@400'], 'only Google Fonts links are kept');
   const { chatRow, chatShell } = first.templates;
   assert(!/비밀|사용자|굵게|덧그림|storage\.ccfolia|onclick|id="r1"|data-ccf|<b>/.test(chatRow), `no data left in the row: ${chatRow}`);
