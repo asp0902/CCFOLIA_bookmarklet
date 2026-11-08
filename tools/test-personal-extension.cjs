@@ -8,7 +8,7 @@ const extension = path.join(root, 'extension/personal');
 const bootstrap = fs.readFileSync(path.join(extension, 'bootstrap.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
 assert.deepEqual(manifest.host_permissions, ['https://ccfolia.com/*', 'https://app.roll20.net/*', 'http://127.0.0.1:8787/*', 'https://capybara-iv.for-trpg.workers.dev/*']);
-assert.deepEqual(manifest.permissions, ['scripting', 'storage']);
+assert.deepEqual(manifest.permissions, ['scripting', 'storage', 'unlimitedStorage']); // unlimitedStorage: the x-seen tab keeps the cleaned tweets (#332)
 // Pinned key: the extension id (and so chrome.storage) must not depend on the folder path.
 const derivedId = [...require('node:crypto').createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32)].map(char => String.fromCharCode(97 + parseInt(char, 16))).join('');
 assert.equal(derivedId, 'dhogfdgmikpinakhcofcddmcmoaenpjc');
@@ -16,19 +16,22 @@ assert.equal(manifest.content_scripts[0].world, 'MAIN');
 assert.equal(manifest.content_scripts[0].all_frames, false);
 assert.deepEqual(manifest.content_scripts[0].js, ['bootstrap.js', 'relay-page.js']);
 assert.equal(manifest.content_scripts[1].world, 'ISOLATED');
-assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js']);
+assert.deepEqual(manifest.content_scripts[1].js, ['relay-bridge.js', 'home-bookmarks.js']); // the home page bookmarks tab
 assert.equal(manifest.options_page, undefined, 'settings live in the icon modal, not an options page');
 assert(fs.existsSync(path.join(extension, 'share-modal.js')));
 
 async function checkAction() {
-  let clicked, messaged;
+  let clicked, messaged, badgeText = ''; // the badge of the tab: an error mark is only cleared when it is the one showing
+  const listeners = []; // the background has several message listeners (Roll20 relay, relay-pending, open toolkit, x-seen); a message goes to all of them
   const calls = [];
   const record = name => async value => { calls.push([name, value]); };
   const sandbox = {
     URL, console: { error() {} },
     chrome: {
-      action: { onClicked: { addListener: fn => { clicked = fn; } }, setBadgeText: record('badge'), setBadgeBackgroundColor: record('color'), setTitle: record('title') },
-      runtime: { onMessage: { addListener: fn => { messaged = fn; } } },
+      action: { onClicked: { addListener: fn => { clicked = fn; } }, getBadgeText: async () => badgeText, setBadgeText: async value => { badgeText = value.text; calls.push(['badge', value]); }, setBadgeBackgroundColor: record('color'), setTitle: record('title') },
+      runtime: { onMessage: { addListener: fn => { listeners.push(fn); messaged = (...args) => listeners.forEach(listener => listener(...args)); } } },
+      tabs: { onUpdated: { addListener() {} }, onCreated: { addListener() {} }, onRemoved: { addListener() {} }, create: async () => {} },
+      storage: { session: { get: async () => ({}), set: async () => {} }, local: { get: async () => ({}) } },
       scripting: { executeScript: async args => { calls.push(['inject', args]); return [{ result: true }]; } }
     }
   };
@@ -64,11 +67,24 @@ async function checkAction() {
 
 (async () => {
   await checkAction();
-  const context = await chromium.launchPersistentContext('', {
-    channel: 'chromium', headless: process.env.HEADED !== '1',
-    ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}),
-    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
-  });
+  console.log('Personal extension: manifest and action passed');
+  // The rest needs a Chromium that still loads unpacked extensions (branded Chrome 137+ ignores --load-extension). Without one it is reported as SKIPPED, not passed.
+  let context;
+  try {
+    context = await chromium.launchPersistentContext('', {
+      channel: 'chromium', headless: process.env.HEADED !== '1',
+      ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}),
+      args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
+    });
+  } catch (error) {
+    console.log('Personal extension: browser part SKIPPED (' + String(error.message).split(String.fromCharCode(10))[0] + ')');
+    return;
+  }
+  if (!(context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 8000 }).catch(() => null))) {
+    await context.close();
+    console.log('Personal extension: browser part SKIPPED (this browser did not load the unpacked extension)');
+    return;
+  }
   try {
     let requests = 0, failNext = false, realLoader = false;
     const loaderPath = '/CCFOLIA_bookmarklet/src/capybara-toolkit-loader.js';
