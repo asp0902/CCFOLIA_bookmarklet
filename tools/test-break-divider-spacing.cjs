@@ -24,7 +24,9 @@ const contRules = [...bridge.matchAll(/`(\.MuiListItem-root\[\$\{CONT_ATTR\}="1"
         <li class="MuiListItem-root" data-ccf-prose-cont="1" id="r2"><div class="ccf-render-root" data-ccf-break="1"><p id="t2">구분선 아래 글자</p></div></li>
         <li class="MuiListItem-root" id="plain"><div><p id="tp">일반 메시지 글자</p></div></li></ul>`);
       const m = await page.evaluate(() => { const px = (v) => parseFloat(v); const r2 = getComputedStyle(document.getElementById('r2')), p = getComputedStyle(document.getElementById('plain')); return { borderTop: px(r2.borderTopWidth), padTop: px(r2.paddingTop), marginTop: px(r2.marginTop), plainPadTop: px(p.paddingTop) }; });
-      assert.equal(m.borderTop, 1, order + ': the line is drawn');
+      assert.equal(m.borderTop, 1, order + ': the row keeps the 1px top edge');
+      const line = await page.evaluate(() => { const r = document.getElementById('r2'), rr = r.getBoundingClientRect(), cs = getComputedStyle(r, '::before'); return { w: parseFloat(cs.width), rowW: rr.width, left: parseFloat(cs.left), h: parseFloat(cs.height), bg: cs.backgroundColor }; });
+      assert.ok(Math.abs(line.w - (line.rowW - 32)) <= 1 && line.left === 16 && line.h === 1 && /255, 255, 255/.test(line.bg), order + ': the line is inset 16px on both sides like the divider between messages: ' + JSON.stringify(line));
       assert.equal(m.padTop, 16, order + ': the text under the line keeps 16px from it (the bridge cont rule would give 0): ' + JSON.stringify(m));
       assert.ok(m.marginTop >= 8, order + ': space above the line: ' + JSON.stringify(m));
     }
