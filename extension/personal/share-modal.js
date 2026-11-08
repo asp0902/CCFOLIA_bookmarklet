@@ -37,6 +37,8 @@
     h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
     .body { padding: 20px 24px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
+    p.status-line { margin: 2px 0; line-height: 1.4; }
+    p.status-line:empty { display: none; }
     .field { margin-top: 16px; }
     .field > label { display: block; margin-bottom: 4px; color: rgba(255,255,255,.7); font-size: .75rem; }
     input[type=text], input[type=password] { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px;
@@ -133,11 +135,11 @@
   const url = el("input", { type: "text", id: "url", autocomplete: "off", spellcheck: "false" });
   const token = el("input", { type: "password", id: "token", autocomplete: "off" });
   const invite = el("input", { type: "text", id: "invite", readonly: "", placeholder: "코코포리아 룸 연결 후 생성됩니다." });
-  const socketLine = el("p", { class: "muted", id: "socket" });
-  const roomLine = el("p", { class: "muted", id: "room" });
-  const healthLine = el("p", { class: "muted", id: "health" });
-  const mirrorLine = el("p", { class: "muted", id: "mirror" });
-  const errorLine = el("p", { class: "muted", id: "relay-errors" });
+  const socketLine = el("p", { class: "muted status-line", id: "socket" });
+  const roomLine = el("p", { class: "muted status-line", id: "room" });
+  const healthLine = el("p", { class: "muted status-line", id: "health" });
+  const mirrorLine = el("p", { class: "muted status-line", id: "mirror" });
+  const errorLine = el("p", { class: "muted status-line", id: "relay-errors" });
   const participants = el("div", { class: "participants", id: "participants", "aria-live": "polite" });
   const toast = el("div", { class: "toast", id: "toast", role: "status" });
   const say = (text, error = false) => { toast.textContent = text; toast.classList.toggle("error", error); };
@@ -151,7 +153,7 @@
 
   const renderParticipants = (items, recipients = []) => {
     participants.replaceChildren();
-    if (!items.length) { participants.append(el("p", { class: "muted", text: "참가 요청 없음" })); return; }
+    if (!items.length) { participants.append(el("p", { class: "muted status-line", text: "참가 요청 없음" })); return; }
     for (const item of items) {
       const act = (label, decision, danger = false) => el("button", { type: "button", class: danger ? "danger" : decision === "approve" ? "approve" : "", "data-decision": decision, "data-id": item.id, text: label });
       participants.append(el("div", { class: "participant" },
@@ -176,7 +178,7 @@
       if (!response.ok) throw new Error(await errorOf(response, "조회 실패"));
       const data = await response.json();
       renderParticipants(data.participants || [], data.recipients || []);
-    } catch (error) { participants.replaceChildren(el("p", { class: "muted", text: error.message })); }
+    } catch (error) { participants.replaceChildren(el("p", { class: "muted status-line", text: error.message })); }
   }
   const renderSocket = info => {
     if (!roomId || !info || info.roomId !== roomId) { socketLine.textContent = "실시간 연결: 아직 연결 시도 없음 — 룸 탭을 새로고침하세요."; return; }
