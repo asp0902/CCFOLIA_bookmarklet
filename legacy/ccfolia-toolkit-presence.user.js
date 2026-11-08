@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.4
+// @version      0.0.5
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -547,7 +547,12 @@
   }
 
   function observeMessages() {
-    const observer = new MutationObserver(scheduleScanMessages);
+    // 접속자 패널 자신(renderPanel 이 목록을 다시 쓴다)이나 다른 툴킷 요소의 변화에는 반응하지 않는다 — 안 그러면 패널이 스스로를 계속 다시 그린다.
+    const owned = (node) => { const el = node instanceof Element ? node : node?.parentElement; return !!el?.closest?.('[data-ccf-safe-markup="1"], [data-ccr20-safe-ui="1"], [data-capybara-toolkit-presence="1"]'); };
+    const observer = new MutationObserver((records) => {
+      if (records.every((record) => owned(record.target))) return;
+      scheduleScanMessages();
+    });
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: true });
     abort.signal.addEventListener("abort", () => observer.disconnect(), { once: true });
   }
@@ -626,6 +631,13 @@
       .filter((peer) => peer.self || now - peer.at <= STALE_MS)
       .sort((a, b) => Number(b.self) - Number(a.self) || b.at - a.at || a.name.localeCompare(b.name));
 
+    // 내용이 지난번과 같으면 다시 만들지 않는다(매번 비우고 채우면 문서 변화가 끊이지 않는다).
+    const renderKey = rows.map((peer) => {
+      const age = Math.max(0, now - peer.at);
+      return [peer.self ? 1 : 0, peer.self || age <= ACTIVE_MS ? "a" : "i", peer.name, peer.self ? "" : formatAge(age)].join("|");
+    }).join("|") + "#" + (panelOpen ? 1 : 0);
+    if (renderPanel.lastKey === renderKey && list.childElementCount === rows.length) return;
+    renderPanel.lastKey = renderKey;
     list.innerHTML = "";
     rows.forEach((peer) => {
       const row = document.createElement("div");

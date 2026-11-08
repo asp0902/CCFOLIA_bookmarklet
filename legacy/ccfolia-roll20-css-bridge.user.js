@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.107
+// @version      0.3.108
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.107"),
+    version: getUserscriptVersion("0.3.108"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1299,13 +1299,14 @@
       const shouldRefresh = mutations.some((mutation) => {
         const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
         if (target?.closest?.(`[${SAFE_UI_ATTR}="1"]`)) return false;
+        if (isToolkitOwnedNode(target)) return false;
 
         const nodes = [
           ...Array.from(mutation.addedNodes || []),
           ...Array.from(mutation.removedNodes || [])
         ];
 
-        return nodes.some((node) => !(node instanceof Element) || !node.closest?.(`[${SAFE_UI_ATTR}="1"]`));
+        return nodes.some((node) => !(node instanceof Element) || !(node.closest?.(`[${SAFE_UI_ATTR}="1"]`) || isToolkitOwnedNode(node)));
       });
 
       if (shouldRefresh) {
@@ -1774,9 +1775,16 @@
     positionOpenButton(btn);
   }
 
+  // 툴킷 스크립트끼리 서로의 DOM 쓰기에 반응해 다시 일하는 연쇄(핑퐁)를 끊기 위한 표식: 다른 툴킷 요소(format-sync 미리보기 오버레이,
+  // 접속자 패널 등) 안쪽의 변화는 이 스크립트가 신경 쓸 일이 아니다.
+  function isToolkitOwnedNode(node) {
+    const el = node instanceof Element ? node : node?.parentElement;
+    return !!el?.closest?.('[data-ccf-safe-markup="1"], [data-ccr20-safe-ui="1"], [data-capybara-toolkit-presence="1"]');
+  }
+
   function ensureOpenButtonHost(composer) {
     if (!(composer instanceof HTMLElement)) return;
-    composer.setAttribute(OPEN_BTN_HOST_ATTR, "1");
+    if (composer.getAttribute(OPEN_BTN_HOST_ATTR) !== "1") composer.setAttribute(OPEN_BTN_HOST_ATTR, "1");
     if (getComputedStyle(composer).position !== "static") return;
     if (!composer.hasAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR)) {
       composer.setAttribute(OPEN_BTN_HOST_PREV_POSITION_ATTR, composer.style.position || "");
@@ -6216,6 +6224,9 @@
     document.addEventListener("click", handlePotentialChatTabActivation, true);
     document.addEventListener("keydown", handlePotentialChatTabKeydown, true);
     observer = new MutationObserver((mutations) => {
+      // 다른 툴킷 요소(미리보기 오버레이·접속자 패널 등) 안쪽의 childList 변화만이면 채팅 목록과 무관하다.
+      const ownedByToolkit = (node) => { const el = node instanceof Element ? node : node?.parentElement; return !!el?.closest?.('[data-ccf-safe-markup="1"], [data-ccr20-safe-ui="1"], [data-capybara-toolkit-presence="1"]'); };
+      if (mutations.every((mutation) => mutation.type === "childList" && ownedByToolkit(mutation.target))) return;
       const forceBottom = mutations.some(isChatTabMutation);
       // A chat row was added: group it (and snap to the bottom) now, in the same task as the row, so the layout the first paint shows is the final one.
       // Waiting for the next animation frame let the native smooth scroll and the regrouped row heights move the list in two steps.
@@ -6261,7 +6272,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.107",
+    version: "0.3.108",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

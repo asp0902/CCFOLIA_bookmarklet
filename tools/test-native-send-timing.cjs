@@ -19,7 +19,9 @@ const profiler = fs.readFileSync(path.join(__dirname, '../extension/personal/sen
         if (t) localStorage.setItem('ccfNativeSendTiming', '1');
         window.__sends = [];
         const form = document.getElementById('composer'); const ta = form.querySelector('textarea');
-        const send = () => { const v = ta.value; if (!v.trim()) return; window.__sends.push(v); ta.value = ''; setTimeout(() => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<p class="MuiListItemText-secondary"></p>'; li.querySelector('p').textContent = v.replace(/[\u2062\u2063\u200b\u200c\u200d\u2060]/g, ''); document.getElementById('list').append(li); }, 40); };
+        // React 의 제어 입력칸처럼: input 이벤트를 받으면 props.value 를 갱신한다(format-sync 가 "React 가 값을 받았나"를 이걸로 확인한다)
+        ta['__reactProps$t'] = { value: '' }; ta.addEventListener('input', () => { ta['__reactProps$t'].value = ta.value; });
+        const send = () => { const v = ta.value; if (!v.trim()) return; window.__sends.push(v); ta.value = ''; ta['__reactProps$t'].value = ''; setTimeout(() => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<p class="MuiListItemText-secondary"></p>'; li.querySelector('p').textContent = v.replace(/[\u2062\u2063\u200b\u200c\u200d\u2060]/g, ''); document.getElementById('list').append(li); }, 40); };
         form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.defaultPrevented) { e.preventDefault(); send(); } });
         form.addEventListener('submit', (e) => { e.preventDefault(); send(); });
       }, timing);
@@ -54,11 +56,18 @@ const profiler = fs.readFileSync(path.join(__dirname, '../extension/personal/sen
       const last = diag[4];
       for (const key of ['guards', 'prepared', 'keydown', 'click', 'cleared', 'row']) assert(typeof last.steps[key] === 'number', `step ${key} recorded: ${JSON.stringify(last.steps)}`);
       assert(last.steps.keydown < 200, 'keydown handler is short in the replica');
+      // 서식(제목 문법)이 있는 글은 봉투가 입력칸에 새로 써진다 — React 가 값을 받은 걸 확인하면 마이크로태스크로, 그래도 한 번만 전송된다.
+      await page.locator('textarea[name=text]').click(); await page.locator('textarea[name=text]').fill('# 제목'); await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelectorAll('#list li').length === 7); await page.waitForTimeout(700);
+      const fmt = (await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.sendTimingDiag())).pop();
+      assert.equal(fmt.kind, 'intercepted'); assert(fmt.steps.prepared != null);
+      assert(fmt.steps.click - fmt.steps.keydown < 5, `an envelope message is submitted in a microtask once React has the value: ${JSON.stringify(fmt.steps)}`);
+      assert.equal((await page.evaluate(() => window.__sends)).length, 7, 'exactly one send for the formatted message');
       assert(last.steps.click - last.steps.keydown < 5, `plain text is submitted right away (microtask), not behind a timer: ${JSON.stringify(last.steps)}`);
       assert(last.byScript && typeof last.byScript['format-sync'] === 'number', `profiler sums time per toolkit script: ${JSON.stringify(last.byScript)}`);
       assert(Array.isArray(last.top) && last.windowMs > 300, 'profiler window recorded');
       assert(logs.some((t) => t.includes('[CCF send timing]')), 'also logged to the console');
-      assert.equal((await page.evaluate(() => window.__sends)).length, 6, 'still exactly one send per Enter');
+      assert.equal((await page.evaluate(() => window.__sends)).length, 7, 'still exactly one send per Enter');
       assert(last.top.every((t) => /d/.test(t.label) && t.n >= 1 && t.total >= t.max), 'top entries carry the registration site (function:line) and are merged');
       const idle = await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.idleProfile(600));
       assert(typeof idle.mutations === 'number' && Array.isArray(idle.mutationTop) && idle.byScript && idle.windowMs >= 500, `idleProfile reports scripts and document changes: ${JSON.stringify(idle)}`);
