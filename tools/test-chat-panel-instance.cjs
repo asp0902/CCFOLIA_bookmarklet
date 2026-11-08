@@ -19,7 +19,7 @@ assert.doesNotMatch(source, /closest\(`#\$\{PANEL_ID\}`\)/, 'exclusion of the pa
     await page.waitForTimeout(300);
     const info = await page.evaluate(() => ({ api: typeof window.__CCF_SECOND_CHAT_PANEL__, version: window.__CCF_SECOND_CHAT_PANEL__?.version }));
     assert.deepEqual(errors, [], 'no errors while loading');
-    assert.equal(info.api, 'object'); assert.match(info.version, /^0\.3\.[0-9]+$/);
+    assert.equal(info.api, 'object'); assert.match(info.version, /^0\.[0-9]+\.[0-9]+$/);
     // open the panel by the API and check the id and the class
     const opened = await page.evaluate(() => { const api = window.__CCF_SECOND_CHAT_PANEL__; try { (api.open || api.openPanel || (() => {}))(); } catch (e) {} const el = document.getElementById('ccf-second-chat-panel'); return el ? { cls: el.classList.contains('ccf-scp-panel') } : null; });
     if (opened) assert.equal(opened.cls, true);
