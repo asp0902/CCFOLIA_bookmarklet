@@ -4,7 +4,8 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 // 오리지널 입력칸 Enter 전송: 서식 없는 글도 한 번만 전송되고, 진단(ccfNativeSendTiming)이 단계별 시간을 남기며, [CCF NAR] 로그는 기본으로 조용하다.
-const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8') + String.fromCharCode(10) + '//# sourceURL=https://example.test/ccfolia-format-sync.user.js';
+const profiler = fs.readFileSync(path.join(__dirname, '../extension/personal/send-profiler.js'), 'utf8');
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {}) });
   try {
@@ -22,6 +23,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
         form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.defaultPrevented) { e.preventDefault(); send(); } });
         form.addEventListener('submit', (e) => { e.preventDefault(); send(); });
       }, timing);
+      if (timing) await page.addScriptTag({ content: profiler });
       await page.addScriptTag({ content: source });
       await page.waitForTimeout(800);
       return { page, logs };
@@ -52,6 +54,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
       const last = diag[4];
       for (const key of ['guards', 'prepared', 'keydown', 'click', 'cleared', 'row']) assert(typeof last.steps[key] === 'number', `step ${key} recorded: ${JSON.stringify(last.steps)}`);
       assert(last.steps.keydown < 200, 'keydown handler is short in the replica');
+      assert(last.steps.click - last.steps.keydown < 5, `plain text is submitted right away (microtask), not behind a timer: ${JSON.stringify(last.steps)}`);
+      assert(last.byScript && typeof last.byScript['format-sync'] === 'number', `profiler sums time per toolkit script: ${JSON.stringify(last.byScript)}`);
+      assert(Array.isArray(last.top) && last.windowMs > 300, 'profiler window recorded');
       assert(logs.some((t) => t.includes('[CCF send timing]')), 'also logged to the console');
       assert.equal((await page.evaluate(() => window.__sends)).length, 6, 'still exactly one send per Enter');
       console.log('send timing sample', JSON.stringify(last));

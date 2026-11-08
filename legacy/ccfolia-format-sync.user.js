@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.92
+// @version      0.1.93
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.92"),
+    version: getUserscriptVersion("0.1.93"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -12827,7 +12827,8 @@
         activeComposer = composer;
         activeEditor = editor;
         lastFocusedEditor = editor;
-        const hadMessage = !!stripInvisibleEnvelope(getEditorText(editor)).trim();
+        const textBeforePrepare = getEditorText(editor);
+        const hadMessage = !!stripInvisibleEnvelope(textBeforePrepare).trim();
         sendTiming?.mark("guards");
         if (preparePayloadForSend(editor, { composer }) === false) {
           event.preventDefault();
@@ -12845,7 +12846,9 @@
           event.stopPropagation();
           event.stopImmediatePropagation?.();
           scheduleInlineFormatResetAfterSend(editor);
-          triggerComposerSubmit(editor, sendTiming);
+          // 서식 봉투를 입력칸에 새로 쓴 경우에만 React 가 input 을 처리한 뒤(다음 태스크) 눌러야 한다.
+          // 평문은 입력칸 값이 이미 React 상태와 같으므로 마이크로태스크로 곧바로 누른다 — 다른 긴 작업 뒤로 밀리지 않는다.
+          triggerComposerSubmit(editor, sendTiming, getEditorText(editor) === textBeforePrepare);
         }
         sendTiming?.finishKeydown(hadMessage ? "intercepted" : "empty");
       });
@@ -14842,7 +14845,12 @@
     const step = (name) => { if (entry.steps[name] == null) entry.steps[name] = Math.round((performance.now() - t0) * 10) / 10; };
     let observer = null;
     try {
-      observer = new PerformanceObserver((list) => list.getEntries().forEach((e) => entry.longtasks.push(Math.round(e.duration))));
+      observer = new PerformanceObserver((list) => list.getEntries().forEach((e) => {
+        entry.longtasks.push(Math.round(e.duration));
+        // 시작 시각(Enter 기준)과 출처 — 코코포리아 자신의 작업인지 다른 프레임인지 정도만 알려 준다.
+        const from = e.attribution && e.attribution[0];
+        (entry.longtaskAt || (entry.longtaskAt = [])).push({ at: Math.round(e.startTime - t0), ms: Math.round(e.duration), src: from ? String(from.containerType || from.name || "") : "" });
+      }));
       observer.observe({ entryTypes: ["longtask"] });
     } catch (_) { observer = null; }
     const probe = text.slice(0, 20);
@@ -14855,20 +14863,26 @@
       });
       mutation.observe(document.body, { childList: true, subtree: true, characterData: true });
     }
+    // Enter 부터 새 행이 뜬 뒤 300ms 까지가 "Enter 창". 확장의 send-profiler.js 가 있으면 그 동안 스크립트별 실행 시간을 합산한다(byScript / top).
+    const profiler = window.__CCF_SEND_PROFILE__ || null;
+    profiler?.start();
+    let rowSeenAt = 0;
     const poll = window.setInterval(() => {
       if (entry.steps.cleared == null && !stripInvisibleEnvelope(getEditorText(editor)).trim()) step("cleared");
-      if (performance.now() - t0 > 6000 || (entry.steps.cleared != null && entry.steps.row != null)) {
+      if (entry.steps.row != null && !rowSeenAt) rowSeenAt = performance.now();
+      if (performance.now() - t0 > 6000 || (entry.steps.cleared != null && rowSeenAt && performance.now() - rowSeenAt >= 300)) {
         window.clearInterval(poll); observer?.disconnect(); mutation?.disconnect();
         entry.done = true;
-        console.info("[CCF send timing]", JSON.stringify({ chars: entry.chars, steps: entry.steps, longtasks: entry.longtasks }));
+        if (profiler) Object.assign(entry, profiler.stop());
+        console.info("[CCF send timing]", JSON.stringify({ chars: entry.chars, steps: entry.steps, longtasks: entry.longtasks, byScript: entry.byScript, top: entry.top }));
       }
     }, 20);
     console.info("[CCF send timing] Enter pressed (", entry.chars, "chars )");
     return { mark: step, finishKeydown: (kind) => { step("keydown"); entry.kind = kind; } };
   }
-  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag = () => SEND_TIMING_LOG.map((e) => ({ ...e, steps: { ...e.steps }, longtasks: e.longtasks.slice() }));
+  if (CCF_FS_RUNTIME) CCF_FS_RUNTIME.sendTimingDiag = () => SEND_TIMING_LOG.map((e) => JSON.parse(JSON.stringify(e)));
 
-  function triggerComposerSubmit(editor, sendTiming = null) {
+  function triggerComposerSubmit(editor, sendTiming = null, immediate = false) {
     const composer = findClosestComposerBar(editor);
     const submitBtn = composer?.querySelector('button[type="submit"]');
     if (!submitBtn) {
@@ -14877,14 +14891,16 @@
     }
     // Defer one microtask so React processes the input event from setEditorText
     // before the submit click reads the current value.
-    setTimeout(() => {
+    const click = () => {
       try {
         sendTiming?.mark("click");
         submitBtn.click();
       } catch (error) {
         console.warn("[CCF NAR] triggerComposerSubmit: click failed", error);
       }
-    }, 0);
+    };
+    if (immediate) queueMicrotask(click);
+    else setTimeout(click, 0);
   }
 
   function looksLikeComposerBar(el) {
