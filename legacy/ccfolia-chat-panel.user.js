@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.2
+// @version      0.4.3
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.2";
+  const VERSION = "0.4.3";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -2364,13 +2364,13 @@
       b.addEventListener("click", (ev) => { ev.preventDefault(); onClick(b); inputEl?.focus(); });
       return b;
     };
-    const svgIcon = (d) => { const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("width", "16"); svg.setAttribute("height", "16"); const path = document.createElementNS(ns, "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); return svg; };
+    const svgIcon = (d, box = 16) => { const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", `0 0 ${box} ${box}`); svg.setAttribute("width", box === 24 ? "18" : "16"); svg.setAttribute("height", box === 24 ? "18" : "16"); const path = document.createElementNS(ns, "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); return svg; };
     const alignBtns = [
-      ["left", "왼쪽 정렬", "M2 3h12v1H2zm0 6h8v1H2zm0 6h12v1H2z"],
-      ["center", "가운데 정렬", "M2 3h12v1H2zm4 6h4v1H6zM3 15h10v-1H3z"],
-      ["right", "오른쪽 정렬", "M2 3h12v1H2zm6 6h6v1H8zM2 15h12v-1H2z"]
+      ["left", "왼쪽 정렬", "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"],
+      ["center", "가운데 정렬", "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"],
+      ["right", "오른쪽 정렬", "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"]
     ].map(([value, title, d]) => {
-      const b = mkBtn(svgIcon(d), title, () => { if (wrapSpan("a", value)) return; fmtState.align = value; syncFmtUi(); }, "ccf-scp-fmt-align");
+      const b = mkBtn(svgIcon(d, 24), title, () => { if (wrapSpan("a", value)) return; fmtState.align = value; syncFmtUi(); }, "ccf-scp-fmt-align");
       b.dataset.align = value; fmtRow.appendChild(b); return b;
     });
     const mkColor = (title, defaultValue, key) => {
