@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(root, "src", "capybara-toolkit-loader.j
 function loadRuntimeFactory() {
   const hook = {};
   const sandbox = {
-    window: { __CAPYBARA_TOOLKIT_TEST_HOOK__: hook },
+    window: { __CAPYBARA_TOOLKIT_TEST_HOOK__: hook, setTimeout() {} }, // the loader schedules the version print (CCFV) at load
     console,
     URL,
     Date,
