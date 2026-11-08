@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.103
+// @version      0.3.104
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.103"),
+    version: getUserscriptVersion("0.3.104"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5947,7 +5947,22 @@
     }
   }
 
+  // 안전장치: 같은 줄의 같은 속성이 2초에 4번 이상 켜졌다 꺼졌다 하면(가상 목록 경계에서 묶음 판정이 렌더마다 달라지는 경우) 그 줄의 그 속성을 10초 고정한다.
   function setOrRemove(el, attr, on) {
+    const nowMs = Date.now();
+    const flips = el.__ccr20Flips || (el.__ccr20Flips = {});
+    const frozen = el.__ccr20Frozen || (el.__ccr20Frozen = {});
+    if (frozen[attr] && nowMs < frozen[attr]) return false;
+    const had = el.hasAttribute(attr);
+    if (had !== !!on) {
+      const list = (flips[attr] = (flips[attr] || []).filter((t) => nowMs - t < 2000));
+      list.push(nowMs);
+      if (list.length >= 4) {
+        frozen[attr] = nowMs + 10000; flips[attr] = [];
+        safety.frozenAttrs += 1; safety.lastFrozen = { attr, at: nowMs };
+        return false;
+      }
+    }
     if (on) {
       if (el.getAttribute(attr) !== "1") {
         el.setAttribute(attr, "1");
@@ -6011,9 +6026,24 @@
   // 코코포리아의 가상 목록도 같은 스크롤러에 scrollTo 를 쓴다. 그 직후(NATIVE_SCROLL_QUIET_MS 안)에 우리가 끼어들어 반대로 끌면 둘이 번갈아 되돌리며 흔들린다
   // (전송 직후 3회 진동, 실측 v2). 코코포리아가 잠잠해진 뒤 한 번만 바닥으로 보정한다.
   const NATIVE_SCROLL_QUIET_MS = 200;
+  // 안전장치(끝없는 되먹임 방지): 같은 스크롤러에서 우리 snap 이 1초에 4번 이상이면 5초 동안 snap 을 멈춘다. localStorage.ccfBridgeNoSnap = "1" 이면 snap 을 아예 하지 않는다.
+  const SNAP_BURST_COUNT = 4, SNAP_BURST_MS = 1000, SNAP_PAUSE_MS = 5000;
+  const safety = { snaps: 0, pauses: 0, lastPauseAt: 0, frozenAttrs: 0, lastFrozen: null, disabledBySwitch: false };
   function snapScrollerToBottom(scroller) {
     if (!(scroller instanceof HTMLElement) || !scroller.isConnected) return;
+    try { if (localStorage.getItem("ccfBridgeNoSnap") === "1") { safety.disabledBySwitch = true; return; } safety.disabledBySwitch = false; } catch (e) { /* 저장소 없음 */ }
     if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 1) return;
+    const nowMs = Date.now();
+    if (scroller.__ccr20SnapPausedUntil && nowMs < scroller.__ccr20SnapPausedUntil) return;
+    const times = (scroller.__ccr20SnapTimes = (scroller.__ccr20SnapTimes || []).filter((t) => nowMs - t < SNAP_BURST_MS));
+    if (times.length >= SNAP_BURST_COUNT) {
+      scroller.__ccr20SnapPausedUntil = nowMs + SNAP_PAUSE_MS; scroller.__ccr20SnapTimes = [];
+      safety.pauses += 1; safety.lastPauseAt = nowMs;
+      try { console.warn("[ccf-prose] 바닥 고정이 1초에 %d번 이상 되풀이돼 %d초 멈춥니다(코코포리아 스크롤과 번갈아 흔드는 중으로 판단)", SNAP_BURST_COUNT, SNAP_PAUSE_MS / 1000); } catch (e) { /* console */ }
+      return;
+    }
+    times.push(nowMs);
+    safety.snaps += 1;
     const sinceNative = Date.now() - (scroller.__ccr20NativeScrollAt || 0);
     if (sinceNative < NATIVE_SCROLL_QUIET_MS) {
       if (!scroller.__ccr20DeferredSnap) {
@@ -6208,7 +6238,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.103",
+    version: "0.3.104",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
@@ -6221,6 +6251,7 @@
         flagged: document.querySelectorAll(`[${CONT_ATTR}="1"]`).length
       };
     },
+    safetyDiag() { return { ...safety, now: Date.now() }; },
     disable() { return teardown(); }
   };
 
