@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.88
+// @version      0.1.89
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.88"),
+    version: getUserscriptVersion("0.1.89"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -872,8 +872,9 @@
         top: -1px;
         left: 16px;
         right: 16px;
-        height: 1px;
-        background: rgba(255, 255, 255, 0.12);
+        height: 0;
+        /* 두께는 border 로: 브라우저가 기기 픽셀 1개로 맞춘다(높이 1px 배경은 배율 1.5 에서 2줄로 번졌다). 색은 오리지널 줄의 실제 선 색을 읽어 변수로 받는다. */
+        border-top: 1px solid var(--ccf-divider-color, rgba(255, 255, 255, 0.08));
         pointer-events: none;
       }
       /* 묶음 안(이어지는 행) 규칙(padding-top: 0)보다 확실히 앞서도록 이어지는 행 조건을 같이 쓴다. */
@@ -1409,7 +1410,7 @@
 
     const overlay = ensureRenderOverlay(el);
     applyNarrationMessageLayout(el, narration);
-    if (breakBefore) el.setAttribute("data-ccf-break", "1");
+    if (breakBefore) { el.setAttribute("data-ccf-break", "1"); refreshDividerColor(); }
     else el.removeAttribute("data-ccf-break");
     if (macro) el.setAttribute("data-ccf-macro", "1");
     else el.removeAttribute("data-ccf-macro");
@@ -1826,6 +1827,27 @@
     return decodeURIComponent(escape(atob(base64)));
   }
 
+  // 오리지널 메시지 사이 구분선의 실제 색: 구분선 줄(border-bottom)이나 MuiDivider 에서 읽어 --ccf-divider-color 로 둔다(구분선 줄의 선이 같은 색이 되게). 못 읽으면 CSS 기본값.
+  let dividerColorAt = 0;
+  function refreshDividerColor() {
+    const now = Date.now();
+    if (now - dividerColorAt < 5000) return;
+    dividerColorAt = now;
+    try {
+      const visible = (c) => { const m = String(c).match(/rgba?\(([^)]*)\)/); if (!m) return false; const p = m[1].split(",").map((x) => parseFloat(x)); return (p.length > 3 ? p[3] : 1) > 0.01; };
+      let color = "";
+      for (const li of document.querySelectorAll(".MuiListItem-root")) {
+        if (li.closest(".ccf-scp-panel") || li.matches(':has(.ccf-render-root[data-ccf-break="1"])')) continue;
+        const cs = getComputedStyle(li);
+        if (parseFloat(cs.borderBottomWidth) > 0 && visible(cs.borderBottomColor)) { color = cs.borderBottomColor; break; }
+      }
+      if (!color) {
+        const hr = [...document.querySelectorAll(".MuiDivider-root")].find((d) => !d.closest(".ccf-scp-panel"));
+        if (hr) { const cs = getComputedStyle(hr); color = visible(cs.borderBottomColor) && parseFloat(cs.borderBottomWidth) > 0 ? cs.borderBottomColor : (visible(cs.backgroundColor) ? cs.backgroundColor : ""); }
+      }
+      if (color) document.documentElement.style.setProperty("--ccf-divider-color", color);
+    } catch (e) { /* 기본 색 */ }
+  }
   function normalizeRuns(runs, textLength) {
     if (!Array.isArray(runs)) return [];
 

@@ -29,8 +29,8 @@ const contRules = [...bridge.matchAll(/`(\.MuiListItem-root\[\$\{CONT_ATTR\}="1"
       assert.equal(m.borderTop, 1, order + ': the row keeps the 1px top edge');
       assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('r3')).paddingTop), '16px', order + ': the extra panel row (li.ccf-scp-row) gets the gap too');
       assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('r4')).paddingTop), '16px', order + ': a narration divider row inside a run keeps the gap too');
-      const line = await page.evaluate(() => { const r = document.getElementById('r2'), rr = r.getBoundingClientRect(), cs = getComputedStyle(r, '::before'); return { w: parseFloat(cs.width), rowW: rr.width, left: parseFloat(cs.left), h: parseFloat(cs.height), bg: cs.backgroundColor }; });
-      assert.ok(Math.abs(line.w - (line.rowW - 32)) <= 1 && line.left === 16 && line.h === 1 && /255, 255, 255/.test(line.bg), order + ': the line is inset 16px on both sides like the divider between messages: ' + JSON.stringify(line));
+      const line = await page.evaluate(() => { const r = document.getElementById('r2'), rr = r.getBoundingClientRect(), cs = getComputedStyle(r, '::before'); return { w: parseFloat(cs.width), rowW: rr.width, left: parseFloat(cs.left), h: parseFloat(cs.height), bw: parseFloat(cs.borderTopWidth), bc: cs.borderTopColor }; });
+      assert.ok(Math.abs(line.w - (line.rowW - 32)) <= 1 && line.left === 16 && line.h === 0 && line.bw === 1 && /255, 255, 255/.test(line.bc), order + ': the line is inset 16px on both sides like the divider between messages: ' + JSON.stringify(line));
       assert.equal(m.padTop, 16, order + ': the text under the line keeps 16px from it (the bridge cont rule would give 0): ' + JSON.stringify(m));
       assert.ok(m.marginTop >= 8, order + ': space above the line: ' + JSON.stringify(m));
     }
