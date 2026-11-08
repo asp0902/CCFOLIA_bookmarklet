@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.6
+// @version      0.4.7
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.6";
+  const VERSION = "0.4.7";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -1280,8 +1280,29 @@
   // GM 자신의 패널 전송은 마지막 내 메시지의 이름·색을 따라가야 하므로 항상 새로 읽는다. 전송이 실패하면 틀을 버리고 한 번 다시 시도한다.
   let templateCache = null; // { roomId, fields, at }
   const TEMPLATE_TTL_MS = 5 * 60 * 1000;
+  // 전송 단계별 시간 측정(localStorage.ccfScpTiming = "1" 일 때만): 클릭 → 인증 → 본뜰 틀 → 본문 만들기 → 쓰기 응답 → 저장소 반영.
+  let sendTiming = null;
+  const timingOn = () => { try { return localStorage.getItem("ccfScpTiming") === "1"; } catch (e) { return false; } };
+  const tmark = (label) => { if (sendTiming) sendTiming.marks.push([label, Math.round(performance.now() - sendTiming.t0)]); };
+  // 입력을 시작하면 본뜰 틀(내 마지막 메시지)을 미리 읽어 둔다: 전송 때 Firestore 조회 한 번을 기다리지 않는다. 15초 안의 것만 쓴다.
+  let warmTemplate = null; // { roomId, fields, at }
+  let warming = false;
+  const WARM_TTL_MS = 15 * 1000;
+  async function warmTemplateIfNeeded() {
+    if (warming || !getRoomId()) return;
+    if (warmTemplate && warmTemplate.roomId === getRoomId() && Date.now() - warmTemplate.at < WARM_TTL_MS - 5000) return;
+    warming = true;
+    try {
+      const ctx = await getAuthContext();
+      warmTemplate = { roomId: ctx.roomId, fields: await fetchTemplateFields(ctx), at: Date.now() };
+    } catch (e) { /* 미리 읽기 실패는 전송 때 다시 읽는다 */ } finally { warming = false; }
+  }
   async function templateFor(ctx, cacheable) {
     if (cacheable && templateCache && templateCache.roomId === ctx.roomId && Date.now() - templateCache.at < TEMPLATE_TTL_MS) return templateCache.fields;
+    if (!cacheable && warmTemplate && warmTemplate.roomId === ctx.roomId && Date.now() - warmTemplate.at < WARM_TTL_MS) {
+      const fields = warmTemplate.fields; warmTemplate = null; tmark("template(warm)");
+      return fields;
+    }
     const fields = await fetchTemplateFields(ctx);
     templateCache = cacheable ? { roomId: ctx.roomId, fields, at: Date.now() } : null;
     return fields;
@@ -1296,7 +1317,9 @@
   }
   async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null, rollExtend = null) {
     const ctx = await getAuthContext();
+    tmark("auth");
     const template = await templateFor(ctx, !!(speaker || meta));
+    tmark("template");
     const fields = {};
     // 템플릿의 필드 구조를 그대로 유지하되, 우리가 정하는 값만 덮어쓴다.
     for (const [key, value] of Object.entries(template)) {
@@ -1346,15 +1369,35 @@
     if (ctx.uid && "from" in template) fields.from = { stringValue: ctx.uid };
 
     const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/messages`;
+    tmark("built");
     const response = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields })
     });
+    tmark("write-response");
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       throw new Error(`전송 실패 (${response.status}) ${detail.slice(0, 120)}`);
     }
+    if (sendTiming) {
+      // 쓴 메시지가 코코포리아 저장소(그리고 우리 목록)에 나타날 때까지의 시간
+      const timing = sendTiming;
+      response.clone().json().then((doc) => {
+        const id = String(doc?.name || "").split("/").pop();
+        const poll = () => {
+          const found = !!getRoomMessagesSlice()?.entities?.[id];
+          if (found) { timing.marks.push(["store", Math.round(performance.now() - timing.t0)]); finishTiming(timing); return; }
+          if (performance.now() - timing.t0 > 8000) { timing.marks.push(["store-timeout", 8000]); finishTiming(timing); return; }
+          window.requestAnimationFrame(poll);
+        };
+        poll();
+      }).catch(() => finishTiming(timing));
+    }
+  }
+  function finishTiming(timing) {
+    try { console.info("[ccf-scp-timing]", timing.marks.map(([k, v]) => `${k}:${v}ms`).join("  ")); } catch (e) { /* noop */ }
+    window.__ccfScpTimingLast = timing.marks;
   }
 
   function setStatus(message, kind = "") {
@@ -1461,13 +1504,19 @@
     const text = inputEl.value.trim();
     if (!text) return;
     sending = true;
+    sendTiming = timingOn() ? { t0: performance.now(), marks: [["click", 0]] } : null;
+    // 쓰기 응답을 기다리지 않고 바로 입력칸을 비운다(실패하면 되돌려 놓는다): 보내는 동안 글자가 남아 있어 느려 보이던 것을 없앤다.
+    const keptText = inputEl.value;
+    inputEl.value = "";
+    pinnedToBottom = true;
     try {
       await sendMessage(text);
+      tmark("sent");
       resetFmtStateAfterSend();
-      inputEl.value = "";
-      pinnedToBottom = true;
+      setStatus("");
     } catch (error) {
       console.error("[ccf-chat-panel] send failed", error);
+      if (inputEl && !inputEl.value) inputEl.value = keptText;
       setStatus(error?.message || "전송에 실패했습니다.", "error");
     } finally {
       sending = false;
@@ -2519,6 +2568,8 @@
       return true;
     };
     inputEl.addEventListener("input", buildSuggest);
+    inputEl.addEventListener("input", () => { warmTemplateIfNeeded(); });
+    inputEl.addEventListener("focus", () => { warmTemplateIfNeeded(); });
     inputEl.addEventListener("focus", buildSuggest); // 다시 포커스해도 추천이 뜨게
     inputEl.addEventListener("blur", () => window.setTimeout(() => { suggestEl.hidden = true; }, 150));
     inputEl.addEventListener("keydown", (event) => {
