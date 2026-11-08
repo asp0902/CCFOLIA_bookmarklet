@@ -34,7 +34,7 @@ assert.match(sync, /\.ccf-inline-divider \{\n        display: none !important;/)
 assert.match(panel, /\[300, 1200\]\.forEach/);
 console.log('format row fourth round PASS');
 // fifth round (user measurement 1.48.31): no header bottom border, no list padding, no right border, bar padding 0 and 60.67 high, bottom area rgb(18,18,18)
-assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-bar \{ border-bottom: 0; \}/); assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-list \{ padding: 0; \}/);
+assert.match(panel, /#\$\{PANEL_ID\} \.ccf-scp-bar \{ border-bottom: 0; \}/);
 assert.doesNotMatch(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
 assert.match(panel, /\.ccf-scp-fmt \{ gap: 0; margin: 0; padding: 6px; background: #282828; \}/); assert.match(panel, /min-height: 72\.67px/);
 assert.match(panel, /ccf-scp-tabs \{ background-color: var\(--scp-tabs-bg/); assert.match(panel, /ccf-scp-compose \{ background-color: var\(--scp-bottom-bg/);
@@ -57,3 +57,8 @@ console.log('format row grid PASS');
 // the line between the panels is drawn by the extra panel: 1px outside its right edge, over the faint native line
 assert.match(panel, /::after \{ content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;/);
 console.log('panel edge line PASS');
+// the end of the list: the same space under the last message's divider as the original (read at run time), more where a band shadow needs it
+assert.match(panel, /\.ccf-scp-list \{ padding: 0 0 var\(--scp-list-tail, 8px\); \}/);
+assert.match(panel, /\.ccf-scp-list:has\(\[data-ccr20-band\]\) \{ padding-bottom: 24px; \}/);
+assert.match(panel, /--scp-list-tail/);
+console.log('list tail PASS');
