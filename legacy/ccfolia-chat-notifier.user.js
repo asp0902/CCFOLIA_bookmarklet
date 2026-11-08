@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.36
+// @version      0.3.37
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.36";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.37";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3721,6 +3721,7 @@
     debugLog("bgm-xfade-start", { videoId, target });
     // 이 시점부터 "들리는 쪽"은 새 플레이어다 — 볼륨/정지 등 기존 로직이 이쪽을 향하게 한다.
     ccfBgmPlayer = incoming;
+    markCcfBgmActiveFrame(); // 화면(영상)도 새 곡 쪽으로
     ccfBgmPlayerVideoId = videoId;
     ccfBgmPlayerReady = true;
 
@@ -3748,6 +3749,7 @@
           try {
             incoming.mute?.(); incoming.stopVideo?.();
             ccfBgmPlayer = outgoing;
+            markCcfBgmActiveFrame();
             ccfBgmPlayerVideoId = videoId;
             outgoing.setVolume?.(target);
             outgoing.unMute?.();
@@ -6259,7 +6261,19 @@
     bar.querySelector(".ccf-youtube-bgm-fold-title").textContent = name;
   }
 
+  // BGM 영역에 보이는 영상은 "지금 소리가 나는" 플레이어의 것이어야 한다. 크로스페이드는 소리를 대기 플레이어로 넘기는데, 두 iframe 이 같은 독에 세로로 쌓이고 독이 한 칸 높이만 보여 주므로
+  // 첫 번째(옛 곡)만 보였다. 지금 플레이어가 아닌 쪽 iframe 에 standby 표식을 달아 CSS 로 숨긴다(소리는 그대로 두는 display:none 이라 재생에 영향 없음).
+  function markCcfBgmActiveFrame() {
+    const players = new Set([ccfBgmPlayer, ccfBgmPlayerB, ...ccfBgmPlayerPair].filter(Boolean));
+    for (const player of players) {
+      let frame = null;
+      try { frame = player.getIframe?.(); } catch (_) { frame = null; }
+      if (frame instanceof HTMLElement) frame.setAttribute("data-ccf-bgm-standby", player === ccfBgmPlayer ? "0" : "1");
+    }
+  }
+
   function syncCcfYoutubeBgmPlayerDockVisibility() {
+    markCcfBgmActiveFrame();
     if (!ccfBgmPlayerDock) {
       return;
     }
@@ -9120,6 +9134,10 @@
 
       .ccf-youtube-bgm-player-dock[data-ccf-youtube-bgm-visible="1"] {
         display: block !important;
+      }
+
+      .ccf-youtube-bgm-player-dock iframe[data-ccf-bgm-standby="1"] {
+        display: none !important;
       }
 
       .ccf-youtube-bgm-player,
