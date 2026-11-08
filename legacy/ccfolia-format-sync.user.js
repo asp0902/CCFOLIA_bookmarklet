@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.73
+// @version      0.1.74
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.73"),
+    version: getUserscriptVersion("0.1.74"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3418,7 +3418,8 @@
         transform: translate(-50%, -50%);
         box-sizing: border-box;
         border-radius: 0;
-        border: 1px solid rgba(255, 255, 255, 0.5);
+        border: 0;
+        box-shadow: inset 0 0 0 1px #808080;
         background: var(--ccf-chip-color, #ffffff);
         pointer-events: none;
       }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.73
+// @version      0.2.74
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.73";
+  const VERSION = "0.2.74";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1727,7 +1727,7 @@
       /* 색 미리보기: 오리지널 패널과 같게 버튼(30×30)은 고정, 칸은 16×16 정사각형(::before), color 입력은 투명 덮개. */
       #${PANEL_ID} .ccf-scp-fmt-color { position: relative; display: block; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; box-sizing: border-box; overflow: hidden; cursor: pointer; }
       #${PANEL_ID} .ccf-scp-fmt-color::before { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); box-sizing: border-box;
-        border: 1px solid rgba(255,255,255,.5); background: var(--ccf-chip-color, #fff); pointer-events: none; }
+        border: 0; box-shadow: inset 0 0 0 1px #808080; background: var(--ccf-chip-color, #fff); pointer-events: none; }
       #${PANEL_ID} .ccf-scp-fmt-color input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.55); }
       #${PANEL_ID} .ccf-scp-fmt-size.is-current::placeholder { color: rgba(255,255,255,.92); opacity: 1; }
