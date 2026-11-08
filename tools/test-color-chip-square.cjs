@@ -39,3 +39,6 @@ assert.doesNotMatch(panel, /border-right: 1px solid rgba\(255,255,255,\.12\)/);
 assert.match(panel, /\.ccf-scp-fmt \{ gap: 0; margin: 0; padding: 0; background: #282828; \}/); assert.match(panel, /min-height: 60\.67px/);
 assert.match(panel, /\.ccf-scp-tabs, #\$\{PANEL_ID\} \.ccf-scp-compose \{ background: rgb\(18,18,18\); \}/);
 console.log('panel match round 2 PASS');
+// the toolkit popovers of the native format bar (narrator characters, saved styles) are not hidden behind the extra panel
+assert.match(panel, /body:has\(\.ccf-inline-popover\.open\) #\$\{PANEL_ID\} \{ z-index: 1; \}/);
+console.log('popover over panel PASS');

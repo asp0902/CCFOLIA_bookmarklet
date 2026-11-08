@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.76
+// @version      0.2.77
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.76";
+  const VERSION = "0.2.77";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1703,6 +1703,8 @@
       /* 네이티브 입력 영역에서 잰 값(탭 48px, 서식 버튼 30×30 #282828, 입력창 우물 rgba(0,0,0,.2), 12px 안내 줄). */
       /* 오리지널 하단 영역(탭 포함 한 덩어리 Paper, 실측 rgb(18,18,18), 높이 347.33)과 맞춘다. 헤더 아래 테두리와 목록 위아래 패딩은 오리지널에 없다. */
       #${PANEL_ID} .ccf-scp-bar { border-bottom: 0; }
+      /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
+      body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
       #${PANEL_ID} .ccf-scp-list { padding: 0; }
       #${PANEL_ID} .ccf-scp-tabs, #${PANEL_ID} .ccf-scp-compose { background: rgb(18,18,18); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
