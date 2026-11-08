@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.2.80
+// @version      0.2.81
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.2.80";
+  const VERSION = "0.2.81";
   const PANEL_ID = "ccf-second-chat-panel";
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
   const MENU_ITEM_ATTR = "data-capybara-toolkit-chat-panel-menu";
@@ -1474,8 +1474,8 @@
       }
       #${PANEL_ID} * { box-sizing: border-box; }
       /* 두 패널 사이 세로선: 추가 패널 오른쪽 바깥에 1px 을 얹어 오리지널의 흐린 왼쪽 선(0.667px)을 덮는다(겹쳐 2줄이 되지 않게). */
-      #${PANEL_ID}::after { content: ""; position: absolute; top: 0; bottom: 0; right: -1px; width: 1px;
-        background: rgba(255,255,255,.22); pointer-events: none; }
+      #${PANEL_ID}::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
+        background: rgba(255,255,255,.3); pointer-events: none; z-index: 3; }
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
          걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다.
@@ -1709,7 +1709,8 @@
       /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
       body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
       #${PANEL_ID} .ccf-scp-list { padding: 0; }
-      #${PANEL_ID} .ccf-scp-tabs, #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); background-image: var(--scp-bottom-img, none); }
+      #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
+      #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
       #${PANEL_ID} .ccf-scp-tab { box-sizing: border-box; min-width: 48px; height: 48px; padding: 12px 16px;
         font-size: 14px; font-weight: 700; letter-spacing: .02857em; line-height: 1.75; }
@@ -2671,6 +2672,21 @@
     return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
   }
 
+  // 요소가 실제로 보이는 배경색: 조상 체인의 반투명 배경들을 불투명한 층을 만날 때까지 위에서 아래로 알파 합성한다(rgba(0,0,0,.1) 위에 rgb(18,18,18) 같은 구조).
+  function visibleBackgroundOf(el, pageBg) {
+    const layers = [];
+    for (let e = el; e instanceof Element; e = e.parentElement) {
+      const c = getComputedStyle(e).backgroundColor;
+      if (!c || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) continue;
+      layers.push(c);
+      const m = String(c).match(/[\d.]+/g) || [];
+      if (m.length < 4 || Number(m[3]) >= 1) break; // 불투명 층을 만났으면 그 아래는 안 보인다
+    }
+    let result = pageBg;
+    for (let i = layers.length - 1; i >= 0; i -= 1) result = toOpaqueColor(layers[i], result);
+    return result;
+  }
+
   // 네이티브 채팅 패널의 헤더 막대와 제목을 찾는다. 제목 텍스트는 로케일마다 다르므로
   // 글자가 아니라 "패널 맨 위에 있는, 폭이 거의 꽉 찬 낮은 막대"로 찾는다.
   function findNativeChatHeader(native) {
@@ -2766,22 +2782,9 @@
       set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
     }
 
-    // 하단 영역(탭 줄 포함 한 덩어리 Paper)의 실제 배경색·배경 이미지(MUI 다크 elevation 덧칠)를 입력칸 조상에서 읽는다. 못 찾으면 현재 값을 유지한다.
+    // 하단 입력 영역(이름·주사위·서식·입력칸)의 "실제 보이는 색"을 입력칸의 조상 체인에서 알파 합성으로 구한다. 못 찾으면 현재 값을 유지한다.
     const nativeInput = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(`#${PANEL_ID}`) && !t.closest('.MuiDialog-root, [role="dialog"]'));
-    let bottomPaper = nativeInput;
-    while (bottomPaper && bottomPaper.parentElement) {
-      const h = bottomPaper.getBoundingClientRect().height;
-      if (h > 250 && h < 450) break;
-      bottomPaper = bottomPaper.parentElement;
-    }
-    if (bottomPaper && bottomPaper !== nativeInput && bottomPaper !== document.body) {
-      const ps = getComputedStyle(bottomPaper);
-      if (!/^(transparent|rgba\(0, 0, 0, 0\))$/.test(ps.backgroundColor)) {
-        set("--scp-bottom-bg", toOpaqueColor(ps.backgroundColor, pageBg));
-        if (ps.backgroundImage && ps.backgroundImage !== "none") panelEl.style.setProperty("--scp-bottom-img", ps.backgroundImage);
-        else panelEl.style.removeProperty("--scp-bottom-img");
-      }
-    }
+    if (nativeInput) set("--scp-bottom-bg", visibleBackgroundOf(nativeInput.parentElement || nativeInput, pageBg));
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
     const header = findNativeChatHeader(native);
