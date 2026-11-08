@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.9
+// @version      0.5.10
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,19 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.9";
+  const VERSION = "0.5.10";
+  // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
+  if (INSTANCE_INDEX === 1) {
+    try {
+      const key = "ccf-suite-registry-v1";
+      const reg = JSON.parse(localStorage.getItem(key) || "{}");
+      const scripts = reg && typeof reg.scripts === "object" && reg.scripts ? reg.scripts : {};
+      const prev = scripts["ccf-chat-panel"] && typeof scripts["ccf-chat-panel"] === "object" ? scripts["ccf-chat-panel"] : {};
+      const now = new Date().toISOString();
+      scripts["ccf-chat-panel"] = { ...prev, id: "ccf-chat-panel", name: "CCF Second Chat Panel", version: VERSION, installedAt: prev.installedAt || now, lastSeenAt: now, lastSeenUrl: location.href };
+      localStorage.setItem(key, JSON.stringify({ scripts }));
+    } catch (e) { /* 등록 실패 무시 */ }
+  }
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -2946,7 +2958,7 @@
     return scpHost.gearSvg || `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="${GEAR_PATH}"/></svg>`;
   }
   // 오리지널 MUI 메뉴의 실제 모양: 사용자가 오리지널 메뉴(톱니 등)를 열면 그 종이·항목의 computed 스타일을 읽어 저장해 두고, 우리 메뉴가 같은 값을 쓴다(추측값은 저장이 없을 때만).
-  const SCP_MENU_STYLE_KEY = "ccf-scp-menu-style:v1";
+  const SCP_MENU_STYLE_KEY = "ccf-scp-menu-style:v2"; // v1 은 다른 메뉴를 읽어 잘못 저장된 값이 있어 버린다
   const readMenuStyle = () => { try { const v = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); return v && typeof v === "object" ? v : null; } catch (e) { return null; } };
   // 가장 최근에 눌린 오리지널 버튼(메뉴를 연 톱니를 특정하는 데 쓴다)과 마지막 캡처 결과(진단용).
   const lastNativeClick = { btn: null, at: 0 };
@@ -2959,8 +2971,12 @@
   function captureNativeMenuStyle(menu) {
     try {
       // 오리지널 톱니가 연 메뉴만 읽는다(다른 MUI 메뉴를 읽어 덮어쓰지 않게): 톱니 버튼이 펼쳐져 있고(aria-expanded), aria-controls 가 있으면 그 메뉴여야 한다.
+      // 코코포리아의 톱니 버튼은 aria-expanded/aria-controls 를 쓰지 않는다(실측) → 톱니가 방금(3초 안) 눌렸을 때 열린 메뉴를 그 메뉴로 본다. aria 가 있으면 그것도 맞아야 한다.
       const gear = scpHost.nativeGearBtn;
-      if (!(gear instanceof HTMLElement) || !gear.isConnected || gear.getAttribute("aria-expanded") !== "true") return;
+      if (!(gear instanceof HTMLElement) || !gear.isConnected) return;
+      const pressedGear = lastNativeClick.btn && (lastNativeClick.btn === gear || gear.contains(lastNativeClick.btn)) && Date.now() - lastNativeClick.at < 3000;
+      const expanded = gear.getAttribute("aria-expanded") === "true";
+      if (!pressedGear && !expanded) return;
       const controls = gear.getAttribute("aria-controls");
       if (controls && menu.id !== controls && !menu.closest(`[id="${controls}"]`) && !document.getElementById(controls)?.contains(menu)) return;
       const paper = menu.closest(".MuiMenu-paper, .MuiPopover-paper, .MuiPaper-root") || menu;
@@ -3033,7 +3049,7 @@
     const br = anchor.getBoundingClientRect(); // 저장값이 없을 때: MUI 처럼 종이 오른쪽 = 버튼 오른쪽, 종이 위 = 버튼 아래
     // 저장값이 없을 때: 오리지널 48px 버튼(아이콘 24px, 안쪽 12px)에 붙은 종이처럼 아이콘 오른쪽+12px 에 종이 오른쪽, 아이콘 아래+12px 에 종이 위쪽.
     const top = rel ? ar.top + rel.dTop : ar.bottom + 12;
-    const right = rel ? ar.right - rel.dRight : ar.right + 12;
+    const right = rel ? ar.right - rel.dRight : ar.right + 8; // 실측: 종이 오른쪽 = 아이콘 오른쪽 + 8, 위 = 아이콘 아래 + 12
     void br;
     menu.style.top = `${Math.round(Math.max(8, top))}px`;
     menu.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, right - menu.offsetWidth)))}px`;
