@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.2
+// @version      0.5.4
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.2";
+  const VERSION = "0.5.4";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -1783,7 +1783,7 @@
         justify-content: center; background: transparent; border: 0;
         color: var(--scp-close-color, #fff); cursor: pointer; padding: 0; border-radius: 50%; }
       .ccf-scp-close:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
-      .ccf-scp-close svg { display: block; }
+      .ccf-scp-close svg { display: block; fill: currentColor; }
       /* 메뉴(오리지널 채팅 메뉴와 같은 MUI Menu 모양): 어두운 종이, 둥근 모서리 4px, 높은 그림자. */
       .ccf-scp-menu { position: fixed; z-index: 2147483000; min-width: 180px; padding: 8px 0; background: rgb(66,66,66); color: #fff; border-radius: 4px;
         box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -2925,6 +2925,26 @@
   function gearIconHtml() {
     return scpHost.gearSvg || `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="${GEAR_PATH}"/></svg>`;
   }
+  // 오리지널 MUI 메뉴의 실제 모양: 사용자가 오리지널 메뉴(톱니 등)를 열면 그 종이·항목의 computed 스타일을 읽어 저장해 두고, 우리 메뉴가 같은 값을 쓴다(추측값은 저장이 없을 때만).
+  const SCP_MENU_STYLE_KEY = "ccf-scp-menu-style:v1";
+  const readMenuStyle = () => { try { const v = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); return v && typeof v === "object" ? v : null; } catch (e) { return null; } };
+  function captureNativeMenuStyle(menu) {
+    try {
+      const paper = menu.closest(".MuiMenu-paper, .MuiPopover-paper, .MuiPaper-root") || menu;
+      const item = menu.querySelector('[role="menuitem"]:not([data-capybara-toolkit-chat-panel-menu])') || menu.querySelector('[role="menuitem"]');
+      if (!(paper instanceof HTMLElement) || !(item instanceof HTMLElement)) return;
+      const pc = getComputedStyle(paper), lc = getComputedStyle(menu), ic = getComputedStyle(item);
+      const snapshot = {
+        paper: { backgroundColor: pc.backgroundColor, backgroundImage: pc.backgroundImage, boxShadow: pc.boxShadow, borderRadius: pc.borderRadius, minWidth: pc.minWidth, color: pc.color },
+        list: { paddingTop: lc.paddingTop, paddingBottom: lc.paddingBottom },
+        item: { minHeight: ic.minHeight, paddingTop: ic.paddingTop, paddingRight: ic.paddingRight, paddingBottom: ic.paddingBottom, paddingLeft: ic.paddingLeft, fontFamily: ic.fontFamily, fontSize: ic.fontSize, fontWeight: ic.fontWeight, lineHeight: ic.lineHeight, letterSpacing: ic.letterSpacing, color: ic.color },
+        width: Math.round(paper.getBoundingClientRect().width)
+      };
+      if (!snapshot.paper.backgroundColor || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(snapshot.paper.backgroundColor)) return;
+      localStorage.setItem(SCP_MENU_STYLE_KEY, JSON.stringify(snapshot));
+    } catch (e) { /* 못 읽으면 기본 모양 */ }
+  }
+  scpHost.captureMenuStyle = captureNativeMenuStyle;
   let gearMenuEl = null;
   function closeGearMenu() {
     if (gearMenuEl) { gearMenuEl.remove(); gearMenuEl = null; }
@@ -2950,6 +2970,17 @@
     };
     addItem(handle.floating ? "고정" : "분리", () => setFloating(!handle.floating));
     addItem("이 채팅 패널 닫기", () => closePanel());
+    // 저장된 오리지널 메뉴 모양이 있으면 그대로 입힌다(종이·덮는 색 이미지·그림자·반경·폭·항목 높이/패딩/글꼴/색).
+    const look = readMenuStyle();
+    if (look) {
+      const pp = look.paper || {}, ll = look.list || {}, ii = look.item || {};
+      Object.assign(menu.style, { backgroundColor: pp.backgroundColor, backgroundImage: pp.backgroundImage && pp.backgroundImage !== "none" ? pp.backgroundImage : "none", boxShadow: pp.boxShadow, borderRadius: pp.borderRadius,
+        color: pp.color, minWidth: look.width ? `${look.width}px` : pp.minWidth, paddingTop: ll.paddingTop, paddingBottom: ll.paddingBottom, fontFamily: ii.fontFamily });
+      for (const el of menu.querySelectorAll(".ccf-scp-menu-item")) {
+        Object.assign(el.style, { minHeight: ii.minHeight, paddingTop: ii.paddingTop, paddingRight: ii.paddingRight, paddingBottom: ii.paddingBottom, paddingLeft: ii.paddingLeft,
+          fontSize: ii.fontSize, fontWeight: ii.fontWeight, lineHeight: ii.lineHeight, letterSpacing: ii.letterSpacing, color: ii.color });
+      }
+    }
     document.body.appendChild(menu);
     const r = anchor.getBoundingClientRect();
     menu.style.top = `${Math.round(r.bottom + 4)}px`;
@@ -3353,6 +3384,8 @@
         if (nativeSvg && !scpHost.gearSvg) {
           const copy = nativeSvg.cloneNode(true);
           copy.removeAttribute("class"); copy.setAttribute("width", "24"); copy.setAttribute("height", "24"); copy.setAttribute("aria-hidden", "true");
+          // MUI 의 SvgIcon 은 클래스 규칙으로 fill:currentColor 를 주는데 클래스를 떼면 기본 검정이 된다 → 글자색(버튼 color)을 따르도록 직접 지정한다.
+          copy.setAttribute("fill", "currentColor");
           if (copy.querySelector("path")) {
             scpHost.gearSvg = copy.outerHTML;
             for (const g of document.querySelectorAll(".ccf-scp-gear")) g.innerHTML = scpHost.gearSvg;
@@ -3758,6 +3791,7 @@
     if (!getRoomId()) return;
     for (const menu of document.querySelectorAll('[role="menu"]')) {
       if (!(menu instanceof HTMLElement) || !isVisible(menu)) continue;
+      if (!menu.classList.contains("ccf-scp-menu") && !menu.closest(".ccf-scp-panel")) captureNativeMenuStyle(menu);
 
       const existing = menu.querySelector(`[${MENU_ITEM_ATTR}="1"]`);
       if (existing) {
