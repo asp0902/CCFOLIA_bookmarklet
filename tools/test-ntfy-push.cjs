@@ -86,6 +86,21 @@ async function backgroundPart() {
     await config(base); await page.clock.runFor(10);
     await page.evaluate(() => { document.hasFocus = () => true; });
     assert.equal(await hook({ name: '하나', text: '안녕' }), false, 'the room is in front');
+    assert.match(await page.evaluate(() => window.__CCF_NTFY_STATE__.lastSkip), /^룸 화면을 보고 있음\(최근 조작 \d+초 전\)$/);
+    // idle: visible and focused, but no input for the set minutes (default 2) -> away
+    await page.clock.runFor(60_000); assert.equal(await hook({ name: '하나', text: '1분' }), false, '1 min of no input is still "present"');
+    await page.mouse.move(5, 5); await page.clock.runFor(1000);
+    assert(await page.evaluate(() => Date.now() - window.__CCF_NTFY_STATE__.lastInputAt) < 2000, 'input is recorded (lastInputAt)');
+    await page.clock.runFor(121_000); assert.equal(await hook({ name: '하나', text: '자리 비움' }), true, '2 min without input -> away');
+    assert.equal((await sent()).length, 1);
+    await page.clock.runFor(11_000); await sent();
+    await config({ ...base, awayMinutes: 5 }); await page.clock.runFor(10);
+    await page.keyboard.press('a'); await page.clock.runFor(180_000);
+    assert.equal(await hook({ name: '하나', text: 'x' }), false, 'custom 5 min: 3 min is not away');
+    await page.clock.runFor(130_000); assert.equal(await hook({ name: '하나', text: 'x' }), true, 'custom 5 min passed');
+    await sent(); await page.clock.runFor(11_000);
+    await config(base); await page.clock.runFor(10);
+    await page.mouse.move(9, 9); await page.clock.runFor(100);
     // away: the first message goes at once with the title "sender + room", no text by default
     await page.evaluate(() => { document.hasFocus = () => false; });
     assert.equal(await hook({ name: '하나', text: '비밀 내용' }), true);

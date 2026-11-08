@@ -8,7 +8,7 @@
   const SOURCE = "capybara-ntfy";
   const BATCH_MS = 10_000;        // 이 시간 안에 더 오는 메시지는 한 알림으로 합친다
   const MAX_PER_MINUTE = 6;       // 분당 전송 상한
-  const state = { config: null, windowEnd: 0, pending: [], flushTimer: 0, sent: [], lastSkip: "", total: 0 };
+  const state = { config: null, windowEnd: 0, pending: [], flushTimer: 0, sent: [], lastSkip: "", total: 0, lastInputAt: Date.now() };
   window.__CCF_NTFY_STATE__ = state;
 
   // 룸 이름: 룸 화면 상단의 룸 이름(relay-page.js 와 같은 요소)을 먼저, 없으면 탭 제목에서 앞의 "(안읽음 수) "를 뗀 것.
@@ -22,7 +22,16 @@
     return title.replace(/\s*[-|–—]\s*(?:CCFOLIA|ココフォリア|코코포리아).*$/i, "").trim().slice(0, 40) || "코코포리아";
   };
   const roomUrl = () => (/^\/rooms\//.test(location.pathname) ? `${location.origin}${location.pathname}` : location.origin);
-  const away = () => document.visibilityState !== "visible" || !document.hasFocus();
+  // 자리 비움: 탭이 숨겨졌거나 창이 비활성이거나, 이 페이지에서 마지막 조작 후 N분(설정, 기본 2, 1~60)이 지남.
+  const awayMs = () => Math.min(60, Math.max(1, Math.round(Number(state.config?.awayMinutes) || 2))) * 60_000;
+  const markInput = () => { state.lastInputAt = Date.now(); };
+  for (const type of ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"]) window.addEventListener(type, markInput, { capture: true, passive: true });
+  const awayReason = () => {
+    if (document.visibilityState !== "visible") return "";
+    if (!document.hasFocus()) return "";
+    const idle = Date.now() - state.lastInputAt;
+    return idle >= awayMs() ? "" : `룸 화면을 보고 있음(최근 조작 ${Math.round(idle / 1000)}초 전)`;
+  };
   const mySpeakerName = () => String(document.querySelector('input[name="name"]')?.value || "").trim();
 
   const send = (payload) => {
@@ -55,7 +64,7 @@
     if (!config || !config.enabled || !config.topic) return false;
     const name = String(info?.name || "").trim() || "누군가";
     const text = String(info?.text || "").trim().slice(0, 60);
-    if (config.onlyAway !== false && !away()) { state.lastSkip = "룸 화면을 보고 있음"; return false; }
+    if (config.onlyAway !== false) { const watching = awayReason(); if (watching) { state.lastSkip = watching; return false; } }
     if (name && name === mySpeakerName()) { state.lastSkip = "내 메시지"; return false; }
     if (config.scope === "keywords") {
       const keywords = (config.keywords || []).map((k) => String(k).trim().toLowerCase()).filter(Boolean);
