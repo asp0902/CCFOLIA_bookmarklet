@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.82
+// @version      0.1.83
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -97,7 +97,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.82"),
+    version: getUserscriptVersion("0.1.83"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -12629,6 +12629,54 @@
     }
     return false; // 일반 텍스트 paste — 기본 동작 유지
   }
+
+  // 추가 룸 채팅 패널 같은 다른 입력칸이 같은 붙여넣기 처리를 쓰도록 내보낸다. 이미지 파일은 Firestore 에 저장해 이미지 토큰을, 이미지 주소·html 이미지는 주소를 만든다.
+  // 처리했으면 true(기본 붙여넣기를 막음), 일반 글자 붙여넣기는 false. 준비되면 insert(imageUrl, alt) 를 부른다.
+  function handleImagePasteForTextInput(event, insert) {
+    const clipboard = event?.clipboardData;
+    if (!clipboard || typeof insert !== "function") return false;
+    const stop = () => { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); };
+    const files = getClipboardImageFiles(event);
+    if (files.length) {
+      stop();
+      const file = files[0];
+      uploadImageFilesToIfh([file]).then((uploads) => {
+        const imageUrl = normalizeImageUrl(uploads?.[0]?.imageUrl || "");
+        if (!imageUrl) {
+          alert("이미지를 저장했지만 Firestore 이미지 토큰을 만들지 못했습니다.");
+          return;
+        }
+        const prepared = prepareImageUrlForTransport(imageUrl);
+        if (!prepared) { alert("이미지가 너무 크거나 저장 공간이 부족해 추가할 수 없습니다. 이미지 링크를 사용해주세요."); return; }
+        insert(prepared, getImageAltFromFile(file));
+      }).catch((error) => {
+        console.warn("[CCF] composer image upload failed:", error);
+        alert(getIfhUploadErrorMessage(error));
+        maybeOpenIfhHelpPage(error);
+      });
+      return true;
+    }
+    const plain = (clipboard.getData("text/plain") || "").trim();
+    if (plain && looksLikeClipboardImageUrl(plain)) {
+      stop();
+      const prepared = prepareImageUrlForTransport(normalizeClipboardImageUrlText(plain));
+      if (!prepared) { alert("이미지가 너무 크거나 저장 공간이 부족해 추가할 수 없습니다. 이미지 링크를 사용해주세요."); return true; }
+      insert(prepared, getImageAltFromUrl(plain));
+      return true;
+    }
+    if (!plain) {
+      const payload = extractClipboardImagePayload(event);
+      if (payload?.imageUrl) {
+        stop();
+        const prepared = prepareImageUrlForTransport(payload.imageUrl);
+        if (!prepared) { alert("이미지가 너무 크거나 저장 공간이 부족해 추가할 수 없습니다. 이미지 링크를 사용해주세요."); return true; }
+        insert(prepared, payload.imageAlt);
+        return true;
+      }
+    }
+    return false;
+  }
+  window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = { handle: handleImagePasteForTextInput };
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
