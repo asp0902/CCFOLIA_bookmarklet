@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.4.8
+// @version      0.4.9
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,7 +50,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.4.8";
+  const VERSION = "0.4.9";
   // 1번 패널은 예전 id 를 그대로 쓴다(호환). 다른 스크립트들은 공통 클래스 .ccf-scp-panel 로 패널을 찾는다.
   const PANEL_ID = INSTANCE_INDEX === 1 ? "ccf-second-chat-panel" : `ccf-chat-panel-${INSTANCE_INDEX}`;
   const SAFE_ATTR = "data-capybara-toolkit-chat-panel";
@@ -587,6 +587,18 @@
   let ccfScpListClass = "";
   let ccfScpRowDivider = "";
   let ccfScpListTail = -1; // 네이티브 마지막 줄 아래 여백(px), -1 = 아직 못 읽음
+  // 안정된 실측값만 채택하고 저장한다: 새로고침 직후엔 오리지널 목록이 아직 바닥 정렬·행 높이 확정 전이라 잘못 재질 수 있다.
+  // 같은 값이 연속으로 나온 뒤에만 쓰고, 채택한 값은 저장해 다음 새로고침 직후부터 그 값으로 시작한다. 범위(1~30px) 밖은 이상치로 본다.
+  const SCP_TAIL_KEY = "ccf-scp-list-tail:v1";
+  let tailSample = null; // { value, count }
+  const readSavedTail = () => {
+    try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.tail); return v >= 1 && v <= 30 ? v : -1; } catch (e) { return -1; }
+  };
+  const adoptTail = (value) => {
+    ccfScpListTail = value;
+    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: value })); } catch (e) { /* 저장 실패는 무시 */ }
+    if (panelEl) panelEl.style.setProperty("--scp-list-tail", `${value}px`);
+  };
   let ccfScpRowPadBottom = 0; // 네이티브 줄의 아래 패딩(구분선 위 여백 +1px 계산용)
   let ccfScpInnerUl = null; // 증분 렌더용: 현재 줄들이 담긴 내부 ul
 
@@ -638,8 +650,9 @@
       let tail = nativeList instanceof HTMLElement ? (parseFloat(getComputedStyle(nativeList).paddingBottom) || 0) : 0;
       const after = source.nextElementSibling;
       if (after instanceof HTMLElement && after.classList.contains("MuiDivider-root")) tail += parseFloat(getComputedStyle(after).marginBottom) || 0;
-      ccfScpListTail = Math.round(tail * 100) / 100;
-      if (panelEl) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
+      if (ccfScpListTail < 0) ccfScpListTail = readSavedTail();
+      if (ccfScpListTail < 0 && tail >= 1 && tail <= 30) ccfScpListTail = Math.round(tail * 100) / 100;
+      if (panelEl && ccfScpListTail >= 0) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
     } catch (e) { /* 못 읽으면 기본 여백 */ }
 
     // 줄을 담고 있던 목록의 클래스도 함께 기억한다.
@@ -892,6 +905,7 @@
   // CSS 규칙은 어딘가에 눌려 0px 가 되므로 줄에 직접·강제로 넣는다.
   function applyRowMarkers(rows) {
     const divider = ccfScpRowDivider || "1px solid rgba(128,128,128,.24)";
+    if (ccfScpListTail < 0) ccfScpListTail = readSavedTail();
     if (panelEl && ccfScpListTail >= 0) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
     rows.forEach((row, i) => {
       if (!(row instanceof HTMLElement)) return;
@@ -2808,7 +2822,7 @@
     ccfScpRowTemplate = null;
     ccfScpListClass = "";
     ccfScpRowDivider = "";
-    ccfScpListTail = -1;
+    ccfScpListTail = -1; tailSample = null;
     ccfScpInnerUl = null;
     // selectedChar 는 닫아도 유지한다(같은 룸 재열기 시 화자 유지). 여기서 null 로
     // 지운 뒤 savePrefs 가 돌면 저장된 화자 id 까지 빈값으로 덮여 복원이 깨진다.
@@ -3052,9 +3066,12 @@
             if (after instanceof HTMLElement && after.classList.contains("MuiDivider-root")) end = after;
             const viewBottom = scroller.getBoundingClientRect().top + scroller.clientHeight;
             const tail = Math.round((viewBottom - end.getBoundingClientRect().bottom) * 100) / 100;
-            if (tail >= 0 && tail <= 60) {
-              ccfScpListTail = tail;
-              panelEl.style.setProperty("--scp-list-tail", `${tail}px`);
+            // 연속 3번(약 1.5초) 같은 값이 나올 때만 채택한다. 범위 밖(0 또는 30 초과)은 이상치로 무시하고 센 횟수를 지운다.
+            if (tail >= 1 && tail <= 30) {
+              if (tailSample && Math.abs(tailSample.value - tail) < 0.5) tailSample.count += 1; else tailSample = { value: tail, count: 1 };
+              if (tailSample.count >= 3 && Math.abs(ccfScpListTail - tail) >= 0.5) adoptTail(tail);
+            } else {
+              tailSample = null;
             }
           }
         }
