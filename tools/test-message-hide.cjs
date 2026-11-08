@@ -104,10 +104,15 @@ assert.match(sync, /out\.hidden = true/);
       const gmRow = page.locator('#ccf-second-chat-panel [data-ccf-msg-id="m1"]');
       await gmRow.hover();
       // an original chat row (native list) gets the button too, matched to its message by the text
-      await page.evaluate(() => { const ul = document.createElement('ul'); ul.id = 'nat'; ul.innerHTML = '<li class="MuiListItem-root" style="position:relative"><h6 class="MuiListItemText-primary">눈깅이</h6><p class="MuiListItemText-secondary">보이는 말</p></li><li class="MuiListItem-root" style="position:relative"><h6 class="MuiListItemText-primary">눈깅이</h6><p class="MuiListItemText-secondary">다른 말</p></li>'; document.getElementById('root').append(ul); });
+      await page.evaluate(() => { const ul = document.createElement('ul'); ul.id = 'nat'; ul.innerHTML = '<li class="MuiListItem-root" style="position:relative;height:60px"><h6 class="MuiListItemText-primary">눈깅이</h6><p class="MuiListItemText-secondary">보이는 말</p><div class="act" style="position:absolute;right:16px;top:8px;display:flex;gap:6px"><button style="width:30px;height:30px">답</button><button style="width:30px;height:30px">수</button></div></li><li class="MuiListItem-root" style="position:relative"><h6 class="MuiListItemText-primary">눈깅이</h6><p class="MuiListItemText-secondary">다른 말</p></li>'; document.getElementById('root').append(ul); });
       await page.waitForTimeout(2000);
       const ids = await page.evaluate(() => [...document.querySelectorAll('#nat .ccf-hide-btn')].map((b) => b.dataset.id));
       assert.deepEqual(ids, ['m1', 'm3'], 'eye buttons on the original rows, matched to the messages: ' + JSON.stringify(ids));
+      // the eye sits right next to the native hover buttons (to their left, same height)
+      await page.locator('#nat > li').first().hover();
+      await page.waitForTimeout(200);
+      const pos = await page.evaluate(() => { const li = document.querySelector('#nat > li'); const eye = li.querySelector('.ccf-hide-btn').getBoundingClientRect(), act = li.querySelector('.act').getBoundingClientRect(); return { gap: Math.round(act.left - eye.right), dy: Math.round((eye.top + eye.height / 2) - (act.top + act.height / 2)) }; });
+      assert.ok(pos.gap >= 0 && pos.gap <= 4 && Math.abs(pos.dy) <= 2, 'the eye button is next to the native buttons: ' + JSON.stringify(pos));
       await context.close();
     }
     console.log('message hide PASS');
