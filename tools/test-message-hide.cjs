@@ -111,8 +111,9 @@ assert.match(sync, /out\.hidden = true/);
       // the eye sits right next to the native hover buttons (to their left, same height)
       await page.locator('#nat > li').first().hover();
       await page.waitForTimeout(200);
-      const pos = await page.evaluate(() => { const li = document.querySelector('#nat > li'); const eye = li.querySelector('.ccf-hide-btn').getBoundingClientRect(), act = li.querySelector('.act').getBoundingClientRect(); return { gap: Math.round(act.left - eye.right), dy: Math.round((eye.top + eye.height / 2) - (act.top + act.height / 2)) }; });
-      assert.ok(pos.gap >= 0 && pos.gap <= 4 && Math.abs(pos.dy) <= 2, 'the eye button is next to the native buttons: ' + JSON.stringify(pos));
+      const pos = await page.evaluate(() => { const li = document.querySelector('#nat > li'); const eye = li.querySelector('.ccf-hide-btn'); const act = li.querySelector('.act'); return { inGroup: eye.parentElement === act, before: eye.nextElementSibling === act.querySelector('button:not(.ccf-hide-btn)'), cls: eye.className }; });
+      assert.ok(pos.inGroup && pos.before, 'the eye button sits in the native hover button group, just before the edit button: ' + JSON.stringify(pos));
+      assert.equal(await page.locator('#nat > li').first().locator('.ccf-hide-btn').count(), 1, 'still one eye button');
       await context.close();
     }
     console.log('message hide PASS');
