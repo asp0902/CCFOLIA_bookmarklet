@@ -26,21 +26,25 @@ const html = (rows) => `<!doctype html><meta charset=utf-8><body style="backgrou
       assert.equal(await page.evaluate(() => window.__CCF_NTFY_STATE__.total), 0, variant + ': the history present at load is never pushed');
       assert.equal(posts.length, 0);
       // someone else writes: the hook is called, ntfy counts it and posts once
-      await page.evaluate((idx) => { const li = document.createElement('template'); li.innerHTML = `<li class="MuiListItem-root" ${idx}><div class="MuiListItemAvatar-root"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary MuiTypography-subtitle2">다른사람<span> - 2026/11/12 20:01</span></h6><p class="MuiTypography-root MuiListItemText-secondary MuiTypography-body2">안녕하세요 새 메시지</p></div></li>`; document.getElementById('list').appendChild(li.content.firstElementChild); }, idx(2));
+      await page.evaluate((idx) => { const t = (() => { const d = new Date(); return '今日 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); })(); const li = document.createElement('template'); li.innerHTML = `<li class="MuiListItem-root" ${idx}><div class="MuiListItemAvatar-root"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary MuiTypography-subtitle2">다른사람<span> - ${t}</span></h6><p class="MuiTypography-root MuiListItemText-secondary MuiTypography-body2">안녕하세요 새 메시지</p></div></li>`; document.getElementById('list').appendChild(li.content.firstElementChild); }, idx(2));
       await page.waitForTimeout(1200);
       const diag1 = await page.evaluate(() => window.__CCF_NOTIFIER_DIAG__());
       assert.equal(await page.evaluate(() => window.__CCF_NTFY_STATE__.total), 1, `${variant}: other person's message -> total 1 (diag ${JSON.stringify(diag1)})`);
       assert.equal(posts.length, 1, 'one real POST'); assert.match(posts[0].message, /다른사람: 안녕하세요 새 메시지/);
       // my own message: ntfy skips it
-      await page.evaluate((idx) => { const li = document.createElement('template'); li.innerHTML = `<li class="MuiListItem-root" ${idx}><div class="MuiListItemAvatar-root"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary MuiTypography-subtitle2">나<span> - 2026/11/12 20:02</span></h6><p class="MuiTypography-root MuiListItemText-secondary MuiTypography-body2">내가 쓴 말</p></div></li>`; document.getElementById('list').appendChild(li.content.firstElementChild); }, idx(3));
+      await page.evaluate((idx) => { const t = (() => { const d = new Date(); return '今日 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); })(); const li = document.createElement('template'); li.innerHTML = `<li class="MuiListItem-root" ${idx}><div class="MuiListItemAvatar-root"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary MuiTypography-subtitle2">나<span> - ${t}</span></h6><p class="MuiTypography-root MuiListItemText-secondary MuiTypography-body2">내가 쓴 말</p></div></li>`; document.getElementById('list').appendChild(li.content.firstElementChild); }, idx(3));
       await page.waitForTimeout(1200);
       const st = await page.evaluate(() => ({ total: window.__CCF_NTFY_STATE__.total, lastSkip: window.__CCF_NTFY_STATE__.lastSkip }));
       assert.deepEqual(st, { total: 1, lastSkip: '내 메시지' }, variant + ': my message is skipped'); assert.equal(posts.length, 1);
       // the text of an existing row changes into a new message (virtual lists reuse rows): also reaches the hook
-      await page.evaluate(() => { document.querySelector('#list li:first-child p').textContent = '재사용된 줄의 새 글'; document.querySelector('#list li:first-child h6').firstChild.textContent = '또다른사람'; });
+      await page.evaluate(() => { document.querySelector('#list li:first-child p').textContent = '재사용된 줄의 새 글'; document.querySelector('#list li:first-child h6').firstChild.textContent = '또다른사람'; document.querySelector('#list li:first-child h6 span').textContent = ' - ' + (() => { const d = new Date(); return '今日 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); })(); });
       await page.waitForTimeout(1500);
       const reused = await page.evaluate(() => window.__CCF_NTFY_STATE__.total);
       assert.equal(reused, 2, variant + ': a reused row with new text is a new message');
+      // an OLD row drawn again (tab switch / scroll up): not a new message
+      await page.evaluate((idx) => { const li = document.createElement('template'); li.innerHTML = `<li class="MuiListItem-root" ${idx}><div class="MuiListItemAvatar-root"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary MuiTypography-subtitle2">옛사람<span> - 2026/10/07 09:00</span></h6><p class="MuiTypography-root MuiListItemText-secondary MuiTypography-body2">오래된 글이 다시 그려짐</p></div></li>`; document.getElementById('list').appendChild(li.content.firstElementChild); }, idx(9));
+      await page.waitForTimeout(1200);
+      assert.equal(await page.evaluate(() => window.__CCF_NTFY_STATE__.total), 2, variant + ': an old row drawn again is not pushed'); assert.equal(await page.evaluate(() => window.__CCF_NOTIFIER_DIAG__().blocked['old-timestamp'] >= 1), true);
       const diag = await page.evaluate(() => window.__CCF_NOTIFIER_DIAG__());
       assert(diag.hookCalls >= 3 && diag.hasHook, 'diag counts hook calls: ' + JSON.stringify(diag));
       assert.deepEqual(errors, []); await page.close();

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.55";
-  const BUILD_ID = "2026-11-12-ntfy-diag-226";
+  const VERSION = "0.3.56";
+  const BUILD_ID = "2026-11-12-ntfy-recent-227";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
