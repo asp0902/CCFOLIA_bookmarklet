@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.110
+// @version      0.1.112
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.110",
+    version: "0.1.112",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1007,7 +1007,8 @@
     .container[data-embedded="1"] .panel { position: absolute !important; inset: 0; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; box-shadow: none; background-color: transparent; }
     .container[data-embedded="1"] [data-resize-handle], .container[data-embedded="1"] header [data-action="close"] { display: none !important; }
     .container[data-embedded="1"] header { cursor: default; }
-    .container[data-embedded="1"] header h1 { display: none; } /* 창 제목(GM 도구)과 탭 이름이 이미 있다 */
+    /* 탭 줄이 보일 때(탭 2개 이상)만 숨긴다: 그땐 탭 이름이 제목이다. 탭이 하나면 이 제목이 유일한 "핸드아웃" */
+    :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header h1 { display: none; }
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
@@ -2759,6 +2760,7 @@
   const GREETING_STORAGE_PREFIX = "ccf-handout:greeted:";
   const GREETING_SKIP_DAY_KEY = "ccf-handout:greeted-skip-day";
   let greetingRoot = null;
+  const greetingDismissed = new Set(); // 확인 없이 닫은 룸: 다시 로드하기 전에는 다시 띄우지 않는다(동의로 치지 않는다)
 
   function isGreeted(roomKey) {
     try { return localStorage.getItem(GREETING_STORAGE_PREFIX + roomKey) === "1"; }
@@ -2817,6 +2819,7 @@
     if (room === "global") return;            // 룸 밖에서는 안 띄움
     if (skipped) return;                      // 오늘 다시 보지 않기 체크된 상태
     if (alreadyMounted) return;
+    if (greetingDismissed.has(room)) return;
     mountGreeting(room);
   }
 
@@ -2882,12 +2885,18 @@
         </div>
       </div>
     `;
+    // 코코포리아 기본 Dialog 처럼: 백드롭을 누르거나 Esc 로 닫는다. 확인이 아니므로 동의(markGreeted)·오늘 건너뛰기는 하지 않는다.
+    const dismiss = () => { document.removeEventListener("keydown", onKey, true); if (greetingRoot === host) { greetingRoot = null; greetingDismissed.add(roomKey); } host.remove(); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); dismiss(); } };
+    document.addEventListener("keydown", onKey, true);
+    sh.querySelector(".gd-overlay").addEventListener("mousedown", (e) => { if (e.target === e.currentTarget) dismiss(); });
     sh.addEventListener("click", (e) => {
       const b = e.target.closest('button[data-action="greeting-ok"]');
       if (!b) return;
       const skipToday = !!sh.querySelector('input[data-skip-today]')?.checked;
       // 체크박스 ON 일 때만 오늘 하루 skip. OFF 면 다음 실행 시 다시 팝업.
       if (skipToday) markSkipToday();
+      document.removeEventListener("keydown", onKey, true);
       greetingRoot?.remove();
       greetingRoot = null;
       // 확인 시점부터 자동 감시 활성화. 다음 실행 때도 유지.
@@ -2906,7 +2915,7 @@
     });
     (document.body || document.documentElement).appendChild(host);
     greetingRoot = host;
-    registerTeardown(() => host.remove());
+    registerTeardown(() => { document.removeEventListener("keydown", onKey, true); host.remove(); });
   }
 
   // ===== 채팅 발신자 감시 (plList 자동 추가) =====

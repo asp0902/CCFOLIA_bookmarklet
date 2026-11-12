@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.28
+// @version      0.5.29
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.28";
+  const VERSION = "0.5.29";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1546,8 +1546,8 @@
       #${ROOT_ID}.is-embedded { position:absolute;inset:0;pointer-events:auto }
       #${ROOT_ID}.is-embedded .ccf-cs-dialog { position:absolute;inset:0;margin:0;width:100%!important;height:100%!important;box-shadow:none;border-radius:0;background:transparent;transform:none!important }
       #${ROOT_ID}.is-embedded .ccf-cs-dialog>header { cursor:default }
-      #${ROOT_ID}.is-embedded .ccf-cs-dialog.is-panel>header { display:none }
-      #${ROOT_ID}.is-embedded .ccf-cs-dialog.is-panel { grid-template-rows:48px minmax(0,1fr) } /* 목록: 제목 "사이코로픽션"은 탭 이름과 같고 버튼도 없다 */
+      .ccf-gt-body:not([data-single-tab]) #${ROOT_ID}.is-embedded .ccf-cs-dialog.is-panel>header { display:none }
+      .ccf-gt-body:not([data-single-tab]) #${ROOT_ID}.is-embedded .ccf-cs-dialog.is-panel { grid-template-rows:48px minmax(0,1fr) } /* 목록: 제목 "사이코로픽션"은 탭 이름과 같고 버튼도 없다 */
       #${ROOT_ID}.is-embedded .ccf-cs-dialog>header [data-action="close"] { display:none }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed { height:auto!important;min-height:0;bottom:auto!important;top:calc(50% - 32px)!important;margin:0 auto;grid-template-rows:64px }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed>:not(header) { display:none!important }
