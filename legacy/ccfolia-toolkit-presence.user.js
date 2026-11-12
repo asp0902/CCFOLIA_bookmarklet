@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.8
+// @version      0.0.9
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -166,6 +166,7 @@
       #ccf-gm-tools .ccf-gt-close{all:unset;box-sizing:border-box;cursor:pointer;width:40px;height:40px;display:inline-grid;place-items:center;border-radius:50%;transition:background-color 150ms}
       #ccf-gm-tools .ccf-gt-close:hover{background:rgba(255,255,255,.08)}
       #ccf-gm-tools .ccf-gt-close svg{width:24px;height:24px;fill:currentColor}
+      #ccf-gm-tools .ccf-gt-tabs[hidden]{display:none}
       #ccf-gm-tools .ccf-gt-tabs{display:flex;flex:0 0 auto;min-height:48px;background:#212121;border-bottom:1px solid rgba(255,255,255,.12)}
       #ccf-gm-tools .ccf-gt-tab{all:unset;box-sizing:border-box;position:relative;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:6px 16px;font-size:14px;font-weight:700;color:rgba(255,255,255,.7)}
       #ccf-gm-tools .ccf-gt-tab:hover{background:rgba(255,255,255,.06)}
