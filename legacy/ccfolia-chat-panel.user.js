@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.28
+// @version      0.5.29
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.28";
+  const VERSION = "0.5.29";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -4692,7 +4692,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
           const roomAudio = (src, name, volume, repeat) => (url(src) ? { url: url(src), name: String(name || "").slice(0, 100), volume: Math.max(0, Math.min(1, num(volume, 1))), repeat: repeat !== false } : null);
           const items = Object.values(ent.roomItems?.entities || {}).map((item) => relayItemView(item, url, num)).filter(Boolean);
           const characters = Object.values(ent.roomCharacters?.entities || {})
-            .filter((c) => c && !c.secret && !c.invisible && c.active !== false && url(c.iconUrl))
+            .filter((c) => c && !c.secret && c.active !== false && url(c.iconUrl))
             .map((c) => ({
               hideStatus: !!c.hideStatus, initiative: num(c.initiative),
               status: (Array.isArray(c.status) ? c.status : []).slice(0, 8).filter((st) => st && String(st.label || "").trim())
@@ -4751,7 +4751,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         const isChar = kind === "character", isDice = kind === "dice"; // a dice symbol (made by a participant: the relay checked it is theirs) moves like an item, in cells
         const doc = (isChar ? ent?.roomCharacters : isDice ? ent?.roomDices : ent?.roomItems)?.entities?.[id];
         if (!doc) throw new Error("대상을 찾지 못했습니다.");
-        if (!isDice && (doc.locked || doc.freezed || (isChar ? doc.secret || doc.invisible : doc.visible === false || doc.active === false || doc.closed))) throw new Error("옮길 수 없는 말입니다.");
+        if (!isDice && (doc.locked || doc.freezed || (isChar ? doc.secret : doc.visible === false || doc.active === false || doc.closed))) throw new Error("옮길 수 없는 말입니다.");
         const num = (v) => (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v });
         const ctx = await getAuthContext();
         const mask = ["x", "y", "updatedAt"].map((f) => `updateMask.fieldPaths=${f}`).join("&");
@@ -4769,7 +4769,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         if (!body) throw new Error("빈 메시지는 전송할 수 없습니다.");
         const target = listChannels().includes(channel) ? channel : "main";
         const c = characterId ? findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId] : null;
-        if (characterId && (!c || c.secret || c.invisible)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
+        if (characterId && (!c || c.secret)) throw new Error("선택한 캐릭터로 발언할 수 없습니다.");
         const name = c ? String(c.name || "") : String(displayName || "").replace(/[\r\n\[\]]/g, " ").trim().slice(0, 40) || "참여자";
         const speaker = { name: name.slice(0, 40), icon: c ? c.iconUrl : relayIconUrl(icon), color: c ? c.color : (/^#[0-9a-f]{6}$/i.test(color || "") ? color : "") };
         // a Roll20 CSS macro from the Roll20 link: the roll20-css-bridge makes the same text + envelope it makes for a macro typed in the chat (styled blocks, pictures); without the bridge the plain text goes
@@ -4886,7 +4886,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       relaySetStatus: async (characterId, index, value) => {
         const c = findStore()?.getState()?.entities?.roomCharacters?.entities?.[characterId];
         const list = Array.isArray(c?.status) ? c.status : [];
-        if (!c || c.secret || c.invisible || c.locked || c.freezed || !list[index] || !Number.isFinite(value)) throw new Error("바꿀 수 없는 상태값입니다.");
+        if (!c || c.secret || c.locked || c.freezed || !list[index] || !Number.isFinite(value)) throw new Error("바꿀 수 없는 상태값입니다.");
         const status = list.map((st, i) => (i === index ? { ...st, value } : st));
         const ctx = await getAuthContext();
         const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/characters/${encodeURIComponent(characterId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt`;
