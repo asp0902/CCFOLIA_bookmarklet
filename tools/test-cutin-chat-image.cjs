@@ -38,6 +38,19 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     assert.equal(await imgs('trigger').evaluate((el) => [el.getAttribute('width'), el.getAttribute('height')]).then((v) => v.join('x')), '2x1');
     // the original text stays (React-safe), the image is appended last
     assert.equal(await page.locator('#trigger').evaluate((p) => p.firstChild.nodeType === 3 && p.firstChild.nodeValue === '번개' && p.lastElementChild.classList.contains('ccf-cutin-chat-image')), true);
+    // the trigger text is hidden by CSS only (the text node stays), the image shows; plain rows are untouched; the off switch shows the text again
+    const look = (id) => page.locator('#' + id).evaluate((p) => { const c = getComputedStyle(p), r = p.getBoundingClientRect(), img = p.querySelector('.ccf-cutin-chat-image img'); return { fontSize: c.fontSize, hideAttr: p.getAttribute('data-ccf-cutin-hide'), textNode: p.firstChild.nodeValue, imgVisible: !img || img.getBoundingClientRect().height > 0 }; });
+    assert.deepEqual(await look('trigger'), { fontSize: '0px', hideAttr: '1', textNode: '번개', imgVisible: true }, 'trigger row: text hidden, node kept, image shown');
+    await addRow('visible', '평범한 말'); await page.waitForTimeout(300);
+    assert.deepEqual(await look('visible'), { fontSize: await page.locator('#visible').evaluate((p) => getComputedStyle(p).fontSize), hideAttr: null, textNode: '평범한 말', imgVisible: true }, 'plain row untouched');
+    assert.notEqual((await look('visible')).fontSize, '0px');
+    await page.evaluate(() => localStorage.setItem('ccfCutinChatHideText', 'off'));
+    await page.evaluate(() => { document.getElementById('trigger').firstChild.nodeValue = '번개'; });
+    await page.waitForFunction(() => !document.getElementById('trigger').hasAttribute('data-ccf-cutin-hide'), null, { timeout: 3000 });
+    assert.notEqual((await look('trigger')).fontSize, '0px', 'off switch: the text shows again');
+    await page.evaluate(() => localStorage.removeItem('ccfCutinChatHideText'));
+    await page.evaluate(() => { document.getElementById('trigger').firstChild.nodeValue = '번개'; });
+    await page.waitForFunction(() => document.getElementById('trigger').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 3000 });
     // the trigger can also be the cut-in's message field
     await addRow('trigger2', '!불꽃');
     await page.waitForSelector('#trigger2 .ccf-cutin-chat-image img');
