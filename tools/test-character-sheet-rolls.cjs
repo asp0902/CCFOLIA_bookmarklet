@@ -77,7 +77,7 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     const cols = () => page.evaluate(() => { const [a, p] = [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-duo > .ccf-cs-form-section')].map((e) => e.getBoundingClientRect()); return { sideBySide: Math.abs(a.top - p.top) < 4 && a.right <= p.left + 1, stacked: p.top >= a.bottom - 1, widths: [Math.round(a.width), Math.round(p.width)] }; });
     const wide = await cols();
     assert(wide.sideBySide, 'abilities (left) and people (right) sit side by side: ' + JSON.stringify(wide));
-    assert(Math.abs(wide.widths[0] - wide.widths[1]) <= 2, 'two equal columns');
+    assert(Math.abs(wide.widths[0] - 2 * wide.widths[1]) <= 2, 'abilities : people = 2 : 1 (' + JSON.stringify(wide.widths) + ')');
     await page.setViewportSize({ width: 560, height: 900 }); await page.waitForTimeout(300);
     assert((await cols()).stacked, 'a narrow sheet folds them into one column');
     await page.setViewportSize({ width: 1300, height: 900 }); await page.waitForTimeout(300);
@@ -93,13 +93,14 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     assert.deepEqual(pair.map((b) => [b.color, b.secret, b.svg]), [['rgb(189, 189, 189)', '', true], ['rgb(244, 67, 54)', '1', true]], 'public = grey eye dice, secret = red eye dice');
     const roll = async (action) => { await page.evaluate(() => { window.__sent.length = 0; document.getElementById('chatbox').value = ''; }); await action(); await page.waitForTimeout(250); return { sent: await page.evaluate(() => window.__sent.slice()), box: await page.locator('#chatbox').inputValue() }; };
     const reopen = async () => { if (!(await page.locator(R + ' .ccf-cs-dialog.is-editor').count())) { await page.locator('#row1 [data-ccf-character-sheet-row-button]').click(); await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor'); } };
+    page.on('dialog', (d) => d.accept('7')); // 목표치(숫자) prompt for the commands that still have a ?
     let r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
     assert.deepEqual(r.sent, ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged'); await reopen();
     r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').first().click());
     assert.deepEqual(r.sent, ['S2D6>=5 [기습/소각]'], 'secret ability roll = S in front'); await reopen();
     // a skill: click = public (typed into the chat box), Shift+click / right click = secret
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
-    assert.equal(r.box, '2D6>=5 [소각]'); await reopen();
+    assert.equal(r.box, '2D6>=5 [소각]'); assert.deepEqual(r.sent, ['2D6>=5 [소각]'], 'a skill click is sent at once'); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open after a roll'); assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'chatbox', 'the chat box does not take the focus'); await reopen();
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click({ modifiers: ['Shift'] }));
     assert.equal(r.box, 'S2D6>=5 [소각]'); await reopen();
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click({ button: 'right' }));
@@ -122,9 +123,9 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     r = await roll(() => page.locator(R + ' footer [data-action="fear-roll"][data-secret="1"]').click());
     assert.equal(r.box, 'S2D6-1>=5 [소각/공포심]'); await reopen();
     r = await roll(() => page.locator(R + ' footer [data-command="2D6>=? [회피]"]:not([data-secret])').click());
-    assert.equal(r.box, '2D6+1>=? [회피]'); await reopen();
+    assert.deepEqual(r.sent, ['2D6+1>=7 [회피]'], 'the ? is filled from the small prompt and sent at once'); await reopen();
     r = await roll(() => page.locator(R + ' footer [data-command="2D6>=? [회피]"][data-secret="1"]').click());
-    assert.equal(r.box, 'S2D6+1>=? [회피]'); await reopen();
+    assert.deepEqual(r.sent, ['S2D6+1>=7 [회피]']); await reopen();
     // without a modifier everything is as before
     await mod.fill('0'); await page.waitForTimeout(150);
     assert.equal(await page.locator(R + ' .ccf-cs-modifier-note').isHidden(), true, 'no note without a modifier');
