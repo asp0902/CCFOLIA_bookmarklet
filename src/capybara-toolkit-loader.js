@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.45";
-  const BUILD_ID = "2026-11-12-gm-tools-menu-217";
+  const VERSION = "0.3.46";
+  const BUILD_ID = "2026-11-12-gm-tools-anchor-218";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
