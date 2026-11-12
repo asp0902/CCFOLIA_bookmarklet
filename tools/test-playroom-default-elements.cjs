@@ -27,6 +27,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.locator('#bgm-vol').evaluate((e) => { e.value = 30; e.dispatchEvent(new Event('input')); });
   assert.equal(await page.locator('#bgm-vol').inputValue(), '30');
   await page.click('#bgm-mute');
+  // the progress line (row 2) shows only while a YouTube BGM plays; the first line stays where it is
+  const row1Top = () => page.evaluate(() => Math.round(document.querySelector('.bgm-row1').getBoundingClientRect().top));
+  const row2Shown = () => page.evaluate(() => getComputedStyle(document.querySelector('.bgm-row2')).display !== 'none');
+  const top0 = await row1Top(); assert.equal(await row2Shown(), false, 'no BGM: no progress line');
+  await page.evaluate(() => playBgm({ state: 'playing', videoId: 'dQw4w9WgXcQ', startedAt: 1, title: '곡' }));
+  assert.equal(await row2Shown(), true, 'playing: progress line'); assert.equal(await row1Top(), top0, 'the first line does not move');
+  await page.evaluate(() => playBgm({ state: 'stopped' }));
+  assert.equal(await row2Shown(), false, 'stopped: hidden again'); assert.equal(await row1Top(), top0);
   // (b) one public GM character (not mine): one status row, one token
   const gm = { id: 'g1', name: 'GM말', iconUrl: 'https://storage.ccfolia-cdn.net/g.png', x: 48, y: 48, z: 1, angle: 0, width: 4, height: 4, status: [{ label: 'HP', value: 3, max: 6 }], params: [], initiative: 0, hideStatus: false, color: '' };
   await draw([gm]); await page.waitForTimeout(200);

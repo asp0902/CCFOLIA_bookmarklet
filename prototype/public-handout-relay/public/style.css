@@ -126,7 +126,7 @@ main{padding:0}
 
 /* BGM bar (top-right of the stage): measured on ccfolia.com — 300px wide at top 64px; 80px blue volume slider, icon buttons, 28px progress row. */
 #bgm-bar{position:absolute;top:64px;right:0;z-index:100;width:300px}
-#bgm-bar[hidden]{display:none}
+#bgm-bar[hidden],.bgm-row2[hidden]{display:none}
 .bgm-row1{display:flex;align-items:center;height:39px;padding:0 8px 0 16px;gap:4px;color:#fff;font-size:12px;font-weight:700}
 .bgm-row2{display:flex;align-items:center;height:28px;padding:0 8px;gap:8px;color:rgba(255,255,255,.88);font-size:10px;font-variant-numeric:tabular-nums}
 #bgm-bar input[type=range]{-webkit-appearance:none;appearance:none;height:12px;background:transparent;margin:0;padding:0;border:0;cursor:pointer}
