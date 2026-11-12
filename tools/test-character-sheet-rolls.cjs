@@ -82,22 +82,21 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     assert((await cols()).stacked, 'a narrow sheet folds them into one column');
     await page.setViewportSize({ width: 1300, height: 900 }); await page.waitForTimeout(300);
     // skill name / value gap: about half of what it was (62px)
-    const gap = await page.evaluate(() => { const b = document.querySelector('#ccf-character-sheet-root .ccf-cs-skill button'); const small = b.querySelector('small').getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(b.firstChild); return Math.round(small.left - range.getBoundingClientRect().right); });
-    assert(gap >= 20 && gap <= 36, `the gap between a skill name and its value was 62px, now ${gap}px`);
+    const gap = await page.evaluate(() => { const b = document.querySelector('#ccf-character-sheet-root button[data-roll="0:7"]'); const small = b.querySelector('small').getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(b.firstChild); return Math.round(small.left - range.getBoundingClientRect().right); });
+    assert(gap >= 38 && gap <= 44, `the gap between the longest skill name of a column and its value is about 40px (was 62, then 31), now ${gap}px`);
     // add an ability pointing at 소각 (0:0), and acquire 소각
     await page.locator(R + ' [data-skill="0:0"]').check();
     await page.locator(R + ' [data-add="abilities"]').click();
     await page.locator(R + ' .ccf-cs-abilities [data-prop="name"]').first().fill('기습');
     await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('소각');
     const pair = await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-abilities .ccf-cs-roll-pair button')].map((b) => ({ color: getComputedStyle(b).color, secret: b.dataset.secret || '', svg: !!b.querySelector('svg circle'), size: [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height)] })));
-    assert.deepEqual(pair.map((b) => [b.color, b.secret, b.svg]), [['rgb(189, 189, 189)', '', true], ['rgb(244, 67, 54)', '1', true]], 'public = grey eye dice, secret = red eye dice');
+    assert.deepEqual(pair.map((b) => [b.color, b.secret]), [['rgb(255, 255, 255)', '']], 'abilities have only the public roll button, white');
     const roll = async (action) => { await page.evaluate(() => { window.__sent.length = 0; document.getElementById('chatbox').value = ''; }); await action(); await page.waitForTimeout(250); return { sent: await page.evaluate(() => window.__sent.slice()), box: await page.locator('#chatbox').inputValue() }; };
     const reopen = async () => { if (!(await page.locator(R + ' .ccf-cs-dialog.is-editor').count())) { await page.locator('#row1 [data-ccf-character-sheet-row-button]').click(); await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor'); } };
     page.on('dialog', (d) => d.accept('7')); // 목표치(숫자) prompt for the commands that still have a ?
     let r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
     assert.deepEqual(r.sent, ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged'); await reopen();
-    r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').first().click());
-    assert.deepEqual(r.sent, ['S2D6>=5 [기습/소각]'], 'secret ability roll = S in front'); await reopen();
+    assert.equal(await page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').count(), 0, 'no secret ability roll button any more');
     // a skill: click = public (typed into the chat box), Shift+click / right click = secret
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6>=5 [소각]'); assert.deepEqual(r.sent, ['2D6>=5 [소각]'], 'a skill click is sent at once'); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open after a roll'); assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'chatbox', 'the chat box does not take the focus'); await reopen();
@@ -113,8 +112,8 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     assert.equal((await page.locator(R + ' .ccf-cs-modifier-note').textContent()).trim(), '수정치 +1');
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6+1>=5 [소각]'); await reopen();
-    r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').first().click());
-    assert.deepEqual(r.sent, ['S2D6+1>=5 [기습/소각]']); await reopen();
+    r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
+    assert.deepEqual(r.sent, ['2D6+1>=5 [기습/소각]']); await reopen();
     await page.locator(R + ' [data-field="fear"]').selectOption('0:0');
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6-1>=5 [소각/공포심]', 'fear -2 and the modifier +1 are merged'); await reopen();
