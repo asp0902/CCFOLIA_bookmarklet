@@ -18,14 +18,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       await page.goto('https://ccfolia.test/rooms/test');
       await page.evaluate(({ owner, appUid, roomsJs }) => {
         const now = Math.floor(Date.now() / 1000);
-        const entities = { m1: { name: '나', text: '내 말', from: appUid, channel: 'main', createdAt: { seconds: now - 20, nanoseconds: 0 } }, m2: { name: '남', text: '남의 말', from: 'other', channel: 'main', createdAt: { seconds: now - 10, nanoseconds: 0 } } };
+        const entities = { m1: { name: '나', text: '내 말', from: appUid, channel: 'main', createdAt: { seconds: now - 20, nanoseconds: 0 } }, m2: { name: '남', text: '남의 말', from: 'other', channel: 'main', createdAt: { seconds: now - 10, nanoseconds: 0 } }, m3: { name: '나', text: '서식 내 말⁠​‌‍​', from: appUid, channel: 'main', createdAt: { seconds: now - 5, nanoseconds: 0 } } };
         const rooms = new Function('owner', 'return ' + roomsJs)(owner);
-        const state = { app: { state: { roomId: 'r1' }, user: { uid: appUid } }, entities: { roomMessages: { entities, ids: ['m1', 'm2'], idsGroupBy: { main: ['m1', 'm2'] } }, roomCharacters: { entities: {} }, rooms: { entities: rooms } } };
+        const state = { app: { state: { roomId: 'r1' }, user: { uid: appUid } }, entities: { roomMessages: { entities, ids: ['m1', 'm2', 'm3'], idsGroupBy: { main: ['m1', 'm2', 'm3'] } }, roomCharacters: { entities: {} }, rooms: { entities: rooms } } };
         window.__state = state;
         const root = document.getElementById('root');
         root['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
         const row = (id, name, text, button) => `<li class="MuiListItem-root" id="${id}" style="position:relative;padding:12px 16px;list-style:none"><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary">${name}</h6><p class="MuiListItemText-secondary">${text}</p></div><div class="hover-group" style="position:absolute;top:12px;right:16px;display:flex"><button class="MuiIconButton-root native" aria-label="${button}">x</button></div></li>`;
-        const ul = document.createElement('ul'); ul.innerHTML = row('own', '나', '내 말', 'chat-edit') + row('theirs', '남', '남의 말', 'reply-to');
+        const ul = document.createElement('ul'); ul.innerHTML = row('own', '나', '내 말', 'chat-edit') + row('theirs', '남', '남의 말', 'reply-to') + row('fmt', '나', '서식 내 말', 'chat-edit');
         root.appendChild(ul);
       }, { owner, appUid, roomsJs });
       await page.addScriptTag({ content: source });
@@ -40,7 +40,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       assert.equal(await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.isGm()), true, 'GM from app.user.uid === current room owner');
       const diag = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.hideDiag());
       assert.equal(diag.isGm, true); assert.equal(diag.gmReason, 'owner'); assert.equal(diag.gmAttr, '1');
-      for (const id of ['own', 'theirs']) {
+      for (const id of ['own', 'theirs', 'fmt']) { // fmt = my message with a format envelope: the row shows only the visible text, the stored text carries the envelope
         const info = await page.evaluate((rowId) => { const li = document.getElementById(rowId); const hide = li.querySelector('.ccf-hide-btn'); const native = li.querySelector('.native:not(.ccf-hide-btn)'); return { hide: !!hide, native: !!native, nativeVisible: native && getComputedStyle(native).display !== 'none' && getComputedStyle(native).visibility !== 'hidden' }; }, id);
         assert.deepEqual(info, { hide: true, native: true, nativeVisible: true }, id + ': the eye button was added, the native button is untouched');
       }
@@ -56,7 +56,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     {
       const { page } = await run('not gm', { owner: 'someone-else', appUid: 'me', roomsJs: "({ r1: { owner } })" });
       assert.equal(await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.isGm()), false);
-      assert.equal(await page.locator('.ccf-hide-btn').count(), 0, 'no eye for a non-GM'); assert.equal(await page.locator('.native').count(), 2, 'native buttons stay');
+      assert.equal(await page.locator('.ccf-hide-btn').count(), 0, 'no eye for a non-GM'); assert.equal(await page.locator('.native').count(), 3, 'native buttons stay');
       assert.equal((await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.hideDiag())).gmReason, 'not-owner');
       await page.context().close();
     }
