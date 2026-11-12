@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.108
+// @version      0.1.109
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.108",
+    version: "0.1.109",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -319,6 +319,7 @@
     activeTab: "list",      // list | new | settings
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
+    search: "",             // 목록 검색어 (저장하지 않는다)
     data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
@@ -731,6 +732,22 @@
     return Number.isFinite(max) ? max + ORDER_STEP : ORDER_STEP;
   }
 
+  // ---- handout list helpers ----
+  // 검색: 제목 또는 공개 본문(태그 제거)에 검색어가 들어 있는 것. 비밀 본문은 보지 않는다. 검색어가 비면 그대로.
+  function matchesHandoutSearch(h, query) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return true;
+    const body = String(h?.description || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ");
+    return String(h?.title || "").toLowerCase().includes(q) || body.toLowerCase().includes(q);
+  }
+  // 복제: 새 id, 제목 "(사본)", 권한표·폴더·이미지 참조·본문은 그대로, 공유(id 기준)·소유 정보·원격 표시는 이어받지 않는다.
+  function makeHandoutCopy(src, newId, order, now) {
+    const copy = JSON.parse(JSON.stringify(src));
+    delete copy._canSecret; delete copy.ownerUid; delete copy.ownerName;
+    return { ...copy, id: newId, title: `${src.title || "(제목 없음)"} (사본)`, _remote: false, createdAt: now, updatedAt: now, order };
+  }
+  // ---- end handout list helpers ----
+
   function compareByOrder(a, b) {
     const ao = Number.isFinite(a?.order) ? a.order : 0;
     const bo = Number.isFinite(b?.order) ? b.order : 0;
@@ -1078,6 +1095,10 @@
       min-height: 100%;
     }
     /* 목록 탭: PL 시점 미리보기 토글 — 푸터(.panel-footer) 바로 위 우하단에 위치 */
+    .list-search-bar { padding: 8px 16px 4px 0; }
+    .list-search { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,.23); background: transparent; color: inherit; font: inherit; }
+    .list-search:focus { outline: none; border-color: #2196f3; }
+    .list-no-result { padding: 16px 0; opacity: .6; font-size: 13px; }
     .list-pl-preview-bar {
       margin-top: auto;
       position: sticky; bottom: 0;
@@ -1794,6 +1815,7 @@
     shadow.addEventListener("dblclick", onShadowDblClick);
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
+    shadow.addEventListener("compositionend", onShadowInput);
     shadow.addEventListener("pointerdown", onShadowPointerDown);
     shadow.addEventListener("pointermove", onShadowPointerMove);
     shadow.addEventListener("pointerup", onShadowPointerEnd);
@@ -3521,7 +3543,10 @@
       return previewToggle;
     }
     // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
-    const sortedHandouts = [...state.data.handouts].sort(compareByOrder);
+    const searchQuery = String(state.search || "").trim();
+    const sortedHandouts = [...state.data.handouts].filter((h) => matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
+    const noResult = searchQuery && !state.data.handouts.some((h) => matchesHandoutSearch(h, searchQuery)) ? `<div class="list-no-result">검색 결과가 없습니다.</div>` : "";
+    const searchBar = `<div class="list-search-bar"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"></div>`;
     const renderCard = (h) => {
       ensurePermissions(h);
       const manageable = canManageHandout(h);
@@ -3541,6 +3566,7 @@
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
             ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="공유" aria-label="공유">${WEB_SHARE_ICON}</button>` : ""}
             ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="공유 중단" aria-label="공유 중단">${WEB_STOP_ICON}</button>` : ""}
+            ${manageable && adminMode ? `<button class="card-icon-btn" data-action="duplicate-handout" data-id="${escapeHtml(h.id)}" title="복제" aria-label="복제">${ICON_COPY}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
@@ -3558,7 +3584,7 @@
     if (!adminMode) {
       const cards = sortedHandouts.map(renderCard).join("");
       return `
-        <div class="list">${cards}</div>
+        ${searchBar}<div class="list">${cards}</div>${noResult}
         ${previewToggle}
       `;
     }
@@ -3568,7 +3594,8 @@
     const inFolder = (h) => h.folderId && folderIds.has(h.folderId);
     const folderSections = folders.map((f) => {
       const children = sortedHandouts.filter((h) => h.folderId === f.id);
-      const cards = f.collapsed ? "" : children.map(renderCard).join("");
+      if (searchQuery && !children.length) return ""; // 검색 중에는 결과가 있는 폴더만, 접힘과 상관없이 펼친다
+      const cards = f.collapsed && !searchQuery ? "" : children.map(renderCard).join("");
       return `
         <div class="folder-section" data-folder-id="${escapeAttr(f.id)}">
           <div class="folder-head" data-folder-head="1" data-folder-id="${escapeAttr(f.id)}">
@@ -3584,7 +3611,7 @@
     }).join("");
     const rootCards = sortedHandouts.filter((h) => !inFolder(h)).map(renderCard).join("");
     return `
-      <div class="list">${folderSections}${rootCards}</div>
+      ${searchBar}<div class="list">${folderSections}${rootCards}</div>${noResult}
       ${previewToggle}
     `;
   }
@@ -3664,6 +3691,7 @@
   // MUI EditIcon (코코포리아 스타일 연필)
   const ICON_PENCIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   // MUI CloseIcon (코코포리아 스타일 X)
+  const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>`;
   const ICON_X_SMALL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   // MUI DragIndicatorIcon (6-dot grip)
   const ICON_DRAG_HANDLE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
@@ -4181,6 +4209,7 @@
       return;
     }
     if (action === "delete-handout") { deleteHandout(id); return; }
+    if (action === "duplicate-handout") { duplicateHandout(id); return; }
     if (action === "folder-new") {
       createFolderFromPrompt();
       return;
@@ -4476,6 +4505,17 @@
 
   // 원문과 커서를 유지한 채 공개/비밀 입력의 매크로만 미리 본다.
   function onShadowInput(event) {
+    const search = event.target.closest?.("input[data-list-search]");
+    if (search) {
+      if (event.isComposing) return; // 한글 조합 중에는 다시 그리지 않는다 (compositionend 에서 처리)
+      if (state.search === search.value) return;
+      state.search = search.value;
+      const caret = search.selectionStart;
+      render();
+      const next = state.shadow?.querySelector("input[data-list-search]");
+      if (next) { next.focus(); try { next.setSelectionRange(caret, caret); } catch (_) {} }
+      return;
+    }
     const ta = event.target.closest('.rich-editor[data-field]');
     if (!ta) return;
     const field = ta.dataset.field;
@@ -5018,6 +5058,22 @@
     closePlListDialog();
     toast(`PL 목록 ${items.length}명 저장됨`);
     render();
+  }
+
+  async function duplicateHandout(id) {
+    const src = findHandout(id);
+    if (!src || !isAdminMode() || !canManageHandout(src)) return;
+    const copy = makeHandoutCopy(src, uuid(), getNextOrder(), new Date().toISOString());
+    state.data.handouts.push(copy);
+    await saveAll(state.data);
+    toast("복제했습니다 (공유는 하지 않은 상태).");
+    render();
+    pushHandoutToFirestore(copy).catch((error) => {
+      noteFirebaseIssue("핸드아웃 복제", error);
+      console.warn("[ccf-handout] Firestore push 실패:", error);
+      toast("송신 실패 — 콘솔 확인 (로컬은 저장됨)");
+    });
+    scheduleWebSync();
   }
 
   async function deleteHandout(id) {
