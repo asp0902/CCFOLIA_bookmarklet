@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.5
+// @version      0.0.6
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -82,8 +82,120 @@
     start();
   }
 
+  // ---- 룸 상단 툴바의 "카피바라 도구" 펭귄 메뉴 ----
+  // 버튼·메뉴는 여기서만 만든다. 각 기능 스크립트는 로드 순서와 무관하게 window.__CCF_TOOLKIT_MENU__.register({ id, label, icon, visible(), badge?(), onClick() }) 로 항목만 등록한다
+  // (레지스트리 객체는 먼저 로드된 쪽이 만들고, 여기서는 sync 를 붙인다). 항목이 하나도 보이지 않으면 버튼을 숨긴다.
+  const MENU_BUTTON_ATTR = "data-ccf-toolkit-menu-button";
+  const PENGUIN_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M12.6 2.2c-2.5-.2-4.200 1.500-4.200 3.700 0 1 .3 1.800.9 2.500-1.800 1.300-2.800 3.600-2.800 6.300 0 2.900 1 5.300 2.700 6.500.6.400 1.100.6 1.600.7V22h6.200v-.1c.5-.1 1-.3 1.500-.7 1.700-1.200 2.700-3.600 2.700-6.500 0-2.700-1-5-2.800-6.300.6-.7.900-1.500.9-2.500 0-2.200-1.700-3.900-4.200-3.700zM9.500 5.100a1.100 1.100 0 1 0 2.200 0 1.100 1.100 0 1 0-2.200 0zM12 10.600c-1.700 0-2.900 1.900-2.900 4.800 0 2.700 1.100 4.600 2.900 4.600s2.900-1.900 2.900-4.600c0-2.900-1.200-4.800-2.900-4.800z"/><path fill="currentColor" d="M8.600 5.900 5.700 6.800l2.900 1zM10.600 5.100a.45.45 0 1 1-.9 0 .45.45 0 0 1 .9 0zM8.800 22.200h3.300v1H8.800zM12.600 22.200h3.300v1h-3.300z"/></svg>';
+  const menuState = { button: null, menu: null, frame: 0 };
+
+  function toolkitMenuItems() {
+    const registry = window.__CCF_TOOLKIT_MENU__;
+    const items = registry?.items ? [...registry.items.values()] : [];
+    return items.filter((item) => { try { return item.visible ? !!item.visible() : true; } catch (_) { return false; } }).sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+  }
+
+  function findMenuAnchor() {
+    const labelled = (words) => [...document.querySelectorAll("button[aria-label], button[title], [role='button'][aria-label]")]
+      .find((node) => words.some((word) => `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`.includes(word)) && !node.hasAttribute(MENU_BUTTON_ATTR));
+    return labelled(["컷인 목록", "カットイン一覧", "Cut-in list", "Cutin list"])
+      || labelled(["내 캐릭터 목록", "내 캐릭터", "캐릭터 목록", "My characters", "My character", "マイキャラクター", "キャラクター一覧"]);
+  }
+
+  function closeToolkitMenu() {
+    menuState.menu?.remove();
+    menuState.menu = null;
+    menuState.button?.setAttribute("aria-expanded", "false");
+  }
+
+  function openToolkitMenu() {
+    closeToolkitMenu();
+    const items = toolkitMenuItems();
+    if (!items.length || !menuState.button) return;
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute(SAFE_UI_ATTR, "1");
+    menu.style.cssText = "position:fixed;z-index:2147483647;min-width:180px;padding:8px 0;background:#424242;color:#fff;border-radius:4px;font:14px/1.5 'Noto Sans KR',Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)";
+    for (const item of items) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.setAttribute("role", "menuitem");
+      row.setAttribute("data-ccf-menu-item", item.id);
+      row.style.cssText = "all:unset;box-sizing:border-box;display:flex;align-items:center;gap:16px;width:100%;min-height:40px;padding:6px 16px;cursor:pointer;color:inherit";
+      let badge = "";
+      try { badge = item.badge ? String(item.badge() || "") : ""; } catch (_) { badge = ""; }
+      row.innerHTML = `<span style="display:grid;place-items:center;width:24px;height:24px">${item.icon || ""}</span><span style="flex:1">${escapeHtml(item.label)}</span>${badge ? `<span style="min-width:20px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center">${escapeHtml(badge)}</span>` : ""}`;
+      row.addEventListener("mouseenter", () => { row.style.background = "rgba(255,255,255,.08)"; });
+      row.addEventListener("mouseleave", () => { row.style.background = ""; });
+      row.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); closeToolkitMenu(); try { item.onClick?.(); } catch (error) { console.warn("[toolkit-menu] item failed", error); } });
+      menu.appendChild(row);
+    }
+    document.documentElement.appendChild(menu);
+    const rect = menuState.button.getBoundingClientRect();
+    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+    menu.style.left = `${Math.max(8, Math.min(Math.round(rect.left), window.innerWidth - menu.offsetWidth - 8))}px`;
+    menuState.menu = menu;
+    menuState.button.setAttribute("aria-expanded", "true");
+    menu.querySelector("button")?.focus();
+  }
+
+  function syncToolkitMenu() {
+    const items = toolkitMenuItems();
+    const anchor = items.length && isCcfoliaRoom() ? findMenuAnchor() : null;
+    if (!anchor?.parentElement) {
+      if (menuState.button && !menuState.button.hidden) { menuState.button.hidden = true; closeToolkitMenu(); }
+      return;
+    }
+    if (!menuState.button || !menuState.button.isConnected) {
+      document.querySelectorAll(`[${MENU_BUTTON_ATTR}]`).forEach((node) => node.remove());
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute(MENU_BUTTON_ATTR, "1");
+      button.setAttribute(SAFE_UI_ATTR, "1");
+      button.setAttribute("aria-label", "카피바라 도구");
+      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-expanded", "false");
+      button.title = "카피바라 도구";
+      button.className = anchor.className;
+      button.innerHTML = PENGUIN_SVG;
+      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); menuState.menu ? closeToolkitMenu() : openToolkitMenu(); }, { signal: abort.signal });
+      menuState.button = button;
+    }
+    const button = menuState.button;
+    if (button.previousElementSibling !== anchor) anchor.parentElement.insertBefore(button, anchor.nextSibling);
+    if (button.hidden) button.hidden = false;
+    // 배지: 항목 중 하나라도 배지가 있으면 버튼에도 점을 단다
+    let hasBadge = false;
+    for (const item of items) { try { if (item.badge && item.badge()) hasBadge = true; } catch (_) { /* 배지 계산 실패는 무시 */ } }
+    if (button.getAttribute("data-badge") !== (hasBadge ? "1" : "0")) button.setAttribute("data-badge", hasBadge ? "1" : "0");
+  }
+
+  function scheduleToolkitMenuSync() {
+    if (menuState.frame) return;
+    menuState.frame = window.requestAnimationFrame(() => { menuState.frame = 0; syncToolkitMenu(); });
+  }
+
+  function startToolkitMenu() {
+    const registry = (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } });
+    registry.sync = scheduleToolkitMenuSync;
+    const style = document.createElement("style");
+    style.setAttribute(SAFE_UI_ATTR, "1");
+    style.textContent = `[${MENU_BUTTON_ATTR}][data-badge="1"]{position:relative}[${MENU_BUTTON_ATTR}][data-badge="1"]::after{content:"";position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:#f50057}`;
+    document.head.appendChild(style);
+    const observer = new MutationObserver((records) => {
+      if (records.every((record) => record.target instanceof Element && record.target.closest(`[${SAFE_UI_ATTR}="1"]`))) return;
+      scheduleToolkitMenuSync();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("mousedown", (event) => { if (menuState.menu && !menuState.menu.contains(event.target) && !menuState.button?.contains(event.target)) closeToolkitMenu(); }, { capture: true, signal: abort.signal });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuState.menu) { event.stopPropagation(); closeToolkitMenu(); menuState.button?.focus(); } }, { capture: true, signal: abort.signal });
+    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); menuState.button?.remove(); style.remove(); }, { once: true });
+    scheduleToolkitMenuSync();
+  }
+
   function start() {
     if (!active) return;
+    queueMicrotask(startToolkitMenu); // 아래 const 선언이 끝난 뒤에 시작(TDZ 방지)
     injectStyles();
     ensurePanel();
     bindSendTriggers();

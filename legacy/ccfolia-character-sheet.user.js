@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.21
+// @version      0.5.22
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.21";
+  const VERSION = "0.5.22";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -266,6 +266,7 @@
 
   registerWithSuite();
   installStyle();
+  registerMenuItem();
   const observer = new MutationObserver(scheduleRefresh);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener("paste", handleTransferPaste, { capture: true, signal });
@@ -316,6 +317,8 @@
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}], [${ROW_BUTTON_ATTR}]`).forEach((node) => node.remove());
+    window.__CCF_TOOLKIT_MENU__?.items?.delete("saikoro");
+    window.__CCF_TOOLKIT_MENU__?.sync?.();
     if (window[DEBUG_KEY]?.__owner === signal) delete window[DEBUG_KEY];
     return true;
   }
@@ -345,7 +348,6 @@
         if (state.open) render();
       }
       if (detectRoom()) {
-        mountIcon();
         mountCharacterDialogButtons();
         mountCharacterListButtons();
       }
@@ -353,6 +355,7 @@
         document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}], [${ROW_BUTTON_ATTR}]`).forEach((node) => node.remove());
         closeSheet();
       }
+      window.__CCF_TOOLKIT_MENU__?.sync?.();
     });
   }
 
@@ -429,24 +432,9 @@
     return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0];
   }
 
-  function findCharacterButton() {
-    const labels = ["내 캐릭터", "캐릭터 목록", "My character", "My characters", "マイキャラクター", "キャラクター一覧", "我的角色"];
-    const candidates = [...document.querySelectorAll("button[aria-label], button[title], [role='button'][aria-label]")];
-    return candidates.find((node) => labels.some((label) => `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`.includes(label))) || null;
-  }
-
-  function mountIcon() {
-    if (document.querySelector(`[${ICON_ATTR}]`)) return;
-    const anchor = findCharacterButton();
-    if (!anchor?.parentElement) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.setAttribute(ICON_ATTR, "toolbar");
-    button.setAttribute("aria-label", "사이코로픽션");
-    button.title = "사이코로픽션";
-    button.innerHTML = diceIcon();
-    button.addEventListener("click", openPanel, { signal });
-    anchor.parentElement.insertBefore(button, anchor.nextSibling);
+  // 사이코로픽션 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다. 인세인 룸 감지일 때만 보인다.
+  function registerMenuItem() {
+    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "saikoro", order: 1, label: "사이코로픽션", icon: diceIcon(), visible: () => state.active && detectRoom(), onClick: openPanel });
   }
 
   function mountCharacterDialogButtons() {
