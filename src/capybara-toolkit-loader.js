@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.38";
-  const BUILD_ID = "2026-11-12-bookmarklet-parity-210";
+  const VERSION = "0.3.39";
+  const BUILD_ID = "2026-11-12-msg-window-sync-211";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -127,6 +127,15 @@
       title: "홈 즐겨찾기·방문 기록",
       summary: "코코포리아 홈의 룸 즐겨찾기와 최근 방문 룸 — 북마클릿용 경로, 확장이 켜져 있으면 확장이 담당 (자동 실행)",
       scripts: ["legacy/ccfolia-home-bookmarks.user.js"],
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-msg-window-sync",
+      title: "메시지창 빨리감기 (다이스 효과 지연 해결)",
+      summary: "화면 메시지창이 숨겨진 동안 메시지창 큐를 빨리 넘겨, 큐 순서에 묶인 3D 다이스 효과가 바로 뜨게 함 (자동 실행, 끄기: localStorage.ccfMsgWindowSync = \"off\")",
+      scripts: ["legacy/ccfolia-message-window-sync.user.js"],
+      roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
     },
