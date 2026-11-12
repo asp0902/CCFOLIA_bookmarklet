@@ -43,11 +43,11 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
         // click → one window titled GM 도구 with two tabs; the last tab (default: the first) is shown
         await openTool(page, '사이코로픽션');
         assert.equal(await page.locator('#ccf-gm-tools .ccf-gt-window > header > h2').textContent(), 'GM 도구');
-        assert.deepEqual(await tabs(page), ['사이코로픽션', '핸드아웃'], label);
+        assert.deepEqual(await tabs(page), ['사이코로픽션', '핸드아웃', '설정'], label);
         await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-character-sheet-root .ccf-cs-dialog');
         assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]').textContent), '사이코로픽션', label + ': first tab');
         const look = await page.evaluate(() => { const w = document.querySelector('#ccf-gm-tools .ccf-gt-window'), c = getComputedStyle(w), t = getComputedStyle(w.querySelector(':scope > header > h2')), tab = document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]'); return { bg: c.backgroundColor, radius: c.borderTopLeftRadius, title: [t.fontSize, t.fontWeight], backdrop: !!document.querySelector('#ccf-gm-tools .ccf-gt-backdrop'), indicator: getComputedStyle(tab, '::after').backgroundColor, sheetInside: !!w.querySelector('.ccf-gt-body > #ccf-character-sheet-root'), standalone: document.querySelectorAll('body > #ccf-character-sheet-root').length }; });
-        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['20px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)', sheetInside: true, standalone: 0 }, label + ': CCFOLIA dialog look, blue tab underline, the sheet is inside the window');
+        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['14px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)', sheetInside: true, standalone: 0 }, label + ': CCFOLIA dialog look, blue tab underline, the sheet is inside the window');
         // switching tabs: the sheet is taken away (unmount), the handout appears inside the window
         await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '핸드아웃' }).dispatchEvent('click');
         await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccfolia-handout-root', { state: 'attached', timeout: 5000 });
@@ -80,6 +80,10 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     }
     // not an inSANe room: no 사이코로픽션 tab; one tab left → no tab strip, just the handout
     const page = await run({ gm: true, insane: false, order: ['character-sheet', 'handout', 'toolkit-presence'] });
+    const handoutSettings = (on) => page.evaluate((on) => { window.__CCF_TOOLKIT_MENU__.items.get('handout-settings').visible = () => on; window.__CCF_TOOLKIT_MENU__.sync(); }, on);
+    await page.waitForFunction(() => window.__CCF_TOOLKIT_MENU__.items.has('handout-settings'), null, { timeout: 5000 });
+    assert.deepEqual(await page.evaluate(() => [...window.__CCF_TOOLKIT_MENU__.items.values()].filter((i) => i.section).map((i) => i.id)), ['handout-settings'], 'the handout settings are a section of the shared settings tab');
+    await handoutSettings(false); await page.waitForTimeout(300); // an account without the GM settings: the handout is the only tab
     await openTool(page, '핸드아웃');
     await page.waitForSelector('#ccf-gm-tools #ccfolia-handout-root', { state: 'attached', timeout: 5000 });
     assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tabs').hidden), true, 'one visible tab: no tab strip');
@@ -109,18 +113,27 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     assert.deepEqual(tip, { text: 'GM 도구', bg: 'rgb(22, 22, 22)', color: 'rgb(255, 255, 255)', font: ['Roboto', '12px', '500'], pad: '4px 8px', radius: '4px', margin: '14px 2px 2px', shadow: 'rgba(0, 0, 0, 0.2) 0px 1px 3px 0px, rgba(0, 0, 0, 0.14) 0px 1px 1px 0px, rgba(0, 0, 0, 0.12) 0px 2px 1px -1px', top: 14, centre: 0, tr: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.133s cubic-bezier(0.4, 0, 0.2, 1)', opacity: '1' }, 'tooltip look');
     await page.mouse.move(600, 600); await page.waitForFunction(() => !document.querySelector('[role="tooltip"]'), null, { timeout: 2000 });
     await openTool(page, '핸드아웃');
-    // the bookmarklet's 스마트폰 알림 item is a tab too (its settings are drawn into the tab body)
     // "핸드아웃" is drawn exactly once: one tab → the panel's own title (no strip); two tabs (ntfy registers later) → the tab name only
     const handoutTitleShown = () => page.evaluate(() => { const h1 = document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('header h1'); const strip = document.querySelector('#ccf-gm-tools .ccf-gt-tabs'); return (getComputedStyle(h1).display !== 'none' ? 1 : 0) + [...strip.querySelectorAll('.ccf-gt-tab')].filter((t) => t.offsetParent && t.textContent === '핸드아웃').length; });
     assert.equal(await handoutTitleShown(), 1, 'one tab: the handout title shows once (panel title)');
     await page.addScriptTag({ content: src('ntfy') });
+    // the phone-notification settings (ntfy) are a section of the shared 설정 tab, not a tab of their own
     await page.waitForFunction(() => [...document.querySelectorAll('#ccf-gm-tools .ccf-gt-tab')].length === 2, null, { timeout: 4000 });
+    assert.deepEqual(await tabs(page), ['핸드아웃', '설정'], 'the shared settings tab appears when a settings section registers');
     assert.equal(await handoutTitleShown(), 1, 'two tabs: the handout title shows once (tab name), applied at once when the second item registers');
-    await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '스마트폰 알림' }).dispatchEvent('click');
-    await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-ntfy-dialog form');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.tab[data-tab="settings"]')).display), 'none', 'no settings sub-tab inside the handout panel any more');
+    await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '설정' }).dispatchEvent('click');
+    await page.waitForSelector('#ccf-gm-tools .ccf-gt-settings #ccf-ntfy-dialog form');
     assert.equal(await page.locator('#ccfolia-handout-root').count(), 0, 'the handout tab was cleaned up');
+    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['스마트폰 알림'], 'sub-heading per section');
+    // the handout's own settings join as a section, live (no reopening)
+    await handoutSettings(true);
+    await page.waitForSelector('#ccf-gm-tools [data-ccf-settings-section="handout-settings"] #ccfolia-handout-root', { state: 'attached', timeout: 4000 });
+    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['핸드아웃', '스마트폰 알림'], 'sections in order');
+    const inner = await page.evaluate(() => { const sh = document.querySelector('#ccfolia-handout-root').shadowRoot; const c = sh.querySelector('.container'); return { mode: c.dataset.mode, field: !!sh.querySelector('[data-field="myCharacter"]'), header: getComputedStyle(sh.querySelector('header')).display, tabs: getComputedStyle(sh.querySelector('.tabs')).display, exp: getComputedStyle(sh.querySelector('[data-action="export"]')).display }; });
+    assert.deepEqual(inner, { mode: 'settings', field: true, header: 'none', tabs: 'none', exp: 'none' }, 'the handout settings drawn without the panel chrome');
     await page.locator('#ccf-gm-tools .ccf-gt-close').dispatchEvent('click');
-    assert.equal(await page.locator('#ccf-ntfy-dialog').count(), 0, 'closing the window removes the ntfy settings');
+    assert.equal(await page.locator('#ccf-ntfy-dialog').count(), 0, 'closing the window removes the ntfy settings'); assert.equal(await page.locator('#ccfolia-handout-root').count(), 0);
     // the other ways to open a sheet (the edit dialog's button) open the window's sheet tab too, for that character
     const edit = await run({ gm: true, insane: true, order: ['character-sheet', 'handout', 'toolkit-presence'] });
     await edit.evaluate(() => {

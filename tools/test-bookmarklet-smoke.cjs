@@ -49,7 +49,7 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
       menuItems: [...window.__CCF_TOOLKIT_MENU__.items.keys()].sort(), penguin: document.querySelector('[data-ccf-toolkit-menu-button]')?.previousElementSibling?.getAttribute('aria-label'),
       homeBookmarks: !!window.__CAPYBARA_HOME_BOOKMARKS__, versions: !!window.__CCF_TOOLKIT_VERSIONS__
     }));
-    assert.deepEqual({ ...ready, versions: undefined }, { chatPanel: true, presence: true, sheet: true, gif: true, ntfy: true, menuItems: ['ntfy', 'saikoro'], penguin: '[GM] 컷인 목록', homeBookmarks: true, versions: undefined });
+    assert.deepEqual({ ...ready, versions: undefined }, { chatPanel: true, presence: true, sheet: true, gif: true, ntfy: true, menuItems: ['gm-settings', 'ntfy', 'saikoro'], penguin: '[GM] 컷인 목록', homeBookmarks: true, versions: undefined });
 
     // the home bookmarks script stores the visited room in localStorage (no chrome.storage)
     const rooms = await page.evaluate(() => JSON.parse(localStorage.getItem('capybaraRooms') || '{}'));
@@ -60,14 +60,14 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
 
     // phone push through the page: settings from the penguin menu, then a direct fetch to ntfy
     await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-    await page.locator('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]', { hasText: '스마트폰 알림' }).dispatchEvent('click'); // the penguin opens a menu; the ntfy item opens its tab of the GM tools window
+    await page.locator('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]', { hasText: '설정' }).dispatchEvent('click'); // the penguin opens a menu; the shared settings tab holds the ntfy settings
     await page.waitForSelector('#ccf-ntfy-dialog form');
     await page.locator('#ccf-ntfy-dialog [data-a="new"]').click();
     await page.locator('#ccf-ntfy-dialog [name="enabled"]').check();
     await page.locator('#ccf-ntfy-dialog [data-a="test"]').click();
     await page.waitForFunction(() => /테스트 알림을 보냈습니다/.test(document.querySelector('#ccf-ntfy-dialog [data-role="note"]')?.textContent || ''), null, { timeout: 8000 });
     assert.equal(ntfy.length, 1); assert.match(ntfy[0].topic, /^capy-[a-z2-7]{24}$/); assert.equal(ntfy[0].title, '카피바라 테스트 알림');
-    await page.locator('#ccf-ntfy-dialog [data-a="close"]').click();
+    await page.locator('#ccf-gm-tools .ccf-gt-close').click();
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ccf-ntfy-v1')).enabled), true, 'the settings live in localStorage');
     // the notifier hook: only while away; own messages and the room in front are skipped
     await page.evaluate(() => { document.hasFocus = () => true; window.__CCF_NTFY_STATE__.lastInputAt = Date.now(); });
