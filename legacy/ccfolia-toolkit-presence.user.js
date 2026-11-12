@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.11
+// @version      0.0.12
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -168,7 +168,8 @@
     paper.style.top = `${Math.round(Math.max(16, Math.min(rect.bottom, window.innerHeight - height - 16)))}px`;
     const duration = muiAutoDuration(height);
     paper.style.transition = `opacity ${duration}ms ${MUI_EASE}, transform ${Math.round(duration * 0.666)}ms ${MUI_EASE}`;
-    window.requestAnimationFrame(() => { paper.style.opacity = "1"; paper.style.transform = "none"; });
+    void paper.offsetHeight; // 시작 상태를 확정한 뒤 바로 끝 상태로 (requestAnimationFrame 은 가려진 창에서 멈춘다)
+    paper.style.opacity = "1"; paper.style.transform = "none";
     backdrop.addEventListener("mousedown", (event) => { event.preventDefault(); closeToolkitMenu(); menuState.button?.focus(); });
     root.addEventListener("keydown", (event) => {
       const rows = [...list.children], at = rows.indexOf(document.activeElement);
@@ -210,7 +211,8 @@
       const rect = menuState.button.getBoundingClientRect();
       node.style.transform = `translate3d(${Math.round(rect.left + rect.width / 2 - node.offsetWidth / 2)}px,${Math.round(rect.bottom)}px,0)`;
       tipState.node = node;
-      window.requestAnimationFrame(() => { tip.style.opacity = "1"; tip.style.transform = "none"; });
+      void tip.offsetHeight;
+      tip.style.opacity = "1"; tip.style.transform = "none";
     }, 100);
   }
 
