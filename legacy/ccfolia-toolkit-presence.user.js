@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.12
+// @version      0.0.13
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -158,7 +158,7 @@
     paper.appendChild(list);
     root.append(backdrop, paper);
     const style = document.createElement("style");
-    style.textContent = ".ccf-tm-item{display:flex;align-items:center;justify-content:flex-start;position:relative;box-sizing:border-box;padding:6px 16px;margin:0;cursor:pointer;user-select:none;white-space:nowrap;outline:0;font-family:Roboto,Helvetica,Arial,sans-serif;font-weight:400;font-size:1rem;line-height:1.5;letter-spacing:.00938em;color:inherit}.ccf-tm-item:hover{background:rgba(255,255,255,.08)}.ccf-tm-item:focus-visible{background:rgba(255,255,255,.12)}.ccf-tm-text{flex:1 1 auto;margin:0 28px 0 0}.ccf-tm-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:0 0 auto}.ccf-tm-icon svg{width:20px;height:20px;fill:currentColor}.ccf-tm-badge{min-width:20px;margin:0 8px 0 -16px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center}";
+    style.textContent = ".ccf-tm-item{display:flex;align-items:center;justify-content:flex-start;position:relative;box-sizing:border-box;padding:6px 16px;margin:0;cursor:pointer;user-select:none;white-space:nowrap;outline:0;font-family:Roboto,Helvetica,Arial,sans-serif;font-weight:400;font-size:1rem;line-height:1.5;letter-spacing:.00938em;color:inherit}.ccf-tm-item:hover{background:rgba(255,255,255,.08)}.ccf-tm-item:focus-visible{background:rgba(255,255,255,.12)}.ccf-tm-text{flex:1 1 auto;margin:0 28px 0 0}.ccf-tm-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:0 0 auto}.ccf-tm-icon svg{width:20px;height:20px}.ccf-tm-badge{min-width:20px;margin:0 8px 0 -16px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center}";
     root.appendChild(style);
     document.documentElement.appendChild(root);
     // 버튼 아래 왼쪽 맞춤 (MUI marginThreshold 16 안으로)
