@@ -35,10 +35,18 @@
       box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); }
     header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 0; }
     h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
-    .body { padding: 4px 24px 20px; overflow: auto; font-size: 1rem; line-height: 1.5; }
+    .body { padding: 15px 24px 20px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
     p.status-line { margin: 2px 0; line-height: 1.4; font-size: 13px; color: rgba(255,255,255,.5); }
     .ntfy { margin-top: 30px; }
+    .ntfy-head { display: flex; align-items: center; gap: 4px; margin: 16px 0 4px; }
+    .ntfy-head h3 { margin: 0; }
+    .ntfy-head .switch .sw { margin: 0; }
+    button.help { min-width: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; color: rgba(255,255,255,.7); }
+    button.help svg { width: 20px; height: 20px; fill: currentColor; }
+    button.help[aria-expanded="true"] { color: #64b5f6; }
+    [hidden] { display: none !important; }
+    .toast:empty { display: none; }
     p.status-line:empty { display: none; }
     .field { margin-top: 16px; }
     .field > label { display: block; margin-bottom: 4px; color: rgba(255,255,255,.7); font-size: .75rem; }
@@ -431,7 +439,7 @@
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     return "capy-" + Array.from(bytes, byte => alphabet[byte % 32]).join("");
   };
-  const nEnabled = el("input", { type: "checkbox", id: "ntfy-enabled" });
+  const nEnabled = el("input", { type: "checkbox", id: "ntfy-enabled", "aria-label": "스마트폰 알림 사용" });
   const nTopic = el("input", { type: "text", id: "ntfy-topic", autocomplete: "off", spellcheck: "false" });
   const nServer = el("input", { type: "text", id: "ntfy-server", autocomplete: "off", spellcheck: "false", placeholder: NTFY_DEFAULT_SERVER });
   const nScope = el("select", { id: "ntfy-scope" }, el("option", { value: "all", text: "다른 사람의 모든 메시지" }), el("option", { value: "keywords", text: "키워드가 들어간 메시지만" }));
@@ -482,22 +490,28 @@
       nSay(answer?.ok ? "테스트 알림을 보냈습니다. 스마트폰 ntfy 앱에서 확인하세요." : `보내지 못했습니다: ${answer?.error || "알 수 없는 오류"}`, !answer?.ok);
     } catch (error) { nSay(`보내지 못했습니다: ${error.message}`, true); }
   });
+  // 연결 방법(제목 · 목록 · 구독 링크)은 기본 숨김: 제목 옆 ? 버튼으로 펼치고 접는다(창을 열 때마다 접힌 채 시작). 상태 줄(nToast)은 메시지가 있을 때만 보인다.
+  const ntfyHelp = el("div", { class: "ntfy-help", id: "ntfy-help", hidden: "" },
+    el("h3", { text: "스마트폰에 연결하는 방법" }),
+    el("ol", { class: "muted", style: "margin:4px 0 0 18px;padding:0" },
+      el("li", { text: "Play 스토어에서 ntfy 앱(무료)을 설치합니다." }),
+      el("li", { text: "앱의 + 를 눌러 위 topic 이름을 입력하고 구독합니다. (서버를 바꿨다면 앱의 서버 주소도 같게)" }),
+      el("li", { text: "여기서 ‘테스트 알림 보내기’를 눌러 스마트폰에 알림이 오는지 확인합니다." })),
+    el("div", { class: "field" }, el("label", { text: "스마트폰에서 열면 바로 구독되는 링크" }), nLink));
+  const ntfyHelpButton = el("button", { type: "button", class: "help", id: "ntfy-help-toggle", title: "연결 방법 보기", "aria-label": "연결 방법 보기", "aria-expanded": "false", "aria-controls": "ntfy-help" });
+  ntfyHelpButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>';
+  ntfyHelpButton.addEventListener("click", () => { const open = ntfyHelp.hidden; ntfyHelp.hidden = !open; ntfyHelpButton.setAttribute("aria-expanded", String(open)); const label = open ? "연결 방법 접기" : "연결 방법 보기"; ntfyHelpButton.title = label; ntfyHelpButton.setAttribute("aria-label", label); });
   const ntfySection = el("div", { class: "ntfy" },
-    el("h3", { text: "스마트폰 알림" }),
-    el("p", { class: "muted", text: "코코포리아 새 메시지를 안드로이드 ntfy 앱으로 알려 줍니다. PC에서 이 룸 탭이 열려 있어야 알림이 갑니다." }),
-    el("label", { class: "check" }, nEnabled, el("span", { text: "스마트폰 알림 사용" })),
+    el("div", { class: "ntfy-head" }, el("h3", { text: "스마트폰 알림" }),
+      el("label", { class: "switch", title: "스마트폰 알림 사용" }, nEnabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
+      ntfyHelpButton),
     el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
     el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알릴 메시지" }), nScope, nKeywords),
     el("label", { class: "check" }, nAway, el("span", {}, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (다른 탭·창이거나, 조작이 없을 때 — 조작 없는 시간: " }), nAwayMin, el("span", { text: " 분)" }))),
     el("label", { class: "check" }, nText, el("span", { text: "알림에 메시지 앞부분(60자)도 넣기" })),
     el("p", { class: "warn", text: "켜면 메시지 내용이 공개 서버(ntfy.sh)를 거칩니다. 기본은 보낸 사람 이름과 룸 이름만 보냅니다." }),
     el("div", { class: "field" }, el("label", { for: "ntfy-server", text: "서버 주소 (비우면 https://ntfy.sh · 자체 서버는 사이트 접근 허용이 따로 필요합니다)" }), nServer),
-    el("h3", { text: "스마트폰에 연결하는 방법" }),
-    el("ol", { class: "muted", style: "margin:4px 0 0 18px;padding:0" },
-      el("li", { text: "Play 스토어에서 ntfy 앱(무료)을 설치합니다." }),
-      el("li", { text: "앱의 + 를 눌러 위 topic 이름을 입력하고 구독합니다. (서버를 바꿨다면 앱의 서버 주소도 같게)" }),
-      el("li", { text: "여기서 ‘테스트 알림 보내기’를 눌러 스마트폰에 알림이 오는지 확인합니다." })),
-    el("div", { class: "field" }, el("label", { text: "스마트폰에서 열면 바로 구독되는 링크" }), nLink),
+    ntfyHelp,
     nToast,
     el("div", { class: "row", style: "margin-top:12px" }, ntfySave, ntfyTest));
 

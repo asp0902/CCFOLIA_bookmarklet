@@ -174,7 +174,7 @@ async function backgroundPart() {
     await modalPage.waitForFunction(() => !!document.getElementById('capybara-share-modal-host'));
     const q = (sel) => modalPage.locator('#capybara-share-modal-host ' + sel);
     await q('#ntfy-save').scrollIntoViewIfNeeded();
-    await q('#ntfy-enabled').check(); await q('#ntfy-save').click();
+    await q('.ntfy label.switch').click(); assert.equal(await q('#ntfy-enabled').isChecked(), true, 'the title-side switch turns it on'); await q('#ntfy-save').click();
     await modalPage.waitForFunction(() => window.__store.ntfy);
     const saved = await modalPage.evaluate(() => window.__store.ntfy);
     assert.match(saved.topic, /^capy-[a-z2-7]{24}$/); assert.equal(saved.enabled, true); assert.equal(saved.onlyAway, true); assert.equal(saved.includeText, false); assert.equal(saved.server, 'https://ntfy.sh');
