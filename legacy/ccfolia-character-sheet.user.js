@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.18
+// @version      0.5.19
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.18";
+  const VERSION = "0.5.19";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -207,6 +207,7 @@
         detail: cleanText(item?.detail, 20_000), memo: cleanText(item?.memo, 20_000), extensions: copyJsonObject(item?.extensions)
       })),
       mission: cleanText(raw.mission, 50_000),
+      image: /^https?:\/\//i.test(String(raw.image || "").trim()) ? cleanText(raw.image, 2000).trim() : "",
       secret: cleanText(raw.secret, 50_000),
       memo: cleanText(raw.memo, 50_000),
       profile: { ...copyJsonObject(raw.profile), catchphrase: cleanText(raw.profile?.catchphrase, 20_000), setting: cleanText(raw.profile?.setting, 50_000) },
@@ -362,7 +363,8 @@
       id: idFactory(), name, player: "", age: "", gender: "", occupation: "",
       life: 6, lifeMax: 6, sanity: 6, sanityMax: 6, merit: 0, etc: "",
       curiosity: "", removedGaps: [false, false, false, false, false],
-      skills: [], fear: "", abilities: [], people: [], mission: "", secret: "", memo: ""
+      skills: [], fear: "", abilities: [], people: [], mission: "", secret: "", memo: "", image: "",
+      respec: { newWorld: false, session: false, roleplay: false, gain: false, empathy: 0, mission: false, other: 0 }
     };
   }
 
@@ -666,16 +668,92 @@
     }, { signal });
   }
 
+  // ---- 시트 상단: 이미지 | 생명력·이성치·공적점·아이템, 캐릭터 메모, 리스펙 줄 ----
+  const RESPECT_TOGGLES = Object.freeze([["newWorld", "새로운 세계"], ["session", "세션참여"], ["roleplay", "롤플레이"], ["gain", "획득"], ["mission", "사명달성"]]);
+  const RESPECT_NUMBERS = Object.freeze([["empathy", "심금"], ["other", "기타"]]);
+
+  let characterStore = null;
+  function findCharacterStore() {
+    if (characterStore) return characterStore;
+    const root = document.getElementById("root") || document.body?.firstElementChild;
+    const key = root ? Object.keys(root).find((name) => name.startsWith("__reactContainer")) : "";
+    const fiber = key ? root[key]?.stateNode?.current : null;
+    if (!fiber) return null;
+    const isStore = (value) => value && typeof value === "object" && typeof value.getState === "function" && typeof value.subscribe === "function";
+    const seen = new WeakSet();
+    let found = null;
+    const visit = (value) => { if (found || !value || typeof value !== "object" || seen.has(value)) return; seen.add(value); if (isStore(value)) found = value; };
+    const walk = (node, depth = 0) => {
+      if (found || !node || depth > 50) return;
+      visit(node.memoizedProps); visit(node.memoizedState); visit(node.stateNode);
+      if (node.memoizedProps?.store) visit(node.memoizedProps.store);
+      if (node.memoizedProps?.value) visit(node.memoizedProps.value);
+      walk(node.child, depth + 1); walk(node.sibling, depth + 1);
+    };
+    walk(fiber);
+    characterStore = found;
+    return found;
+  }
+
+  // 연결된 코코포리아 캐릭터의 아이콘(iconUrl): 시트에 직접 고른 이미지가 없을 때의 기본값.
+  function nativeCharacterIcon(sheet) {
+    try {
+      const entities = findCharacterStore()?.getState()?.entities?.roomCharacters?.entities || {};
+      const names = [sheet.player, sheet.name].map((value) => String(value || "").trim()).filter(Boolean);
+      const hit = Object.values(entities).find((character) => character && names.includes(String(character.name || "").trim()) && /^https?:\/\//i.test(character.iconUrl || ""));
+      return hit ? hit.iconUrl : "";
+    } catch (error) { return ""; }
+  }
+
+  function sheetImageUrl(sheet) {
+    const own = String(sheet.image || "").trim();
+    return /^https?:\/\//i.test(own) ? own : nativeCharacterIcon(sheet);
+  }
+
+  function renderPortrait(sheet) {
+    const url = sheetImageUrl(sheet);
+    return `<button type="button" class="ccf-cs-portrait" data-action="portrait" aria-label="캐릭터 이미지 바꾸기" title="이미지 주소를 입력해 바꿉니다(비우면 캐릭터 아이콘)">${url ? `<img src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer">` : "<span>이미지</span>"}</button>`;
+  }
+
+  function renderRespect(sheet) {
+    const respec = sheet.respec || {};
+    const toggles = RESPECT_TOGGLES.map(([key, label]) => `<label class="ccf-cs-respect-toggle"><span>${label}</span><input type="checkbox" role="switch" data-respec="${key}"${respec[key] ? " checked" : ""}><i aria-hidden="true"></i></label>`).join("");
+    const numbers = RESPECT_NUMBERS.map(([key, label]) => `<label class="ccf-cs-respect-number"><span>${label}</span><input type="number" min="0" data-respec="${key}" value="${nonNegativeNumber(respec[key])}"></label>`).join("");
+    return `<div class="ccf-cs-respect" role="group" aria-label="리스펙"><strong>리스펙</strong>${toggles}${numbers}<button type="button" class="ccf-cs-respect-roll" data-action="respect-roll" aria-label="리스펙 합계를 공적점에 더하고 채팅으로 보내기" title="켜진 항목과 숫자를 더해 채팅으로 보내고 공적점에 더한 뒤 초기화합니다">${rollIcon()}</button></div>`;
+  }
+
+  // 리스펙 굴리기: 켜진 항목(각 1점)과 숫자를 더해 내역·합계를 채팅으로 보내고, 공적점에 더한 뒤 토글·숫자를 초기화한다.
+  function respectBreakdown(sheet) {
+    const respec = sheet.respec || {};
+    const parts = [];
+    for (const [key, label] of RESPECT_TOGGLES) if (respec[key]) parts.push([label, 1]);
+    for (const [key, label] of RESPECT_NUMBERS) { const value = nonNegativeNumber(respec[key]); if (value > 0) parts.push([label, value]); }
+    const total = parts.reduce((sum, [, value]) => sum + value, 0);
+    return { parts, total, text: `리스펙: ${parts.map(([label, value]) => `${label} ${value}`).join(" + ")} = ${total}` };
+  }
+
+  function rollRespect() {
+    const sheet = currentSheet();
+    const { total, text } = respectBreakdown(sheet);
+    if (!total) return status("켜진 리스펙 항목이 없습니다");
+    sheet.merit = nonNegativeNumber(sheet.merit) + total;
+    sheet.respec = { ...(sheet.respec || {}), ...Object.fromEntries(RESPECT_TOGGLES.map(([key]) => [key, false])), ...Object.fromEntries(RESPECT_NUMBERS.map(([key]) => [key, 0])) };
+    saveSoon();
+    render();
+    writeChat(text, true, { keepOpen: true });
+  }
+
   function renderSections(sheet) {
     const skillOptions = CATEGORIES.flatMap((category, column) => category.slice(1).map((name, row) => `<option value="${column}:${row}"${sheet.fear === `${column}:${row}` ? " selected" : ""}>${category[0]} · ${name}</option>`)).join("");
     const basic = `<div class="ccf-cs-basic">
-      <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
-      <div class="ccf-cs-stats-items"><div class="ccf-cs-stats">
+      <div class="ccf-cs-top">${renderPortrait(sheet)}<div class="ccf-cs-stats-items"><div class="ccf-cs-stats">
         ${vitalField("생명력", "life", sheet.life, "lifeMax", sheet.lifeMax)}
         ${vitalField("이성치", "sanity", sheet.sanity, "sanityMax", sheet.sanityMax)}
         ${numberField("merit", "공적점", sheet.merit)}
         ${textField("etc", "ETC", sheet.etc)}
-      </div>${renderItemFields(sheet.items)}</div>
+      </div>${renderItemFields(sheet.items)}</div></div>
+      <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
+      ${renderRespect(sheet)}
     </div>`;
     const skillSettings = `<div class="ccf-cs-skill-options">
       <label>호기심 분야<select data-field="curiosity"><option value="">선택 안 함</option>${CATEGORIES.map((category, index) => `<option value="${index}"${String(index) === String(sheet.curiosity) ? " selected" : ""}>${category[0]}</option>`).join("")}</select></label>
@@ -814,6 +892,12 @@
       if (value) writeChat(`sc(${value})`);
       return;
     }
+    if (target.dataset.respec) {
+      sheet.respec ||= {};
+      sheet.respec[target.dataset.respec] = target.type === "checkbox" ? target.checked : nonNegativeNumber(target.value);
+      saveSoon();
+      return;
+    }
     if (target.dataset.item) {
       sheet.items ||= {};
       sheet.items[target.dataset.item] = nonNegativeNumber(target.value);
@@ -864,6 +948,16 @@
     if (button.dataset.action === "close") return closeSheet();
     if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
     if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
+    if (button.dataset.action === "respect-roll") return rollRespect();
+    if (button.dataset.action === "portrait") {
+      const sheet = currentSheet();
+      const next = window.prompt("캐릭터 이미지 주소(https://…). 비우면 코코포리아 캐릭터 아이콘을 씁니다.", sheet.image || "");
+      if (next === null) return;
+      const value = String(next).trim();
+      if (value && !/^https?:\/\//i.test(value)) return status("https:// 로 시작하는 주소를 입력하세요");
+      sheet.image = value;
+      saveSoon(); render(); return;
+    }
     if (button.dataset.action === "open-sheet") return selectSheet(button.dataset.sheetId);
     if (button.dataset.action === "delete-sheet-list") {
       if (state.data.sheets.length === 1) return;
@@ -966,7 +1060,7 @@
     }
   }
 
-  function writeChat(command, submit = false) {
+  function writeChat(command, submit = false, options = {}) {
     const editors = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
     const editor = editors.find((node) => !node.closest(`#${ROOT_ID}, [role="dialog"], .MuiDialog-root`) && isVisible(node) && findSubmitScope(node));
     if (!editor) return status("채팅 입력창을 찾지 못함");
@@ -977,7 +1071,7 @@
     editor.dispatchEvent(new Event("input", { bubbles: true }));
     if (submit) findSubmitScope(editor)?.querySelector('button[type="submit"]')?.click();
     else editor.focus();
-    closeSheet();
+    if (!options.keepOpen) closeSheet();
   }
 
   function findSubmitScope(editor) {
@@ -1010,7 +1104,7 @@
     style.textContent = `
       [${ICON_ATTR}] { all:unset;box-sizing:border-box;width:40px;height:40px;margin:0 2px;color:inherit;display:inline-grid;place-items:center;border-radius:50%;cursor:pointer;vertical-align:middle;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${ICON_ATTR}]:hover { background:rgba(255,255,255,.1) }
-      [${DIALOG_BUTTON_ATTR}] { position:static!important;display:inline-grid!important;place-items:center;width:36px!important;min-width:36px!important;height:36px!important;margin:0 52px 0 4px!important;padding:6px!important;flex:0 0 36px;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
+      [${DIALOG_BUTTON_ATTR}] { position:static!important;display:inline-grid!important;place-items:center;width:36px!important;min-width:36px!important;height:36px!important;margin:0 4px!important;padding:6px!important;flex:0 0 36px;transition:background-color 150ms cubic-bezier(.4,0,.2,1) }
       [${DIALOG_BUTTON_ATTR}] svg { width:24px;height:24px;pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
@@ -1071,7 +1165,26 @@
       #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87);border-bottom-width:2px }
       #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:transparent;border-bottom-width:2px;background-size:100% 2px }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
-      #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
+      #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:minmax(0,1fr);gap:16px }
+      #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:120px minmax(0,1fr);gap:24px;align-items:start }
+      #${ROOT_ID} .ccf-cs-top>.ccf-cs-stats-items { grid-column:auto }
+      #${ROOT_ID} .ccf-cs-portrait { width:120px;height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-portrait img { display:block;width:100%;height:100%;object-fit:cover }
+      #${ROOT_ID} .ccf-cs-portrait:hover { border-color:rgba(255,255,255,.6) }
+      #${ROOT_ID} .ccf-cs-respect { display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-height:44px;padding:0 12px 0 0;background:#1b1b1b;border:1px solid rgba(255,255,255,.2) }
+      #${ROOT_ID} .ccf-cs-respect strong { align-self:stretch;display:grid;place-items:center;padding:0 16px;margin-right:4px;background:#000;color:#fff;font-size:14px }
+      #${ROOT_ID} .ccf-cs-respect label { display:inline-flex;align-items:center;gap:6px;color:#e0e0e0;font-size:13px }
+      #${ROOT_ID} .ccf-cs-respect-toggle input { position:absolute;opacity:0;width:1px!important;min-height:0!important;height:1px;pointer-events:none }
+      #${ROOT_ID} .ccf-cs-respect-toggle i { position:relative;flex:0 0 38px;width:38px;height:20px;border-radius:10px;background:#616161;transition:background-color 120ms }
+      #${ROOT_ID} .ccf-cs-respect-toggle i::after { content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.5);transition:transform 120ms }
+      #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i { background:#f50057 }
+      #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i::after { transform:translateX(18px) }
+      #${ROOT_ID} .ccf-cs-respect-toggle input:focus-visible+i { outline:2px solid #2196f3;outline-offset:2px }
+      #${ROOT_ID} .ccf-cs-respect-number input { width:38px!important;min-height:38px!important;height:38px;padding:0!important;border:1px solid #9e9e9e!important;border-radius:50%;background-image:none!important;text-align:center;font-size:15px }
+      #${ROOT_ID} .ccf-cs-respect-number input:focus { border-color:#f50057!important }
+      #${ROOT_ID} .ccf-cs-respect-roll { margin-left:auto;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#e0e0e0;display:grid;place-items:center;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-respect-roll:hover { background:rgba(255,255,255,.12) }
+      #${ROOT_ID} .ccf-cs-respect-roll svg { width:24px;height:24px }
       #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
       #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1;display:block;padding:12px 16px 0;background:rgba(255,255,255,.1);color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-profile-memo span { display:block;margin-bottom:2px }
