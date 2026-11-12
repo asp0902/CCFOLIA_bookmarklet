@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.9
+// @version      0.0.10
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -105,41 +105,113 @@
       || labelled(["내 캐릭터 목록", "내 캐릭터", "캐릭터 목록", "My characters", "My character", "マイキャラクター", "キャラクター一覧"]);
   }
 
+  // ---- 펭귄 버튼의 메뉴·툴팁: 코코포리아의 MUI Menu / Tooltip 을 잰 값 그대로 (룸 메뉴·계정 메뉴·툴바 버튼, 테스트 룸 실측) ----
+  // 메뉴: 투명 백드롭(fixed, 바깥 클릭으로 닫힘) 위에 paper rgba(44,44,44,.87) 모서리 4 elevation8 그림자, ul 패딩 8 0, 항목 padding 6 16, Roboto 16/24 자간 .15008px,
+  // hover rgba(255,255,255,.08) · focus-visible .12, 글자 왼쪽(margin-right 28)·아이콘 오른쪽 20px, 버튼 아래 왼쪽 맞춤, Grow(opacity 전체 시간 · transform 0.666배, scale .75→1, 시간은 높이로 정하는 auto).
+  const MUI_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+  const muiAutoDuration = (height) => { const c = height / 36; return Math.round((4 + 15 * c ** 0.25 + c / 5) * 10); };
   function closeToolkitMenu() {
-    menuState.menu?.remove();
+    const root = menuState.menu;
     menuState.menu = null;
     menuState.button?.setAttribute("aria-expanded", "false");
+    if (!root) return;
+    const paper = root.querySelector("[data-ccf-tm-paper]");
+    root.setAttribute("data-closing", "1");
+    root.style.pointerEvents = "none";
+    if (paper) { paper.style.opacity = "0"; paper.style.transform = "scale(0.75, 0.5625)"; }
+    window.setTimeout(() => root.remove(), 200);
   }
 
   function openToolkitMenu() {
     closeToolkitMenu();
+    hideToolkitTip();
     const items = toolkitMenuItems();
     if (!items.length || !menuState.button) return;
-    const menu = document.createElement("div");
-    menu.setAttribute("role", "menu");
-    menu.setAttribute(SAFE_UI_ATTR, "1");
-    menu.style.cssText = "position:fixed;z-index:2147483647;min-width:180px;padding:8px 0;background:#424242;color:#fff;border-radius:4px;font:14px/1.5 'Noto Sans KR',Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)";
+    const root = document.createElement("div");
+    root.setAttribute(SAFE_UI_ATTR, "1");
+    root.setAttribute("data-ccf-toolkit-menu", "1");
+    root.style.cssText = "position:fixed;inset:0;z-index:2147483000";
+    const backdrop = document.createElement("div");
+    backdrop.style.cssText = "position:fixed;inset:0;background:transparent;-webkit-tap-highlight-color:transparent";
+    const paper = document.createElement("div");
+    paper.setAttribute("data-ccf-tm-paper", "1");
+    paper.setAttribute("tabindex", "-1");
+    paper.style.cssText = "position:absolute;box-sizing:border-box;min-width:16px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);overflow-y:auto;overflow-x:hidden;outline:0;background:rgba(44,44,44,.87);color:#fff;border-radius:4px;font-family:'Noto Sans KR',Roboto,Helvetica,Arial,sans-serif;box-shadow:0px 5px 5px -3px rgba(0,0,0,.2),0px 8px 10px 1px rgba(0,0,0,.14),0px 3px 14px 2px rgba(0,0,0,.12);opacity:0;transform:scale(0.75,0.5625);transform-origin:0 0";
+    const list = document.createElement("ul");
+    list.setAttribute("role", "menu");
+    list.style.cssText = "list-style:none;margin:0;padding:8px 0;position:relative";
     for (const item of items) {
-      const row = document.createElement("button");
-      row.type = "button";
+      const row = document.createElement("li");
       row.setAttribute("role", "menuitem");
+      row.setAttribute("tabindex", "-1");
       row.setAttribute("data-ccf-menu-item", item.id);
-      row.style.cssText = "all:unset;box-sizing:border-box;display:flex;align-items:center;gap:16px;width:100%;min-height:40px;padding:6px 16px;cursor:pointer;color:inherit";
+      row.className = "ccf-tm-item";
       let badge = "";
       try { badge = item.badge ? String(item.badge() || "") : ""; } catch (_) { badge = ""; }
-      row.innerHTML = `<span style="display:grid;place-items:center;width:24px;height:24px">${item.icon || ""}</span><span style="flex:1">${escapeHtml(item.label)}</span>${badge ? `<span style="min-width:20px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center">${escapeHtml(badge)}</span>` : ""}`;
-      row.addEventListener("mouseenter", () => { row.style.background = "rgba(255,255,255,.08)"; });
-      row.addEventListener("mouseleave", () => { row.style.background = ""; });
-      row.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); closeToolkitMenu(); try { item.onClick?.(); } catch (error) { console.warn("[toolkit-menu] item failed", error); } });
-      menu.appendChild(row);
+      row.innerHTML = `<span class="ccf-tm-text">${escapeHtml(item.label)}</span>${badge ? `<span class="ccf-tm-badge">${escapeHtml(badge)}</span>` : ""}<span class="ccf-tm-icon">${item.icon || ""}</span>`;
+      row.addEventListener("click", (event) => {
+        event.preventDefault(); event.stopPropagation(); closeToolkitMenu();
+        try { if (typeof item.mount === "function") openGmTools(item.id); else item.onClick?.(); } catch (error) { console.warn("[toolkit-menu] item failed", error); }
+      });
+      list.appendChild(row);
     }
-    document.documentElement.appendChild(menu);
+    paper.appendChild(list);
+    root.append(backdrop, paper);
+    const style = document.createElement("style");
+    style.textContent = ".ccf-tm-item{display:flex;align-items:center;justify-content:flex-start;position:relative;box-sizing:border-box;padding:6px 16px;margin:0;cursor:pointer;user-select:none;white-space:nowrap;outline:0;font-family:Roboto,Helvetica,Arial,sans-serif;font-weight:400;font-size:1rem;line-height:1.5;letter-spacing:.00938em;color:inherit}.ccf-tm-item:hover{background:rgba(255,255,255,.08)}.ccf-tm-item:focus-visible{background:rgba(255,255,255,.12)}.ccf-tm-text{flex:1 1 auto;margin:0 28px 0 0}.ccf-tm-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:0 0 auto}.ccf-tm-icon svg{width:20px;height:20px;fill:currentColor}.ccf-tm-badge{min-width:20px;margin:0 8px 0 -16px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center}";
+    root.appendChild(style);
+    document.documentElement.appendChild(root);
+    // 버튼 아래 왼쪽 맞춤 (MUI marginThreshold 16 안으로)
     const rect = menuState.button.getBoundingClientRect();
-    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
-    menu.style.left = `${Math.max(8, Math.min(Math.round(rect.left), window.innerWidth - menu.offsetWidth - 8))}px`;
-    menuState.menu = menu;
+    const width = paper.offsetWidth, height = paper.offsetHeight;
+    paper.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
+    paper.style.top = `${Math.round(Math.max(16, Math.min(rect.bottom, window.innerHeight - height - 16)))}px`;
+    const duration = muiAutoDuration(height);
+    paper.style.transition = `opacity ${duration}ms ${MUI_EASE}, transform ${Math.round(duration * 0.666)}ms ${MUI_EASE}`;
+    window.requestAnimationFrame(() => { paper.style.opacity = "1"; paper.style.transform = "none"; });
+    backdrop.addEventListener("mousedown", (event) => { event.preventDefault(); closeToolkitMenu(); menuState.button?.focus(); });
+    root.addEventListener("keydown", (event) => {
+      const rows = [...list.children], at = rows.indexOf(document.activeElement);
+      if (event.key === "Escape") { event.stopPropagation(); closeToolkitMenu(); menuState.button?.focus(); }
+      else if (event.key === "ArrowDown") { event.preventDefault(); rows[(at + 1) % rows.length]?.focus(); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); rows[(at < 1 ? rows.length : at) - 1]?.focus(); }
+      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); document.activeElement?.click?.(); }
+      else if (event.key === "Tab") { event.preventDefault(); closeToolkitMenu(); }
+    });
+    menuState.menu = root;
     menuState.button.setAttribute("aria-expanded", "true");
-    menu.querySelector("button")?.focus();
+    list.firstElementChild?.focus({ preventScroll: true });
+  }
+
+  // 툴팁(MUI Tooltip): 배경 rgb(22,22,22), Roboto 12/500 흰색, 패딩 4 8, 모서리 4, 위쪽 여백 14 · 가운데 맞춤 · 버튼 아래, 100ms 뒤 Grow(opacity 200ms · transform 133ms), 최대 폭 300.
+  const tipState = { node: null, timer: 0 };
+  function hideToolkitTip() {
+    window.clearTimeout(tipState.timer); tipState.timer = 0;
+    const node = tipState.node; tipState.node = null;
+    if (!node) return;
+    const tip = node.firstElementChild;
+    if (tip) { tip.style.opacity = "0"; tip.style.transform = "scale(0.75)"; }
+    window.setTimeout(() => node.remove(), 150);
+  }
+  function showToolkitTip() {
+    window.clearTimeout(tipState.timer);
+    tipState.timer = window.setTimeout(() => {
+      tipState.timer = 0;
+      if (tipState.node || menuState.menu || !menuState.button || menuState.button.hidden) return;
+      const node = document.createElement("div");
+      node.setAttribute(SAFE_UI_ATTR, "1");
+      node.setAttribute("role", "tooltip");
+      node.style.cssText = "position:fixed;z-index:2147483001;pointer-events:none;top:0;left:0;margin:0";
+      const tip = document.createElement("div");
+      tip.textContent = "GM 도구";
+      tip.style.cssText = "box-sizing:border-box;margin:14px 2px 2px;max-width:300px;padding:4px 8px;border-radius:4px;background:rgb(22,22,22);color:#fff;font:500 12px/normal Roboto,Helvetica,Arial,sans-serif;word-wrap:break-word;box-shadow:0px 1px 3px 0px rgba(0,0,0,.2),0px 1px 1px 0px rgba(0,0,0,.14),0px 2px 1px -1px rgba(0,0,0,.12);opacity:0;transform:scale(0.75);transform-origin:center top;transition:opacity 200ms " + MUI_EASE + ",transform 133ms " + MUI_EASE;
+      node.appendChild(tip);
+      document.documentElement.appendChild(node);
+      const rect = menuState.button.getBoundingClientRect();
+      node.style.transform = `translate3d(${Math.round(rect.left + rect.width / 2 - node.offsetWidth / 2)}px,${Math.round(rect.bottom)}px,0)`;
+      tipState.node = node;
+      window.requestAnimationFrame(() => { tip.style.opacity = "1"; tip.style.transform = "none"; });
+    }, 100);
   }
 
   // ---- GM 도구 창: 코코포리아 기본 모달 모양(paper rgba(44,44,44,.87), 모서리 4px, MUI 그림자), 제목 "GM 도구", 탭(MUI Tabs 밑줄 파랑), 마지막 탭 기억 ----
@@ -294,12 +366,15 @@
       button.setAttribute(MENU_BUTTON_ATTR, "1");
       button.setAttribute(SAFE_UI_ATTR, "1");
       button.setAttribute("aria-label", "GM 도구");
-      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-haspopup", "menu");
       button.setAttribute("aria-expanded", "false");
-      button.title = "GM 도구";
+      button.addEventListener("mouseenter", showToolkitTip, { signal: abort.signal });
+      button.addEventListener("mouseleave", hideToolkitTip, { signal: abort.signal });
+      button.addEventListener("focus", () => { if (button.matches(":focus-visible")) showToolkitTip(); }, { signal: abort.signal });
+      button.addEventListener("blur", hideToolkitTip, { signal: abort.signal });
       button.className = anchor.className;
       button.innerHTML = PENGUIN_SVG;
-      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); if (toolTabs().length) { toolsState.host ? closeGmTools() : openGmTools(); } else { menuState.menu ? closeToolkitMenu() : openToolkitMenu(); } }, { signal: abort.signal });
+      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); hideToolkitTip(); menuState.menu ? closeToolkitMenu() : openToolkitMenu(); }, { signal: abort.signal });
       menuState.button = button;
     }
     const button = menuState.button;
@@ -331,9 +406,7 @@
       scheduleToolkitMenuSync();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener("mousedown", (event) => { if (menuState.menu && !menuState.menu.contains(event.target) && !menuState.button?.contains(event.target)) closeToolkitMenu(); }, { capture: true, signal: abort.signal });
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuState.menu) { event.stopPropagation(); closeToolkitMenu(); menuState.button?.focus(); } }, { capture: true, signal: abort.signal });
-    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); closeGmTools(); document.getElementById("ccf-gm-tools-style")?.remove(); menuState.button?.remove(); style.remove(); }, { once: true });
+    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); hideToolkitTip(); closeGmTools(); document.getElementById("ccf-gm-tools-style")?.remove(); menuState.button?.remove(); style.remove(); }, { once: true });
     scheduleToolkitMenuSync();
   }
 
