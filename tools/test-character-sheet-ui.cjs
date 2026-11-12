@@ -124,7 +124,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.equal(await page.locator('#ccf-character-sheet-root header h2').textContent(), '연갈');
     await page.evaluate(() => document.getElementById('ccf-character-sheet-root')?.remove());
     // the list: ＋ is at the right end of the tab bar (list tab only), no heading row any more
-    await page.locator('#toolbar [data-ccf-character-sheet-icon], [data-ccf-character-sheet-icon]').first().click();
+    await page.evaluate(() => window.__CCF_TOOLKIT_MENU__ ? window.__CCF_TOOLKIT_MENU__.items.get('saikoro').onClick() : window.__CCF_CHARACTER_SHEET_DEBUG__.open()); // the toolbar icon is now an item of the penguin menu (tools/test-toolkit-menu.cjs)
     await page.waitForSelector('#ccf-character-sheet-root .ccf-cs-tabs');
     const tabs = await page.evaluate(() => {
       const nav = document.querySelector('#ccf-character-sheet-root .ccf-cs-tabs'), add = nav.querySelector('[data-action="add-sheet"]');

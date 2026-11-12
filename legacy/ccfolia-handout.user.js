@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.106
+// @version      0.1.107
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.106",
+    version: "0.1.107",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -5228,59 +5228,11 @@
     };
   }
 
+  // 핸드아웃 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다.
   function mountIcon() {
     if (!isActive()) return;
-    document.querySelectorAll(`[${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
-    const existing = document.querySelector(`[${ICON_MARKER}]`);
-    if (existing && existing.isConnected) return;
-
-    // 1순위: 상단 탑바의 "내 캐릭터 목록" 토글 버튼 옆
-    const charBtn = findCharacterToolbarButton();
-    if (charBtn?.parentElement) {
-      const icon = buildToolbarIcon();
-      charBtn.parentElement.insertBefore(icon, charBtn.nextSibling);
-      console.info("[ccf-handout] mounted next to character toolbar button");
-      return;
-    }
-    // 2순위: 상단 탑바 우측 끝
-    const appbar = findTopAppBar();
-    if (appbar) {
-      const icon = buildToolbarIcon();
-      icon.setAttribute(ICON_MARKER, "appbar");
-      appbar.appendChild(icon);
-      console.info("[ccf-handout] mounted at app bar end");
-      return;
-    }
-    // 3순위: 사이드 패널 h6
-    const h6 = findCharPanelH6();
-    if (h6) {
-      const icon = buildIcon();
-      h6.appendChild(icon);
-      console.info("[ccf-handout] mounted next to side panel h6");
-      return;
-    }
-    // Wait for the native toolbar; the mount observer retries after React renders it.
-  }
-
-  function buildToolbarIcon() {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.setAttribute(ICON_MARKER, "toolbar");
-    btn.title = "핸드아웃";
-    btn.setAttribute("aria-label", "핸드아웃");
-    // MUI IconButton 매치 — 40x40 hit, 24 icon, color inherits from app bar
-    btn.style.cssText = `
-      all: unset; box-sizing: border-box; cursor: pointer;
-      width: 40px; height: 40px; border-radius: 50%;
-      color: inherit; display: inline-grid; place-items: center;
-      margin: 0 2px; vertical-align: middle;
-      transition: background-color 120ms ease;
-    `;
-    btn.innerHTML = JOURNAL_ICON_HTML;
-    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,.1)"; }, { signal });
-    btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; }, { signal });
-    btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); togglePanel(); }, true);
-    return btn;
+    document.querySelectorAll(`[${ICON_MARKER}="toolbar"], [${ICON_MARKER}="appbar"], [${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
+    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "handout", order: 2, label: "핸드아웃", icon: JOURNAL_ICON_HTML, visible: isActive, onClick: togglePanel });
   }
 
   // React 리렌더 대응 — body 변경 감시
