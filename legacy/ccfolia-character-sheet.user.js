@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.17
+// @version      0.5.18
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.17";
+  const VERSION = "0.5.18";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -460,7 +460,11 @@
       button.title = "사이코로픽션";
       button.innerHTML = diceIcon();
       button.addEventListener("click", () => openSheetFromCharacterDialog(dialog), { signal });
-      title.insertAdjacentElement("afterend", button);
+      // 오른쪽 버튼 무리 안, 닫기(마지막 아이콘 버튼) 바로 왼쪽
+      const others = [...host.querySelectorAll("button")].filter((node) => !node.hasAttribute(DIALOG_BUTTON_ATTR));
+      const closeButton = others[others.length - 1];
+      if (closeButton?.parentElement) closeButton.parentElement.insertBefore(button, closeButton);
+      else host.appendChild(button);
     });
   }
 
@@ -471,8 +475,16 @@
       selectSheet(linkedSheet.id);
       return openSheet();
     }
-    state.view = "list";
-    openSheet();
+    // 연결된 시트가 없으면 이 캐릭터용 시트를 새로 만들어 목록을 거치지 않고 곧바로 연다(이름·메모·생명력/이성치는 편집창 값으로 채운다).
+    const characterName = String(dialog.querySelector('input[name="name"]')?.value || "").trim();
+    const sheet = makeSheet(characterName || `시트 ${state.data.sheets.length + 1}`);
+    sheet.player = characterName;
+    state.data.sheets.push(sheet);
+    state.open = true;
+    ensureRoot();
+    selectSheet(sheet.id);
+    saveSoon();
+    return true;
   }
 
   function selectSheet(sheetId) {
@@ -615,12 +627,12 @@
   }
 
   function renderPanelTabs() {
-    return `<nav class="ccf-cs-tabs" aria-label="사이코로픽션 메뉴"><button data-action="panel-list" aria-selected="${state.view === "list"}">목록</button><button data-action="panel-settings" aria-selected="${state.view === "settings"}">설정</button></nav>`;
+    return `<nav class="ccf-cs-tabs" aria-label="사이코로픽션 메뉴"><button data-action="panel-list" aria-selected="${state.view === "list"}">목록</button><button data-action="panel-settings" aria-selected="${state.view === "settings"}">설정</button>${state.view === "list" ? `<button class="ccf-cs-tab-add" data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button>` : ""}</nav>`;
   }
 
   function renderSheetList() {
     const rows = state.data.sheets.map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-panel-heading"><button data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button></div><div class="ccf-cs-sheet-list">${rows}</div></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-sheet-list">${rows}</div></section>`;
   }
 
   function renderSettings() {
@@ -1025,6 +1037,7 @@
       #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border:0 }
       #${ROOT_ID} .ccf-cs-tabs button { min-width:96px;height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#9e9e9e;font-weight:bold }
       #${ROOT_ID} .ccf-cs-tabs button[aria-selected="true"] { color:#fff;border-bottom-color:#f50057 }
+      #${ROOT_ID} .ccf-cs-tabs .ccf-cs-tab-add { margin-left:auto;min-width:48px;padding:0;color:#fff;font-size:22px;font-weight:normal }
       #${ROOT_ID} .ccf-cs-panel-main { padding:20px }
       #${ROOT_ID} .ccf-cs-panel-section { max-width:680px;margin:0 auto }
       #${ROOT_ID} .ccf-cs-panel-heading { display:flex;align-items:center;margin-bottom:8px }
