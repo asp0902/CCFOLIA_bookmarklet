@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.96
+// @version      0.1.97
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.96"),
+    version: getUserscriptVersion("0.1.97"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -263,6 +263,7 @@
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
     // 구분선 줄이 안 먹을 때: 표식이 붙은 줄마다 줄 요소·조상·계산된 여백·첫 글자까지의 거리와, 규칙이 든 style 이 있는지.
+    cutinChatDiag() { return cutinChatDiag(); },
     breakDiag() {
       const brief = (el) => el instanceof Element ? { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 80), data: [...el.attributes].filter((a) => /^data-/.test(a.name)).map((a) => `${a.name}=${String(a.value).slice(0, 12)}`) } : null;
       const rows = [...document.querySelectorAll('.ccf-render-root[data-ccf-break="1"]')].slice(-5).map((root) => {
@@ -1145,6 +1146,147 @@
     return el.scrollHeight - el.scrollTop - el.clientHeight < 32;
   }
 
+  // ---- 컷인 명령 → 할당 이미지를 채팅 메시지 행 안에 보여 주기 (테마와 무관) ----
+  // c805506 에서 뺀 것은 "네이티브 컷인 화면을 채팅 위에 겹쳐 복제(오버레이·BroadcastChannel·1초 재스캔)"였다. 이건 그것과 다르다:
+  // 저장소(roomEffects)의 컷인 이름·이미지 주소만 읽어, 메시지 글이 컷인 트리거와 같으면 그 행(p) 끝에 평범한 인라인 이미지를 하나 덧붙일 뿐이다
+  // (오버레이·타이머·채널 없음, 새 행이 스캔될 때만 일한다). 원본 텍스트·노드는 건드리지 않는다(React-safe).
+  // 끄기: localStorage.ccfCutinChatImage = "off". 글 일치 방식: 기본 "exact"(트리거와 글 전체가 같음), localStorage.ccfCutinChatMatch = "contains" 로 포함 일치.
+      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), sizes: new Map(), loading: new Set() }); }
+
+  function cutinChatEnabled() {
+    try { return localStorage.getItem("ccfCutinChatImage") !== "off"; } catch (_) { return true; }
+  }
+
+  function cutinChatFindStore() {
+    if (cutinChatS().store) return cutinChatS().store;
+    const root = document.getElementById("root") || document.body?.firstElementChild;
+    if (!root) return null;
+    const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+    const fiber = key ? root[key]?.stateNode?.current : null;
+    if (!fiber) return null;
+    const isStore = (v) => v && typeof v === "object" && typeof v.dispatch === "function" && typeof v.getState === "function" && typeof v.subscribe === "function";
+    const seen = new WeakSet();
+    let found = null;
+    const visit = (v) => { if (found || !v || typeof v !== "object" || seen.has(v)) return; seen.add(v); if (isStore(v)) found = v; };
+    const walk = (node, depth = 0) => {
+      if (found || !node || depth > 50) return;
+      visit(node.memoizedProps); visit(node.memoizedState); visit(node.stateNode);
+      if (node.memoizedProps?.store) visit(node.memoizedProps.store);
+      if (node.memoizedProps?.value) visit(node.memoizedProps.value);
+      walk(node.child, depth + 1); walk(node.sibling, depth + 1);
+    };
+    walk(fiber);
+    if (found) cutinChatS().store = found;
+    return found;
+  }
+
+  function cutinChatPreload(url) {
+    if (cutinChatS().sizes.has(url) || cutinChatS().loading.has(url)) return;
+    cutinChatS().loading.add(url);
+    const img = new Image();
+    img.onload = () => { cutinChatS().loading.delete(url); if (img.naturalWidth && img.naturalHeight) cutinChatS().sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = () => { cutinChatS().loading.delete(url); };
+    img.src = url;
+  }
+
+  // 컷인 목록은 저장소의 roomEffects 조각이 바뀔 때만 다시 읽는다(불변 객체라 참조 비교). 트리거 글(message 또는 name) → 이미지 주소.
+  function cutinChatMap() {
+    const store = cutinChatFindStore();
+    if (!store) return cutinChatS().map;
+    let slice;
+    try { slice = store.getState()?.entities?.roomEffects; } catch (_) { slice = undefined; }
+    if (slice === cutinChatS().slice) return cutinChatS().map;
+    cutinChatS().slice = slice;
+    const map = new Map();
+    const entries = slice && typeof slice === "object" ? Object.values(slice.entities && typeof slice.entities === "object" ? slice.entities : slice) : [];
+    for (const effect of entries) {
+      if (!effect || typeof effect !== "object") continue;
+      const url = [effect.imageUrl, effect.image, effect.url].find((value) => typeof value === "string" && /^(?:https?:\/\/|data:image\/)/i.test(value.trim()));
+      if (!url) continue;
+      for (const trigger of [effect.message, effect.name]) {
+        const text = typeof trigger === "string" ? trigger.trim() : "";
+        if (text && !map.has(text)) map.set(text, url.trim());
+      }
+      cutinChatPreload(url.trim());
+    }
+    cutinChatS().map = map;
+    return map;
+  }
+
+  function cutinChatMessageText(el) {
+    let text = el.getAttribute(CCF_RAW_ATTR) || el.textContent || "";
+    const decoded = extractEnvelope(text);
+    if (decoded) text = typeof decoded.envelope?.text === "string" ? decoded.envelope.text : (decoded.visibleText || "");
+    return text.trim();
+  }
+
+  function cutinChatUrlFor(text) {
+    const map = cutinChatMap();
+    if (!map.size || !text) return "";
+    if (map.has(text)) return map.get(text);
+    let mode = "exact";
+    try { mode = localStorage.getItem("ccfCutinChatMatch") === "contains" ? "contains" : "exact"; } catch (_) { mode = "exact"; }
+    if (mode === "contains") for (const [trigger, url] of map) if (text.includes(trigger)) return url;
+    return "";
+  }
+
+  function ensureCutinChatStyle() {
+    if (document.getElementById("ccf-cutin-chat-style")) return;
+    const style = document.createElement("style");
+    style.id = "ccf-cutin-chat-style";
+    style.setAttribute(CCF_SAFE_UI_ATTR, "1");
+    style.textContent = `.ccf-cutin-chat-image{display:block;margin:6px 0 2px;max-width:100%;line-height:0}`
+      + `.ccf-cutin-chat-image img{display:block;max-width:100%;max-height:200px;width:auto;height:auto;object-fit:contain;border-radius:4px;cursor:zoom-in}`;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function removeCutinChatImage(el) {
+    el.querySelectorAll(`:scope > .ccf-cutin-chat-image`).forEach((node) => node.remove());
+    el.removeAttribute("data-ccf-cutin-chat");
+  }
+
+  function applyCutinChatImage(el) {
+    if (!(el instanceof HTMLElement)) return;
+    if (!cutinChatEnabled()) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    const url = cutinChatUrlFor(cutinChatMessageText(el));
+    if (!url) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    // 이미 다른 이미지(언성 듀엣 고정 이미지·매크로 GIF 인라인 등)가 이 메시지에 있으면 두 번 보이지 않게 건너뛴다.
+    if ([...el.querySelectorAll("img")].some((image) => !image.closest(".ccf-cutin-chat-image"))) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    if (el.getAttribute("data-ccf-cutin-chat") === url && el.querySelector(`:scope > .ccf-cutin-chat-image`)) return;
+    ensureCutinChatStyle();
+    removeCutinChatImage(el);
+    const wrap = document.createElement("span");
+    wrap.className = "ccf-cutin-chat-image";
+    wrap.setAttribute(CCF_SAFE_UI_ATTR, "1");
+    const img = document.createElement("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    // 자리를 미리 확보: 크기를 아는 이미지는 가로세로를 속성으로 줘서 로드 전에도 같은 높이를 차지한다(가상 목록·바닥 고정이 흔들리지 않게).
+    const size = cutinChatS().sizes.get(url);
+    if (size) { img.width = size.w; img.height = size.h; }
+    else img.addEventListener("load", () => { if (img.naturalWidth && img.naturalHeight) cutinChatS().sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight }); }, { once: true });
+    img.src = url;
+    img.addEventListener("click", () => { try { window.open(url, "_blank", "noopener,noreferrer"); } catch (_) { /* 팝업 차단 */ } });
+    wrap.appendChild(img);
+    el.appendChild(wrap);
+    el.setAttribute("data-ccf-cutin-chat", url);
+  }
+
+  // 진단: 컷인 저장소 조각의 모양과 지금 읽은 트리거 목록(주소는 앞부분만).
+  function cutinChatDiag() {
+    const store = cutinChatFindStore();
+    let slice;
+    try { slice = store?.getState()?.entities?.roomEffects; } catch (_) { slice = undefined; }
+    const entries = slice && typeof slice === "object" ? Object.values(slice.entities && typeof slice.entities === "object" ? slice.entities : slice) : [];
+    return {
+      enabled: cutinChatEnabled(), store: !!store, sliceKeys: slice && typeof slice === "object" ? Object.keys(slice).slice(0, 8) : null,
+      sampleKeys: entries.slice(0, 3).map((effect) => (effect && typeof effect === "object" ? Object.keys(effect) : typeof effect)),
+      triggers: [...cutinChatMap()].map(([text, url]) => [text.slice(0, 30), url.slice(0, 60)]),
+      sizes: cutinChatS().sizes.size, images: document.querySelectorAll(`.ccf-cutin-chat-image`).length
+    };
+  }
+
   function scanWithin(root) {
     if (!(root instanceof Element)) return;
 
@@ -1174,6 +1316,15 @@
 
     markNarratorDiceMessages(root);
     syncNarrationPanelsWithin(root);
+
+    // 컷인 트리거 메시지 → 행 안 인라인 이미지(서식 봉투가 없는 평문도 대상이라 위 렌더 대상과 별개로 훑는다)
+    const cutinTexts = new Set();
+    if (root.matches?.(MESSAGE_TEXT_SELECTOR)) cutinTexts.add(root);
+    root.querySelectorAll?.(MESSAGE_TEXT_SELECTOR).forEach((el) => cutinTexts.add(el));
+    for (const el of cutinTexts) {
+      if (el.classList.contains("ccf-original-hidden") || el.classList.contains("ccf-render-overlay") || el.closest("textarea, input, [contenteditable]")) continue;
+      applyCutinChatImage(el);
+    }
   }
 
   // 나레이터가 보낸 판정 명령(choice[..], 1D100 등)은 봉투 없이 원문으로 전송된다(코코포리아가 판정해야 하므로).
