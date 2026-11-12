@@ -70,7 +70,9 @@ const png = fs.readFileSync(path.join(__dirname, '../docs/img/penguin-ref.png'))
       const f = (v) => String(Math.round(v * 100) / 100);
       const toPath = (poly) => { const p = rdp(poly, eps).map(([x, y]) => [x * scale + ox, y * scale + oy]); return 'M' + p.map(([x, y]) => f(x) + ' ' + f(y)).join('L') + 'Z'; };
       const circle = (c) => { const r = c.r * scale, x = c.cx * scale + ox, y = c.cy * scale + oy; return `M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0Z`; };
-      return { d: [silPoly, ...bellyPolys, ...eyePolys].filter(Boolean).map(toPath).join('') + (pupil ? circle(pupil) : ''), sil: [sMinX, sMinY, sMaxX, sMaxY], belly: belly.area, eye: eye ? eye.area : 0, pupil };
+      // 눈: 흰자(구멍)는 동공을 같은 중심에서 확대한 원(반지름 eyeScale 배, 기본 1.9), 동공은 그대로
+      const eyeRing = pupil ? circle({ cx: pupil.cx, cy: pupil.cy, r: pupil.r * (options.eyeScale ?? 1.9) }) : '';
+      return { d: [silPoly, ...bellyPolys].filter(Boolean).map(toPath).join('') + eyeRing + (pupil ? circle(pupil) : ''), sil: [sMinX, sMinY, sMaxX, sMaxY], belly: belly.area, eye: eye ? eye.area : 0, pupil };
     }, { dataUrl: 'data:image/png;base64,' + png.toString('base64'), options });
     if (process.env.PENGUIN_DEBUG) console.error(JSON.stringify({ sil: d.sil, belly: d.belly, eye: d.eye, pupil: d.pupil, bytes: d.d.length }));
     process.stdout.write(d.d);

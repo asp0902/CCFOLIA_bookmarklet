@@ -56,7 +56,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(hook.normalizeItems({ "보상 및 기
 assert.match(source, /if \(!label && labelText === "보상 및 기타"\)/);
 assert.equal(migrated.permissions["*"].view, true);
 assert.equal("permissions" in migrated.sheets[0], false);
-assert.match(source, /register\(\{ id: "saikoro", order: 1, label: "사이코로픽션", icon: diceIcon\(\), visible: \(\) => state\.active && detectRoom\(\), onClick: openPanel \}\)/);
+assert.match(source, /register\(\{ id: "saikoro", order: 1, label: "사이코로픽션", icon: diceIcon\(\), visible: \(\) => state\.active && detectRoom\(\), onClick: openPanel, mount: mountSheetTool, unmount: unmountSheetTool \}\)/);
 assert.doesNotMatch(source, /function mountIcon\(/);
 assert.match(source, /M4 10 2 7l7-3 3 3M12 7l3-3 7 2-2 4/);
 assert.doesNotMatch(source, /M10 3\.3v3M10 7\.9h\.01/);

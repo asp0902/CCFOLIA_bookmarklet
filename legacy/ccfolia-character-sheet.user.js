@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.25
+// @version      0.5.26
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.25";
+  const VERSION = "0.5.26";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -264,6 +264,7 @@
     view: "list",
     renderFrame: 0,
     collapsed: false,
+    embedded: null,
     saveTimer: 0,
     dialogPosition: { x: 0, y: 0 },
     openNotes: new Set(),
@@ -322,6 +323,7 @@
     observer.disconnect();
     cancelAnimationFrame(state.renderFrame);
     clearTimeout(state.saveTimer);
+    if (state.embedded) { try { toolsApi()?.closeTool?.(); } catch (error) { /* 창 정리 실패는 무시 */ } }
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}], [${ROW_BUTTON_ATTR}]`).forEach((node) => node.remove());
@@ -453,7 +455,7 @@
 
   // 사이코로픽션 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다. 인세인 룸 감지일 때만 보인다.
   function registerMenuItem() {
-    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "saikoro", order: 1, label: "사이코로픽션", icon: diceIcon(), visible: () => state.active && detectRoom(), onClick: openPanel });
+    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "saikoro", order: 1, label: "사이코로픽션", icon: diceIcon(), visible: () => state.active && detectRoom(), onClick: openPanel, mount: mountSheetTool, unmount: unmountSheetTool });
   }
 
   function mountCharacterDialogButtons() {
@@ -508,7 +510,7 @@
     sheet.player = characterName;
     state.data.sheets.push(sheet);
     state.open = true;
-    ensureRoot();
+    showSheet();
     selectSheet(sheet.id);
     saveSoon();
     return true;
@@ -611,11 +613,38 @@
     }
   }
 
-  function openSheet() {
-    if (!detectRoom()) return false;
+  // 시트는 "GM 도구" 창(toolkit-presence)의 사이코로픽션 탭 안에 그려진다. 그 창을 쓸 수 없으면(presence 미로드) 예전처럼 따로 뜨는 창으로 연다.
+  function toolsApi() {
+    const registry = window.__CCF_TOOLKIT_MENU__;
+    return typeof registry?.openTool === "function" ? registry : null;
+  }
+
+  function showSheet() {
+    if (state.embedded) { ensureRoot(); render(); return true; }
+    const api = toolsApi();
+    if (api && api.openTool("saikoro")) return true;
+    ensureRoot();
+    render();
+    return true;
+  }
+
+  function mountSheetTool(container) {
+    document.getElementById(ROOT_ID)?.remove();
+    state.embedded = container;
     state.open = true;
     ensureRoot();
     render();
+  }
+
+  function unmountSheetTool() {
+    state.embedded = null;
+    closeSheet();
+  }
+
+  function openSheet() {
+    if (!detectRoom()) return false;
+    state.open = true;
+    showSheet();
     return true;
   }
 
@@ -626,6 +655,7 @@
     state.tablePicker = null;
     state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
+    if (state.embedded) { state.embedded = null; try { toolsApi()?.closeTool?.(); } catch (error) { /* 창 정리 실패는 무시 */ } }
   }
 
   function ensureRoot() {
@@ -650,7 +680,8 @@
     }, { signal });
     root.addEventListener("input", handleInput, { signal });
     root.addEventListener("change", handleInput, { signal });
-    document.body.appendChild(root);
+    (state.embedded || document.body).appendChild(root);
+    root.classList.toggle("is-embedded", !!state.embedded);
   }
 
   function render() {
@@ -693,7 +724,7 @@
 
   function enableDialogDrag(dialog) {
     const handle = dialog?.querySelector("header");
-    if (!handle) return;
+    if (!handle || state.embedded) return;
     // 탑바 더블클릭: 접기/펼치기(핸드아웃 창과 같음). 버튼·입력 위 더블클릭은 무시. 접힘 상태는 창이 열려 있는 동안 유지.
     handle.addEventListener("dblclick", (event) => {
       if (event.target.closest("button,input,select,textarea,a,label")) return;
@@ -947,7 +978,7 @@
     sheet.player = clean;
     state.data.sheets.push(sheet);
     state.open = true;
-    ensureRoot();
+    showSheet();
     selectSheet(sheet.id);
     saveSoon();
     return true;
@@ -1395,8 +1426,7 @@
       state.data.selectedId = sheet.id;
       state.open = true;
       state.view = "sheet";
-      ensureRoot();
-      render();
+      showSheet();
       syncNativeItems(sheet);
       status("시트 가져옴");
       saveSoon();
@@ -1512,6 +1542,10 @@
       #${ROOT_ID} .ccf-cs-dialog.is-editor { grid-template-rows:64px minmax(0,1fr) auto }
       #${ROOT_ID} .ccf-cs-dialog.is-editor { width:min(900px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px)) }
       #${ROOT_ID} .ccf-cs-dialog.is-panel { grid-template-rows:64px 48px minmax(0,1fr) }
+      #${ROOT_ID}.is-embedded { position:absolute;inset:0;pointer-events:auto }
+      #${ROOT_ID}.is-embedded .ccf-cs-dialog { position:absolute;inset:0;margin:0;width:100%!important;height:100%!important;box-shadow:none;border-radius:0;background:transparent;transform:none!important }
+      #${ROOT_ID}.is-embedded .ccf-cs-dialog>header { cursor:default }
+      #${ROOT_ID}.is-embedded .ccf-cs-dialog>header [data-action="close"] { display:none }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed { height:auto!important;min-height:0;bottom:auto!important;top:calc(50% - 32px)!important;margin:0 auto;grid-template-rows:64px }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed>:not(header) { display:none!important }
       #${ROOT_ID} header,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border:0 }
