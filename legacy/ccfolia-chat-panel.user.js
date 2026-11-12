@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.26
+// @version      0.5.27
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.26";
+  const VERSION = "0.5.27";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -2420,7 +2420,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       #${PANEL_ID} .ccf-scp-status { min-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; }
       #${PANEL_ID} .ccf-scp-status:empty { display: none; }
       #${PANEL_ID} .ccf-scp-fmt-break { flex-basis: 100%; height: 0; }
-      #${PANEL_ID} .ccf-scp-fmt-btn.is-active { background: rgb(66,66,66); }
+      #${PANEL_ID} .ccf-scp-fmt-btn.is-active, #${PANEL_ID} .ccf-scp-fmt-btn.is-current { background: rgb(66,66,66); }
       #${PANEL_ID} .ccf-scp-fmt-align svg { display: block; margin: auto; }
       /* 구분선 단추의 가로줄: 글자 기준선에 얹히지 않게 블록으로 두고 단추 정중앙에 놓는다(선은 viewBox 정중앙 y 7.5~8.5). */
       #${PANEL_ID} .ccf-scp-fmt-btn svg { display: block; margin: auto; }
@@ -2951,6 +2951,29 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       inputEl.value = `${v.slice(0, s)}[${base}^${tip}]${v.slice(e)}`;
       inputEl.focus();
     };
+    // ---- 서식 버튼 "현재 서식" 표시: 커서/선택 영역이 마크다운 마커 안쪽이면 그 버튼을 활성 모양(.is-current)으로 보여 준다 ----
+    // (켜 둔 토글 Nr·구분선·()은 자기 .is-active 가 있다.) 갱신은 rAF 1회로 묶고 값이 같으면 쓰지 않는다.
+    let syncFmtCurrent = null;
+    const markerInner = (text, open, regexBody) => {
+      const spans = [];
+      const re = new RegExp(regexBody, "g");
+      let m;
+      while ((m = re.exec(text))) {
+        const innerStart = m.index + open;
+        spans.push([innerStart, innerStart + m[1].length]);
+        if (m[0].length === 0) re.lastIndex += 1;
+      }
+      return spans;
+    };
+    const fmtSpansOf = (text) => {
+      const esc = (marker) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pair = (marker, source = text) => markerInner(source, marker.length, esc(marker) + "([^\\n]+?)" + esc(marker));
+      const masked = text.replace(/\*\*/g, "\u0001\u0001");
+      return {
+        B: pair("**"), I: pair("*", masked), U: pair("__"), S: pair("~~"), Bl: pair("||"), "</>": pair("`"),
+        Rb: markerInner(text, 1, "\\[([^\\]\\[|^]+)\\|[^\\]]*\\]"), Tip: markerInner(text, 1, "\\[([^\\]\\[|^]+)\\^[^\\]]*\\]")
+      };
+    };
     const FMT_BTNS = [
       ["B", () => wrapSel("**")],
       ["I", () => wrapSel("*")],
@@ -2961,14 +2984,16 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       ["Bl", () => wrapSel("||")],
       ["</>", () => wrapSel("`")]
     ];
+    const fmtBtnByLabel = {};
     for (const [label, fn] of FMT_BTNS) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "ccf-scp-fmt-btn";
+      fmtBtnByLabel[label] = b;
       // B·I·U·S 는 오리지널 서식 바처럼 글자 모양(굵게·기울임·밑줄·취소선)을 버튼에 그대로 보여 준다.
       const glyph = { B: "b", I: "i", U: "u", S: "s" }[label];
       if (glyph) { const g = document.createElement(glyph); g.textContent = label; b.append(g); } else b.textContent = label;
-      b.addEventListener("click", (ev) => { ev.preventDefault(); fn(); });
+      b.addEventListener("click", (ev) => { ev.preventDefault(); fn(); window.requestAnimationFrame(() => syncFmtCurrent?.()); });
       fmtRow.appendChild(b);
     }
     const nrBtn = document.createElement("button");
@@ -3100,6 +3125,23 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     // 다른 스크립트가 이 입력창을 채팅 입력창으로 오인해 가공하지 않도록 표시.
     inputEl.setAttribute(SAFE_ATTR, "1");
     // 이미지 붙여넣기: 오리지널 입력칸과 같은 처리(서식 연동의 공개 함수)를 쓴다. 이미지 파일은 Firestore 에 저장해 표식 {i:주소|설명|} 를 커서 위치에 넣고, 일반 글자 붙여넣기는 그대로 둔다.
+    {
+      let frame = 0;
+      syncFmtCurrent = () => {
+        if (frame) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = 0;
+          if (!inputEl || !inputEl.isConnected) return;
+          const start = inputEl.selectionStart ?? 0, end = inputEl.selectionEnd ?? start;
+          const spans = fmtSpansOf(inputEl.value);
+          for (const [label, button] of Object.entries(fmtBtnByLabel)) {
+            const on = (spans[label] || []).some(([a, b]) => start >= a && end <= b && b > a);
+            if (button.classList.contains("is-current") !== on) button.classList.toggle("is-current", on);
+          }
+        });
+      };
+      for (const type of ["input", "keyup", "mouseup", "focus", "select", "click"]) inputEl.addEventListener(type, () => syncFmtCurrent(), { passive: true });
+    }
     inputEl.addEventListener("paste", (e) => {
       // 복사한 메시지의 보이지 않는 봉투 문자는 붙여넣지 않는다(보이는 글만).
       const pasted = e.clipboardData?.getData("text/plain") || "";
