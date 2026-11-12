@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.114
+// @version      0.1.115
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.114",
+    version: "0.1.115",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -186,6 +186,8 @@
       return pushHandoutToFirestore(h);
     },
     fetchAll() { return fetchAllFromFirestore(); },
+    // 로컬 목록(내용 없이 id·제목·소유자 uid 앞부분·갱신 시각): 원격 문서와 견주어 "원격에만 있는 것"을 찾는 점검용
+    localHandouts() { return state.data.handouts.map((h) => ({ id: h.id, title: String(h.title || "").slice(0, 30), owner: String(h.ownerUid || "").slice(0, 6), remote: h._remote === true, updatedAt: h.updatedAt || "" })); },
     subscribe() {
       return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]);
     },
@@ -2168,8 +2170,10 @@
     if (data.ownerUid === fbState.uid) return;
 
     const me = state.data.myCharacter;
-    const hasPublic = canView(data, me, identityKeys());
-    const hasSecret = canViewSecret(data, me, identityKeys());
+    // GM(방장)은 룸의 원본을 전부 본다: 옛 익명 uid 로 만든 것(브라우저 데이터를 지운 뒤 uid 가 바뀐 경우)·권한표에 GM 이름이 없는 것도 로컬 목록에서 빠지면 안 된다(예전엔 "권한 없음"으로 건너뛰어 원격 4 ≠ 로컬 3 이 됐다).
+    const gm = isAdminMode();
+    const hasPublic = gm || canView(data, me, identityKeys());
+    const hasSecret = gm || canViewSecret(data, me, identityKeys());
     if (!hasPublic && !hasSecret) {
       console.info("[ccf-handout] remote skipped (no permission):", data.id, "as", me || "(미설정)");
       ingestRemoteRemove(data.id);
@@ -2183,15 +2187,15 @@
       description: data.description || "",
       // 비밀 권한 없으면 gmNotes 비움 (Firestore에서 받지만 안 보여줌)
       gmNotes: hasSecret ? (data.gmNotes || "") : "",
-      // 수신측 로컬 저장소에는 권한표를 남기지 않는다. 표시/비밀 여부는 수신 시점에 확정.
-      permissions: {},
+      // 수신측 로컬 저장소에는 권한표를 남기지 않는다. 표시/비밀 여부는 수신 시점에 확정. (GM 은 관리하는 쪽이라 권한표를 그대로 가져온다)
+      permissions: gm && data.permissions && typeof data.permissions === "object" ? data.permissions : {},
       tags: data.tags || [],
       folderId: typeof data.folderId === "string" ? data.folderId : "",
       ownerUid: data.ownerUid,
       ownerName: data.ownerName || "",
       createdAt: data.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      _remote: true,
+      _remote: !gm,
       _canSecret: hasSecret,
       _canView: hasPublic,
       // 원격 order 우선, 없으면 로컬에서 끝에 부여 (#32)
