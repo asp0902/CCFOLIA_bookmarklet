@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.31
+// @version      0.2.32
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.31"),
+    version: getUserscriptVersion("0.2.32"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5063,8 +5063,24 @@
   const INSANE_SCENE_NAME_RE = INSANE_SCENE_TABLES.flatMap(table => [table.ko, table.ja])
     .sort((a, b) => b.length - a.length).join('|');
 
+  // 코코포리아 /roll-table 로 사용자가 직접 만든 표: 채팅 글이 "표 이름 1D5" 이고 그 뒤에 BCDice 결과 "표 이름(번호) ＞ 문장" 이 붙는다
+  // (코코포리아 공개 번들의 roll-table 처리: text = 첫 줄(이름) + " " + 둘째 줄(주사위), BCDice UserDefinedDiceTable 결과 = "이름(번호) ＞ 문장").
+  // 표 이름에 장면표/シーン表 가 들어가면 장면표 카드로 보여 준다. 이름은 그대로 제목, 번호·주사위 값은 뺀다.
+  function parseInsaneRoll20UserScene(normalized) {
+    const split = normalized.match(/^([\s\S]*?)\(\s*(\d+)\s*\)\s*>\s*([\s\S]+?)\s*$/);
+    if (!split) return null;
+    const echo = split[1].trim().match(/^([\s\S]+?)\s+(\d*[dD]\d+)\s+([\s\S]+)$/);
+    if (!echo) return null;
+    const name = echo[1].trim();
+    if (name.replace(/\s+/g, ' ') !== echo[3].trim().replace(/\s+/g, ' ')) return null;
+    if (!/장면표|シーン表/i.test(name)) return null;
+    return { prefix: '', name, roll: split[2], text: split[3], user: true };
+  }
+
   function parseInsaneRoll20Scene(text) {
     const normalized = text.replace(/＞/g, '>').replace(/（/g, '(').replace(/）/g, ')');
+    const userScene = parseInsaneRoll20UserScene(normalized);
+    if (userScene) return userScene;
     const match = normalized.match(new RegExp('^\\s*(.*?)\\s*(' + INSANE_SCENE_NAME_RE + ')\\s*\\(\\s*(\\d{1,2})\\s*\\)\\s*>\\s*([\\s\\S]+?)\\s*$', 'u'));
     if (!match) return null;
     return { prefix: match[1].replace(/[>\s]+$/g, '').trim(), name: match[2], roll: match[3], text: match[4] };
