@@ -98,7 +98,7 @@ async function backgroundPart() {
     await page.keyboard.press('a'); await page.clock.runFor(180_000);
     assert.equal(await hook({ name: '하나', text: 'x' }), false, 'custom 5 min: 3 min is not away');
     await page.clock.runFor(130_000); assert.equal(await hook({ name: '하나', text: 'x' }), true, 'custom 5 min passed');
-    await sent(); await page.clock.runFor(11_000);
+    await sent(); await page.clock.runFor(11_000); await sent();
     await config(base); await page.clock.runFor(10);
     await page.mouse.move(9, 9); await page.clock.runFor(100);
     // away: the first message goes at once with the title "sender + room", no text by default
