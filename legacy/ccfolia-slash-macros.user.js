@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         CCFOLIA Slash Macros by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-slash-macros
-// @version      0.1.2
+// @version      0.1.3
 // @description  Save and run multi-line slash command macros from the CCFOLIA chat input.
-// @description:ko 채팅 슬래시 커맨드 본문을 매크로로 저장하고 /m <이름>으로 펼쳐서 실행합니다.
+// @description:ko 채팅 슬래시 커맨드 본문을 커스텀 커맨드로 저장하고 /m <이름>으로 펼쳐서 실행합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -20,7 +20,7 @@
   const CCF_SM_SCRIPT_INFO = Object.freeze({
     id: "ccf-slash-macros",
     name: "CCFOLIA Slash Macros",
-    version: "0.1.2",
+    version: "0.1.3",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-slash-macros"
   });
 
@@ -214,7 +214,7 @@
   function saveMacro(name, body) {
     const cleanName = String(name || "").trim();
     const cleanBody = String(body || "");
-    if (!cleanName) throw new Error("매크로 이름이 비어있습니다.");
+    if (!cleanName) throw new Error("커스텀 커맨드 이름이 비어있습니다.");
     const list = readMacros().slice();
     const idx = list.findIndex((m) => m.name === cleanName);
     const entry = { name: cleanName, body: cleanBody, updatedAt: Date.now() };
@@ -541,8 +541,8 @@
     btn.type = "button";
     btn.setAttribute(TOOLBAR_BTN_ATTR, "manage");
     btn.className = "ccf-sm-toolbar-btn";
-    btn.textContent = "내 매크로";
-    btn.title = "내 슬래시 매크로 관리";
+    btn.textContent = "커스텀 커맨드";
+    btn.title = "커스텀 커맨드 관리";
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -573,7 +573,7 @@
       <div class="ccf-sm-modal-backdrop"></div>
       <div class="ccf-sm-modal-card" role="dialog" aria-modal="true">
         <div class="ccf-sm-modal-head">
-          <strong>내 매크로</strong>
+          <strong>커스텀 커맨드</strong>
           <button type="button" class="ccf-sm-modal-close" aria-label="닫기">×</button>
         </div>
         <div class="ccf-sm-modal-body">
@@ -607,7 +607,7 @@
     const refresh = () => {
       const macros = readMacros();
       if (!macros.length) {
-        listEl.innerHTML = '<p class="ccf-sm-modal-empty">저장된 매크로가 없습니다. 아래에서 추가하세요.</p>';
+        listEl.innerHTML = '<p class="ccf-sm-modal-empty">저장된 커스텀 커맨드가 없습니다. 아래에서 추가하세요.</p>';
         return;
       }
       listEl.innerHTML = macros.map((m, i) => `
@@ -639,7 +639,7 @@
         nameEl.focus();
         statusEl.textContent = `'${target.name}' 편집 중`;
       } else if (action === "delete") {
-        if (!confirm(`'${target.name}' 매크로를 삭제할까요?`)) return;
+        if (!confirm(`'${target.name}' 커스텀 커맨드를 삭제할까요?`)) return;
         deleteMacro(target.name);
         statusEl.textContent = `'${target.name}' 삭제됨`;
         refresh();

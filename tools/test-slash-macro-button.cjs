@@ -20,6 +20,17 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-slash-mac
     assert.equal(await page.locator('#a').evaluate((el) => getComputedStyle(el).color), 'rgb(255, 255, 255)', 'text colour inherited');
     await page.locator('#a').hover();
     assert.equal(await bg('a'), 'rgba(255, 255, 255, 0.08)', 'a faint fill on hover');
+    // the wording: the button injected into the chat-commands dialog, its title, the management modal and its empty list all say 커스텀 커맨드
+    await page.evaluate(() => { document.getElementById('host').innerHTML = '<div class="MuiDialog-root" role="dialog"><div class="MuiDialogTitle-root"><h2>채팅 커맨드에 대해</h2></div><div class="MuiDialogContent-root">/roll /desc /cc roll-table</div></div>'; });
+    await page.waitForSelector('.MuiDialog-root .ccf-sm-toolbar-btn', { timeout: 5000 });
+    assert.equal(await page.locator('.MuiDialog-root .ccf-sm-toolbar-btn').textContent(), '커스텀 커맨드');
+    assert.equal(await page.locator('.MuiDialog-root .ccf-sm-toolbar-btn').getAttribute('title'), '커스텀 커맨드 관리');
+    await page.locator('.MuiDialog-root .ccf-sm-toolbar-btn').click();
+    await page.waitForSelector('.ccf-sm-modal-head strong');
+    assert.equal(await page.locator('.ccf-sm-modal-head strong').first().textContent(), '커스텀 커맨드');
+    assert.match(await page.locator('.ccf-sm-modal-empty').first().textContent(), /저장된 커스텀 커맨드가 없습니다/);
+    const visible = await page.evaluate(() => document.documentElement.innerText);
+    assert(!/내 매크로|슬래시 매크로/.test(visible), 'no old name left on screen');
     console.log('slash macro button PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
