@@ -29,7 +29,7 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
     const page = await browser.newPage();
     await page.route('https://ccfolia.com/**', r => r.fulfill({ body: '<html><body></body></html>', contentType: 'text/html' }));
     await page.goto('https://ccfolia.com/rooms/test');
-    const funcs = ['renderList', 'onShadowInput', 'duplicateHandout', 'findHandout'].map(extract).join('\n');
+    const funcs = ['renderList', 'onShadowInput', 'closeListSearch', 'duplicateHandout', 'findHandout'].map(extract).join('\n');
     const helpers = source.slice(a, b);
     const out = await page.evaluate(async ([funcs, helpers]) => {
       const mk = (id, title, description, folderId, order) => ({ id, title, description, gmNotes: '', permissions: {}, folderId, order });
@@ -38,7 +38,7 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
       const escapeHtml = s => String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;'); const escapeAttr = escapeHtml;
       const ensurePermissions = h => h, canManageHandout = () => true, hasPlayerRelay = () => false, canViewSecret = () => false, getPermissionCharacterName = () => 'GM', identityKeys = () => [];
       const compareByOrder = (x, y) => x.order - y.order, ALL_KEY = '*';
-      const ICON_COPY = '', ICON_DRAG_HANDLE = '', ICON_PENCIL = '', ICON_X_SMALL = '', WEB_SHARE_ICON = '', WEB_STOP_ICON = '';
+      const ICON_SEARCH = '', ICON_COPY = '', ICON_DRAG_HANDLE = '', ICON_PENCIL = '', ICON_X_SMALL = '', WEB_SHARE_ICON = '', WEB_STOP_ICON = '';
       const toast = () => {}, saveAll = async () => {}, pushHandoutToFirestore = async () => {}, noteFirebaseIssue = () => {}, scheduleWebSync = () => {};
       let n = 0; const uuid = () => 'copy' + (++n), getNextOrder = () => 99;
       return await eval(`(async () => { ${helpers}\n${funcs}
@@ -48,15 +48,18 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
         const res = {};
         render(); res.all = titles(); res.allFolders = folders();
         const input = () => document.querySelector('input[data-list-search]');
+        res.closedHasInput = !!input(); res.iconBtn = !!document.querySelector('button[data-action="search-open"]'); state.searchOpen = true; render(); // the search icon opens the one-line field
+        res.openHasInput = !!input() && !!document.querySelector('button[data-action="search-close"]');
         const type = (v) => { const i = input(); i.focus(); i.value = v; i.setSelectionRange(v.length, v.length); onShadowInput({ target: i, isComposing: false }); };
         type('의식'); res.q1 = titles(); res.q1Folders = folders(); res.focused = document.activeElement === input() && input().value === '의식' && input().selectionStart === 2;
         type('없음'); res.q2 = titles(); res.none = !!document.querySelector('.list-no-result');
-        type(''); res.back = titles();
+        type(''); res.back = titles(); closeListSearch(); res.afterClose = [!!input(), state.search, state.searchOpen];
         await duplicateHandout('c'); res.afterCopy = titles(); res.copy = state.data.handouts.find(h => h.id === 'copy1');
-        admin = false; render(); res.plCopyBtn = document.querySelectorAll('[data-action="duplicate-handout"]').length; res.plSearch = !!input();
+        admin = false; render(); res.plCopyBtn = document.querySelectorAll('[data-action="duplicate-handout"]').length; res.plSearch = !!document.querySelector('button[data-action="search-open"]');
         return res; })()`);
     }, [funcs, helpers]);
     assert.deepEqual(out.all, ['지도', '편지'], 'the collapsed folder hides its card'); assert.deepEqual(out.allFolders, ['1막', '2막']);
+    assert.deepEqual([out.closedHasInput, out.iconBtn, out.openHasInput, out.afterClose], [false, true, true, [false, '', false]], 'search icon (no box) -> opens the one-line field with a clear/close X -> closing clears the filter');
     assert.deepEqual(out.q1, ['의식', '편지'], 'title or public body'); assert.deepEqual(out.q1Folders, ['1막'], 'only folders with a result, collapsed ones open');
     assert.equal(out.focused, true, 'focus and caret kept'); assert.deepEqual(out.q2, []); assert.equal(out.none, true);
     assert.equal(out.back.length, 2, 'empty = all again'); assert.equal(out.afterCopy.length, 3); assert.equal(out.afterCopy.filter(t => t === '편지 (사본)').length, 1);

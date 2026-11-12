@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.113
+// @version      0.1.114
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.113",
+    version: "0.1.114",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -320,6 +320,7 @@
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
     search: "",             // 목록 검색어 (저장하지 않는다)
+    searchOpen: false,      // 검색칸이 펼쳐져 있음 (닫으면 검색어도 비운다)
     mode: "list",           // GM 도구 창 안에서: "list" = 핸드아웃 탭(목록·편집), "settings" = 공용 설정 탭의 핸드아웃 구역
     data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
@@ -1101,9 +1102,14 @@
       min-height: 100%;
     }
     /* 목록 탭: PL 시점 미리보기 토글 — 푸터(.panel-footer) 바로 위 우하단에 위치 */
-    .list-search-bar { padding: 8px 16px 4px 0; }
-    .list-search { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,.23); background: transparent; color: inherit; font: inherit; }
-    .list-search:focus { outline: none; border-color: #2196f3; }
+    .list-search-bar { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-height: 40px; padding: 0 12px 0 16px; }
+    .list-search-btn { all: unset; box-sizing: border-box; cursor: pointer; width: 34px; height: 34px; display: inline-grid; place-items: center; border-radius: 50%; color: rgba(255,255,255,.7); transition: background-color 150ms; }
+    .list-search-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .list-search-btn svg { width: 20px; height: 20px; pointer-events: none; }
+    .list-search-field { flex: 1; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid rgba(255,255,255,.42); transition: border-color 150ms; }
+    .list-search-field:focus-within { border-bottom-color: #2196f3; }
+    .list-search { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; outline: none; }
+    .list-search::-webkit-search-cancel-button { display: none; }
     .list-no-result { padding: 16px 0; opacity: .6; font-size: 13px; }
     .list-pl-preview-bar {
       margin-top: auto;
@@ -1822,6 +1828,9 @@
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
     shadow.addEventListener("compositionend", onShadowInput);
+    shadow.addEventListener("keydown", (event) => { if (event.key === "Escape" && event.target.closest?.("input[data-list-search]")) { event.stopPropagation(); closeListSearch(); } });
+    // 검색칸이 비어 있는데 바깥을 눌러 포커스가 나가면 닫는다 (X 버튼을 누르는 중이면 그 클릭이 닫는다)
+    shadow.addEventListener("focusout", (event) => { if (!event.target.closest?.("input[data-list-search]")) return; window.setTimeout(() => { const input = state.shadow?.querySelector("input[data-list-search]"); if (input && !input.value && state.shadow.activeElement !== input && !state.shadow.activeElement?.closest?.(".list-search-field")) closeListSearch(); }, 120); });
     shadow.addEventListener("pointerdown", onShadowPointerDown);
     shadow.addEventListener("pointermove", onShadowPointerMove);
     shadow.addEventListener("pointerup", onShadowPointerEnd);
@@ -3566,7 +3575,10 @@
     const searchQuery = String(state.search || "").trim();
     const sortedHandouts = [...state.data.handouts].filter((h) => matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
     const noResult = searchQuery && !state.data.handouts.some((h) => matchesHandoutSearch(h, searchQuery)) ? `<div class="list-no-result">검색 결과가 없습니다.</div>` : "";
-    const searchBar = `<div class="list-search-bar"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"></div>`;
+    // 검색: 목록 위 오른쪽의 아이콘 버튼 → 누르면 밑줄만 있는 한 줄 검색칸(자동 포커스, X = 지우고 닫기, Esc = 닫기, 비어 있을 때 바깥을 누르면 닫힘)
+    const searchBar = state.searchOpen
+      ? `<div class="list-search-bar"><div class="list-search-field"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"><button class="list-search-btn" data-action="search-close" aria-label="검색 닫기" title="지우고 닫기">${ICON_X_SMALL}</button></div></div>`
+      : `<div class="list-search-bar"><button class="list-search-btn" data-action="search-open" aria-label="검색" title="검색">${ICON_SEARCH}</button></div>`;
     const renderCard = (h) => {
       ensurePermissions(h);
       const manageable = canManageHandout(h);
@@ -3711,6 +3723,7 @@
   // MUI EditIcon (코코포리아 스타일 연필)
   const ICON_PENCIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   // MUI CloseIcon (코코포리아 스타일 X)
+  const ICON_SEARCH = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>`;
   const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>`;
   const ICON_X_SMALL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   // MUI DragIndicatorIcon (6-dot grip)
@@ -4230,6 +4243,8 @@
     }
     if (action === "delete-handout") { deleteHandout(id); return; }
     if (action === "duplicate-handout") { duplicateHandout(id); return; }
+    if (action === "search-open") { state.searchOpen = true; render(); state.shadow?.querySelector("input[data-list-search]")?.focus(); return; }
+    if (action === "search-close") { closeListSearch(); return; }
     if (action === "folder-new") {
       createFolderFromPrompt();
       return;
@@ -5077,6 +5092,12 @@
     await saveAll(state.data);
     closePlListDialog();
     toast(`PL 목록 ${items.length}명 저장됨`);
+    render();
+  }
+
+  function closeListSearch() {
+    if (!state.searchOpen && !state.search) return;
+    state.searchOpen = false; state.search = "";
     render();
   }
 

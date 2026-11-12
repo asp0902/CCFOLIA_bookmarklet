@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.29
+// @version      0.5.30
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.29";
+  const VERSION = "0.5.30";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1259,17 +1259,21 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     if (!slice) return;
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement && li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel, .MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
     if (!rows.length) return;
+    // 짝짓기 키: 원문 그대로가 먼저, 안 맞으면 보이지 않는 봉투 문자·공백을 뺀 글자("~"로 시작). 서식을 단 내 메시지는 줄의 글과 저장된 글이 봉투만큼 달라 원문 키로는 못 찾는다.
+    const normKey = (t) => "~" + stripInvisible(String(t)).replace(/\s+/g, " ").trim();
     const byKey = new Map();
+    const addKey = (key, id, at) => { const list = byKey.get(key) || []; list.push({ id, at }); byKey.set(key, list); };
     for (const [id, msg] of Object.entries(slice.entities || {})) {
       if (!msg || msg.removed) continue;
       const text = String(msg.text || "");
       if (!text) continue;
-      const list = byKey.get(text) || [];
-      list.push({ id, at: readCreatedAt(msg) });
-      byKey.set(text, list);
+      const at = readCreatedAt(msg);
+      addKey(text, id, at);
+      addKey(normKey(text), id, at);
     }
     for (const list of byKey.values()) list.sort((a, b) => a.at - b.at);
-    const keys = rows.map(nativeRowKey);
+    const rawKeys = rows.map(nativeRowKey);
+    const keys = rawKeys.map((key) => (byKey.has(key) ? key : normKey(key)));
     const total = new Map();
     for (const key of keys) total.set(key, (total.get(key) || 0) + 1);
     const seen = new Map();
@@ -1281,7 +1285,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const existing = li.querySelector(".ccf-hide-btn");
       if (!list) { existing?.remove(); return; }
       const id = (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
-      const hiddenNow = isHiddenText(key);
+      const hiddenNow = isHiddenText(rawKeys[i]);
       if (existing && existing.dataset.id === id && existing.dataset.hidden === String(hiddenNow)) return;
       existing?.remove();
       li.classList.add("ccf-hide-host");
@@ -5368,7 +5372,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       // 메시지 숨기기: 숨기거나 되돌린다(GM 만). id 는 메시지 id.
       setMessageHidden: (id, hidden) => setMessageHidden(id, hidden !== false),
       isGm: () => scpHost.isGm ?? null,
-      hideDiag() { return { isGm: scpHost.isGm ?? null, gmReason: scpHost.gmReason || "not-checked yet", gmAttr: document.documentElement.getAttribute("data-ccf-gm"), nativeRows: document.querySelectorAll(".MuiListItem-root h6.MuiListItemText-primary").length, nativeHoverGroups: document.querySelectorAll(".MuiListItem-root .MuiIconButton-root").length, hiddenInStore: Object.entries(getRoomMessagesSlice()?.entities || {}).filter(([, m]) => m && isHiddenText(String(m.text || ""))).map(([id]) => id), buttons: document.querySelectorAll(".ccf-hide-btn").length }; },
+      hideDiag() { return { unpairedRows: [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel, .MuiPopover-root, .MuiMenu-root, .MuiDialog-root") && !li.querySelector(".ccf-hide-btn")).length, isGm: scpHost.isGm ?? null, gmReason: scpHost.gmReason || "not-checked yet", gmAttr: document.documentElement.getAttribute("data-ccf-gm"), nativeRows: document.querySelectorAll(".MuiListItem-root h6.MuiListItemText-primary").length, nativeHoverGroups: document.querySelectorAll(".MuiListItem-root .MuiIconButton-root").length, hiddenInStore: Object.entries(getRoomMessagesSlice()?.entities || {}).filter(([, m]) => m && isHiddenText(String(m.text || ""))).map(([id]) => id), buttons: document.querySelectorAll(".ccf-hide-btn").length }; },
       menuStyleDiag() {
         let saved = null; try { saved = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); } catch (e) { /* none */ }
         const rect = (el) => { if (!(el instanceof Element)) return null; const r = el.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) }; };
