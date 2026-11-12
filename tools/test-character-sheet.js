@@ -138,7 +138,7 @@ assert.doesNotMatch(source, /ccf-cs-perm-dialog/);
 assert.doesNotMatch(source, /<h3>캐릭터 시트 목록<\/h3>/);
 assert.match(source, /ccf-cs-tab-add" data-action="add-sheet"/);
 assert.doesNotMatch(source, /ccf-cs-sheet-panel"><div class="ccf-cs-panel-heading"/);
-assert.match(source, /ccf-cs-dialog\.is-editor \{ width:min\(900px,calc\(100vw - 64px\)\);height:min\(900px,calc\(100vh - 64px\)\) \}/);
+assert.match(source, /ccf-cs-dialog\.is-editor \{ width:min\(860px,calc\(100vw - 64px\)\);height:min\(900px,calc\(100vh - 64px\)\) \}/);
 assert.doesNotMatch(source, /field\("name", "캐릭터명"/);
 assert.doesNotMatch(source, /function playerField\(value\)/);
 assert.doesNotMatch(source, /<label>플레이어<select data-field="player">/);
