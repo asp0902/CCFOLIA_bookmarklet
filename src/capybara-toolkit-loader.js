@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.35";
-  const BUILD_ID = "2026-11-08-toolkit-diag-208";
+  const VERSION = "0.3.36";
+  const BUILD_ID = "2026-11-12-gif-compress-209";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -100,6 +100,15 @@
       title: "판정 매크로 자동 실행",
       summary: "/desc로 렌더된 판정 알약을 클릭하면 채팅 팔레트를 자동 선택해 굴림",
       scripts: ["legacy/ccfolia-roll-triggers.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-gif-compress",
+      title: "큰 GIF 압축 업로드",
+      summary: "5MB를 넘는 움직이는 GIF를 업로드할 때 움직임을 유지한 채 5MB 아래로 줄임 (자동 실행)",
+      scripts: ["legacy/ccfolia-gif-compress.user.js"],
       roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
