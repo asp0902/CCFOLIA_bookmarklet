@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.39";
-  const BUILD_ID = "2026-11-12-msg-window-sync-211";
+  const VERSION = "0.3.40";
+  const BUILD_ID = "2026-11-12-others-characters-212";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -135,6 +135,15 @@
       title: "메시지창 빨리감기 (다이스 효과 지연 해결)",
       summary: "화면 메시지창이 숨겨진 동안 메시지창 큐를 빨리 넘겨, 큐 순서에 묶인 3D 다이스 효과가 바로 뜨게 함 (자동 실행, 끄기: localStorage.ccfMsgWindowSync = \"off\")",
       scripts: ["legacy/ccfolia-message-window-sync.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-others-characters",
+      title: "참가자 캐릭터 (내 캐릭터 목록)",
+      summary: "GM 화면에서만: 내 캐릭터 목록에 다른 사람 소유 캐릭터를 음영 행으로 함께 보여 주고 클릭하면 편집창을 엽니다 (자동 실행)",
+      scripts: ["legacy/ccfolia-others-characters.user.js"],
       roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
