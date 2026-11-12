@@ -207,6 +207,75 @@
     if (tickList) { closeTickList(); return; }
     openTickList(area, select, from, to);
   }, true);
+  // ---- Roll20 새 메시지 → 핸드폰 푸시(ntfy). 설정은 코코포리아 알림과 같은 것(chrome.storage.local.ntfy: enabled·topic·onlyAway·awayMinutes·scope·keywords·includeText, "roll20": false 로 Roll20만 끌 수 있다).
+  // 보내는 것은 제목(이름)과 짧은 본문뿐: 계정·캠페인 번호는 보내지 않는다. 전송은 확장 백그라운드가 한다(Roll20 의 CSP 와 무관). 진단: documentElement.dataset.capybaraR20Ntfy(JSON).
+  const NTFY_GRACE_MS = 8000; // 접속 직후 이력이 한꺼번에 붙는 시간: 이 안에 본 줄은 이력이다
+  const NTFY_BATCH_MS = 10000, NTFY_MAX_PER_MINUTE = 6;
+  const ntfy = { config: null, total: 0, lastSkip: "", lastError: "", sent: [], pending: [], windowEnd: 0, timer: 0, lastInputAt: Date.now() };
+  const ntfyPublishState = () => { try { document.documentElement.dataset.capybaraR20Ntfy = JSON.stringify({ total: ntfy.total, lastSkip: ntfy.lastSkip, lastError: ntfy.lastError, sentLastMin: ntfy.sent.filter(t => Date.now() - t < 60000).length, pending: ntfy.pending.length, enabled: !!ntfy.config?.enabled, hasTopic: !!ntfy.config?.topic, roll20Switch: ntfy.config?.roll20 !== false, onlyAway: ntfy.config?.onlyAway !== false, includeText: ntfy.config?.includeText === true, graceLeftMs: Math.max(0, NTFY_GRACE_MS - (Date.now() - startedAt)), version: 1 }); } catch (_) {} };
+  const ntfyLoad = async () => { try { ntfy.config = (await chrome.storage.local.get(["ntfy"])).ntfy || null; } catch (_) { ntfy.config = null; } ntfyPublishState(); };
+  ntfyLoad();
+  try { chrome.storage.onChanged.addListener((changes, area) => { if (area === "local" && changes.ntfy) { ntfy.config = changes.ntfy.newValue || null; ntfyPublishState(); } }); } catch (_) {}
+  for (const type of ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"]) window.addEventListener(type, () => { ntfy.lastInputAt = Date.now(); }, { capture: true, passive: true });
+  const ntfyAwayMs = () => Math.min(60, Math.max(1, Math.round(Number(ntfy.config?.awayMinutes) || 2))) * 60000;
+  const ntfySkip = reason => { ntfy.lastSkip = reason; ntfyPublishState(); return false; };
+  const ntfySpeaker = () => { const select = speakerSelect(); return clean(select?.selectedOptions?.[0]?.textContent, 80); };
+  const ntfySend = (title, message) => {
+    const now = Date.now();
+    ntfy.sent = ntfy.sent.filter(t => now - t < 60000);
+    if (ntfy.sent.length >= NTFY_MAX_PER_MINUTE) return ntfySkip("분당 상한");
+    ntfy.sent.push(now);
+    chrome.runtime.sendMessage({ type: "ntfy-send", payload: { title: title.slice(0, 100), message: message.slice(0, 200) } }).then(result => { ntfy.lastError = result?.ok === false ? String(result.error || "") : ""; ntfyPublishState(); }).catch(error => { ntfy.lastError = String(error?.message || error); ntfyPublishState(); });
+    return true;
+  };
+  const ntfyPayload = items => {
+    const [first] = items, extra = items.length - 1, tag = first.whisper ? "Roll20 귓속말" : "Roll20";
+    const title = extra > 0 ? `[${tag}] ${first.name} 외 ${extra}건` : `[${tag}] ${first.name}`;
+    const message = ntfy.config?.includeText === true ? (items.slice(0, 3).map(item => `${item.name}: ${item.text}`).join("\n") || "새 메시지가 도착했습니다.") : "새 메시지가 도착했습니다.";
+    return { title, message };
+  };
+  const ntfyFlush = () => {
+    ntfy.timer = 0;
+    const items = ntfy.pending.splice(0);
+    if (items.length && ntfy.config?.enabled) { const { title, message } = ntfyPayload(items); ntfySend(title, message); }
+    ntfy.windowEnd = items.length ? Date.now() + NTFY_BATCH_MS : 0;
+    ntfyPublishState();
+  };
+  // el = 새로 생긴 줄, message = read(el)
+  const ntfyOnMessage = (el, message) => {
+    const config = ntfy.config;
+    if (!config || !config.enabled || !config.topic) return ntfySkip("꺼져 있거나 topic 없음");
+    if (config.roll20 === false) return ntfySkip("Roll20 알림 꺼짐");
+    if (el.classList.contains("system")) return ntfySkip("시스템 줄");
+    if (Date.now() - startedAt < NTFY_GRACE_MS) return ntfySkip("접속 직후 이력");
+    const whisper = el.classList.contains("private") || el.classList.contains("whisper");
+    // 내 메시지: Roll20 이 내 줄에 붙이는 you 클래스, 또는 보낸 이가 지금 선택한 발화자와 같을 때. 귓속말은 보낸 사람이 나(you)면 내가 보낸 것이다.
+    if (el.classList.contains("you") || (message.name && message.name === ntfySpeaker())) return ntfySkip("내 메시지");
+    if (config.onlyAway !== false && document.visibilityState === "visible" && document.hasFocus() && Date.now() - ntfy.lastInputAt < ntfyAwayMs()) return ntfySkip("Roll20 화면을 보고 있음");
+    const name = clean(message.name, 40) || "누군가";
+    // 굴림은 결과만 요약("주사위: 17"), 나머지는 본문 앞 60자(이미지·HTML 없음: read 가 만든 글)
+    const text = message.kind === "rollresult" ? `주사위: ${clean(el.querySelector(".rolled")?.textContent, 40) || "굴림"}` : clean(message.text, 60);
+    if (config.scope === "keywords") {
+      const keywords = (config.keywords || []).map(k => String(k).trim().toLowerCase()).filter(Boolean), hay = `${name} ${message.text}`.toLowerCase();
+      if (!keywords.length || !keywords.some(k => hay.includes(k))) return ntfySkip("키워드 없음");
+    }
+    ntfy.total += 1;
+    const item = { name, text, whisper };
+    const now = Date.now();
+    if (now >= ntfy.windowEnd && !ntfy.pending.length) {
+      const { title, message: body } = ntfyPayload([item]);
+      if (!ntfySend(title, body)) return false;
+      ntfy.windowEnd = now + NTFY_BATCH_MS;
+      if (!ntfy.timer) ntfy.timer = setTimeout(ntfyFlush, NTFY_BATCH_MS);
+    } else {
+      ntfy.pending.push(item);
+      if (!ntfy.timer) ntfy.timer = setTimeout(ntfyFlush, Math.max(200, ntfy.windowEnd - now));
+    }
+    ntfyPublishState();
+    return true;
+  };
+  setInterval(ntfyPublishState, 5000);
+
   const scan = () => {
     if (!chrome.runtime?.id) { clearInterval(timer); return; } // orphaned after an extension reload
     for (const el of document.querySelectorAll("#textchat .content div.message[data-messageid]")) {
@@ -215,6 +284,7 @@
       seen.add(id);
       const message = read(el);
       if (findCampaignId()) message.campaignId = campaignId; // the game screen usually has none; the background knows it from the tab's campaign page
+      if (Date.now() - startedAt >= 3000 && message.text) { try { ntfyOnMessage(el, message); } catch (_) { /* 푸시 쪽 오류가 CCFOLIA 중계를 막지 않게 */ } }
       if (Date.now() - startedAt < 3000 || el.matches(SKIP) || !message.text) continue;
       chrome.runtime.sendMessage({ type: "r20-message", message }).catch(() => {});
     }
