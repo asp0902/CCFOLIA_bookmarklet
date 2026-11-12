@@ -69,6 +69,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       assert.equal(pasted, '굵게 일반', label + ': pasting a copied message gives the visible text only');
       const twice = await send(sel, bold);
       assert.equal(twice, '굵게 일반', label + ': the old envelope is dropped, the visible text goes out plain (no double envelope): ' + twice.length);
+      // chat commands and dice commands go out exactly as typed: markers are not parsed, the format bar state (colour, narration, line break) is not applied, no envelope
+      for (const command of ['/roll-table\n장면표\n1D5\n1: **굵게** 단어', '/roll 2d6 *기울임*', '2D6>=5 **판정**', 'ST']) {
+        const sent = await send(sel, command, async () => {
+          await page.evaluate((q) => { const c = document.querySelector(q + ' .ccf-scp-fmt-color input'); if (c) { c.value = '#00ff00'; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new Event('change', { bubbles: true })); } }, sel);
+        });
+        assert.equal(sent, command, label + ': a command is sent as typed: ' + JSON.stringify(command));
+        assert.ok(!INVIS.test(sent), label + ': no envelope on a command');
+      }
       const plain = await send(sel, '그냥 글');
       assert.equal(plain, '그냥 글', label + ': plain text stays plain');
     };

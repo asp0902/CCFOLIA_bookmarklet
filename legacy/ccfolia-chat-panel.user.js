@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.25
+// @version      0.5.26
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.25";
+  const VERSION = "0.5.26";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1740,6 +1740,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     };
   }
   // 우리가 굴리지 못해도 판정 명령으로 시작하면 서식 봉투를 붙이지 않는다(봉투가 섞이면 코코포리아가 명령으로 인식 못 함).
+  // 채팅 커맨드('/' 로 시작: /roll-table·/roll·/cc …, /desc 는 롤20 매크로 변환이 따로 있어 제외)와 다이스 명령은 원문 그대로 보낸다 —
+  // 서식 마커 해석·서식 바 상태·자동 나레이션·봉투를 붙이면 명령 해석이 깨진다. (format-sync 의 isChatCommandText 와 같은 판정)
+  function isChatCommandText(text) {
+    const body = String(text || "").trimStart();
+    if (!body) return false;
+    if (body.startsWith("/") && !/^\/desc\b/i.test(body)) return true;
+    return looksLikeDiceCommand(body);
+  }
+
   function looksLikeDiceCommand(text) {
     const body = String(text || "").replace(/\[\[[^\]]*\]\]/g, "").trim();
     return /^S?choice\s*[\[(\s]/i.test(body)
@@ -1853,17 +1862,20 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     // 서식: 마크다운 마커를 파싱해 봉투(invisible envelope)를 만든다. 다이스 판정이면
     // 서식은 무시하고 명령 원문만 보낸다(판정 카드에 서식은 의미 없음).
     // meta(다른 곳에서 넘어온 메시지, 예: 롤20)는 서식·판정 해석 없이 그대로 보내고, 출처만 봉투에 보이지 않게 싣는다.
-    const parsed = meta ? { text: String(text), runs: [], alignRuns: [] } : parseFormatMarkers(stripEnvelopes(text));
+    const isCommand = !meta && isChatCommandText(stripEnvelopes(text));
+    const parsed = meta ? { text: String(text), runs: [], alignRuns: [] }
+      : isCommand ? { text: stripEnvelopes(text), runs: [], alignRuns: [], narration: false }
+      : parseFormatMarkers(stripEnvelopes(text));
     const cleanText = parsed.text;
     const rolled = rollExtend || (meta ? null : evaluateDiceCommand(cleanText));
     let outText = cleanText;
-    const extra = rolled || meta ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
+    const extra = rolled || meta || isCommand ? { runs: [], alignRuns: [] } : buildFmtStateRuns(cleanText);
     const alignAll = [...(parsed.alignRuns || []), ...extra.alignRuns];
-    const narrate = (narrationOn || parsed.narration === true) && !meta;
+    const narrate = (narrationOn || parsed.narration === true) && !meta && !isCommand;
     // 구분선은 이 메시지 하나에만: 판정 명령·롤20 중계 메시지에는 붙지 않고, 어느 경우든 보내면 꺼진다.
-    const breakHere = breakNext && !meta;
+    const breakHere = breakNext && !meta && !isCommand;
     if (breakNext) { breakNext = false; breakBtnEl?.classList.remove("is-active"); }
-    if (!rolled && !meta?.rawEnvelope && !(!meta && looksLikeDiceCommand(cleanText)) && (meta || breakHere || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
+    if (!rolled && !meta?.rawEnvelope && !isCommand && !(!meta && looksLikeDiceCommand(cleanText)) && (meta || breakHere || parsed.runs.length > 0 || narrate || extra.runs.length > 0 || alignAll.length > 0)) {
       const payload = {
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
