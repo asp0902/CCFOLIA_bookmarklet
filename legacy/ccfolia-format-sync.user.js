@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.102
+// @version      0.1.103
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.102"),
+    version: getUserscriptVersion("0.1.103"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4382,6 +4382,36 @@
         padding: 7px 10px;
       }
 
+      /* 루비·툴팁 입력창: 코코포리아의 글자 버튼처럼 — 취소는 배경 없는 글자(hover 때만 옅게), 적용은 파란 글자(#2196f3), hover 때 옅은 파란 바탕 */
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn {
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: #fff;
+        transition: background-color 150ms cubic-bezier(.4, 0, .2, 1);
+      }
+
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn:hover,
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn:active {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary {
+        background: transparent;
+        color: #2196f3;
+      }
+
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary:hover,
+      .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary:active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary:hover,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-popover-actions.is-text-buttons .ccf-btn.primary:active {
+        background: rgba(33, 150, 243, 0.08);
+      }
+
       .ccf-narrator-note {
         color: rgba(255, 255, 255, 0.78);
         font-size: 12px;
@@ -7007,9 +7037,10 @@
     const actions = document.createElement("div");
     actions.className = "ccf-inline-popover-actions";
     actions.innerHTML = `
-      <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uCDE8\uC18C</button>
       <button type="button" class="ccf-btn primary" data-inline-popover-action="apply">\uC801\uC6A9</button>
+      <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uCDE8\uC18C</button>
     `;
+    actions.classList.add("is-text-buttons");
 
     popover.append(title, field, actions);
     popover.classList.add("open");
@@ -13723,7 +13754,11 @@
     // 직접 넣는다. format-sync가 먼저 소비하면 이후 bridge 재인코딩에서 알약 runs가
     // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
     // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
-    if (isChatCommandText(rawText)) return true;
+    // 커맨드는 어떤 나레이션 상태에서도 원문 그대로. 입력칸에 이미 봉투(보이지 않는 글자)가 붙어 있으면(앞선 서식·나레이션 상태, 매크로 펼침 등) 걷어 내고 보낸다.
+    if (isChatCommandText(rawText)) {
+      if (currentText !== rawText) setEditorText(editor, rawText);
+      return true;
+    }
     if (window.__CCF_ROLL20_BRIDGE_DEBUG__ && ROLL20_DESC_RE.test(rawText)) return true;
     // bridge가 이미 /desc를 인코딩한 결과물 — 재래핑하면 source/roll20Macro(트리거)
     // 정보가 유실되므로 그대로 둔다. roll20Macro 표식이 (재호출 등으로) 빠졌더라도
