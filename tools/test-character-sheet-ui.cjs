@@ -24,7 +24,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
       window.__sent = [];
-      document.getElementById('chat').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.getElementById('chatbox').value); });
+      window.__nativeClosed = 0; document.getElementById('native-close').addEventListener('click', () => { window.__nativeClosed++; });
+      document.getElementById('chat').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.getElementById('chatbox').value); window.__colorAtSubmit = getComputedStyle(document.getElementById('chatbox')).color; window.__heightAtSubmit = document.getElementById('chatbox').offsetHeight; });
       const state = { entities: { roomCharacters: { entities: { c1: { name: '연갈', iconUrl: 'https://example.test/icon.png', owner: 'me' }, c2: { name: '다른이', iconUrl: 'https://example.test/other.png', owner: 'other' }, c3: { name: '니노', iconUrl: 'https://example.test/nino.png', owner: 'me', order: 2 }, c4: { name: '브릿지', iconUrl: '', owner: 'me', order: 1 }, c5: { name: '남의것', owner: 'someone' } } } } };
       document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, subscribe: () => () => {}, dispatch() {} } } } } };
     });
@@ -45,6 +46,48 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-panel').count(), 0, 'the list was not shown');
     assert.equal(await page.locator('#ccf-character-sheet-root header h2').textContent(), '연갈');
     assert.equal(await page.locator('#ccf-character-sheet-root [data-field="memo"]').inputValue(), '메모 내용', 'filled from the native dialog');
+    // 14.1: after the values were moved over, CCFOLIA's own edit dialog is closed (its close button is pressed once); the sheet stays
+    await page.waitForFunction(() => window.__nativeClosed === 1, null, { timeout: 4000 });
+    assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays after the native dialog is closed');
+    // 14.2: the window looks like CCFOLIA's own dialog (title 20px bold, radius 4px, paper rgba(44,44,44,.87), three-layer shadow)
+    const lookup = await page.evaluate(() => { const d = document.querySelector('#ccf-character-sheet-root .ccf-cs-dialog'), h = d.querySelector('header h2'), c = getComputedStyle(d), t = getComputedStyle(h); return { title: [t.fontSize, t.fontWeight, t.lineHeight], radius: c.borderTopLeftRadius, bg: c.backgroundColor, shadow: (c.boxShadow.match(/rgba/g) || []).length, header: Math.round(d.querySelector('header').getBoundingClientRect().height) }; });
+    assert.deepEqual(lookup, { title: ['20px', '700', '32px'], radius: '4px', bg: 'rgba(44, 44, 44, 0.87)', shadow: 3, header: 64 }, 'CCFOLIA dialog title / radius / paper / shadow / app bar height');
+    // 14.3: double-click on the top bar folds the window to the bar and unfolds it again; a double-click on a button does nothing
+    const hdr = () => page.locator('#ccf-character-sheet-root .ccf-cs-dialog > header');
+    await hdr().dblclick({ position: { x: 300, y: 32 } });
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector('#ccf-character-sheet-root .ccf-cs-dialog').getBoundingClientRect().height)), 64, 'folded to the bar');
+    await hdr().dblclick({ position: { x: 300, y: 32 } });
+    assert((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).height > 300, 'unfolded');
+    await page.locator('#ccf-character-sheet-root [data-action="back-list"]').dblclick(); await page.waitForTimeout(150);
+    assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-collapsed').count(), 0, 'a double-click on a button does not fold');
+    await page.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();
+    await page.waitForSelector('#ccf-character-sheet-root .ccf-cs-dialog.is-editor');
+    // 14.4 / 14.5: respect toggles keep their label colour, on = blue, the number fields are about 24px tall
+    const respect = async () => page.evaluate(() => { const l = document.querySelector('#ccf-character-sheet-root .ccf-cs-respect-toggle'), i = l.querySelector('i'), n = document.querySelector('#ccf-character-sheet-root .ccf-cs-respect-number input'); return { label: getComputedStyle(l.querySelector('span')).color, track: getComputedStyle(i).backgroundColor, number: Math.round(n.getBoundingClientRect().height) }; });
+    const before = await respect();
+    await page.locator('#ccf-character-sheet-root .ccf-cs-respect-toggle').first().click(); await page.waitForTimeout(300);
+    const after = await respect();
+    assert.equal(after.label, before.label, 'the label colour does not change when the toggle is switched');
+    assert.equal(after.track, 'rgb(33, 150, 243)', 'on = blue'); assert.equal(before.number, 24, 'respect numbers are 24px tall');
+    await page.locator('#ccf-character-sheet-root .ccf-cs-respect-toggle').first().click();
+    // 14.6: no 특기 title above the skill table; 14.7: the table fits its content (it was 740px wide at least)
+    assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-section-wide .ccf-cs-section-head').count(), 0, 'no 특기 heading');
+    const tableW = await page.evaluate(() => Math.round(document.querySelector('#ccf-character-sheet-root .ccf-cs-skills').getBoundingClientRect().width));
+    console.log('skill table width', tableW);
+    assert(tableW < 800, 'the skill table is smaller than before (860px at this size, now ' + tableW + 'px)');
+    const smallFont = await page.evaluate(() => getComputedStyle(document.querySelector('#ccf-character-sheet-root .ccf-cs-skill small')).fontSize); assert.equal(smallFont, '11px', 'value numbers are smaller');
+    // 16: Roll20's dicefontd20 "t" is the roll icon (white public, rgb(255,0,12) secret), the SVG only as a fallback
+    const dice = await page.evaluate(async () => { await document.fonts.ready; const root = document.getElementById('ccf-character-sheet-root'); const g = document.querySelector('#ccf-character-sheet-root .ccf-cs-roll-public .ccf-cs-d20'), s = document.querySelector('#ccf-character-sheet-root footer .ccf-cs-footer-secret .ccf-cs-d20'); return { flag: root.getAttribute('data-d20-font'), loaded: document.fonts.check('17px ccf-dicefontd20', 't'), width: Math.round(g.getBoundingClientRect().width), size: getComputedStyle(g).fontSize, family: getComputedStyle(g).fontFamily.startsWith('ccf-dicefontd20'), publicColor: getComputedStyle(g.parentElement).color, secretColor: getComputedStyle(s.parentElement).color, fallbackHidden: getComputedStyle(g.nextElementSibling).display === 'none', respect: getComputedStyle(document.querySelector('#ccf-character-sheet-root .ccf-cs-respect-roll')).color }; });
+    assert.deepEqual({ ...dice, width: dice.width > 5 }, { flag: '1', loaded: true, width: true, size: '17px', family: true, publicColor: 'rgb(255, 255, 255)', secretColor: 'rgb(255, 0, 12)', fallbackHidden: true, respect: 'rgb(255, 255, 255)' }, 'dicefontd20 glyph, 17px, white / red, fallback svg hidden');
+    // 15.3: the memo buttons are visible; 15.4: 관계 목록 = 이름 · 감정 · 거처(toggle) on one row, the old 설명 moves into the memo
+    assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-people').count(), 1);
+    await page.locator('#ccf-character-sheet-root [data-add="people"]').click();
+    const rel = await page.evaluate(() => { const sec = document.querySelector('#ccf-character-sheet-root .ccf-cs-people section'); const f = sec.querySelector('.ccf-cs-repeater-fields'); const kids = [...f.children].map((c) => { const r = c.getBoundingClientRect(); return Math.round((r.top + r.bottom) / 2 / 4); }); return { heads: [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-people .ccf-cs-repeater-head .ccf-cs-repeater-fields span')].map((x) => x.textContent), tops: new Set(kids).size, count: f.children.length, title: document.querySelector('#ccf-character-sheet-root .ccf-cs-duo .ccf-cs-section-head:last-child h3, #ccf-character-sheet-root .ccf-cs-duo > section:last-child h3')?.textContent, noteColor: getComputedStyle(sec.querySelector('.ccf-cs-note-toggle')).backgroundColor, hasTextarea: !!f.querySelector('textarea') }; });
+    assert.deepEqual(rel, { heads: ['이름', '감정', '거처'], tops: 1, count: 3, title: '관계 목록', noteColor: 'rgba(255, 255, 255, 0.7)', hasTextarea: false }, 'three fields on one row, memo button visible');
+    await page.locator('#ccf-character-sheet-root .ccf-cs-people [data-prop="name"]').fill('조력자');
+    await page.locator('#ccf-character-sheet-root .ccf-cs-people .ccf-cs-shelter').click(); await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => { const raw = Object.keys(localStorage).filter((k) => k.startsWith('ccf-character-sheet:')).map((k) => JSON.parse(localStorage.getItem(k))); return raw[0].sheets.find((x) => x.name === '연갈').people[0].shelter; }), true, 'the 거처 toggle is saved (people[].shelter, the existing transfer field)');
+    // (the transfer-data check runs at the end of this test)
     // layout: [image | life, sanity, merit, items] on top, the memo below, the respect row under it
     const layout = await page.evaluate(() => {
       const q = (sel) => document.querySelector('#ccf-character-sheet-root ' + sel).getBoundingClientRect();
@@ -133,6 +176,12 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.deepEqual(await page.locator(R + ' .ccf-cs-menu > button').allTextContents(), ['장면열기▸', '장면닫기', '기본 장면표', '괴담 장면표', '장면표 추가…']);
     await page.locator(R + ' [data-action="scene-table"]').click(); await page.waitForTimeout(200);
     assert.equal((await page.evaluate(() => window.__sent)).pop(), '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째', 'the custom command body goes out as it is');
+    // 15.1: while a command is sent the chat box text is transparent and the box keeps its height; afterwards it is back to normal (the fake chat never clears the box, so this is also the send-failed path: restored + a notice)
+    const during = await page.evaluate(() => ({ color: window.__colorAtSubmit, height: window.__heightAtSubmit }));
+    assert.equal(during.color, 'rgba(0, 0, 0, 0)', 'the typed command is invisible while it is sent');
+    await page.waitForTimeout(1900);
+    const restored = await page.evaluate(() => { const t = document.getElementById('chatbox'); return { color: t.style.color, important: t.getAttribute('style') || '' }; });
+    assert.equal(restored.color, '', 'the box style is restored'); assert.equal(restored.important, 'width: 300px;', 'only the box\'s own inline style is left (nothing of ours)');
     await page.evaluate(() => localStorage.removeItem('ccf-slash-macros-v1'));
     await page.locator(R + ' [data-action="scene-menu"]').click(); await page.locator(R + ' [data-action="scene-table-add"]').click();
     await page.locator(R + ' .ccf-cs-link-picker input[data-table-toggle="0"]').uncheck(); await page.waitForTimeout(300);
@@ -194,6 +243,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await page.locator(R + ' [data-action="panel-settings"]').click(); await page.locator(R + ' [data-action="panel-list"]').click();
     await page.locator(R + ' .ccf-cs-tabs [data-action="add-sheet"]').click();
     await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor');
+    const migrated = await page.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.importText(JSON.stringify({ kind: 'capybara.insane-sheet', version: 1, data: { name: '옛 시트', player: '옛', people: [{ name: 'A', emotion: '호의', detail: '옛 설명' }] } })).people[0]);
+    assert.equal(migrated.memo, '옛 설명', 'transfer data: the old 설명 (detail) is read as the memo'); assert.equal(migrated.detail, '옛 설명', 'and detail stays readable');
     assert.deepEqual(errors, [], 'no page errors');
     console.log('character sheet ui PASS');
   } finally { await browser.close(); }

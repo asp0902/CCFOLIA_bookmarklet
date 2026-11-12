@@ -76,7 +76,6 @@
     .approval { margin-top: 30px; }
     .approval > h3.section { margin-top: 0; }
     button.section-toggle { min-width: 0; height: auto; padding: 2px 6px 2px 0; margin: 0; border-radius: 4px; font-size: 1rem; font-weight: 700; letter-spacing: 0; display: inline-flex; align-items: center; gap: 6px; }
-    button.section-toggle .caret { font-size: .75rem; color: rgba(255,255,255,.7); }
     /* 접힌 상태: 상태 문장은 숨기고, 오류(빨강으로 칠해진 줄)만 보인다 */
     .status-lines.collapsed p.status-line:not([style*="color"]) { display: none; }
     button { font: inherit; font-size: .875rem; font-weight: 500; letter-spacing: .02857em; min-width: 64px; height: 36px; padding: 6px 12px; border: 0; border-radius: 4px;
@@ -524,12 +523,11 @@
 
   // 참가 승인: 제목을 누르면 상태 문장(룸·실시간 연결·구조 점검·미러)이 펼쳐진다. 기본은 접힘(창을 열 때마다). 오류(빨강) 줄은 접혀 있어도 보인다. 참가자 목록은 항상 보인다.
   const statusLines = el("div", { class: "status-lines collapsed", id: "approval-status" }, roomLine, socketLine, healthLine, mirrorLine, errorLine);
-  const approvalToggle = el("button", { type: "button", class: "section-toggle", id: "approval-toggle", "aria-expanded": "false", "aria-controls": "approval-status" }, "참가 승인", el("span", { class: "caret", "aria-hidden": "true", text: "▸" }));
+  const approvalToggle = el("button", { type: "button", class: "section-toggle", id: "approval-toggle", "aria-expanded": "false", "aria-controls": "approval-status" }, "참가 승인");
   approvalToggle.addEventListener("click", () => {
     const open = statusLines.classList.contains("collapsed");
     statusLines.classList.toggle("collapsed", !open);
     approvalToggle.setAttribute("aria-expanded", String(open));
-    approvalToggle.querySelector(".caret").textContent = open ? "▾" : "▸";
   });
   const approvalTitle = el("h3", { class: "section" }, approvalToggle);
   const paper = el("div", { class: "paper", role: "dialog", "aria-modal": "true", "aria-labelledby": "title" },
