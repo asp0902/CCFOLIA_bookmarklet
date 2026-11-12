@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Slash Macros by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-slash-macros
-// @version      0.1.1
+// @version      0.1.2
 // @description  Save and run multi-line slash command macros from the CCFOLIA chat input.
 // @description:ko 채팅 슬래시 커맨드 본문을 매크로로 저장하고 /m <이름>으로 펼쳐서 실행합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -20,7 +20,7 @@
   const CCF_SM_SCRIPT_INFO = Object.freeze({
     id: "ccf-slash-macros",
     name: "CCFOLIA Slash Macros",
-    version: "0.1.1",
+    version: "0.1.2",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-slash-macros"
   });
 
@@ -859,12 +859,12 @@
         padding: 4px 10px;
         border: 0;
         border-radius: 0;
-        background: rgba(255,255,255,0.06);
+        background: transparent;
         color: inherit;
         font-size: 15px;
         cursor: pointer;
       }
-      .ccf-sm-toolbar-btn:hover { background: rgba(255,255,255,0.12); }
+      .ccf-sm-toolbar-btn:hover { background: rgba(255,255,255,0.08); }
 
       #${MODAL_ID} {
         position: fixed;
