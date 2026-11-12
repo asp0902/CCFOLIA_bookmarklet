@@ -90,7 +90,7 @@ assert.doesNotMatch(source, /data-action="panel-settings" aria-label="설정"/);
 assert.match(source, /data-ability-roll="\$\{index\}"/);
 assert.match(source, /M12 2 21 8l-3 11H6L3 8z/);
 assert.match(source, /ccf-cs-ability-roll svg \{ width:20px;height:20px;fill:none;stroke:currentColor/);
-assert.match(source, /inputSkillRoll\(skill, ability\?\.name, true\)/);
+assert.match(source, /inputSkillRoll\(skill, ability\?\.name, true, button\.dataset\.secret === "1"\)/);
 assert.match(source, /querySelector\('button\[type="submit"\]'\)\?\.click\(\)/);
 assert.match(source, /ccf-cs-abilities \{ gap:4px \}/);
 assert.match(source, /ccf-cs-skill\.is-fear button \{ color:#f50057;font-weight:bold \}/);
