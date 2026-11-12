@@ -32,7 +32,7 @@ const GLOBAL_KEY = 'ccf-format-style-presets-v1';
     assert.deepEqual((await presetRows(a)).map((t) => t.trim()).filter(Boolean).length, 1, 'first visit: the global list is copied into room A');
     assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:A')).length), 1);
     assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1')).length), 1, 'the global original stays');
-    assert.match(await a.locator('.ccf-inline-popover.open [data-preset-room]').textContent(), /이 룸의 서식 프리셋/);
+    assert.equal(await a.locator('.ccf-inline-popover.open [data-preset-room]').count(), 0, 'the "이 룸의 서식 프리셋" caption was removed');
     // add a preset in room A (builder: bold + name)
     await a.evaluate(() => { const t = document.querySelector('textarea[name=text]'); t.value = '문장'; t.dispatchEvent(new Event('input', { bubbles: true })); });
     await a.locator('.ccf-inline-popover.open [data-style-preset-name]').fill('룸A서식');

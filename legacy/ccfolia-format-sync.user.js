@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.103
+// @version      0.1.104
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.103"),
+    version: getUserscriptVersion("0.1.104"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4230,6 +4230,24 @@
         display: flex; align-items: center; justify-content: space-between; gap: 4px;
       }
       .ccf-style-preset-title-row .ccf-style-preset-remove { font-size: 16px; }
+      .ccf-style-note { color: #ffcc80; font-size: 12px; padding: 4px 0; }
+      /* 프리셋 폴더 */
+      .ccf-style-folder { margin: 2px 0; }
+      .ccf-style-folder-head { display: flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 12px; font-weight: 700; color: #fff; }
+      .ccf-style-folder-head[data-drop="1"], .ccf-style-preset-row[data-drop="1"], .ccf-style-root-drop[data-drop="1"] { outline: 1px dashed rgba(33, 150, 243, 0.9); outline-offset: -1px; }
+      .ccf-style-folder-toggle { all: unset; box-sizing: border-box; cursor: pointer; width: 20px; height: 22px; flex: 0 0 20px; display: inline-grid; place-items: center; color: rgba(255, 255, 255, 0.7); font-size: 11px; }
+      .ccf-style-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+      .ccf-style-folder-name-input { flex: 1; min-width: 0; height: 24px; box-sizing: border-box; background: #1f1f1f; color: #fff; border: 1px solid rgba(255, 255, 255, 0.25); padding: 0 6px; font: inherit; font-size: 12px; }
+      .ccf-style-folder-body { margin-left: 14px; }
+      .ccf-style-folder-empty { color: rgba(255, 255, 255, 0.45); font-size: 11px; padding: 3px 6px; }
+      .ccf-style-root-drop { color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 3px 6px; text-align: center; }
+      .ccf-style-add-menu { display: flex; flex-direction: column; margin: 2px 0 6px; background: rgba(255, 255, 255, 0.06); }
+      .ccf-style-add-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 10px; font-size: 12px; color: #fff; }
+      .ccf-style-add-menu button:hover { background: rgba(255, 255, 255, 0.14); }
+      .ccf-style-folder-add-row { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
+      .ccf-style-folder-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
+      .ccf-style-builder-extra { display: flex; gap: 4px; margin-top: 2px; }
+      .ccf-style-builder-extra .ccf-inline-popover-field { flex: 1; min-width: 0; height: 28px; font-size: 12px; }
       .ccf-style-builder { display: flex; flex-direction: column; gap: 4px; }
       .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
       /* 빌더 줄의 모든 컨트롤: 28×28(크기 칸은 40×28), 같은 외곽선·배경. 활성(data-active)만 파랑. 색 칸은 둘 다 28×28 + 안쪽 16×16 칩(서식 바 색 칩과 같은 모양). */
@@ -5617,6 +5635,22 @@
       }
 
       // 서식 빌더 토글 (#70) — B/I/U/S는 개별 토글, 정렬은 셋 중 하나
+      const textToggle = target.closest("[data-style-builder-text]");
+      if (textToggle && toolbar.contains(textToggle)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const key = textToggle.getAttribute("data-style-builder-text");
+        const host = textToggle.closest(".ccf-inline-popover");
+        const row = host?.querySelector(`[data-style-builder-extra="${key}"]`);
+        const input = host?.querySelector(`[data-style-builder-input="${key}"]`);
+        if (row && input) {
+          const show = row.style.display === "none";
+          row.style.display = show ? "flex" : "none";
+          if (show) input.focus({ preventScroll: true });
+        }
+        return;
+      }
+
       const builderToggle = target.closest("[data-style-builder], [data-style-builder-align]");
       if (builderToggle && toolbar.contains(builderToggle)) {
         event.preventDefault();
@@ -5641,7 +5675,47 @@
         const state = inlinePopoverState;
         if (!state || state.toolbar !== toolbar || state.kind !== "style-clipboard") return;
         const action = styleAction.getAttribute("data-inline-style-action");
-        // 서식 프리셋 액션 (#70): add / apply / remove
+        // 서식 프리셋 액션 (#70): add / apply / remove, 폴더: add-menu / folder-*
+        if (action === "add-menu") {
+          const host = state.popover?.querySelector("[data-style-add-menu-host]");
+          if (!host) return;
+          if (host.firstChild) { host.textContent = ""; styleAction.setAttribute("aria-expanded", "false"); return; }
+          host.innerHTML = '<div class="ccf-style-add-menu" role="menu"><button type="button" role="menuitem" data-inline-style-action="add">프리셋 추가</button><button type="button" role="menuitem" data-inline-style-action="folder-add-start">폴더 추가</button></div>';
+          styleAction.setAttribute("aria-expanded", "true");
+          return;
+        }
+        if (action === "folder-add-start") {
+          const host = state.popover?.querySelector("[data-style-add-menu-host]");
+          if (!host) return;
+          host.innerHTML = '<div class="ccf-style-folder-add-row"><input type="text" class="ccf-style-folder-name-input" data-style-folder-name placeholder="폴더 이름" spellcheck="false" maxlength="40"><button type="button" class="ccf-btn primary" data-inline-style-action="folder-add-confirm">추가</button></div>';
+          host.querySelector("input")?.focus({ preventScroll: true });
+          return;
+        }
+        if (action === "folder-add-confirm") {
+          const input = state.popover?.querySelector("[data-style-folder-name]");
+          const name = String(input?.value || "").trim();
+          if (!name) { showStylePresetNote(state.popover, "폴더 이름을 입력해 주세요."); return; }
+          if (addStyleFolder(name)) openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+          return;
+        }
+        if (action === "folder-toggle") {
+          toggleStyleFolderOpen(styleAction.getAttribute("data-folder-id"));
+          openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+          return;
+        }
+        if (action === "folder-rename") {
+          beginStyleFolderRename(state.popover, styleAction.getAttribute("data-folder-id"));
+          return;
+        }
+        if (action === "folder-remove") {
+          const id = styleAction.getAttribute("data-folder-id");
+          const folder = readStyleFolders().find((f) => f.id === id);
+          if (folder && window.confirm(`'${folder.name}' 폴더를 삭제할까요? 안의 프리셋은 폴더 밖으로 옮겨집니다.`)) {
+            removeStyleFolder(id);
+            openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+          }
+          return;
+        }
         if (action === "add") {
           const popoverEl = state.popover;
           const nameInput = popoverEl?.querySelector("[data-style-preset-name]");
@@ -5683,7 +5757,13 @@
         if (action === "apply") {
           const idx = Number(styleAction.getAttribute("data-preset-index"));
           const preset = readStylePresets()[idx];
-          if (preset && applyStylePresetToContext(state.context, preset)) {
+          // 모달을 연 뒤에 고른 선택(전체 선택 등)도 쓰도록, 적용 때 선택을 다시 읽는다(없으면 마지막으로 기억한 범위).
+          const fresh = getInlineStyleClipboardContext(toolbar);
+          const hasSel = (c) => !!c?.selection && c.selection.start !== c.selection.end;
+          const context = hasSel(fresh) ? fresh : (hasSel(state.context) ? state.context : null);
+          if (preset && !context) { showStylePresetNote(state.popover, "서식을 적용할 텍스트를 먼저 선택해 주세요."); return; }
+          if (preset && applyStylePresetToContext(context, preset)) {
+            state.selection = context.selection;
             closeInlinePopover(toolbar, { restoreFocus: false });
             restoreRoomSelectionSoon(state.editor, state.selection);
             showInlineToolbarSelectionHighlight(toolbar);
@@ -6911,46 +6991,42 @@
     popover.style.left = "";
     popover.style.top = "";
     // \uC11C\uC2DD \uD504\uB9AC\uC14B \uBBF8\uB2C8\uBAA8\uB2EC (#70) \u2014 \uBAA9\uB85D(\uD074\uB9AD=\uC801\uC6A9, \u00D7=\uC0AD\uC81C) + \uD604\uC7AC \uC11C\uC2DD \uCD94\uAC00
-    const presets = readStylePresets();
-    const rows = presets.map((p, i) => `
-      <div class="ccf-style-preset-row">
-        <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${i}" data-on="${p.auto === false ? "0" : "1"}" role="switch" aria-checked="${p.auto === false ? "false" : "true"}" title="자동 적용 ${p.auto === false ? "꺼짐" : "켜짐"} — 클릭으로 전환" aria-label="자동 적용"></button>
-        <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9" style="${escapeHtml(stylePresetPreviewCss(p.style, p.align))}">${escapeHtml(p.name)}</button>
-        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${i}" title="\uD3B8\uC9D1 \u2014 \uC11C\uC2DD\uC744 \uC544\uB798 \uBE4C\uB354\uC5D0 \uBD88\uB7EC\uC634" aria-label="\uD3B8\uC9D1">\u270E</button>
-        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
-      </div>
-    `).join("");
+    const listMarkup = buildStylePresetListMarkup();
     popover.innerHTML = `
       <div class="ccf-style-preset-title-row">
-        <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B<small data-preset-room style="display:block;margin-top:2px;font-size:11px;font-weight:400;opacity:.7">\uC774 \uB8F8\uC758 \uC11C\uC2DD \uD504\uB9AC\uC14B</small></div>
-        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add" title="\uAD6C\uC131\uD55C \uC11C\uC2DD\uC744 \uD504\uB9AC\uC14B\uC73C\uB85C \uCD94\uAC00" aria-label="\uD504\uB9AC\uC14B \uCD94\uAC00">+</button>
+        <div class="ccf-inline-popover-title">서식 프리셋</div>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add-menu" title="추가" aria-label="추가" aria-haspopup="menu" aria-expanded="false">+</button>
       </div>
-      ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798\uC5D0\uC11C \uC11C\uC2DD\uC744 \uAD6C\uC131\uD574 + \uB85C \uCD94\uAC00\uD558\uC138\uC694.</div>'}
+      <div class="ccf-style-note" data-style-preset-note style="display:none;" role="status"></div>
+      <div data-style-add-menu-host></div>
+      <div data-style-preset-list>${listMarkup}</div>
       <div class="ccf-style-builder" data-style-builder-host>
         <div class="ccf-style-builder-row">
-          <button type="button" class="ccf-toggle" data-style-builder="bold" title="\uAD75\uAC8C"><b>B</b></button>
-          <button type="button" class="ccf-toggle" data-style-builder="italic" title="\uAE30\uC6B8\uC784"><i>I</i></button>
-          <button type="button" class="ccf-toggle" data-style-builder="underline" title="\uBC11\uC904"><u>U</u></button>
-          <button type="button" class="ccf-toggle" data-style-builder="strike" title="\uCDE8\uC18C\uC120"><s>S</s></button>
-          <button type="button" class="ccf-toggle" data-style-builder-align="left" data-active="1" title="\uC67C\uCABD \uC815\uB82C">\u2BC7</button>
-          <button type="button" class="ccf-toggle" data-style-builder-align="center" title="\uAC00\uC6B4\uB370 \uC815\uB82C">\u2BC8\u2BC7</button>
-          <button type="button" class="ccf-toggle" data-style-builder-align="right" title="\uC624\uB978\uCABD \uC815\uB82C">\u2BC8</button>
-          <label class="ccf-style-builder-color" title="\uAE00\uC790\uC0C9"><input type="color" data-style-builder-color value="#ffffff"></label>
-          <label class="ccf-style-builder-color" title="\uBC30\uACBD\uC0C9"><input type="color" data-style-builder-bg value="#010101"></label>
-          <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="${(() => { try { return Math.round(parseFloat(getComputedStyle(context.editor).fontSize)) || 14; } catch (_) { return 14; } })()}" title="\uAE00\uC790 \uD06C\uAE30(px)">
+          <button type="button" class="ccf-toggle" data-style-builder="bold" title="굵게"><b>B</b></button>
+          <button type="button" class="ccf-toggle" data-style-builder="italic" title="기울임"><i>I</i></button>
+          <button type="button" class="ccf-toggle" data-style-builder="underline" title="밑줄"><u>U</u></button>
+          <button type="button" class="ccf-toggle" data-style-builder="strike" title="취소선"><s>S</s></button>
+          <button type="button" class="ccf-toggle" data-style-builder="blur" title="블러">Bl</button>
+          <button type="button" class="ccf-toggle" data-style-builder-text="rubyText" title="루비 글자">Rb</button>
+          <button type="button" class="ccf-toggle" data-style-builder-text="tooltipText" title="툴팁 설명">Tip</button>
+          <label class="ccf-style-builder-color" title="글자색"><input type="color" data-style-builder-color value="#ffffff"></label>
+          <label class="ccf-style-builder-color" title="배경색"><input type="color" data-style-builder-bg value="#010101"></label>
+          <input type="text" class="ccf-inline-popover-field ccf-style-builder-size" data-style-builder-size inputmode="numeric" pattern="[0-9]*" placeholder="${(() => { try { return Math.round(parseFloat(getComputedStyle(context.editor).fontSize)) || 14; } catch (_) { return 14; } })()}" title="글자 크기(px)">
         </div>
+        <div class="ccf-style-builder-extra" data-style-builder-extra="rubyText" style="display:none;"><input type="text" class="ccf-inline-popover-field" data-style-builder-input="rubyText" placeholder="루비 글자 (선택한 글 위에 작게)" spellcheck="false"></div>
+        <div class="ccf-style-builder-extra" data-style-builder-extra="tooltipText" style="display:none;"><input type="text" class="ccf-inline-popover-field" data-style-builder-input="tooltipText" placeholder="툴팁 설명 (마우스를 올리면 보임)" spellcheck="false"></div>
       </div>
       <div class="ccf-style-preset-add-row">
-        <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="\uC0C8 \uD504\uB9AC\uC14B \uC774\uB984 (\uBBF8\uB9AC\uBCF4\uAE30)" spellcheck="false">
+        <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="새 프리셋 이름 (미리보기)" spellcheck="false">
       </div>
       <div class="ccf-inline-popover-actions">
         <button type="button" class="ccf-btn primary" data-inline-style-action="add">저장</button>
-        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">\uB2EB\uAE30</button>
+        <button type="button" class="ccf-btn" data-inline-popover-action="cancel">닫기</button>
       </div>
     `;
     // \uC0C9/\uD06C\uAE30 \uC785\uB825 \u2014 \uB9CC\uC9C0\uBA74 \uC801\uC6A9 \uB300\uC0C1\uC73C\uB85C \uD45C\uC2DC(data-touched) + \uC774\uB984 \uC785\uB825\uCE78 \uBBF8\uB9AC\uBCF4\uAE30 \uAC31\uC2E0 (#70)
     bindStylePresetDragSort(popover, toolbar); // 프리셋 행 드래그 정렬 (#70)
-    popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size]").forEach((inp) => {
+    popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size], [data-style-builder-input]").forEach((inp) => {
       // 색 칩 초기 표시
       if (inp.type === "color") {
         inp.closest(".ccf-style-builder-color")?.style.setProperty("--ccf-chip-color", inp.value);
@@ -6963,6 +7039,7 @@
         updateStyleBuilderPreview(popover);
       });
     });
+    bindStylePresetFolderInputs(popover, toolbar);
     // 레이아웃에 끼지 않는 부유 팝업(fixed) — 스크롤바 생성 방지 (#70)
     popover.classList.add("ccf-inline-float-popover", "open");
     popover.setAttribute("aria-hidden", "false");
@@ -11664,12 +11741,157 @@
     }
   }
 
+  // ===== 프리셋 폴더 =====
+  // 폴더 목록은 같은 룸의 별도 키(ccf-format-style-folders-v1:{roomId}): [{ id, name, open }]. 프리셋은 folderId 로 소속을 가진다(옛 배열 데이터는 그대로 읽힌다: folderId 없음 = 폴더 밖).
+  const STYLE_FOLDERS_STORAGE_KEY = "ccf-format-style-folders-v1";
+
+  function styleFoldersKey() {
+    const roomId = stylePresetRoomId();
+    return roomId ? `${STYLE_FOLDERS_STORAGE_KEY}:${roomId}` : "";
+  }
+
+  function readStyleFolders() {
+    const key = styleFoldersKey();
+    if (!key) return [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!Array.isArray(parsed)) return [];
+      const seen = new Set();
+      return parsed.filter((f) => f && typeof f.id === "string" && f.id && typeof f.name === "string" && f.name.trim() && !seen.has(f.id) && seen.add(f.id))
+        .map((f) => ({ id: f.id, name: f.name.trim().slice(0, 40), open: f.open !== false }));
+    } catch (_) { return []; }
+  }
+
+  function writeStyleFolders(list) {
+    const key = styleFoldersKey();
+    if (!key) return false;
+    try { localStorage.setItem(key, JSON.stringify(list)); return true; } catch (error) { console.error("[ccf-format-sync] writeStyleFolders failed", error); return false; }
+  }
+
+  function addStyleFolder(name) {
+    const clean = String(name || "").trim().slice(0, 40);
+    if (!clean) return false;
+    const list = readStyleFolders();
+    list.push({ id: `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: clean, open: true });
+    return writeStyleFolders(list);
+  }
+
+  function renameStyleFolder(id, name) {
+    const clean = String(name || "").trim().slice(0, 40);
+    if (!clean) return false;
+    const list = readStyleFolders();
+    const folder = list.find((f) => f.id === id);
+    if (!folder) return false;
+    folder.name = clean;
+    return writeStyleFolders(list);
+  }
+
+  function toggleStyleFolderOpen(id) {
+    const list = readStyleFolders();
+    const folder = list.find((f) => f.id === id);
+    if (!folder) return false;
+    folder.open = !folder.open;
+    return writeStyleFolders(list);
+  }
+
+  // 폴더 삭제: 안의 프리셋은 폴더 밖으로 옮긴다(프리셋은 지우지 않는다).
+  function removeStyleFolder(id) {
+    const presets = readStylePresets();
+    let changed = false;
+    for (const preset of presets) if (preset.folderId === id) { delete preset.folderId; changed = true; }
+    if (changed) writeStylePresets(presets);
+    return writeStyleFolders(readStyleFolders().filter((f) => f.id !== id));
+  }
+
+  function buildStylePresetRowMarkup(preset, index) {
+    return `
+      <div class="ccf-style-preset-row" draggable="true" data-preset-index="${index}">
+        <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${index}" data-on="${preset.auto === false ? "0" : "1"}" role="switch" aria-checked="${preset.auto === false ? "false" : "true"}" title="자동 적용 ${preset.auto === false ? "꺼짐" : "켜짐"} — 클릭으로 전환" aria-label="자동 적용"></button>
+        <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${index}" title="선택 영역에 적용" style="${escapeHtml(stylePresetPreviewCss(preset.style, preset.align))}">${escapeHtml(preset.name)}</button>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${index}" title="편집 — 서식을 아래 빌더에 불러옴" aria-label="편집">✎</button>
+        <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${index}" title="삭제" aria-label="삭제">×</button>
+      </div>`;
+  }
+
+  // 목록: 폴더(각각 접기/펼치기, 안의 프리셋) 다음에 폴더 밖 프리셋. 데이터 인덱스는 프리셋 배열의 실제 위치.
+  function buildStylePresetListMarkup() {
+    const presets = readStylePresets();
+    const folders = readStyleFolders();
+    const known = new Set(folders.map((f) => f.id));
+    const inFolder = (id) => presets.map((p, i) => [p, i]).filter(([p]) => p.folderId === id);
+    const root = presets.map((p, i) => [p, i]).filter(([p]) => !p.folderId || !known.has(p.folderId));
+    const folderMarkup = folders.map((f) => {
+      const items = inFolder(f.id);
+      return `<div class="ccf-style-folder" data-folder-id="${escapeHtml(f.id)}">
+        <div class="ccf-style-folder-head" draggable="true" data-folder-head="${escapeHtml(f.id)}">
+          <button type="button" class="ccf-style-folder-toggle" data-inline-style-action="folder-toggle" data-folder-id="${escapeHtml(f.id)}" aria-expanded="${f.open ? "true" : "false"}" aria-label="${f.open ? "접기" : "펼치기"}">${f.open ? "▾" : "▸"}</button>
+          <span class="ccf-style-folder-name" data-folder-name="${escapeHtml(f.id)}" title="더블클릭: 이름 변경">${escapeHtml(f.name)}</span>
+          <button type="button" class="ccf-style-preset-remove" data-inline-style-action="folder-rename" data-folder-id="${escapeHtml(f.id)}" title="이름 변경" aria-label="폴더 이름 변경">✎</button>
+          <button type="button" class="ccf-style-preset-remove" data-inline-style-action="folder-remove" data-folder-id="${escapeHtml(f.id)}" title="폴더 삭제(안의 프리셋은 밖으로)" aria-label="폴더 삭제">×</button>
+        </div>
+        ${f.open ? `<div class="ccf-style-folder-body" data-folder-body="${escapeHtml(f.id)}">${items.map(([p, i]) => buildStylePresetRowMarkup(p, i)).join("") || '<div class="ccf-style-folder-empty">비어 있음 — 프리셋을 끌어 넣으세요</div>'}</div>` : ""}
+      </div>`;
+    }).join("");
+    const rootMarkup = root.map(([p, i]) => buildStylePresetRowMarkup(p, i)).join("");
+    const empty = !presets.length && !folders.length ? '<div class="ccf-code-note">저장된 서식이 없습니다. 아래에서 서식을 구성해 + 로 추가하세요.</div>' : "";
+    const dropZone = folders.length ? '<div class="ccf-style-root-drop" data-root-drop="1">여기로 끌면 폴더 밖으로</div>' : "";
+    return folderMarkup + rootMarkup + empty + dropZone;
+  }
+
+  // 모달 안 안내 문구(alert 대신)
+  function showStylePresetNote(popover, message) {
+    const note = popover?.querySelector?.("[data-style-preset-note]");
+    if (!(note instanceof HTMLElement)) return false;
+    note.textContent = message || "";
+    note.style.display = message ? "block" : "none";
+    return true;
+  }
+
+  function beginStyleFolderRename(popover, id) {
+    const span = popover?.querySelector?.(`[data-folder-name="${CSS.escape(id)}"]`);
+    const folder = readStyleFolders().find((f) => f.id === id);
+    if (!(span instanceof HTMLElement) || !folder) return;
+    const input = document.createElement("input");
+    input.type = "text"; input.className = "ccf-style-folder-name-input"; input.value = folder.name; input.setAttribute("data-folder-rename", id); input.maxLength = 40;
+    span.replaceWith(input);
+    input.focus({ preventScroll: true }); input.select();
+  }
+
+  // 폴더 이름 입력(추가·이름 변경): Enter 확정, Esc 취소(창 닫힘 방지), 포커스를 잃으면 이름 변경은 확정
+  function bindStylePresetFolderInputs(popover, toolbar) {
+    if (!(popover instanceof HTMLElement) || popover.__ccfFolderInputsBound) return;
+    popover.__ccfFolderInputsBound = true;
+    const refresh = () => openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+    popover.addEventListener("keydown", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.matches("[data-style-folder-name]")) {
+        if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); target.closest(".ccf-style-folder-add-row")?.querySelector('[data-inline-style-action="folder-add-confirm"]')?.click(); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); popover.querySelector("[data-style-add-menu-host]").textContent = ""; }
+        return;
+      }
+      if (target.matches("[data-folder-rename]")) {
+        if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (renameStyleFolder(target.getAttribute("data-folder-rename"), target.value)) refresh(); else showStylePresetNote(popover, "폴더 이름을 입력해 주세요."); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); refresh(); }
+      }
+    }, true);
+    popover.addEventListener("dblclick", (event) => {
+      const name = event.target instanceof Element ? event.target.closest("[data-folder-name]") : null;
+      if (name) beginStyleFolderRename(popover, name.getAttribute("data-folder-name"));
+    });
+  }
+
   // 팝업 내 서식 빌더 상태 수집 (#70) — 색상은 picker를 만진(data-touched) 경우만 포함
   function collectStyleBuilderDraft(popover) {
     if (!(popover instanceof HTMLElement)) return { style: {}, align: "left" };
     const style = {};
     popover.querySelectorAll('[data-style-builder][data-active="1"]').forEach((b) => {
-      style[b.getAttribute("data-style-builder")] = true;
+      const key = b.getAttribute("data-style-builder");
+      style[key] = key === "blur" ? DEFAULT_BLUR_VALUE : true;
+    });
+    popover.querySelectorAll("[data-style-builder-input]").forEach((input) => {
+      const text = String(input.value || "").trim();
+      if (text) style[input.getAttribute("data-style-builder-input")] = text;
     });
     const colorInput = popover.querySelector("[data-style-builder-color]");
     if (colorInput?.getAttribute("data-touched") === "1" && colorInput.value) {
@@ -11681,7 +11903,8 @@
     }
     const size = parseInt(popover.querySelector("[data-style-builder-size]")?.value, 10);
     if (Number.isFinite(size) && size > 0) style.fontSize = size;
-    const align = popover.querySelector('[data-style-builder-align][data-active="1"]')?.getAttribute("data-style-builder-align") || "left";
+    // 정렬 버튼은 UI에서 없앴다. 불러온 프리셋에 저장돼 있던 정렬은 그대로 유지한다.
+    const align = popover.getAttribute("data-ccf-builder-align") || "left";
     return { style: cleanupStyle(style), align };
   }
 
@@ -11691,7 +11914,9 @@
     if (style.bold) parts.push("font-weight:700");
     if (style.italic) parts.push("font-style:italic");
     const deco = [style.underline && "underline", style.strike && "line-through"].filter(Boolean).join(" ");
-    if (deco) parts.push(`text-decoration:${deco}`);
+    const decoParts = [deco, style.tooltipText && "underline dotted"].filter(Boolean).join(" ");
+    if (decoParts) parts.push(`text-decoration:${decoParts}`);
+    if (style.blur) parts.push("filter:blur(1.5px)");
     if (style.color) parts.push(`color:${style.color}`);
     if (style.backgroundColor) parts.push(`background-color:${style.backgroundColor}`);
     const sizePx = parseInt(style.fontSize, 10);
@@ -11718,43 +11943,60 @@
     try { localStorage.setItem(`${STYLE_PRESETS_AUTO_KEY}:${roomId}`, on ? "1" : "0"); } catch (_) {}
   }
 
-  // 프리셋 행 드래그로 순서 변경 (#70)
+  // 드래그: 프리셋 행 → 다른 프리셋 앞 / 폴더 머리글(그 폴더로) / 폴더 밖 칸, 폴더 머리글 → 다른 폴더 앞(폴더 순서)
   function bindStylePresetDragSort(popover, toolbar) {
-    if (!(popover instanceof HTMLElement)) return;
-    let dragIndex = null;
-    popover.querySelectorAll(".ccf-style-preset-row").forEach((row, i) => {
-      row.setAttribute("draggable", "true");
-      row.setAttribute("data-row-index", String(i));
-    });
+    if (!(popover instanceof HTMLElement) || popover.__ccfPresetDragBound) return; // 팝오버 요소는 다시 그릴 때도 같으므로 한 번만 묶는다(중복이면 한 번의 드롭이 여러 번 처리된다)
+    popover.__ccfPresetDragBound = true;
+    let drag = null;
+    const clearMarks = () => popover.querySelectorAll("[data-drop]").forEach((n) => n.removeAttribute("data-drop"));
+    const refresh = () => openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
     popover.addEventListener("dragstart", (event) => {
+      const head = event.target.closest?.("[data-folder-head]");
       const row = event.target.closest?.(".ccf-style-preset-row");
-      if (!row) return;
-      dragIndex = Number(row.getAttribute("data-row-index"));
-      try { event.dataTransfer.effectAllowed = "move"; } catch (_) {}
+      if (head) drag = { kind: "folder", id: head.getAttribute("data-folder-head") };
+      else if (row) drag = { kind: "preset", index: Number(row.getAttribute("data-preset-index")) };
+      else return;
+      try { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "ccf-style-drag"); } catch (_) {}
     });
     popover.addEventListener("dragover", (event) => {
-      if (dragIndex === null) return;
-      if (!event.target.closest?.(".ccf-style-preset-row")) return;
+      if (!drag) return;
+      const target = event.target.closest?.("[data-folder-head], .ccf-style-preset-row, [data-root-drop], [data-folder-body]");
+      if (!target) return;
+      if (drag.kind === "folder" && !target.matches("[data-folder-head]")) return;
       event.preventDefault();
+      clearMarks();
+      target.setAttribute("data-drop", "1");
     });
     popover.addEventListener("drop", (event) => {
-      if (dragIndex === null) return;
-      const row = event.target.closest?.(".ccf-style-preset-row");
-      if (!row) { dragIndex = null; return; }
+      if (!drag) return;
+      const target = event.target.closest?.("[data-folder-head], .ccf-style-preset-row, [data-root-drop], [data-folder-body]");
+      clearMarks();
+      if (!target) { drag = null; return; }
       event.preventDefault();
-      const dropIndex = Number(row.getAttribute("data-row-index"));
-      if (Number.isFinite(dropIndex) && dropIndex !== dragIndex) {
+      if (drag.kind === "folder" && target.matches("[data-folder-head]")) {
+        const folders = readStyleFolders();
+        const from = folders.findIndex((f) => f.id === drag.id), to = folders.findIndex((f) => f.id === target.getAttribute("data-folder-head"));
+        if (from >= 0 && to >= 0 && from !== to) { const [moved] = folders.splice(from, 1); folders.splice(to, 0, moved); writeStyleFolders(folders); refresh(); }
+      } else if (drag.kind === "preset") {
         const list = readStylePresets();
-        const [moved] = list.splice(dragIndex, 1);
+        const [moved] = list.splice(drag.index, 1);
         if (moved) {
-          list.splice(dropIndex, 0, moved);
+          if (target.matches(".ccf-style-preset-row")) {
+            const dropIndex = Number(target.getAttribute("data-preset-index"));
+            const targetPreset = readStylePresets()[dropIndex];
+            const at = list.findIndex((p) => p.name === targetPreset?.name);
+            if (targetPreset?.folderId) moved.folderId = targetPreset.folderId; else delete moved.folderId;
+            list.splice(at >= 0 ? at : list.length, 0, moved);
+          } else if (target.matches("[data-folder-head]")) { moved.folderId = target.getAttribute("data-folder-head"); list.push(moved); }
+          else if (target.matches("[data-folder-body]")) { moved.folderId = target.getAttribute("data-folder-body"); list.push(moved); }
+          else { delete moved.folderId; list.push(moved); }
           writeStylePresets(list);
-          openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
+          refresh();
         }
       }
-      dragIndex = null;
+      drag = null;
     });
-    popover.addEventListener("dragend", () => { dragIndex = null; });
+    popover.addEventListener("dragend", () => { drag = null; clearMarks(); });
   }
 
   // 메시지 텍스트에서 프리셋 이름과 일치하는 구간에 프리셋 서식 run 생성 (#70)
@@ -11785,11 +12027,13 @@
       if (style[b.getAttribute("data-style-builder")]) b.setAttribute("data-active", "1");
       else b.removeAttribute("data-active");
     });
-    const align = cleanupAlign(preset.align) || "left";
-    popover.querySelectorAll("[data-style-builder-align]").forEach((b) => {
-      if (b.getAttribute("data-style-builder-align") === align) b.setAttribute("data-active", "1");
-      else b.removeAttribute("data-active");
-    });
+    popover.setAttribute("data-ccf-builder-align", cleanupAlign(preset.align) || "left");
+    for (const key of ["rubyText", "tooltipText"]) {
+      const input = popover.querySelector(`[data-style-builder-input="${key}"]`);
+      const row = popover.querySelector(`[data-style-builder-extra="${key}"]`);
+      if (input) input.value = style[key] || "";
+      if (row) row.style.display = style[key] ? "flex" : "none";
+    }
     const colorInput = popover.querySelector("[data-style-builder-color]");
     if (colorInput) {
       if (style.color) { colorInput.value = style.color; colorInput.setAttribute("data-touched", "1"); }
@@ -11816,6 +12060,12 @@
     const input = popover.querySelector("[data-style-preset-name]");
     if (!(input instanceof HTMLElement)) return;
     const draft = collectStyleBuilderDraft(popover);
+    // Rb / Tip 버튼: 입력값이 있으면 켜진 표시(파랑)와 title 로 값을 보여 준다
+    for (const [key, label] of [["rubyText", "루비"], ["tooltipText", "툴팁"]]) {
+      const button = popover.querySelector(`[data-style-builder-text="${key}"]`);
+      const value = draft.style[key] || "";
+      if (button) { if (value) button.setAttribute("data-active", "1"); else button.removeAttribute("data-active"); button.title = value ? `${label}: ${value}` : (key === "rubyText" ? "루비 글자" : "툴팁 설명"); }
+    }
     input.style.cssText = "";
     const css = stylePresetPreviewCss(draft.style, draft.align);
     if (css) input.style.cssText = css;
@@ -11823,16 +12073,24 @@
 
   function addStylePresetFromBuilder(name, draft) {
     const cleanName = String(name || "").trim();
+    const popover = inlinePopoverState?.kind === "style-clipboard" ? inlinePopoverState.popover : null;
+    const notify = (message) => { if (!showStylePresetNote(popover, message)) alert(message); };
     if (!cleanName) {
-      alert("프리셋 이름을 입력해 주세요.");
+      notify("프리셋 이름을 입력해 주세요.");
       return false;
     }
     if (!draft || (!Object.keys(draft.style || {}).length && (draft.align || "left") === "left")) {
-      alert("저장할 서식을 하나 이상 선택해 주세요.");
+      notify("저장할 서식을 하나 이상 선택해 주세요.");
       return false;
     }
-    const list = readStylePresets().filter((p) => p.name !== cleanName);
-    list.push({ name: cleanName, style: draft.style, align: draft.align, savedAt: Date.now() });
+    const list = readStylePresets();
+    const at = list.findIndex((p) => p.name === cleanName);
+    const next = { name: cleanName, style: draft.style, align: draft.align, savedAt: Date.now() };
+    if (at >= 0) { // 같은 이름은 제자리에서 덮어쓴다(폴더·자동 적용 설정 유지)
+      if (list[at].folderId) next.folderId = list[at].folderId;
+      if (list[at].auto === false) next.auto = false;
+      list[at] = next;
+    } else list.push(next);
     return writeStylePresets(list);
   }
 
@@ -11873,10 +12131,7 @@
 
   function applyStylePresetToContext(context, preset) {
     if (!preset) return false;
-    if (!context?.selection || context.selection.start === context.selection.end) {
-      alert("서식을 적용할 텍스트를 먼저 선택해 주세요.");
-      return false;
-    }
+    if (!context?.selection || context.selection.start === context.selection.end) return false; // 안내는 호출한 쪽이 모달 안에 보인다
     const clearedStyle = {
       bold: null, italic: null, underline: null, strike: null,
       rubyText: null, tooltipText: null, codeMode: null, blur: null,
