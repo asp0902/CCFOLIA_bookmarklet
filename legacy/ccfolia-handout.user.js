@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.107
+// @version      0.1.108
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.107",
+    version: "0.1.108",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -985,6 +985,11 @@
       pointer-events: none; display: none;
     }
     .container[data-open="1"] { display: block; }
+    /* "GM 도구" 창 탭 안에 임베드: 창 크기를 채우고 따로 떠 있는 창의 위치·크기·닫기·리사이즈 손잡이는 쓰지 않는다 */
+    .container[data-embedded="1"] { position: absolute; inset: 0; z-index: auto; pointer-events: auto; }
+    .container[data-embedded="1"] .panel { position: absolute !important; inset: 0; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; box-shadow: none; background-color: transparent; }
+    .container[data-embedded="1"] [data-resize-handle], .container[data-embedded="1"] header [data-action="close"] { display: none !important; }
+    .container[data-embedded="1"] header { cursor: default; }
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
@@ -3321,7 +3326,42 @@
     toastTimer = setTimeout(() => el.removeAttribute("data-visible"), 1600);
   }
 
-  async function openPanel() {
+  // 핸드아웃은 "GM 도구" 창(toolkit-presence)의 핸드아웃 탭 안에 그려진다. 그 창을 쓸 수 없으면 예전처럼 따로 뜨는 창.
+  function toolsApi() {
+    const registry = window.__CCF_TOOLKIT_MENU__;
+    return typeof registry?.openTool === "function" ? registry : null;
+  }
+
+  function openPanel() {
+    if (!state.embedded) {
+      const api = toolsApi();
+      if (api && api.openTool("handout")) return state.mountPromise || Promise.resolve();
+    }
+    return openPanelInternal();
+  }
+
+  function mountHandoutTool(container) {
+    state.embedded = true;
+    ensureRoot();
+    state.root.setAttribute("data-embedded", "1");
+    state.root.style.cssText = "position:absolute;inset:0;display:block";
+    state.shadow.querySelector(".container")?.setAttribute("data-embedded", "1");
+    container.appendChild(state.root);
+    state.mountPromise = openPanelInternal();
+    state.mountPromise.catch(() => {});
+  }
+
+  function unmountHandoutTool() {
+    state.embedded = false;
+    state.isOpen = false;
+    state.editingId = null;
+    try { closeAddChoiceDialog(); } catch (error) { /* 정리 실패는 무시 */ }
+    state.root?.remove();
+    state.root = null;
+    state.shadow = null;
+  }
+
+  async function openPanelInternal() {
     ensureRoot();
     // 룸 변경 감지
     const room = getCurrentRoomKey();
@@ -3343,6 +3383,7 @@
   }
 
   function closePanel() {
+    if (state.embedded) { try { toolsApi()?.closeTool?.(); } catch (error) { /* 창 정리 실패는 무시 */ } return; }
     state.isOpen = false;
     state.editingId = null;
     closeAddChoiceDialog();
@@ -5232,7 +5273,7 @@
   function mountIcon() {
     if (!isActive()) return;
     document.querySelectorAll(`[${ICON_MARKER}="toolbar"], [${ICON_MARKER}="appbar"], [${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
-    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "handout", order: 2, label: "핸드아웃", icon: JOURNAL_ICON_HTML, visible: isActive, onClick: togglePanel });
+    (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "handout", order: 2, label: "핸드아웃", icon: JOURNAL_ICON_HTML, visible: isActive, onClick: togglePanel, mount: mountHandoutTool, unmount: unmountHandoutTool });
   }
 
   // React 리렌더 대응 — body 변경 감시

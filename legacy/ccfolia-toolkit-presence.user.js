@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.7
+// @version      0.0.8
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -83,11 +83,13 @@
   }
 
   // ---- 룸 상단 툴바의 "카피바라 도구" 펭귄 메뉴 ----
-  // 버튼·메뉴는 여기서만 만든다. 각 기능 스크립트는 로드 순서와 무관하게 window.__CCF_TOOLKIT_MENU__.register({ id, label, icon, visible(), badge?(), onClick() }) 로 항목만 등록한다
+  // 버튼·창은 여기서만 만든다. 각 기능 스크립트는 로드 순서와 무관하게 window.__CCF_TOOLKIT_MENU__.register({ id, order, label, icon, visible(), badge?(), onClick(), mount?(container), unmount?() }) 로 항목만 등록한다.
+  // mount 가 있는 항목은 "GM 도구" 창의 탭이 되어 mount(container)로 자기 내용을 탭 본문에 그린다(탭을 바꾸거나 창을 닫으면 unmount()). mount 가 없는 항목은 예전처럼 메뉴 항목.
+  // 창을 코드로 열려면 registry.openTool(id)(그 탭으로 열기) / closeTool() / isToolOpen().
   // (레지스트리 객체는 먼저 로드된 쪽이 만들고, 여기서는 sync 를 붙인다). 항목이 하나도 보이지 않으면 버튼을 숨긴다.
   const MENU_BUTTON_ATTR = "data-ccf-toolkit-menu-button";
-  // 사용자 제공 이미지(docs/img/penguin-ref.png)의 윤곽을 따라 만든 오른쪽 옆모습 실루엣(tools/gen-penguin-svg.cjs): 몸 전체가 currentColor, 배와 눈 흰자는 evenodd 구멍, 눈동자는 그 안의 섬.
-  const PENGUIN_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.73 2L14.48 2.01L15.26 2.25L15.76 2.51L17.02 3.38L18.62 3.95L19.03 4.31L19.21 4.7L17.99 4.85L17.23 5.05L15.74 5.84L15.41 6.09L15.41 6.75L16.2 7.79L16.48 8.4L16.72 9.37L16.75 10.39L16.59 11.94L16.59 12.83L16.67 13.49L16.62 14.85L16.46 15.79L16.04 17.18L15.62 18.07L15.33 18.49L15.11 18.66L14.71 18.66L14.65 18.76L14.36 20.07L13.68 21.3L13.68 21.93L13.87 22.15L14.11 22.26L15 22.28L15.47 22.41L16 22.7L16.25 22.95L16.33 23.16L15.5 23.15L15.47 23.36L15.19 23.28L14.45 23.28L14.29 23.51L13.77 23.31L13.14 23.31L13.11 23.41L12.41 23.38L12.35 23.75L11.44 23.75L11.41 23.96L10.75 23.8L10.05 23.8L9.86 24.01L9.36 23.88L8.68 23.88L8.66 23.99L8.18 23.72L7.96 23.4L7.99 22.16L7.7 22.06L7.44 21.35L6.99 19.41L6.78 17.97L6.13 17.97L5.73 19.04L5.33 19.5L5.22 19.56L4.96 19.53L4.79 19.15L4.82 18.07L5 16.47L5.5 14.09L6.07 12.38L6.94 10.68L7.73 8.77L8.49 7.66L10.19 6.12L10.92 4.1L11.5 3.15L11.96 2.69L12.43 2.38L13.04 2.12L13.72 2.01ZM14.57 5.25L14.83 5.33L14.54 5.62L14.44 5.83L14.44 6.85L15.28 8.11L15.59 8.71L15.88 9.68L15.96 10.65L15.67 12.36L14.75 15.64L13.65 18.99L13.1 20.25L12.04 20.21L11.46 20.47L9.89 20.47L9.55 20.63L9.18 21.02L8.54 20.22L8.25 19.54L7.99 17.94L8.01 16.84L8.17 15.69L8.36 14.9L9.22 12.8L9.27 11.39L9.19 10.97L9.48 10.23L10.02 9.56L11.12 8.73L12.18 7.64L12.63 7.01L13.02 6.06L13.25 5.79L13.77 5.45L14.56 5.26ZM14.75 3.28L14.98 3.27L15.21 3.38L15.54 3.76L15.08 4.06L14.64 4.01L14.28 3.63L14.53 3.38L14.74 3.3ZM14.63 3.66a0.29 0.29 0 1 0 0.58 0a0.29 0.29 0 1 0 -0.58 0Z"/></svg>';
+  // 사용자 제공 이미지(docs/img/penguin-ref.png)의 윤곽을 따라 만든 오른쪽 옆모습 실루엣(tools/gen-penguin-svg.cjs): 몸 전체가 currentColor, 배와 눈 흰자는 evenodd 구멍(흰자는 동공과 같은 중심의 원, 반지름 1.9배), 눈동자는 그 안의 섬.
+  const PENGUIN_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.73 2L14.48 2.01L15.26 2.25L15.76 2.51L17.02 3.38L18.62 3.95L19.03 4.31L19.21 4.7L17.99 4.85L17.23 5.05L15.74 5.84L15.41 6.09L15.41 6.75L16.2 7.79L16.48 8.4L16.72 9.37L16.75 10.39L16.59 11.94L16.59 12.83L16.67 13.49L16.62 14.85L16.46 15.79L16.04 17.18L15.62 18.07L15.33 18.49L15.11 18.66L14.71 18.66L14.65 18.76L14.36 20.07L13.68 21.3L13.68 21.93L13.87 22.15L14.11 22.26L15 22.28L15.47 22.41L16 22.7L16.25 22.95L16.33 23.16L15.5 23.15L15.47 23.36L15.19 23.28L14.45 23.28L14.29 23.51L13.77 23.31L13.14 23.31L13.11 23.41L12.41 23.38L12.35 23.75L11.44 23.75L11.41 23.96L10.75 23.8L10.05 23.8L9.86 24.01L9.36 23.88L8.68 23.88L8.66 23.99L8.18 23.72L7.96 23.4L7.99 22.16L7.7 22.06L7.44 21.35L6.99 19.41L6.78 17.97L6.13 17.97L5.73 19.04L5.33 19.5L5.22 19.56L4.96 19.53L4.79 19.15L4.82 18.07L5 16.47L5.5 14.09L6.07 12.38L6.94 10.68L7.73 8.77L8.49 7.66L10.19 6.12L10.92 4.1L11.5 3.15L11.96 2.69L12.43 2.38L13.04 2.12L13.72 2.01ZM14.57 5.25L14.83 5.33L14.54 5.62L14.44 5.83L14.44 6.85L15.28 8.11L15.59 8.71L15.88 9.68L15.96 10.65L15.67 12.36L14.75 15.64L13.65 18.99L13.1 20.25L12.04 20.21L11.46 20.47L9.89 20.47L9.55 20.63L9.18 21.02L8.54 20.22L8.25 19.54L7.99 17.94L8.01 16.84L8.17 15.69L8.36 14.9L9.22 12.8L9.27 11.39L9.19 10.97L9.48 10.23L10.02 9.56L11.12 8.73L12.18 7.64L12.63 7.01L13.02 6.06L13.25 5.79L13.77 5.45L14.56 5.26ZM14.37 3.66a0.55 0.55 0 1 0 1.1 0a0.55 0.55 0 1 0 -1.1 0ZM14.63 3.66a0.29 0.29 0 1 0 0.58 0a0.29 0.29 0 1 0 -0.58 0Z"/></svg>';
   const menuState = { button: null, menu: null, frame: 0 };
 
   function toolkitMenuItems() {
@@ -140,7 +142,144 @@
     menu.querySelector("button")?.focus();
   }
 
+  // ---- GM 도구 창: 코코포리아 기본 모달 모양(paper rgba(44,44,44,.87), 모서리 4px, MUI 그림자), 제목 "GM 도구", 탭(MUI Tabs 밑줄 파랑), 마지막 탭 기억 ----
+  // 시트로 채팅을 보내며 쓰는 창이라 배경을 가리는 백드롭은 없고 제목줄을 끌어 옮길 수 있다.
+  const TOOLS_TAB_KEY = "ccfGmToolsTab";
+  const toolsState = { host: null, tab: "", mounted: null, tabsKey: "", pos: { x: 0, y: 0 } };
+
+  function toolTabs() { return toolkitMenuItems().filter((item) => typeof item.mount === "function"); }
+
+  function rememberedToolTab() { try { return localStorage.getItem(TOOLS_TAB_KEY) || ""; } catch (_) { return ""; } }
+
+  function ensureToolsStyle() {
+    if (document.getElementById("ccf-gm-tools-style")) return;
+    const style = document.createElement("style");
+    style.id = "ccf-gm-tools-style";
+    style.setAttribute(SAFE_UI_ATTR, "1");
+    style.textContent = `
+      #ccf-gm-tools{position:fixed;inset:0;z-index:2147482999;pointer-events:none;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,sans-serif;color:#fff}
+      #ccf-gm-tools .ccf-gt-window,#ccf-gm-tools .ccf-gt-window>*{box-sizing:border-box}
+      #ccf-gm-tools .ccf-gt-window{position:absolute;inset:10px;margin:auto;width:min(900px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px));pointer-events:auto;display:flex;flex-direction:column;background:rgba(44,44,44,.87);background-image:none;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden}
+      #ccf-gm-tools .ccf-gt-window>header{display:flex;align-items:center;flex:0 0 auto;min-height:64px;padding:0 16px 0 24px;background:#212121;cursor:move;user-select:none;touch-action:none}
+      #ccf-gm-tools .ccf-gt-window>header>h2{margin:0;flex:1;font-size:1.25rem;font-weight:700;line-height:1.6;letter-spacing:.0075em}
+      #ccf-gm-tools .ccf-gt-close,#ccf-gm-tools .ccf-gt-tab{font:inherit;color:inherit}
+      #ccf-gm-tools .ccf-gt-close{all:unset;box-sizing:border-box;cursor:pointer;width:40px;height:40px;display:inline-grid;place-items:center;border-radius:50%;transition:background-color 150ms}
+      #ccf-gm-tools .ccf-gt-close:hover{background:rgba(255,255,255,.08)}
+      #ccf-gm-tools .ccf-gt-close svg{width:24px;height:24px;fill:currentColor}
+      #ccf-gm-tools .ccf-gt-tabs{display:flex;flex:0 0 auto;min-height:48px;background:#212121;border-bottom:1px solid rgba(255,255,255,.12)}
+      #ccf-gm-tools .ccf-gt-tab{all:unset;box-sizing:border-box;position:relative;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:6px 16px;font-size:14px;font-weight:700;color:rgba(255,255,255,.7)}
+      #ccf-gm-tools .ccf-gt-tab:hover{background:rgba(255,255,255,.06)}
+      #ccf-gm-tools .ccf-gt-tab[aria-selected="true"]{color:#fff}
+      #ccf-gm-tools .ccf-gt-tab[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#2196f3}
+      #ccf-gm-tools .ccf-gt-tab svg{width:20px;height:20px}
+      #ccf-gm-tools .ccf-gt-tab .ccf-gt-badge{min-width:18px;padding:0 5px;border-radius:9px;background:#f50057;color:#fff;font-size:11px;text-align:center}
+      #ccf-gm-tools .ccf-gt-body{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function renderToolTabs() {
+    const bar = toolsState.host?.querySelector(".ccf-gt-tabs");
+    if (!bar) return;
+    const tabs = toolTabs();
+    const key = tabs.map((item) => `${item.id}:${item.label}`).join("|");
+    bar.hidden = tabs.length < 2; // 보이는 탭이 하나면 탭 줄 없이 그 내용만
+    if (toolsState.tabsKey !== key) {
+      toolsState.tabsKey = key;
+      bar.textContent = "";
+      for (const item of tabs) {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "ccf-gt-tab";
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("data-ccf-tool-tab", item.id);
+        tab.innerHTML = `<span>${escapeHtml(item.label)}</span>`;
+        tab.addEventListener("click", () => showToolTab(item.id), { signal: abort.signal });
+        bar.appendChild(tab);
+      }
+      bar.setAttribute("role", "tablist");
+    }
+    bar.querySelectorAll(".ccf-gt-tab").forEach((tab) => {
+      const selected = tab.getAttribute("data-ccf-tool-tab") === toolsState.tab;
+      if (tab.getAttribute("aria-selected") !== String(selected)) tab.setAttribute("aria-selected", String(selected));
+    });
+  }
+
+  function unmountTool() {
+    const item = toolsState.mounted;
+    toolsState.mounted = null;
+    if (!item) return;
+    try { item.unmount?.(); } catch (error) { console.warn("[toolkit-menu] unmount failed", error); }
+    const body = toolsState.host?.querySelector(".ccf-gt-body");
+    if (body) body.textContent = "";
+  }
+
+  function showToolTab(id) {
+    const item = toolTabs().find((entry) => entry.id === id);
+    const body = toolsState.host?.querySelector(".ccf-gt-body");
+    if (!item || !body) return false;
+    if (toolsState.mounted?.id === id) { toolsState.tab = id; renderToolTabs(); return true; }
+    unmountTool();
+    toolsState.tab = id;
+    try { localStorage.setItem(TOOLS_TAB_KEY, id); } catch (_) { /* 저장 불가 */ }
+    renderToolTabs();
+    toolsState.mounted = item;
+    try { item.mount(body); } catch (error) { console.warn("[toolkit-menu] mount failed", error); }
+    return true;
+  }
+
+  function openGmTools(tabId) {
+    const tabs = toolTabs();
+    if (!tabs.length) return false;
+    const wanted = tabs.find((item) => item.id === tabId) || tabs.find((item) => item.id === rememberedToolTab()) || tabs[0];
+    if (!toolsState.host) {
+      closeToolkitMenu();
+      ensureToolsStyle();
+      const host = document.createElement("div");
+      host.id = "ccf-gm-tools";
+      host.setAttribute(SAFE_UI_ATTR, "1");
+      host.innerHTML = '<section class="ccf-gt-window" role="dialog" aria-label="GM 도구"><header><h2>GM 도구</h2><button type="button" class="ccf-gt-close" aria-label="닫기" title="닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></header><nav class="ccf-gt-tabs" hidden></nav><div class="ccf-gt-body"></div></section>';
+      host.querySelector(".ccf-gt-close").addEventListener("click", () => closeGmTools(), { signal: abort.signal });
+      host.addEventListener("keydown", (event) => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); closeGmTools(); menuState.button?.focus(); } }, { signal: abort.signal });
+      const win = host.querySelector(".ccf-gt-window");
+      win.style.transform = `translate3d(${toolsState.pos.x}px,${toolsState.pos.y}px,0)`;
+      host.querySelector("header").addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest("button")) return;
+        event.preventDefault();
+        const start = { x: event.clientX, y: event.clientY, pos: { ...toolsState.pos } };
+        const move = (next) => { toolsState.pos = { x: start.pos.x + next.clientX - start.x, y: start.pos.y + next.clientY - start.y }; win.style.transform = `translate3d(${toolsState.pos.x}px,${toolsState.pos.y}px,0)`; };
+        const stop = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", stop); document.removeEventListener("pointercancel", stop); };
+        document.addEventListener("pointermove", move); document.addEventListener("pointerup", stop); document.addEventListener("pointercancel", stop);
+      }, { signal: abort.signal });
+      document.documentElement.appendChild(host);
+      toolsState.host = host;
+      toolsState.tabsKey = "";
+      menuState.button?.setAttribute("aria-expanded", "true");
+    }
+    return showToolTab(wanted.id);
+  }
+
+  function closeGmTools() {
+    if (!toolsState.host) return;
+    unmountTool();
+    toolsState.host.remove();
+    toolsState.host = null;
+    toolsState.tab = "";
+    toolsState.tabsKey = "";
+    menuState.button?.setAttribute("aria-expanded", "false");
+  }
+
+  // 항목 목록이 바뀌었을 때(방 이동, 인세인 룸이 아니게 됨 등) 열린 창을 맞춘다
+  function syncGmTools() {
+    if (!toolsState.host) return;
+    const tabs = toolTabs();
+    if (!tabs.length) { closeGmTools(); return; }
+    if (!tabs.some((item) => item.id === toolsState.tab)) { showToolTab(tabs[0].id); return; }
+    renderToolTabs();
+  }
+
   function syncToolkitMenu() {
+    syncGmTools();
     const items = toolkitMenuItems();
     const anchor = items.length && isCcfoliaRoom() ? findMenuAnchor() : null;
     if (!anchor?.parentElement) {
@@ -153,13 +292,13 @@
       button.type = "button";
       button.setAttribute(MENU_BUTTON_ATTR, "1");
       button.setAttribute(SAFE_UI_ATTR, "1");
-      button.setAttribute("aria-label", "카피바라 도구");
-      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-label", "GM 도구");
+      button.setAttribute("aria-haspopup", "dialog");
       button.setAttribute("aria-expanded", "false");
-      button.title = "카피바라 도구";
+      button.title = "GM 도구";
       button.className = anchor.className;
       button.innerHTML = PENGUIN_SVG;
-      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); menuState.menu ? closeToolkitMenu() : openToolkitMenu(); }, { signal: abort.signal });
+      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); if (toolTabs().length) { toolsState.host ? closeGmTools() : openGmTools(); } else { menuState.menu ? closeToolkitMenu() : openToolkitMenu(); } }, { signal: abort.signal });
       menuState.button = button;
     }
     const button = menuState.button;
@@ -179,6 +318,9 @@
   function startToolkitMenu() {
     const registry = (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } });
     registry.sync = scheduleToolkitMenuSync;
+    registry.openTool = (id) => openGmTools(id);
+    registry.closeTool = () => closeGmTools();
+    registry.isToolOpen = () => !!toolsState.host;
     const style = document.createElement("style");
     style.setAttribute(SAFE_UI_ATTR, "1");
     style.textContent = `[${MENU_BUTTON_ATTR}][data-badge="1"]{position:relative}[${MENU_BUTTON_ATTR}][data-badge="1"]::after{content:"";position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:#f50057}`;
@@ -190,7 +332,7 @@
     observer.observe(document.body, { childList: true, subtree: true });
     document.addEventListener("mousedown", (event) => { if (menuState.menu && !menuState.menu.contains(event.target) && !menuState.button?.contains(event.target)) closeToolkitMenu(); }, { capture: true, signal: abort.signal });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuState.menu) { event.stopPropagation(); closeToolkitMenu(); menuState.button?.focus(); } }, { capture: true, signal: abort.signal });
-    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); menuState.button?.remove(); style.remove(); }, { once: true });
+    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); closeGmTools(); document.getElementById("ccf-gm-tools-style")?.remove(); menuState.button?.remove(); style.remove(); }, { once: true });
     scheduleToolkitMenuSync();
   }
 

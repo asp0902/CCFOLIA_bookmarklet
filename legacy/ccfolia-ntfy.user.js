@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Phone Push (ntfy) by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-ntfy
-// @version      0.1.0
+// @version      0.1.1
 // @description  Sends a phone push (ntfy) for new room messages when you are away — the bookmarklet path of the extension's ntfy feature.
 // @description:ko 룸에 새 메시지가 오면(자리를 비운 동안) 스마트폰 ntfy 앱으로 알림을 보냅니다. 확장의 스마트폰 알림과 같은 기능의 북마클릿용 경로입니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -111,13 +111,16 @@
   };
 
   // ---- 설정 창 (펭귄 메뉴 → 스마트폰 알림)
-  function openSettings() {
+  // container 가 있으면 "GM 도구" 창의 탭 본문에 그린다(따로 뜨는 창 아님).
+  function openSettings(container) {
+    if (!(container instanceof Element)) container = null;
     document.getElementById("ccf-ntfy-dialog")?.remove();
     const config = readConfig();
     const box = document.createElement("div");
     box.id = "ccf-ntfy-dialog";
     box.setAttribute(SAFE, "1");
-    box.style.cssText = "position:fixed;inset:0;z-index:2147483600;display:grid;place-items:center;background:rgba(0,0,0,.5);font:14px/1.5 'Noto Sans KR',Roboto,sans-serif";
+    box.style.cssText = container ? "position:absolute;inset:0;overflow:auto;display:grid;place-items:start center;padding:16px;font:14px/1.5 'Noto Sans KR',Roboto,sans-serif" : "position:fixed;inset:0;z-index:2147483600;display:grid;place-items:center;background:rgba(0,0,0,.5);font:14px/1.5 'Noto Sans KR',Roboto,sans-serif";
+    const dismiss = () => { if (container) window.__CCF_TOOLKIT_MENU__?.closeTool?.(); else box.remove(); };
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     box.innerHTML = `<form style="width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:20px 24px;background:#222;color:#fff;border-radius:4px;box-shadow:0 11px 15px -7px rgba(0,0,0,.2),0 24px 38px 3px rgba(0,0,0,.14)">
       <h3 style="margin:0 0 8px;font-size:1.25rem;font-weight:500">스마트폰 알림</h3>
@@ -153,7 +156,7 @@
     form.addEventListener("submit", (event) => { event.preventDefault(); save(); });
     form.addEventListener("click", async (event) => {
       const action = event.target.closest("[data-a]")?.dataset.a;
-      if (action === "close") box.remove();
+      if (action === "close") dismiss();
       else if (action === "new") { form.topic.value = randomTopic(); note("새 topic 입니다. 저장한 뒤 핸드폰 앱에서 다시 구독하세요."); }
       else if (action === "copy") { try { await navigator.clipboard.writeText(form.topic.value.trim()); note("topic 이름을 복사했습니다."); } catch (_) { form.topic.select(); note("복사하지 못했습니다. 선택된 이름을 직접 복사하세요.", true); } }
       else if (action === "test") {
@@ -164,13 +167,13 @@
         catch (error) { note(`보내지 못했습니다: ${error.message || error}`, true); }
       }
     });
-    box.addEventListener("mousedown", (event) => { if (event.target === box) box.remove(); });
-    box.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.stopPropagation(); box.remove(); } event.stopPropagation(); });
-    document.documentElement.appendChild(box);
+    box.addEventListener("mousedown", (event) => { if (event.target === box && !container) box.remove(); });
+    box.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.stopPropagation(); dismiss(); } event.stopPropagation(); });
+    (container || document.documentElement).appendChild(box);
     form.topic.focus();
   }
 
   (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } })
-    .register({ id: "ntfy", order: 3, label: "스마트폰 알림", icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>', visible: () => true, onClick: openSettings });
+    .register({ id: "ntfy", order: 3, label: "스마트폰 알림", icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>', visible: () => true, onClick: () => openSettings(), mount: (container) => openSettings(container), unmount: () => { document.getElementById("ccf-ntfy-dialog")?.remove(); } });
   window.__CCF_NTFY_DIAG__ = () => ({ config: { ...readConfig(), topic: readConfig().topic ? "(설정됨)" : "" }, state: { ...state, sent: state.sent.length } });
 })();
