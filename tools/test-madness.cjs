@@ -46,7 +46,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-madness.u
       await set(page, 49); assert.equal(await card(page), null, '−1 is not enough');
       await set(page, 45);
       c = await card(page); assert.deepEqual(c.buttons, ['indefinite', 'close']); assert.match(c.text, /오늘 누적 −12/);
-      await page.locator('[data-cmd="indefinite"]').click(); assert.deepEqual(await page.evaluate(() => window.__sent), ['TI', 'II']);
+      await page.locator('[data-cmd="indefinite"]').click(); assert.deepEqual(await page.evaluate(() => window.__sent), ['TI', 'LI']);
       // after an indefinite alert the base is the new value: −7 more is not enough, −9 (≥ 1/5 of 45) is
       await set(page, 42); assert.equal(await card(page), null); await set(page, 38); assert.equal(await card(page), null, 'cumulative 7 < 9'); await set(page, 36); assert.deepEqual((await card(page)).buttons, ['indefinite', 'close'], 'cumulative 9 >= 45/5, only 2 at once');
       assert.deepEqual(page.__errors, []); await page.close();
@@ -55,6 +55,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-madness.u
     { const page = await open({ system: 'Insane' }); await set(page, 40); assert.equal(await card(page), null, 'only Cthulhu rooms'); await page.close(); }
     { const page = await open({ charOwner: 'other' }); await set(page, 40); assert.equal(await card(page), null, 'not mine, not GM'); await page.close(); }
     { const page = await open({ charOwner: 'other', owner: 'me' }); await set(page, 40); assert.deepEqual((await card(page)).buttons, ['temporary', 'indefinite', 'close'], 'the GM sees other people\'s characters'); await page.close(); }
+    // a 6th-edition room (no TI/LI tables): the card still alerts but offers no table buttons
+    { const page = await open({ system: 'Cthulhu' }); await set(page, 40); assert.deepEqual((await card(page)).buttons, ['close'], '6th edition: no table buttons'); await page.close(); }
     // a baseline from yesterday is replaced by the first value seen today
     { const page = await open({ pre: { 'ccf-madness-v1:r1': JSON.stringify({ chars: { c1: { day: '2000-01-01', base: 100 } }, commands: {} }) } }); await set(page, 55); assert.equal(await card(page), null, '−2 against today\'s first value 57 (not yesterday\'s 100)'); await page.close(); }
     console.log('madness PASS');

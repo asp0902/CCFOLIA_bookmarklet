@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Madness Alert (Cthulhu rooms) by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-madness
-// @version      0.1.0
+// @version      0.1.1
 // @description  Cthulhu rooms only: when a character loses 5 or more SAN at once, or 1/5 or more of the SAN it had when first seen today, a small card offers the madness table commands (nothing is sent by itself).
 // @description:ko 크툴루 룸에서만: 캐릭터의 SAN 이 한 번에 5 이상, 또는 오늘 처음 본 값의 1/5 이상 줄면 작은 알림 카드로 광기 표 커맨드를 제안합니다(자동 전송 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,10 +22,11 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.0";
+  const VERSION = "0.1.1";
   const SAFE_ATTR = "data-capybara-toolkit-madness";
   const SAN_RE = /^(san|san値|sanity|이성|이성치|이성값|正気度|sanチェック)$/i;
-  const DEFAULT_COMMANDS = { temporary: "TI", indefinite: "II" };
+  // BCDice Cthulhu7th 도움말: TI = 狂気の発作(リアルタイム, 일시적 광기), LI = 狂気の発作(サマリー, 부정기 광기 쪽 요약표). 6판(Cthulhu)에는 이 표가 없을 수 있다.
+  const DEFAULT_COMMANDS = { temporary: "TI", indefinite: "LI" };
 
   try { window.__CCF_MADNESS__?.disable?.(); } catch (error) { /* 이전 인스턴스 정리 실패 */ }
   const abort = new AbortController();
@@ -82,7 +83,7 @@
     const room = roomId ? snapshot?.entities?.rooms?.entities?.[roomId] : null;
     if (!roomId || !room) return null;
     const system = String(room.diceBotSystem || room.system || "");
-    return { snapshot, roomId, room, uid: snapshot?.app?.user?.uid || "", cthulhu: /cthulhu|coc|크툴루|クトゥルフ/i.test(system) };
+    return { snapshot, roomId, room, uid: snapshot?.app?.user?.uid || "", table: /7th|7版|7판/i.test(system), cthulhu: /cthulhu|coc|크툴루|クトゥルフ/i.test(system) };
   }
 
   function scan() {
@@ -109,7 +110,7 @@
       data.chars[id] = result.record; writeStore(ctx.roomId, data);
       const mine = character.owner && character.owner === ctx.uid;
       const gm = ctx.room.owner && ctx.room.owner === ctx.uid;
-      if (result.alert && (mine || gm)) showCard({ id, name: String(character.name || "").trim() || "캐릭터", from: prev, to: san, ...result.alert, commands: data.commands });
+      if (result.alert && (mine || gm)) showCard({ id, name: String(character.name || "").trim() || "캐릭터", from: prev, to: san, ...result.alert, commands: data.commands, table: ctx.table });
     }
     for (const id of [...state.last.keys()]) if (!seen.has(id)) state.last.delete(id);
   }
@@ -140,7 +141,7 @@
     const reasons = [info.temporary ? `한 번에 −${info.drop}` : "", info.indefinite ? `오늘 누적 −${info.cumulative}(기준 ${info.base}의 1/5 이상)` : ""].filter(Boolean).join(" · ");
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     card.innerHTML = `<div style="font-weight:700;margin-bottom:2px">광기 발현 판정</div><div style="color:rgba(255,255,255,.85)">[${esc(info.name)}] SAN ${info.from} → ${info.to}</div><div style="color:rgba(255,255,255,.6);font-size:12px">${esc(reasons)}</div>
-      <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap">${info.temporary ? `<button type="button" data-cmd="temporary">일시적 광기 표</button>` : ""}${info.indefinite ? `<button type="button" data-cmd="indefinite">부정기 광기 표</button>` : ""}<button type="button" data-cmd="close">닫기</button></div>`;
+      <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap">${info.table ? `${info.temporary ? `<button type="button" data-cmd="temporary">일시적 광기 표</button>` : ""}${info.indefinite ? `<button type="button" data-cmd="indefinite">부정기 광기 표</button>` : ""}` : `<span style="flex:1;font-size:12px;color:rgba(255,255,255,.6)">이 룸의 시스템(6판 등)에는 광기 표 커맨드가 없을 수 있어 직접 굴려 주세요.</span>`}<button type="button" data-cmd="close">닫기</button></div>`;
     for (const button of card.querySelectorAll("button")) button.style.cssText = "all:unset;box-sizing:border-box;cursor:pointer;padding:4px 8px;border-radius:4px;color:#64b5f6;font:500 13px Roboto,'Noto Sans KR',sans-serif;text-transform:none";
     card.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-cmd]");
