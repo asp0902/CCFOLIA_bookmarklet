@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.100
+// @version      0.1.101
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.100"),
+    version: getUserscriptVersion("0.1.101"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4199,13 +4199,20 @@
         display: flex; align-items: center; gap: 4px; margin-top: 6px;
       }
       .ccf-style-preset-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
+      /* 프리셋 행의 자동 적용: 작은 MUI 스위치(트랙 28×14, 손잡이 둥글게, 켜짐=파랑·꺼짐=회색). 행 높이는 늘리지 않는다. */
       .ccf-style-preset-auto-dot {
-        all: unset; box-sizing: border-box; cursor: pointer;
-        width: 10px; height: 10px; flex: 0 0 10px; border-radius: 0;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        margin-right: 2px;
+        all: unset; box-sizing: border-box; position: relative; cursor: pointer;
+        width: 28px; height: 14px; flex: 0 0 28px; border-radius: 7px;
+        background: rgba(255, 255, 255, 0.3);
+        margin: 0 4px 0 2px; transition: background-color 120ms;
       }
-      .ccf-style-preset-auto-dot[data-on="1"] { background: #ff0000; border-color: #ff0000; }
+      .ccf-style-preset-auto-dot::after {
+        content: ""; position: absolute; top: 1px; left: 1px; width: 12px; height: 12px; border-radius: 50%;
+        background: #bdbdbd; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); transition: transform 120ms, background-color 120ms;
+      }
+      .ccf-style-preset-auto-dot[data-on="1"] { background: rgba(33, 150, 243, 0.5); }
+      .ccf-style-preset-auto-dot[data-on="1"]::after { transform: translateX(14px); background: #2196f3; }
+      .ccf-style-preset-auto-dot:focus-visible { outline: 2px solid #64b5f6; outline-offset: 2px; }
       .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; width: min(380px, calc(100vw - 24px)); }
       .ccf-style-preset-title-row {
         display: flex; align-items: center; justify-content: space-between; gap: 4px;
@@ -4213,24 +4220,28 @@
       .ccf-style-preset-title-row .ccf-style-preset-remove { font-size: 16px; }
       .ccf-style-builder { display: flex; flex-direction: column; gap: 4px; }
       .ccf-style-builder-row { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+      /* 빌더 줄의 모든 컨트롤: 28×28(크기 칸은 40×28), 같은 외곽선·배경. 활성(data-active)만 파랑. 색 칸은 둘 다 28×28 + 안쪽 16×16 칩(서식 바 색 칩과 같은 모양). */
       .ccf-style-builder-row .ccf-toggle {
-        min-width: 28px; width: 28px; height: 28px; padding: 0;
-        border-radius: 0; font-size: 12px;
+        box-sizing: border-box; min-width: 28px; width: 28px; height: 28px; padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0; background: #282828; font-size: 12px;
       }
+      /* 서식 바 쪽의 ".ccf-toggle { border-width: 0 !important }" 가 빌더 줄 버튼의 외곽선까지 지우던 것을 되돌린다 */
+      .ccf-inline-toolbar .ccf-style-builder-row .ccf-toggle { border-width: 1px !important; }
       .ccf-style-builder-row .ccf-toggle[data-active="1"] {
-        background: rgba(33, 150, 243, 0.35); color: #fff;
+        background: rgba(33, 150, 243, 0.35); border-color: rgba(33, 150, 243, 0.8); color: #fff;
       }
-      .ccf-style-builder-color {
+      .ccf-style-builder-row .ccf-style-builder-color {
         position: relative;
-        width: 28px; height: 28px; flex: 0 0 28px;
+        width: 28px !important; height: 28px !important; min-width: 28px; flex: 0 0 28px; margin: 0; padding: 0;
         border: 1px solid rgba(255, 255, 255, 0.12);
         background: #282828;
-        box-sizing: border-box; overflow: hidden; cursor: pointer;
+        box-sizing: border-box !important; overflow: hidden; cursor: pointer;
       }
-      .ccf-style-builder-color::before {
+      .ccf-style-builder-row .ccf-style-builder-color::before {
         content: "";
-        position: absolute; inset: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        position: absolute; inset: auto; left: 50%; top: 50%;
+        width: 16px !important; height: 16px !important; transform: translate(-50%, -50%);
+        box-sizing: border-box; border: 0; box-shadow: inset 0 0 0 1px #808080;
         background: var(--ccf-chip-color, #ffffff);
         pointer-events: none;
       }
@@ -4238,7 +4249,12 @@
         position: absolute; inset: 0; width: 100%; height: 100%;
         opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0;
       }
-      .ccf-style-builder-size { width: auto; flex: 1 1 36px; min-width: 36px; max-width: 52px; min-height: 28px; padding: 0 4px; text-align: center; }
+      .ccf-style-builder-row .ccf-style-builder-size {
+        box-sizing: border-box; width: 40px; min-width: 40px; max-width: 40px; flex: 0 0 40px; height: 28px; min-height: 28px;
+        padding: 0 4px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0; background: #282828; color: #fff;
+        text-align: center; font-size: 12px; line-height: 1;
+      }
+      .ccf-style-builder-row .ccf-style-builder-size::placeholder { color: rgba(255, 255, 255, 0.4); }
 
       .ccf-inline-size-input {
         width: 44px;
@@ -5617,7 +5633,8 @@
           if (writeStylePresets(list)) {
             const on = preset.auto !== false;
             styleAction.setAttribute("data-on", on ? "1" : "0");
-            styleAction.setAttribute("title", `자동 적용 ${on ? "ON" : "OFF"} — 클릭으로 전환`);
+            styleAction.setAttribute("aria-checked", on ? "true" : "false");
+            styleAction.setAttribute("title", `자동 적용 ${on ? "켜짐" : "꺼짐"} — 클릭으로 전환`);
           }
           return;
         }
@@ -6844,7 +6861,7 @@
     const presets = readStylePresets();
     const rows = presets.map((p, i) => `
       <div class="ccf-style-preset-row">
-        <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${i}" data-on="${p.auto === false ? "0" : "1"}" title="자동 적용 ${p.auto === false ? "OFF" : "ON"} — 클릭으로 전환" aria-label="자동 적용 전환"></button>
+        <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${i}" data-on="${p.auto === false ? "0" : "1"}" role="switch" aria-checked="${p.auto === false ? "false" : "true"}" title="자동 적용 ${p.auto === false ? "꺼짐" : "켜짐"} — 클릭으로 전환" aria-label="자동 적용"></button>
         <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${i}" title="\uC120\uD0DD \uC601\uC5ED\uC5D0 \uC801\uC6A9" style="${escapeHtml(stylePresetPreviewCss(p.style, p.align))}">${escapeHtml(p.name)}</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${i}" title="\uD3B8\uC9D1 \u2014 \uC11C\uC2DD\uC744 \uC544\uB798 \uBE4C\uB354\uC5D0 \uBD88\uB7EC\uC634" aria-label="\uD3B8\uC9D1">\u270E</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${i}" title="\uC0AD\uC81C" aria-label="\uC0AD\uC81C">\u00D7</button>
