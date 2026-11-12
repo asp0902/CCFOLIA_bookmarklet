@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.19
+// @version      0.5.20
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
   const STYLE_ID = "ccf-character-sheet-style";
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
-  const VERSION = "0.5.19";
+  const VERSION = "0.5.20";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -370,7 +370,7 @@
 
   function makeData() {
     const sheet = makeSheet();
-    return { version: 1, selectedId: sheet.id, sheets: [sheet], permissions: {} };
+    return { version: 1, selectedId: sheet.id, sheets: [sheet], permissions: {}, scene: { cycle: 1, number: 0 } };
   }
 
   function normalizeData(value) {
@@ -387,7 +387,7 @@
     const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0].id;
     const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
     sheets.forEach((sheet) => { delete sheet.permissions; });
-    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions) };
+    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene) };
   }
 
   async function loadData(key) {
@@ -604,6 +604,11 @@
     const root = document.createElement("div");
     root.id = ROOT_ID;
     root.addEventListener("click", handleClick, { signal });
+    root.addEventListener("click", (event) => { if (!event.target.closest(".ccf-cs-menu-host, .ccf-cs-scene-form")) root.querySelectorAll(".ccf-cs-menu").forEach((node) => { node.remove(); root.querySelector('[data-action="scene-menu"]')?.setAttribute("aria-expanded", "false"); }); }, { signal, capture: true });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !root.querySelector(".ccf-cs-menu, .ccf-cs-scene-form")) return;
+      event.preventDefault(); event.stopPropagation(); closeSceneUi();
+    }, { signal, capture: true });
     root.addEventListener("input", handleInput, { signal });
     root.addEventListener("change", handleInput, { signal });
     document.body.appendChild(root);
@@ -619,7 +624,7 @@
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => `<button data-command="${command}">${label}</button>`).join("")}<button data-action="fear-roll">공포판정</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">회피</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${label}</button></span>` : `<button data-command="${command}">${label}</button>`).join("")}<button data-action="fear-roll">공포판정</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">회피</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
@@ -741,6 +746,93 @@
     saveSoon();
     render();
     writeChat(text, true, { keepOpen: true });
+  }
+
+  // ---- 하단 '장면표' 메뉴: 장면열기 ▸ 드라마/전투 장면, 장면닫기, 장면표(ST) ----
+  // 장면열기/닫기는 채팅 메시지(【드라마 장면 #1-2】 등장인물: … / 배경: …)로 보내고, 인세인 테마에서는 theme-switcher 가 장면표 카드처럼 꺾쇠 카드로 보여 준다.
+  const SCENE_KINDS = Object.freeze({ drama: ["드라마 장면", "배경"], battle: ["전투 장면", "대전 상대"] });
+
+  function normalizeScene(value) {
+    const cycle = Math.floor(Number(value?.cycle));
+    const number = Math.floor(Number(value?.number));
+    return { cycle: cycle >= 1 ? cycle : 1, number: number >= 0 ? number : 0 };
+  }
+
+  function sceneOpenMessage(kind, cycle, number, cast, detail) {
+    const [title, detailLabel] = SCENE_KINDS[kind] || SCENE_KINDS.drama;
+    const parts = [];
+    if (String(cast || "").trim()) parts.push(`등장인물: ${String(cast).trim()}`);
+    if (String(detail || "").trim()) parts.push(`${detailLabel}: ${String(detail).trim()}`);
+    return `【${title} #${cycle}-${number}】${parts.length ? ` ${parts.join(" / ")}` : ""}`;
+  }
+
+  const SCENE_CLOSE_MESSAGE = "【장면 종료】";
+
+  function closeSceneUi() {
+    const root = document.getElementById(ROOT_ID);
+    root?.querySelectorAll(".ccf-cs-menu, .ccf-cs-scene-form").forEach((node) => node.remove());
+    root?.querySelector('[data-action="scene-menu"]')?.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleSceneMenu(button) {
+    const host = button.closest(".ccf-cs-menu-host");
+    if (!host) return;
+    if (host.querySelector(".ccf-cs-menu")) return closeSceneUi();
+    closeSceneUi();
+    const menu = document.createElement("div");
+    menu.className = "ccf-cs-menu";
+    menu.setAttribute("role", "menu");
+    menu.innerHTML = `<button type="button" role="menuitem" data-action="scene-open-submenu" aria-haspopup="menu" aria-expanded="false">장면열기<span aria-hidden="true">▸</span></button>`
+      + `<button type="button" role="menuitem" data-action="scene-close">장면닫기</button>`
+      + `<button type="button" role="menuitem" data-command="ST">장면표</button>`;
+    host.appendChild(menu);
+    button.setAttribute("aria-expanded", "true");
+    menu.querySelector("button")?.focus();
+  }
+
+  function toggleSceneSubmenu(button) {
+    const menu = button.closest(".ccf-cs-menu");
+    if (!menu) return;
+    const existing = menu.querySelector(".ccf-cs-submenu");
+    if (existing) { existing.remove(); button.setAttribute("aria-expanded", "false"); return; }
+    const sub = document.createElement("div");
+    sub.className = "ccf-cs-submenu";
+    sub.setAttribute("role", "menu");
+    sub.innerHTML = Object.entries(SCENE_KINDS).map(([kind, [title]]) => `<button type="button" role="menuitem" data-action="scene-form" data-kind="${kind}">${title}</button>`).join("");
+    button.after(sub);
+    button.setAttribute("aria-expanded", "true");
+    sub.querySelector("button")?.focus();
+  }
+
+  function openSceneForm(kind) {
+    closeSceneUi();
+    const dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`);
+    if (!dialog) return;
+    const sheet = currentSheet();
+    const scene = normalizeScene(state.data.scene);
+    const [title, detailLabel] = SCENE_KINDS[kind] || SCENE_KINDS.drama;
+    const form = document.createElement("form");
+    form.className = "ccf-cs-scene-form";
+    form.setAttribute("role", "dialog");
+    form.setAttribute("aria-label", `${title} 열기`);
+    form.dataset.kind = kind;
+    form.innerHTML = `<h3>${title} 열기</h3>`
+      + `<div class="ccf-cs-scene-numbers"><label>사이클<input type="number" min="1" name="cycle" value="${scene.cycle}"></label><label>장면<input type="number" min="0" name="number" value="${scene.number + 1}"></label></div>`
+      + `<label>등장인물<input name="cast" value="${escapeHtml(sheet.name || "")}"></label>`
+      + `<label>${detailLabel}<input name="detail" value=""></label>`
+      + `<div class="ccf-cs-scene-actions"><button type="button" data-action="scene-cancel">취소</button><button type="submit" data-action="scene-send">보내기</button></div>`;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = new FormData(form);
+      const cycle = Math.max(1, Math.floor(Number(data.get("cycle"))) || 1);
+      const number = Math.max(0, Math.floor(Number(data.get("number"))) || 0);
+      state.data.scene = { cycle, number };
+      saveSoon();
+      form.remove();
+      writeChat(sceneOpenMessage(kind, cycle, number, data.get("cast"), data.get("detail")), true, { keepOpen: true });
+    });
+    dialog.appendChild(form);
+    form.querySelector('input[name="detail"]')?.focus();
   }
 
   function renderSections(sheet) {
@@ -948,6 +1040,11 @@
     if (button.dataset.action === "close") return closeSheet();
     if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
     if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
+    if (button.dataset.action === "scene-menu") return toggleSceneMenu(button);
+    if (button.dataset.action === "scene-open-submenu") return toggleSceneSubmenu(button);
+    if (button.dataset.action === "scene-form") return openSceneForm(button.dataset.kind);
+    if (button.dataset.action === "scene-cancel") return closeSceneUi();
+    if (button.dataset.action === "scene-close") { closeSceneUi(); return writeChat(SCENE_CLOSE_MESSAGE, true, { keepOpen: true }); }
     if (button.dataset.action === "respect-roll") return rollRespect();
     if (button.dataset.action === "portrait") {
       const sheet = currentSheet();
@@ -1166,6 +1263,18 @@
       #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:transparent;border-bottom-width:2px;background-size:100% 2px }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:minmax(0,1fr);gap:16px }
+      #${ROOT_ID} .ccf-cs-menu-host { position:relative;display:inline-flex }
+      #${ROOT_ID} .ccf-cs-menu,#${ROOT_ID} .ccf-cs-submenu { z-index:5;min-width:152px;padding:8px 0;background:#424242;color:#fff;border-radius:4px;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12) }
+      #${ROOT_ID} .ccf-cs-menu { position:absolute;left:0;bottom:calc(100% + 4px) }
+      #${ROOT_ID} .ccf-cs-submenu { position:absolute;left:calc(100% - 4px);top:0 }
+      #${ROOT_ID} .ccf-cs-menu button,#${ROOT_ID} .ccf-cs-dialog>footer .ccf-cs-menu button { display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:36px;padding:6px 16px;border:0;border-radius:0;background:transparent;color:#fff;font-size:14px;text-align:left;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-menu button:hover,#${ROOT_ID} .ccf-cs-menu button:focus-visible { background:rgba(255,255,255,.1);outline:none }
+      #${ROOT_ID} .ccf-cs-scene-form { position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;gap:12px;width:min(360px,calc(100% - 32px));padding:20px;background:#303030;border:1px solid rgba(255,255,255,.16);box-shadow:0 11px 15px -7px rgba(0,0,0,.4),0 24px 38px 3px rgba(0,0,0,.28) }
+      #${ROOT_ID} .ccf-cs-scene-form h3 { margin:0;font-size:16px }
+      #${ROOT_ID} .ccf-cs-scene-numbers { display:grid;grid-template-columns:1fr 1fr;gap:12px }
+      #${ROOT_ID} .ccf-cs-scene-actions { display:flex;justify-content:flex-end;gap:8px }
+      #${ROOT_ID} .ccf-cs-scene-actions button { min-width:72px;min-height:36px;border:0;border-radius:0;background:transparent;color:#fff;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-scene-actions button[type="submit"] { color:#f50057;font-weight:bold }
       #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:120px minmax(0,1fr);gap:24px;align-items:start }
       #${ROOT_ID} .ccf-cs-top>.ccf-cs-stats-items { grid-column:auto }
       #${ROOT_ID} .ccf-cs-portrait { width:120px;height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }

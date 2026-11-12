@@ -21,6 +21,10 @@ const rows = [
   ['uja', '연갈', '', '夜のシーン表 1D6 夜のシーン表(4) ＞ 窓の外で何かが動く。'],
   ['unl', '연갈', '', 'MURDER FEED 장면표\n1D5\nMURDER FEED 장면표(3) ＞ 줄바꿈으로 이어진 형식도 같다.'],
   ['uother', '연갈', '', '날씨표 1D3 날씨표(2) ＞ 비'],
+  // 사이코로픽션 시트가 보내는 장면 메시지
+  ['sdrama', '연갈', '', '【드라마 장면 #1-2】 등장인물: 연갈, 브릿지 / 배경: 밤의 교실'],
+  ['sbattle', '연갈', '', '【전투 장면 #3-0】 등장인물: 연갈 / 대전 상대: 괴이'],
+  ['sclose', '연갈', '', '【장면 종료】'],
 ];
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
@@ -62,6 +66,11 @@ const rows = [
     assert.deepEqual(await user('uja'), { label: '연갈', name: '夜のシーン表', text: '窓の外で何かが動く。', children: ['small', 'span', 'span'] });
     assert.equal((await user('unl')).name, 'MURDER FEED 장면표'); assert.equal((await user('unl')).text, '줄바꿈으로 이어진 형식도 같다.');
     assert.equal(await page.locator('#uother .ccf-roll20-scene-card').count(), 0, 'a roll-table without 장면표 stays as it is');
+    // scene messages from the character sheet: title = the scene kind and number, body = the lines (none for the end)
+    assert.deepEqual(await user('sdrama'), { label: '연갈', name: '드라마 장면 #1-2', text: '등장인물: 연갈, 브릿지\n배경: 밤의 교실', children: ['small', 'span', 'span'] });
+    assert.deepEqual(await user('sbattle'), { label: '연갈', name: '전투 장면 #3-0', text: '등장인물: 연갈\n대전 상대: 괴이', children: ['small', 'span', 'span'] });
+    assert.deepEqual(await user('sclose'), { label: '연갈', name: '장면 종료', text: undefined, children: ['small', 'span'] });
+    assert.equal(await page.locator('#sdrama .ccf-roll20-scene-text').evaluate((e) => getComputedStyle(e).whiteSpace), 'pre-line');
     // the original text is only hidden (React-safe): still there, the card is appended last
     assert.equal(await page.locator('#st').evaluate((p) => p.firstChild.nodeType === 3 && p.lastElementChild.classList.contains('ccf-roll20-scene-card')), true);
     assert.equal(await page.locator('#st').evaluate((p) => getComputedStyle(p.firstChild.parentElement).fontSize), '0px');
