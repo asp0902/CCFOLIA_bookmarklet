@@ -56,6 +56,9 @@ const rows = [
     assert.equal(await page.locator('#plain .ccf-roll20-emotion-card').count(), 0);
     assert.equal(await page.locator('#emotion .ccf-roll20-emotion-card').textContent(), '브릿지충성(플러스) / 모멸(마이너스)');
     assert.equal(await page.locator('#emotion .ccf-roll20-scene-card').count(), 0);
+    // sizes: the result sentence is 13px (1px smaller than before); the sender label and the table name are unchanged
+    const sizes = await page.locator('#st .ccf-roll20-scene-card').evaluate((el) => ({ text: getComputedStyle(el.querySelector('.ccf-roll20-scene-text')).fontSize, name: getComputedStyle(el.querySelector('.ccf-roll20-scene-name')).fontSize, label: getComputedStyle(el.querySelector('small')).fontSize }));
+    assert.deepEqual(sizes, { text: '13px', name: '16px', label: '11px' });
     // the card has the four corner brackets (same technique as the emotion card)
     const brackets = await page.locator('#st .ccf-roll20-scene-card').evaluate((el) => [getComputedStyle(el, '::before').backgroundImage.split('linear-gradient').length - 1, getComputedStyle(el, '::after').backgroundSize]);
     assert.equal(brackets[0], 4); assert.equal(brackets[1].split(',').length, 4);
