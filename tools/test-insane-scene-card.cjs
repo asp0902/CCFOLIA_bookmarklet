@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/asp92/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 
-// 시트 테마 인세인: 장면표 명령의 결과 메시지를 Roll20식 카드(장식 + "장면을 열겠습니다" + 구분선, 꺾쇠 상자: 이름 / 표 이름 / 결과)로 보여 준다.
+// 시트 테마 인세인: 장면표 명령의 결과 메시지를 Roll20식 꺾쇠 상자 카드(작은 회색 이름 / 굵은 표 이름 / 결과)로 보여 준다. 위 장식·"장면을 열겠습니다"·구분선은 Roll20 매크로 사용자가 따로 넣는 이미지라 만들지 않는다.
 // 다른 테마·꺼짐이면 원래 글 그대로, 감정표 카드는 그대로. SCREENSHOT_DIR 이 있으면 카드 그림을 저장한다.
 const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-switcher.user.js'), 'utf8');
 const rows = [
@@ -34,7 +34,7 @@ const rows = [
     await page.waitForSelector('.ccf-roll20-scene-card');
     const card = async (id) => page.locator(`#${id} .ccf-roll20-scene-card`).evaluate((el) => ({
       label: el.querySelector('small')?.textContent, name: el.querySelector('.ccf-roll20-scene-name')?.textContent, text: el.querySelector('.ccf-roll20-scene-text')?.textContent,
-      title: el.querySelector('.ccf-roll20-scene-title')?.textContent, svg: !!el.querySelector('.ccf-roll20-scene-orn svg path'), rule: !!el.querySelector('.ccf-roll20-scene-rule'), table: el.dataset.sceneTable, bg: getComputedStyle(el).backgroundColor }));
+      title: el.querySelector('svg, .ccf-roll20-scene-title, .ccf-roll20-scene-rule, .ccf-roll20-scene-orn') ? 'decoration' : '', whole: el.textContent, table: el.dataset.sceneTable, bg: getComputedStyle(el).backgroundColor, children: [...el.children].map((c) => c.tagName.toLowerCase()) }));
     const expected = {
       st: ['장면표', '구석에 놓인 낡은 인형이 이쪽을 보고 있다.'], hjst: ['사실은 무서운 현대 일본 장면표', '지하철이 멈추고 불이 꺼진다.'],
       mtst: ['광란의 20년대 장면표', '재즈 클럽의 무대 위, 연주자들이 일제히 이쪽을 돌아본다.'], dvst: ['빅토리아의 어둠 장면표', '안개 속에서 가스등이 하나씩 꺼진다.'],
@@ -44,7 +44,8 @@ const rows = [
       const c = await card(id);
       assert.equal(c.name, name, `${id}: table name`); assert.equal(c.text, text, `${id}: result sentence`);
       assert.equal(c.label, '연갈', `${id}: sender label (the command prefix is not used as a name)`);
-      assert.equal(c.title, '장면을 열겠습니다'); assert(c.svg, 'ornament drawn as SVG'); assert(c.rule, 'divider under the title'); assert.equal(c.bg, 'rgb(255, 255, 255)');
+      assert.equal(c.title, '', `${id}: no ornament, title or divider`); assert(!c.whole.includes('장면을 열겠습니다'), 'no 장면을 열겠습니다 title');
+      assert.deepEqual(c.children, ['small', 'span', 'span'], 'label, table name, result only'); assert.equal(c.bg, 'rgb(255, 255, 255)');
       assert.equal(await page.locator(`#${id} .ccf-roll20-scene-card`).count(), 1, 'one card per message');
       assert.doesNotMatch(c.text, /\(\d+\)/, 'the dice value is not shown');
     }
@@ -56,8 +57,11 @@ const rows = [
     assert.equal(await page.locator('#emotion .ccf-roll20-emotion-card').textContent(), '브릿지충성(플러스) / 모멸(마이너스)');
     assert.equal(await page.locator('#emotion .ccf-roll20-scene-card').count(), 0);
     // the card has the four corner brackets (same technique as the emotion card)
-    const brackets = await page.locator('#st .ccf-roll20-scene-box').evaluate((el) => [getComputedStyle(el, '::before').backgroundImage.split('linear-gradient').length - 1, getComputedStyle(el, '::after').backgroundSize]);
+    const brackets = await page.locator('#st .ccf-roll20-scene-card').evaluate((el) => [getComputedStyle(el, '::before').backgroundImage.split('linear-gradient').length - 1, getComputedStyle(el, '::after').backgroundSize]);
     assert.equal(brackets[0], 4); assert.equal(brackets[1].split(',').length, 4);
+    // the card starts right below the row heading: no leftover space above the box
+    const gap = await page.locator('#st').evaluate((p) => { const card = p.querySelector('.ccf-roll20-scene-card').getBoundingClientRect(), row = p.getBoundingClientRect(); return Math.round(card.top - row.top); });
+    assert(gap <= 8, `no extra space above the card (${gap}px)`);
     if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-scene-card.png'), fullPage: true });
     // a changed message is redrawn once, not duplicated
     await page.locator('#st').evaluate((p) => { p.firstChild.nodeValue = 'ST 장면표(3) ＞ 새 결과'; });
