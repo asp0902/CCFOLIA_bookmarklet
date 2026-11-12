@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.98
+// @version      0.1.99
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.98"),
+    version: getUserscriptVersion("0.1.99"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1245,8 +1245,20 @@
     el.removeAttribute("data-ccf-cutin-chat");
   }
 
+  // 채팅 메시지 행의 본문에만 붙인다(오리지널 채팅 목록·추가 패널). 컷인/이미지/캐릭터 목록 같은 모달·팝오버·메뉴·드로어 목록의 항목 글이
+  // 컷인 이름과 같아도 이미지를 붙이지 않는다. role=log 가 없는 구조에 대비해, 메시지 행은 보낸 사람 머리글(h6)에 시각 표시(caption)가 붙는 것도 인정한다.
+  function cutinChatIsMessageText(el) {
+    if (el.closest('.MuiDialog-root, .MuiPopover-root, .MuiMenu-root, .MuiModal-root, [role="dialog"], [role="menu"], [role="listbox"], textarea, input, [contenteditable], [data-ccf-safe-markup="1"]')) return false;
+    const panel = el.closest(".ccf-scp-panel");
+    if (panel) return !!el.closest(".ccf-scp-row, .MuiListItem-root");
+    if (el.closest('[role="log"]')) return true;
+    const row = el.closest(".MuiListItem-root, li");
+    return !!row?.querySelector("h6.MuiListItemText-primary .MuiTypography-caption");
+  }
+
   function applyCutinChatImage(el) {
     if (!(el instanceof HTMLElement)) return;
+    if (!cutinChatIsMessageText(el)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (!cutinChatEnabled()) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     const url = cutinChatUrlFor(cutinChatMessageText(el));
     if (!url) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
