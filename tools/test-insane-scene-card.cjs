@@ -15,6 +15,12 @@ const rows = [
   ['ja', '연갈', '', 'シーン表(6) ＞ 雨音の向こうで、誰かが名前を呼んでいる。'],
   ['plain', '연갈', '', '장면표 이야기를 나누는 평범한 메시지'],
   ['emotion', '브릿지', 'FT', '감정표(4) ＞ 충성（플러스）／모멸（마이너스）'],
+  // 코코포리아 /roll-table 로 직접 만든 표: 글 = "표 이름 1D5", 뒤에 BCDice 결과 "표 이름(번호) ＞ 문장" (코코포리아 번들의 roll-table 처리 + BCDice UserDefinedDiceTable 형식)
+  ['u1', '연갈', '', 'MURDER FEED 장면표 1D5 MURDER FEED 장면표(1) ＞ 밖에서 비바람이 치는 소리가 울린다.'],
+  ['u5', '연갈', '', 'MURDER FEED 장면표 1D5 MURDER FEED 장면표(5) ＞ 난방을 켜고 몸을 데우면, 체온이 오르고 마음이 가라앉는다 (2). (단, 현재 수치가 상한인 경우에는 불가능하다.)'],
+  ['uja', '연갈', '', '夜のシーン表 1D6 夜のシーン表(4) ＞ 窓の外で何かが動く。'],
+  ['unl', '연갈', '', 'MURDER FEED 장면표\n1D5\nMURDER FEED 장면표(3) ＞ 줄바꿈으로 이어진 형식도 같다.'],
+  ['uother', '연갈', '', '날씨표 1D3 날씨표(2) ＞ 비'],
 ];
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
@@ -49,6 +55,13 @@ const rows = [
       assert.equal(await page.locator(`#${id} .ccf-roll20-scene-card`).count(), 1, 'one card per message');
       assert.doesNotMatch(c.text, /\(\d+\)/, 'the dice value is not shown');
     }
+    // user-made scene tables (/roll-table): title = the table name as typed, body = the sentence only (no number, no dice)
+    const user = async (id) => page.locator(`#${id} .ccf-roll20-scene-card`).evaluate((el) => ({ label: el.querySelector('small')?.textContent, name: el.querySelector('.ccf-roll20-scene-name')?.textContent, text: el.querySelector('.ccf-roll20-scene-text')?.textContent, children: [...el.children].map((c) => c.tagName.toLowerCase()) }));
+    assert.deepEqual(await user('u1'), { label: '연갈', name: 'MURDER FEED 장면표', text: '밖에서 비바람이 치는 소리가 울린다.', children: ['small', 'span', 'span'] });
+    assert.deepEqual(await user('u5'), { label: '연갈', name: 'MURDER FEED 장면표', text: '난방을 켜고 몸을 데우면, 체온이 오르고 마음이 가라앉는다 (2). (단, 현재 수치가 상한인 경우에는 불가능하다.)', children: ['small', 'span', 'span'] });
+    assert.deepEqual(await user('uja'), { label: '연갈', name: '夜のシーン表', text: '窓の外で何かが動く。', children: ['small', 'span', 'span'] });
+    assert.equal((await user('unl')).name, 'MURDER FEED 장면표'); assert.equal((await user('unl')).text, '줄바꿈으로 이어진 형식도 같다.');
+    assert.equal(await page.locator('#uother .ccf-roll20-scene-card').count(), 0, 'a roll-table without 장면표 stays as it is');
     // the original text is only hidden (React-safe): still there, the card is appended last
     assert.equal(await page.locator('#st').evaluate((p) => p.firstChild.nodeType === 3 && p.lastElementChild.classList.contains('ccf-roll20-scene-card')), true);
     assert.equal(await page.locator('#st').evaluate((p) => getComputedStyle(p.firstChild.parentElement).fontSize), '0px');
