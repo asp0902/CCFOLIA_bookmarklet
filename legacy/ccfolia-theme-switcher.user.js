@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.29
+// @version      0.2.30
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.29"),
+    version: getUserscriptVersion("0.2.30"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1859,23 +1859,8 @@
         font-size: 11px; line-height: 1.4; font-weight: normal;
       }
       ${scope} .ccf-roll20-check-card { padding: 12px 16px; }
-      /* 장면표 결과: 위 장식 + "장면을 열겠습니다" + 구분선 아래에, 네 모서리 꺾쇠가 있는 상자(작은 회색 이름 / 굵은 표 이름 / 결과 문장) */
-      ${scope} .ccf-roll20-scene-card { padding: 14px 14px 16px; font-weight: normal; }
-      ${scope} .ccf-roll20-scene-card::before, ${scope} .ccf-roll20-scene-card::after { display: none; }
-      ${scope} .ccf-roll20-scene-orn { display: block; margin: 0 auto; width: 190px; max-width: 80%; height: auto; }
-      ${scope} .ccf-roll20-scene-orn svg { display: block; width: 100%; height: auto; fill: none; stroke: #222; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-      ${scope} .ccf-roll20-scene-title { display: block; margin: 2px 0 8px; color: #222 !important; font-size: 24px; line-height: 1.3; font-weight: normal; letter-spacing: .02em; }
-      ${scope} .ccf-roll20-scene-rule { display: block; height: 0; margin: 0 0 14px; border-top: 1px solid #555; }
-      ${scope} .ccf-roll20-scene-box { position: relative; display: block; box-sizing: border-box; padding: 18px 16px; text-align: center; }
-      ${scope} .ccf-roll20-scene-box::before, ${scope} .ccf-roll20-scene-box::after {
-        content: ""; position: absolute; inset: 0; pointer-events: none;
-        background: linear-gradient(#333,#333) left top / 26px 4px no-repeat,
-          linear-gradient(#333,#333) right top / 26px 4px no-repeat,
-          linear-gradient(#333,#333) left bottom / 26px 4px no-repeat,
-          linear-gradient(#333,#333) right bottom / 26px 4px no-repeat;
-      }
-      ${scope} .ccf-roll20-scene-box::after { background-size: 4px 26px; }
-      ${scope} .ccf-roll20-scene-box > small { display: block; margin-bottom: 6px; color: #999 !important; font-size: 11px; line-height: 1.4; font-weight: normal; }
+      /* 장면표 결과: 감정표와 같은 꺾쇠 상자 안에 작은 회색 이름 / 굵은 표 이름 / 결과 문장 (위 장식·제목은 Roll20 매크로 사용자가 따로 넣는 이미지라 만들지 않는다) */
+      ${scope} .ccf-roll20-scene-card { font-weight: normal; }
       ${scope} .ccf-roll20-scene-name { display: block; margin-bottom: 8px; color: #333 !important; font-size: 16px; line-height: 1.4; font-weight: bold; }
       ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 14px; line-height: 1.5; font-weight: normal; }
       ${scope} .ccf-roll20-check-body {
@@ -5088,28 +5073,10 @@
   function appendInsaneRoll20Scene(card, scene, speaker) {
     card.classList.add('ccf-roll20-scene-card');
     card.dataset.sceneTable = scene.name;
-    const orn = document.createElement('span');
-    orn.className = 'ccf-roll20-scene-orn';
-    // 장식 문양(직접 그린 선화): 좌우로 뻗은 선 + 가운데 소용돌이·왕관 장식
-    orn.innerHTML = '<svg viewBox="0 0 240 56" aria-hidden="true">'
-      + '<path d="M6 40 C40 40 62 40 86 34 C100 30 104 22 96 18 C90 15 84 19 88 24"/>'
-      + '<path d="M234 40 C200 40 178 40 154 34 C140 30 136 22 144 18 C150 15 156 19 152 24"/>'
-      + '<path d="M104 40 C110 30 114 24 120 8 C126 24 130 30 136 40"/>'
-      + '<path d="M104 40 C112 36 128 36 136 40 C128 44 112 44 104 40Z"/>'
-      + '<path d="M112 36 C113 28 116 22 120 16 C124 22 127 28 128 36"/>'
-      + '<path d="M60 40 C70 46 80 46 90 42 M180 40 C170 46 160 46 150 42"/>'
-      + '</svg>';
-    const title = document.createElement('span');
-    title.className = 'ccf-roll20-scene-title';
-    title.textContent = '장면을 열겠습니다';
-    const rule = document.createElement('span');
-    rule.className = 'ccf-roll20-scene-rule';
-    const box = document.createElement('span');
-    box.className = 'ccf-roll20-scene-box';
     if (speaker) {
       const label = document.createElement('small');
       label.textContent = speaker;
-      box.appendChild(label);
+      card.appendChild(label);
     }
     const name = document.createElement('span');
     name.className = 'ccf-roll20-scene-name';
@@ -5117,8 +5084,7 @@
     const body = document.createElement('span');
     body.className = 'ccf-roll20-scene-text';
     body.textContent = scene.text;
-    box.append(name, body);
-    card.append(orn, title, rule, box);
+    card.append(name, body);
   }
 
   function parseInsaneRoll20Check(text) {
