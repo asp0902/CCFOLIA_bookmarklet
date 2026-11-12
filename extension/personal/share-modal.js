@@ -12,7 +12,7 @@
       return parsed.origin === "http://127.0.0.1:8787" || parsed.protocol === "https:" ? parsed.origin : "";
     } catch (_) { return ""; }
   };
-  const STATUS_LABEL = { pending: "대기 중", approved: "승인됨", rejected: "거절됨", revoked: "접근 취소됨" };
+  const STATUS_LABEL = { pending: "대기 중", approved: "승인 완료", rejected: "거절됨", revoked: "접근 취소됨" };
   const el = (tag, props = {}, ...children) => {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(props)) {
@@ -31,7 +31,7 @@
     .backdrop { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0.5); font-family: "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif; }
     .paper { width: min(560px, calc(100vw - 64px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column;
-      background: #222; color: #fff; border-radius: 4px; overflow: hidden;
+      background: rgba(44, 44, 44, 0.87); background-image: none; color: #fff; border-radius: 4px; overflow: hidden;
       box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); }
     header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 0; }
     h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
@@ -72,6 +72,13 @@
     .switch input:focus-visible + .sw { outline: 2px solid #fff; outline-offset: -4px; border-radius: 19px; }
     .body > .field:first-child { margin-top: 0; }
     h3 { margin: 16px 0 4px; font-size: 1rem; font-weight: 500; }
+    h3.section { font-weight: 700; }
+    .approval { margin-top: 30px; }
+    .approval > h3.section { margin-top: 0; }
+    button.section-toggle { min-width: 0; height: auto; padding: 2px 6px 2px 0; margin: 0; border-radius: 4px; font-size: 1rem; font-weight: 700; letter-spacing: 0; display: inline-flex; align-items: center; gap: 6px; }
+    button.section-toggle .caret { font-size: .75rem; color: rgba(255,255,255,.7); }
+    /* 접힌 상태: 상태 문장은 숨기고, 오류(빨강으로 칠해진 줄)만 보인다 */
+    .status-lines.collapsed p.status-line:not([style*="color"]) { display: none; }
     button { font: inherit; font-size: .875rem; font-weight: 500; letter-spacing: .02857em; min-width: 64px; height: 36px; padding: 6px 12px; border: 0; border-radius: 4px;
       background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
     button:hover { background: rgba(255,255,255,.08); }
@@ -90,7 +97,7 @@
     .participant { display: flex; align-items: center; gap: 4px; min-height: 48px; border-top: 1px solid rgba(255,255,255,.12); }
     .participant .name { flex: 1; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
     .participant .state { color: rgba(255,255,255,.7); font-size: .875rem; margin-right: 4px; }
-    .participant .state.approved { color: #64b5f6; }
+    .participant .state.approved { color: #64b5f6; font-weight: 700; }
     button.name-btn { flex: 1; min-width: 0; height: auto; min-height: 32px; padding: 4px 6px; margin: 0 0 0 -6px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 15px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
     button.name-btn:hover, button.name-btn[aria-expanded="true"] { background: rgba(255,255,255,.08); text-decoration: underline; }
     button.name-btn:focus-visible { outline: 2px solid #64b5f6; outline-offset: 0; }
@@ -106,7 +113,7 @@
     footer .spacer, header .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
     .toast.error { color: #f44336; }
-    select, input[type=text].short, input[type=number].short { height: 36px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px; background: #222; color: #fff; font: inherit; font-size: .9rem; padding: 4px 8px; }
+    select, input[type=text].short, input[type=number].short { height: 36px; border: 1px solid rgba(255,255,255,.23); border-radius: 4px; background: rgba(0,0,0,.25); color: #fff; font: inherit; font-size: .9rem; padding: 4px 8px; }
     .check { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: .9rem; cursor: pointer; }
     .check input { margin-top: 3px; }
     .warn { color: #ffb74d; font-size: .8rem; margin: 4px 0 0 24px; }
@@ -502,7 +509,7 @@
   ntfyHelpButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>';
   ntfyHelpButton.addEventListener("click", () => { const open = ntfyHelp.hidden; ntfyHelp.hidden = !open; ntfyHelpButton.setAttribute("aria-expanded", String(open)); const label = open ? "연결 방법 접기" : "연결 방법 보기"; ntfyHelpButton.title = label; ntfyHelpButton.setAttribute("aria-label", label); });
   const ntfySection = el("div", { class: "ntfy" },
-    el("div", { class: "ntfy-head" }, el("h3", { text: "스마트폰 알림" }),
+    el("div", { class: "ntfy-head" }, el("h3", { class: "section", text: "스마트폰 알림" }),
       el("label", { class: "switch", title: "스마트폰 알림 사용" }, nEnabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
       ntfyHelpButton),
     el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
@@ -515,6 +522,16 @@
     nToast,
     el("div", { class: "row", style: "margin-top:12px" }, ntfySave, ntfyTest));
 
+  // 참가 승인: 제목을 누르면 상태 문장(룸·실시간 연결·구조 점검·미러)이 펼쳐진다. 기본은 접힘(창을 열 때마다). 오류(빨강) 줄은 접혀 있어도 보인다. 참가자 목록은 항상 보인다.
+  const statusLines = el("div", { class: "status-lines collapsed", id: "approval-status" }, roomLine, socketLine, healthLine, mirrorLine, errorLine);
+  const approvalToggle = el("button", { type: "button", class: "section-toggle", id: "approval-toggle", "aria-expanded": "false", "aria-controls": "approval-status" }, "참가 승인", el("span", { class: "caret", "aria-hidden": "true", text: "▸" }));
+  approvalToggle.addEventListener("click", () => {
+    const open = statusLines.classList.contains("collapsed");
+    statusLines.classList.toggle("collapsed", !open);
+    approvalToggle.setAttribute("aria-expanded", String(open));
+    approvalToggle.querySelector(".caret").textContent = open ? "▾" : "▸";
+  });
+  const approvalTitle = el("h3", { class: "section" }, approvalToggle);
   const paper = el("div", { class: "paper", role: "dialog", "aria-modal": "true", "aria-labelledby": "title" },
     el("header", {}, el("h2", { id: "title", text: "웹 공유" }),
       el("label", { class: "switch", title: "웹 공유 사용" }, enabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
@@ -525,7 +542,7 @@
       el("div", { class: "field" }, el("label", { for: "invite", text: "참여자 초대 URL" }), el("div", { class: "row" }, invite, copy)),
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
       toast,
-      el("h3", { text: "참가 승인" }), roomLine, socketLine, healthLine, mirrorLine, errorLine, participants,
+      el("div", { class: "approval" }, approvalTitle, statusLines, participants),
       ntfySection),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);

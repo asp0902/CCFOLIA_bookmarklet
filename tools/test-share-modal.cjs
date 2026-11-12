@@ -89,10 +89,30 @@ const flush = page => page.waitForTimeout(80);
         btn.click();
         return { first, open, closed: vis(help) };
       });
-      assert.deepEqual(sixth.first, { sw: true, sameSwitch: true, order: ['H3', 'LABEL.switch', 'BUTTON.help'], labelCheck: false, intro: false, helpVisible: false, toastVisible: false, expanded: 'false', save: true, test: true });
+      assert.deepEqual(sixth.first, { sw: true, sameSwitch: true, order: ['H3.section', 'LABEL.switch', 'BUTTON.help'], labelCheck: false, intro: false, helpVisible: false, toastVisible: false, expanded: 'false', save: true, test: true });
       assert.deepEqual(sixth.open, { helpVisible: true, expanded: 'true', title: '연결 방법 접기', linkLabel: true }); assert.equal(sixth.closed, false, 'folds again');
       assert(!layout.text.includes('핸드폰'), 'no 핸드폰 left in the section');
       // '참가 승인' status lines: tight spacing, empty lines take no room, other muted paragraphs (ntfy) keep the default margin.
+      // batch 1112b: 승인 완료 bold, CCFOLIA's own dialog paper (rgba(44,44,44,.87), measured in its theme), 30px before 참가 승인, folded status lines, bold section titles
+      const look = await page.evaluate(() => {
+        const r = document.getElementById('capybara-share-modal-host').shadowRoot, cs = (el) => getComputedStyle(el), rect = (el) => el.getBoundingClientRect();
+        const toggle = r.getElementById('approval-toggle'), lines = r.getElementById('approval-status');
+        const approved = r.querySelector('.participant .state.approved');
+        const out = { paper: [cs(r.querySelector('.paper')).backgroundColor, cs(r.querySelector('.paper')).backgroundImage, cs(r.querySelector('.backdrop')).backgroundColor], approved: approved ? [approved.textContent, cs(approved).fontWeight] : null, titles: [cs(toggle).fontWeight, cs(r.querySelector('.ntfy .ntfy-head h3')).fontWeight], aboveApproval: Math.round(rect(r.querySelector('.approval h3')).top - rect(r.getElementById('title').closest('header')).bottom) };
+        out.foldedAtStart = [toggle.getAttribute('aria-expanded'), cs(r.getElementById('socket')).display];
+        toggle.click(); out.expandedNow = [toggle.getAttribute('aria-expanded'), toggle.querySelector('.caret').textContent, cs(r.getElementById('socket')).display];
+        toggle.click(); out.folded = [toggle.getAttribute('aria-expanded'), toggle.querySelector('.caret').textContent, ['room', 'socket', 'health', 'mirror'].map((id) => cs(r.getElementById(id)).display), cs(r.getElementById('participants')).display];
+        const err = r.getElementById('relay-errors'); err.textContent = '최근 릴레이 오류: x'; err.style.color = '#f44336'; out.errorShownFolded = cs(err).display; err.textContent = ''; err.style.color = '';
+        return out;
+      });
+      assert.deepEqual(look.paper, ['rgba(44, 44, 44, 0.87)', 'none', 'rgba(0, 0, 0, 0.5)'], 'CCFOLIA dialog paper and backdrop');
+      assert.deepEqual(look.approved, ['승인 완료', '700'], '승인 완료, bold'); assert.deepEqual(look.titles, ['700', '700'], 'section titles are bold');
+      assert.deepEqual(look.foldedAtStart, ['false', 'none'], 'folded by default');
+      assert.deepEqual(look.expandedNow, ['true', '▾', 'block']);
+      assert.deepEqual(look.folded, ['false', '▸', ['none', 'none', 'none', 'none'], 'block'], 'folded: status lines hidden, the participant list stays');
+      assert.equal(look.errorShownFolded, 'block', 'an error line shows even when folded');
+      assert(look.aboveApproval >= 28, 'space above 참가 승인 (' + look.aboveApproval + 'px incl. the form above)');
+      await q(page, '#approval-toggle').click();
       const gaps = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;
         const top = id => r.getElementById(id).getBoundingClientRect();
