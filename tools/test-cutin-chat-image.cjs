@@ -58,6 +58,23 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     await page.evaluate(() => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">a</h6><p id="dup" class="MuiTypography-root MuiTypography-body2 MuiListItemText-secondary">번개<img class="ccf-unsung-duet-msg-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></p></div>'; document.getElementById('list').append(li); });
     await page.waitForTimeout(500);
     assert.equal(await page.locator('#dup .ccf-cutin-chat-image').count(), 0, 'no second image when the message already has one');
+    // only chat message rows: a cut-in list modal / popover / menu / drawer list whose item text equals a cut-in name gets no image (and one that was added is removed)
+    await page.evaluate(() => {
+      const host = document.createElement('div');
+      host.innerHTML = '<div class="MuiDialog-root" role="dialog"><ul><li class="MuiListItem-root"><div class="MuiListItemText-root"><p id="modalItem" class="MuiListItemText-secondary">번개</p></div></li></ul></div>'
+        + '<div class="MuiPopover-root"><ul><li class="MuiMenuItem-root"><p id="popItem" class="MuiListItemText-secondary">번개</p></li></ul></div>'
+        + '<aside class="MuiDrawer-paper"><ul><li class="MuiListItem-root"><div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">컷인</h6><p id="drawerItem" class="MuiListItemText-secondary">번개</p></div></li></ul></aside>'
+        + '<div class="ccf-scp-panel"><ul><li class="ccf-scp-row MuiListItem-root"><div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">패널</h6><p id="panelRow" class="MuiListItemText-secondary">번개</p></div></li></ul></div>'
+        + '<ul><li class="MuiListItem-root"><div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">연갈<span class="MuiTypography-caption"> - 오늘 14:44</span></h6><p id="captionRow" class="MuiListItemText-secondary">번개</p></div></li></ul>';
+      document.body.append(host);
+    });
+    await page.waitForSelector('#panelRow .ccf-cutin-chat-image img');
+    await page.waitForSelector('#captionRow .ccf-cutin-chat-image img');
+    await page.waitForTimeout(400);
+    for (const id of ['modalItem', 'popItem', 'drawerItem']) assert.equal(await imgs(id).count(), 0, id + ': no image outside chat message rows');
+    // an image that is already there is taken off again
+    await page.evaluate(() => { const el = document.getElementById('modalItem'); el.setAttribute('data-ccf-cutin-chat', 'x'); const w = document.createElement('span'); w.className = 'ccf-cutin-chat-image'; w.innerHTML = '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">'; el.appendChild(w); el.firstChild.nodeValue = '번개 '; });
+    await page.waitForFunction(() => !document.querySelector('#modalItem .ccf-cutin-chat-image'));
     // the list is re-read only when roomEffects changes (a new cut-in works at once)
     await page.evaluate(() => { const effects = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...effects, entities: { ...effects.entities, e4: { name: '새컷인', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' } } }; });
     await addRow('fresh', '새컷인');
