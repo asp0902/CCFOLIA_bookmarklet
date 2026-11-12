@@ -82,6 +82,18 @@
     .participant { display: flex; align-items: center; gap: 4px; min-height: 48px; border-top: 1px solid rgba(255,255,255,.12); }
     .participant .name { flex: 1; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
     .participant .state { color: rgba(255,255,255,.7); font-size: .875rem; margin-right: 4px; }
+    .participant .state.approved { color: #64b5f6; }
+    button.name-btn { flex: 1; min-width: 0; height: auto; min-height: 32px; padding: 4px 6px; margin: 0 0 0 -6px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 15px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+    button.name-btn:hover, button.name-btn[aria-expanded="true"] { background: rgba(255,255,255,.08); text-decoration: underline; }
+    button.name-btn:focus-visible { outline: 2px solid #64b5f6; outline-offset: 0; }
+    .menu { position: fixed; z-index: 2147483001; min-width: 168px; max-width: calc(100vw - 16px); padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; font-size: 1rem;
+      box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+    .menu.sub-menu { z-index: 2147483002; }
+    .menu-item { display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 6px 16px 6px 8px; cursor: pointer; line-height: 1.5; outline: none; user-select: none; }
+    .menu-item:hover, .menu-item:focus { background: rgba(255,255,255,.08); }
+    .menu-check { width: 20px; flex: none; text-align: center; color: #64b5f6; }
+    .menu-label { flex: 1; }
+    .menu-arrow { margin-left: 16px; color: rgba(255,255,255,.7); }
     footer { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,.4); }
     footer .spacer, header .spacer { flex: 1; }
     .toast { min-height: 1.25rem; margin-top: 12px; font-size: .875rem; color: #a5d6a7; }
@@ -152,23 +164,140 @@
   };
   const errorOf = async (response, fallback) => (await response.json().catch(() => ({}))).error || `${fallback} (${response.status})`;
 
+  // ---- 승인된 참가자: 이름을 누르면 뜨는 메뉴(이름 변경 / 수신자 설정 ▸ 하위 목록). 대기 행은 예전처럼 '이름 변경' 버튼.
+  let participantData = { items: [], recipients: [] };
+  const menuState = { id: "", root: null, sub: null, anchor: null };
+  const closeMenu = () => {
+    menuState.root?.remove(); menuState.sub?.remove();
+    menuState.anchor?.setAttribute("aria-expanded", "false");
+    menuState.id = ""; menuState.root = null; menuState.sub = null; menuState.anchor = null;
+  };
+  // 화면 밖으로 나가지 않게: 기준 상자 아래(없으면 위)·오른쪽(없으면 왼쪽)에 놓는다.
+  const placeMenu = (menu, rect, side = false) => {
+    menu.style.visibility = "hidden";
+    const width = menu.offsetWidth, height = menu.offsetHeight, margin = 8;
+    let left = side ? rect.right - 4 : rect.left;
+    let top = side ? rect.top - 8 : rect.bottom + 2;
+    if (left + width > window.innerWidth - margin) left = side ? Math.max(margin, rect.left - width + 4) : Math.max(margin, window.innerWidth - width - margin);
+    if (top + height > window.innerHeight - margin) top = Math.max(margin, side ? window.innerHeight - height - margin : rect.top - height - 2);
+    menu.style.left = `${Math.round(left)}px`; menu.style.top = `${Math.round(top)}px`; menu.style.visibility = "";
+  };
+  const menuItem = (label, options = {}) => {
+    const item = el("div", { class: "menu-item", role: options.role || "menuitem", tabindex: "-1" },
+      el("span", { class: "menu-check", text: options.checked ? "✓" : "" }), el("span", { class: "menu-label", text: label }), options.arrow ? el("span", { class: "menu-arrow", text: "▸" }) : null);
+    if (options.role === "menuitemradio") item.setAttribute("aria-checked", options.checked ? "true" : "false");
+    if (options.arrow) item.setAttribute("aria-haspopup", "menu");
+    return item;
+  };
+  const focusItem = (menu, delta, absolute = false) => {
+    const items = [...menu.querySelectorAll(".menu-item")];
+    if (!items.length) return;
+    const current = items.indexOf(shadow.activeElement);
+    const next = absolute ? (delta < 0 ? items.length - 1 : 0) : (current + delta + items.length) % items.length;
+    items[next].focus();
+  };
+  const renameParticipant = async (id, currentName, button = null) => {
+    if (!roomId) return;
+    const next = (prompt("참여자 표시 이름", currentName) || "").trim();
+    if (!next || next === currentName) return;
+    if (button) button.disabled = true;
+    try {
+      const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(id)}/rename`, { method: "POST", body: JSON.stringify({ displayName: next }) });
+      if (!response.ok) throw new Error(await errorOf(response, "이름 변경 실패"));
+      say("표시 이름을 바꿨습니다.");
+    } catch (error) { say(error.message, true); }
+    await refreshParticipants();
+  };
+  const setRecipient = async (id, key) => {
+    if (!roomId) return;
+    try {
+      const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(id)}/recipient`, { method: "POST", body: JSON.stringify({ key }) });
+      if (!response.ok) throw new Error(await errorOf(response, "수신자 지정 실패"));
+      say("핸드아웃 수신자를 지정했습니다. 다음 핸드아웃 전송부터 반영됩니다.");
+    } catch (error) { say(error.message, true); }
+    await refreshParticipants();
+  };
+  const openRecipientMenu = (item, parentRow) => {
+    menuState.sub?.remove();
+    const options = [{ key: "", label: "이름으로 자동" }, ...participantData.recipients.map(option => ({ key: option.key, label: option.label || option.key }))];
+    if (item.recipientKey && !participantData.recipients.some(option => option.key === item.recipientKey)) options.push({ key: item.recipientKey, label: item.recipientKey });
+    const sub = el("div", { class: "menu sub-menu", role: "menu", "aria-label": "수신자 설정" });
+    for (const option of options) {
+      const row = menuItem(option.label, { role: "menuitemradio", checked: (item.recipientKey || "") === option.key });
+      row.dataset.recipientKey = option.key;
+      row.addEventListener("click", () => { const id = item.id; closeMenu(); setRecipient(id, option.key); });
+      sub.append(row);
+    }
+    shadow.append(sub); menuState.sub = sub;
+    placeMenu(sub, parentRow.getBoundingClientRect(), true);
+    parentRow.setAttribute("aria-expanded", "true");
+    return sub;
+  };
+  const openParticipantMenu = (button) => {
+    const id = button.dataset.menu;
+    if (menuState.id === id) { closeMenu(); return; }
+    const item = participantData.items.find(entry => entry.id === id);
+    if (!item) return;
+    closeMenu();
+    const menu = el("div", { class: "menu", role: "menu", "aria-label": `${item.displayName} 메뉴` });
+    const rename = menuItem("이름 변경");
+    rename.dataset.action = "rename";
+    rename.addEventListener("click", () => { closeMenu(); renameParticipant(item.id, item.displayName); });
+    const recipient = menuItem("수신자 설정", { arrow: true });
+    recipient.dataset.action = "recipient";
+    recipient.setAttribute("aria-expanded", "false");
+    recipient.addEventListener("click", () => openRecipientMenu(item, recipient));
+    recipient.addEventListener("mouseenter", () => { if (!menuState.sub) openRecipientMenu(item, recipient); });
+    menu.append(rename, recipient);
+    menu.addEventListener("keydown", event => {
+      const inSub = menuState.sub && menuState.sub.contains(shadow.activeElement);
+      const scope = inSub ? menuState.sub : menu;
+      if (event.key === "ArrowDown") { event.preventDefault(); focusItem(scope, 1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); focusItem(scope, -1); }
+      else if (event.key === "Home") { event.preventDefault(); focusItem(scope, 1, true); }
+      else if (event.key === "End") { event.preventDefault(); focusItem(scope, -1, true); }
+      else if (event.key === "ArrowRight" && shadow.activeElement === recipient) { event.preventDefault(); const sub = openRecipientMenu(item, recipient); focusItem(sub, 1, true); }
+      else if (event.key === "ArrowLeft" && inSub) { event.preventDefault(); menuState.sub.remove(); menuState.sub = null; recipient.focus(); }
+      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); shadow.activeElement?.click?.(); }
+      else if (event.key === "Tab") { event.preventDefault(); }
+    });
+    shadow.append(menu);
+    menuState.id = id; menuState.root = menu; menuState.anchor = button;
+    button.setAttribute("aria-expanded", "true");
+    placeMenu(menu, button.getBoundingClientRect());
+    rename.focus();
+  };
+  // 바깥을 누르면 메뉴만 닫는다(바깥이 어두운 배경이어도 창은 닫지 않는다). 본문이 스크롤되면 위치가 어긋나므로 닫는다.
+  shadow.addEventListener("mousedown", event => {
+    if (!menuState.root) return;
+    const path = event.composedPath();
+    if (path.includes(menuState.root) || (menuState.sub && path.includes(menuState.sub)) || path.includes(menuState.anchor)) return;
+    closeMenu();
+    if (event.target?.classList?.contains("backdrop")) event.stopPropagation();
+  }, true);
+  shadow.addEventListener("scroll", () => closeMenu(), true);
+
   const renderParticipants = (items, recipients = []) => {
+    participantData = { items, recipients };
     participants.replaceChildren();
     if (!items.length) { participants.append(el("p", { class: "muted status-line", text: "참가 요청 없음" })); return; }
     for (const item of items) {
       const act = (label, decision, danger = false) => el("button", { type: "button", class: danger ? "danger" : decision === "approve" ? "approve" : "", "data-decision": decision, "data-id": item.id, text: label });
       participants.append(el("div", { class: "participant" },
-        el("span", { class: "name", text: item.displayName }),
-        el("span", { class: "state", text: STATUS_LABEL[item.status] || item.status }),
-        item.status === "pending" || item.status === "approved" ? el("button", { type: "button", "data-rename": item.id, "data-name": item.displayName, text: "이름 변경" }) : null,
-        // who this participant is for the handouts: one of the people the handout tool knows (blank = matched by name)
-        item.status === "approved" ? el("select", { "data-recipient": item.id, title: "핸드아웃 수신자", "aria-label": `${item.displayName}의 핸드아웃 수신자` },
-          el("option", { value: "", text: "수신자: 이름으로 자동" }),
-          ...recipients.map(option => el("option", { value: option.key, text: option.label || option.key, ...(option.key === item.recipientKey ? { selected: "" } : {}) })),
-          ...(item.recipientKey && !recipients.some(option => option.key === item.recipientKey) ? [el("option", { value: item.recipientKey, text: item.recipientKey, selected: "" })] : [])) : null,
+        // approved: the name opens a menu (rename, who this participant is for the handouts); pending keeps the rename button
+        item.status === "approved"
+          ? el("button", { type: "button", class: "name name-btn", "data-menu": item.id, "aria-haspopup": "menu", "aria-expanded": menuState.id === item.id ? "true" : "false", title: "이름 변경·핸드아웃 수신자 설정", text: item.displayName })
+          : el("span", { class: "name", text: item.displayName }),
+        el("span", { class: `state ${item.status}`, text: STATUS_LABEL[item.status] || item.status }),
+        item.status === "pending" ? el("button", { type: "button", "data-rename": item.id, "data-name": item.displayName, text: "이름 변경" }) : null,
         item.status === "pending" ? [act("승인", "approve"), act("거절", "reject", true)] : null,
         item.status === "approved" ? act("접근 취소", "revoke", true) : null,
         item.status === "rejected" || item.status === "revoked" ? el("button", { type: "button", class: "danger", "data-remove": item.id, "data-name": item.displayName, text: "삭제" }) : null));
+    }
+    // the list is redrawn by every refresh: keep an open menu on the new name button, or close it when that participant is gone
+    if (menuState.id) {
+      const anchor = [...participants.querySelectorAll("button[data-menu]")].find(b => b.dataset.menu === menuState.id);
+      if (anchor) { menuState.anchor = anchor; anchor.setAttribute("aria-expanded", "true"); } else closeMenu();
     }
   };
   async function refreshParticipants() {
@@ -258,27 +387,12 @@
       await refreshParticipants();
     } catch (error) { say(error.message, true); }
   });
-  participants.addEventListener("change", async event => {
-    const select = event.target.closest?.("select[data-recipient]");
-    if (!select || !roomId) return;
-    try {
-      const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(select.dataset.recipient)}/recipient`, { method: "POST", body: JSON.stringify({ key: select.value }) });
-      if (!response.ok) throw new Error(await errorOf(response, "수신자 지정 실패"));
-      say("핸드아웃 수신자를 지정했습니다. 다음 핸드아웃 전송부터 반영됩니다.");
-    } catch (error) { say(error.message, true); }
-  });
   participants.addEventListener("click", async event => {
+    const nameButton = event.target.closest?.("button[data-menu]");
+    if (nameButton) { openParticipantMenu(nameButton); return; }
     const rename = event.target.closest?.("button[data-rename]");
     if (rename && roomId) {
-      const next = (prompt("참여자 표시 이름", rename.dataset.name) || "").trim();
-      if (!next || next === rename.dataset.name) return;
-      rename.disabled = true;
-      try {
-        const response = await adminFetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/participants/${encodeURIComponent(rename.dataset.rename)}/rename`, { method: "POST", body: JSON.stringify({ displayName: next }) });
-        if (!response.ok) throw new Error(await errorOf(response, "이름 변경 실패"));
-        say("표시 이름을 바꿨습니다.");
-      } catch (error) { say(error.message, true); }
-      await refreshParticipants();
+      await renameParticipant(rename.dataset.rename, rename.dataset.name, rename);
       return;
     }
     // a refused or revoked participant leaves the list (one confirmation; their session and handout list go with them, the objects they made stay in the room)
@@ -405,7 +519,9 @@
   shadow.append(backdrop);
   // The labels live in the same shadow root as their inputs, so for/id pairing works.
   const onKey = event => {
-    if (event.key === "Escape") { event.stopPropagation(); closeModal(); }
+    // an open menu takes the Escape (only the menu closes, not the dialog)
+    if (event.key === "Escape" && menuState.root) { event.stopPropagation(); event.preventDefault(); const anchor = menuState.anchor; closeMenu(); anchor?.focus?.(); }
+    else if (event.key === "Escape") { event.stopPropagation(); closeModal(); }
     // Keep typing inside the dialog from reaching CCFOLIA's global shortcuts.
     else if (host.matches(":focus-within") || shadow.activeElement) event.stopPropagation();
   };

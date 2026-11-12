@@ -6,10 +6,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 // Runs the real share-modal.js (injected by the toolbar icon) against a stubbed chrome.* API and relay.
 //   PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE, SCREENSHOT_DIR (optional)
 const source = fs.readFileSync(path.join(__dirname, '..', 'extension/personal/share-modal.js'), 'utf8');
-const stub = ({ storage, stopStatus = 200, participants = [] }) => `(() => {
+const stub = ({ storage, stopStatus = 200, participants = [], recipients = [] }) => `(() => {
   const store = ${JSON.stringify(storage)};
   const listeners = [];
-  window.__calls = []; window.__messages = []; window.__confirm = true; window.__stopStatus = ${stopStatus}; window.__participants = ${JSON.stringify(participants)};
+  window.__calls = []; window.__messages = []; window.__confirm = true; window.__stopStatus = ${stopStatus}; window.__participants = ${JSON.stringify(participants)}; window.__recipients = ${JSON.stringify(recipients)};
   window.chrome = {
     runtime: { id: "test-extension", sendMessage: async message => { window.__messages.push(message); } },
     storage: {
@@ -26,7 +26,7 @@ const stub = ({ storage, stopStatus = 200, participants = [] }) => `(() => {
   window.fetch = async (url, options = {}) => {
     window.__calls.push({ url, method: options.method || 'GET', auth: options.headers && options.headers.Authorization, body: options.body ? JSON.parse(options.body) : undefined });
     if (/\\/share\\/stop$/.test(url)) return { ok: window.__stopStatus < 300, status: window.__stopStatus, json: async () => (window.__stopStatus < 300 ? { stopped: true } : { error: 'GM 인증 실패' }) };
-    if (/\\/participants$/.test(url)) return { ok: true, status: 200, json: async () => ({ participants: window.__participants }) };
+    if (/\\/participants$/.test(url)) return { ok: true, status: 200, json: async () => ({ participants: window.__participants, recipients: window.__recipients }) };
     return { ok: true, status: 200, json: async () => ({}) };
   };
 })();`;
@@ -125,18 +125,67 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(store.relayUrl, 'https://other.example.test'); assert.equal(store.relayGmToken, 'new');
       await page.close();
     }
-    // The GM can rename a pending or approved participant (the name is used for their messages from then on).
+    // Participant rows: a pending one keeps the rename button; an approved one has only name · state · 접근 취소, and its name opens a menu (이름 변경 / 수신자 설정 ▸ list with the current value checked).
     {
-      const page = await open({ storage: { ...base }, participants: [{ id: 'p1', displayName: '원래 이름', status: 'approved' }, { id: 'p2', displayName: '거절된 사람', status: 'rejected' }] });
-      assert.deepEqual(await q(page, 'button[data-rename]').evaluateAll(b => b.map(x => x.dataset.rename)), ['p1'], 'only pending/approved participants can be renamed');
-      await page.evaluate(() => { window.prompt = (message, current) => { window.__promptArgs = [message, current]; return '  GM이 정한 이름  '; }; });
-      await q(page, 'button[data-rename]').click(); await flush(page);
+      const page = await open({ storage: { ...base }, recipients: [{ key: 'k1', label: '알파' }, { key: 'k2', label: '베타' }], participants: [
+        { id: 'p1', displayName: '원래 이름', status: 'approved', recipientKey: 'k2' }, { id: 'p2', displayName: '대기자', status: 'pending' }, { id: 'p3', displayName: '거절된 사람', status: 'rejected' }] });
+      assert.equal(await q(page, '#participants select').count(), 0, 'no recipient select in the rows');
+      assert.deepEqual(await q(page, 'button[data-rename]').evaluateAll(b => b.map(x => x.dataset.rename)), ['p2'], 'only the pending row keeps the rename button');
+      assert.deepEqual(await q(page, '.participant:has(button[data-menu]) button').evaluateAll(b => b.map(x => x.textContent.trim())), ['원래 이름', '접근 취소'], 'approved row: name button and 접근 취소 only');
+      const colors = await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; const c = (sel) => getComputedStyle(r.querySelector(sel)).color; return { approved: c('.state.approved'), pending: c('.state.pending'), rejected: c('.state.rejected') }; });
+      assert.equal(colors.approved, 'rgb(100, 181, 246)', '승인됨 is blue');
+      assert.notEqual(colors.pending, colors.approved);
+      assert.equal(colors.pending, colors.rejected, 'other states keep their colour');
+      const name = q(page, 'button[data-menu="p1"]');
+      assert.equal(await name.getAttribute('aria-haspopup'), 'menu');
+      assert.equal(await name.evaluate(el => getComputedStyle(el).cursor), 'pointer');
+      await name.click(); await flush(page);
+      assert.equal(await name.getAttribute('aria-expanded'), 'true');
+      assert.deepEqual(await q(page, '.menu:not(.sub-menu) .menu-label').allTextContents(), ['이름 변경', '수신자 설정'], 'two menu items');
+      const box = await q(page, '.menu:not(.sub-menu)').boundingBox();
+      assert(box.x >= 0 && box.y >= 0 && box.x + box.width <= 1280 && box.y + box.height <= 800, 'menu stays on screen');
+      // the recipient list: 이름으로 자동 + the known people, the current one checked
+      await q(page, '.menu-item[data-action="recipient"]').click(); await flush(page);
+      assert.deepEqual(await q(page, '.sub-menu .menu-label').allTextContents(), ['이름으로 자동', '알파', '베타']);
+      assert.deepEqual(await q(page, '.sub-menu .menu-item').evaluateAll(b => b.map(x => x.getAttribute('aria-checked'))), ['false', 'false', 'true']);
+      assert.deepEqual(await q(page, '.sub-menu .menu-check').allTextContents(), ['', '', '✓']);
+      // choosing one calls the same API as before and closes the menu
+      await q(page, '.sub-menu .menu-item[data-recipient-key="k1"]').click(); await flush(page);
+      const recipientCall = (await page.evaluate(() => window.__calls)).find(c => /\/recipient$/.test(c.url));
+      assert(recipientCall.url.endsWith('/api/admin/rooms/R1/participants/p1/recipient'));
+      assert.equal(recipientCall.method, 'POST'); assert.equal(recipientCall.auth, 'Bearer tok'); assert.deepEqual(recipientCall.body, { key: 'k1' });
+      assert.equal(await q(page, '.menu').count(), 0, 'the menu closed after the choice');
+      // Esc closes only the menu
+      await name.click(); await flush(page);
+      assert.equal(await q(page, '.menu').count(), 1);
+      await page.keyboard.press('Escape'); await flush(page);
+      assert.equal(await q(page, '.menu').count(), 0, 'Esc closes the menu');
+      assert.equal(await page.locator('#capybara-share-modal-host').count(), 1, 'but not the dialog');
+      // a click outside (also on the dark backdrop) closes the menu only
+      await name.click(); await flush(page);
+      await page.mouse.click(5, 5); await flush(page);
+      assert.equal(await q(page, '.menu').count(), 0, 'an outside click closes the menu');
+      assert.equal(await page.locator('#capybara-share-modal-host').count(), 1, 'and keeps the dialog open');
+      // keyboard: Enter on the focused name opens it
+      await name.focus(); await page.keyboard.press('Enter'); await flush(page);
+      assert.equal(await q(page, '.menu:not(.sub-menu) .menu-item[data-action="rename"]').count(), 1);
+      await page.keyboard.press('Escape'); await flush(page);
+      // rename through the menu: same API as the old button
+      await page.evaluate(() => { window.prompt = (message, current) => { window.__promptArgs = [message, current]; return '  GM이 정한 이름  '; }; window.__calls.length = 0; });
+      await name.click(); await flush(page);
+      await q(page, '.menu-item[data-action="rename"]').click(); await flush(page);
       assert.deepEqual(await page.evaluate(() => window.__promptArgs), ['참여자 표시 이름', '원래 이름']);
       const rename = (await page.evaluate(() => window.__calls)).find(c => /\/rename$/.test(c.url));
-      assert(rename.url.endsWith('/api/admin/rooms/R1/participants/p1/rename')); assert.equal(rename.method, 'POST'); assert.equal(rename.auth, 'Bearer tok'); assert.deepEqual(rename.body, { displayName: 'GM이 정한 이름' });
+      assert(rename.url.endsWith('/api/admin/rooms/R1/participants/p1/rename'));
+      assert.equal(rename.method, 'POST'); assert.equal(rename.auth, 'Bearer tok'); assert.deepEqual(rename.body, { displayName: 'GM이 정한 이름' });
+      // cancelling the prompt changes nothing; the pending row's own button still works
       await page.evaluate(() => { window.__calls.length = 0; window.prompt = () => null; });
-      await q(page, 'button[data-rename]').click(); await flush(page);
+      await name.click(); await q(page, '.menu-item[data-action="rename"]').click(); await flush(page);
+      await q(page, 'button[data-rename="p2"]').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__calls)).filter(c => /rename/.test(c.url)).length, 0, 'cancelling the prompt changes nothing');
+      await page.evaluate(() => { window.prompt = () => '새 대기자'; });
+      await q(page, 'button[data-rename="p2"]').click(); await flush(page);
+      assert((await page.evaluate(() => window.__calls)).some(c => /participants\/p2\/rename$/.test(c.url)), 'the pending row renames as before');
       await page.close();
     }
     // Stop: confirmed / declined / rejected / nothing shared.
