@@ -64,6 +64,21 @@ const flush = page => page.waitForTimeout(80);
       assert(rows[0].includes('<b>x</b> 대기') && rows[0].includes('대기 중'), 'HTML in names stays text');
       assert.equal(await q(page, '.participant b').count(), 0);
       assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.getElementById('room')).fontSize, getComputedStyle(r.querySelector('.ntfy p.muted')).fontSize, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['13px', '14px', '15px'], 'status lines 13px; ntfy paragraph and participant rows unchanged');
+      // 4차: title→first label gap, big gap before the 스마트폰 알림 section, grey status lines, wording
+      const layout = await page.evaluate(() => {
+        const r = document.getElementById('capybara-share-modal-host').shadowRoot;
+        const rect = (el) => el.getBoundingClientRect();
+        const titleBottom = rect(r.getElementById('title')).bottom, firstLabel = rect(r.querySelector('.body > .field > label')).top;
+        const lastApprove = rect(r.getElementById('participants')).bottom, ntfyTitle = rect(r.querySelector('.ntfy h3')).top;
+        const secondField = rect(r.querySelectorAll('.body > .field')[1]).top - rect(r.querySelectorAll('.body > .field')[0]).bottom;
+        return { titleGap: Math.round((firstLabel - titleBottom) * 10) / 10, sectionGap: Math.round(ntfyTitle - lastApprove), fieldGap: Math.round(secondField), color: getComputedStyle(r.getElementById('room')).color, h3: [...r.querySelectorAll('h3')].map((h) => h.textContent), text: r.querySelector('.ntfy').textContent };
+      });
+      console.log('share modal layout', JSON.stringify({ titleGap: layout.titleGap, sectionGap: layout.sectionGap, fieldGap: layout.fieldGap }));
+      assert(layout.titleGap <= 8 && layout.titleGap <= layout.fieldGap + 8, `title → first label gap is small (${layout.titleGap}px, other fields ${layout.fieldGap}px)`);
+      assert(layout.sectionGap >= 28, `clear gap before the 스마트폰 알림 section (${layout.sectionGap}px)`);
+      assert.equal(layout.color, 'rgba(255, 255, 255, 0.5)', 'status lines are light grey');
+      assert.deepEqual(layout.h3.slice(-2), ['스마트폰 알림', '스마트폰에 연결하는 방법']);
+      assert(!layout.text.includes('핸드폰'), 'no 핸드폰 left in the section');
       // '참가 승인' status lines: tight spacing, empty lines take no room, other muted paragraphs (ntfy) keep the default margin.
       const gaps = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;
@@ -82,7 +97,7 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(await q(page, '#ntfy-away-min').inputValue(), '2', 'idle minutes default 2');
       await q(page, '#ntfy-topic').fill('capy-test'); await q(page, '#ntfy-away-min').fill('99'); await q(page, '#ntfy-save').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__store.ntfy)).awayMinutes, 60, 'idle minutes clamped to 1..60');
-      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('capybara-share-modal-host').shadowRoot.querySelector('.body > .field')).marginTop), '4px', 'first field sits close to the header');
+      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('capybara-share-modal-host').shadowRoot.querySelector('.body > .field')).marginTop), '0px', 'first field sits close to the header');
       console.log('approval spacing', JSON.stringify(gaps));
       assert.deepEqual(await q(page, 'button[data-decision]').evaluateAll(b => b.map(x => `${x.dataset.id}:${x.dataset.decision}`)), ['p1:approve', 'p1:reject', 'p2:revoke']);
       // Approve: authenticated POST for that participant.

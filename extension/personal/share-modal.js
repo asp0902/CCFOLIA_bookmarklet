@@ -33,11 +33,12 @@
     .paper { width: min(560px, calc(100vw - 64px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column;
       background: #222; color: #fff; border-radius: 4px; overflow: hidden;
       box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); }
-    header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 8px; }
+    header { display: flex; align-items: center; gap: 8px; padding: 16px 24px 0; }
     h2 { flex: none; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0075em; }
-    .body { padding: 20px 24px; overflow: auto; font-size: 1rem; line-height: 1.5; }
+    .body { padding: 4px 24px 20px; overflow: auto; font-size: 1rem; line-height: 1.5; }
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
-    p.status-line { margin: 2px 0; line-height: 1.4; font-size: 13px; }
+    p.status-line { margin: 2px 0; line-height: 1.4; font-size: 13px; color: rgba(255,255,255,.5); }
+    .ntfy { margin-top: 30px; }
     p.status-line:empty { display: none; }
     .field { margin-top: 16px; }
     .field > label { display: block; margin-bottom: 4px; color: rgba(255,255,255,.7); font-size: .75rem; }
@@ -61,7 +62,7 @@
     .switch input:checked + .sw .base { transform: translateX(20px); color: #2196f3; }
     .switch input:checked + .sw .track { background-color: #2196f3; opacity: .5; }
     .switch input:focus-visible + .sw { outline: 2px solid #fff; outline-offset: -4px; border-radius: 19px; }
-    .body > .field:first-child { margin-top: 4px; }
+    .body > .field:first-child { margin-top: 0; }
     h3 { margin: 16px 0 4px; font-size: 1rem; font-weight: 500; }
     button { font: inherit; font-size: .875rem; font-weight: 500; letter-spacing: .02857em; min-width: 64px; height: 36px; padding: 6px 12px; border: 0; border-radius: 4px;
       background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
@@ -309,7 +310,7 @@
   const x = el("button", { type: "button", class: "icon", id: "x", "aria-label": "닫기", text: "✕" });
   x.addEventListener("click", closeModal);
 
-  // ---- 핸드폰 알림 (ntfy): 새 메시지를 안드로이드 ntfy 앱으로. 설정은 chrome.storage.local.ntfy, 전송은 background.js, 판정은 ntfy-page.js.
+  // ---- 스마트폰 알림: 새 메시지를 안드로이드 ntfy 앱으로. 설정은 chrome.storage.local.ntfy, 전송은 background.js, 판정은 ntfy-page.js.
   const NTFY_DEFAULT_SERVER = "https://ntfy.sh";
   const randomTopic = () => {
     const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
@@ -349,7 +350,7 @@
   const ntfySave = el("button", { type: "button", class: "contained", id: "ntfy-save", text: "알림 설정 저장" });
   ntfySave.addEventListener("click", () => { if (!nTopic.value.trim()) nTopic.value = randomTopic(); refreshNtfyLink(); saveNtfy(); });
   const ntfyNew = el("button", { type: "button", id: "ntfy-new", text: "새로 만들기" });
-  ntfyNew.addEventListener("click", () => { nTopic.value = randomTopic(); refreshNtfyLink(); nSay("새 topic 입니다. 저장한 뒤 핸드폰 앱에서 다시 구독하세요."); });
+  ntfyNew.addEventListener("click", () => { nTopic.value = randomTopic(); refreshNtfyLink(); nSay("새 topic 입니다. 저장한 뒤 스마트폰 앱에서 다시 구독하세요."); });
   const ntfyCopy = el("button", { type: "button", id: "ntfy-copy", text: "복사" });
   ntfyCopy.addEventListener("click", async () => {
     if (!nTopic.value.trim()) { nSay("먼저 저장해서 topic 을 만드세요.", true); return; }
@@ -363,26 +364,26 @@
     if (!(await saveNtfy())) return;
     nSay("보내는 중…");
     try {
-      const answer = await chrome.runtime.sendMessage({ type: "ntfy-test", payload: { title: "카피바라 테스트 알림", message: "핸드폰에 이 알림이 보이면 연결된 것입니다.", click: location.origin + "/" } });
-      nSay(answer?.ok ? "테스트 알림을 보냈습니다. 핸드폰 ntfy 앱에서 확인하세요." : `보내지 못했습니다: ${answer?.error || "알 수 없는 오류"}`, !answer?.ok);
+      const answer = await chrome.runtime.sendMessage({ type: "ntfy-test", payload: { title: "카피바라 테스트 알림", message: "스마트폰에 이 알림이 보이면 연결된 것입니다.", click: location.origin + "/" } });
+      nSay(answer?.ok ? "테스트 알림을 보냈습니다. 스마트폰 ntfy 앱에서 확인하세요." : `보내지 못했습니다: ${answer?.error || "알 수 없는 오류"}`, !answer?.ok);
     } catch (error) { nSay(`보내지 못했습니다: ${error.message}`, true); }
   });
   const ntfySection = el("div", { class: "ntfy" },
-    el("h3", { text: "핸드폰 알림 (ntfy)" }),
+    el("h3", { text: "스마트폰 알림" }),
     el("p", { class: "muted", text: "코코포리아 새 메시지를 안드로이드 ntfy 앱으로 알려 줍니다. PC에서 이 룸 탭이 열려 있어야 알림이 갑니다." }),
-    el("label", { class: "check" }, nEnabled, el("span", { text: "핸드폰 알림 사용" })),
+    el("label", { class: "check" }, nEnabled, el("span", { text: "스마트폰 알림 사용" })),
     el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
     el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알릴 메시지" }), nScope, nKeywords),
     el("label", { class: "check" }, nAway, el("span", {}, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (다른 탭·창이거나, 조작이 없을 때 — 조작 없는 시간: " }), nAwayMin, el("span", { text: " 분)" }))),
     el("label", { class: "check" }, nText, el("span", { text: "알림에 메시지 앞부분(60자)도 넣기" })),
     el("p", { class: "warn", text: "켜면 메시지 내용이 공개 서버(ntfy.sh)를 거칩니다. 기본은 보낸 사람 이름과 룸 이름만 보냅니다." }),
     el("div", { class: "field" }, el("label", { for: "ntfy-server", text: "서버 주소 (비우면 https://ntfy.sh · 자체 서버는 사이트 접근 허용이 따로 필요합니다)" }), nServer),
-    el("h3", { text: "핸드폰에 연결하는 방법" }),
+    el("h3", { text: "스마트폰에 연결하는 방법" }),
     el("ol", { class: "muted", style: "margin:4px 0 0 18px;padding:0" },
       el("li", { text: "Play 스토어에서 ntfy 앱(무료)을 설치합니다." }),
       el("li", { text: "앱의 + 를 눌러 위 topic 이름을 입력하고 구독합니다. (서버를 바꿨다면 앱의 서버 주소도 같게)" }),
-      el("li", { text: "여기서 ‘테스트 알림 보내기’를 눌러 핸드폰에 알림이 오는지 확인합니다." })),
-    el("div", { class: "field" }, el("label", { text: "핸드폰에서 열면 바로 구독되는 링크" }), nLink),
+      el("li", { text: "여기서 ‘테스트 알림 보내기’를 눌러 스마트폰에 알림이 오는지 확인합니다." })),
+    el("div", { class: "field" }, el("label", { text: "스마트폰에서 열면 바로 구독되는 링크" }), nLink),
     nToast,
     el("div", { class: "row", style: "margin-top:12px" }, ntfySave, ntfyTest));
 
