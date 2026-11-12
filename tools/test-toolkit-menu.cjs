@@ -44,17 +44,27 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
         await openTool(page, '사이코로픽션');
         assert.equal(await page.locator('#ccf-gm-tools .ccf-gt-window > header > h2').textContent(), 'GM 도구');
         assert.deepEqual(await tabs(page), ['사이코로픽션', '핸드아웃', '설정'], label);
-        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-character-sheet-root .ccf-cs-dialog');
+        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-sheet-tab');
+        assert.equal(await page.locator('#ccf-character-sheet-root').count(), 0, label + ': the tab is a list, no sheet window yet');
         assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]').textContent), '사이코로픽션', label + ': first tab');
-        const look = await page.evaluate(() => { const w = document.querySelector('#ccf-gm-tools .ccf-gt-window'), c = getComputedStyle(w), t = getComputedStyle(w.querySelector(':scope > header > h2')), tab = document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]'); return { bg: c.backgroundColor, radius: c.borderTopLeftRadius, title: [t.fontSize, t.fontWeight], backdrop: !!document.querySelector('#ccf-gm-tools .ccf-gt-backdrop'), indicator: getComputedStyle(tab, '::after').backgroundColor, sheetInside: !!w.querySelector('.ccf-gt-body > #ccf-character-sheet-root'), standalone: document.querySelectorAll('body > #ccf-character-sheet-root').length }; });
-        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['14px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)', sheetInside: true, standalone: 0 }, label + ': CCFOLIA dialog look, blue tab underline, the sheet is inside the window');
+        const look = await page.evaluate(() => { const w = document.querySelector('#ccf-gm-tools .ccf-gt-window'), c = getComputedStyle(w), t = getComputedStyle(w.querySelector(':scope > header > h2')), tab = document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]'); return { bg: c.backgroundColor, radius: c.borderTopLeftRadius, title: [t.fontSize, t.fontWeight], backdrop: !!document.querySelector('#ccf-gm-tools .ccf-gt-backdrop'), indicator: getComputedStyle(tab, '::after').backgroundColor }; });
+        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['14px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)' }, label + ': CCFOLIA dialog look, blue tab underline');
+        // the list: add a sheet (opens the standalone window), the row of a sheet opens it; the tab itself never edits
+        await page.locator('#ccf-gm-tools [data-tab-add]').dispatchEvent('click');
+        await page.waitForSelector('body > #ccf-character-sheet-root .ccf-cs-dialog.is-editor');
+        assert.equal(await page.locator('#ccf-gm-tools #ccf-character-sheet-root').count(), 0, label + ': the sheet is not inside the GM tools window');
+        assert.equal(await page.locator('#ccf-gm-tools [data-tab-open]').count() >= 1, true, label + ': the list shows the new sheet');
+        await page.locator('#ccf-character-sheet-root [data-action="close"]').dispatchEvent('click');
+        assert.equal(await page.locator('#ccf-character-sheet-root').count(), 0, label + ': the sheet window closes');
+        await page.locator('#ccf-gm-tools [data-tab-open]').first().dispatchEvent('click');
+        await page.waitForSelector('body > #ccf-character-sheet-root .ccf-cs-dialog.is-editor');
+        await page.locator('#ccf-character-sheet-root [data-action="close"]').dispatchEvent('click');
         // switching tabs: the sheet is taken away (unmount), the handout appears inside the window
         await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '핸드아웃' }).dispatchEvent('click');
         await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccfolia-handout-root', { state: 'attached', timeout: 5000 });
-        assert.equal(await page.locator('#ccf-character-sheet-root').count(), 0, label + ': the sheet tab was cleaned up');
         assert.equal(await page.evaluate(() => { const panel = document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.panel'); const body = document.querySelector('#ccf-gm-tools .ccf-gt-body').getBoundingClientRect(), r = panel.getBoundingClientRect(); return Math.abs(r.width - body.width) < 2 && Math.abs(r.height - body.height) < 2; }), true, label + ': the handout panel fills the tab body');
         await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '사이코로픽션' }).dispatchEvent('click');
-        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-character-sheet-root .ccf-cs-dialog');
+        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-sheet-tab');
         assert.equal(await page.locator('#ccfolia-handout-root').count(), 0, label + ': the handout tab was cleaned up');
         // the last tab is remembered, Esc and ✕ close the window
         await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '핸드아웃' }).dispatchEvent('click');
@@ -69,7 +79,7 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
         assert.equal(await page.locator('#ccf-gm-tools').count(), 0, label + ': Esc closes the window');
         // code paths that opened the sheet on its own open the window's sheet tab: the registry API
         await page.evaluate(() => window.__CCF_TOOLKIT_MENU__.openTool('saikoro'));
-        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-character-sheet-root .ccf-cs-dialog');
+        await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-sheet-tab');
         await page.evaluate(() => window.__CCF_TOOLKIT_MENU__.closeTool());
         assert.equal(await page.locator('#ccf-gm-tools').count(), 0);
         const changes = await page.evaluate(() => new Promise((resolve) => { let n = 0; const root = document.querySelector('header'); const mo = new MutationObserver((r) => { n += r.length; }); mo.observe(root, { subtree: true, childList: true, attributes: true, characterData: true }); setTimeout(() => { mo.disconnect(); resolve(n); }, 1500); }));
@@ -145,12 +155,12 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     });
     await edit.waitForSelector('[data-ccf-character-sheet-dialog-button]', { state: 'attached', timeout: 8000 });
     await edit.locator('[data-ccf-character-sheet-dialog-button]').dispatchEvent('click');
-    await edit.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-character-sheet-root .ccf-cs-dialog.is-editor', { timeout: 5000 });
-    assert.equal(await edit.locator('#ccf-gm-tools #ccf-cs-title').textContent(), '연갈', 'the edit dialog button shows that character\'s sheet in the GM tools window');
-    assert.equal(await edit.locator('body > #ccf-character-sheet-root').count(), 0, 'no separate sheet window');
+    await edit.waitForSelector('body > #ccf-character-sheet-root .ccf-cs-dialog.is-editor', { timeout: 5000 });
+    assert.equal(await edit.locator('#ccf-cs-title').textContent(), '연갈', 'the edit dialog button opens that character\'s sheet in its own window');
+    assert.equal(await edit.locator('#ccf-gm-tools').count(), 0, 'not in the GM tools window (it manages all sheets, it does not edit one)');
     await edit.waitForFunction(() => window.__nativeClosed === 1, null, { timeout: 4000 });
-    assert.equal(await edit.locator('#ccf-gm-tools .ccf-gt-window').count(), 1, 'the window stays after the native edit dialog is closed');
-    assert.equal(await edit.locator('#ccf-gm-tools [data-action="close"]').evaluate((b) => getComputedStyle(b).display), 'none', 'the sheet has no close button of its own inside the window');
+    assert.equal(await edit.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-editor').count(), 1, 'the sheet window stays after the native edit dialog is closed');
+    assert.notEqual(await edit.locator('#ccf-character-sheet-root [data-action="close"]').first().evaluate((b) => getComputedStyle(b).display), 'none', 'the standalone sheet has its own close button');
     // the only item gone (the sheet script alone in a non-inSANe room): the button hides itself
     const lonely = await (async () => {
       const p = await browser.newPage();

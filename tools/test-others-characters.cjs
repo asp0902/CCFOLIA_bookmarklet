@@ -70,6 +70,41 @@ const html = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
       assert.deepEqual(await page.evaluate(() => window.__dispatched.length), 0, 'the sheet button does not open the edit dialog');
       await page.close();
     }
+    // the real "내 캐릭터 목록" is a floating Paper panel (h6 title), not a Dialog; a GM with no characters of their own has no native row to copy: the rows are drawn from scratch, in that panel's list
+    for (const variant of ['paper-with-rows', 'paper-empty']) {
+      const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+      const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+      const panel = variant === 'paper-empty'
+        ? '<div class="MuiPaper-root MuiPaper-elevation6" style="position:fixed;right:20px;top:60px;width:420px;background:#333"><div><h6 class="MuiTypography-root">내 캐릭터 목록</h6></div><ul class="MuiList-root" id="rows"></ul></div>'
+        : '<div class="MuiPaper-root MuiPaper-elevation6" style="position:fixed;right:20px;top:60px;width:420px;background:#333"><div><h6 class="MuiTypography-root">내 캐릭터 목록</h6></div><ul class="MuiList-root" id="rows"><li class="MuiListItem-root" style="display:flex"><div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">연갈</h6></div><button aria-label="토큰을 화면에서 삭제">삭</button></li></ul></div>';
+      await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div id="root"></div>' + panel }));
+      await page.goto('https://ccfolia.com/rooms/test');
+      await page.evaluate(() => {
+        const state = { app: { user: { uid: 'me' }, state: { roomId: 'r1', openRoomCharacter: false, openRoomCharacterId: null }, room: { members: { entities: { u1: { displayName: '하나' } } } } }, entities: { rooms: { entities: { r1: { owner: 'me' } } }, roomCharacters: { entities: { b1: { name: '하나의 캐릭터', owner: 'u1', order: 1, iconUrl: 'https://example.test/h1.png' } } } } };
+        window.__dispatched = [];
+        const store = { getState: () => state, subscribe: () => () => {}, dispatch(action) { window.__dispatched.push(action); return action; } };
+        document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store } } } };
+      });
+      await page.addScriptTag({ content: source });
+      await page.waitForSelector('[data-ccf-others-row]', { timeout: 4000 });
+      assert.equal(await page.locator('[data-ccf-others-row]').count(), 1, variant + ': one row');
+      assert.equal(await page.locator('[data-ccf-others-row] button').count(), 0, variant + ': no delete button');
+      assert.equal(await page.evaluate(() => document.querySelector('[data-ccf-others-row] .MuiListItemText-primary').textContent), '하나의 캐릭터');
+      await page.locator('[data-ccf-others-row]').click();
+      assert.deepEqual(await page.evaluate(() => window.__dispatched.map((x) => [x.type, x.payload.openRoomCharacterId])), [['app/state/seted', 'b1']], variant + ': click opens the native edit dialog');
+      const diag = await page.evaluate(() => window.__CCF_OTHERS_CHARS__.diag());
+      assert.deepEqual([diag.gm, diag.ownedByOthers, diag.panels.map((x) => [x.kind, x.title, x.nativeRows]), diag.reason], [true, 1, [['paper', '내 캐릭터 목록', variant === 'paper-empty' ? 0 : 1]], '정상: 행이 붙어 있음'], variant + ': diag explains');
+      assert.deepEqual(errors, []); await page.close();
+    }
+    // diag reasons: not the GM / no panel open
+    {
+      const page = await browser.newPage();
+      await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><body><div id="root"></div>' }));
+      await page.goto('https://ccfolia.com/rooms/test');
+      await page.evaluate(() => { const state = { app: { user: { uid: 'me' }, state: { roomId: 'r1' } }, entities: { rooms: { entities: { r1: { owner: 'x' } } }, roomCharacters: { entities: { b1: { name: 'n', owner: 'u1' } } } } }; document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, subscribe: () => () => {}, dispatch() {} } } } } }; });
+      await page.addScriptTag({ content: source }); await page.waitForTimeout(400);
+      assert((await page.evaluate(() => window.__CCF_OTHERS_CHARS__.diag())).reason.includes('계정이 아님')); await page.close();
+    }
     console.log('others characters PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.29
+// @version      0.5.32
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.29";
+  const VERSION = "0.5.32";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -266,6 +266,7 @@
     renderFrame: 0,
     collapsed: false,
     embedded: null,
+    tabContainer: null,
     saveTimer: 0,
     dialogPosition: { x: 0, y: 0 },
     openNotes: new Set(),
@@ -615,32 +616,71 @@
     }
   }
 
-  // 시트는 "GM 도구" 창(toolkit-presence)의 사이코로픽션 탭 안에 그려진다. 그 창을 쓸 수 없으면(presence 미로드) 예전처럼 따로 뜨는 창으로 연다.
+  // 시트를 여는 모든 길(편집창 버튼·내 캐릭터 목록 버튼·붙여넣기·코드)은 독립 시트 창으로 연다(원래 창 모양, 탑바 더블클릭 접기).
+  // "GM 도구" 창의 사이코로픽션 탭은 모든 시트를 관리하는 목록(추가·삭제)이고, 시트를 고르면 독립 시트 창이 열린다. 탭 안에서는 시트를 편집하지 않는다.
   function toolsApi() {
     const registry = window.__CCF_TOOLKIT_MENU__;
     return typeof registry?.openTool === "function" ? registry : null;
   }
 
   function showSheet() {
-    if (state.embedded) { ensureRoot(); render(); return true; }
-    const api = toolsApi();
-    if (api && api.openTool("saikoro")) return true;
     ensureRoot();
     render();
     return true;
   }
 
-  function mountSheetTool(container) {
-    document.getElementById(ROOT_ID)?.remove();
-    state.embedded = container;
+  // ---- GM 도구 창 탭: 시트 관리 목록 ----
+  const TAB_ID = "ccf-sheet-tab";
+  function renderSheetTab() {
+    const container = state.tabContainer;
+    if (!container?.isConnected) return;
+    const sheets = state.data?.sheets || [];
+    const button = "all:unset;box-sizing:border-box;cursor:pointer;display:inline-grid;place-items:center;border-radius:50%;width:34px;height:34px;color:rgba(255,255,255,.7)";
+    const signature = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name, sheet.player]));
+    if (container.__sig === signature && container.querySelector("#" + TAB_ID)) return;
+    container.__sig = signature;
+    const rows = sheets.map((sheet) => `<div style="display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(255,255,255,.08)"><button type="button" data-tab-open="${escapeHtml(sheet.id)}" style="all:unset;box-sizing:border-box;flex:1;min-width:0;cursor:pointer;display:flex;align-items:baseline;gap:12px;padding:10px 8px"><strong style="font-size:15px;font-weight:700">${escapeHtml(sheet.name || "이름 없음")}</strong><span style="color:rgba(255,255,255,.6);font-size:13px">${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button type="button" data-tab-delete="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 삭제" title="삭제" style="${button}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>`).join("");
+    container.innerHTML = `<div id="${TAB_ID}" style="position:absolute;inset:0;overflow:auto;padding:0 24px 24px;font-family:Roboto,'Noto Sans KR',sans-serif;color:#fff"><div style="display:flex;align-items:center;justify-content:space-between;min-height:48px"><span style="color:rgba(255,255,255,.7);font-size:13px">시트를 누르면 시트 창이 열립니다.</span><button type="button" data-tab-add aria-label="시트 추가" title="시트 추가" style="${button}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button></div>${rows || '<p style="color:rgba(255,255,255,.6)">시트가 없습니다. ＋로 추가하세요.</p>'}</div>`;
+  }
+
+  function openSheetWindow(sheetId) {
+    if (!detectRoom()) return false;
     state.open = true;
+    state.view = "sheet";
+    state.data.selectedId = sheetId;
     ensureRoot();
     render();
+    return true;
+  }
+
+  function onSheetTabClick(event) {
+    const open = event.target.closest("[data-tab-open]");
+    if (open) { openSheetWindow(open.dataset.tabOpen); return; }
+    const del = event.target.closest("[data-tab-delete]");
+    if (del) {
+      const sheet = state.data.sheets.find((item) => item.id === del.dataset.tabDelete);
+      if (!sheet || !confirm(`'${sheet.name || "이름 없음"}' 시트를 삭제할까요?`)) return;
+      state.data.sheets = state.data.sheets.filter((item) => item.id !== sheet.id);
+      if (state.data.selectedId === sheet.id) state.data.selectedId = state.data.sheets[0]?.id || "";
+      if (state.open) render();
+      renderSheetTab(); saveSoon();
+      return;
+    }
+    if (event.target.closest("[data-tab-add]")) {
+      const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
+      state.data.sheets.push(sheet); renderSheetTab(); saveSoon();
+      openSheetWindow(sheet.id);
+    }
+  }
+
+  function mountSheetTool(container) {
+    state.tabContainer = container;
+    container.addEventListener("click", onSheetTabClick, { signal });
+    renderSheetTab();
   }
 
   function unmountSheetTool() {
-    state.embedded = null;
-    closeSheet();
+    state.tabContainer = null;
   }
 
   function openSheet() {
@@ -657,7 +697,7 @@
     state.tablePicker = null;
     state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
-    if (state.embedded) { state.embedded = null; try { toolsApi()?.closeTool?.(); } catch (error) { /* 창 정리 실패는 무시 */ } }
+    renderSheetTab();
   }
 
   function ensureRoot() {
@@ -697,7 +737,7 @@
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}${state.collapsed ? " is-collapsed" : ""}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${label}</button></span>` : `<button data-command="${command}">${label}</button>`).join("")}<button data-action="fear-roll">공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     checkD20Font();
     const dialog = root.querySelector(".ccf-cs-dialog");
@@ -705,6 +745,7 @@
     dialog.querySelector("main").scrollTop = scrollTop;
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
+    renderSheetTab(); // GM 도구 탭의 관리 목록도 같은 데이터(이름·플레이어)로 맞춘다
   }
 
   function renderPanelTabs() {
@@ -1455,15 +1496,18 @@
   }
 
   // 커맨드를 입력칸에 넣고 보내는 동안 입력칸 글을 투명하게(높이 고정·캐럿 숨김) 해서 본문이 비치지 않게 한다. 비워지면 원복, 전송이 안 되면 원복 + 안내.
+  // 보내는 동안 입력창: 글자·커서를 투명하게 하고, 입력칸(textarea)과 그 래퍼(MUI InputBase)의 높이를 원래 값으로 고정한다.
+  // MUI 의 자동 높이(TextareaAutosize)는 글이 바뀔 때마다 textarea 의 인라인 height 를 다시 쓰므로 인라인 값으로는 못 막는다 → 속성 + !important 스타일 규칙(인라인보다 앞선다)과 CSS 변수로 고정한다.
   function hideEditorWhileSending(editor) {
     if (!(editor instanceof HTMLTextAreaElement)) return () => {};
-    const names = ["color", "caret-color", "height", "min-height", "max-height", "overflow", "resize"];
-    // 연속으로 보낼 때 두 번째가 '이미 투명한 상태'를 원래 값으로 저장하지 않도록, 원래 값은 처음 한 번만 저장하고 마지막 복원 때 되돌린다.
+    // 연속으로 보낼 때 두 번째가 '이미 고정된 상태'를 원래 값으로 저장하지 않도록, 처음 한 번만 걸고 마지막 복원 때 푼다.
     let hold = editor.__ccfSheetHide;
     if (!hold) {
-      hold = editor.__ccfSheetHide = { count: 0, saved: names.map((name) => [name, editor.style.getPropertyValue(name), editor.style.getPropertyPriority(name)]) };
-      const height = `${editor.offsetHeight}px`;
-      for (const [name, value] of [["color", "transparent"], ["caret-color", "transparent"], ["height", height], ["min-height", height], ["max-height", height], ["overflow", "hidden"], ["resize", "none"]]) editor.style.setProperty(name, value, "important");
+      const wrap = editor.closest(".MuiInputBase-root") || editor.parentElement;
+      hold = editor.__ccfSheetHide = { count: 0, wrap, hadWrapAttr: wrap?.hasAttribute("data-ccf-sheet-sending-wrap") };
+      editor.style.setProperty("--ccf-sheet-h", `${editor.offsetHeight}px`);
+      editor.setAttribute("data-ccf-sheet-sending", "1");
+      if (wrap && wrap !== editor) { wrap.style.setProperty("--ccf-sheet-wh", `${wrap.offsetHeight}px`); wrap.setAttribute("data-ccf-sheet-sending-wrap", "1"); }
     }
     hold.count += 1;
     let restored = false;
@@ -1471,18 +1515,21 @@
       if (restored) return; restored = true;
       hold.count -= 1;
       if (hold.count <= 0) {
-        for (const [name, value, priority] of hold.saved) { if (value) editor.style.setProperty(name, value, priority); else editor.style.removeProperty(name); }
+        editor.removeAttribute("data-ccf-sheet-sending");
+        editor.style.removeProperty("--ccf-sheet-h");
         if (!editor.getAttribute("style")) editor.removeAttribute("style");
+        if (hold.wrap) { hold.wrap.removeAttribute("data-ccf-sheet-sending-wrap"); hold.wrap.style.removeProperty("--ccf-sheet-wh"); if (!hold.wrap.getAttribute("style")) hold.wrap.removeAttribute("style"); }
         delete editor.__ccfSheetHide;
       }
       if (failed) status("전송되지 않았습니다");
     };
   }
-
   function writeChat(command, submit = true) {
     const editors = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
     const editor = editors.find((node) => !node.closest(`#${ROOT_ID}, [role="dialog"], .MuiDialog-root`) && isVisible(node) && findSubmitScope(node));
     if (!editor) return status("채팅 입력창을 찾지 못함");
+    // 글을 넣기 전에 먼저 고정한다: 넣는 순간 MUI 자동 높이가 입력칸을 키우므로, 그 뒤에 재면 이미 커진 높이가 "원래" 값이 된다.
+    const restore = submit ? hideEditorWhileSending(editor) : null;
     if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
       const setter = Object.getOwnPropertyDescriptor(editor.constructor.prototype, "value")?.set;
       if (setter) setter.call(editor, command); else editor.value = command;
@@ -1491,7 +1538,6 @@
     // 시트는 닫기 버튼·Esc 로만 닫힌다. 보낸 뒤 채팅 입력칸에 포커스를 가져가지 않는다.
     if (submit) {
       const submitButton = findSubmitScope(editor)?.querySelector('button[type="submit"]');
-      const restore = hideEditorWhileSending(editor);
       submitButton?.click();
       // 보내면 코코포리아가 입력칸을 비운다 → 원복. 끝까지 안 비워지면(전송 실패) 원복하고 안내.
       const started = Date.now();
@@ -1542,7 +1588,8 @@
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(44,44,44,.87);background-image:none;border:0;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden }
       #${ROOT_ID} .ccf-cs-dialog.is-editor { grid-template-rows:64px minmax(0,1fr) auto }
-      #${ROOT_ID} .ccf-cs-dialog.is-editor { width:min(900px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px)) }
+      /* 폭은 내용에 맞춘다: 가장 넓은 줄은 리스펙 줄(한 줄 유지에 약 850px 필요, 특기 표는 734px): 본문 좌우 여백 40 + 스크롤바 여유 포함해 860(14.7: 예전 900에서 줄임) */
+      #${ROOT_ID} .ccf-cs-dialog.is-editor { width:min(860px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px)) }
       #${ROOT_ID} .ccf-cs-dialog.is-panel { grid-template-rows:64px 48px minmax(0,1fr) }
       #${ROOT_ID}.is-embedded { position:absolute;inset:0;pointer-events:auto }
       #${ROOT_ID}.is-embedded .ccf-cs-dialog { position:absolute;inset:0;margin:0;width:100%!important;height:100%!important;box-shadow:none;border-radius:0;background:transparent;transform:none!important }
@@ -1638,11 +1685,15 @@
       #${ROOT_ID} .ccf-cs-roll-pair .ccf-cs-ability-roll { width:32px;min-width:32px }
       #${ROOT_ID} .ccf-cs-roll-public,#${ROOT_ID} .ccf-cs-footer-public { color:#fff }
       #${ROOT_ID} .ccf-cs-roll-secret,#${ROOT_ID} .ccf-cs-footer-secret { color:rgb(255,0,12) }
+      textarea[data-ccf-sheet-sending] { color:transparent!important;caret-color:transparent!important;height:var(--ccf-sheet-h)!important;min-height:var(--ccf-sheet-h)!important;max-height:var(--ccf-sheet-h)!important;overflow:hidden!important;resize:none!important }
+      [data-ccf-sheet-sending-wrap] { height:var(--ccf-sheet-wh)!important;min-height:var(--ccf-sheet-wh)!important;max-height:var(--ccf-sheet-wh)!important;box-sizing:border-box!important }
       #${ROOT_ID} .ccf-cs-dialog button.ccf-cs-roll-public,#${ROOT_ID} .ccf-cs-dialog button.ccf-cs-respect-roll { color:#fff }
       #${ROOT_ID} .ccf-cs-dialog button.ccf-cs-footer-secret,#${ROOT_ID} .ccf-cs-dialog button.ccf-cs-roll-secret { color:rgb(255,0,12) }
       #${ROOT_ID} .ccf-cs-roll-public:hover,#${ROOT_ID} .ccf-cs-respect-roll:hover { background:rgba(255,255,255,.14) }
       #${ROOT_ID} .ccf-cs-d20 { font-family:"${D20_FONT_FAMILY}",sans-serif;font-size:17px;line-height:1;font-weight:normal;font-style:normal;pointer-events:none;display:none }
       #${ROOT_ID} .ccf-cs-d20-fallback { display:none }
+      #${ROOT_ID} footer button:not(.ccf-cs-footer-secret) { display:inline-flex;align-items:center;gap:4px }
+      #${ROOT_ID} footer button:not(.ccf-cs-footer-secret) .ccf-cs-d20-fallback { width:17px;height:17px }
       #${ROOT_ID}[data-d20-font="1"] .ccf-cs-d20 { display:inline-block }
       #${ROOT_ID}[data-d20-font="0"] .ccf-cs-d20-fallback { display:inline-block }
       #${ROOT_ID} .ccf-cs-dialog>footer .ccf-cs-footer-secret { width:30px;min-width:30px;padding:0;display:inline-grid;place-items:center;background:transparent }
