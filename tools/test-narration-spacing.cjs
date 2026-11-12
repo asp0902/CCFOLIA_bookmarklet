@@ -17,6 +17,7 @@ const prose = styleFunction(bridge.slice(bridge.indexOf('// ===== Prose Mode')))
     const row = (id, attrs = '', narration = true) => `<div class="MuiListItem-root" id="${id}" ${attrs}><div class="MuiListItemText-root"><p class="MuiListItemText-secondary ccf-render-root" ${narration ? 'data-ccf-narration="1"' : ''}><span class="ccf-line">${id}</span></p></div></div>`;
     await page.setContent(`<style>body{background:#282828;color:white;font:16px sans-serif}.MuiListItem-root{padding:8px 16px;display:flex}.MuiListItemText-root{margin:6px 0}.ccf-render-root{margin:0;line-height:24px}.ccf-line{display:block}section{max-width:320px;border-block:1px solid #555;margin-bottom:20px}</style>
       <section id="single-group">${row('single')}</section>
+      <section id="image-row"><div class="MuiListItem-root" id="imgrow"><div class="MuiListItemText-root"><p class="MuiListItemText-secondary ccf-render-root" data-ccf-narration="1"><span class="ccf-frag ccf-image-frag"><img class="ccf-image" width="40" height="40"></span></p></div></div><div class="MuiListItem-root" id="imgcont" data-ccf-prose-cont="1"><div class="MuiListItemText-root"><p class="MuiListItemText-secondary ccf-render-root" data-ccf-narration="1"><span class="ccf-frag ccf-image-frag"><img class="ccf-image" width="40" height="40"></span></p></div></div></section>
       <section id="multi-group">${row('first', 'data-ccf-prose-cont-leader="1"')}${row('middle', 'data-ccf-prose-cont="1"')}${row('last', 'data-ccf-prose-cont="1" data-ccf-prose-cont-last="1"')}</section>
       ${row('ordinary', '', false)}`);
     await page.addScriptTag({ content: `{const CCF_NARRATION_ATTR='data-ccf-narration';const CCF_NARRATION_PANEL_ATTR='data-ccf-narration-panel';${format};injectStyle();}` });
@@ -34,6 +35,8 @@ const prose = styleFunction(bridge.slice(bridge.indexOf('// ===== Prose Mode')))
           gap2: line('last').top - line('middle').bottom,
           ordinary: getComputedStyle(document.querySelector('#ordinary')).paddingTop };
       });
+      // image narration row (#124): 4px less on top so the gap above the image equals the one below; a continuation row keeps 0
+      assert.deepEqual(await page.evaluate(() => ['#imgrow', '#imgcont'].map((id) => { const c = getComputedStyle(document.querySelector(id)); return c.paddingTop + '/' + c.paddingBottom; })), ['12px/16px', '0px/6px'], 'image rows');
       assert.deepEqual(spacing, { singleTop:16, singleBottom:16, top:16, bottom:16, gap1:6, gap2:6, ordinary:'8px' });
       if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `narration-spacing-${width}.png`) });
     }
