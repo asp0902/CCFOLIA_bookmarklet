@@ -63,27 +63,40 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(rows.length, 3);
       assert(rows[0].includes('<b>x</b> 대기') && rows[0].includes('대기 중'), 'HTML in names stays text');
       assert.equal(await q(page, '.participant b').count(), 0);
-      assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.getElementById('room')).fontSize, getComputedStyle(r.querySelector('.ntfy p.muted')).fontSize, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['13px', '14px', '15px'], 'status lines 13px; ntfy paragraph and participant rows unchanged');
+      assert.deepEqual(await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; return [getComputedStyle(r.getElementById('room')).fontSize, getComputedStyle(r.querySelector('.ntfy ol.muted')).fontSize, getComputedStyle(r.querySelector('.participant .name')).fontSize]; }), ['13px', '14px', '15px'], 'status lines 13px; ntfy paragraph and participant rows unchanged');
       // 4차: title→first label gap, big gap before the 스마트폰 알림 section, grey status lines, wording
       const layout = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;
         const rect = (el) => el.getBoundingClientRect();
-        const titleBottom = rect(r.getElementById('title')).bottom, firstLabel = rect(r.querySelector('.body > .field > label')).top;
-        const lastApprove = rect(r.getElementById('participants')).bottom, ntfyTitle = rect(r.querySelector('.ntfy h3')).top;
+        const textBox = (el) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect(); };
+        const titleBottom = textBox(r.getElementById('title')).bottom, firstLabel = textBox(r.querySelector('.body > .field > label')).top, paperTop = rect(r.querySelector('.paper')).top, titleTop = textBox(r.getElementById('title')).top;
+        const lastApprove = rect(r.getElementById('participants')).bottom, ntfyTitle = rect(r.querySelector('.ntfy .ntfy-head h3')).top;
         const secondField = rect(r.querySelectorAll('.body > .field')[1]).top - rect(r.querySelectorAll('.body > .field')[0]).bottom;
-        return { titleGap: Math.round((firstLabel - titleBottom) * 10) / 10, sectionGap: Math.round(ntfyTitle - lastApprove), fieldGap: Math.round(secondField), color: getComputedStyle(r.getElementById('room')).color, h3: [...r.querySelectorAll('h3')].map((h) => h.textContent), text: r.querySelector('.ntfy').textContent };
+        return { topGap: Math.round((titleTop - paperTop) * 10) / 10, titleGap: Math.round((firstLabel - titleBottom) * 10) / 10, sectionGap: Math.round(ntfyTitle - lastApprove), fieldGap: Math.round(secondField), color: getComputedStyle(r.getElementById('room')).color, h3: [...r.querySelectorAll('h3')].map((h) => h.textContent), text: r.querySelector('.ntfy').textContent };
       });
-      console.log('share modal layout', JSON.stringify({ titleGap: layout.titleGap, sectionGap: layout.sectionGap, fieldGap: layout.fieldGap }));
-      assert(layout.titleGap <= 8 && layout.titleGap <= layout.fieldGap + 8, `title → first label gap is small (${layout.titleGap}px, other fields ${layout.fieldGap}px)`);
+      console.log('share modal layout', JSON.stringify({ topGap: layout.topGap, titleGap: layout.titleGap, sectionGap: layout.sectionGap, fieldGap: layout.fieldGap }));
+      assert(Math.abs(layout.titleGap - layout.topGap) <= 1, `6차: the gap under the title (${layout.titleGap}px) equals the gap above it (${layout.topGap}px)`);
       assert(layout.sectionGap >= 28, `clear gap before the 스마트폰 알림 section (${layout.sectionGap}px)`);
       assert.equal(layout.color, 'rgba(255, 255, 255, 0.5)', 'status lines are light grey');
       assert.deepEqual(layout.h3.slice(-2), ['스마트폰 알림', '스마트폰에 연결하는 방법']);
+      // 6차: switch beside the section title (no checkbox row), ? toggles the how-to block, the intro line is gone, the status line shows only with a message
+      const sixth = await page.evaluate(async () => {
+        const r = document.getElementById('capybara-share-modal-host').shadowRoot, vis = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0;
+        const head = r.querySelector('.ntfy-head'), btn = r.getElementById('ntfy-help-toggle'), help = r.getElementById('ntfy-help');
+        const first = { sw: !!head.querySelector('label.switch #ntfy-enabled'), sameSwitch: getComputedStyle(head.querySelector('.sw')).width === getComputedStyle(r.querySelector('header .sw')).width, order: [...head.children].map((c) => c.tagName + (c.className ? '.' + c.className.split(' ')[0] : '')), labelCheck: [...r.querySelectorAll('.ntfy label.check span')].some((s) => /스마트폰 알림 사용/.test(s.textContent)), intro: /안드로이드 ntfy 앱으로 알려 줍니다/.test(r.querySelector('.ntfy').textContent), helpVisible: vis(help), toastVisible: vis(r.getElementById('ntfy-toast')), expanded: btn.getAttribute('aria-expanded'), save: vis(r.getElementById('ntfy-save')), test: vis(r.getElementById('ntfy-test')) };
+        btn.click();
+        const open = { helpVisible: vis(help), expanded: btn.getAttribute('aria-expanded'), title: btn.title, linkLabel: vis(help.querySelector('.field')) };
+        btn.click();
+        return { first, open, closed: vis(help) };
+      });
+      assert.deepEqual(sixth.first, { sw: true, sameSwitch: true, order: ['H3', 'LABEL.switch', 'BUTTON.help'], labelCheck: false, intro: false, helpVisible: false, toastVisible: false, expanded: 'false', save: true, test: true });
+      assert.deepEqual(sixth.open, { helpVisible: true, expanded: 'true', title: '연결 방법 접기', linkLabel: true }); assert.equal(sixth.closed, false, 'folds again');
       assert(!layout.text.includes('핸드폰'), 'no 핸드폰 left in the section');
       // '참가 승인' status lines: tight spacing, empty lines take no room, other muted paragraphs (ntfy) keep the default margin.
       const gaps = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;
         const top = id => r.getElementById(id).getBoundingClientRect();
-        const measure = () => ({ socketToRoom: Math.round(top('socket').top - top('room').bottom), healthDisplay: getComputedStyle(r.getElementById('health')).display, errorsDisplay: getComputedStyle(r.getElementById('relay-errors')).display, ntfyMargin: getComputedStyle(r.querySelector('.ntfy p.muted')).marginTop });
+        const measure = () => ({ socketToRoom: Math.round(top('socket').top - top('room').bottom), healthDisplay: getComputedStyle(r.getElementById('health')).display, errorsDisplay: getComputedStyle(r.getElementById('relay-errors')).display, ntfyMargin: getComputedStyle(r.querySelector('.ntfy p.warn')).marginTop });
         const now = measure();
         r.querySelectorAll('p.status-line').forEach(p => p.classList.remove('status-line'));
         const before = measure();
