@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.101
+// @version      0.1.102
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.101"),
+    version: getUserscriptVersion("0.1.102"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1236,13 +1236,24 @@
     style.id = "ccf-cutin-chat-style";
     style.setAttribute(CCF_SAFE_UI_ATTR, "1");
     style.textContent = `.ccf-cutin-chat-image{display:block;margin:6px 0 2px;max-width:100%;line-height:0}`
-      + `.ccf-cutin-chat-image img{display:block;max-width:100%;max-height:200px;width:auto;height:auto;object-fit:contain;border-radius:4px;cursor:zoom-in}`;
+      + `.ccf-cutin-chat-image img{display:block;max-width:100%;max-height:200px;width:auto;height:auto;object-fit:contain;border-radius:4px;cursor:zoom-in}`
+      + `[data-ccf-cutin-hide="1"]{font-size:0!important;line-height:0!important}`;
     (document.head || document.documentElement).appendChild(style);
   }
 
   function removeCutinChatImage(el) {
     el.querySelectorAll(`:scope > .ccf-cutin-chat-image`).forEach((node) => node.remove());
     el.removeAttribute("data-ccf-cutin-chat");
+    el.removeAttribute("data-ccf-cutin-hide");
+  }
+
+  // 컷인 트리거 글은 숨기고 이미지만 보인다(원본 글 노드는 그대로 두고 CSS 로만 숨김 — React 안전). 코코포리아 컷인 재생은 글을 그대로 보내므로 영향 없음.
+  // 끄기: localStorage ccfCutinChatHideText = "off" (글도 같이 보기).
+  function syncCutinChatHide(el) {
+    let hide = true;
+    try { hide = localStorage.getItem("ccfCutinChatHideText") !== "off"; } catch (_) { hide = true; }
+    if (hide) { if (el.getAttribute("data-ccf-cutin-hide") !== "1") el.setAttribute("data-ccf-cutin-hide", "1"); }
+    else if (el.hasAttribute("data-ccf-cutin-hide")) el.removeAttribute("data-ccf-cutin-hide");
   }
 
   // 채팅 메시지 행의 본문에만 붙인다(오리지널 채팅 목록·추가 패널). 컷인/이미지/캐릭터 목록 같은 모달·팝오버·메뉴·드로어 목록의 항목 글이
@@ -1264,7 +1275,7 @@
     if (!url) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     // 이미 다른 이미지(언성 듀엣 고정 이미지·매크로 GIF 인라인 등)가 이 메시지에 있으면 두 번 보이지 않게 건너뛴다.
     if ([...el.querySelectorAll("img")].some((image) => !image.closest(".ccf-cutin-chat-image"))) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
-    if (el.getAttribute("data-ccf-cutin-chat") === url && el.querySelector(`:scope > .ccf-cutin-chat-image`)) return;
+    if (el.getAttribute("data-ccf-cutin-chat") === url && el.querySelector(`:scope > .ccf-cutin-chat-image`)) { syncCutinChatHide(el); return; }
     ensureCutinChatStyle();
     removeCutinChatImage(el);
     const wrap = document.createElement("span");
@@ -1283,6 +1294,7 @@
     wrap.appendChild(img);
     el.appendChild(wrap);
     el.setAttribute("data-ccf-cutin-chat", url);
+    syncCutinChatHide(el);
   }
 
   // 진단: 컷인 저장소 조각의 모양과 지금 읽은 트리거 목록(주소는 앞부분만).
@@ -5658,14 +5670,23 @@
         event.stopPropagation();
         const action = narratorAction.getAttribute("data-inline-narrator-action");
         if (action === "toggle") {
-          const name = narratorAction.getAttribute("data-inline-narrator-name") || "";
-          toggleNarratorName(name);
+          // 체크는 창 안에서만 임시 반영한다. 저장을 눌러야 기록되고, 닫기는 버린다.
+          const name = normalizeMyCharacterName(narratorAction.getAttribute("data-inline-narrator-name") || "");
+          const state = getInlineNarratorPopoverState(toolbar);
+          if (state && name) {
+            state.pending ||= readNarratorNameSet();
+            if (state.pending.has(name)) state.pending.delete(name); else state.pending.add(name);
+          }
           updateInlineNarratorPopoverList(toolbar);
+        } else if (action === "save") {
+          const state = getInlineNarratorPopoverState(toolbar);
+          if (state?.pending && !writeNarratorNameSet(state.pending)) { setInlineNarratorPopoverBusy(toolbar, false, "저장하지 못했습니다."); return; }
           refreshAllInlineNarrationButtons();
           syncAllEditorVisualPreviews();
           if (isModalOpen() && activeEditor) {
             renderPreview(activeEditor, { force: true });
           }
+          closeInlinePopover(toolbar);
         } else if (action === "refresh") {
           refreshInlineNarratorPopover(toolbar, { forcePanelScan: true });
         }
@@ -6726,7 +6747,7 @@
     if (!state) return;
     const listHost = state.popover?.querySelector?.("[data-inline-narrator-list-host]");
     if (!listHost) return;
-    const set = readNarratorNameSet();
+    const set = state.pending || readNarratorNameSet();
     listHost.innerHTML = buildInlineNarratorListMarkup(state.characterNames || [], set, getCurrentSpeakerName());
   }
 
@@ -6815,8 +6836,9 @@
       <div class="ccf-narrator-note" data-inline-narrator-note style="display:none;"></div>
       <div data-inline-narrator-list-host>${buildInlineNarratorListMarkup([], initialSet, currentSpeaker)}</div>
       <div class="ccf-inline-popover-actions">
+        <button type="button" class="ccf-btn" data-inline-narrator-action="refresh">새로고침</button>
+        <button type="button" class="ccf-btn primary" data-inline-narrator-action="save">저장</button>
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">닫기</button>
-        <button type="button" class="ccf-btn primary" data-inline-narrator-action="refresh">새로고침</button>
       </div>
     `;
     popover.classList.add("ccf-inline-narrator-popover", "open");
@@ -6826,7 +6848,8 @@
       kind: "narrator",
       toolbar,
       popover,
-      characterNames: []
+      characterNames: [],
+      pending: new Set(initialSet) // 저장 전까지는 창 안에서만 바뀌는 임시 선택
     };
 
     positionInlineNarratorPopover(toolbar);
