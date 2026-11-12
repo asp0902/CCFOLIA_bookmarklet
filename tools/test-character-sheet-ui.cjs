@@ -86,7 +86,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     // the footer 장면표 button is a menu: 장면열기 ▸ (드라마/전투 장면), 장면닫기, 장면표 (ST)
     assert.equal(await page.locator(R + ' footer [data-command="ST"]').count(), 0, 'no direct ST button any more');
     await page.locator(R + ' [data-action="scene-menu"]').click();
-    assert.deepEqual(await page.locator(R + ' .ccf-cs-menu > button').allTextContents(), ['장면열기▸', '장면닫기', '장면표']);
+    assert.deepEqual(await page.locator(R + ' .ccf-cs-menu > button').allTextContents(), ['장면열기▸', '장면닫기', '기본 장면표', '장면표 추가…']);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator(R + ' .ccf-cs-menu').count(), 0, 'Esc closes the menu');
     assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'and the sheet stays');
@@ -118,7 +118,26 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open after a scene message');
     await page.locator(R + ' [data-action="scene-menu"]').click();
     await page.locator(R + ' .ccf-cs-menu [data-command="ST"]').click(); await page.waitForTimeout(200);
-    assert.equal(await page.locator('#chatbox').inputValue(), 'ST', 'the scene table command goes into the chat box as before');
+    assert.equal((await page.evaluate(() => window.__sent)).pop(), 'ST', 'the basic scene table is sent at once'); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'and the sheet stays open');
+    // custom scene tables: 장면표 추가… lists the /roll-table custom commands, a checked one becomes a menu item that sends its body as it is
+    await page.evaluate(() => localStorage.setItem('ccf-slash-macros-v1', JSON.stringify([{ name: '장면표Q', body: '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째' }, { name: '인사', body: '안녕' }])));
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    await page.locator(R + ' [data-action="scene-table-add"]').click();
+    await page.waitForSelector(R + ' .ccf-cs-link-picker');
+    assert.deepEqual(await page.locator(R + ' .ccf-cs-link-picker label.ccf-cs-link-row').allTextContents(), ['괴담 장면표커스텀 커맨드: 장면표Q'], 'only /roll-table custom commands, table name + command name');
+    await page.locator(R + ' .ccf-cs-link-picker input[data-table-toggle="0"]').check(); await page.waitForTimeout(300);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('ccf-character-sheet:')))).sceneTables.map((t) => [t.macroName, t.tableName, t.body.includes('1D3')])), [['장면표Q', '괴담 장면표', true]], 'saved in the room data with a copy of the body');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator(R + ' .ccf-cs-link-picker').count(), 0); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1);
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    assert.deepEqual(await page.locator(R + ' .ccf-cs-menu > button').allTextContents(), ['장면열기▸', '장면닫기', '기본 장면표', '괴담 장면표', '장면표 추가…']);
+    await page.locator(R + ' [data-action="scene-table"]').click(); await page.waitForTimeout(200);
+    assert.equal((await page.evaluate(() => window.__sent)).pop(), '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째', 'the custom command body goes out as it is');
+    await page.evaluate(() => localStorage.removeItem('ccf-slash-macros-v1'));
+    await page.locator(R + ' [data-action="scene-menu"]').click(); await page.locator(R + ' [data-action="scene-table-add"]').click();
+    await page.locator(R + ' .ccf-cs-link-picker input[data-table-toggle="0"]').uncheck(); await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('ccf-character-sheet:')))).sceneTables.length), 0, 'unchecking removes it (also when the command is gone from this browser)');
+    await page.keyboard.press('Escape');
     // a second press finds the linked sheet instead of making another
     await page.locator('#ccf-character-sheet-root [data-action="close"], #ccf-character-sheet-root header .ccf-cs-icon:last-of-type').last().click().catch(() => {});
     await page.evaluate(() => document.getElementById('ccf-character-sheet-root')?.remove());

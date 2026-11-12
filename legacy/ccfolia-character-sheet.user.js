@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.23
+// @version      0.5.24
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.23";
+  const VERSION = "0.5.24";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -262,7 +262,8 @@
     dialogPosition: { x: 0, y: 0 },
     openNotes: new Set(),
     nativeCharacterDialog: null,
-    linkPicker: null
+    linkPicker: null,
+    tablePicker: null
   };
 
   registerWithSuite();
@@ -376,7 +377,14 @@
 
   function makeData() {
     // 시트는 0개로 시작할 수 있다(＋, 캐릭터 편집창 버튼, 내 캐릭터 목록 버튼으로 만든다).
-    return { version: 1, selectedId: "", sheets: [], permissions: {}, scene: { cycle: 1, number: 0 } };
+    return { version: 1, selectedId: "", sheets: [], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] };
+  }
+
+  // 장면표 메뉴에 추가한 /roll-table 커스텀 커맨드. 본문까지 룸 데이터에 복사해 두어 다른 사용자(플레이어)도 쓸 수 있다.
+  function normalizeSceneTables(value) {
+    const seen = new Set();
+    return (Array.isArray(value) ? value : []).slice(0, 20).map((item) => ({ macroName: cleanText(item?.macroName, 100), tableName: cleanText(item?.tableName, 100), body: String(item?.body || "").slice(0, 4000) }))
+      .filter((item) => item.macroName && /^\/roll-table\b/.test(item.body.trim()) && !seen.has(item.macroName) && seen.add(item.macroName));
   }
 
   function normalizeData(value) {
@@ -393,7 +401,7 @@
     const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0]?.id || "";
     const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
     sheets.forEach((sheet) => { delete sheet.permissions; });
-    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene) };
+    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene), sceneTables: normalizeSceneTables(value.sceneTables) };
   }
 
   async function loadData(key) {
@@ -588,6 +596,7 @@
   function closeSheet() {
     state.open = false;
     state.linkPicker = null;
+    state.tablePicker = null;
     state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
   }
@@ -603,7 +612,7 @@
       event.preventDefault(); event.stopPropagation(); closeSceneUi();
     }, { signal, capture: true });
     root.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !state.linkPicker) return;
+      if (event.key !== "Escape" || !(state.linkPicker || state.tablePicker)) return;
       event.preventDefault(); event.stopPropagation(); closeLinkPicker();
     }, { signal, capture: true });
     root.addEventListener("contextmenu", (event) => {
@@ -629,7 +638,7 @@
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${label}</button></span>` : `<button data-command="${command}">${label}</button>`).join("")}<button data-action="fear-roll">공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${eyeDiceIcon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${eyeDiceIcon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
-      </section>${state.linkPicker ? renderLinkPicker() : ""}`;
+      </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
     dialog.querySelector("main").scrollTop = scrollTop;
@@ -750,7 +759,7 @@
     sheet.respec = { ...(sheet.respec || {}), ...Object.fromEntries(RESPECT_TOGGLES.map(([key]) => [key, false])), ...Object.fromEntries(RESPECT_NUMBERS.map(([key]) => [key, 0])) };
     saveSoon();
     render();
-    writeChat(text, true, { keepOpen: true });
+    writeChat(text, true);
   }
 
   // ---- 하단 '장면표' 메뉴: 장면열기 ▸ 드라마/전투 장면, 장면닫기, 장면표(ST) ----
@@ -789,7 +798,9 @@
     menu.setAttribute("role", "menu");
     menu.innerHTML = `<button type="button" role="menuitem" data-action="scene-open-submenu" aria-haspopup="menu" aria-expanded="false">장면열기<span aria-hidden="true">▸</span></button>`
       + `<button type="button" role="menuitem" data-action="scene-close">장면닫기</button>`
-      + `<button type="button" role="menuitem" data-command="ST">장면표</button>`;
+      + `<button type="button" role="menuitem" data-command="ST">기본 장면표</button>`
+      + normalizeSceneTables(state.data.sceneTables).map((table, index) => `<button type="button" role="menuitem" data-action="scene-table" data-index="${index}" title="${escapeHtml(table.macroName)}">${escapeHtml(table.tableName || table.macroName)}</button>`).join("")
+      + `<button type="button" role="menuitem" data-action="scene-table-add">장면표 추가…</button>`;
     host.appendChild(menu);
     button.setAttribute("aria-expanded", "true");
     menu.querySelector("button")?.focus();
@@ -834,7 +845,7 @@
       state.data.scene = { cycle, number };
       saveSoon();
       form.remove();
-      writeChat(sceneOpenMessage(kind, cycle, number, data.get("cast"), data.get("detail")), true, { keepOpen: true });
+      writeChat(sceneOpenMessage(kind, cycle, number, data.get("cast"), data.get("detail")), true);
     });
     dialog.appendChild(form);
     form.querySelector('input[name="detail"]')?.focus();
@@ -1066,8 +1077,9 @@
   }
 
   function closeLinkPicker() {
-    if (!state.linkPicker) return;
+    if (!state.linkPicker && !state.tablePicker) return;
     state.linkPicker = null;
+    state.tablePicker = null;
     render();
   }
 
@@ -1076,6 +1088,39 @@
     state.linkPicker = null;
     if (sheet) { sheet.player = name; saveSoon(); }
     render();
+  }
+
+  // ---- 장면표 추가: 커스텀 커맨드(ccf-slash-macros-v1) 중 /roll-table 본문 후보를 체크로 고른다 ----
+  function readRollTableMacros() {
+    try {
+      const list = JSON.parse(localStorage.getItem("ccf-slash-macros-v1") || "[]");
+      return (Array.isArray(list) ? list : []).filter((item) => item && typeof item.name === "string" && /^\/roll-table\b/.test(String(item.body || "").trim()))
+        .map((item) => ({ macroName: item.name, tableName: String(item.body).trim().split(/\r?\n/)[1]?.trim() || item.name, body: String(item.body) }));
+    } catch (error) { return []; }
+  }
+
+  function openTablePicker() {
+    const saved = normalizeSceneTables(state.data.sceneTables);
+    const candidates = readRollTableMacros();
+    const extra = saved.filter((table) => !candidates.some((item) => item.macroName === table.macroName)).map((table) => ({ ...table, orphan: true }));
+    state.tablePicker = { candidates: [...candidates, ...extra] };
+    render();
+    document.querySelector(`#${ROOT_ID} .ccf-cs-link-picker`)?.focus();
+  }
+
+  function renderTablePicker() {
+    const saved = new Set(normalizeSceneTables(state.data.sceneTables).map((table) => table.macroName));
+    const rows = (state.tablePicker?.candidates || []).map((item, index) => `<li><label class="ccf-cs-link-row"><input type="checkbox" data-table-toggle="${index}"${saved.has(item.macroName) ? " checked" : ""}><span class="ccf-cs-link-name">${escapeHtml(item.tableName || item.macroName)}<small>커스텀 커맨드: ${escapeHtml(item.macroName)}${item.orphan ? " (이 브라우저에 없음)" : ""}</small></span></label></li>`).join("");
+    return `<div class="ccf-cs-link-picker" role="dialog" aria-modal="true" aria-label="장면표 추가" tabindex="-1"><div class="ccf-cs-link-card"><header><h3>장면표 추가</h3><button type="button" class="ccf-cs-icon" data-action="link-close" aria-label="닫기" title="닫기">${closeIcon()}</button></header><ul>${rows}</ul>${rows ? "" : '<p class="ccf-cs-empty">등록된 /roll-table 커스텀 커맨드가 없습니다.</p>'}</div></div>`;
+  }
+
+  function toggleSceneTable(index, checked) {
+    const item = state.tablePicker?.candidates?.[index];
+    if (!item) return;
+    const list = normalizeSceneTables(state.data.sceneTables).filter((table) => table.macroName !== item.macroName);
+    if (checked) list.push({ macroName: item.macroName, tableName: item.tableName, body: item.body });
+    state.data.sceneTables = normalizeSceneTables(list);
+    saveSoon();
   }
 
   function renderLinkPicker() {
@@ -1113,10 +1158,11 @@
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
     if (!sheet && !target.dataset.permKey) return;
+    if (target.dataset.tableToggle !== undefined) { toggleSceneTable(Number(target.dataset.tableToggle), target.checked); return; }
     if (target.dataset.commandSelect !== undefined) {
       const command = target.value;
       target.value = "";
-      if (command) writeChat(command);
+      if (command) sendCommand(command);
       return;
     }
     if (target.dataset.plotSelect !== undefined) {
@@ -1196,7 +1242,9 @@
     if (button.dataset.action === "scene-open-submenu") return toggleSceneSubmenu(button);
     if (button.dataset.action === "scene-form") return openSceneForm(button.dataset.kind);
     if (button.dataset.action === "scene-cancel") return closeSceneUi();
-    if (button.dataset.action === "scene-close") { closeSceneUi(); return writeChat(SCENE_CLOSE_MESSAGE, true, { keepOpen: true }); }
+    if (button.dataset.action === "scene-table") { closeSceneUi(); const table = normalizeSceneTables(state.data.sceneTables)[Number(button.dataset.index)]; return table ? writeChat(table.body) : undefined; }
+    if (button.dataset.action === "scene-table-add") { closeSceneUi(); return openTablePicker(); }
+    if (button.dataset.action === "scene-close") { closeSceneUi(); return writeChat(SCENE_CLOSE_MESSAGE, true); }
     if (button.dataset.action === "respect-roll") return rollRespect();
     if (button.dataset.action === "portrait") {
       const sheet = currentSheet();
@@ -1239,7 +1287,7 @@
       const fear = currentSheet().fear;
       return fear ? inputSkillRoll(fear, "", false, button.dataset.secret === "1") : status("공포심을 먼저 선택");
     }
-    if (button.dataset.command) return writeChat(applyRollOptions(button.dataset.command, button.dataset.secret === "1"));
+    if (button.dataset.command) { if (button.closest(".ccf-cs-menu")) closeSceneUi(); return sendCommand(applyRollOptions(button.dataset.command, button.dataset.secret === "1")); }
     if (button.dataset.roll) return inputSkillRoll(button.dataset.roll, "", false, event.shiftKey);
   }
 
@@ -1264,7 +1312,7 @@
     const [column, row] = id.split(":").map(Number);
     const name = CATEGORIES[column][row + 1];
     const fear = sheet.fear === id;
-    writeChat(`${rollCommandPrefix(secret)}2D6${rollModifierText(sheet, fear)}>=${target} [${subject ? `${subject}/` : ""}${name}${fear ? "/공포심" : ""}]`, submit);
+    writeChat(`${rollCommandPrefix(secret)}2D6${rollModifierText(sheet, fear)}>=${target} [${subject ? `${subject}/` : ""}${name}${fear ? "/공포심" : ""}]`);
   }
 
   function looksLikeTransfer(text) {
@@ -1311,7 +1359,20 @@
     }
   }
 
-  function writeChat(command, submit = false, options = {}) {
+  // 목표치가 정해지지 않은 명령(2D6>=? [회피] 처럼 ? 가 남은 것)은 작은 입력으로 숫자를 받아 채운 뒤 보낸다. 취소하면 보내지 않는다.
+  function sendCommand(command) {
+    let text = String(command || "");
+    if (/>=\?/.test(text)) {
+      const answer = window.prompt("목표치(숫자)", "");
+      const value = String(answer ?? "").trim();
+      if (answer === null) return;
+      if (!/^\d{1,3}$/.test(value)) return status("목표치는 숫자로 입력하세요");
+      text = text.replace(/>=\?/, `>=${value}`);
+    }
+    return writeChat(text);
+  }
+
+  function writeChat(command, submit = true) {
     const editors = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
     const editor = editors.find((node) => !node.closest(`#${ROOT_ID}, [role="dialog"], .MuiDialog-root`) && isVisible(node) && findSubmitScope(node));
     if (!editor) return status("채팅 입력창을 찾지 못함");
@@ -1320,9 +1381,8 @@
       if (setter) setter.call(editor, command); else editor.value = command;
     } else editor.textContent = command;
     editor.dispatchEvent(new Event("input", { bubbles: true }));
+    // 시트는 닫기 버튼·Esc 로만 닫힌다. 보낸 뒤 채팅 입력칸에 포커스를 가져가지 않는다.
     if (submit) findSubmitScope(editor)?.querySelector('button[type="submit"]')?.click();
-    else editor.focus();
-    if (!options.keepOpen) closeSheet();
   }
 
   function findSubmitScope(editor) {
@@ -1388,6 +1448,8 @@
       #${ROOT_ID} .ccf-cs-link-avatar { display:inline-flex;flex:0 0 40px;width:40px;height:40px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-link-avatar img { width:100%;height:100%;object-fit:cover }
       #${ROOT_ID} .ccf-cs-link-name { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+      #${ROOT_ID} .ccf-cs-link-name small { display:block;color:#bdbdbd;font-size:12px }
+      #${ROOT_ID} label.ccf-cs-link-row input { flex:0 0 18px;width:18px!important;height:18px;min-height:0!important;margin:0 }
       #${ROOT_ID} .ccf-cs-player-link svg { width:18px;height:18px }
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
       #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border:0 }
@@ -1453,7 +1515,7 @@
       #${ROOT_ID} .ccf-cs-modifier-note { margin:0 0 6px;color:#bdbdbd;font-size:12px }
       #${ROOT_ID} .ccf-cs-skill button[data-roll] { padding-right:31px }
       #${ROOT_ID} main { container-type:inline-size }
-      #${ROOT_ID} .ccf-cs-duo { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;align-items:start }
+      #${ROOT_ID} .ccf-cs-duo { display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:0 24px;align-items:start }
       #${ROOT_ID} .ccf-cs-duo>.ccf-cs-form-section { min-width:0 }
       @container (max-width:640px) { #${ROOT_ID} .ccf-cs-duo { grid-template-columns:minmax(0,1fr) } }
       #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:120px minmax(0,1fr);gap:24px;align-items:start }
