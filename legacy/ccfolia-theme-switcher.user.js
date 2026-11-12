@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.27
+// @version      0.2.28
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -52,8 +52,8 @@
     }),
     Object.freeze({
       id: "insane-roll20",
-      name: "Roll20",
-      description: "Roll20 다이스 결과 이미지(감정·판정 카드)만 롤20처럼 표시 / 색상은 코코포리아 기본 유지"
+      name: "인세인",
+      description: "인세인 룸용 / 다이스 결과(감정·판정 카드)를 Roll20처럼 표시 · 색상은 코코포리아 기본 유지"
     })
   ]);
   // 신규 활성화 사용자의 커스텀 시트 테마 기본 선택값. 사용자가 드롭다운에서 명시적으로
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.27"),
+    version: getUserscriptVersion("0.2.28"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -2404,7 +2404,7 @@
         <div class="ccf-theme-card">
           <div class="ccf-theme-head">
             <div class="ccf-theme-title">
-              <strong>CCF Theme</strong>
+              <strong>테마</strong>
               <span>메인 포맷 스크립트와 분리된 독립 테마입니다.</span>
             </div>
             <button type="button" class="ccf-theme-close" data-action="close" aria-label="테마 패널 닫기">×</button>
