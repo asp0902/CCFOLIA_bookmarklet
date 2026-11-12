@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.99
+// @version      0.1.100
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.99"),
+    version: getUserscriptVersion("0.1.100"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3547,7 +3547,8 @@
         font-size: 13px;
       }
 
-      .ccf-toggle.active {
+      .ccf-toggle.active,
+      .ccf-toggle.ccf-fmt-current {
         background: #383838;
         border-color: #fafafa;
       }
@@ -4446,6 +4447,7 @@
       }
 
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle.active,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle.ccf-fmt-current,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option.active,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn.primary,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-builder-row .ccf-toggle[data-active="1"],
@@ -4742,7 +4744,88 @@
     });
   }
 
+  // ---- 서식 바 버튼 "현재 서식" 표시 ----------------------------------------------------------------------------------------------
+  // 버튼의 .active 는 눌러서 켜 둔 대기 서식이라 의미(다음 입력에 적용)를 그대로 두고, 커서/선택 영역에 실제로 걸린 서식과 자동 서식(프리셋·
+  // 자동 나레이션)은 별도 표식 .ccf-fmt-current 로 같은 활성 모양을 보여 준다. 갱신은 rAF 1회로 묶고 값이 같으면 DOM 을 쓰지 않는다.
+  function setToolbarCurrent(button, on) {
+    if (!(button instanceof HTMLElement)) return;
+    if (button.classList.contains("ccf-fmt-current") !== on) button.classList.toggle("ccf-fmt-current", on);
+  }
+
+  function syncInlineToolbarCurrent(toolbar) {
+    if (!(toolbar instanceof HTMLElement) || !toolbar.isConnected) return;
+    const editor = getInlineToolbarEditor(toolbar);
+    const states = { bold: false, italic: false, underline: false, strike: false, blur: false, ruby: false, tooltip: false, code: false, narration: false };
+    let align = "";
+    if (editor && isVisible(editor)) {
+      const text = stripInvisibleEnvelope(getEditorText(editor));
+      const state = ensureEditorState(editor);
+      const length = text.length;
+      const selection = normalizeSelectionRange(getEditorSelection(editor), length);
+      if (length > 0 && selection) {
+        const caret = selection.start === selection.end;
+        const range = caret
+          ? { start: Math.max(0, selection.start - 1), end: Math.max(1, selection.start) }
+          : selection;
+        const runs = [...(state.runs || []), ...buildPresetNameRuns(text)];
+        const has = (key) => {
+          const value = getSharedStyleValueForSelection(runs, range, key, length);
+          return !!value && value !== "false";
+        };
+        states.bold = has("bold"); states.italic = has("italic"); states.underline = has("underline"); states.strike = has("strike");
+        states.blur = has("blur"); states.ruby = has("rubyText"); states.tooltip = has("tooltipText"); states.code = has("codeMode");
+        const lineIndex = text.slice(0, selection.start).split("\n").length - 1;
+        const aligns = getEffectiveAlignRuns(text, state.alignRuns, state.blockStyle);
+        const hit = aligns.find((run) => run.start <= lineIndex && lineIndex < run.end);
+        align = cleanupAlign(hit?.align) || "left";
+      }
+      states.narration = cleanupBlockStyle(applyAutomaticNarration(state.blockStyle)).narration === true;
+    }
+    for (const [command, on] of Object.entries(states)) {
+      setToolbarCurrent(toolbar.querySelector(`[data-inline-command="${command}"]`), on);
+    }
+    // 정렬 버튼은 .active 가 "지금 줄의 정렬"을 나타내는 표시 전용이라 그대로 맞춘다
+    if (align) {
+      const current = [...toolbar.querySelectorAll(".ccf-align-toggle.active")].map((btn) => cleanupAlign(btn.getAttribute("data-align")) || "left");
+      if (current.length !== 1 || current[0] !== align) setInlineToolbarAlignment(toolbar, align);
+    }
+  }
+
+  function syncAllInlineToolbarsCurrent() {
+    document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach((toolbar) => {
+      try { syncInlineToolbarCurrent(toolbar); } catch (error) { /* 표시일 뿐 — 실패해도 입력은 막지 않는다 */ }
+    });
+  }
+
+  function scheduleInlineToolbarCurrentSync() {
+    if (scheduleInlineToolbarCurrentSync.frame) return;
+    scheduleInlineToolbarCurrentSync.frame = window.requestAnimationFrame(() => {
+      scheduleInlineToolbarCurrentSync.frame = 0;
+      syncAllInlineToolbarsCurrent();
+    });
+  }
+
+  function bindInlineToolbarCurrentSync() {
+    const activeIsEditor = () => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && (active.matches?.(EDITOR_SELECTOR) || active.closest?.(INLINE_TOOLBAR_SELECTOR));
+    };
+    document.addEventListener("selectionchange", () => { if (activeIsEditor()) scheduleInlineToolbarCurrentSync(); }, ccfFsWithSignal({ passive: true }));
+    for (const type of ["input", "keyup", "mouseup", "focusin", "click"]) {
+      document.addEventListener(type, () => scheduleInlineToolbarCurrentSync(), ccfFsWithSignal({ capture: true, passive: true }));
+    }
+  }
+
   function bindGlobalEvents() {
+    bindInlineToolbarCurrentSync();
+    window.addEventListener("storage", (event) => {
+      const key = stylePresetsKey();
+      if (!key || event.key !== key) return;
+      scheduleInlineToolbarCurrentSync();
+      if (inlinePopoverState?.kind === "style-clipboard" && inlinePopoverState.popover?.classList.contains("open") && inlinePopoverState.toolbar?.isConnected) {
+        openInlineStyleClipboardPopover(inlinePopoverState.toolbar, { reuseContext: true });
+      }
+    }, ccfFsWithSignal());
     document.addEventListener("keydown", (event) => {
       if (handleFormatShortcut(event)) {
         return;
@@ -5039,7 +5122,8 @@
         color: #fff !important;
         box-shadow: none !important;
       }
-      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.active {
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.active,
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.ccf-fmt-current {
         background-color: rgba(255, 255, 255, 0.12) !important;
       }
     `;
@@ -6768,7 +6852,7 @@
     `).join("");
     popover.innerHTML = `
       <div class="ccf-style-preset-title-row">
-        <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B</div>
+        <div class="ccf-inline-popover-title">\uC11C\uC2DD \uD504\uB9AC\uC14B<small data-preset-room style="display:block;margin-top:2px;font-size:11px;font-weight:400;opacity:.7">\uC774 \uB8F8\uC758 \uC11C\uC2DD \uD504\uB9AC\uC14B</small></div>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add" title="\uAD6C\uC131\uD55C \uC11C\uC2DD\uC744 \uD504\uB9AC\uC14B\uC73C\uB85C \uCD94\uAC00" aria-label="\uD504\uB9AC\uC14B \uCD94\uAC00">+</button>
       </div>
       ${rows || '<div class="ccf-code-note">\uC800\uC7A5\uB41C \uC11C\uC2DD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798\uC5D0\uC11C \uC11C\uC2DD\uC744 \uAD6C\uC131\uD574 + \uB85C \uCD94\uAC00\uD558\uC138\uC694.</div>'}
@@ -11456,10 +11540,30 @@
   // ===== 서식 프리셋 (#70) — 여러 서식을 이름으로 저장/삭제/적용 =====
   const STYLE_PRESETS_STORAGE_KEY = "ccf-format-style-presets-v1";
 
+  // 서식 프리셋은 룸별로 저장한다: 키 = 전역 키 + ":" + 룸 ID. 룸 밖(홈)에는 프리셋이 없다.
+  // 처음 그 룸에 들어갔을 때 그 룸 목록이 아직 없으면 기존 전역 목록을 복사해 준다(전역 원본은 지우지 않아 다른 룸 첫 진입 때도 복사 대상이다).
+  function stylePresetRoomId() {
+    const match = String(location.pathname || "").match(/^\/rooms\/([^/?#]+)/);
+    if (!match) return "";
+    try { return decodeURIComponent(match[1]); } catch (_) { return match[1]; }
+  }
+
+  function stylePresetsKey() {
+    const roomId = stylePresetRoomId();
+    return roomId ? `${STYLE_PRESETS_STORAGE_KEY}:${roomId}` : "";
+  }
+
   function readStylePresets() {
     let list = [];
+    const roomKey = stylePresetsKey();
+    if (!roomKey) return list;
     try {
-      const parsed = JSON.parse(localStorage.getItem(STYLE_PRESETS_STORAGE_KEY) || "[]");
+      let rawList = localStorage.getItem(roomKey);
+      if (rawList == null) {
+        const inherited = localStorage.getItem(STYLE_PRESETS_STORAGE_KEY);
+        if (inherited != null) { try { localStorage.setItem(roomKey, inherited); } catch (_) { /* 저장 실패해도 읽기는 계속 */ } rawList = inherited; }
+      }
+      const parsed = JSON.parse(rawList || "[]");
       if (Array.isArray(parsed)) {
         list = parsed.filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
       }
@@ -11477,8 +11581,10 @@
   }
 
   function writeStylePresets(list) {
+    const roomKey = stylePresetsKey();
+    if (!roomKey) return false; // 룸 밖에서는 프리셋을 저장하지 않는다
     try {
-      localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(list));
+      localStorage.setItem(roomKey, JSON.stringify(list));
       return true;
     } catch (error) {
       console.error("[ccf-format-sync] writeStylePresets failed", error);
@@ -11526,13 +11632,19 @@
   // 프리셋 자동 반영 ON/OFF (#70)
   const STYLE_PRESETS_AUTO_KEY = "ccf-format-style-presets-auto-v1";
 
+  // 자동 적용 스위치도 룸별: 그 룸 값이 없으면 전역 값을 이어받는다.
   function isPresetAutoEnabled() {
-    try { return localStorage.getItem(STYLE_PRESETS_AUTO_KEY) !== "0"; }
-    catch (_) { return true; }
+    try {
+      const roomId = stylePresetRoomId();
+      const value = (roomId ? localStorage.getItem(`${STYLE_PRESETS_AUTO_KEY}:${roomId}`) : null) ?? localStorage.getItem(STYLE_PRESETS_AUTO_KEY);
+      return value !== "0";
+    } catch (_) { return true; }
   }
 
   function setPresetAutoEnabled(on) {
-    try { localStorage.setItem(STYLE_PRESETS_AUTO_KEY, on ? "1" : "0"); } catch (_) {}
+    const roomId = stylePresetRoomId();
+    if (!roomId) return;
+    try { localStorage.setItem(`${STYLE_PRESETS_AUTO_KEY}:${roomId}`, on ? "1" : "0"); } catch (_) {}
   }
 
   // 프리셋 행 드래그로 순서 변경 (#70)

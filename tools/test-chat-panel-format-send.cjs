@@ -46,6 +46,21 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     };
     const INVIS = /[\u200b-\u200f\u2060-\u206f\ufe00-\ufe0f\u{e0000}-\u{e01ef}]/u;
     const checkPanel = async (sel, label) => {
+      // the format buttons show the formatting at the caret / selection (markers around it), and not outside
+      const caretAt = async (start, end = start) => { await page.evaluate(({ q, a, b }) => { const i = document.querySelector(q + ' .ccf-scp-input'); i.focus(); i.setSelectionRange(a, b); i.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true })); }, { q: sel, a: start, b: end }); await page.waitForTimeout(150); };
+      const cur = (label) => page.locator(sel + ' .ccf-scp-fmt-btn', { has: page.locator(label) }).first().evaluate((b) => b.classList.contains('is-current'));
+      await page.locator(sel + ' .ccf-scp-input').fill('앞 **굵게** 뒤 *기울임* __밑줄__');
+      await caretAt(5);
+      assert.equal(await cur('b'), true, label + ': caret inside **bold**: B is current'); assert.equal(await cur('i'), false); assert.equal(await cur('u'), false);
+      await caretAt(1);
+      assert.equal(await cur('b'), false, label + ': caret outside: B is not current');
+      await caretAt(13);
+      assert.equal(await cur('i'), true, label + ': caret inside *italic*: I is current (not confused with **)'); assert.equal(await cur('b'), false);
+      await caretAt(4, 6); assert.equal(await cur('b'), true, label + ': a selection inside the bold text');
+      const look = await page.locator(sel + ' .ccf-scp-fmt-btn', { has: page.locator('b') }).first().evaluate((b) => getComputedStyle(b).backgroundColor);
+      assert.equal(look, 'rgb(66, 66, 66)', label + ': a current button has the active look');
+      await caretAt(1, 7); assert.equal(await cur('b'), false, label + ': a selection that leaves the bold text');
+      await page.locator(sel + ' .ccf-scp-input').fill('');
       const bold = await send(sel, '**굵게** 일반');
       assert.ok(bold.startsWith('굵게 일반') && bold.length > 20 && INVIS.test(bold), label + ': bold marker became an envelope: ' + JSON.stringify(bold.slice(0, 30)));
       const viaBtn = await send(sel, '선택 굵게', async () => {

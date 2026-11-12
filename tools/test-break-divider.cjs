@@ -25,7 +25,7 @@ assert.match(sync, /if \(breakBefore\) \{ el\.setAttribute\("data-ccf-break", "1
 assert.match(sync, /\.MuiListItem-root:has\(\.ccf-render-root\[data-ccf-break="1"\]\),\s+\.ccf-scp-row:has\(\.ccf-render-root\[data-ccf-break="1"\]\) \{\s+border-top: 1px solid transparent !important;/);
 assert.match(sync, /data-ccf-break="1"\]\)::before \{[^}]*left: 16px;[^}]*right: 16px;[^}]*border-top: 1px solid var\(--ccf-divider-color/);
 // the extra panel: toggle, payload, one send only, nothing for a dice command or a relayed message
-assert.match(panel, /const breakHere = breakNext && !meta;/);
+assert.match(panel, /const breakHere = breakNext && !meta && !isCommand;/);
 assert.match(panel, /if \(breakNext\) \{ breakNext = false; breakBtnEl\?\.classList\.remove\("is-active"\); \}/);
 assert.match(panel, /\.\.\.\(breakHere \? \{ breakBefore: true \} : \{\}\)/);
 assert.match(panel, /!\(!meta && looksLikeDiceCommand\(cleanText\)\) && \(meta \|\| breakHere/);
