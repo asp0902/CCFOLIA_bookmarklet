@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.97
+// @version      0.1.98
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.97"),
+    version: getUserscriptVersion("0.1.98"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10456,6 +10456,15 @@
   // 메시지가 판정 명령으로 "시작"할 때만 명령으로 본다.
   // 문장 중간에 1D6 이 섞였다는 이유로 명령 취급하면(이전 규칙) 나레이션·서식이
   // 통째로 사라진다 — 예: "오늘 1D6 정도 남았다".
+  // 채팅 커맨드(/roll-table·/roll·/cc … , /desc 는 롤20 매크로 변환이 따로 있어 제외)와 다이스 명령은 원문 그대로 가야 한다:
+  // 저장 서식·자동 나레이션·봉투를 붙이면 표 이름·명령 해석이 깨지고, 입력창에 서식 적용 모습이 한 번 비치다 전송된다.
+  function isChatCommandText(text) {
+    const body = String(text || "").trimStart();
+    if (!body) return false;
+    if (body.startsWith("/") && !ROLL20_DESC_RE.test(body)) return true;
+    return looksLikeCcfDiceCommand(body);
+  }
+
   function looksLikeCcfDiceCommand(text) {
     const raw = String(text || "");
     if (!raw) return false;
@@ -13122,7 +13131,8 @@
     delete blockStyle.narration;
     const runs = applyNarrationPreviewRuns(state.runs, text, blockStyle);
     const alignRuns = getEffectiveAlignRuns(text, state.alignRuns, blockStyle);
-    const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && isVisible(editor);
+    // 커맨드는 서식 없이 평문으로 가므로 입력창 미리보기에도 서식을 그리지 않는다(저장 서식이 비치는 깜빡임 방지)
+    const shouldShow = !!text && (runs.length > 0 || alignRuns.length > 0) && !isChatCommandText(text) && isVisible(editor);
 
     // 보여 줄 게 없으면 오버레이를 만들지 않는다. 예전에는 모든 입력칸(색 입력칸·팝오버 안 입력칸 등 안 보이는 것 포함)에
     // 매번 오버레이를 만들었다가 바로 고아로 지우는 일을 ensureUi 마다 반복해 문서 변화가 끊이지 않았다.
@@ -13549,7 +13559,7 @@
     // 직접 넣는다. format-sync가 먼저 소비하면 이후 bridge 재인코딩에서 알약 runs가
     // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
     // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
-    if (looksLikeCcfDiceCommand(rawText)) return true;
+    if (isChatCommandText(rawText)) return true;
     if (window.__CCF_ROLL20_BRIDGE_DEBUG__ && ROLL20_DESC_RE.test(rawText)) return true;
     // bridge가 이미 /desc를 인코딩한 결과물 — 재래핑하면 source/roll20Macro(트리거)
     // 정보가 유실되므로 그대로 둔다. roll20Macro 표식이 (재호출 등으로) 빠졌더라도
