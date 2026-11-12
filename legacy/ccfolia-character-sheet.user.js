@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.22
+// @version      0.5.23
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.22";
+  const VERSION = "0.5.23";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -261,7 +261,8 @@
     saveTimer: 0,
     dialogPosition: { x: 0, y: 0 },
     openNotes: new Set(),
-    nativeCharacterDialog: null
+    nativeCharacterDialog: null,
+    linkPicker: null
   };
 
   registerWithSuite();
@@ -374,12 +375,12 @@
   }
 
   function makeData() {
-    const sheet = makeSheet();
-    return { version: 1, selectedId: sheet.id, sheets: [sheet], permissions: {}, scene: { cycle: 1, number: 0 } };
+    // 시트는 0개로 시작할 수 있다(＋, 캐릭터 편집창 버튼, 내 캐릭터 목록 버튼으로 만든다).
+    return { version: 1, selectedId: "", sheets: [], permissions: {}, scene: { cycle: 1, number: 0 } };
   }
 
   function normalizeData(value) {
-    if (!value || !Array.isArray(value.sheets) || !value.sheets.length) return makeData();
+    if (!value || !Array.isArray(value.sheets)) return makeData();
     const sheets = value.sheets.map((raw, index) => {
       const base = makeSheet(`시트 ${index + 1}`);
       const sheet = { ...base, ...raw };
@@ -389,7 +390,7 @@
       sheet.people = (Array.isArray(raw.people) ? raw.people : []).map((item, itemIndex) => ({ ...item, id: item.id || `${sheet.id}:person:${itemIndex}` }));
       return sheet;
     });
-    const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0].id;
+    const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0]?.id || "";
     const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
     sheets.forEach((sheet) => { delete sheet.permissions; });
     return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene) };
@@ -429,7 +430,7 @@
   }
 
   function currentSheet() {
-    return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0];
+    return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0] || null;
   }
 
   // 사이코로픽션 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다. 인세인 룸 감지일 때만 보인다.
@@ -498,6 +499,7 @@
   function syncSheetFromNativeDialog(dialog) {
     if (!(dialog instanceof HTMLElement)) return;
     const sheet = currentSheet();
+    if (!sheet) return;
     const name = dialog.querySelector('input[name="name"]');
     const memo = dialog.querySelector('textarea[name="memo"]');
     const rows = [...dialog.querySelectorAll('input[name^="status."][name$=".label"]')].map((label) => {
@@ -547,7 +549,7 @@
   }
 
   async function syncNativeItems(sheet, dialog = state.nativeCharacterDialog || findNativeCharacterDialog()) {
-    if (!(dialog instanceof HTMLElement) || !dialog.isConnected) return;
+    if (!sheet || !(dialog instanceof HTMLElement) || !dialog.isConnected) return;
     const entries = Object.entries(normalizeItems(sheet.items));
     if (!entries.length) return;
     const labels = () => [...dialog.querySelectorAll('input[name^="status."][name$=".label"]')];
@@ -585,6 +587,7 @@
 
   function closeSheet() {
     state.open = false;
+    state.linkPicker = null;
     state.nativeCharacterDialog = null;
     document.getElementById(ROOT_ID)?.remove();
   }
@@ -598,6 +601,10 @@
     root.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !root.querySelector(".ccf-cs-menu, .ccf-cs-scene-form")) return;
       event.preventDefault(); event.stopPropagation(); closeSceneUi();
+    }, { signal, capture: true });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !state.linkPicker) return;
+      event.preventDefault(); event.stopPropagation(); closeLinkPicker();
     }, { signal, capture: true });
     root.addEventListener("contextmenu", (event) => {
       const skill = event.target.closest?.("button[data-roll]");
@@ -615,13 +622,14 @@
     if (!root || !state.open) return;
     const scrollTop = root.querySelector(".ccf-cs-dialog>main")?.scrollTop || 0;
     const sheet = currentSheet();
+    if (!sheet && state.view === "sheet") state.view = "list";
     const editor = state.view === "sheet";
     root.innerHTML = `
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${label}</button></span>` : `<button data-command="${command}">${label}</button>`).join("")}<button data-action="fear-roll">공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${eyeDiceIcon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${eyeDiceIcon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
-      </section>`;
+      </section>${state.linkPicker ? renderLinkPicker() : ""}`;
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
     dialog.querySelector("main").scrollTop = scrollTop;
@@ -635,7 +643,7 @@
 
   function renderSheetList() {
     const rows = state.data.sheets.map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-sheet-list">${rows}</div></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-sheet-list">${rows || '<p class="ccf-cs-empty">시트가 없습니다. ＋로 추가하세요.</p>'}</div></section>`;
   }
 
   function renderSettings() {
@@ -670,7 +678,7 @@
   }
 
   // ---- 시트 상단: 이미지 | 생명력·이성치·공적점·아이템, 캐릭터 메모, 리스펙 줄 ----
-  const RESPECT_TOGGLES = Object.freeze([["newWorld", "새로운 세계"], ["session", "세션참여"], ["roleplay", "롤플레이"], ["gain", "획득"], ["mission", "사명달성"]]);
+  const RESPECT_TOGGLES = Object.freeze([["newWorld", "새로운 세계"], ["session", "세션 참여"], ["roleplay", "롤플레이"], ["gain", "획득"], ["mission", "사명 달성"]]);
   const RESPECT_NUMBERS = Object.freeze([["empathy", "심금"], ["other", "기타"]]);
 
   let characterStore = null;
@@ -735,6 +743,7 @@
 
   function rollRespect() {
     const sheet = currentSheet();
+    if (!sheet) return;
     const { total, text } = respectBreakdown(sheet);
     if (!total) return status("켜진 리스펙 항목이 없습니다");
     sheet.merit = nonNegativeNumber(sheet.merit) + total;
@@ -803,8 +812,8 @@
   function openSceneForm(kind) {
     closeSceneUi();
     const dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`);
-    if (!dialog) return;
     const sheet = currentSheet();
+    if (!dialog || !sheet) return;
     const scene = normalizeScene(state.data.scene);
     const [title, detailLabel] = SCENE_KINDS[kind] || SCENE_KINDS.drama;
     const form = document.createElement("form");
@@ -860,7 +869,7 @@
   function updateModifierNote() {
     const note = document.querySelector(`#${ROOT_ID} .ccf-cs-modifier-note`);
     if (!note) return;
-    const modifier = clampModifier(currentSheet().modifier);
+    const modifier = clampModifier(currentSheet()?.modifier);
     note.textContent = modifier ? `수정치 ${modifier > 0 ? "+" : ""}${modifier}` : "";
     note.hidden = !modifier;
   }
@@ -1023,14 +1032,63 @@
     });
   }
 
-  function playerLinkField(value) {
-    return `<label class="ccf-cs-icon ccf-cs-player-link" title="플레이어 연결">${linkIcon()}<select data-field="player" aria-label="플레이어 연결"><option value="">선택 안 함</option>${playerOptions(value)}</select></label>`;
+  // ---- 캐릭터 연결 모달: 내 캐릭터 목록과 같은 모양(아이콘·이름 행). 연결값(player)은 캐릭터 이름 ----
+  async function readAuthUids() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open("firebaseLocalStorageDb"); } catch (error) { resolve([]); return; }
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        try {
+          const all = req.result.transaction("firebaseLocalStorage", "readonly").objectStore("firebaseLocalStorage").getAll();
+          all.onsuccess = () => resolve((all.result || []).map((record) => record?.value?.uid).filter(Boolean).map(String));
+          all.onerror = () => resolve([]);
+        } catch (error) { resolve([]); }
+      };
+    });
   }
 
-  function playerOptions(value) {
-    const players = permissionRows(state.data.permissions).filter((row) => row.key !== "*");
-    if (value && !players.some((row) => row.key === value)) players.push({ key: value, label: value });
-    return players.map((row) => `<option value="${escapeHtml(row.key)}"${row.key === value ? " selected" : ""}>${escapeHtml(row.label)}</option>`).join("");
+  // 저장소의 roomCharacters 중 내 계정(owner = 로그인 uid)의 캐릭터. uid 를 못 읽으면 구분할 수 없으므로 전체를 보인다.
+  async function readMyCharacters() {
+    let characters = [];
+    try { characters = Object.values(findCharacterStore()?.getState()?.entities?.roomCharacters?.entities || {}).filter((character) => character && String(character.name || "").trim()); } catch (error) { /* 저장소 없음 */ }
+    const uids = await readAuthUids();
+    const mine = uids.length ? characters.filter((character) => uids.includes(String(character.owner))) : characters;
+    return mine.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || String(a.name).localeCompare(String(b.name), "ko")).map((character) => ({ name: String(character.name).trim(), icon: /^https?:\/\//i.test(character.iconUrl || "") ? character.iconUrl : "" }));
+  }
+
+  async function openLinkPicker() {
+    const list = await readMyCharacters();
+    if (!state.open || !currentSheet()) return;
+    state.linkPicker = { list };
+    render();
+    document.querySelector(`#${ROOT_ID} .ccf-cs-link-picker`)?.focus();
+  }
+
+  function closeLinkPicker() {
+    if (!state.linkPicker) return;
+    state.linkPicker = null;
+    render();
+  }
+
+  function chooseLinkedCharacter(name) {
+    const sheet = currentSheet();
+    state.linkPicker = null;
+    if (sheet) { sheet.player = name; saveSoon(); }
+    render();
+  }
+
+  function renderLinkPicker() {
+    const sheet = currentSheet();
+    const current = String(sheet?.player || "").trim();
+    const list = [...(state.linkPicker?.list || [])];
+    if (current && !list.some((item) => item.name === current)) list.unshift({ name: current, icon: "" });
+    const row = (name, label, icon) => `<li><button type="button" class="ccf-cs-link-row${name === current ? " is-selected" : ""}" data-action="link-choose" data-name="${escapeHtml(name)}"><span class="ccf-cs-link-avatar" aria-hidden="true">${icon ? `<img src="${escapeHtml(icon)}" alt="" referrerpolicy="no-referrer">` : ""}</span><span class="ccf-cs-link-name">${escapeHtml(label)}</span></button></li>`;
+    return `<div class="ccf-cs-link-picker" role="dialog" aria-modal="true" aria-label="캐릭터 연결" tabindex="-1"><div class="ccf-cs-link-card"><header><h3>캐릭터 연결</h3><button type="button" class="ccf-cs-icon" data-action="link-close" aria-label="닫기" title="닫기">${closeIcon()}</button></header><ul>${row("", "선택 안 함", "")}${list.map((item) => row(item.name, item.name, item.icon)).join("")}</ul>${list.length ? "" : '<p class="ccf-cs-empty">내 캐릭터가 없습니다.</p>'}</div></div>`;
+  }
+
+  function playerLinkField(value) {
+    return `<button type="button" class="ccf-cs-icon ccf-cs-player-link" data-action="link-pick" aria-label="캐릭터 연결" title="${value ? `연결: ${escapeHtml(value)}` : "캐릭터 연결"}">${linkIcon()}</button>`;
   }
 
   function numberField(name, label, value) {
@@ -1054,6 +1112,7 @@
     const target = event.target;
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
+    if (!sheet && !target.dataset.permKey) return;
     if (target.dataset.commandSelect !== undefined) {
       const command = target.value;
       target.value = "";
@@ -1123,11 +1182,16 @@
   }
 
   function handleClick(event) {
+    if (event.target.classList?.contains("ccf-cs-link-picker")) return closeLinkPicker();
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
+    if (button.dataset.action === "link-pick") return openLinkPicker();
+    if (button.dataset.action === "link-close") return closeLinkPicker();
+    if (button.dataset.action === "link-choose") return chooseLinkedCharacter(button.dataset.name || "");
     if (button.dataset.action === "panel-list" || button.dataset.action === "back-list") { state.view = "list"; return render(); }
     if (button.dataset.action === "panel-settings") { state.view = "settings"; return render(); }
+    if (!currentSheet() && !["open-sheet", "delete-sheet-list", "add-sheet"].includes(button.dataset.action)) return;
     if (button.dataset.action === "scene-menu") return toggleSceneMenu(button);
     if (button.dataset.action === "scene-open-submenu") return toggleSceneSubmenu(button);
     if (button.dataset.action === "scene-form") return openSceneForm(button.dataset.kind);
@@ -1145,11 +1209,10 @@
     }
     if (button.dataset.action === "open-sheet") return selectSheet(button.dataset.sheetId);
     if (button.dataset.action === "delete-sheet-list") {
-      if (state.data.sheets.length === 1) return;
       const sheet = state.data.sheets.find((item) => item.id === button.dataset.sheetId);
       if (!sheet || !confirm(`'${sheet.name || "이름 없음"}' 시트를 삭제할까요?`)) return;
       state.data.sheets = state.data.sheets.filter((item) => item.id !== sheet.id);
-      if (state.data.selectedId === sheet.id) state.data.selectedId = state.data.sheets[0].id;
+      if (state.data.selectedId === sheet.id) state.data.selectedId = state.data.sheets[0]?.id || "";
       render(); saveSoon(); return;
     }
     if (button.dataset.action === "add-sheet") {
@@ -1183,6 +1246,7 @@
   function updateSkillsView() {
     const root = document.getElementById(ROOT_ID);
     const sheet = currentSheet();
+    if (!sheet) return;
     root?.querySelectorAll(".ccf-cs-gap").forEach((gap, index) => gap.classList.toggle("is-active", !!sheet.removedGaps[index]));
     root?.querySelectorAll("button[data-roll]").forEach((button) => {
       button.parentElement?.classList.toggle("is-fear", sheet.fear === button.dataset.roll);
@@ -1194,6 +1258,7 @@
 
   function inputSkillRoll(id, subject = "", submit = false, secret = false) {
     const sheet = currentSheet();
+    if (!sheet) return;
     const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
     if (!target) return status("습득 특기를 먼저 선택");
     const [column, row] = id.split(":").map(Number);
@@ -1237,6 +1302,7 @@
       syncNativeItems(sheet);
       status("시트 가져옴");
       saveSoon();
+      if (!sheet.player) openLinkPicker();
       return sheet;
     } catch (error) {
       if (state.open) status(error.message || "시트를 가져오지 못함");
@@ -1310,8 +1376,19 @@
       #${ROOT_ID} .ccf-cs-icon { width:40px;min-width:40px;padding:0;border:0;background:transparent;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-icon svg { width:24px;height:24px;fill:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-player-link { position:relative;display:grid;color:#fff;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-empty { margin:16px;color:#bdbdbd;text-align:center }
+      #${ROOT_ID} .ccf-cs-link-picker { position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(0,0,0,.5);pointer-events:auto;outline:0 }
+      #${ROOT_ID} .ccf-cs-link-card { width:min(420px,calc(100vw - 32px));max-height:min(560px,calc(100vh - 64px));display:flex;flex-direction:column;background:#212121;box-shadow:0 12px 32px rgba(0,0,0,.6);overflow:hidden }
+      #${ROOT_ID} .ccf-cs-link-card header { display:flex;align-items:center;justify-content:space-between;min-height:56px;padding:0 8px 0 24px }
+      #${ROOT_ID} .ccf-cs-link-card h3 { margin:0;font-size:20px;font-weight:500 }
+      #${ROOT_ID} .ccf-cs-link-card ul { margin:0;padding:0;list-style:none;overflow:auto }
+      #${ROOT_ID} .ccf-cs-link-row { all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 24px;color:#fff;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-link-row:hover,#${ROOT_ID} .ccf-cs-link-row:focus-visible { background:rgba(255,255,255,.08) }
+      #${ROOT_ID} .ccf-cs-link-row.is-selected { background:rgba(245,0,87,.18) }
+      #${ROOT_ID} .ccf-cs-link-avatar { display:inline-flex;flex:0 0 40px;width:40px;height:40px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.12) }
+      #${ROOT_ID} .ccf-cs-link-avatar img { width:100%;height:100%;object-fit:cover }
+      #${ROOT_ID} .ccf-cs-link-name { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-player-link svg { width:18px;height:18px }
-      #${ROOT_ID} .ccf-cs-player-link select { position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer }
       #${ROOT_ID} main { min-height:0;overflow:auto;padding:0 20px 24px;scrollbar-color:#777 #212121 }
       #${ROOT_ID} .ccf-cs-tabs { display:flex;height:48px;padding:0 16px;background:#212121;border:0 }
       #${ROOT_ID} .ccf-cs-tabs button { min-width:96px;height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#9e9e9e;font-weight:bold }
@@ -1384,7 +1461,7 @@
       #${ROOT_ID} .ccf-cs-portrait { width:120px;height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }
       #${ROOT_ID} .ccf-cs-portrait img { display:block;width:100%;height:100%;object-fit:cover }
       #${ROOT_ID} .ccf-cs-portrait:hover { border-color:rgba(255,255,255,.6) }
-      #${ROOT_ID} .ccf-cs-respect { display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-height:44px;padding:0 12px 0 0;background:#1b1b1b;border:1px solid rgba(255,255,255,.2) }
+      #${ROOT_ID} .ccf-cs-respect { display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-height:44px;padding:0 12px 0 0;background:#1b1b1b }
       #${ROOT_ID} .ccf-cs-respect strong { align-self:stretch;display:grid;place-items:center;padding:0 16px;margin-right:4px;background:#000;color:#fff;font-size:14px }
       #${ROOT_ID} .ccf-cs-respect label { display:inline-flex;align-items:center;gap:6px;color:#e0e0e0;font-size:13px }
       #${ROOT_ID} .ccf-cs-respect-toggle input { position:absolute;opacity:0;width:1px!important;min-height:0!important;height:1px;pointer-events:none }
@@ -1393,8 +1470,9 @@
       #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i { background:#f50057 }
       #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i::after { transform:translateX(18px) }
       #${ROOT_ID} .ccf-cs-respect-toggle input:focus-visible+i { outline:2px solid #2196f3;outline-offset:2px }
-      #${ROOT_ID} .ccf-cs-respect-number input { width:38px!important;min-height:38px!important;height:38px;padding:0!important;border:1px solid #9e9e9e!important;border-radius:50%;background-image:none!important;text-align:center;font-size:15px }
-      #${ROOT_ID} .ccf-cs-respect-number input:focus { border-color:#f50057!important }
+      #${ROOT_ID} .ccf-cs-respect-number input { width:44px!important;min-height:32px!important;height:32px;padding:0 4px!important;border:0!important;border-radius:3px;background:rgba(255,255,255,.1)!important;background-image:none!important;text-align:center;font-size:15px;-moz-appearance:textfield;appearance:textfield }
+      #${ROOT_ID} .ccf-cs-respect-number input::-webkit-inner-spin-button,#${ROOT_ID} .ccf-cs-respect-number input::-webkit-outer-spin-button { -webkit-appearance:none;margin:0 }
+      #${ROOT_ID} .ccf-cs-respect-number input:focus { background:rgba(255,255,255,.16)!important;box-shadow:inset 0 -2px 0 #f50057;outline:0 }
       #${ROOT_ID} .ccf-cs-respect-roll { margin-left:auto;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#e0e0e0;display:grid;place-items:center;cursor:pointer }
       #${ROOT_ID} .ccf-cs-respect-roll:hover { background:rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-respect-roll svg { width:24px;height:24px }
