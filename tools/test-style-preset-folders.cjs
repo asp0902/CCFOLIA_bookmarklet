@@ -31,6 +31,12 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     const sendAndDecode = async () => { await page.evaluate(() => { window.__sent.length = 0; }); await page.locator('#composer button[type=submit]').dispatchEvent('click'); await page.waitForTimeout(2300); /* the send's own restore/reset timers (180ms..2s) finish first */ return decode((await page.evaluate(() => window.__sent[0])) || ''); };
     const reset = async (text) => { await page.evaluate((t) => { const el = document.querySelector('#composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, t); el.dispatchEvent(new Event('input', { bubbles: true })); }, text); };
 
+    // (0) formats that are on in the toolbar (bold typed on, italic) are already active in the preset modal's builder
+    await ta.click(); await page.evaluate(() => { document.querySelector('[data-inline-command="bold"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); document.querySelector('[data-inline-command="italic"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    await open();
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.ccf-inline-popover.open [data-style-builder]')].filter((b) => b.getAttribute('data-active') === '1').map((b) => b.getAttribute('data-style-builder'))), ['bold', 'italic'], 'the formats that are on show as active in the builder');
+    await pop.locator('[data-inline-popover-action="cancel"]').dispatchEvent('click'); await page.waitForFunction(() => !document.querySelector('.ccf-inline-popover.open'));
+    await page.evaluate(() => { for (const key of ['bold', 'italic']) document.querySelector(`[data-inline-command="${key}"]`).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); }); await reset('');
     // (1) the popover is opened first (no selection), then the whole text is selected, then a preset is clicked
     await ta.click(); await page.keyboard.type('안녕하세요 테스트');
     await open();

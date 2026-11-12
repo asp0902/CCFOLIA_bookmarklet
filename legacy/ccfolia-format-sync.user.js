@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.104
+// @version      0.1.105
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.104"),
+    version: getUserscriptVersion("0.1.105"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -7024,6 +7024,7 @@
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">닫기</button>
       </div>
     `;
+    prefillStyleBuilderFromToolbar(popover, toolbar); // 켜져 있는 서식(굵게·기울임 등)을 빌더에도 켜진 모양으로
     // \uC0C9/\uD06C\uAE30 \uC785\uB825 \u2014 \uB9CC\uC9C0\uBA74 \uC801\uC6A9 \uB300\uC0C1\uC73C\uB85C \uD45C\uC2DC(data-touched) + \uC774\uB984 \uC785\uB825\uCE78 \uBBF8\uB9AC\uBCF4\uAE30 \uAC31\uC2E0 (#70)
     bindStylePresetDragSort(popover, toolbar); // 프리셋 행 드래그 정렬 (#70)
     popover.querySelectorAll("[data-style-builder-color], [data-style-builder-bg], [data-style-builder-size], [data-style-builder-input]").forEach((inp) => {
@@ -12017,6 +12018,17 @@
       }
     }
     return runs;
+  }
+
+  // 프리셋 모달을 열 때: 서식 바에서 지금 켜져 있는(커서·선택 영역에 적용 중이거나 켜 둔) 굵게·기울임·밑줄·취소선·블러를 빌더 버튼에도 활성으로 표시한다.
+  // (예전에는 빌더가 항상 꺼진 채로 열려서, 서식이 켜져 있는데도 해당 버튼이 활성 표시가 안 됐다.) 프리셋을 눌러 불러오면 그 프리셋 값으로 바뀐다.
+  function prefillStyleBuilderFromToolbar(popover, toolbar) {
+    if (!(popover instanceof HTMLElement) || !(toolbar instanceof HTMLElement)) return;
+    for (const key of ["bold", "italic", "underline", "strike", "blur"]) {
+      const source = toolbar.querySelector(`[data-inline-command="${key}"]`);
+      const target = popover.querySelector(`[data-style-builder="${key}"]`);
+      if (source && target && (source.classList.contains("active") || source.getAttribute("aria-pressed") === "true")) target.setAttribute("data-active", "1");
+    }
   }
 
   // 프리셋을 빌더에 불러와 편집 — 같은 이름으로 + 누르면 덮어씀 (#70)
