@@ -21,6 +21,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
       await page.evaluate((cmd) => document.querySelector(`[data-inline-command="${cmd}"]`).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })), command);
       await page.waitForSelector('.ccf-inline-popover.open .ccf-inline-popover-actions', { timeout: 4000 });
       assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.ccf-inline-popover.open .ccf-inline-popover-actions button')].map((b) => b.dataset.inlinePopoverAction + ':' + b.textContent.trim())), ['apply:적용', 'cancel:취소'], `${command}: 적용 first, 취소 second`);
+      // the input popover is small, floats (fixed) inside the screen and has no scrollbar of its own (issue #107)
+      const box = await page.evaluate(() => { const p = document.querySelector('.ccf-inline-popover.open'), r = p.getBoundingClientRect(), c = getComputedStyle(p); return { position: c.position, width: Math.round(r.width), inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, noScroll: p.scrollHeight <= p.clientHeight, docScroll: document.scrollingElement.scrollHeight > innerHeight }; });
+      assert.deepEqual(box, { position: 'fixed', width: 300, inside: true, noScroll: true, docScroll: false }, `${command}: small floating popover without scrollbars`);
       const rest = await styles();
       assert.equal(rest.cancel.bg, 'rgba(0, 0, 0, 0)', `${command}: cancel has no background`); assert.equal(rest.cancel.color, 'rgb(255, 255, 255)');
       assert.equal(rest.apply.bg, 'rgba(0, 0, 0, 0)', `${command}: apply is a text button`); assert.equal(rest.apply.color, 'rgb(33, 150, 243)', `${command}: CCFOLIA blue text`);

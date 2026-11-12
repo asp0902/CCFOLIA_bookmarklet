@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.105
+// @version      0.1.107
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.105"),
+    version: getUserscriptVersion("0.1.107"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -895,9 +895,14 @@
       html[data-ccf-gm="0"] .MuiListItem-root:has(.ccf-render-root[data-ccf-hidden="1"]) {
         display: none !important;
       }
+      /* 나레이션 묶음 위·아래(#124): 위 = 앞 메시지 글 아래 14(행 padding 8 + 본문 margin 6) + 16 = 30, 아래 = 16 + 다음 메시지 이름줄 위 14(행 padding 8 + 본문 margin 6) = 30. 이미 같다(실측). */
       .MuiListItem-root:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
         padding-top: 16px !important;
         padding-bottom: 16px !important;
+      }
+      /* 이미지 나레이션 줄(#124 실측): 이미지 위 간격 39(앞 글 아래 → 이미지)가 아래 간격 35(이미지 → 다음 이름줄)보다 4 크다 → 위 padding 을 4 줄여 35 = 35. 이어지는 행·구분선 행은 건드리지 않는다. */
+      .MuiListItem-root:not([data-ccf-prose-cont="1"]):not(:has(.ccf-render-root[data-ccf-break="1"])):has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"] .ccf-image-frag) {
+        padding-top: 12px !important;
       }
       .MuiListItem-root[data-ccf-prose-cont="1"]:has(.ccf-render-root[${CCF_NARRATION_ATTR}="1"]) {
         padding-top: 0 !important;
@@ -4226,6 +4231,8 @@
       .ccf-style-preset-auto-dot[data-on="1"]::after { transform: translateX(14px); background: #2196f3; }
       .ccf-style-preset-auto-dot:focus-visible { outline: 2px solid #64b5f6; outline-offset: 2px; }
       .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; width: min(380px, calc(100vw - 24px)); }
+      .ccf-inline-popover.ccf-inline-float-popover.is-text-popover { box-sizing: border-box; width: min(300px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: hidden; }
+      .ccf-inline-popover.is-text-popover textarea.ccf-inline-popover-field { height: 56px; min-height: 0; resize: none; }
       .ccf-style-preset-title-row {
         display: flex; align-items: center; justify-content: space-between; gap: 4px;
       }
@@ -7059,8 +7066,8 @@
   }
 
   // Sv 버튼 기준으로 fixed 팝업 위치 계산 — 아래 공간 부족하면 위로.
-  function positionStylePresetPopover(toolbar, popover) {
-    const anchor = toolbar?.querySelector?.('[data-inline-command="style-clipboard"]');
+  function positionStylePresetPopover(toolbar, popover, command = "style-clipboard") {
+    const anchor = toolbar?.querySelector?.(`[data-inline-command="${command}"]`);
     if (!(popover instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !popover.classList.contains("open")) {
       return;
     }
@@ -7095,7 +7102,7 @@
     const popover = toolbar.querySelector("[data-inline-popover]");
     if (!popover) return false;
 
-    popover.classList.remove("ccf-inline-narrator-popover", "ccf-inline-float-popover");
+    popover.classList.remove("ccf-inline-narrator-popover", "ccf-inline-float-popover", "is-text-popover");
     popover.style.left = "";
     popover.style.top = "";
     popover.textContent = "";
@@ -7121,7 +7128,8 @@
     actions.classList.add("is-text-buttons");
 
     popover.append(title, field, actions);
-    popover.classList.add("open");
+    // 루비·툴팁 입력창: 작은 Dialog 폭, 화면 안에 뜨는 fixed 팝업(레이아웃에 끼지 않아 채팅 패널·룸에 세로 스크롤이 생기지 않는다), 입력칸은 짧게
+    popover.classList.add("ccf-inline-float-popover", "is-text-popover", "open");
     popover.setAttribute("aria-hidden", "false");
 
     inlinePopoverState = {
@@ -7130,6 +7138,8 @@
       field,
       popover
     };
+    positionStylePresetPopover(toolbar, popover, config.kind);
+    requestAnimationFrame(() => positionStylePresetPopover(toolbar, popover, config.kind));
 
     setTimeout(() => {
       field.focus({ preventScroll: true });
@@ -7144,7 +7154,7 @@
     const state = inlinePopoverState?.toolbar === toolbar ? inlinePopoverState : null;
     const popover = toolbar?.querySelector?.("[data-inline-popover]");
     if (popover) {
-      popover.classList.remove("open", "ccf-inline-narrator-popover", "ccf-inline-float-popover");
+      popover.classList.remove("open", "ccf-inline-narrator-popover", "ccf-inline-float-popover", "is-text-popover");
       popover.setAttribute("aria-hidden", "true");
       popover.textContent = "";
       popover.style.left = "";

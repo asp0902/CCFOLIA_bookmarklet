@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.53";
-  const BUILD_ID = "2026-11-12-batch-c-c-224";
+  const VERSION = "0.3.54";
+  const BUILD_ID = "2026-11-12-batch-c-d-225";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -144,6 +144,15 @@
       title: "참가자 캐릭터 (내 캐릭터 목록)",
       summary: "GM 화면에서만: 내 캐릭터 목록에 다른 사람 소유 캐릭터를 음영 행으로 함께 보여 주고 클릭하면 편집창을 엽니다 (자동 실행)",
       scripts: ["legacy/ccfolia-others-characters.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-madness",
+      title: "광기 발현 알림 (크툴루)",
+      summary: "크툴루 룸에서 SAN 이 한 번에 5 이상 또는 오늘 처음 값의 1/5 이상 줄면 광기 표 커맨드를 제안하는 카드를 띄웁니다 (자동 실행)",
+      scripts: ["legacy/ccfolia-madness.user.js"],
       roomOnly: true,
       alwaysOn: true,
       hiddenFromPanel: true
