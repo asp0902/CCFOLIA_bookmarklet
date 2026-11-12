@@ -25,9 +25,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await page.evaluate(() => {
       window.__sent = [];
       document.getElementById('chat').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.getElementById('chatbox').value); });
-      const state = { entities: { roomCharacters: { entities: { c1: { name: '연갈', iconUrl: 'https://example.test/icon.png' }, c2: { name: '다른이', iconUrl: 'https://example.test/other.png' } } } } };
+      const state = { entities: { roomCharacters: { entities: { c1: { name: '연갈', iconUrl: 'https://example.test/icon.png', owner: 'me' }, c2: { name: '다른이', iconUrl: 'https://example.test/other.png', owner: 'other' }, c3: { name: '니노', iconUrl: 'https://example.test/nino.png', owner: 'me', order: 2 }, c4: { name: '브릿지', iconUrl: '', owner: 'me', order: 1 }, c5: { name: '남의것', owner: 'someone' } } } } };
       document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, subscribe: () => () => {}, dispatch() {} } } } } };
     });
+    await page.evaluate(() => new Promise((resolve) => { const open = indexedDB.open('firebaseLocalStorageDb'); open.onupgradeneeded = () => open.result.createObjectStore('firebaseLocalStorage', { keyPath: 'fbase_key' }); open.onsuccess = () => { const tx = open.result.transaction('firebaseLocalStorage', 'readwrite'); tx.objectStore('firebaseLocalStorage').put({ fbase_key: 'k', value: { uid: 'me' } }); tx.oncomplete = () => resolve(); }; }));
     await page.addScriptTag({ content: source });
     const dialogButton = page.locator('[data-ccf-character-sheet-dialog-button]');
     await dialogButton.waitFor({ state: 'attached', timeout: 8000 });
@@ -55,10 +56,12 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert((await page.locator('#ccf-character-sheet-root .ccf-cs-respect').boundingBox()).height <= 50, 'the respect row stays on one line');
     // the respect row
     const respectRow = await page.evaluate(() => { const r = document.querySelector('#ccf-character-sheet-root .ccf-cs-respect'); return { label: r.querySelector('strong').textContent, toggles: [...r.querySelectorAll('.ccf-cs-respect-toggle span')].map((e) => e.textContent), numbers: [...r.querySelectorAll('.ccf-cs-respect-number span')].map((e) => e.textContent), roll: !!r.querySelector('[data-action="respect-roll"] svg'), switches: [...r.querySelectorAll('input[role="switch"]')].length }; });
-    assert.deepEqual(respectRow, { label: '리스펙', toggles: ['새로운 세계', '세션참여', '롤플레이', '획득', '사명달성'], numbers: ['심금', '기타'], roll: true, switches: 5 });
+    assert.deepEqual(respectRow, { label: '리스펙', toggles: ['새로운 세계', '세션 참여', '롤플레이', '획득', '사명 달성'], numbers: ['심금', '기타'], roll: true, switches: 5 });
     const R = '#ccf-character-sheet-root';
+    const look = await page.evaluate(() => { const row = document.querySelector('#ccf-character-sheet-root .ccf-cs-respect'), input = row.querySelector('.ccf-cs-respect-number input'), c = getComputedStyle(input), r = getComputedStyle(row); return { rowBorder: r.borderTopWidth, inputBorder: c.borderTopWidth, radius: c.borderTopLeftRadius, bg: c.backgroundColor, align: c.textAlign }; });
+    assert.deepEqual(look, { rowBorder: '0px', inputBorder: '0px', radius: '3px', bg: 'rgba(255, 255, 255, 0.1)', align: 'center' }, 'no outline on the row, no round border on the numbers: a filled centred field');
     await page.locator(R + ' .ccf-cs-respect-toggle', { hasText: '새로운 세계' }).click();
-    await page.locator(R + ' .ccf-cs-respect-toggle', { hasText: '사명달성' }).click();
+    await page.locator(R + ' .ccf-cs-respect-toggle', { hasText: '사명 달성' }).click();
     await page.locator(R + ' .ccf-cs-respect-number', { hasText: '기타' }).locator('input').fill('2');
     await page.waitForTimeout(300);
     const saved = await page.evaluate(() => { const raw = Object.keys(localStorage).filter((k) => k.startsWith('ccf-character-sheet:')).map((k) => JSON.parse(localStorage.getItem(k))); const sheet = raw[0].sheets.find((x) => x.name === '연갈'); return sheet.respec; });
@@ -66,7 +69,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     // rolling: the breakdown goes to the chat, the merit grows by the total, the toggles and numbers reset
     await page.locator(R + ' [data-action="respect-roll"]').click();
     await page.waitForTimeout(200);
-    assert.deepEqual(await page.evaluate(() => window.__sent), ['리스펙: 새로운 세계 1 + 사명달성 1 + 기타 2 = 4']);
+    assert.deepEqual(await page.evaluate(() => window.__sent), ['리스펙: 새로운 세계 1 + 사명 달성 1 + 기타 2 = 4']);
     assert.equal(await page.locator(R + ' [data-field="merit"]').inputValue(), '4', 'merit grew by the total');
     assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-respect input')].map((i) => (i.type === 'checkbox' ? i.checked : i.value))), [false, false, false, false, false, '0', '0'], 'toggles and numbers reset');
     assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open');
@@ -132,12 +135,46 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
       return { inNav: !!add, lastChild: nav.lastElementChild === add, rightEnd: rn.right - ra.right < 24, heading: !!document.querySelector('#ccf-character-sheet-root .ccf-cs-panel-heading'), rows: document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-sheet-row').length };
     });
     assert.deepEqual({ ...tabs, rows: undefined }, { inNav: true, lastChild: true, rightEnd: true, heading: false, rows: undefined });
-    assert.equal(tabs.rows, 2, 'the default sheet and the one made for 연갈 (still one for 연갈 after the second press)');
+    assert.equal(tabs.rows, 1, 'only the one made for 연갈 (no default sheet any more; still one after the second press)');
     await page.locator('#ccf-character-sheet-root [data-action="panel-settings"]').click();
     assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-tabs [data-action="add-sheet"]').count(), 0, 'no + on the settings tab');
     await page.locator('#ccf-character-sheet-root [data-action="panel-list"]').click();
     await page.locator('#ccf-character-sheet-root .ccf-cs-tabs [data-action="add-sheet"]').click();
     await page.waitForSelector('#ccf-character-sheet-root .ccf-cs-dialog.is-editor');
+    // 10: the character link is a modal like the 내 캐릭터 목록 (my characters only, icon + name, 선택 안 함, Esc), not a select
+    await page.evaluate(() => { document.getElementById('ccf-character-sheet-root')?.remove(); });
+    await dialogButton.click();
+    await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor');
+    assert.equal(await page.locator(R + ' select[data-field="player"]').count(), 0, 'no select any more');
+    await page.locator(R + ' [data-action="link-pick"]').click();
+    await page.waitForSelector(R + ' .ccf-cs-link-picker');
+    const picker = await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-link-row')].map((row) => ({ name: row.querySelector('.ccf-cs-link-name').textContent, icon: row.querySelector('img')?.getAttribute('src') || '', selected: row.classList.contains('is-selected') })));
+    assert.deepEqual(picker, [{ name: '선택 안 함', icon: '', selected: false }, { name: '연갈', icon: 'https://example.test/icon.png', selected: true }, { name: '브릿지', icon: '', selected: false }, { name: '니노', icon: 'https://example.test/nino.png', selected: false }], 'my three characters only (not 다른이/남의것), by order, the current one marked');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator(R + ' .ccf-cs-link-picker').count(), 0, 'Esc closes the picker'); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'and the sheet stays');
+    await page.locator(R + ' [data-action="link-pick"]').click();
+    await page.locator(R + ' .ccf-cs-link-row', { hasText: '니노' }).click();
+    assert.equal(await page.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets.find((x) => x.name === '연갈').player), '니노', 'the choice is saved as the link');
+    assert.equal(await page.locator(R + ' .ccf-cs-portrait img').getAttribute('src'), 'https://example.test/icon.png', 'own/other image rules unchanged (name 연갈 still matches an icon)');
+    await page.locator(R + ' [data-action="link-pick"]').click();
+    await page.locator(R + ' .ccf-cs-link-row', { hasText: '선택 안 함' }).click();
+    assert.equal(await page.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets.find((x) => x.name === '연갈').player), '', '선택 안 함 clears it');
+    // pasting a sheet opens the picker at once
+    await page.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.importText(JSON.stringify({ kind: 'capybara.insane-sheet', version: 1, data: { name: '붙여넣기', player: '' } })));
+    await page.waitForSelector(R + ' .ccf-cs-link-picker');
+    await page.keyboard.press('Escape');
+    // 12: every sheet can be deleted; the empty list survives a reload and no click throws
+    await page.evaluate(() => window.__CCF_TOOLKIT_MENU__.items.get('saikoro').onClick());
+    await page.locator(R + ' [data-action="panel-list"]').click();
+    page.on('dialog', (d) => d.accept());
+    for (let i = 0; i < 10 && await page.locator(R + ' [data-action="delete-sheet-list"]').count(); i++) { await page.locator(R + ' [data-action="delete-sheet-list"]').first().click(); await page.waitForTimeout(100); }
+    assert.equal(await page.locator(R + ' .ccf-cs-sheet-row').count(), 0, 'the last sheet was deletable');
+    assert.match(await page.locator(R + ' .ccf-cs-empty').textContent(), /시트가 없습니다/);
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('ccf-character-sheet:')))).sheets.length), 0, 'the empty list is stored');
+    await page.locator(R + ' [data-action="panel-settings"]').click(); await page.locator(R + ' [data-action="panel-list"]').click();
+    await page.locator(R + ' .ccf-cs-tabs [data-action="add-sheet"]').click();
+    await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor');
     assert.deepEqual(errors, [], 'no page errors');
     console.log('character sheet ui PASS');
   } finally { await browser.close(); }

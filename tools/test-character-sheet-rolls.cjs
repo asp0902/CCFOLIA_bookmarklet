@@ -58,7 +58,7 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
       await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor');
       assert.equal(await page.locator(R + ' header h2').textContent(), '연갈');
       await page.locator(R + ' [data-action="back-list"]').click();
-      assert.equal(await page.locator(R + ' .ccf-cs-sheet-row').count(), 3, 'default sheet + 브릿지 + 연갈 (a second press on 브릿지 reused its sheet)');
+      assert.equal(await page.locator(R + ' .ccf-cs-sheet-row').count(), 2, '브릿지 + 연갈 (no default sheet) (a second press on 브릿지 reused its sheet)');
       assert.deepEqual(page.__errors, []);
       await page.close();
     }
