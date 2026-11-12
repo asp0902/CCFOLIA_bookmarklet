@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.10
+// @version      0.0.11
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -100,7 +100,7 @@
 
   function findMenuAnchor() {
     const labelled = (words) => [...document.querySelectorAll("button[aria-label], button[title], [role='button'][aria-label]")]
-      .find((node) => words.some((word) => `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`.includes(word)) && !node.hasAttribute(MENU_BUTTON_ATTR));
+      .find((node) => words.some((word) => `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`.includes(word)) && !node.hasAttribute(MENU_BUTTON_ATTR) && !node.disabled); // 비활성(참여자에게 보이는 [GM] 버튼)은 닻으로 쓰지 않는다: 복제하면 클릭도 툴팁도 안 된다
     return labelled(["컷인 목록", "カットイン一覧", "Cut-in list", "Cutin list"])
       || labelled(["내 캐릭터 목록", "내 캐릭터", "캐릭터 목록", "My characters", "My character", "マイキャラクター", "キャラクター一覧"]);
   }
@@ -372,7 +372,7 @@
       button.addEventListener("mouseleave", hideToolkitTip, { signal: abort.signal });
       button.addEventListener("focus", () => { if (button.matches(":focus-visible")) showToolkitTip(); }, { signal: abort.signal });
       button.addEventListener("blur", hideToolkitTip, { signal: abort.signal });
-      button.className = anchor.className;
+      button.className = anchor.className.replace(/Mui-(?:disabled|focusVisible)/g, "").trim();
       button.innerHTML = PENGUIN_SVG;
       button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); hideToolkitTip(); menuState.menu ? closeToolkitMenu() : openToolkitMenu(); }, { signal: abort.signal });
       menuState.button = button;
