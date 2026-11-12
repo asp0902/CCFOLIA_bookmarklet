@@ -77,6 +77,7 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
     await page.waitForSelector('#ccf-gm-tools #ccfolia-handout-root', { state: 'attached', timeout: 5000 });
     assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tabs').hidden), true, 'one visible tab: no tab strip');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccf-gm-tools .ccf-gt-tabs')).display), 'none', 'and it is really not drawn (display)');
     // the bookmarklet's 스마트폰 알림 item is a tab too (its settings are drawn into the tab body)
     await page.addScriptTag({ content: src('ntfy') });
     await page.waitForFunction(() => [...document.querySelectorAll('#ccf-gm-tools .ccf-gt-tab')].length === 2, null, { timeout: 4000 });
