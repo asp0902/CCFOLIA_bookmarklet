@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.41
+// @version      0.3.42
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.41";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.42";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1087,6 +1087,19 @@
     return hasEditor && hasSubmit;
   }
 
+  // 줄 머리의 시각("今日 21:54" / "2026/11/12 21:54")이 지금과 3분 넘게 벌어지면 새 메시지가 아니다: 탭을 바꾸거나 위로 스크롤해 오래된 줄이 새로 그려질 때도 줄은 "처음 보는 줄"로 등록되기 때문이다(실제 룸 실측: 탭 전환 한 번에 훅 16회).
+  // 시각을 읽지 못하면(형식이 다른 줄) 통과시킨다.
+  function isRecentMessageRow(itemRoot) {
+    const head = normalizeSpace(itemRoot.querySelector("h6.MuiListItemText-primary")?.textContent || "");
+    const now = new Date();
+    let when = null;
+    let m = head.match(/(今日|오늘|today)\s*(\d{1,2}):(\d{2})/i);
+    if (m) when = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Number(m[2]), Number(m[3]));
+    else if ((m = head.match(/(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/))) when = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), m[4] ? Number(m[4]) : 0, m[5] ? Number(m[5]) : 0);
+    if (!when) return true;
+    return Math.abs(now.getTime() - when.getTime()) <= 3 * 60 * 1000;
+  }
+
   function registerMessageItem(itemRoot, allowNotify) {
     ntfyDiagState.register += 1;
     if (allowNotify) { ntfyDiagState.live += 1; ntfyDiagState.lastRegisterAt = Date.now(); }
@@ -1126,8 +1139,9 @@
     // 핸드폰 푸시(ntfy): 소리와 달리 룸을 보고 있는지 여부는 그쪽 설정에 따라 판정하므로 canNotifyNow 와 별개로, 새로 등록된 실시간 메시지를 확장에 알린다.
     if (!allowNotify) ntfyBlock("not-live", allowNotify);
     else if (Date.now() - readyAt < INIT_GRACE_MS) ntfyBlock("grace", allowNotify);
+    else if (!isRecentMessageRow(itemRoot)) ntfyBlock("old-timestamp", allowNotify);
     else if (typeof window.__CCF_NTFY_HOOK__ !== "function") ntfyBlock("no-hook", allowNotify);
-    if (allowNotify && Date.now() - readyAt >= INIT_GRACE_MS && typeof window.__CCF_NTFY_HOOK__ === "function") {
+    if (allowNotify && Date.now() - readyAt >= INIT_GRACE_MS && typeof window.__CCF_NTFY_HOOK__ === "function" && isRecentMessageRow(itemRoot)) {
       ntfyDiagState.hookCalls += 1; ntfyDiagState.lastHookAt = Date.now();
       try {
         const nameNode = itemRoot.querySelector("h6.MuiListItemText-primary");
