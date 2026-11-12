@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Phone Push (ntfy) by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-ntfy
-// @version      0.1.1
+// @version      0.1.2
 // @description  Sends a phone push (ntfy) for new room messages when you are away — the bookmarklet path of the extension's ntfy feature.
 // @description:ko 룸에 새 메시지가 오면(자리를 비운 동안) 스마트폰 ntfy 앱으로 알림을 보냅니다. 확장의 스마트폰 알림과 같은 기능의 북마클릿용 경로입니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -119,7 +119,7 @@
     const box = document.createElement("div");
     box.id = "ccf-ntfy-dialog";
     box.setAttribute(SAFE, "1");
-    box.style.cssText = container ? "position:absolute;inset:0;overflow:auto;display:grid;place-items:start center;padding:16px;font:14px/1.5 'Noto Sans KR',Roboto,sans-serif" : "position:fixed;inset:0;z-index:2147483600;display:grid;place-items:center;background:rgba(0,0,0,.5);font:14px/1.5 'Noto Sans KR',Roboto,sans-serif";
+    box.style.cssText = container ? "font:14px/1.5 'Noto Sans KR',Roboto,sans-serif" : "position:fixed;inset:0;z-index:2147483600;display:grid;place-items:center;background:rgba(0,0,0,.5);font:14px/1.5 'Noto Sans KR',Roboto,sans-serif";
     const dismiss = () => { if (container) window.__CCF_TOOLKIT_MENU__?.closeTool?.(); else box.remove(); };
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     box.innerHTML = `<form style="width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:20px 24px;background:#222;color:#fff;border-radius:4px;box-shadow:0 11px 15px -7px rgba(0,0,0,.2),0 24px 38px 3px rgba(0,0,0,.14)">
@@ -137,6 +137,7 @@
       <p data-role="note" role="status" style="min-height:20px;margin:8px 0 0;font-size:13px"></p>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button type="button" data-a="test">테스트 알림 보내기</button><button type="submit" data-a="save">저장</button><button type="button" data-a="close">닫기</button></div></form>`;
     const form = box.querySelector("form");
+    if (container) { form.style.cssText = "width:100%;max-width:520px;padding:0;background:transparent;color:#fff"; form.querySelector("h3")?.remove(); form.querySelector('[data-a="close"]')?.remove(); } // 공용 설정 탭 안: 소제목은 탭이 단다, 창은 탭 바깥의 닫기로 닫는다
     for (const button of form.querySelectorAll("button")) button.style.cssText = "padding:6px 12px;border:0;background:transparent;color:#64b5f6;font:inherit;cursor:pointer";
     const note = (text, error = false) => { const el = form.querySelector('[data-role="note"]'); el.textContent = text; el.style.color = error ? "#f44336" : "#bdbdbd"; };
     const read = () => ({
@@ -174,6 +175,6 @@
   }
 
   (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } })
-    .register({ id: "ntfy", order: 3, label: "스마트폰 알림", icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>', visible: () => true, onClick: () => openSettings(), mount: (container) => openSettings(container), unmount: () => { document.getElementById("ccf-ntfy-dialog")?.remove(); } });
+    .register({ id: "ntfy", order: 3, label: "스마트폰 알림", icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>', visible: () => true, section: true, onClick: () => openSettings(), mount: (container) => openSettings(container), unmount: () => { document.getElementById("ccf-ntfy-dialog")?.remove(); } });
   window.__CCF_NTFY_DIAG__ = () => ({ config: { ...readConfig(), topic: readConfig().topic ? "(설정됨)" : "" }, state: { ...state, sent: state.sent.length } });
 })();

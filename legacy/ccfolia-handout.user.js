@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.112
+// @version      0.1.113
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.112",
+    version: "0.1.113",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -320,6 +320,7 @@
     editingId: null,        // 편집 중인 handout id
     plPreview: false,       // PL 시점 미리보기 토글
     search: "",             // 목록 검색어 (저장하지 않는다)
+    mode: "list",           // GM 도구 창 안에서: "list" = 핸드아웃 탭(목록·편집), "settings" = 공용 설정 탭의 핸드아웃 구역
     data: { handouts: [], myCharacter: "", myCharacterOptions: [], plList: [], folders: [] },
     formPermissions: {},    // 편집 폼의 임시 권한 상태 — 저장 시 반영
     myCharacterOptions: [], // 설정 탭 드롭다운 옵션 (캐릭터 패널 스캔 결과)
@@ -1007,6 +1008,9 @@
     .container[data-embedded="1"] .panel { position: absolute !important; inset: 0; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; box-shadow: none; background-color: transparent; }
     .container[data-embedded="1"] [data-resize-handle], .container[data-embedded="1"] header [data-action="close"] { display: none !important; }
     .container[data-embedded="1"] header { cursor: default; }
+    /* 공용 설정 탭 안의 구역: 머리·탭 줄·내보내기/가져오기 없이 설정 화면만 */
+    .container[data-mode="settings"] header, .container[data-mode="settings"] .tabs, .container[data-mode="settings"] .panel-footer [data-action="export"], .container[data-mode="settings"] .panel-footer [data-action="import"] { display: none !important; }
+    .container[data-mode="list"] .tab[data-tab="settings"] { display: none !important; }
     /* 탭 줄이 보일 때(탭 2개 이상)만 숨긴다: 그땐 탭 이름이 제목이다. 탭이 하나면 이 제목이 유일한 "핸드아웃" */
     :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header h1 { display: none; }
     .panel {
@@ -3372,12 +3376,16 @@
     return openPanelInternal();
   }
 
-  function mountHandoutTool(container) {
+  function openSharedSettings() { try { toolsApi()?.openTool("gm-settings"); } catch (_) { /* 창을 쓸 수 없음 */ } }
+
+  function mountHandoutTool(container, mode = "list") {
     state.embedded = true;
+    state.mode = mode;
     ensureRoot();
     state.root.setAttribute("data-embedded", "1");
-    state.root.style.cssText = "position:absolute;inset:0;display:block";
+    state.root.style.cssText = mode === "settings" ? "position:relative;display:block;height:460px" : "position:absolute;inset:0;display:block";
     state.shadow.querySelector(".container")?.setAttribute("data-embedded", "1");
+    state.shadow.querySelector(".container")?.setAttribute("data-mode", mode);
     container.appendChild(state.root);
     state.mountPromise = openPanelInternal();
     state.mountPromise.catch(() => {});
@@ -3385,6 +3393,7 @@
 
   function unmountHandoutTool() {
     state.embedded = false;
+    state.mode = "list";
     state.isOpen = false;
     state.editingId = null;
     try { closeAddChoiceDialog(); } catch (error) { /* 정리 실패는 무시 */ }
@@ -3523,6 +3532,7 @@
         if (state.activeTab === "edit") state.activeTab = "list";
       }
     }
+    if (state.embedded) { if (state.mode === "settings") state.activeTab = "settings"; else if (state.activeTab === "settings") state.activeTab = "list"; }
     state.shadow.querySelectorAll(".tab").forEach((t) => {
       t.setAttribute("data-active", t.dataset.tab === state.activeTab ? "1" : "0");
     });
@@ -5340,6 +5350,8 @@
     if (!isActive()) return;
     document.querySelectorAll(`[${ICON_MARKER}="toolbar"], [${ICON_MARKER}="appbar"], [${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
     (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "handout", order: 2, label: "핸드아웃", icon: JOURNAL_ICON_HTML, visible: isActive, onClick: togglePanel, mount: mountHandoutTool, unmount: unmountHandoutTool });
+    // 공용 "설정" 탭(GM 도구 창)의 핸드아웃 구역: 내 캐릭터·PL 목록·동기화 줄. 핸드아웃 탭 안의 설정 하위 탭은 쓰지 않는다.
+    window.__CCF_TOOLKIT_MENU__.register({ id: "handout-settings", section: true, order: 2, label: "핸드아웃", visible: () => isActive() && isAdminMode(), onClick: openSharedSettings, mount: (container) => mountHandoutTool(container, "settings"), unmount: unmountHandoutTool }); // onClick 는 레지스트리의 중복 등록 판별에 쓰이므로 항상 같은 함수여야 한다
   }
 
   // React 리렌더 대응 — body 변경 감시

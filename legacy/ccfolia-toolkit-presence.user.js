@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.14
+// @version      0.0.15
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -88,13 +88,18 @@
   // 창을 코드로 열려면 registry.openTool(id)(그 탭으로 열기) / closeTool() / isToolOpen().
   // (레지스트리 객체는 먼저 로드된 쪽이 만들고, 여기서는 sync 를 붙인다). 항목이 하나도 보이지 않으면 버튼을 숨긴다.
   const MENU_BUTTON_ATTR = "data-ccf-toolkit-menu-button";
-  // 사용자 제공 이미지(docs/img/penguin-ref.png)의 윤곽을 따라 만든 오른쪽 옆모습 실루엣(tools/gen-penguin-svg.cjs): 몸 전체가 currentColor, 배와 눈 흰자는 evenodd 구멍(흰자는 동공과 같은 중심의 원, 반지름 1.9배), 눈동자는 그 안의 섬.
-  const PENGUIN_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.73 2L14.48 2.01L15.26 2.25L15.76 2.51L17.02 3.38L18.62 3.95L19.03 4.31L19.21 4.7L17.99 4.85L17.23 5.05L15.74 5.84L15.41 6.09L15.41 6.75L16.2 7.79L16.48 8.4L16.72 9.37L16.75 10.39L16.59 11.94L16.59 12.83L16.67 13.49L16.62 14.85L16.46 15.79L16.04 17.18L15.62 18.07L15.33 18.49L15.11 18.66L14.71 18.66L14.65 18.76L14.36 20.07L13.68 21.3L13.68 21.93L13.87 22.15L14.11 22.26L15 22.28L15.47 22.41L16 22.7L16.25 22.95L16.33 23.16L15.5 23.15L15.47 23.36L15.19 23.28L14.45 23.28L14.29 23.51L13.77 23.31L13.14 23.31L13.11 23.41L12.41 23.38L12.35 23.75L11.44 23.75L11.41 23.96L10.75 23.8L10.05 23.8L9.86 24.01L9.36 23.88L8.68 23.88L8.66 23.99L8.18 23.72L7.96 23.4L7.99 22.16L7.7 22.06L7.44 21.35L6.99 19.41L6.78 17.97L6.13 17.97L5.73 19.04L5.33 19.5L5.22 19.56L4.96 19.53L4.79 19.15L4.82 18.07L5 16.47L5.5 14.09L6.07 12.38L6.94 10.68L7.73 8.77L8.49 7.66L10.19 6.12L10.92 4.1L11.5 3.15L11.96 2.69L12.43 2.38L13.04 2.12L13.72 2.01ZM14.57 5.25L14.83 5.33L14.54 5.62L14.44 5.83L14.44 6.85L15.28 8.11L15.59 8.71L15.88 9.68L15.96 10.65L15.67 12.36L14.75 15.64L13.65 18.99L13.1 20.25L12.04 20.21L11.46 20.47L9.89 20.47L9.55 20.63L9.18 21.02L8.54 20.22L8.25 19.54L7.99 17.94L8.01 16.84L8.17 15.69L8.36 14.9L9.22 12.8L9.27 11.39L9.19 10.97L9.48 10.23L10.02 9.56L11.12 8.73L12.18 7.64L12.63 7.01L13.02 6.06L13.25 5.79L13.77 5.45L14.56 5.26ZM14.37 3.66a0.55 0.55 0 1 0 1.1 0a0.55 0.55 0 1 0 -1.1 0ZM14.63 3.66a0.29 0.29 0 1 0 0.58 0a0.29 0.29 0 1 0 -0.58 0Z"/></svg>';
+  // 아델리 펭귄 머리(+목 조금)를 확대한 옆모습(직접 그린 도형, tools/render-penguin-head.cjs → docs/img/penguin-head-24-48.png): 머리 전체가 currentColor, 흰 눈테두리는 evenodd 구멍(동공과 같은 중심, 반지름 1.9배), 부리는 짧은 쐐기.
+  const PENGUIN_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M3.5 22.5C2.6 16 3 9.5 8 5.6C12.2 2.4 17.6 4.2 18.6 8.9L22.6 10.6L22.6 12.1L18.3 13.2C17.9 15.4 16.7 17.4 15.2 19C14.6 20.3 14.6 21.6 15.3 22.5ZM13.6 9.6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0ZM13.6 9.6m-1.58 0a1.58 1.58 0 1 0 3.16 0a1.58 1.58 0 1 0-3.16 0Z"/></svg>';
   const menuState = { button: null, menu: null, frame: 0 };
 
-  function toolkitMenuItems() {
+  // section:true 항목은 공용 "설정" 탭 안의 소제목 구역으로 그려지고 메뉴·탭으로는 따로 나오지 않는다.
+  function visibleRegistryItems() {
     const registry = window.__CCF_TOOLKIT_MENU__;
-    const items = registry?.items ? [...registry.items.values()] : [];
+    return registry?.items ? [...registry.items.values()] : [];
+  }
+  function settingsSections() { return visibleRegistryItems().filter((item) => item.section === true && typeof item.mount === "function").filter((item) => { try { return item.visible ? !!item.visible() : true; } catch (_) { return false; } }).sort((a, b) => (a.order ?? 99) - (b.order ?? 99)); }
+  function toolkitMenuItems() {
+    const items = visibleRegistryItems().filter((item) => item.section !== true);
     return items.filter((item) => { try { return item.visible ? !!item.visible() : true; } catch (_) { return false; } }).sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
   }
 
@@ -219,7 +224,35 @@
   // ---- GM 도구 창: 코코포리아 기본 모달 모양(paper rgba(44,44,44,.87), 모서리 4px, MUI 그림자), 제목 "GM 도구", 탭(MUI Tabs 밑줄 파랑), 마지막 탭 기억 ----
   // 시트로 채팅을 보내며 쓰는 창이라 배경을 가리는 백드롭은 없고 제목줄을 끌어 옮길 수 있다.
   const TOOLS_TAB_KEY = "ccfGmToolsTab";
-  const toolsState = { host: null, tab: "", mounted: null, tabsKey: "", pos: { x: 0, y: 0 } };
+  const toolsState = { host: null, tab: "", mounted: null, tabsKey: "", sectionsKey: "", pos: { x: 0, y: 0 } };
+
+  // 공용 "설정" 탭: 각 기능이 section:true 로 등록한 설정 화면을 소제목 구역으로 한 곳에 모은다.
+  const GEAR_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+  const SETTINGS_TAB_ID = "gm-settings";
+  const settingsMounted = [];
+  const sectionsKey = () => settingsSections().map((item) => item.id + ":" + item.label).join("|");
+  function mountSettingsTab(container) {
+    const wrap = document.createElement("div");
+    wrap.className = "ccf-gt-settings";
+    toolsState.sectionsKey = sectionsKey();
+    for (const item of settingsSections()) {
+      const section = document.createElement("section");
+      section.setAttribute("data-ccf-settings-section", item.id);
+      const title = document.createElement("h3");
+      title.textContent = item.label;
+      const body = document.createElement("div");
+      section.append(title, body);
+      wrap.appendChild(section);
+      settingsMounted.push(item);
+      try { item.mount(body); } catch (error) { console.warn("[toolkit-menu] settings section failed", item.id, error); }
+    }
+    container.appendChild(wrap);
+  }
+  function unmountSettingsTab() {
+    while (settingsMounted.length) { const item = settingsMounted.pop(); try { item.unmount?.(); } catch (error) { console.warn("[toolkit-menu] settings section unmount failed", error); } }
+  }
+
+  function openSettingsFromMenu() { openGmTools(SETTINGS_TAB_ID); }
 
   function toolTabs() { return toolkitMenuItems().filter((item) => typeof item.mount === "function"); }
 
@@ -234,8 +267,11 @@
       #ccf-gm-tools{position:fixed;inset:0;z-index:2147482999;pointer-events:none;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,sans-serif;color:#fff}
       #ccf-gm-tools .ccf-gt-window,#ccf-gm-tools .ccf-gt-window>*{box-sizing:border-box}
       #ccf-gm-tools .ccf-gt-window{position:absolute;inset:10px;margin:auto;width:min(900px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px));pointer-events:auto;display:flex;flex-direction:column;background:rgba(44,44,44,.87);background-image:none;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden}
-      #ccf-gm-tools .ccf-gt-window>header{display:flex;align-items:center;flex:0 0 auto;min-height:64px;padding:0 16px 0 24px;background:#212121;cursor:move;user-select:none;touch-action:none}
-      #ccf-gm-tools .ccf-gt-window>header>h2{margin:0;flex:1;font-size:1.25rem;font-weight:700;line-height:1.6;letter-spacing:.0075em}
+      #ccf-gm-tools .ccf-gt-window>header{display:flex;align-items:center;flex:0 0 auto;min-height:48px;padding:0 8px 0 24px;background:#212121;cursor:move;user-select:none;touch-action:none}
+      #ccf-gm-tools .ccf-gt-window>header>h2{margin:0;flex:1;font-size:14px;font-weight:700;line-height:21.98px;letter-spacing:.09996px}
+      #ccf-gm-tools .ccf-gt-settings{position:absolute;inset:0;overflow:auto;padding:0 24px 24px}
+      #ccf-gm-tools .ccf-gt-settings h3{margin:20px 0 8px;font-size:14px;font-weight:700;line-height:21.98px;letter-spacing:.09996px}
+      #ccf-gm-tools .ccf-gt-settings section+section{margin-top:12px;padding-top:4px;border-top:1px solid rgba(255,255,255,.12)}
       #ccf-gm-tools .ccf-gt-close,#ccf-gm-tools .ccf-gt-tab{font:inherit;color:inherit}
       #ccf-gm-tools .ccf-gt-close{all:unset;box-sizing:border-box;cursor:pointer;width:40px;height:40px;display:inline-grid;place-items:center;border-radius:50%;transition:background-color 150ms}
       #ccf-gm-tools .ccf-gt-close:hover{background:rgba(255,255,255,.08)}
@@ -353,6 +389,7 @@
     if (!tabs.length) { closeGmTools(); return; }
     if (!tabs.some((item) => item.id === toolsState.tab)) { showToolTab(tabs[0].id); return; }
     renderToolTabs();
+    if (toolsState.mounted?.id === SETTINGS_TAB_ID && toolsState.sectionsKey !== sectionsKey()) { unmountTool(); toolsState.tab = ""; showToolTab(SETTINGS_TAB_ID); }
   }
 
   function syncToolkitMenu() {
@@ -398,6 +435,7 @@
   function startToolkitMenu() {
     const registry = (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } });
     registry.sync = scheduleToolkitMenuSync;
+    registry.register({ id: SETTINGS_TAB_ID, order: 80, label: "설정", icon: GEAR_ICON, visible: () => settingsSections().length > 0, onClick: openSettingsFromMenu, mount: mountSettingsTab, unmount: unmountSettingsTab });
     registry.openTool = (id) => openGmTools(id);
     registry.closeTool = () => closeGmTools();
     registry.isToolOpen = () => !!toolsState.host;
