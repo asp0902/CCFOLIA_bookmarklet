@@ -1,6 +1,7 @@
 "use strict";
 
 const isRoomTab = tab => { try { return new URL(tab.url).origin === "https://ccfolia.com"; } catch (_) { return false; } };
+const isRoll20Tab = tab => { try { return new URL(tab.url).origin === "https://app.roll20.net"; } catch (_) { return false; } };
 const flagError = async (tabId, error) => {
   console.error("[Capybara personal extension]", error);
   await chrome.action.setBadgeText({ tabId, text: "!" });
@@ -122,7 +123,9 @@ const sendNtfy = async (payload, { test = false } = {}) => {
   return { ok: true };
 };
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if ((message?.type !== "ntfy-send" && message?.type !== "ntfy-test") || !isRoomTab(sender.tab || {})) return;
+  // 푸시는 코코포리아 룸 탭과 Roll20 탭(roll20-reader.js 의 Roll20 새 메시지 알림)이 보내 달라고 할 수 있다. 시험 알림은 코코포리아 탭만.
+  if (message?.type !== "ntfy-send" && message?.type !== "ntfy-test") return;
+  if (!(isRoomTab(sender.tab || {}) || (message.type === "ntfy-send" && isRoll20Tab(sender.tab || {})))) return;
   sendNtfy(message.payload, { test: message.type === "ntfy-test" })
     .then((result) => sendResponse(result))
     .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
