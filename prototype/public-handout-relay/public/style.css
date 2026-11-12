@@ -357,3 +357,31 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 .ccr20-render-root .ccr20-line.ccr20-line-flush{display:block;padding:14px 10px 8px}
 .ccr20-render-root .ccr20-line-flush .ccr20-image-frag{display:block;overflow:visible}
 .ccr20-render-root .ccr20-line-flush .ccr20-image{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;border:0}
+
+/* ===== Playroom vs CCFOLIA, measured 1440x900 (docs/playroom-vs-ccfolia-1112.md A1-A3) ===== */
+/* A2: Roboto first (Korean falls back to Noto Sans KR), like CCFOLIA's own pages */
+:root,.dialog,#chat-form,#chat-form button,#chat-form input,#chat-form textarea,#messages{font-family:Roboto,"Noto Sans KR","Noto Sans JP","Helvetica Neue",Arial,sans-serif}
+/* A1: one speaker row 32px high — 40px face button, MUI underline name input (no filled box), 34x34 round icon buttons (the generic "#chat-form .name-row button" text-button rule used to win over .mini-btn) */
+#chat-form .name-row{align-items:center;gap:0;padding:4px 8px}
+#chat-form .name-row .face-btn{min-width:0;width:40px;height:32px;padding:0;border-radius:0;background:none;color:#fff}
+#chat-form .name-row .face-btn svg{width:20px;height:20px}
+#chat-form .name-row .face-btn img{width:20px;height:20px}
+#chat-form #chat-name{flex:1;min-width:0;height:32px;padding:0 4px;border:0;border-bottom:1px solid rgba(255,255,255,.7);border-radius:0;background:transparent;color:#fff;font-size:16px;line-height:1.5}
+#chat-form #chat-name:hover{border-bottom-color:#fff}
+#chat-form #chat-name:focus{outline:0;background:transparent;border-bottom:2px solid #2196f3;padding-bottom:0}
+#chat-form .name-row .mini-btn{min-width:0;width:34px;height:34px;padding:0;margin-left:4px;border-radius:50%;background:none;color:#fff;font-size:inherit}
+#chat-form .name-row .mini-btn svg{width:24px;height:24px}
+#chat-form .name-row .mini-btn:hover:not(:disabled){background:rgba(255,255,255,.08)}
+#chat-form .name-row .mini-btn:disabled{color:rgba(255,255,255,.3)}
+/* send button: Roboto 13px 700, padding 4px 5px, 64x31, radius 4px, text #eee */
+#chat-form .dice-row button[type=submit]{width:64px;min-width:64px;height:31px;padding:4px 5px;border-radius:4px;color:#eee;font-family:Roboto,"Noto Sans KR",sans-serif;font-size:13px;font-weight:700;line-height:1.75;letter-spacing:.02857em}
+/* message box: 92px high like CCFOLIA's, Roboto 16px */
+#chat-input{min-height:92px;font-family:Roboto,"Noto Sans KR",sans-serif;font-size:16px}
+/* bottom line: Roboto 12px rgb(100,100,100) */
+.dice-footer,.dice-footer span,.dice-footer a{font-family:Roboto,"Noto Sans KR",sans-serif;font-size:12px;color:rgb(100,100,100)}
+/* A3: chat rows — padding 8px 16px, 40px square avatar + 56px column, name h6 14px 700, caption 12px #757575, body 14px/20.02px */
+#messages li{padding:8px 0 5px}
+#messages .avatar{width:40px;height:40px;margin-right:16px;border-radius:0}
+#messages h6,#messages strong{font-size:14px;font-weight:700;line-height:1.57}
+#messages .msg-time{font-size:12px;font-weight:400;line-height:1.66;color:rgb(117,117,117)}
+#messages p{font-size:14px;line-height:1.43}
