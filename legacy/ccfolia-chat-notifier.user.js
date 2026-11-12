@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.40
+// @version      0.3.41
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.40";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.41";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -434,6 +434,15 @@
   let focusSyncTimer = 0;
 
   let readyAt = Date.now();
+  // 스마트폰 푸시 진단: 줄이 등록 경로에서 어디서 막혔는지 이유별로 센다(window.__CCF_NOTIFIER_DIAG__()).
+  const ntfyDiagState = { register: 0, live: 0, blocked: {}, hookCalls: 0, lastBlock: "", lastRegisterAt: 0, lastHookAt: 0 };
+  function ntfyBlock(reason, allowNotify) {
+    if (!allowNotify) return; // 처음 읽어 들이는 줄(알림 대상 아님)은 세지 않는다
+    ntfyDiagState.blocked[reason] = (ntfyDiagState.blocked[reason] || 0) + 1;
+    ntfyDiagState.lastBlock = reason;
+  }
+  window.__CCF_NOTIFIER_DIAG__ = () => ({ ...ntfyDiagState, blocked: { ...ntfyDiagState.blocked }, graceLeftMs: Math.max(0, INIT_GRACE_MS - (Date.now() - readyAt)), hasHook: typeof window.__CCF_NTFY_HOOK__ === "function", knownKeys: knownMessageKeySet.size });
+
   let lastTitle = "";
   let lastUnreadCount = null;
   let lastNotifiedKey = "";
@@ -1079,22 +1088,28 @@
   }
 
   function registerMessageItem(itemRoot, allowNotify) {
+    ntfyDiagState.register += 1;
+    if (allowNotify) { ntfyDiagState.live += 1; ntfyDiagState.lastRegisterAt = Date.now(); }
     if (!isPotentialMessageItem(itemRoot)) {
+      ntfyBlock("not-message-item", allowNotify);
       return false;
     }
 
     const key = buildMessageKey(itemRoot);
     if (!key) {
+      ntfyBlock("no-key", allowNotify);
       return false;
     }
 
     const previousElementKey = knownMessageElementKeys.get(itemRoot) || "";
     if (previousElementKey === key) {
+      ntfyBlock("same-element-key", allowNotify);
       return false;
     }
     knownMessageElementKeys.set(itemRoot, key);
 
     if (knownMessageKeySet.has(key)) {
+      ntfyBlock("known-key", allowNotify);
       return false;
     }
 
@@ -1109,7 +1124,11 @@
     });
 
     // 핸드폰 푸시(ntfy): 소리와 달리 룸을 보고 있는지 여부는 그쪽 설정에 따라 판정하므로 canNotifyNow 와 별개로, 새로 등록된 실시간 메시지를 확장에 알린다.
+    if (!allowNotify) ntfyBlock("not-live", allowNotify);
+    else if (Date.now() - readyAt < INIT_GRACE_MS) ntfyBlock("grace", allowNotify);
+    else if (typeof window.__CCF_NTFY_HOOK__ !== "function") ntfyBlock("no-hook", allowNotify);
     if (allowNotify && Date.now() - readyAt >= INIT_GRACE_MS && typeof window.__CCF_NTFY_HOOK__ === "function") {
+      ntfyDiagState.hookCalls += 1; ntfyDiagState.lastHookAt = Date.now();
       try {
         const nameNode = itemRoot.querySelector("h6.MuiListItemText-primary");
         const name = normalizeSpace([...(nameNode?.childNodes || [])].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join("")) || normalizeSpace(nameNode?.textContent || "");
