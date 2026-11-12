@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.27
+// @version      0.5.28
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.27";
+  const VERSION = "0.5.28";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1173,18 +1173,30 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       eye.style.top = `${Math.max(0, Math.round((top + bottom) / 2 - lr.top - 15))}px`;
     }, true);
   }
+  // GM 판정은 코코포리아의 getIsOwner 와 같은 기준이다: 현재 방(app.state.roomId)의 owner === 로그인한 uid(app.user.uid).
+  // 방 정보나 uid 가 아직 없으면(저장소 준비 전) null 로 굳지 않고 이유를 남겨 다음 확인(1.5초마다)에서 다시 본다. 브라우저에 저장된 로그인 uid 들(IndexedDB)은 보조 근거로 합친다.
   async function refreshGm() {
     ensureHideStyle();
     try {
-      const room = Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0];
-      if (!room?.owner) return scpHost.isGm ?? null;
-      const uids = await readAllAuthUids();
-      if (!uids.length) return scpHost.isGm ?? null;
+      const store = findStore();
+      if (!store) { scpHost.gmReason = "store-not-found"; return scpHost.isGm ?? null; }
+      const state = store.getState();
+      const rooms = state?.entities?.rooms?.entities || {};
+      const roomId = state?.app?.state?.roomId;
+      const room = (roomId && rooms[roomId]) || Object.values(rooms)[0];
+      if (!room) { scpHost.gmReason = "room-not-in-store"; return scpHost.isGm ?? null; }
+      if (!room.owner) { scpHost.gmReason = "room-owner-missing"; return scpHost.isGm ?? null; }
+      const uids = [];
+      const appUid = state?.app?.user?.uid;
+      if (appUid) uids.push(String(appUid));
+      for (const uid of await readAllAuthUids()) if (!uids.includes(uid)) uids.push(uid);
+      if (!uids.length) { scpHost.gmReason = "no-login-uid"; return scpHost.isGm ?? null; }
       const isGm = uids.includes(String(room.owner));
+      scpHost.gmReason = isGm ? "owner" : "not-owner";
       if (scpHost.isGm !== isGm) { scpHost.isGm = isGm; lastSignature = null; }
       document.documentElement.setAttribute("data-ccf-gm", isGm ? "1" : "0");
       return isGm;
-    } catch (error) { return scpHost.isGm ?? null; }
+    } catch (error) { scpHost.gmReason = `error: ${error?.message || error}`; return scpHost.isGm ?? null; }
   }
   async function setMessageHidden(id, hidden) {
     if (!id) throw new Error("메시지를 찾지 못했습니다.");
@@ -5356,7 +5368,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       // 메시지 숨기기: 숨기거나 되돌린다(GM 만). id 는 메시지 id.
       setMessageHidden: (id, hidden) => setMessageHidden(id, hidden !== false),
       isGm: () => scpHost.isGm ?? null,
-      hideDiag() { return { isGm: scpHost.isGm ?? null, gmAttr: document.documentElement.getAttribute("data-ccf-gm"), hiddenInStore: Object.entries(getRoomMessagesSlice()?.entities || {}).filter(([, m]) => m && isHiddenText(String(m.text || ""))).map(([id]) => id), buttons: document.querySelectorAll(".ccf-hide-btn").length }; },
+      hideDiag() { return { isGm: scpHost.isGm ?? null, gmReason: scpHost.gmReason || "not-checked yet", gmAttr: document.documentElement.getAttribute("data-ccf-gm"), nativeRows: document.querySelectorAll(".MuiListItem-root h6.MuiListItemText-primary").length, nativeHoverGroups: document.querySelectorAll(".MuiListItem-root .MuiIconButton-root").length, hiddenInStore: Object.entries(getRoomMessagesSlice()?.entities || {}).filter(([, m]) => m && isHiddenText(String(m.text || ""))).map(([id]) => id), buttons: document.querySelectorAll(".ccf-hide-btn").length }; },
       menuStyleDiag() {
         let saved = null; try { saved = JSON.parse(localStorage.getItem(SCP_MENU_STYLE_KEY) || "null"); } catch (e) { /* none */ }
         const rect = (el) => { if (!(el instanceof Element)) return null; const r = el.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) }; };
