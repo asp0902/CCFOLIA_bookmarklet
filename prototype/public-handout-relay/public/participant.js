@@ -106,7 +106,7 @@ const roomAudio = { media: { el: null, url: "", cfg: null }, sound: { el: null, 
 const halted = new Set();
 const roomAudioOn = () => Object.values(roomAudio).some(slot => slot.url);
 function refreshBgmBar() {
-  bgmBar.hidden = !(ytPlaying || roomAudioOn());
+  // the bar is always there (name "BGM", volume and mute work), like CCFOLIA's
   if (!ytPlaying) document.getElementById("bgm-name").textContent = roomAudio.media.cfg?.name || roomAudio.sound.cfg?.name || "BGM";
   playBtn.hidden = !blockedAudio;
 }
