@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.13
+// @version      0.0.14
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -259,6 +259,8 @@
     const tabs = toolTabs();
     const key = tabs.map((item) => `${item.id}:${item.label}`).join("|");
     bar.hidden = tabs.length < 2; // 보이는 탭이 하나면 탭 줄 없이 그 내용만
+    const body = toolsState.host.querySelector(".ccf-gt-body"); // 탭이 하나면 도구 자신의 제목이 보이게(둘 이상이면 탭 이름이 제목): 도구 CSS 가 이 표시를 본다
+    if (body) { if (tabs.length < 2) body.setAttribute("data-single-tab", "1"); else body.removeAttribute("data-single-tab"); }
     if (toolsState.tabsKey !== key) {
       toolsState.tabsKey = key;
       bar.textContent = "";

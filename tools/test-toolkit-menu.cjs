@@ -110,8 +110,12 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     await page.mouse.move(600, 600); await page.waitForFunction(() => !document.querySelector('[role="tooltip"]'), null, { timeout: 2000 });
     await openTool(page, '핸드아웃');
     // the bookmarklet's 스마트폰 알림 item is a tab too (its settings are drawn into the tab body)
+    // "핸드아웃" is drawn exactly once: one tab → the panel's own title (no strip); two tabs (ntfy registers later) → the tab name only
+    const handoutTitleShown = () => page.evaluate(() => { const h1 = document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('header h1'); const strip = document.querySelector('#ccf-gm-tools .ccf-gt-tabs'); return (getComputedStyle(h1).display !== 'none' ? 1 : 0) + [...strip.querySelectorAll('.ccf-gt-tab')].filter((t) => t.offsetParent && t.textContent === '핸드아웃').length; });
+    assert.equal(await handoutTitleShown(), 1, 'one tab: the handout title shows once (panel title)');
     await page.addScriptTag({ content: src('ntfy') });
     await page.waitForFunction(() => [...document.querySelectorAll('#ccf-gm-tools .ccf-gt-tab')].length === 2, null, { timeout: 4000 });
+    assert.equal(await handoutTitleShown(), 1, 'two tabs: the handout title shows once (tab name), applied at once when the second item registers');
     await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '스마트폰 알림' }).dispatchEvent('click');
     await page.waitForSelector('#ccf-gm-tools .ccf-gt-body #ccf-ntfy-dialog form');
     assert.equal(await page.locator('#ccfolia-handout-root').count(), 0, 'the handout tab was cleaned up');
