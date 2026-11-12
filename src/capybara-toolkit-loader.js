@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.37";
-  const BUILD_ID = "2026-11-12-gif-compress-209";
+  const VERSION = "0.3.38";
+  const BUILD_ID = "2026-11-12-bookmarklet-parity-210";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -110,6 +110,23 @@
       summary: "5MB를 넘는 움직이는 GIF를 업로드할 때 움직임을 유지한 채 5MB 아래로 줄임 (자동 실행)",
       scripts: ["legacy/ccfolia-gif-compress.user.js"],
       roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-ntfy",
+      title: "스마트폰 알림 (ntfy)",
+      summary: "새 메시지를 스마트폰 ntfy 앱으로 알림 — 북마클릿용 경로, 확장이 켜져 있으면 확장이 담당 (자동 실행, 설정은 펭귄 메뉴)",
+      scripts: ["legacy/ccfolia-ntfy.user.js"],
+      roomOnly: true,
+      alwaysOn: true,
+      hiddenFromPanel: true
+    },
+    {
+      id: "ccf-home-bookmarks",
+      title: "홈 즐겨찾기·방문 기록",
+      summary: "코코포리아 홈의 룸 즐겨찾기와 최근 방문 룸 — 북마클릿용 경로, 확장이 켜져 있으면 확장이 담당 (자동 실행)",
+      scripts: ["legacy/ccfolia-home-bookmarks.user.js"],
       alwaysOn: true,
       hiddenFromPanel: true
     },
