@@ -80,6 +80,42 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await page.evaluate(() => { window.prompt = () => ''; });
     await page.locator(R + ' [data-action="portrait"]').click(); await page.waitForTimeout(150);
     assert.equal(await page.locator(R + ' .ccf-cs-portrait img').getAttribute('src'), 'https://example.test/icon.png');
+    // the footer 장면표 button is a menu: 장면열기 ▸ (드라마/전투 장면), 장면닫기, 장면표 (ST)
+    assert.equal(await page.locator(R + ' footer [data-command="ST"]').count(), 0, 'no direct ST button any more');
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    assert.deepEqual(await page.locator(R + ' .ccf-cs-menu > button').allTextContents(), ['장면열기▸', '장면닫기', '장면표']);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator(R + ' .ccf-cs-menu').count(), 0, 'Esc closes the menu');
+    assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'and the sheet stays');
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    await page.locator(R + ' [data-action="scene-open-submenu"]').click();
+    assert.deepEqual(await page.locator(R + ' .ccf-cs-submenu button').allTextContents(), ['드라마 장면', '전투 장면']);
+    await page.locator(R + ' [data-action="scene-form"][data-kind="drama"]').click();
+    const defaults = await page.evaluate(() => { const f = document.querySelector('#ccf-character-sheet-root .ccf-cs-scene-form'); return { cycle: f.cycle.value, number: f.number.value, cast: f.cast.value, detailLabel: f.querySelector('input[name="detail"]').closest('label').textContent.trim() }; });
+    assert.deepEqual(defaults, { cycle: '1', number: '1', cast: '연갈', detailLabel: '배경' }, 'cycle 1, scene 1 suggested, the cast defaults to this sheet');
+    await page.locator(R + ' .ccf-cs-scene-form input[name="detail"]').fill('밤의 교실');
+    await page.locator(R + ' .ccf-cs-scene-form [data-action="scene-send"]').click(); await page.waitForTimeout(200);
+    assert.equal((await page.evaluate(() => window.__sent)).pop(), '【드라마 장면 #1-1】 등장인물: 연갈 / 배경: 밤의 교실');
+    // the last numbers are remembered (+1 suggested); the battle scene asks for the opponent
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    await page.locator(R + ' [data-action="scene-open-submenu"]').click();
+    await page.locator(R + ' [data-action="scene-form"][data-kind="battle"]').click();
+    const next = await page.evaluate(() => { const f = document.querySelector('#ccf-character-sheet-root .ccf-cs-scene-form'); return { cycle: f.cycle.value, number: f.number.value, detailLabel: f.querySelector('input[name="detail"]').closest('label').textContent.trim() }; });
+    assert.deepEqual(next, { cycle: '1', number: '2', detailLabel: '대전 상대' });
+    await page.locator(R + ' .ccf-cs-scene-form input[name="cycle"]').fill('2');
+    await page.locator(R + ' .ccf-cs-scene-form input[name="number"]').fill('1');
+    await page.locator(R + ' .ccf-cs-scene-form input[name="cast"]').fill('연갈, 브릿지');
+    await page.locator(R + ' .ccf-cs-scene-form input[name="detail"]').fill('괴이');
+    await page.locator(R + ' .ccf-cs-scene-form [data-action="scene-send"]').click(); await page.waitForTimeout(200);
+    assert.equal((await page.evaluate(() => window.__sent)).pop(), '【전투 장면 #2-1】 등장인물: 연갈, 브릿지 / 대전 상대: 괴이');
+    // closing the scene, and the plain scene table
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    await page.locator(R + ' [data-action="scene-close"]').click(); await page.waitForTimeout(200);
+    assert.equal((await page.evaluate(() => window.__sent)).pop(), '【장면 종료】');
+    assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open after a scene message');
+    await page.locator(R + ' [data-action="scene-menu"]').click();
+    await page.locator(R + ' .ccf-cs-menu [data-command="ST"]').click(); await page.waitForTimeout(200);
+    assert.equal(await page.locator('#chatbox').inputValue(), 'ST', 'the scene table command goes into the chat box as before');
     // a second press finds the linked sheet instead of making another
     await page.locator('#ccf-character-sheet-root [data-action="close"], #ccf-character-sheet-root header .ccf-cs-icon:last-of-type').last().click().catch(() => {});
     await page.evaluate(() => document.getElementById('ccf-character-sheet-root')?.remove());

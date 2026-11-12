@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.32
+// @version      0.2.33
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.32"),
+    version: getUserscriptVersion("0.2.33"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1862,7 +1862,7 @@
       /* 장면표 결과: 감정표와 같은 꺾쇠 상자 안에 작은 회색 이름 / 굵은 표 이름 / 결과 문장 (위 장식·제목은 Roll20 매크로 사용자가 따로 넣는 이미지라 만들지 않는다) */
       ${scope} .ccf-roll20-scene-card { font-weight: normal; }
       ${scope} .ccf-roll20-scene-name { display: block; margin-bottom: 8px; color: #333 !important; font-size: 16px; line-height: 1.4; font-weight: bold; }
-      ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 13px; line-height: 1.5; font-weight: normal; }
+      ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 13px; line-height: 1.5; font-weight: normal; white-space: pre-line; }
       ${scope} .ccf-roll20-check-body {
         display: grid; grid-template-columns: 72px minmax(0,1fr); align-items: center; gap: 8px;
       }
@@ -5077,7 +5077,21 @@
     return { prefix: '', name, roll: split[2], text: split[3], user: true };
   }
 
+  // 사이코로픽션 시트의 장면 메시지: 【드라마 장면 #1-2】 등장인물: A, B / 배경: 밤의 교실 · 【전투 장면 #1-2】 등장인물: … / 대전 상대: … · 【장면 종료】
+  // 제목 = "드라마 장면 #1-2" 등, 본문 = " / "로 나눈 줄들(장면 종료는 본문 없음).
+  function parseInsaneRoll20SceneMarker(text) {
+    const open = String(text || "").match(/^\s*【\s*(드라마 장면|전투 장면)\s*#\s*(\d+)\s*[-－]\s*(\d+)\s*】\s*([\s\S]*?)\s*$/);
+    if (open) {
+      const lines = open[4] ? open[4].split(/\s+\/\s+/).map((part) => part.trim()).filter(Boolean) : [];
+      return { prefix: '', name: `${open[1]} #${open[2]}-${open[3]}`, roll: '', text: lines.join('\n'), marker: true };
+    }
+    if (/^\s*【\s*장면 종료\s*】\s*$/.test(String(text || ""))) return { prefix: '', name: '장면 종료', roll: '', text: '', marker: true };
+    return null;
+  }
+
   function parseInsaneRoll20Scene(text) {
+    const marker = parseInsaneRoll20SceneMarker(text);
+    if (marker) return marker;
     const normalized = text.replace(/＞/g, '>').replace(/（/g, '(').replace(/）/g, ')');
     const userScene = parseInsaneRoll20UserScene(normalized);
     if (userScene) return userScene;
@@ -5100,7 +5114,8 @@
     const body = document.createElement('span');
     body.className = 'ccf-roll20-scene-text';
     body.textContent = scene.text;
-    card.append(name, body);
+    card.appendChild(name);
+    if (scene.text) card.appendChild(body);
   }
 
   function parseInsaneRoll20Check(text) {
