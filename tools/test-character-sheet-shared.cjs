@@ -39,6 +39,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
         const col = p.split('/')[2];
         if (col === 'sheets' && !(gm || d.ownerUid === uid)) throw denyError();
         if (col === 'sheetSecrets' && !(gm || after.get(`rooms/test/sheets/${p.split('/')[3]}`)?.ownerUid === uid)) throw denyError();
+        if (col === 'meta' && !gm) throw denyError(); // meta/{docId}: only the GM writes (existing rule)
       }
       for (const [p, d] of ops) store.set(p, d);
       for (const [p] of ops) await emit(p);
@@ -65,7 +66,13 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
   const wait = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 12000, polling: 200 });
   const sheetOf = (page) => page.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets[0]);
   try {
-    const original = { id: 's1', name: '에르네스토', player: '', age: '', gender: '', occupation: '', life: 6, lifeMax: 6, sanity: 6, sanityMax: 6, merit: 0, etc: '', curiosity: '1', removedGaps: [false, false, false, false, false], skills: ['0:0', '1:2'], fear: '0:1', abilities: [], people: [], mission: '사명 비밀', secret: '시트 비밀', memo: '', image: '', respec: { newWorld: true, session: false, roleplay: false, gain: false, empathy: 3, mission: false, other: 0 } };
+    // a sheet as the paste of the 사이코로픽션 API leaves it: items, abilities, people, madness, profile, extensions and a key this tool does not know
+    const original = { id: 's1', name: '에르네스토', player: '시크릿', age: '31', gender: '남', occupation: '청소부', life: 5, lifeMax: 6, sanity: 4, sanityMax: 6, merit: 2, etc: '메모 ETC', curiosity: '1', removedGaps: [false, true, false, false, false], skills: ['0:0', '1:2'], fear: '0:1', modifier: -1, rootLaw: true,
+      abilities: [{ id: 'a1', name: '기본공격', type: '공격', target: '격투', cost: '', effect: '1점 데미지', memo: '', extensions: { src: 1 } }], people: [{ id: 'p1', name: '마리아', emotion: '신뢰', shelter: true, detail: '', memo: '거처 메모', extensions: {} }],
+      mission: '사명 비밀', secret: '시트 비밀', memo: '', image: 'https://example.test/e.png', profile: { catchphrase: '하하', setting: '설정' }, flashback: '회상',
+      items: { 진통제: 1, 무기: 2, 부적: 1, '그물망 발사기': 0, 'B급 기억소거': 1, 기폭장치: 3 }, madnessState: { current: 1, delirium: false }, madness: [{ name: '광기', trigger: '조건', revealed: false, effect: '효과', extensions: {} }],
+      extensions: { trpgManagement: { sourceData: { basic: { etc: '메모 ETC' } } } }, unknownKey: { kept: true },
+      respec: { newWorld: true, session: false, roleplay: false, gain: false, empathy: 3, mission: false, other: 0 } };
     const A = await open({ uid: 'uA', seed: { version: 1, selectedId: 's1', sheets: [original], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });
     await wait(A, () => true); await A.waitForFunction(() => document.body, null);
     // migration: the browser-only sheet goes up (public part without the secrets; the secrets in their own document)
@@ -78,6 +85,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     let b = await sheetOf(B);
     assert.deepEqual([b.name, b.skills, b.curiosity, b.fear, b.respec.empathy, b.respec.newWorld], ['에르네스토', ['0:0', '1:2'], '1', '0:1', 3, true], 'B sees skills / curiosity / fear / respec');
     assert.deepEqual([b.secret, b.mission], ['', ''], 'B (not owner, not GM) does not get the secret part');
+    // every field arrives: deep comparison of A's and B's sheets, apart from the secret part (by permission) and updatedAt
+    const strip = ({ secret, mission, updatedAt, ...rest }) => rest;
+    assert.deepEqual(strip(b), strip(await sheetOf(A)), 'B has every field of A (items, abilities, people, madness, profile, extensions, unknown keys...)');
+    assert.deepEqual(b.items, original.items, 'items');
     // B edits the memo: it goes up with ownerUid uB, without touching the secrets
     await B.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
     await B.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root [data-field="memo"]', { timeout: 6000 });
@@ -93,6 +104,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     const G = await open({ uid: 'uG', gm: true });
     await wait(G, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets[0]?.secret === '시트 비밀');
     assert.equal((await sheetOf(G)).memo, '새 소유자의 메모');
+    const g = await sheetOf(G); assert.deepEqual(strip(g), strip(await sheetOf(B)), 'the GM has the same sheet'); assert.deepEqual([g.secret, g.mission], ['시트 비밀', '사명 비밀']);
+    // room settings (scene tables / view permissions / scene counter) are the room's: the GM shares them (meta/sheetRoom), everybody receives them, a player cannot write them
+    const roomSettings = { permissions: { 시크릿: { view: true, secret: false, edit: true } }, scene: { cycle: 2, number: 3 }, sceneTables: [{ macroName: '/거리', tableName: '거리 장면표', body: '/roll-table\n거리 장면표\n1:a' }] };
+    await wait(G, () => !!localStorage.getItem('ccf-character-sheet:test'));
+    await G.evaluate((r) => { const k = 'ccf-character-sheet:test'; const d = JSON.parse(localStorage.getItem(k)); Object.assign(d, r); localStorage.setItem(k, JSON.stringify(d)); }, roomSettings);
+    await G.reload(); await G.addScriptTag({ content: source });
+    await wait(B, (r) => { const d = window.__CCF_CHARACTER_SHEET_DEBUG__.data(); return JSON.stringify(d.sceneTables) === JSON.stringify(r.sceneTables) && d.scene.cycle === 2 && d.permissions['시크릿']?.edit === true; }, roomSettings);
+    assert.match(store.get('rooms/test/meta/sheetRoom').json, /거리 장면표/);
     // rules not deployed: nothing breaks, the sheet stays in the browser, the status line says so
     const D = await open({ uid: 'uD', denied: true, seed: { version: 1, selectedId: 's9', sheets: [{ ...original, id: 's9', name: '로컬만' }], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });
     await D.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
