@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Others' Characters in My Character List by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-others-characters
-// @version      0.1.5
+// @version      0.1.6
 // @description  GM only: shows the characters owned by other people inside CCFOLIA's "My characters" list (shaded rows with a small owner icon); clicking one opens CCFOLIA's own edit dialog.
 // @description:ko GM 화면에서만: 코코포리아 '내 캐릭터 목록' 안에 다른 사람 소유 캐릭터를 옅은 음영 + 작은 소유자 아이콘 행으로 함께 보여 주고, 클릭하면 코코포리아 편집창을 엽니다(삭제 버튼 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.5";
+  const VERSION = "0.1.6";
   const ROW_ATTR = "data-ccf-others-row";
   const SAFE_ATTR = "data-capybara-toolkit-others";
   const DELETE_LABELS = ["토큰을 화면에서 삭제", "Remove token from screen", "コマを画面から削除"];
@@ -30,7 +30,8 @@
 
   try { window.__CCF_OTHERS_CHARS__?.disable?.(); } catch (error) { /* 이전 인스턴스 정리 실패 */ }
   const abort = new AbortController();
-  const state = { store: null, frame: 0, unsubscribe: null, finder: 0, syncCount: 0, lastSyncAt: 0, lastSyncResult: "", lastError: "" };
+  const state = { store: null, frame: 0, unsubscribe: null, finder: 0, syncCount: 0, lastSyncAt: 0, lastSyncResult: "", lastError: "", speakerInjected: 0, speakerReason: "아직 화자 선택창을 못 봄" };
+  const SPEAKER_ATTR = "data-ccf-others-speaker";
 
   function findStore() {
     if (state.store) return state.store;
@@ -65,7 +66,7 @@
     const list = [];
     for (const [id, character] of Object.entries(snapshot?.entities?.roomCharacters?.entities || {})) {
       if (!character || !character.owner || character.owner === uid) continue;
-      list.push({ id, name: String(character.name || "").trim() || "NONAME", icon: /^https?:\/\//i.test(character.iconUrl || "") ? character.iconUrl : "", order: Number(character.order) || 0, owner: String(character.owner), ownerName: String(members[character.owner]?.displayName || "").trim() });
+      list.push({ id, rawName: String(character.name || ""), name: String(character.name || "").trim() || "NONAME", icon: /^https?:\/\//i.test(character.iconUrl || "") ? character.iconUrl : "", order: Number(character.order) || 0, owner: String(character.owner), ownerName: String(members[character.owner]?.displayName || "").trim() });
     }
     list.sort((a, b) => (a.ownerName || a.owner).localeCompare(b.ownerName || b.owner, "ko") || a.order - b.order || a.name.localeCompare(b.name, "ko"));
     return list;
@@ -203,6 +204,69 @@
 
   function clearRows() { document.querySelectorAll(`[${ROW_ATTR}]`).forEach((node) => node.remove()); }
 
+  // ---- 채팅 화자(캐릭터) 선택창 ----
+  // 코코포리아의 선택창(번들 0f872b7d hW)은 Popover 안 목록이고, 항목 컴포넌트(nW)는 props { characterId, onSelect, isActive } 를 받는다. onSelect(이름, id) 는 앱 상태
+  // roomChatName/roomChatId 를 바꾸고 창을 닫는다. 발화 캐릭터는 roomChatId 가 있고 이름이 같으면 "전체" 캐릭터에서 찾으므로(getCurrentRoomChatCharacter) 남의 캐릭터도 그 이름·아이콘·색으로 말한다.
+  // 그래서 같은 onSelect 를 그대로 부른다. 항목 props 는 항목 요소의 React 파이버를 몇 단계 올라가 읽는다.
+  function speakerPropsOf(element) {
+    try {
+      const key = Object.keys(element).find((name) => name.startsWith("__reactFiber$"));
+      for (let fiber = key ? element[key] : null, depth = 0; fiber && depth < 8; fiber = fiber.return, depth += 1) {
+        const props = fiber.memoizedProps;
+        if (props && typeof props.characterId === "string" && typeof props.onSelect === "function") return props;
+      }
+    } catch (_) { /* 못 읽음 */ }
+    return null;
+  }
+  function findSpeakerMenu() {
+    for (const popover of document.querySelectorAll(".MuiPopover-root, .MuiMenu-root")) {
+      const items = [...popover.querySelectorAll(".MuiMenuItem-root, .MuiListItem-root, .MuiListItemButton-root, [role='menuitem']")].filter((node) => !node.hasAttribute(SPEAKER_ATTR));
+      const withProps = items.map((node) => ({ node, props: speakerPropsOf(node) })).filter((entry) => entry.props);
+      if (withProps.length) return { popover, items: withProps.map((entry) => entry.node), onSelect: withProps[0].props.onSelect };
+    }
+    return null;
+  }
+  function buildSpeakerRow(template, entry, onSelect) {
+    const row = template.cloneNode(true);
+    row.setAttribute(SPEAKER_ATTR, entry.id);
+    row.setAttribute(SAFE_ATTR, "1");
+    row.classList.remove("Mui-selected", "Mui-focusVisible");
+    row.removeAttribute("id");
+    row.tabIndex = -1;
+    row.title = `소유자: ${entry.ownerName || entry.owner.slice(0, 6)}`;
+    row.style.background = "rgba(255, 255, 255, 0.04)";
+    const img = row.querySelector("img");
+    if (img) { if (entry.icon) img.src = entry.icon; else img.removeAttribute("src"); }
+    const primary = row.querySelector(".MuiListItemText-primary");
+    if (primary) primary.textContent = entry.name;
+    const secondary = row.querySelector(".MuiListItemText-secondary");
+    if (secondary) { secondary.innerHTML = `${OWNER_ICON} `; secondary.append(document.createTextNode(entry.ownerName || "다른 사람")); secondary.style.display = "inline-flex"; secondary.style.alignItems = "center"; secondary.style.gap = "4px"; }
+    // 이름이 빈 캐릭터는 코코포리아가 발화 캐릭터로 고를 수 없다(이름으로 맞춰 본다): NONAME 으로 보이되 누를 수 없다
+    const usable = entry.name !== "NONAME" || entry.rawName;
+    if (!usable) { row.style.opacity = "0.5"; row.style.pointerEvents = "none"; row.title += " · 이름이 없어 발화할 수 없음"; }
+    const choose = (event) => { event.preventDefault(); event.stopPropagation(); try { onSelect(entry.rawName, entry.id); } catch (error) { state.lastError = String(error?.message || error); } };
+    row.addEventListener("click", choose, { signal: abort.signal });
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") choose(event); }, { signal: abort.signal });
+    return row;
+  }
+  function syncSpeakerMenu() {
+    const menu = findSpeakerMenu();
+    if (!menu) { if (!document.querySelector(".MuiPopover-root, .MuiMenu-root")) state.speakerReason = "화자 선택창이 열려 있지 않음"; return 0; }
+    const others = readOthers();
+    if (!others) { menu.popover.querySelectorAll(`[${SPEAKER_ATTR}]`).forEach((node) => node.remove()); state.speakerReason = "GM(방장) 화면이 아님"; return 0; }
+    const last = menu.items[menu.items.length - 1];
+    const present = [...menu.popover.querySelectorAll(`[${SPEAKER_ATTR}]`)];
+    const signature = JSON.stringify(others.map((c) => [c.id, c.name, c.icon, c.ownerName]));
+    if (menu.popover.getAttribute("data-ccf-others-speaker-sig") === signature && present.length === others.length && last.nextElementSibling === present[0]) { state.speakerReason = `정상: ${present.length}명 표시`; return 0; }
+    present.forEach((node) => node.remove());
+    menu.popover.setAttribute("data-ccf-others-speaker-sig", signature);
+    let anchor = last;
+    for (const entry of others) { const row = buildSpeakerRow(last, entry, menu.onSelect); anchor.after(row); anchor = row; }
+    state.speakerInjected += others.length;
+    state.speakerReason = others.length ? `정상: ${others.length}명 표시` : "다른 사람 소유 캐릭터가 없음";
+    return others.length;
+  }
+
   // sync 는 예외를 삼키지 않고 기록한다(diag 의 lastError / lastSyncResult)
   function sync() {
     state.frame = 0;
@@ -217,10 +281,11 @@
   function syncInner() {
     let inserted = 0;
     if (!state.store) return 0;
+    inserted += syncSpeakerMenu();
     const dialogs = listPanels();
-    if (!dialogs.length) { if (document.querySelector(`[${ROW_ATTR}]`)) clearRows(); return; }
+    if (!dialogs.length) { if (document.querySelector(`[${ROW_ATTR}]`)) clearRows(); return inserted; }
     const others = readOthers();
-    if (!others) { if (document.querySelector(`[${ROW_ATTR}]`)) clearRows(); return; }
+    if (!others) { if (document.querySelector(`[${ROW_ATTR}]`)) clearRows(); return inserted; }
     const sheetApi = (() => { const api = window.__CCF_CHARACTER_SHEET_DEBUG__; return api?.detected?.() && typeof api.openForCharacter === "function" ? api : null; })();
     for (const dialog of dialogs) {
       let rows = nativeRows(dialog);
@@ -269,6 +334,7 @@
 
   function disable() {
     abort.abort();
+    document.querySelectorAll(`[${SPEAKER_ATTR}]`).forEach((node) => node.remove());
     observer.disconnect();
     cancelAnimationFrame(state.frame);
     clearInterval(state.finder);
@@ -279,7 +345,7 @@
   // 안 보이는 이유를 돌려준다(읽기만 한다): window.__CCF_OTHERS_CHARS__.diag()
   function diag() {
     sync(); // 호출할 때 실제로 한 번 돌린다(주입 포함): 결과는 아래 lastSyncResult / lastError
-    const out = { syncCount: state.syncCount, lastSyncAt: state.lastSyncAt ? new Date(state.lastSyncAt).toISOString() : "", lastSyncResult: state.lastSyncResult, lastError: state.lastError, otherNames: [], version: VERSION, store: !!state.store, gm: null, reason: "", room: null, uid: "", panels: [], characters: 0, ownedByOthers: 0, othersListed: 0, rowsInDom: document.querySelectorAll(`[${ROW_ATTR}]`).length };
+    const out = { syncCount: state.syncCount, lastSyncAt: state.lastSyncAt ? new Date(state.lastSyncAt).toISOString() : "", lastSyncResult: state.lastSyncResult, lastError: state.lastError, otherNames: [], version: VERSION, store: !!state.store, gm: null, reason: "", room: null, uid: "", panels: [], characters: 0, ownedByOthers: 0, othersListed: 0, rowsInDom: document.querySelectorAll(`[${ROW_ATTR}]`).length, speaker: null };
     const snapshot = state.store?.getState?.();
     if (!snapshot) { out.reason = "저장소를 아직 못 찾음"; return out; }
     const uid = snapshot?.app?.user?.uid || "";
@@ -296,6 +362,7 @@
     const panels = listPanels();
     out.titleCandidates = [...document.querySelectorAll("h6, h5, h4, h3, h2")].filter((heading) => PANEL_TITLES.includes(normalize(heading.textContent))).map((heading) => ({ visible: heading.getClientRects().length > 0, chain: (() => { const chain = []; for (let node = heading.parentElement; node && chain.length < 8; node = node.parentElement) chain.push(node.tagName.toLowerCase() + (node.className && typeof node.className === "string" ? "." + node.className.split(" ").filter(Boolean).slice(0, 3).join(".") : "")); return chain; })(), picked: panels.includes(windowOf(heading)), names: (windowOf(heading)?.querySelectorAll(".MuiListItemText-primary").length) ?? 0 }));
     out.scrollableLists = document.querySelectorAll(".scrollable-list").length;
+    out.speaker = { injectedTotal: state.speakerInjected, rowsNow: document.querySelectorAll(`[${SPEAKER_ATTR}]`).length, reason: state.speakerReason };
     out.panels = panels.map((panel) => ({ title: (panel.querySelector("h6, h5, h4, h3, h2")?.textContent || "").trim().slice(0, 20), nativeRows: nativeRows(panel).length, hasList: !!listContainer(panel), hasScrollable: !!panel.querySelector(".scrollable-list"), cls: String(panel.className || "").split(" ").filter(Boolean).slice(0, 4).join("."), kind: panel.matches(".MuiDialog-root, [role='dialog']") ? "dialog" : "paper" }));
     out.reason = !uid || !room ? "룸 정보/uid 없음" : !out.gm ? "GM(방장) 계정이 아님(소유자 비교 uid)" : !out.ownedByOthers ? "다른 사람 소유 캐릭터가 저장소에 없음" : !panels.length ? "'내 캐릭터 목록' 패널이 열려 있지 않음(패널을 열어야 함)" : panels.every((panel) => !nativeRows(panel).length && !listContainer(panel)) ? "패널 안에 목록 요소를 못 찾음" : out.rowsInDom ? "정상: 행이 붙어 있음" : "조건은 맞는데 행이 없음(sync 실행 확인)";
     return out;
