@@ -31,7 +31,7 @@ function extract(name) {
       const escapeAttr = escapeHtml, renderHandoutBody = s => s || '';
       const renderFormatToolbar = () => '<div class="handout-format-toolbar"></div>';
       const toast = () => {}, setTab = () => {}, saveAll = async () => {}, pushHandoutToFirestore = async () => {};
-      const uuid = () => 'new-id', getNextOrder = () => 1;
+      const uuid = () => 'new-id', getNextOrder = () => 1, renderEditStatus = () => '';
       return await eval(`(async () => { ${funcs}
         document.body.innerHTML = renderEdit();
         const select = document.querySelector('[data-field="folderId"]');

@@ -89,28 +89,9 @@
     if (event.source !== window || event.origin !== location.origin) return;
     const data = event.data;
     if (!data || data.source !== SOURCE || data.direction !== "bridge") return;
-    if (data.action === "config") { state.config = data.config && typeof data.config === "object" ? data.config : null; refreshSettingsView(); }
+    if (data.action === "config") { state.config = data.config && typeof data.config === "object" ? data.config : null; }
   });
-  // GM 도구 창의 공용 "설정" 탭 안의 "스마트폰 알림" 구역(확장 경로). 설정은 chrome.storage 에 있고 페이지가 바꿀 수 없으므로(서버·topic 을 페이지 스크립트가 못 바꾸게) 여기서는 지금 상태만 보여 주고
-  // 바꾸는 곳(확장 아이콘의 창)을 안내한다. 북마클릿 경로(legacy ntfy)는 자기 설정창을 쓰고, 확장이 켜져 있으면 그쪽은 시작하지 않는다.
-  let settingsView = null;
-  const settingsLines = () => {
-    const c = state.config;
-    if (!c) return ["확장 설정을 아직 읽지 못했습니다."];
-    const scope = c.scope === "keywords" ? `키워드(${(c.keywords || []).length}개)` : "모든 메시지";
-    return [
-      `알림: ${c.enabled ? "켜짐" : "꺼짐"}${c.enabled && !c.topic ? " (topic 이 비어 있어 보내지 않음)" : ""}`,
-      `대상: ${scope} · ${c.onlyAway === false ? "항상 보냄" : `자리 비움 ${Math.round(Number(c.awayMinutes) || 2)}분 후만`} · 본문 ${c.includeText ? "포함" : "미포함"}`,
-      "바꾸려면 브라우저 도구 막대의 확장 아이콘(카피바라 4세)을 눌러 나오는 창의 '스마트폰 알림'에서 설정하세요."
-    ];
-  };
-  function refreshSettingsView() { if (settingsView?.isConnected) renderSettingsView(settingsView); }
-  function renderSettingsView(box) {
-    box.replaceChildren(...settingsLines().map((text) => { const p = document.createElement("p"); p.textContent = text; p.style.cssText = "margin:0 0 8px;font-size:13px;line-height:1.5;color:#e0e0e0"; return p; }));
-  }
-  const openSettingsNoop = () => {};
-  (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } })
-    .register({ id: "ntfy", section: true, order: 3, label: "스마트폰 알림", visible: () => true, onClick: openSettingsNoop, mount: (container) => { settingsView = document.createElement("div"); settingsView.setAttribute("data-ccf-safe-markup", "1"); container.appendChild(settingsView); renderSettingsView(settingsView); }, unmount: () => { settingsView?.remove(); settingsView = null; } });
+  // 스마트폰 알림 설정은 확장 팝업에서만 한다: GM 도구 설정 탭에 구역을 등록하지 않는다(사용자 결정).
   // 설정은 브리지가 로드 직후 보내 주지만, 이 스크립트가 늦게 뜬 경우를 위해 한 번 요청한다.
   window.postMessage({ source: SOURCE, direction: "page", action: "hello" }, location.origin);
 })();
