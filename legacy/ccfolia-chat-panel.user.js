@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.32
+// @version      0.5.33
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.32";
+  const VERSION = "0.5.33";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1258,6 +1258,18 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     const hiddenSpan = p.querySelector(".ccf-original-hidden");
     return (hiddenSpan ? hiddenSpan.textContent : p.textContent) || "";
   }
+  // 코코포리아의 메시지 줄 컴포넌트는 props 로 messageId 를 받는다(번들 0f872b7d WH({messageId})). 줄(li)의 React 파이버를 몇 단계 올라가 그 값을 읽으면
+  // 글자 비교 없이 정확히 짝지어진다: 편집한 메시지(본문 끝에 " [編集済]" 가 붙음)·주사위 결과·같은 글 여러 개도 틀리지 않는다.
+  function nativeRowMessageId(li) {
+    try {
+      const key = Object.keys(li).find((k) => k.startsWith("__reactFiber$"));
+      for (let fiber = key ? li[key] : null, depth = 0; fiber && depth < 8; fiber = fiber.return, depth += 1) {
+        const id = fiber.memoizedProps?.messageId;
+        if (typeof id === "string" && id) return id;
+      }
+    } catch (_) { /* 글자로 짝짓기 */ }
+    return "";
+  }
   function decorateNativeRows() {
     if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root .ccf-hide-btn")) b.remove(); return; }
     const slice = getRoomMessagesSlice();
@@ -1288,9 +1300,11 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const n = seen.get(key) || 0;
       seen.set(key, n + 1);
       const existing = li.querySelector(".ccf-hide-btn");
-      if (!list) { existing?.remove(); return; }
-      const id = (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
-      const hiddenNow = isHiddenText(rawKeys[i]);
+      const fiberId = nativeRowMessageId(li);
+      const known = fiberId && slice.entities?.[fiberId] && !slice.entities[fiberId].removed ? fiberId : "";
+      if (!list && !known) { existing?.remove(); return; }
+      const id = known || (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
+      const hiddenNow = known ? isHiddenText(String(slice.entities[known].text || "")) : isHiddenText(rawKeys[i]);
       if (existing && existing.dataset.id === id && existing.dataset.hidden === String(hiddenNow)) return;
       existing?.remove();
       li.classList.add("ccf-hide-host");
@@ -1511,7 +1525,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
           const tx = db.transaction("firebaseLocalStorage", "readonly");
           const all = tx.objectStore("firebaseLocalStorage").getAll();
           all.onsuccess = () => {
-            const row = (all.result || []).find((r) => r?.value?.stsTokenManager?.accessToken);
+            // 같은 저장소에 핸드아웃 도구의 익명 계정(앱 이름 ccf-handout)도 있다: 코코포리아 앱([DEFAULT]) 레코드를 먼저 고른다(다른 계정 uid 로 보내면 내 메시지가 남의 것이 되어 수정 단추가 없다).
+            const rows = (all.result || []).filter((r) => r?.value?.stsTokenManager?.accessToken);
+            const row = rows.find((r) => /:\[DEFAULT\]$/.test(String(r.fbase_key || ""))) || rows[0];
             resolve(row?.value || null);
           };
           all.onerror = () => reject(new Error("인증 레코드 읽기 실패"));
