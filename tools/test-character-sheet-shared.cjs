@@ -119,8 +119,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     if (await D.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').count()) await D.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();
     await D.locator('#ccf-character-sheet-root [data-field="memo"]').fill('로컬 메모');
     // the status line of the sheet is hidden, so the notice is a line at the top of the sheet body
-    await D.waitForFunction(() => window.__CCF_CHARACTER_SHEET_DEBUG__.shared().denied && /이 브라우저에만 저장/.test(document.querySelector('#ccf-character-sheet-root .ccf-cs-share-note')?.textContent || ''), null, { timeout: 12000 });
-    assert.equal(await A.locator('#ccf-character-sheet-root .ccf-cs-share-note').count(), 0, 'no notice where the shared storage works');
+    await D.waitForFunction(() => window.__CCF_CHARACTER_SHEET_DEBUG__.shared().denied, null, { timeout: 12000 });
+    assert.equal(await D.locator('#ccf-character-sheet-root .ccf-cs-share-note').count(), 0, 'no notice in the sheet (0.5.37: the state is only in the debug API)');
     assert.equal((await sheetOf(D)).memo, '로컬 메모'); assert.equal(store.has('rooms/test/sheets/s9'), false);
     assert.equal(await D.evaluate(() => JSON.parse(localStorage.getItem('ccf-character-sheet:test')).sheets[0].memo), '로컬 메모', 'still saved in the browser');
     for (const entry of pages) assert.deepEqual(entry.page.__errors, []);

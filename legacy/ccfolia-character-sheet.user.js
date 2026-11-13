@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.36
+// @version      0.5.37
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.36";
+  const VERSION = "0.5.37";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -874,7 +874,7 @@
     root.innerHTML = `
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}${state.collapsed ? " is-collapsed" : ""}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
-        ${editor ? `<main>${shared.denied ? '<p class="ccf-cs-share-note" role="status">룸 공유 저장을 쓸 수 없어 이 시트는 이 브라우저에만 저장됩니다(다른 사람·다른 브라우저에는 보이지 않음).</p>' : ""}${renderSections(sheet)}</main>
+        ${editor ? `<main>${renderSections(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     checkD20Font();
@@ -1241,12 +1241,12 @@
   function renderSections(sheet) {
     const skillOptions = CATEGORIES.flatMap((category, column) => category.slice(1).map((name, row) => `<option value="${column}:${row}"${sheet.fear === `${column}:${row}` ? " selected" : ""}>${category[0]} · ${name}</option>`)).join("");
     const basic = `<div class="ccf-cs-basic">
-      <div class="ccf-cs-top">${renderPortrait(sheet)}<div class="ccf-cs-stats-items"><div class="ccf-cs-stats">
+      <div class="ccf-cs-top"><div class="ccf-cs-stats-items"><div class="ccf-cs-portrait-stats">${renderPortrait(sheet)}<div class="ccf-cs-stats">
         ${vitalField("생명력", "life", sheet.life, "lifeMax", sheet.lifeMax)}
         ${vitalField("이성치", "sanity", sheet.sanity, "sanityMax", sheet.sanityMax)}
         ${numberField("merit", "공적점", sheet.merit)}
         ${textField("etc", "ETC", sheet.etc)}
-      </div>${renderItemFields(sheet.items)}</div></div>
+      </div></div>${renderItemFields(sheet.items)}</div></div>
       <label class="ccf-cs-profile-memo"><span>캐릭터 메모</span><textarea data-field="memo" placeholder="나이 / 성별 / 직업">${escapeHtml(profileMemo(sheet))}</textarea></label>
       ${renderRespect(sheet)}
     </div>`;
@@ -1884,8 +1884,9 @@
       #${ROOT_ID} .ccf-cs-duo { display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:0 24px;align-items:start }
       #${ROOT_ID} .ccf-cs-duo>.ccf-cs-form-section { min-width:0 }
       @container (max-width:640px) { #${ROOT_ID} .ccf-cs-duo { grid-template-columns:minmax(0,1fr) } }
-      #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:stretch }
-      #${ROOT_ID} .ccf-cs-top>.ccf-cs-stats-items { grid-column:auto }
+      /* 이미지 = 상태 3줄(첫 라벨 위 ~ 셋째 줄 밑줄)의 높이인 정사각형: 이미지와 상태 칸만 한 격자(stretch)로 묶고, 그 묶음은 위에 붙인다(아이템이 4줄 이상이어도 이미지는 그대로, 아래는 빈칸) */
+      #${ROOT_ID} .ccf-cs-top { display:block }
+      #${ROOT_ID} .ccf-cs-portrait-stats { display:grid;grid-template-columns:auto minmax(200px,1fr);gap:24px;align-items:stretch;align-self:start }
       #${ROOT_ID} .ccf-cs-portrait { align-self:stretch;height:100%;width:auto;aspect-ratio:1;min-height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }
       #${ROOT_ID} .ccf-cs-portrait img { display:block;width:100%;height:100%;object-fit:cover }
       #${ROOT_ID} .ccf-cs-portrait:hover { border-color:rgba(255,255,255,.6) }
@@ -1909,7 +1910,7 @@
       #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1;display:block;padding:12px 16px 0;background:rgba(255,255,255,.1);color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-profile-memo span { display:block;margin-bottom:2px }
       #${ROOT_ID} .ccf-cs-profile-memo textarea { width:calc(100% + 32px);min-height:140px;margin:0 -16px;padding:0 16px;background-color:transparent;resize:none }
-      #${ROOT_ID} .ccf-cs-stats-items { grid-column:1/-1;display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.2fr);gap:24px;align-items:start }
+      #${ROOT_ID} .ccf-cs-stats-items { grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:start }
       #${ROOT_ID} .ccf-cs-stats,#${ROOT_ID} .ccf-cs-item-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-vital { grid-column:1/-1 }
       #${ROOT_ID} .ccf-cs-vital>span:last-child { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
