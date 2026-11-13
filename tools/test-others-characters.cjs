@@ -152,6 +152,14 @@ const html = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
       await page.addScriptTag({ content: source }); await page.waitForTimeout(400);
       assert((await page.evaluate(() => window.__CCF_OTHERS_CHARS__.diag())).reason.includes('계정이 아님')); await page.close();
     }
+    // the other people's rows do not depend on the rule: a room that is not inSANe (sheet script loaded or not) lists them all, with no sheet button; an inSANe room lists the same rows plus the sheet button
+    for (const withSheet of [false, true]) {
+      const page = await open({ gm: true, insane: false, withSheet });
+      assert.equal(await page.locator('[data-ccf-others-row]').count(), 3, 'not inSANe (sheet script ' + (withSheet ? 'loaded' : 'absent') + '): all other-owned rows are listed');
+      assert.equal(await page.locator('[data-ccf-others-row] button').count(), 0, 'not inSANe: no sheet button');
+      await page.close();
+    }
+    { const page = await open({ gm: true, insane: true, withSheet: true }); assert.equal(await page.locator('[data-ccf-others-row]').count(), 3); assert.equal(await page.locator('[data-ccf-others-row] button[aria-label="사이코로픽션 시트"]').count(), 3, 'inSANe: the same rows plus the sheet button'); await page.close(); }
     console.log('others characters PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
