@@ -79,6 +79,20 @@ service cloud.firestore {
           && request.resource.data.json is string && request.resource.data.json.size() <= 200000 && request.resource.data.updatedAt is number;
         allow delete: if isGm(roomId) || (signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)) && get(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)).data.ownerUid == request.auth.uid);
       }
+      // 커스텀 커맨드 룸 공유. macros/{id} = { name, body, ownerUid, ownerName, updatedAt(ms), deleted }. 읽기: 룸 구성원·GM. 만들기: 구성원이 자기 uid 로.
+      // 고치기: 만든 사람(ownerUid 는 바꿀 수 없음) 또는 GM. 지우기: 만든 사람 또는 GM. (공유 끄기는 deleted 표시로 고친다)
+      match /macros/{macroId} {
+        function macroShape() {
+          return request.resource.data.keys().hasOnly(['name', 'body', 'ownerUid', 'ownerName', 'updatedAt', 'deleted'])
+            && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100
+            && request.resource.data.body is string && request.resource.data.body.size() <= 20000
+            && request.resource.data.ownerUid is string && request.resource.data.updatedAt is number;
+        }
+        allow read: if isGm(roomId) || isMember(roomId);
+        allow create: if macroShape() && (isGm(roomId) || isMember(roomId)) && request.resource.data.ownerUid == request.auth.uid;
+        allow update: if macroShape() && (isGm(roomId) || (signedIn() && resource.data.ownerUid == request.auth.uid && request.resource.data.ownerUid == request.auth.uid));
+        allow delete: if isGm(roomId) || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      }
       match /presence/{uid} {
         allow read: if signedIn();
         allow write, delete: if signedIn() && request.auth.uid == uid;

@@ -139,6 +139,21 @@ await check("a takeover (one batch: sheet with the new ownerUid + secrets) is ac
 await check("the new owner now reads the secret part", getDoc(doc(as("p2"), `${R}/sheetSecrets/s6`)), true);
 await check("the old owner no longer reads the secret part", getDoc(doc(as("p1"), `${R}/sheetSecrets/s6`)), false);
 await check("a secret part for a sheet that does not exist is refused", setDoc(doc(as("p1"), `${R}/sheetSecrets/nope`), { json: "{}", updatedAt: 1 }), false);
+// custom commands shared to the room: members read, a member writes in their own name, the owner or the GM changes / deletes
+const mc = (uid, extra = {}) => ({ name: "날씨", body: "/roll 1d6", ownerUid: uid, ownerName: "앨리스", updatedAt: 1, deleted: false, ...extra });
+await check("a member shares a command in their own name", setDoc(doc(as("p1"), `${R}/macros/m1`), mc("p1")), true);
+await check("a member cannot share in somebody else's name", setDoc(doc(as("p1"), `${R}/macros/m2`), mc("p2")), false);
+await check("a non-member cannot share", setDoc(doc(as("p9"), `${R}/macros/m3`), mc("p9")), false);
+await check("macros: extra fields are refused", setDoc(doc(as("p1"), `${R}/macros/m4`), mc("p1", { secret: 1 })), false);
+await check("macros: an empty name is refused", setDoc(doc(as("p1"), `${R}/macros/m5`), mc("p1", { name: "" })), false);
+await check("another member reads the room's commands", getDocs(collection(as("p2"), `${R}/macros`)), true);
+await check("a non-member cannot read them", getDocs(collection(as("p9"), `${R}/macros`)), false);
+await check("the owner changes it", setDoc(doc(as("p1"), `${R}/macros/m1`), mc("p1", { body: "/roll 2d6", updatedAt: 2 })), true);
+await check("another member cannot change it", setDoc(doc(as("p2"), `${R}/macros/m1`), mc("p2", { updatedAt: 3 })), false);
+await check("another member cannot take it over", setDoc(doc(as("p2"), `${R}/macros/m1`), mc("p1", { body: "x", updatedAt: 3 })), false);
+await check("the owner stops sharing (deleted mark)", setDoc(doc(as("p1"), `${R}/macros/m1`), mc("p1", { deleted: true, updatedAt: 4 })), true);
+await check("another member cannot delete it", deleteDoc(doc(as("p2"), `${R}/macros/m1`)), false);
+await check("the GM deletes it", deleteDoc(doc(as("gm1"), `${R}/macros/m1`)), true);
 await env.cleanup();
 console.log(failures ? `${failures} FAILED` : "all rules checks passed");
 process.exit(failures ? 1 : 0);
