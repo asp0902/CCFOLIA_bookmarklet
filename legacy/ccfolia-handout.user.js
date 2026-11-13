@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.127
+// @version      0.1.128
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.127",
+    version: "0.1.128",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -4849,7 +4849,44 @@
       }
       return;
     }
+    // 3) 웹페이지에서 복사한 HTML: 줄(블록)마다 <div> 한 줄로 바꿔 넣는다. 브라우저 기본 붙여넣기는 원본의 계산된 style(white-space:normal, display:inline …)을
+    // 그대로 달고 와서, 정렬을 걸면 줄바꿈이 사라졌다(편집기·팝업 모두). 굵게·기울임·밑줄·취소선·코드·링크·그림만 남긴다.
+    const html = cd.getData("text/html");
+    if (html) {
+      const clean = normalizePastedHtml(html);
+      if (clean) { event.preventDefault(); execEditor(editor, "insertHTML", clean); return; }
+    }
     // 그 외: 브라우저 기본 paste 진행
+  }
+  function normalizePastedHtml(html) {
+    const doc = new DOMParser().parseFromString(String(html), "text/html");
+    const BLOCK = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE|TR|PRE|SECTION|ARTICLE|HEADER|FOOTER|UL|OL|TABLE|TBODY|DL|DT|DD|FIGURE|FIGCAPTION|ASIDE|MAIN|NAV)$/;
+    const INLINE = { B: "b", STRONG: "b", I: "i", EM: "i", U: "u", S: "s", STRIKE: "s", DEL: "s", CODE: "code" };
+    const lines = [];
+    let line = "";
+    const flush = (keepEmpty = false) => { const t = line.replace(/^\s+|\s+$/g, ""); if (t || keepEmpty) lines.push(`<div>${t || "<br>"}</div>`); line = ""; };
+    const walk = (node, pre) => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const text = child.nodeValue || "";
+          if (pre) text.split("\n").forEach((part, i) => { if (i) flush(true); line += escapeHtml(part); });
+          else line += escapeHtml(text.replace(/\s+/g, " "));
+          continue;
+        }
+        if (child.nodeType !== Node.ELEMENT_NODE) continue;
+        const tag = child.tagName;
+        if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|META|LINK|HEAD|TITLE|svg)$/i.test(tag)) continue;
+        if (tag === "BR") { flush(true); continue; }
+        if (tag === "IMG") { const src = normalizeRenderableImageUrl(child.getAttribute("src") || ""); if (src) line += `<img src="${escapeAttr(src)}" alt="">`; continue; }
+        if (tag === "A" && /^https?:\/\//i.test(child.getAttribute("href") || "")) { line += `<a href="${escapeAttr(child.getAttribute("href"))}" target="_blank" rel="noopener noreferrer">`; walk(child, pre); line += "</a>"; continue; }
+        if (BLOCK.test(tag)) { flush(); walk(child, pre || tag === "PRE"); flush(); continue; }
+        if (INLINE[tag]) { line += `<${INLINE[tag]}>`; walk(child, pre); line += `</${INLINE[tag]}>`; continue; }
+        walk(child, pre);
+      }
+    };
+    walk(doc.body, false);
+    flush();
+    return lines.join("");
   }
 
   // 공개·비밀 칸 높이: 둘 중 내용이 긴 쪽에 맞춰 둘 다 같은 높이(최소 140px, 최대 480px — 넘으면 각 칸 안에서 스크롤). 입력할 때마다·편집 탭을 그릴 때마다 맞춘다.

@@ -38,6 +38,24 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
       const a = await get();
       assert.equal(a[0], b[0], `${label} + ${cmd}: the text lines are kept (${a[1]})`);
     }
+    // pasted from a web page (the reported case): HTML whose lines are blocks with the page's computed styles (white-space:normal, display:inline), source newlines
+    // only, nested blocks, a list, a heading -> each line stays a line after the paste and after centring
+    const pastes = {
+      styledBlocks: { html: '<div style="white-space:normal;display:inline">첫째 줄</div><div style="white-space: normal; display: inline;">둘째 줄</div><p style="display:inline">셋째 줄</p>', lines: 3 },
+      sourceNewlines: { html: '<span style="white-space:normal">첫째 줄\n둘째 줄\n셋째 줄</span><p>넷째 줄</p>', lines: 2 },
+      nested: { html: '<div><div><p>하나</p><p>둘</p></div><ul><li>셋</li><li><b>넷</b> 굵게</li></ul><h2>다섯</h2></div>', lines: 5 },
+      preAndBr: { html: '<pre>가\n나</pre>다<br>라', lines: 4 }
+    };
+    for (const [label, { html, lines }] of Object.entries(pastes)) {
+      await page.evaluate(() => { document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.rich-editor[data-field="description"]').innerHTML = ''; });
+      await ed.click();
+      await page.evaluate((html) => { const e = document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.rich-editor[data-field="description"]'); const dt = new DataTransfer(); dt.setData('text/html', html); dt.setData('text/plain', html.replace(/<[^>]+>/g, ' ')); e.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true, composed: true })); }, html);
+      const pasted = await get();
+      assert.equal(pasted[0], lines, `paste ${label}: ${lines} lines (${pasted[1]})`);
+      assert.doesNotMatch(pasted[1], /white-space|display/, `paste ${label}: no page styles kept`);
+      await page.keyboard.press('Control+a'); await sh('[data-format-cmd="align-center"]').click(); await page.waitForTimeout(120);
+      assert.equal((await get())[0], lines, `paste ${label} + centre: lines kept`);
+    }
     assert.deepEqual(errors, []);
     console.log('handout align lines PASS');
   } finally { await browser.close(); }
