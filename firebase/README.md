@@ -34,6 +34,10 @@ What follows from them:
 | `shows/{id}` | create and delete: GM |
 | `presence/{uid}` | as today |
 | `images/{id}`, `chunks` | read by id (no listing of pictures), write: GM |
+| `sheets/{sheetId}` (character sheet without secret/mission; added 2026-11-13) | read: signed in; create/update: the GM, or a member (`members/{uid}` exists) writing their own uid as `ownerUid` (taking over a sheet = reporting your uid; fields `json`, `ownerUid`, `updatedAt`, `deleted` only); delete: GM or the current `ownerUid` |
+| `sheetSecrets/{sheetId}` (secret, mission) | read/write/delete: the GM or the current `ownerUid` of `sheets/{sheetId}` (a takeover writes both in one batch, checked with `getAfter`) |
+
+Until these two are published the character sheet keeps working as before: every write is refused, the tool keeps the sheet in the browser and shows a notice line in the sheet. Taking over a sheet is a claim made by the client (CCFOLIA ownership cannot be checked by the rules), so any member can take over and then overwrite a sheet; the secret part of a sheet can be read only after such a takeover, never by just reading.
 
 ### Known weakness (said plainly)
 The GM seat can be taken back on another browser by a client that writes `meta/gm` with the same `gmCcfoliaUid`. That claim is made by the client: **a player who learns the owner's CCFOLIA account uid can take the GM seat** (CCFOLIA shows the owner uid to the room's members in its own data, so a technically capable player can find it). It is still much better than today (anybody can take it with no knowledge). A real fix needs something only the owner has (for example a secret stored with the owner's CCFOLIA account); the alternative is to forbid the claim and let the GM seat change only by deleting `meta/gm` by hand in the console.

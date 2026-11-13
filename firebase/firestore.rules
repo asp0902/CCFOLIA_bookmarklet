@@ -59,6 +59,26 @@ service cloud.firestore {
         allow create: if isGm(roomId) && request.resource.data.atUid == request.auth.uid;
         allow delete: if isGm(roomId);
       }
+      // 사이코로픽션 시트(룸 공유 저장). sheets/{sheetId} = 비밀·사명을 뺀 시트 JSON(json), ownerUid(마지막으로 쓴 계정), updatedAt(ms), deleted(지움 표시). 읽기: 로그인한 누구나.
+      // 쓰기: 룸 구성원(members/{내 uid} 가 있는 사람)이 ownerUid 를 자기 uid 로 적어 쓴다 - 소유권을 넘겨받는 것도 이 "신고"다(코코포리아 소유권은 서버가 검증할 수 없어 위조 가능, 핸드아웃 members 와 같은 신뢰 수준).
+      // GM 은 모두 쓴다. 지우기는 GM 또는 현재 ownerUid.
+      function isMember(roomId) { return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)); }
+      match /sheets/{sheetId} {
+        allow read: if signedIn();
+        allow create, update: if (isGm(roomId) || (isMember(roomId) && request.resource.data.ownerUid == request.auth.uid))
+          && request.resource.data.keys().hasOnly(['json', 'ownerUid', 'updatedAt', 'deleted'])
+          && request.resource.data.json is string && request.resource.data.json.size() <= 600000
+          && request.resource.data.ownerUid is string && request.resource.data.updatedAt is number;
+        allow delete: if isGm(roomId) || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      }
+      // 비밀·사명: GM 과 그 시트의 현재 ownerUid 만 읽고 쓴다(소유권을 넘겨받으면 같은 묶음 쓰기로 sheets 의 ownerUid 가 먼저 바뀌므로 getAfter 로 본다).
+      match /sheetSecrets/{sheetId} {
+        allow read: if isGm(roomId) || (signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)) && get(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)).data.ownerUid == request.auth.uid);
+        allow create, update: if (isGm(roomId) || (signedIn() && getAfter(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)).data.ownerUid == request.auth.uid))
+          && request.resource.data.keys().hasOnly(['json', 'updatedAt'])
+          && request.resource.data.json is string && request.resource.data.json.size() <= 200000 && request.resource.data.updatedAt is number;
+        allow delete: if isGm(roomId) || (signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)) && get(/databases/$(database)/documents/rooms/$(roomId)/sheets/$(sheetId)).data.ownerUid == request.auth.uid);
+      }
       match /presence/{uid} {
         allow read: if signedIn();
         allow write, delete: if signedIn() && request.auth.uid == uid;

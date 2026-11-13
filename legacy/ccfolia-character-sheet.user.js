@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.34
+// @version      0.5.35
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.34";
+  const VERSION = "0.5.35";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -292,6 +292,7 @@
     openForCharacter: (name) => openSheetForCharacterName(name),
     data: () => structuredClone(state.data),
     importText: (text) => importTransferText(text),
+    shared: () => ({ room: shared.room, ready: shared.ready, denied: shared.denied, remote: shared.remote.size, known: shared.known.size, secretOk: [...shared.secretOk] }),
     disable
   };
   scheduleRefresh();
@@ -358,6 +359,7 @@
       if (nextRoom !== state.roomKey) {
         state.roomKey = nextRoom;
         state.data = await loadData(nextRoom);
+        state.dataRoom = nextRoom;
         if (state.open) render();
       }
       if (detectRoom()) {
@@ -445,12 +447,124 @@
       const toolkit = window.__CAPYBARA_TOOLKIT__;
       if (toolkit?.storage?.setRoomData) await toolkit.storage.setRoomData(FEATURE_ID, state.roomKey, state.data);
       else localStorage.setItem(`${FEATURE_ID}:${state.roomKey}`, JSON.stringify(state.data));
-      status("저장됨");
+      status(shared.denied ? "저장됨 · 공유 저장 불가(이 브라우저에만 저장)" : shared.ready ? "저장됨 · 룸 공유" : "저장됨");
+      sharedPushSoon();
     } catch (error) {
       console.warn("[ccf-character-sheet] save failed", error);
       status("저장 실패");
     }
   }
+
+  // ---- 룸 공유 저장 ----
+  // 시트는 룸마다 이 브라우저(localStorage)에만 있어서 소유권을 가져간 사람·GM·다른 브라우저는 빈 시트를 봤다. 핸드아웃과 같은 Firebase 연결(동의한 룸에서만 열림)이 있으면 rooms/{room}/sheets/{id}(비밀·사명을 뺀 시트)와
+  // sheetSecrets/{id}(비밀·사명: GM 과 그 시트의 ownerUid 만 읽음)에도 두고 서로 맞춘다. 규칙이 아직 배포되지 않았거나 연결이 없으면 지금처럼 이 브라우저에만 저장하고(상태 줄에 안내) 아무것도 깨지 않는다.
+  // 충돌은 updatedAt 이 최신인 쪽, 지금 고치고 있는 시트는 덮어쓰지 않는다. 지운 시트는 deleted 표시로 전해진다.
+  const shared = { room: "", unsub: null, remote: new Map(), pushed: new Map(), known: new Set(), secretOk: new Set(), ready: false, denied: false, timer: 0, pushing: false };
+  const sheetBody = (sheet) => { const { secret, mission, updatedAt, ...rest } = sheet; return JSON.stringify(rest); };
+  const sheetSecret = (sheet) => JSON.stringify({ secret: sheet.secret || "", mission: sheet.mission || "" });
+  const sharedFb = () => { const f = window.__CCF_HANDOUT_FB__?.state?.(); return f?.db && f.uid && f.modules?.fs ? f : null; };
+  const sharedIsGm = () => { try { return !!window.__CCF_HANDOUT_FB__?.isGm?.(); } catch (_) { return false; } };
+  const sheetBeingEdited = (id) => state.open && currentSheet()?.id === id && Date.now() - (state.lastEditAt || 0) < 8000;
+  function sharedDenied(error) {
+    if (!/permission|PERMISSION/.test(String(error?.code || error?.message || ""))) { console.warn("[ccf-character-sheet] shared storage", error); return false; }
+    shared.denied = true; shared.ready = false; shared.unsub?.(); shared.unsub = null;
+    status("저장됨 · 공유 저장 불가(이 브라우저에만 저장)");
+    if (state.open) render();
+    return true;
+  }
+  function sharedTick() {
+    if (!state.active || shared.denied || !state.roomKey || state.dataRoom !== state.roomKey) return;
+    const fb = sharedFb();
+    if (!fb) return;
+    if (shared.room === state.roomKey && shared.unsub) return;
+    shared.unsub?.(); shared.room = state.roomKey; shared.remote.clear(); shared.pushed.clear(); shared.known.clear(); shared.secretOk.clear(); shared.ready = false;
+    const { collection, onSnapshot } = fb.modules.fs;
+    shared.unsub = onSnapshot(collection(fb.db, "rooms", state.roomKey, "sheets"), (snap) => {
+      snap.docChanges().forEach((change) => {
+        const id = change.doc.id, data = change.doc.data();
+        if (change.type === "removed") { shared.remote.delete(id); return; }
+        shared.remote.set(id, { ownerUid: data.ownerUid, updatedAt: Number(data.updatedAt) || 0, deleted: !!data.deleted });
+        sharedApply(id, data, fb);
+      });
+      if (!shared.ready) { shared.ready = true; status("저장됨 · 룸 공유"); }
+      sharedPushSoon();
+    }, (error) => { sharedDenied(error); });
+  }
+  function sharedApply(id, data, fb) {
+    const local = state.data.sheets.find((sheet) => sheet.id === id);
+    const at = Number(data.updatedAt) || 0;
+    if (local && (local.updatedAt || 0) >= at) return;
+    if (sheetBeingEdited(id)) return;
+    if (data.deleted) {
+      if (!local) return;
+      state.data.sheets = state.data.sheets.filter((sheet) => sheet.id !== id);
+      if (state.data.selectedId === id) state.data.selectedId = state.data.sheets[0]?.id || "";
+      shared.known.delete(id); shared.pushed.delete(id);
+    } else {
+      let parsed; try { parsed = JSON.parse(data.json); } catch (_) { return; }
+      const next = normalizeData({ sheets: [{ ...parsed, id, secret: local?.secret || "", mission: local?.mission || "" }] }).sheets[0];
+      next.updatedAt = at;
+      if (local) state.data.sheets = state.data.sheets.map((sheet) => (sheet.id === id ? next : sheet)); else state.data.sheets.push(next);
+      shared.known.add(id); shared.pushed.set(id, { body: sheetBody(next), secret: sheetSecret(next) });
+      if (sharedIsGm() || data.ownerUid === fb.uid) sharedLoadSecret(id, fb);
+    }
+    clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
+    if (state.open) render();
+  }
+  async function sharedLoadSecret(id, fb) {
+    try {
+      const { doc, getDoc } = fb.modules.fs;
+      const snap = await getDoc(doc(fb.db, "rooms", state.roomKey, "sheetSecrets", id));
+      const sheet = state.data.sheets.find((item) => item.id === id);
+      if (!snap.exists() || !sheet || sheetBeingEdited(id)) return;
+      const secret = JSON.parse(snap.data().json || "{}");
+      sheet.secret = cleanText(secret.secret, 50_000); sheet.mission = cleanText(secret.mission, 50_000);
+      shared.secretOk.add(id); shared.pushed.set(id, { body: sheetBody(sheet), secret: sheetSecret(sheet) });
+      clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
+      if (state.open) render();
+    } catch (_) { /* 읽을 권한이 없으면(소유자도 GM 도 아님) 비밀·사명은 비어 있다 */ }
+  }
+  function sharedPushSoon() {
+    if (!shared.ready || shared.denied) return;
+    clearTimeout(shared.timer); shared.timer = setTimeout(sharedPush, 900);
+  }
+  async function sharedPush() {
+    const fb = sharedFb();
+    if (!fb || !shared.ready || shared.denied || shared.pushing || state.dataRoom !== state.roomKey || shared.room !== state.roomKey) return;
+    shared.pushing = true;
+    try {
+      const { doc, writeBatch } = fb.modules.fs, gm = sharedIsGm(), room = state.roomKey, now = Date.now();
+      const base = (...path) => doc(fb.db, "rooms", room, ...path);
+      for (const sheet of [...state.data.sheets]) {
+        const body = sheetBody(sheet), secret = sheetSecret(sheet), pushed = shared.pushed.get(sheet.id), remote = shared.remote.get(sheet.id);
+        if (pushed && pushed.body === body && pushed.secret === secret) continue;
+        if (!pushed && remote && (sheet.updatedAt || 0) <= remote.updatedAt) continue; // 공유 쪽이 더 최신: 위에서 받아 쓴다
+        if (sheetBeingEdited(sheet.id) && Date.now() - state.lastEditAt < 1200) { shared.timer = setTimeout(sharedPush, 1200); continue; }
+        sheet.updatedAt = pushed || !sheet.updatedAt ? now : sheet.updatedAt;
+        const ownerUid = gm && remote ? remote.ownerUid : fb.uid;
+        const batch = writeBatch(fb.db);
+        batch.set(base("sheets", sheet.id), { json: body, ownerUid, updatedAt: sheet.updatedAt, deleted: false });
+        // 비밀·사명은 읽을 수 있었던(또는 이 브라우저에서 만든) 시트만 쓴다: 소유권을 넘겨받은 직후 빈 값으로 원래 값을 덮지 않게.
+        if (!remote || shared.secretOk.has(sheet.id) || gm || remote.ownerUid === fb.uid) { batch.set(base("sheetSecrets", sheet.id), { json: secret, updatedAt: sheet.updatedAt }); shared.secretOk.add(sheet.id); }
+        await batch.commit();
+        shared.pushed.set(sheet.id, { body, secret }); shared.remote.set(sheet.id, { ownerUid, updatedAt: sheet.updatedAt, deleted: false }); shared.known.add(sheet.id);
+        clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
+      }
+      for (const id of [...shared.known]) {
+        if (state.data.sheets.some((sheet) => sheet.id === id)) continue;
+        const remote = shared.remote.get(id);
+        shared.known.delete(id); shared.pushed.delete(id);
+        if (!remote || remote.deleted) continue;
+        const ownerUid = gm ? remote.ownerUid : fb.uid;
+        await writeBatch(fb.db).set(base("sheets", id), { json: "{}", ownerUid, updatedAt: now, deleted: true }).commit();
+        shared.remote.set(id, { ownerUid, updatedAt: now, deleted: true });
+      }
+    } catch (error) {
+      if (!sharedDenied(error)) shared.timer = setTimeout(sharedPush, 15000);
+    } finally { shared.pushing = false; }
+  }
+  const sharedInterval = setInterval(sharedTick, 3000);
+  signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); });
 
   function currentSheet() {
     return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0] || null;
@@ -736,7 +850,7 @@
     root.innerHTML = `
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}${state.collapsed ? " is-collapsed" : ""}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
-        ${editor ? `<main>${renderSections(sheet)}</main>
+        ${editor ? `<main>${shared.denied ? '<p class="ccf-cs-share-note" role="status">룸 공유 저장을 쓸 수 없어 이 시트는 이 브라우저에만 저장됩니다(다른 사람·다른 브라우저에는 보이지 않음).</p>' : ""}${renderSections(sheet)}</main>
         <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     checkD20Font();
@@ -1058,7 +1172,7 @@
         const row = name.closest(".MuiListItem-container") || name.closest(".MuiListItem-root, li"); // 보조 동작 칸은 컨테이너 쪽에 있다
         if (!row || row.querySelector(`[${ROW_BUTTON_ATTR}]`)) return;
         const secondary = row.querySelector(".MuiListItemSecondaryAction-root");
-        const anchor = secondary?.querySelector("button");
+        const anchor = secondary?.querySelector("button") || [...row.querySelectorAll("button[aria-label], button[title]")].find((b) => TOKEN_DELETE_LABELS.some((text) => `${b.getAttribute("aria-label") || ""} ${b.getAttribute("title") || ""}`.includes(text)));
         const button = document.createElement("button");
         button.type = "button";
         button.className = anchor?.className || "MuiButtonBase-root MuiIconButton-root";
@@ -1084,7 +1198,7 @@
         const previous = remove.previousElementSibling;
         if (previous?.hasAttribute(ROW_BUTTON_ATTR)) return;
         const row = remove.closest('li, .MuiListItem-root, [role="listitem"], [role="row"]') || remove.parentElement?.parentElement;
-        if (!row) return;
+        if (!row || row.querySelector(`[${ROW_BUTTON_ATTR}]`)) return; // 창 쪽(mountWindowRowButtons)이 이미 단 행: 하나만
         const button = document.createElement("button");
         button.type = "button";
         button.className = remove.className;
@@ -1321,6 +1435,7 @@
     const target = event.target;
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
+    state.lastEditAt = Date.now();
     if (!sheet && !target.dataset.permKey) return;
     if (target.dataset.tableToggle !== undefined) { toggleSceneTable(Number(target.dataset.tableToggle), target.checked); return; }
     if (target.dataset.commandSelect !== undefined) {
@@ -1828,6 +1943,7 @@
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
         #${ROOT_ID} #ccf-cs-status { display:none }
+        #${ROOT_ID} .ccf-cs-share-note { margin:12px 0 0;padding:8px 12px;background:rgba(255,193,7,.12);color:#ffe082;font-size:12px;line-height:1.5 }
         #${ROOT_ID} .ccf-cs-perm-grid { grid-template-columns:minmax(0,1fr) repeat(3,52px);padding:8px }
       }
     `;

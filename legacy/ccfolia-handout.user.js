@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.116
+// @version      0.1.117
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.116",
+    version: "0.1.117",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1870,6 +1870,8 @@
   const FIREBASE_APP_NAME = "ccf-handout";
 
   let fbState = null;       // { app, auth, db, user, uid, modules }
+  // 사이코로픽션 시트의 룸 공유 저장이 같은 Firebase 연결(동의한 룸에서만 열린다)을 쓰도록 읽기 전용으로 내보낸다. 연결 전에는 state() 가 null.
+  window.__CCF_HANDOUT_FB__ = { state: () => fbState, isGm: () => { try { return !!isAdminMode(); } catch (_) { return false; } }, roomKey: () => getCurrentRoomKey() };
   let fbInitPromise = null;
 
   // ===== 이미지 업로드 (Firebase Storage) =====
