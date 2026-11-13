@@ -64,8 +64,8 @@ assert.match(sync, /out\.hidden = true/);
       // the store now has the hidden text (as Firestore would deliver it)
       await page.evaluate((t) => { window.__state.entities.roomMessages.entities.m1.text = t; }, hiddenText);
       await page.waitForTimeout(1500);
-      const dim = await page.evaluate(() => { const r = document.querySelector('#ccf-second-chat-panel [data-ccf-msg-id="m1"]'); return { hidden: r?.getAttribute('data-ccf-hidden-row'), title: r?.querySelector('.ccf-hide-btn')?.title, op: r ? getComputedStyle(r.querySelector(':scope > :not(.ccf-hide-btn)')).opacity : null }; });
-      assert.equal(dim.hidden, '1', 'the hidden row stays for the GM, marked'); assert.equal(dim.title, '다시 보이기'); assert.ok(parseFloat(dim.op) < 0.5, 'dimmed: ' + dim.op);
+      const dim = await page.evaluate(() => { const r = document.querySelector('#ccf-second-chat-panel [data-ccf-msg-id="m1"]'); return { hidden: r?.getAttribute('data-ccf-hidden-row'), title: r?.querySelector('.ccf-hide-btn')?.title, body: r ? getComputedStyle(r.querySelector('.ccf-scp-text, p.MuiListItemText-secondary')).display : null, fold: r?.querySelector('.ccf-hidden-fold')?.textContent || null }; });
+      assert.equal(dim.hidden, '1', 'the hidden row stays for the GM, marked'); assert.equal(dim.title, '다시 보이기'); assert.deepEqual([dim.body, dim.fold], ['none', '숨긴 메시지 · 펼치기'], 'folded to one line (0.5.39): ' + JSON.stringify(dim));
       // not relayed
       const relayed = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.relayMessages().map((m) => m.id));
       assert.deepEqual(relayed, ['m3'], 'the participants do not get the hidden message');
