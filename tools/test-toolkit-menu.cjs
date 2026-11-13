@@ -48,7 +48,7 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
         assert.equal(await page.locator('#ccf-character-sheet-root').count(), 0, label + ': the tab is a list, no sheet window yet');
         assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]').textContent), '사이코로픽션', label + ': first tab');
         const look = await page.evaluate(() => { const w = document.querySelector('#ccf-gm-tools .ccf-gt-window'), c = getComputedStyle(w), t = getComputedStyle(w.querySelector(':scope > header > h2')), tab = document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]'); return { bg: c.backgroundColor, radius: c.borderTopLeftRadius, title: [t.fontSize, t.fontWeight], backdrop: !!document.querySelector('#ccf-gm-tools .ccf-gt-backdrop'), indicator: getComputedStyle(tab, '::after').backgroundColor }; });
-        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['14px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)' }, label + ': CCFOLIA dialog look, blue tab underline');
+        assert.deepEqual(look, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', title: ['16px', '700'], backdrop: false, indicator: 'rgb(33, 150, 243)' }, label + ': CCFOLIA dialog look, blue tab underline');
         // the list: add a sheet (opens the standalone window), the row of a sheet opens it; the tab itself never edits
         await page.locator('#ccf-gm-tools [data-tab-add]').dispatchEvent('click');
         await page.waitForSelector('body > #ccf-character-sheet-root .ccf-cs-dialog.is-editor');
