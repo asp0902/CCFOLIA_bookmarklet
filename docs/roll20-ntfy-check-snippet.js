@@ -12,5 +12,5 @@
     visible: document.visibilityState, focused: document.hasFocus(),
   };
   copy(out);
-  console.log(out);
+  console.warn(out);
 })();

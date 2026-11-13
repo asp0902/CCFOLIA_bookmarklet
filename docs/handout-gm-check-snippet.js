@@ -4,13 +4,15 @@
   const d = window.__CCF_HANDOUT_DEBUG__;
   const out = { at: new Date().toISOString(), room: location.pathname, hasDebug: !!d };
   const safe = (f) => { try { return f(); } catch (e) { return "오류: " + e.message; } };
-  if (!d) { copy(JSON.stringify(out, null, 1)); console.log("복사됨(핸드아웃 스크립트 없음)"); return; }
+  if (!d) { copy(JSON.stringify(out, null, 1)); console.warn("복사됨(핸드아웃 스크립트 없음)"); return; }
   out.version = safe(() => window.__CCF_TOOLKIT_VERSIONS__?.().registry?.["ccf-handout"]?.version);
+  out.ingestSkips = safe(() => d.ingestSkips?.());   // 받기 경로가 건너뛴 문서(id·이유)
+  out.lastPushError = safe(() => d.lastPushError?.()); // 마지막 올리기 실패(id·code), 없으면 null
   out.seat = safe(() => d.seat());
   out.gmInfo = safe(() => d.gmInfo?.());
   out.state = safe(() => { const s = d.state?.(); return s && typeof s === "object" ? Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Array.isArray(v) ? `배열 ${v.length}` : (v && typeof v === "object" ? "객체" : v)])) : s; });
   let done = false;
-  const finish = () => { if (done) return; done = true; const t = JSON.stringify(out, null, 1); window.__HO_CHECK__ = t; try { copy(t); } catch (_) {} console.log("복사됨 — 안 붙여지면 콘솔에 copy(__HO_CHECK__) 입력\n" + t); };
+  const finish = () => { if (done) return; done = true; const t = JSON.stringify(out, null, 1); window.__HO_CHECK__ = t; try { copy(t); } catch (_) {} console.warn("복사됨 — 안 붙여지면 콘솔에 copy(__HO_CHECK__) 입력\n" + t); };
   setTimeout(() => { if (!out.remote) out.remote = "fetchAll 10초 안에 응답 없음"; finish(); }, 10000);
   d.fetchAll().then((docs) => {
     out.remote = {

@@ -2,5 +2,5 @@
 // 먼저 "내 캐릭터 목록" 패널을 열어 둔 상태에서 실행.
 (() => {
   const d = window.__CCF_OTHERS_CHARS__?.diag?.() || { error: 'others-characters 0.1.1 이상이 로드되지 않음(툴킷 새로고침 필요)', version: window.__CCF_OTHERS_CHARS__?.version || null };
-  copy(d); console.log(d);
+  copy(d); console.warn(d);
 })();
