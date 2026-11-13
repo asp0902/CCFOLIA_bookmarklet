@@ -3,7 +3,7 @@
 // Tags are an allow list; attributes: class (plain words), a safe subset of style, https links, images only as small data URIs or from CCFOLIA's own CDN; everything else is dropped, text is escaped.
 export const HANDOUT_LIMITS = Object.freeze({ htmlEach: 600_000, itemsPerPerson: 60, totalPerPerson: 1_800_000, title: 200 });
 
-const TAGS = new Set(["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote", "br", "hr", "b", "i", "u", "s", "strong", "em", "code", "pre", "a", "img", "small", "sub", "sup", "table", "thead", "tbody", "tr", "td", "th"]);
+const TAGS = new Set(["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote", "br", "hr", "b", "i", "u", "s", "strong", "em", "code", "pre", "a", "img", "small", "sub", "sup", "table", "thead", "tbody", "tr", "td", "th", "ruby", "rt", "rp"]);
 const VOID = new Set(["br", "hr", "img"]);
 const DROP_WITH_CONTENT = /^(?:script|style|iframe|object|embed|template|noscript|svg|math|form|textarea|select)$/;
 const STYLE_PROPS = new Set(["color", "background-color", "font-size", "font-weight", "font-style", "text-align", "text-decoration", "line-height", "letter-spacing", "margin", "padding", "border-radius", "text-shadow"]);
@@ -55,6 +55,7 @@ export function cleanHandoutHtml(html) {
       else if (key === "style") { const style = cleanStyle(value); if (style) attributes += ` style="${escapeAttribute(style)}"`; }
       else if (key === "href" && name === "a") { if (LINK.test(value)) attributes += ` href="${escapeAttribute(value)}" target="_blank" rel="noopener noreferrer"`; }
       else if (key === "src" && name === "img") { if (IMAGE_DATA.test(value) || IMAGE_CDN.test(value)) { attributes += ` src="${escapeAttribute(value)}"`; hasSrc = true; } }
+      else if (key === "title") attributes += ` title="${escapeAttribute(value.slice(0, 200))}"`; // 서식 프리셋의 툴팁
       else if (key === "alt" && name === "img") attributes += ` alt="${escapeAttribute(value.slice(0, 200))}"`;
       else if ((key === "width" || key === "height") && name === "img" && /^\d{1,4}$/.test(value)) attributes += ` ${key}="${value}"`;
       else if ((key === "colspan" || key === "rowspan") && /^\d{1,2}$/.test(value) && (name === "td" || name === "th")) attributes += ` ${key}="${value}"`;
