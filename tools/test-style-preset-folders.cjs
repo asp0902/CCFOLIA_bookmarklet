@@ -112,6 +112,9 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     assert.equal(dialogs.length, 1, 'one confirm'); assert.match(dialogs[0], /confirm:.*폴더/);
     assert.deepEqual((await stored('folders')), [], 'folder removed'); assert((await stored('presets')).some((p) => p.name === '빨강' && !p.folderId), 'its preset is kept, outside any folder');
     assert.equal(await pop.locator('.ccf-style-preset-apply', { hasText: '빨강' }).count(), 1);
+    // an Escape that arrives while no format window is open (the toolkit closes CCFOLIA's character dropdown with one after reading it at entry) must not move the focus into the chat box
+    await page.evaluate(() => { document.activeElement?.blur(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName === 'TEXTAREA'), false, 'Escape without an open format window does not focus the chat box');
     assert.deepEqual(errors, [], 'no page errors');
     console.log('style preset folders PASS');
   } finally { await browser.close(); }
