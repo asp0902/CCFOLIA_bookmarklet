@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.109
+// @version      0.1.110
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.109"),
+    version: getUserscriptVersion("0.1.110"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -8159,6 +8159,7 @@
 
   function closeModal() {
     const roomEditor = getResolvedActiveEditor();
+    const wasOpen = isModalOpen(); // 서식 창이 열려 있었을 때만 채팅 입력칸으로 돌아간다(입장 때 캐릭터 선택 목록을 읽고 Escape 로 닫는 동작이 입력칸에 포커스를 줘 코코포리아의 커맨드 팝업이 뜨던 문제)
     setModalSelection(null);
     document.getElementById(BACKDROP_ID)?.classList.remove("show");
     document.getElementById(MODAL_ID)?.classList.remove("show");
@@ -8175,7 +8176,7 @@
     resetCodeToolboxState();
     setStyleClipboardPopoverOpen(false);
     resetImageToolboxState();
-    roomEditor?.focus?.({ preventScroll: true });
+    if (wasOpen) roomEditor?.focus?.({ preventScroll: true });
   }
 
   function restoreStoredModalSize(modal) {
