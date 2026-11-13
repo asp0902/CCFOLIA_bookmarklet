@@ -34,6 +34,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     const before = await names();
     assert(before.includes('눈깅') && before.includes('에르네스토'), JSON.stringify(before));
     const avatar = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '눈깅'); const a = row.querySelector('[data-pl-avatar]'); return { initial: a.getAttribute('data-initial'), before: getComputedStyle(a, '::before').content, opacity: getComputedStyle(a).opacity }; });
+    const account = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const sel = s.querySelector('.pl-modal .pl-row [data-pl-account]'); return sel ? { first: sel.options[0]?.textContent, linked: sel.getAttribute('data-linked') } : null; });
+    assert.deepEqual(account, { first: '계정 연결 안 됨', linked: '0' }, 'each PL row has an account select (0.1.120)');
     assert.deepEqual(avatar, { initial: '눈', before: '"눈"', opacity: '1' }, 'the first letter shows behind a blank picture: ' + JSON.stringify(avatar));
     // drag 에르네스토 above 눈깅 with the handle
     const handle = await page.evaluateHandle(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; return [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '에르네스토').querySelector('.pl-drag'); });

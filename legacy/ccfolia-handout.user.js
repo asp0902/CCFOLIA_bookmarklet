@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.119
+// @version      0.1.120
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.119",
+    version: "0.1.120",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -185,8 +185,8 @@
       const plList = mergePlListById(state.data.plList || []);
       const targets = [...remoteMembers].filter(([anon]) => anon !== fbState?.uid).map(([anon, person]) => {
         const copy = inboxCopiesFor(person, plList, [h], state.data.folders, null)[h.id];
-        const pl = plList.find((p) => p.uid && p.uid === person.ccfoliaUid) || plList.find((p) => [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) && normalizePlNameKey(n) === normalizePlNameKey(person.displayName)));
-        return { anon: anon.slice(0, 6) + "…", name: person.displayName || "", matchedPl: pl?.name || null, view: !!copy?.access?.view, secret: !!copy?.access?.secret, copyWrittenAt: inboxWrites.get(`${anon}:${h.id}`) || null };
+        const found = findPlForMember(person, plList), pl = found.pl;
+        return { anon: anon.slice(0, 6) + "…", name: person.displayName || "", matchedPl: pl?.name || null, matchedBy: found.how || null, ownedCharacters: ownedCharacterNames(person.ccfoliaUid).map((n) => Array.from(n).slice(0, 6).join("")), view: !!copy?.access?.view, secret: !!copy?.access?.secret, copyWrittenAt: inboxWrites.get(`${anon}:${h.id}`) || null };
       });
       const permissions = Object.fromEntries(Object.entries(h.permissions || {}).map(([key, perm]) => [key.length > 12 ? key.slice(0, 6) + "…" : key, { view: !!perm?.view, secret: !!perm?.secret }]));
       return JSON.parse(JSON.stringify({ id: h.id, title: (h.title || "").slice(0, 30), permissions, sharedOnWeb: readWebShared().has(h.id), members: remoteMembers.size, targets, nobodyCanSee: !targets.some((t) => t.view || t.secret), lastInboxError, inboxPausedUntil: inboxDeniedAt ? new Date(inboxDeniedAt + 300000).toISOString() : null, gm: isAdminMode(), seatIsMine: !!(lastGmDoc && fbState?.uid && lastGmDoc.gmUid === fbState.uid) }));
@@ -231,6 +231,7 @@
       };
     },
     // 받는 쪽(플레이어) 점검: 연결·동의·내 사본 구독·받은 수·마지막 수신. docs/handout-receive-snippet.js 가 부른다.
+    greetingLog() { return greetingLog.slice(-10); },
     receiveDiag() {
       const room = getCurrentRoomKey();
       let skipDay = null; try { skipDay = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
@@ -489,6 +490,12 @@
     if (!showAudienceKeys(h).length && !((typeof state !== "undefined" && state?.data?.plList) || []).some((p) => p.uid && h.permissions?.[p.uid] && (h.permissions[p.uid].view || h.permissions[p.uid].secret))) {
       toast("볼 수 있는 사람이 없습니다 — 권한표에서 받을 사람의 '공개'(또는 '비밀')를 체크한 뒤 공유하세요.");
     }
+    try {
+      const plList = mergePlListById(state.data.plList || []);
+      const members = [...remoteMembers.values()];
+      const unlinked = plList.filter((pl) => { const key = removeSpaces(pl.name); const perm = h.permissions?.[key] || h.permissions?.[pl.name]; if (!perm || !(perm.view || perm.secret)) return false; return !members.some((m) => findPlForMember(m, plList).pl === pl); }).map((pl) => pl.name);
+      if (unlinked.length) toast(`${unlinked.join(", ")}: 계정 연결 안 됨 — 플레이어 목록에서 계정을 연결하세요`);
+    } catch (_) { /* 안내만 */ }
     markWebShared(h.id, true);
     try {
       clearTimeout(webSyncTimer);
@@ -1121,6 +1128,8 @@
     }
     .tab:hover { color: #fff; background: rgba(255,255,255,.04); }
     /* 목록 탭의 검색: 탭 줄 오른쪽 끝(펼친 검색칸도 같은 줄, 탭 줄 높이는 그대로) */
+    .connect-banner { display: flex; align-items: center; gap: 12px; margin: 8px 16px; padding: 10px 12px; border-radius: 4px; background: rgba(255,183,77,.12); color: #ffe0b2; font-size: 13px; }
+    .connect-banner .btn { margin-left: auto; }
     .tabs-search { margin-left: auto; display: flex; align-items: center; padding: 0 8px; min-width: 0; }
     .tabs-search:empty { display: none; }
     .tabs-search .list-search-bar { min-height: 0; padding: 0; }
@@ -1670,6 +1679,8 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-role="gm"] { border-left-color: #fff; }
+    .pl-modal .pl-account { width: 100%; box-sizing: border-box; }
+    .pl-modal .pl-account[data-linked="0"] { color: #ffb74d; }
     .pl-modal .pl-drag { cursor: grab; color: rgba(255,255,255,.45); font-size: 14px; letter-spacing: -3px; text-align: center; user-select: none; border-radius: 3px; }
     .pl-modal .pl-drag:hover, .pl-modal .pl-drag:focus-visible { color: #fff; background: rgba(255,255,255,.08); outline: none; }
     .pl-modal .pl-row[data-dragging="1"] { opacity: .4; }
@@ -1678,7 +1689,7 @@
     .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
-      grid-template-columns: 16px 24px 28px minmax(0,1fr) minmax(0,140px) 60px 28px;
+      grid-template-columns: 16px 24px 28px minmax(0,1fr) minmax(0,110px) 60px minmax(0,120px) 28px;
       gap: 4px 8px; align-items: center; min-width: 0;
     }
     /* 폴더 (#56) */
@@ -2302,10 +2313,31 @@
     }, (error) => { inboxActive = false; noteFirebaseIssue("내 사본 읽기", error); console.info("[ccf-handout] inbox not readable (rules not published yet?):", error?.code || error); });
     registerTeardown(() => { try { unsubInbox?.(); } catch (_) {} unsubInbox = null; inboxActive = false; });
   }
+  // 멤버(계정) -> PL 항목. 표시 이름("눈깅이 열심히")과 PL 이름("눈깅")이 다른 게 보통이라 이름 완전일치만으로는 못 찾았다(사본이 하나도 안 써진 원인). 순서:
+  // ① PL 에 저장된 계정 uid ② 멤버 표시 이름 또는 그 계정이 소유한 캐릭터 이름이 PL 이름·병합 이름과 같음 ③ 표시 이름이 PL 이름(병합 포함)을 품거나 그 반대 — 그런 PL 이 하나뿐일 때만.
+  // 반환 { pl, how } (못 찾으면 pl null). how: "uid" | "name" | "character" | "loose".
+  function ownedCharacterNames(ccfoliaUid) {
+    if (!ccfoliaUid) return [];
+    try { return Object.values(findCcfoliaStore()?.getState()?.entities?.roomCharacters?.entities || {}).filter((c) => c && c.owner === ccfoliaUid && c.name).map((c) => String(c.name)); } catch (_) { return []; }
+  }
+  function findPlForMember(person, plList) {
+    const list = Array.isArray(plList) ? plList.filter((p) => p && p.name) : [];
+    const byUid = person?.ccfoliaUid ? list.find((p) => p.uid && p.uid === person.ccfoliaUid) : null;
+    if (byUid) return { pl: byUid, how: "uid" };
+    const keysOf = (p) => [p.name, ...(p.aliases || [])].map(normalizePlNameKey).filter(Boolean);
+    const display = normalizePlNameKey(person?.displayName || "");
+    const byName = display ? list.filter((p) => !p.uid && keysOf(p).includes(display)) : [];
+    if (byName.length === 1) return { pl: byName[0], how: "name" };
+    const owned = ownedCharacterNames(person?.ccfoliaUid).map(normalizePlNameKey).filter(Boolean);
+    const byCharacter = owned.length ? list.filter((p) => !p.uid && keysOf(p).some((k) => owned.includes(k))) : [];
+    if (byCharacter.length === 1) return { pl: byCharacter[0], how: "character" };
+    const loose = display ? list.filter((p) => !p.uid && keysOf(p).some((k) => k.length >= 2 && (display.includes(k) || k.includes(display)))) : [];
+    if (loose.length === 1) return { pl: loose[0], how: "loose" };
+    return { pl: null, how: "" };
+  }
   // 보내는 쪽(GM): 계정(members)마다 읽을 수 있는 사본을 계산한다(순수). 반환: { [핸드아웃 id]: 사본 }
   function inboxCopiesFor(person, plList, handouts, folders, sharedIds = null) {
-    const pl = (plList || []).find((p) => p.uid && p.uid === person.ccfoliaUid)
-      || (plList || []).find((p) => [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) && normalizePlNameKey(n) === normalizePlNameKey(person.displayName)));
+    const pl = findPlForMember(person, plList).pl;
     const name = pl?.name || person.displayName || "";
     const extra = [...new Set([person.ccfoliaUid, pl?.uid].filter(Boolean))];
     const out = {};
@@ -2339,6 +2371,13 @@
       if (!fb || roomKey === "global") return;
       const { doc, setDoc, deleteDoc, collection, getDocs, serverTimestamp } = fb.modules.fs;
       const plList = mergePlListById(state.data.plList || []);
+      let linked = 0;
+      for (const [, person] of remoteMembers) {
+        if (!person?.ccfoliaUid || person.ccfoliaUid === myCcfUid) continue;
+        const found = findPlForMember(person, state.data.plList || []);
+        if (found.pl && !found.pl.uid && found.how !== "uid") { found.pl.uid = person.ccfoliaUid; linked += 1; }
+      }
+      if (linked) { saveAll(state.data).catch(() => {}); console.info("[ccf-handout] PL ↔ account linked automatically:", linked); }
       for (const [anon, person] of remoteMembers) {
         if (anon === fb.uid) continue; // GM 본인은 원본을 읽는다
         const want = inboxCopiesFor(person, plList, state.data.handouts, state.data.folders, hasPlayerRelay() ? readWebShared() : null); // without the relay extension there is no share button: everything with a right is sent as before
@@ -2846,6 +2885,7 @@
   const GREETING_STORAGE_PREFIX = "ccf-handout:greeted:";
   const GREETING_SKIP_DAY_KEY = "ccf-handout:greeted-skip-day";
   let greetingRoot = null;
+  const greetingLog = []; // 인사 창이 어떻게 닫혔는지(확인/정리/다른 것)
   const greetingDismissed = new Set(); // 확인 없이 닫은 룸: 다시 로드하기 전에는 다시 띄우지 않는다(동의로 치지 않는다)
 
   function isGreeted(roomKey) {
@@ -2988,11 +3028,9 @@
         </div>
       </div>
     `;
-    // 코코포리아 기본 Dialog 처럼: 백드롭을 누르거나 Esc 로 닫는다. 확인이 아니므로 동의(markGreeted)·오늘 건너뛰기는 하지 않는다.
-    const dismiss = () => { document.removeEventListener("keydown", onKey, true); if (greetingRoot === host) { greetingRoot = null; greetingDismissed.add(roomKey); } host.remove(); };
-    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); dismiss(); } };
-    document.addEventListener("keydown", onKey, true);
-    sh.querySelector(".gd-overlay").addEventListener("mousedown", (e) => { if (e.target === e.currentTarget) dismiss(); });
+    // 정책(사용자 결정): '확인'을 눌러야만 닫힌다. 백드롭·Esc 닫기는 없앴다 — 입장 직후 다른 스크립트가 보내는 합성 Escape(서식 연동의 캐릭터 목록 닫기 등)에 창이 저절로 사라졌다.
+    // 그 밖의 제거(룸을 나가거나 스크립트를 끌 때)는 greetingLog 에 남긴다.
+    const onKey = () => {};
     // '오늘은 다시 보지 않기'는 체크하는 순간 저장한다: 체크한 뒤 바깥을 눌러/Esc 로 닫아도 그날은 다시 뜨지 않는다(예전엔 확인을 눌러야만 저장됐다). 체크를 풀면 지운다.
     sh.querySelector("input[data-skip-today]")?.addEventListener("change", (e) => {
       if (e.target.checked) markSkipToday();
@@ -3004,7 +3042,7 @@
       const skipToday = !!sh.querySelector('input[data-skip-today]')?.checked;
       // 체크박스 ON 일 때만 오늘 하루 skip. OFF 면 다음 실행 시 다시 팝업.
       if (skipToday) markSkipToday();
-      document.removeEventListener("keydown", onKey, true);
+      greetingLog.push({ at: new Date().toISOString(), how: "ok" });
       greetingRoot?.remove();
       greetingRoot = null;
       // 확인 시점부터 자동 감시 활성화. 다음 실행 때도 유지.
@@ -3023,7 +3061,9 @@
     });
     (document.body || document.documentElement).appendChild(host);
     greetingRoot = host;
-    registerTeardown(() => { document.removeEventListener("keydown", onKey, true); host.remove(); });
+    registerTeardown(() => { if (host.isConnected) greetingLog.push({ at: new Date().toISOString(), how: "cleanup" }); host.remove(); });
+    // 확인 말고 다른 무엇이 창을 지우면 기록한다(누가 지웠는지 진단용).
+    new MutationObserver((records, observer) => { if (!host.isConnected) { observer.disconnect(); if (greetingRoot === host) { greetingLog.push({ at: new Date().toISOString(), how: "removed-by-other", stack: String(new Error().stack || "").split("\n").slice(2, 6).join(" | ").slice(0, 300) }); greetingRoot = null; } } }).observe(host.parentNode || document.documentElement, { childList: true });
   }
 
   // ===== 채팅 발신자 감시 (plList 자동 추가) =====
@@ -3645,13 +3685,19 @@
     if (state.activeTab === "list") inner = renderList();
     else if (state.activeTab === "edit") inner = renderEdit();
     else inner = renderSettings();
-    body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${inner}</div>`;
+    body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${state.activeTab === "list" ? renderConnectBanner() : ""}${inner}</div>`;
     const tabsSearch = state.shadow.querySelector("[data-tabs-search]");
     if (tabsSearch) tabsSearch.innerHTML = state.activeTab === "list" ? (state.listSearchHtml || "") : "";
     // 본문에 들어간 Firestore 이미지 토큰을 실제 이미지로 교체 (비동기).
     resolveHandoutImagesIn(body);
   }
 
+  // 인사 창을 닫아 버렸거나 못 본 사람: 핸드아웃 목록 맨 위의 '연결' 한 번으로 동의·연결한다(동의 자체는 없애지 않는다).
+  function renderConnectBanner() {
+    const room = getCurrentRoomKey();
+    if (room === "global" || isGreeted(room) || fbState) return "";
+    return `<div class="connect-banner"><span>이 룸의 핸드아웃을 받으려면 연결이 필요합니다.</span><button class="btn small" data-action="greeting-connect">연결</button></div>`;
+  }
   function renderList() {
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
@@ -4307,6 +4353,14 @@
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
     if (action === "close") { closePanel(); return; }
+    if (action === "greeting-connect") {
+      const room = getCurrentRoomKey();
+      markGreeted(room);
+      greetingRoot?.remove(); greetingRoot = null;
+      startSync().then((fb) => { if (fb) toast("핸드아웃 연결됨"); render(); }).catch((error) => { toast("연결 실패 — 콘솔 확인"); console.error(error); });
+      render();
+      return;
+    }
     if (action === "new-handout") {
       if (!isAdminMode()) return;
       toggleAddChoiceDialog();
@@ -4856,6 +4910,7 @@
           <option value="player">PL</option>
           <option value="gm">GM</option>
         </select>
+        <select class="pl-account" data-pl-account title="코코포리아 계정(룸 멤버) 연결" aria-label="계정 연결"></select>
         <button class="row-x" data-action="pl-modal-row-remove" title="행 삭제" aria-label="행 삭제">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
@@ -5001,6 +5056,15 @@
     else row.removeAttribute("data-pl-admin");
     row.setAttribute("data-pl-role", item.role === "gm" ? "gm" : "player");
     if (item.uid) row.setAttribute("data-pl-uid", item.uid); else row.removeAttribute("data-pl-uid");
+    const account = row.querySelector("[data-pl-account]");
+    if (account) {
+      const members = [...remoteMembers.values()].filter((m) => m?.ccfoliaUid && m.ccfoliaUid !== myCcfUid);
+      const options = [["", "계정 연결 안 됨"], ...members.map((m) => [m.ccfoliaUid, m.displayName || m.ccfoliaUid.slice(0, 6)])];
+      if (item.uid && !members.some((m) => m.ccfoliaUid === item.uid)) options.push([item.uid, `(지금 없는 계정 ${item.uid.slice(0, 6)}…)`]);
+      account.innerHTML = options.map(([value, label]) => `<option value="${escapeAttr(value)}"${value === (item.uid || "") ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+      account.setAttribute("data-linked", item.uid ? "1" : "0");
+      if (!account.__ccfBound) { account.__ccfBound = true; account.addEventListener("change", () => { if (account.value) row.setAttribute("data-pl-uid", account.value); else row.removeAttribute("data-pl-uid"); account.setAttribute("data-linked", account.value ? "1" : "0"); }); }
+    }
     if (item.source === "playroom") { row.setAttribute("data-pl-source", "playroom"); row.setAttribute("data-pl-playroom-id", item.playroomId || ""); } else { row.removeAttribute("data-pl-source"); row.removeAttribute("data-pl-playroom-id"); }
 
     // 아바타 (#74)

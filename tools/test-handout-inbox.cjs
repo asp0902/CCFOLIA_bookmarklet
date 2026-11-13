@@ -26,10 +26,10 @@ const vm = require('node:vm');
   const box = { ALL_KEY: '*', fbState: { uid: 'gm-anon' }, state: { data: { plList: [{ name: '앨리스', aliases: [], uid: 'acct-a' }, { name: '밥', aliases: [], uid: '' }], handouts: [], folders: [{ id: 'f1', name: '1막' }], myCharacter: 'GM' }, isOpen: false }, denied: false,
     render() {}, registerTeardown() {}, hasPlayerRelay: () => false, noteFirebaseIssue() {}, noteFirebaseOk() {}, readWebShared: () => new Set(), initFirebase: async () => ({ uid: 'gm-anon', db: {}, modules: { fs: fsApi } }), getCurrentRoomKey: () => 'room', saveAll: async () => {}, isAdminMode: () => true,
     normalizePlNameKey: v => String(v || '').replace(/\s+/g, '').toLowerCase(), mergePlListById: l => l, ingestRemoteHandout: (data, type) => ingested.push([data, type]), ingestRemoteRemove: id => removed.push(id),
-    readFirebaseAuthUids: async () => [], findCcfoliaStore: () => null, setTimeout: () => 0, clearTimeout() {}, console, Object, Array, Set, Map, String, Number, JSON, Date, Promise };
+    readFirebaseAuthUids: async () => [], findCcfoliaStore: () => ({ getState: () => ({ entities: { roomCharacters: { entities: box.characters || {} } } }) }), myCcfUid: 'acct-gm', saveAll: async () => {}, setTimeout: () => 0, clearTimeout() {}, console, Object, Array, Set, Map, String, Number, JSON, Date, Promise };
   vm.createContext(box);
   box.withoutAll = vm.runInContext('(' + source.match(/const withoutAll = (.*);\r?\n/)[1] + ')', box);
-  vm.runInContext(`${source.slice(a, b)}\n${source.slice(c, d)}\n;this.api = { inboxCopiesFor, syncInboxes, subscribeToInbox, remoteMembers, inboxActive: () => inboxActive };`, box);
+  vm.runInContext(`${source.slice(a, b)}\n${source.slice(c, d)}\n;this.api = { inboxCopiesFor, findPlForMember, syncInboxes, subscribeToInbox, remoteMembers, inboxActive: () => inboxActive };`, box);
   const api = box.api;
   const handouts = [
     { id: 'h1', title: '지도', description: '공개', gmNotes: '비밀', image: 'img', permissions: { '*': { view: true }, 'acct-a': { view: true, secret: true } }, order: 1, folderId: 'f1' },
@@ -66,6 +66,17 @@ const vm = require('node:vm');
   await api.syncInboxes();
   assert.equal(store.has('rooms/room/inbox/anon-b/handouts/h2'), false, 'h2 is no longer for Bob: the copy is gone');
   assert.equal(store.get('rooms/room/inbox/anon-a/handouts/h1').description, '바뀐 공개');
+  // 0.1.120: a member whose display name differs from the PL name ("눈깅이 열심히" vs PL "눈깅") is matched through a character the account owns ("에르네스토", merged into 눈깅),
+  // linked automatically (PL uid saved), and gets the copy; matching by the display name containing the PL name works when it is the only candidate
+  box.state.data.plList.push({ name: '눈깅', aliases: ['에르네스토'], uid: '' });
+  box.characters = { c1: { name: '에르네스토', owner: 'acct-n' } };
+  handouts.push({ id: 'h5', title: '바깥 상황', description: '바깥', gmNotes: '', permissions: { '눈깅': { view: true } }, order: 5 });
+  api.remoteMembers.set('anon-n', { ccfoliaUid: 'acct-n', displayName: '눈깅이 열심히' });
+  await api.syncInboxes();
+  assert.equal(store.get('rooms/room/inbox/anon-n/handouts/h5')?.description, '바깥', 'the copy reaches the member found through the owned character');
+  assert.equal(box.state.data.plList.find((p) => p.name === '눈깅').uid, 'acct-n', 'the PL is linked to the account');
+  assert.deepEqual(copy(api.findPlForMember({ ccfoliaUid: 'acct-z', displayName: '눈깅이 열심히' }, [{ name: '눈깅', aliases: [] }]).how), 'loose', 'the display name containing the PL name');
+  assert.equal(api.findPlForMember({ ccfoliaUid: 'acct-z', displayName: '눈깅이 열심히' }, [{ name: '눈깅', aliases: [] }, { name: '깅이', aliases: [] }]).pl, null, 'loose only when unique');
   // rules that refuse the write: nothing breaks, the tool waits
   box.denied = true; handouts[0].description = '또 바뀜'; await api.syncInboxes(); box.denied = false;
   await api.syncInboxes(); assert.equal(store.get('rooms/room/inbox/anon-a/handouts/h1').description, '바뀐 공개', 'paused after a refusal');
