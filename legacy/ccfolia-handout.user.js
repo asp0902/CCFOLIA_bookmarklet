@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.125
+// @version      0.1.126
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.125",
+    version: "0.1.126",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -343,7 +343,6 @@
     isOpen: false,
     activeTab: "list",      // list | new | settings
     editingId: null,        // 편집 중인 handout id
-    plPreview: false,       // PL 시점 미리보기 토글
     search: "",             // 목록 검색어 (저장하지 않는다)
     searchOpen: false,      // 검색칸이 펼쳐져 있음 (닫으면 검색어도 비운다)
     mode: "list",           // GM 도구 창 안에서: "list" = 핸드아웃 탭(목록·편집), "settings" = 공용 설정 탭의 핸드아웃 구역
@@ -1316,7 +1315,7 @@
     .handout-preview-title { all: unset; cursor: pointer; }
     .handout-preview-title:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
     .handout-edit-cols .col .rich-editor {
-      width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: none;
+      width: 100%; min-height: 140px; max-height: 360px; overflow: auto; resize: none;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
       padding: 6px 10px; color: #fff;
       font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -1376,6 +1375,12 @@
       transition: background-color 120ms, color 120ms;
     }
     .ft-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .ft-sv { font-size: 0.75rem; letter-spacing: .02em; }
+    .sv-menu { position: absolute; z-index: 30; min-width: 180px; max-width: 280px; max-height: 320px; overflow: auto; padding: 6px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+    .sv-menu .sv-folder { padding: 6px 14px 2px; font-size: 0.75rem; color: rgba(255,255,255,.6); }
+    .sv-menu .sv-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 14px; cursor: pointer; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sv-menu .sv-item:hover, .sv-menu .sv-item:focus-visible { background: rgba(255,255,255,.08); }
+    .sv-menu .sv-empty { padding: 8px 14px; font-size: 0.8125rem; color: rgba(255,255,255,.7); white-space: normal; }
     .ft-btn svg { pointer-events: none; display: block; }
     .ft-btn:active { background: rgba(255,255,255,.14); }
     .ft-btn code { font-family: ui-monospace, Consolas, monospace; font-size: 0.6875rem; }
@@ -3740,7 +3745,7 @@
     if (tabsSearch) tabsSearch.innerHTML = state.activeTab === "list" ? (state.listSearchHtml || "") : "";
     // 본문에 들어간 Firestore 이미지 토큰을 실제 이미지로 교체 (비동기).
     resolveHandoutImagesIn(body);
-    if (state.activeTab === "edit") { syncEditorHeights(); body.querySelectorAll(".handout-edit-cols img").forEach((img) => img.addEventListener("load", syncEditorHeights, { once: true })); }
+    if (state.activeTab === "edit") { syncEditorHeights(); watchEditorHeights(); body.querySelectorAll(".handout-edit-cols img").forEach((img) => img.addEventListener("load", syncEditorHeights, { once: true })); }
   }
 
   // 인사 창을 닫아 버렸거나 못 본 사람: 핸드아웃 목록 맨 위의 '연결' 한 번으로 동의·연결한다(동의 자체는 없애지 않는다).
@@ -3752,19 +3757,9 @@
   function renderList() {
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
-    const previewAsPl = adminMode && state.plPreview && !!me;
-    // 내보내기/가져오기 바 (.panel-footer) 바로 위 우하단에 sticky로 배치
-    const previewToggle = adminMode ? `
-      <div class="list-pl-preview-bar">
-        <label class="checkbox" title="현재 캐릭터의 권한대로만 표시">
-          <input type="checkbox" data-action="toggle-pl-preview" ${previewAsPl ? "checked" : ""} ${me ? "" : "disabled"}>
-          PL 시점 미리보기
-        </label>
-      </div>
-    ` : "";
     state.listSearchHtml = "";
     if (!state.data.handouts.length && !(state.data.folders || []).length) {
-      return previewToggle;
+      return "";
     }
     // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
     const searchQuery = String(state.search || "").trim();
@@ -3778,9 +3773,7 @@
       ensurePermissions(h);
       const manageable = canManageHandout(h);
       const permissionName = getPermissionCharacterName();
-      const canSecret = previewAsPl
-        ? canViewSecret(h, me)
-        : (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
+      const canSecret = adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys());
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
       const permKeys = Object.keys(h.permissions || {});
       const viewersLabel = adminMode
@@ -3812,7 +3805,6 @@
       const cards = sortedHandouts.map(renderCard).join("");
       return `
         <div class="list">${cards}</div>${noResult}
-        ${previewToggle}
       `;
     }
 
@@ -3839,7 +3831,6 @@
     const rootCards = sortedHandouts.filter((h) => !inFolder(h)).map(renderCard).join("");
     return `
       <div class="list">${folderSections}${rootCards}</div>${noResult}
-      ${previewToggle}
     `;
   }
 
@@ -3955,6 +3946,8 @@
           <span>A</span>
           <input type="color" data-format-cmd="color" value="#ffffff" aria-label="색상 선택">
         </label>
+        <span class="ft-sep" aria-hidden="true"></span>
+        <button type="button" class="ft-btn ft-sv" data-format-cmd="sv" title="서식 프리셋" aria-label="서식 프리셋" aria-haspopup="menu">Sv</button>
       </div>
     `;
   }
@@ -4064,6 +4057,85 @@
     } catch (_) { return false; }
   }
 
+  // ===== 서식 프리셋(Sv): 채팅 서식 바(format-sync)가 이 룸에 저장한 프리셋을 그대로 읽어 쓴다(쓰지는 않는다). 자동 적용은 채팅 전용 — 여기서는 눌러서만.
+  // 핸드아웃 HTML 로 옮기는 것: 굵게·기울임·밑줄·취소선·글자색·배경색·크기·자간·줄 간격·그림자·여백·모서리·정렬·루비(<ruby>)·툴팁(title + 점선 밑줄).
+  // 옮기지 않는 것: 블러(채팅의 '눌러서 보기'는 format-sync 전용 동작이라 핸드아웃·플레이룸에서 같은 모양을 못 낸다)·배경 그림·테두리·표시 방식·코드 모드.
+  function readRoomStylePresets() {
+    const room = getCurrentRoomKey();
+    const read = (key) => { try { const v = JSON.parse(localStorage.getItem(key) || "null"); return Array.isArray(v) ? v : null; } catch (_) { return null; } };
+    const presets = (read(`ccf-format-style-presets-v1:${room}`) || read("ccf-format-style-presets-v1") || []).filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
+    const folders = (read(`ccf-format-style-folders-v1:${room}`) || []).filter((f) => f && f.id && f.name);
+    return { presets, folders };
+  }
+  function presetCssText(style = {}) {
+    const parts = [];
+    const css = (prop, value) => { const v = String(value ?? "").trim(); if (v && /^[#%.,\s\w()-]{1,80}$/.test(v) && !/url|expression/i.test(v)) parts.push(`${prop}:${v}`); };
+    if (style.bold) parts.push("font-weight:700");
+    if (style.italic) parts.push("font-style:italic");
+    const deco = [style.underline && "underline", style.strike && "line-through"].filter(Boolean);
+    if (deco.length) parts.push(`text-decoration:${deco.join(" ")}`);
+    else if (style.tooltipText) parts.push("text-decoration:underline dotted");
+    css("color", style.color); css("background-color", style.backgroundColor);
+    const size = parseFloat(style.fontSize); if (Number.isFinite(size) && size > 0) parts.push(`font-size:${Math.min(size, 72)}px`);
+    css("letter-spacing", style.letterSpacing); css("line-height", style.lineHeight); css("text-shadow", style.textShadow);
+    css("padding", style.padding); css("margin", style.margin); css("border-radius", style.borderRadius);
+    return parts.join(";");
+  }
+  function closeSvMenu() { state.shadow?.querySelectorAll(".sv-menu").forEach((m) => m.remove()); }
+  function toggleSvMenu(editor, button) {
+    if (state.shadow?.querySelector(".sv-menu")) { closeSvMenu(); return; }
+    rememberFormatSelection();
+    const { presets, folders } = readRoomStylePresets();
+    const item = (preset, index) => `<button type="button" class="sv-item" role="menuitem" data-sv-preset="${index}" title="${escapeAttr(preset.name)}"><span style="${escapeAttr(presetCssText(preset.style || {}))}">${escapeHtml(preset.name)}</span></button>`;
+    const known = new Set(folders.map((f) => f.id));
+    const indexed = presets.map((preset, index) => [preset, index]);
+    const html = presets.length
+      ? folders.map((f) => { const items = indexed.filter(([pr]) => pr.folderId === f.id); return items.length ? `<div class="sv-folder">${escapeHtml(f.name)}</div>${items.map(([pr, i]) => item(pr, i)).join("")}` : ""; }).join("")
+        + indexed.filter(([pr]) => !pr.folderId || !known.has(pr.folderId)).map(([pr, i]) => item(pr, i)).join("")
+      : `<div class="sv-empty">이 룸에 저장된 서식 프리셋이 없습니다. 채팅 서식 바의 Sv 에서 만드세요.</div>`;
+    const menu = document.createElement("div");
+    menu.className = "sv-menu"; menu.setAttribute("role", "menu");
+    menu.innerHTML = html;
+    const panel = state.shadow.querySelector(".panel") || state.shadow;
+    panel.appendChild(menu);
+    const br = button?.getBoundingClientRect?.(), pr = panel.getBoundingClientRect?.();
+    if (br && pr) { menu.style.top = `${Math.round(br.bottom - pr.top + 4)}px`; menu.style.right = `${Math.max(8, Math.round(pr.right - br.right))}px`; }
+  }
+  function applyStylePresetToEditor(editor, preset) {
+    editor.focus();
+    restoreFormatSelection(editor);
+    const sel = state.shadow?.getSelection?.() || window.getSelection();
+    let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (!range || !editor.contains(range.commonAncestorContainer)) { toast("본문에서 적용할 글자를 선택하세요."); return false; }
+    if (range.collapsed) {
+      // 선택이 없으면 지금 줄(문단) 전체
+      // 편집기의 바로 아래 자식 중 커서가 든 것: 블록이면 그 안 전체, 아니면(첫 줄처럼 div 없이 놓인 글자) 앞뒤로 블록·줄바꿈을 만날 때까지
+      let top = range.startContainer === editor ? editor.childNodes[Math.min(range.startOffset, editor.childNodes.length - 1)] : range.startContainer;
+      while (top && top.parentNode !== editor) top = top.parentNode;
+      const isBlock = (n) => n && n.nodeType === Node.ELEMENT_NODE && /^(DIV|P|H[1-6]|LI|UL|OL|BLOCKQUOTE|PRE|HR|BR)$/.test(n.nodeName);
+      range = document.createRange();
+      if (!top) range.selectNodeContents(editor);
+      else if (isBlock(top) && top.nodeName !== "BR" && top.nodeName !== "HR") range.selectNodeContents(top);
+      else { let first = top, last = top; while (first.previousSibling && !isBlock(first.previousSibling)) first = first.previousSibling; while (last.nextSibling && !isBlock(last.nextSibling)) last = last.nextSibling; range.setStartBefore(first); range.setEndAfter(last); }
+    }
+    const style = preset.style || {};
+    const span = document.createElement("span");
+    const cssText = presetCssText(style);
+    if (cssText) span.setAttribute("style", cssText);
+    const tooltip = String(style.tooltipText || "").trim();
+    if (tooltip) span.title = tooltip.slice(0, 200);
+    span.appendChild(range.extractContents());
+    let node = span;
+    const rubyText = String(style.rubyText || "").trim();
+    if (rubyText) { const ruby = document.createElement("ruby"); const rt = document.createElement("rt"); rt.textContent = rubyText.slice(0, 80); ruby.append(span, rt); node = ruby; }
+    range.insertNode(node);
+    const after = document.createRange(); after.selectNode(node);
+    sel.removeAllRanges(); sel.addRange(after); rememberFormatSelection();
+    const align = String(preset.align || "").toLowerCase();
+    if (align === "center" || align === "right" || align === "left") execEditor(editor, align === "center" ? "justifyCenter" : align === "right" ? "justifyRight" : "justifyLeft");
+    else editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    return true;
+  }
   function handleFormatToolbarCommand(cmd, editor, payload = null) {
     if (!cmd || !editor) return;
     switch (cmd) {
@@ -4079,6 +4151,7 @@
         execEditor(editor, "insertHTML", html);
         return;
       }
+      case "sv":           toggleSvMenu(editor, payload); return;
       case "h1":           execEditor(editor, "formatBlock", "h1"); return;
       case "h2":           execEditor(editor, "formatBlock", "h2"); return;
       case "h3":           execEditor(editor, "formatBlock", "h3"); return;
@@ -4378,9 +4451,19 @@
         toast("공개 또는 비밀 본문 입력칸을 먼저 클릭해주세요.");
         return;
       }
-      handleFormatToolbarCommand(cmd, editor);
+      handleFormatToolbarCommand(cmd, editor, cmd === "sv" ? formatBtn : null);
       return;
     }
+    const svItem = event.target.closest("button[data-sv-preset]");
+    if (svItem) {
+      event.preventDefault();
+      const editor = getCurrentFormatTargetEditor();
+      const preset = readRoomStylePresets().presets[Number(svItem.getAttribute("data-sv-preset"))];
+      closeSvMenu();
+      if (editor && preset) applyStylePresetToEditor(editor, preset);
+      return;
+    }
+    if (state.shadow?.querySelector(".sv-menu") && !event.target.closest(".sv-menu")) closeSvMenu();
     const addChoiceOverlay = event.target.closest('.add-choice-overlay[data-action="add-choice-close"]');
     if (addChoiceOverlay && event.target === addChoiceOverlay) {
       closeAddChoiceDialog();
@@ -4519,12 +4602,6 @@
         return;
       }
       handleFormatToolbarCommand("color", editor, colorInp.value);
-      return;
-    }
-    const cb = event.target.closest('input[data-action="toggle-pl-preview"]');
-    if (cb) {
-      state.plPreview = !!cb.checked;
-      render();
       return;
     }
     const perm = event.target.closest('input[data-perm-key][data-perm-col]');
@@ -4756,11 +4833,21 @@
   }
 
   // 공개·비밀 칸 높이: 둘 중 내용이 긴 쪽에 맞춰 둘 다 같은 높이(최소 140px, 최대 480px — 넘으면 각 칸 안에서 스크롤). 입력할 때마다·편집 탭을 그릴 때마다 맞춘다.
+  let editorHeightObserver = null;
+  function watchEditorHeights() {
+    try { editorHeightObserver?.disconnect(); } catch (_) {}
+    const editors = [...(state.shadow?.querySelectorAll(".handout-edit-cols .col .rich-editor") || [])];
+    if (!editors.length || typeof MutationObserver !== "function") return;
+    let queued = false;
+    editorHeightObserver = new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; syncEditorHeights(); }); });
+    editors.forEach((el) => { if (!el.__ccfHoLoadWatch) { el.__ccfHoLoadWatch = true; el.addEventListener("load", () => syncEditorHeights(), true); } }); // 나중에 넣은 그림이 다 읽힌 뒤에도
+    editors.forEach((el) => editorHeightObserver.observe(el, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["src"] })); // not "style": syncEditorHeights itself writes the boxes' style (a loop)
+  }
   function syncEditorHeights() {
     const editors = [...(state.shadow?.querySelectorAll(".handout-edit-cols .col .rich-editor") || [])];
     if (editors.length < 2) return;
     editors.forEach((el) => { el.style.height = "auto"; });
-    const want = Math.min(480, Math.max(140, ...editors.map((el) => el.scrollHeight + 2)));
+    const want = Math.min(360, Math.max(140, ...editors.map((el) => el.scrollHeight + 2)));
     editors.forEach((el) => { el.style.height = `${want}px`; });
   }
   function renderEditorMacro(editor) {
@@ -5443,9 +5530,8 @@
     if (!h) return;
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
-    const previewAsPl = adminMode && state.plPreview && !!me;
     const permissionName = getPermissionCharacterName();
-    const canSecret = previewAsPl ? canViewSecret(h, me) : (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
+    const canSecret = (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
     const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
     const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");
