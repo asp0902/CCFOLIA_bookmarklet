@@ -49,7 +49,7 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
       menuItems: [...window.__CCF_TOOLKIT_MENU__.items.keys()].sort(), penguin: document.querySelector('[data-ccf-toolkit-menu-button]')?.previousElementSibling?.getAttribute('aria-label'),
       homeBookmarks: !!window.__CAPYBARA_HOME_BOOKMARKS__, versions: !!window.__CCF_TOOLKIT_VERSIONS__
     }));
-    assert.deepEqual({ ...ready, versions: undefined }, { chatPanel: true, presence: true, sheet: true, gif: true, ntfy: true, menuItems: ['gm-settings', 'madness-settings', 'ntfy', 'saikoro'], penguin: '[GM] 컷인 목록', homeBookmarks: true, versions: undefined });
+    assert.deepEqual({ ...ready, versions: undefined }, { chatPanel: true, presence: true, sheet: true, gif: true, ntfy: true, menuItems: ['gm-settings', 'madness-settings', 'saikoro'], penguin: '[GM] 컷인 목록', homeBookmarks: true, versions: undefined });
 
     // the home bookmarks script stores the visited room in localStorage (no chrome.storage)
     const rooms = await page.evaluate(() => JSON.parse(localStorage.getItem('capybaraRooms') || '{}'));
@@ -58,17 +58,9 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
     // GIF compression can start its Worker from a blob (the page has no CSP)
     assert.equal(await page.evaluate(() => new Promise((resolve) => { try { const w = new Worker(URL.createObjectURL(new Blob(['postMessage(1)'], { type: 'text/javascript' }))); w.onmessage = () => resolve('ok'); w.onerror = () => resolve('error'); setTimeout(() => resolve('timeout'), 3000); } catch (e) { resolve('blocked: ' + e.message); } })), 'ok', 'blob Worker works in the page');
 
-    // phone push through the page: settings from the penguin menu, then a direct fetch to ntfy
-    await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-    await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '설정' }).dispatchEvent('click'); // the penguin opens the window at once; the shared settings tab holds the ntfy settings
-    await page.waitForSelector('#ccf-ntfy-dialog form');
-    await page.locator('#ccf-ntfy-dialog [data-a="new"]').click();
-    await page.locator('#ccf-ntfy-dialog [name="enabled"]').check();
-    await page.locator('#ccf-ntfy-dialog [data-a="test"]').click();
-    await page.waitForFunction(() => /테스트 알림을 보냈습니다/.test(document.querySelector('#ccf-ntfy-dialog [data-role="note"]')?.textContent || ''), null, { timeout: 8000 });
-    assert.equal(ntfy.length, 1); assert.match(ntfy[0].topic, /^capy-[a-z2-7]{24}$/); assert.equal(ntfy[0].title, '카피바라 테스트 알림');
-    await page.locator('#ccf-gm-tools .ccf-gt-close').click();
-    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ccf-ntfy-v1')).enabled), true, 'the settings live in localStorage');
+    // phone push through the page: the GM tools no longer show the ntfy settings (they live in the extension popup); a saved config still pushes with a direct fetch
+    assert.equal(await page.evaluate(() => [...window.__CCF_TOOLKIT_MENU__.items.keys()].includes('ntfy')), false, 'no ntfy section');
+    await page.evaluate(() => localStorage.setItem('ccf-ntfy-v1', JSON.stringify({ ...(JSON.parse(localStorage.getItem('ccf-ntfy-v1') || '{}')), enabled: true, topic: 'capy-abcdefghijklmnopqrstuvwx' })));
     // the notifier hook: only while away; own messages and the room in front are skipped
     await page.evaluate(() => { document.hasFocus = () => true; window.__CCF_NTFY_STATE__.lastInputAt = Date.now(); });
     assert.equal(await page.evaluate(() => window.__CCF_NTFY_HOOK__({ name: '하나', text: '안녕' })), false, 'looking at the room: no push');
@@ -76,10 +68,10 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
     assert.equal(await page.evaluate(() => window.__CCF_NTFY_HOOK__({ name: '나', text: '내 글' })), false, 'own message: no push');
     assert.equal(await page.evaluate(() => window.__CCF_NTFY_HOOK__({ name: '하나', text: '비밀 내용' })), true);
     // the push is batched for BATCH_MS (10s) before it goes out
-    for (let i = 0; i < 200 && ntfy.length < 2; i++) await page.waitForTimeout(100);
+    for (let i = 0; i < 200 && ntfy.length < 1; i++) await page.waitForTimeout(100);
     await page.waitForTimeout(300);
-    assert.equal(ntfy.length, 2);
-    assert.deepEqual({ title: ntfy[1].title, message: ntfy[1].message, click: ntfy[1].click, keys: Object.keys(ntfy[1]).sort() }, { title: '하나님 메시지 · 테스트룸', message: '새 메시지가 도착했습니다.', click: 'https://ccfolia.com/rooms/test', keys: ['click', 'message', 'tags', 'title', 'topic'] }, 'only title, short text and the room address go out');
+    assert.equal(ntfy.length, 1);
+    assert.deepEqual({ title: ntfy[0].title, message: ntfy[0].message, click: ntfy[0].click, keys: Object.keys(ntfy[0]).sort() }, { title: '하나님 메시지 · 테스트룸', message: '새 메시지가 도착했습니다.', click: 'https://ccfolia.com/rooms/test', keys: ['click', 'message', 'tags', 'title', 'topic'] }, 'only title, short text and the room address go out');
     assert.deepEqual(errors, [], 'no page errors on the bookmarklet path');
     console.log('bookmarklet smoke PASS');
   } finally { await browser.close(); }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.19
+// @version      0.0.20
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -166,7 +166,7 @@
       const title = document.createElement("h3");
       title.textContent = item.label;
       const body = document.createElement("div");
-      section.append(title, body);
+      if (item.hideTitle) section.append(body); else section.append(title, body); // 소제목 없이 그릴 구역(핸드아웃: 내용의 라벨로 충분)
       wrap.appendChild(section);
       settingsMounted.push(item);
       try { item.mount(body); } catch (error) { console.warn("[toolkit-menu] settings section failed", item.id, error); }
@@ -196,7 +196,7 @@
       #ccf-gm-tools .ccf-gt-window>header>h2{margin:0;flex:1;font-size:16px;font-weight:700;line-height:25.12px;letter-spacing:.09996px}
       #ccf-gm-tools .ccf-gt-settings{position:absolute;inset:0;overflow:auto;padding:0 24px 24px}
       #ccf-gm-tools .ccf-gt-settings h3{margin:20px 0 8px;font-size:14px;font-weight:700;line-height:21.98px;letter-spacing:.09996px}
-      #ccf-gm-tools .ccf-gt-settings section+section{margin-top:12px;padding-top:4px;border-top:1px solid rgba(255,255,255,.12)}
+      #ccf-gm-tools .ccf-gt-settings section+section{margin-top:12px}
       #ccf-gm-tools .ccf-gt-close,#ccf-gm-tools .ccf-gt-tab{font:inherit;color:inherit}
       #ccf-gm-tools .ccf-gt-close{all:unset;box-sizing:border-box;cursor:pointer;width:40px;height:40px;display:inline-grid;place-items:center;border-radius:50%;transition:background-color 150ms}
       #ccf-gm-tools .ccf-gt-close:hover{background:rgba(255,255,255,.08)}

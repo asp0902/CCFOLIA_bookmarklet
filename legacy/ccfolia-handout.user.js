@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.126
+// @version      0.1.127
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.126",
+    version: "0.1.127",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1047,6 +1047,8 @@
     /* 공용 설정 탭 안의 구역: 머리·탭 줄·내보내기/가져오기 없이 설정 화면만 */
     .container[data-mode="settings"] header, .container[data-mode="settings"] .tabs, .container[data-mode="settings"] .panel-footer [data-action="export"], .container[data-mode="settings"] .panel-footer [data-action="import"] { display: none !important; }
     .container[data-mode="list"] .tab[data-tab="settings"] { display: none !important; }
+    .container[data-mode="settings"] .panel-footer { background: transparent; border-top: 0; } /* 설정 탭 안에서는 저장 줄이 진한 띠로 보였다 */
+    .settings-pl-row > .settings-pl-role { justify-self: end; } /* PL·GM 표시: 줄 오른쪽 신호등 바로 왼쪽(같은 열) */
     /* 탭 줄이 보일 때(탭 2개 이상)만 숨긴다: 그땐 탭 이름이 제목이다. 탭이 하나면 이 제목이 유일한 "핸드아웃" */
     :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header { display: none; } /* 제목은 탭 이름, '+'는 탭 줄로 옮겨 머리 줄에 남는 것이 없다 */
     .panel {
@@ -1221,6 +1223,9 @@
       letter-spacing: .02em; font-weight: 500;
     }
     .card .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
+    .edit-status { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+    .edit-status .badge { font-size: 0.6875rem; padding: 2px 8px; border-radius: 4px; color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); letter-spacing: .02em; font-weight: 500; }
+    .edit-status .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
     .card .summary { margin-top: 4px; font-size: 0.8125rem; color: rgba(255,255,255,.6); max-height: 40px; overflow: hidden; line-height: 1.43; }
     .card .actions { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
     .empty { padding: 56px 16px; text-align: center; color: rgba(255,255,255,.4); font-size: 0.875rem; }
@@ -1535,7 +1540,7 @@
     }
     .settings-pl-row {
       display: grid;
-      grid-template-columns: 3px 24px minmax(0, 1fr) auto;
+      grid-template-columns: 3px 24px minmax(0, 1fr) auto auto; /* 띠 · 아바타 · 이름 · PL/GM · 신호등 */
       gap: 8px; align-items: center;
       padding: 6px 8px;
       background: rgba(255,255,255,.03);
@@ -3775,10 +3780,6 @@
       const permissionName = getPermissionCharacterName();
       const canSecret = adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys());
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
-      const permKeys = Object.keys(h.permissions || {});
-      const viewersLabel = adminMode
-        ? (permKeys.some((k) => k !== ALL_KEY) ? permKeys.filter((k) => k !== ALL_KEY).join(", ") : "GM 전용")
-        : "핸드아웃";
       return `
         <article class="card" data-id="${escapeHtml(h.id)}" data-order="${Number.isFinite(h.order) ? h.order : ""}">
           <div class="head">
@@ -3789,12 +3790,6 @@
             ${manageable && adminMode ? `<button class="card-icon-btn" data-action="duplicate-handout" data-id="${escapeHtml(h.id)}" title="복제" aria-label="복제">${ICON_COPY}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
-          </div>
-          <div class="summary-row">
-            <div class="badges-row">
-              ${hasSecret && canSecret ? `<span class="badge secret">비밀</span>` : ""}
-              <span class="badge">${escapeHtml(viewersLabel)}</span>
-            </div>
           </div>
         </article>
       `;
@@ -3852,6 +3847,30 @@
   }
 
   // 권한 표에 표시할 행 목록 만들기
+  // 권한 키 → 화면에 보일 이름: 이름 키는 그대로, 계정 uid 키는 그 계정에 연결된 PL 이름(못 찾으면 "연결 안 된 계정"). uid 원문은 화면에 내지 않는다.
+  const looksLikeAccountUid = (key) => /^[A-Za-z0-9_-]{20,}$/.test(String(key || ""));
+  function permissionKeyLabel(key) {
+    if (!looksLikeAccountUid(key)) return String(key);
+    const plList = mergePlListById(state.data.plList || []);
+    const byUid = plList.find((pl) => pl.uid === key);
+    if (byUid) return byUid.name;
+    for (const person of remoteMembers.values()) if (person.ccfoliaUid === key) { const found = findPlForMember(person, plList).pl; return found?.name || person.displayName || "연결 안 된 계정"; }
+    return "연결 안 된 계정";
+  }
+  function audienceNames(permissions) {
+    const names = [];
+    for (const [key, perm] of Object.entries(permissions || {})) {
+      if (key === ALL_KEY || !perm || !(perm.view || perm.secret)) continue;
+      const label = permissionKeyLabel(key);
+      if (!names.includes(label)) names.push(label);
+    }
+    return names;
+  }
+  function renderEditStatus(h, permissions) {
+    const names = audienceNames(permissions);
+    const secret = !!String(h.gmNotes || "").trim();
+    return `<div class="edit-status">${secret ? '<span class="badge secret">비밀</span>' : ""}<span class="badge">${escapeHtml(names.length ? names.join(", ") : "GM 전용")}</span></div>`;
+  }
   function permissionRowKeys(h) {
     const myChar = removeSpaces(state.data.myCharacter);
     const plList = mergePlListById(state.data.plList || []).filter((p) => p && p.name);
@@ -3876,7 +3895,7 @@
     const accountKeys = new Set([...plList.map((p) => p.uid).filter(Boolean), ...[...remoteMembers.values()].map((m) => m.ccfoliaUid)]);
     for (const k of Object.keys(perms)) {
       if (k === ALL_KEY || rows.some((r) => r.key === k) || accountKeys.has(k)) continue; // 계정 uid 키는 연결된 PL 의 이름 행과 한 쌍; "플레이어 전체"는 더 이상 없다(옛 값은 무시)
-      rows.push({ key: k, label: k });
+      rows.push({ key: k, label: permissionKeyLabel(k) });
     }
     return rows;
   }
@@ -4228,6 +4247,7 @@
         </div>
       </div>
       <div class="perm-section">
+        ${editing ? renderEditStatus(editing, editing.permissions) : ""}
         <div class="perm-title">플레이어 권한</div>
         <div class="perm-grid">
           <div class="head name-col">이름</div>
@@ -4265,11 +4285,11 @@
           <div class="settings-pl-main">
             <div class="settings-pl-name-row">
               <span class="settings-pl-name" title="${escapeAttr(name)}">${escapeHtml(name)}</span>
-              <span class="settings-pl-role">${roleLabel}</span>
               ${id ? `<span class="settings-pl-id">#${escapeHtml(id)}</span>` : ""}
             </div>
             ${aliases.length ? `<div class="settings-pl-aliases">${aliasHtml}</div>` : ""}
           </div>
+          <span class="settings-pl-role">${roleLabel}</span>
           <div class="settings-pl-signals" aria-label="권한 신호등 (전체 핸드아웃 집계)">
             <span class="settings-pl-dot" data-perm="view"   data-on="${perms.view   ? "1" : "0"}" title="공개${perms.view   ? "" : " (없음)"}"></span>
             <span class="settings-pl-dot" data-perm="secret" data-on="${perms.secret ? "1" : "0"}" title="비밀${perms.secret ? "" : " (없음)"}"></span>
@@ -5552,7 +5572,7 @@
             : `<div class="hidden-secret">이 핸드아웃에는 GM 전용 정보가 있지만, 현재 캐릭터(${escapeHtml(me)})에게는 공개되지 않았습니다.</div>`
         ) : ""}
         <div class="chip-row">
-          ${(h.viewers || []).map((v) => `<span class="chip">${v === "*" ? "전체 공개" : escapeHtml(v)}</span>`).join("")}
+          ${(h.viewers || []).map((v) => `<span class="chip">${v === "*" ? "전체 공개" : escapeHtml(permissionKeyLabel(v))}</span>`).join("")}
           ${(h.tags || []).map((t) => `<span class="chip">#${escapeHtml(t)}</span>`).join("")}
         </div>
       </div>
@@ -5768,7 +5788,7 @@
     document.querySelectorAll(`[${ICON_MARKER}="toolbar"], [${ICON_MARKER}="appbar"], [${ICON_MARKER}="floating"]`).forEach((el) => el.remove());
     (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } }).register({ id: "handout", order: 2, label: "핸드아웃", icon: JOURNAL_ICON_HTML, visible: isActive, onClick: togglePanel, mount: mountHandoutTool, unmount: unmountHandoutTool });
     // 공용 "설정" 탭(GM 도구 창)의 핸드아웃 구역: 내 캐릭터·PL 목록·동기화 줄. 핸드아웃 탭 안의 설정 하위 탭은 쓰지 않는다.
-    window.__CCF_TOOLKIT_MENU__.register({ id: "handout-settings", section: true, order: 2, label: "핸드아웃", visible: () => isActive() && isAdminMode(), onClick: openSharedSettings, mount: (container) => mountHandoutTool(container, "settings"), unmount: unmountHandoutTool }); // onClick 는 레지스트리의 중복 등록 판별에 쓰이므로 항상 같은 함수여야 한다
+    window.__CCF_TOOLKIT_MENU__.register({ id: "handout-settings", section: true, hideTitle: true, order: 2, label: "핸드아웃", visible: () => isActive() && isAdminMode(), onClick: openSharedSettings, mount: (container) => mountHandoutTool(container, "settings"), unmount: unmountHandoutTool }); // onClick 는 레지스트리의 중복 등록 판별에 쓰이므로 항상 같은 함수여야 한다
   }
 
   // React 리렌더 대응 — body 변경 감시

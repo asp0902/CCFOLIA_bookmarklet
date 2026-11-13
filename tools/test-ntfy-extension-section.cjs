@@ -1,5 +1,5 @@
-// extension path: ntfy-page.js adds a read-only "스마트폰 알림" section to the shared 설정 tab (the settings live in chrome.storage and a page script must not change topic/server),
-// it shows the state the bridge sent and tells where to change it; the legacy ntfy (bookmarklet path) does not start next to the extension.
+// 스마트폰 알림 설정은 확장 팝업에서만 한다(사용자 결정): 확장 경로(ntfy-page.js)도 북마클릿 경로(legacy ntfy)도 GM 도구 설정 탭에 구역을 등록하지 않는다.
+// 다른 구역(핸드아웃·광기 발현)이 없으면 설정 탭도 없다.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,21 +14,11 @@ const read = (p) => fs.readFileSync(path.join(__dirname, p), 'utf8');
     await page.goto('https://ccfolia.com/rooms/test');
     await page.addScriptTag({ content: read('../legacy/ccfolia-toolkit-presence.user.js') });
     await page.addScriptTag({ content: read('../extension/personal/ntfy-page.js') });
-    await page.evaluate(() => window.postMessage({ source: 'capybara-ntfy', direction: 'bridge', action: 'config', config: { enabled: true, topic: 'x', scope: 'keywords', keywords: ['a', 'b'], onlyAway: true, awayMinutes: 5 } }, location.origin));
-    await page.waitForSelector('[data-ccf-toolkit-menu-button]', { state: 'attached', timeout: 8000 });
-    await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-    await page.waitForSelector('#ccf-gm-tools .ccf-gt-window');
-    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccf-gm-tools .ccf-gt-tabs')).display), 'none', 'only the settings tab: no tab strip');
-    const text = () => page.locator('#ccf-gm-tools .ccf-gt-settings').innerText();
-    await page.waitForFunction(() => /알림: 켜짐/.test(document.querySelector('#ccf-gm-tools .ccf-gt-settings')?.innerText || ''), null, { timeout: 4000 });
-    let t = await text(); assert.match(t, /스마트폰 알림/); assert.match(t, /키워드\(2개\)/); assert.match(t, /자리 비움 5분/); assert.match(t, /확장 아이콘/); assert(!/topic: x|\bx\b.*topic/.test(t), 'the topic is not shown');
-    assert.equal(await page.locator('#ccf-gm-tools .ccf-gt-settings input, #ccf-gm-tools .ccf-gt-settings form').count(), 0, 'read-only: no input or form');
-    // a config change from the bridge is shown live
-    await page.evaluate(() => window.postMessage({ source: 'capybara-ntfy', direction: 'bridge', action: 'config', config: { enabled: false, topic: '' } }, location.origin));
-    await page.waitForFunction(() => /알림: 꺼짐/.test(document.querySelector('#ccf-gm-tools .ccf-gt-settings')?.innerText || ''), null, { timeout: 4000 });
-    // legacy ntfy next to the extension's: does not register a second one
     await page.addScriptTag({ content: read('../legacy/ccfolia-ntfy.user.js') });
-    assert.equal(await page.evaluate(() => [...window.__CCF_TOOLKIT_MENU__.items.values()].filter((i) => i.id === 'ntfy').length), 1);
+    await page.waitForTimeout(800);
+    const ids = await page.evaluate(() => [...(window.__CCF_TOOLKIT_MENU__?.items?.values?.() || [])].map((i) => i.id));
+    assert.deepEqual(ids.filter((id) => id === 'ntfy'), [], 'no ntfy item: ' + JSON.stringify(ids));
+    assert.equal(await page.locator('#ccf-gm-tools [data-ccf-settings-section="ntfy"]').count(), 0);
     assert.deepEqual(errors, []);
     console.log('ntfy extension section PASS');
   } finally { await browser.close(); }

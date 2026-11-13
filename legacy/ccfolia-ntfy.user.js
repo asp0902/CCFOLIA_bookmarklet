@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Phone Push (ntfy) by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-ntfy
-// @version      0.1.2
+// @version      0.1.3
 // @description  Sends a phone push (ntfy) for new room messages when you are away — the bookmarklet path of the extension's ntfy feature.
 // @description:ko 룸에 새 메시지가 오면(자리를 비운 동안) 스마트폰 ntfy 앱으로 알림을 보냅니다. 확장의 스마트폰 알림과 같은 기능의 북마클릿용 경로입니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -174,7 +174,6 @@
     form.topic.focus();
   }
 
-  (window.__CCF_TOOLKIT_MENU__ ||= { items: new Map(), register(item) { if (this.items.get(item.id)?.onClick === item.onClick) return; this.items.set(item.id, item); this.sync?.(); } })
-    .register({ id: "ntfy", order: 3, label: "스마트폰 알림", icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>', visible: () => true, section: true, onClick: () => openSettings(), mount: (container) => openSettings(container), unmount: () => { document.getElementById("ccf-ntfy-dialog")?.remove(); } });
+  // 스마트폰 알림 설정은 확장 팝업에서만 한다: GM 도구 설정 탭에 구역을 등록하지 않는다(사용자 결정).
   window.__CCF_NTFY_DIAG__ = () => ({ config: { ...readConfig(), topic: readConfig().topic ? "(설정됨)" : "" }, state: { ...state, sent: state.sent.length } });
 })();

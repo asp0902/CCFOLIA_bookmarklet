@@ -118,24 +118,24 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     // "핸드아웃" is drawn exactly once: one tab → the panel's own title (no strip); two tabs (ntfy registers later) → the tab name only
     const handoutTitleShown = () => page.evaluate(() => { const h1 = document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('header h1'); const strip = document.querySelector('#ccf-gm-tools .ccf-gt-tabs'); return (h1.getClientRects().length ? 1 : 0) + [...strip.querySelectorAll('.ccf-gt-tab')].filter((t) => t.offsetParent && t.textContent === '핸드아웃').length; });
     assert.equal(await handoutTitleShown(), 1, 'one tab: the handout title shows once (panel title)');
-    await page.addScriptTag({ content: src('ntfy') });
+    await page.evaluate(() => window.__CCF_TOOLKIT_MENU__.register({ id: 'test-section', section: true, order: 3, label: '시험 구역', visible: () => true, onClick() {}, mount: (c) => { c.innerHTML = '<form id="test-section-form"></form>'; }, unmount() { document.getElementById('test-section-form')?.remove(); } })); // (스마트폰 알림 구역은 지웠다: 다른 구역으로 확인)
     // the phone-notification settings (ntfy) are a section of the shared 설정 tab, not a tab of their own
     await page.waitForFunction(() => [...document.querySelectorAll('#ccf-gm-tools .ccf-gt-tab')].length === 2, null, { timeout: 4000 });
     assert.deepEqual(await tabs(page), ['핸드아웃', '설정'], 'the shared settings tab appears when a settings section registers');
     assert.equal(await handoutTitleShown(), 1, 'two tabs: the handout title shows once (tab name), applied at once when the second item registers');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.tab[data-tab="settings"]')).display), 'none', 'no settings sub-tab inside the handout panel any more');
     await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '설정' }).dispatchEvent('click');
-    await page.waitForSelector('#ccf-gm-tools .ccf-gt-settings #ccf-ntfy-dialog form');
+    await page.waitForSelector('#ccf-gm-tools .ccf-gt-settings #test-section-form', { state: 'attached' });
     assert.equal(await page.locator('#ccfolia-handout-root').count(), 0, 'the handout tab was cleaned up');
-    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['스마트폰 알림'], 'sub-heading per section');
+    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['시험 구역'], 'sub-heading per section');
     // the handout's own settings join as a section, live (no reopening)
     await handoutSettings(true);
     await page.waitForSelector('#ccf-gm-tools [data-ccf-settings-section="handout-settings"] #ccfolia-handout-root', { state: 'attached', timeout: 4000 });
-    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['핸드아웃', '스마트폰 알림'], 'sections in order');
+    assert.deepEqual(await page.locator('#ccf-gm-tools .ccf-gt-settings h3').allTextContents(), ['시험 구역'], 'sections in order; the handout section has no heading (0.1.127)');
     const inner = await page.evaluate(() => { const sh = document.querySelector('#ccfolia-handout-root').shadowRoot; const c = sh.querySelector('.container'); return { mode: c.dataset.mode, field: !!sh.querySelector('[data-field="myCharacter"]'), header: getComputedStyle(sh.querySelector('header')).display, tabs: getComputedStyle(sh.querySelector('.tabs')).display, exp: getComputedStyle(sh.querySelector('[data-action="export"]')).display }; });
     assert.deepEqual(inner, { mode: 'settings', field: true, header: 'none', tabs: 'none', exp: 'none' }, 'the handout settings drawn without the panel chrome');
     await page.locator('#ccf-gm-tools .ccf-gt-close').dispatchEvent('click');
-    assert.equal(await page.locator('#ccf-ntfy-dialog').count(), 0, 'closing the window removes the ntfy settings'); assert.equal(await page.locator('#ccfolia-handout-root').count(), 0);
+    assert.equal(await page.locator('#test-section-form').count(), 0, 'closing the window removes the section'); assert.equal(await page.locator('#ccfolia-handout-root').count(), 0);
     // the other ways to open a sheet (the edit dialog's button) open the window's sheet tab too, for that character
     const edit = await run({ gm: true, insane: true, order: ['character-sheet', 'handout', 'toolkit-presence'] });
     await edit.evaluate(() => {
