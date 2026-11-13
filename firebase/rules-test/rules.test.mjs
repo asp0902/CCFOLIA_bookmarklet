@@ -1,6 +1,6 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, writeBatch } from "firebase/firestore";
 
 const rulesPath = process.env.RULES_PATH || "../firestore.rules";
 const env = await initializeTestEnvironment({ projectId: "demo-handout", firestore: { rules: readFileSync(rulesPath, "utf8"), host: "127.0.0.1", port: 8091 } });
@@ -109,6 +109,35 @@ await check("a player cannot change the GM's picture", setDoc(doc(as("p2"), `${R
 await check("not signed in cannot create a picture", setDoc(doc(as(null), `${R}/images/n9`), { ownerUid: "" }), false);
 await check("not signed in cannot get a picture", getDoc(doc(as(null), `${R}/images/i2`)), false);
 await check("an unknown path is closed", getDoc(doc(as("gm1"), `${R}/secrets/x`)), false);
+// character sheets (room shared storage): public part in sheets, secret/mission in sheetSecrets that follows the sheet's ownerUid
+const sh = (uid, extra = {}) => ({ json: "{}", ownerUid: uid, updatedAt: 1, ...extra });
+await check("a member creates a sheet with their own ownerUid", setDoc(doc(as("p1"), `${R}/sheets/s1`), sh("p1")), true);
+await check("a non-member cannot create a sheet", setDoc(doc(as("p9"), `${R}/sheets/s2`), sh("p9")), false);
+await check("a member cannot write a sheet in somebody else's name", setDoc(doc(as("p1"), `${R}/sheets/s3`), sh("p7")), false);
+await check("sheets: extra fields are refused", setDoc(doc(as("p1"), `${R}/sheets/s4`), sh("p1", { gmNotes: "x" })), false);
+await check("sheets: json must be a string", setDoc(doc(as("p1"), `${R}/sheets/s5`), sh("p1", { json: { a: 1 } })), false);
+await check("anybody signed in reads a sheet", getDoc(doc(as("p9"), `${R}/sheets/s1`)), true);
+await check("not signed in cannot read a sheet", getDoc(doc(as(null), `${R}/sheets/s1`)), false);
+await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `${R}/members/p2`), { ccfoliaUid: "acct-2", displayName: "밥" }); });
+await check("a member takes over a sheet by reporting their own ownerUid", setDoc(doc(as("p2"), `${R}/sheets/s1`), sh("p2", { updatedAt: 2 })), true);
+await check("the GM writes any sheet", setDoc(doc(as("gm1"), `${R}/sheets/s1`), sh("gm1", { updatedAt: 3 })), true);
+await check("the GM can put a sheet back to a player", setDoc(doc(as("gm1"), `${R}/sheets/s1`), sh("p1", { updatedAt: 4 })), true);
+await check("a stranger cannot delete a sheet", deleteDoc(doc(as("p2"), `${R}/sheets/s1`)), false);
+await check("the owner deletes a sheet", deleteDoc(doc(as("p1"), `${R}/sheets/s1`)), true);
+// secrets follow the owner
+await setDoc(doc(as("p1"), `${R}/sheets/s6`), sh("p1"));
+await check("the owner writes the secret part", setDoc(doc(as("p1"), `${R}/sheetSecrets/s6`), { json: '{"secret":"x"}', updatedAt: 1 }), true);
+await check("the owner reads the secret part", getDoc(doc(as("p1"), `${R}/sheetSecrets/s6`)), true);
+await check("the GM reads the secret part", getDoc(doc(as("gm1"), `${R}/sheetSecrets/s6`)), true);
+await check("another player cannot read the secret part", getDoc(doc(as("p2"), `${R}/sheetSecrets/s6`)), false);
+await check("another player cannot list the secrets", getDocs(collection(as("p2"), `${R}/sheetSecrets`)), false);
+await check("another player cannot write the secret part", setDoc(doc(as("p2"), `${R}/sheetSecrets/s6`), { json: "{}", updatedAt: 2 }), false);
+await check("secrets: extra fields are refused", setDoc(doc(as("p1"), `${R}/sheetSecrets/s6`), { json: "{}", updatedAt: 2, ownerUid: "p1" }), false);
+const db2 = as("p2"); const claim = writeBatch(db2); claim.set(doc(db2, `${R}/sheets/s6`), sh("p2", { updatedAt: 5 })); claim.set(doc(db2, `${R}/sheetSecrets/s6`), { json: '{"secret":"y"}', updatedAt: 5 });
+await check("a takeover (one batch: sheet with the new ownerUid + secrets) is accepted", claim.commit(), true);
+await check("the new owner now reads the secret part", getDoc(doc(as("p2"), `${R}/sheetSecrets/s6`)), true);
+await check("the old owner no longer reads the secret part", getDoc(doc(as("p1"), `${R}/sheetSecrets/s6`)), false);
+await check("a secret part for a sheet that does not exist is refused", setDoc(doc(as("p1"), `${R}/sheetSecrets/nope`), { json: "{}", updatedAt: 1 }), false);
 await env.cleanup();
 console.log(failures ? `${failures} FAILED` : "all rules checks passed");
 process.exit(failures ? 1 : 0);
