@@ -39,6 +39,7 @@ await check("a player reads their own inbox copy", getDoc(doc(as("p1"), `${R}/in
 await check("a player cannot read another person's inbox copy", getDoc(doc(as("p2"), `${R}/inbox/p1/handouts/h1`)), false);
 await check("a player cannot list another person's inbox", getDocs(collection(as("p2"), `${R}/inbox/p1/handouts`)), false);
 await check("a player lists their own inbox", getDocs(collection(as("p1"), `${R}/inbox/p1/handouts`)), true);
+await check("the GM cannot list a person's inbox (so the handout tool must not read it before writing)", getDocs(collection(as("gm1"), `${R}/inbox/p1/handouts`)), false);
 await check("GM writes an inbox copy", setDoc(doc(as("gm1"), `${R}/inbox/p2/handouts/h1`), { id: "h1" }), true);
 await check("GM deletes an inbox copy", deleteDoc(doc(as("gm1"), `${R}/inbox/p2/handouts/h1`)), true);
 await check("a player cannot write their own inbox copy", setDoc(doc(as("p1"), `${R}/inbox/p1/handouts/h5`), { id: "h5", gmNotes: "x" }), false);

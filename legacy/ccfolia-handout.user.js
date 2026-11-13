@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.117
+// @version      0.1.118
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.117",
+    version: "0.1.118",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -178,6 +178,19 @@
     forceGreeting() { clearGreetingFlags(); maybeShowGreeting(); },
     fb() { return fbState; },
     // who holds the GM seat in Firestore against this browser (for a refused read/write): the seat document, this anonymous uid, the account uid, the role CCFOLIA gave, what the claim did, the last refusal
+    // 한 핸드아웃이 누구에게 가는지(읽기만): 대상 계정마다 권한표 이름 매칭·볼 수 있는지·사본을 쓴 시각, 마지막 사본 쓰기 오류, GM 자리 상태
+    shareDiag(id) {
+      const h = (state.data.handouts || []).find((item) => item.id === id) || (state.data.handouts || [])[0];
+      if (!h) return { error: "핸드아웃 없음" };
+      const plList = mergePlListById(state.data.plList || []);
+      const targets = [...remoteMembers].filter(([anon]) => anon !== fbState?.uid).map(([anon, person]) => {
+        const copy = inboxCopiesFor(person, plList, [h], state.data.folders, null)[h.id];
+        const pl = plList.find((p) => p.uid && p.uid === person.ccfoliaUid) || plList.find((p) => [p.name, ...(p.aliases || [])].some((n) => normalizePlNameKey(n) && normalizePlNameKey(n) === normalizePlNameKey(person.displayName)));
+        return { anon: anon.slice(0, 6) + "…", name: person.displayName || "", matchedPl: pl?.name || null, view: !!copy?.access?.view, secret: !!copy?.access?.secret, copyWrittenAt: inboxWrites.get(`${anon}:${h.id}`) || null };
+      });
+      const permissions = Object.fromEntries(Object.entries(h.permissions || {}).map(([key, perm]) => [key.length > 12 ? key.slice(0, 6) + "…" : key, { view: !!perm?.view, secret: !!perm?.secret }]));
+      return JSON.parse(JSON.stringify({ id: h.id, title: (h.title || "").slice(0, 30), permissions, sharedOnWeb: readWebShared().has(h.id), members: remoteMembers.size, targets, nobodyCanSee: !targets.some((t) => t.view || t.secret), lastInboxError, inboxPausedUntil: inboxDeniedAt ? new Date(inboxDeniedAt + 300000).toISOString() : null, gm: isAdminMode(), seatIsMine: !!(lastGmDoc && fbState?.uid && lastGmDoc.gmUid === fbState.uid) }));
+    },
     seat() { return JSON.parse(JSON.stringify({ roomKey: getCurrentRoomKey(), seatPath: `rooms/${getCurrentRoomKey()}/meta/gm`, myUid: fbState?.uid || "", myCcfUid, role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seat: lastGmDoc, claim: seatClaimLog, issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null })); },
     initFirebase() { return initFirebase(); },
     pushHandout(id) {
@@ -216,6 +229,12 @@
         firebase: fbState ? { uid: fbState.uid } : null,
         subscribed: subscribedRoom
       };
+    },
+    // 받는 쪽(플레이어) 점검: 연결·동의·내 사본 구독·받은 수·마지막 수신. docs/handout-receive-snippet.js 가 부른다.
+    receiveDiag() {
+      const room = getCurrentRoomKey();
+      let skipDay = null; try { skipDay = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
+      return JSON.parse(JSON.stringify({ room, active: isActive(), greeted: isGreeted(room), skipToday: isSkippedToday(), skipDay, connected: !!fbState, myUid: fbState?.uid ? fbState.uid.slice(0, 6) + "…" : "", myCcfUid: myCcfUid ? myCcfUid.slice(0, 6) + "…" : "", syncReason: syncInfo?.reason || "", inboxSubscribed: !!unsubInbox, inboxActive, received: state.data.handouts.filter((h) => h._remote).length, lastReceived: lastInboxReceived, gm: isAdminMode(), issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null }));
     },
     autoDetect(force) { return autoDetectMyCharacter({ force: !!force }); },
     gmInfo() { return remoteGmInfo; },
@@ -466,6 +485,10 @@
       .map(([key]) => key);
   }
   async function shareHandoutNow(h) {
+    // 권한표에서 아무에게도 공개·비밀을 체크하지 않았으면 공유해도 아무에게도 가지 않는다(설계): 먼저 분명히 알린다.
+    if (!showAudienceKeys(h).length && !((typeof state !== "undefined" && state?.data?.plList) || []).some((p) => p.uid && h.permissions?.[p.uid] && (h.permissions[p.uid].view || h.permissions[p.uid].secret))) {
+      toast("볼 수 있는 사람이 없습니다 — 권한표에서 받을 사람의 '공개'(또는 '비밀')를 체크한 뒤 공유하세요.");
+    }
     markWebShared(h.id, true);
     try {
       clearTimeout(webSyncTimer);
@@ -1845,6 +1868,8 @@
     shadow.addEventListener("keyup", rememberFormatSelection);
     shadow.addEventListener("mouseup", rememberFormatSelection);
     shadow.addEventListener("paste", onShadowPaste);
+    shadow.addEventListener("drop", onShadowDrop);
+    shadow.addEventListener("dragover", (event) => { if (event.target instanceof Element && event.target.closest('.rich-editor[contenteditable="true"]') && [...(event.dataTransfer?.items || [])].some((item) => item.kind === "file")) event.preventDefault(); });
     bindWindowControls(shadow);
     state.root = root;
     state.shadow = shadow;
@@ -2004,6 +2029,8 @@
       const token = img.getAttribute("src") || "";
       if (img.dataset.ccfHoResolving === "1") return;
       img.dataset.ccfHoResolving = "1";
+      // 원래 토큰을 남겨 둔다: 편집기에서 보이게 풀어 둔 이미지를 저장할 때 임시 주소(blob:) 대신 토큰으로 되돌린다(getFieldValue).
+      img.setAttribute("data-ccf-ho-token", token);
       // 깨진 이미지 아이콘이 뜨지 않도록 잠시 비워둔다.
       img.removeAttribute("src");
       resolveHandoutImageToken(token).then((url) => {
@@ -2238,6 +2265,7 @@
   // 원본 rooms/{room}/handouts/{id} 는 (보안 규칙을 게시하면) GM 만 읽는다. 각 사람은 자기 사본 rooms/{room}/inbox/{익명uid}/handouts/{id} 만 읽는다:
   // 그 사람이 볼 수 있는 필드만(공개 본문·그림은 볼 권한이 있을 때, 비밀 본문은 비밀 권한이 있을 때만) 담고, access 에 두 권한을 적는다. 쓰는 것은 GM 뿐이다.
   let inboxActive = false;   // 받는 쪽: 자기 inbox 구독이 성공한 뒤로는 inbox 가 진실
+  let lastInboxReceived = null; // receiveDiag 용
   let unsubInbox = null;
   async function subscribeToInbox() {
     const fb = await initFirebase();
@@ -2249,6 +2277,7 @@
       noteFirebaseOk("내 사본 읽기");
       snap.docChanges().forEach((change) => {
         const data = change.doc.data() || {};
+        lastInboxReceived = { at: new Date().toISOString(), id: String(data.id || change.doc.id).slice(0, 12), type: change.type };
         if (change.type === "removed") { ingestRemoteRemove(data.id || change.doc.id); return; }
         const access = data.access || {};
         // 받은 사본은 기존 수신 경로를 그대로 쓴다: 권한표 자리에 이 사본의 권한(전체 대상)을 넣는다.
@@ -2281,6 +2310,8 @@
   }
   const inboxKnown = new Map(); // 익명 uid -> Map(핸드아웃 id -> 서명): 이미 써 둔 것
   let inboxBusy = false, inboxWanted = false, inboxTimer = 0, inboxDeniedAt = 0;
+  let lastInboxError = null; // { op, path, code, at } — shareDiag 용
+  const inboxWrites = new Map(); // "익명uid:핸드아웃id" -> 마지막으로 사본을 쓴 시각
   async function syncInboxes() {
     if (!isAdminMode()) return;
     if (Date.now() - inboxDeniedAt < 300000) return; // 규칙이 아직 거절하면 5분 쉰다
@@ -2296,22 +2327,28 @@
         if (anon === fb.uid) continue; // GM 본인은 원본을 읽는다
         const want = inboxCopiesFor(person, plList, state.data.handouts, state.data.folders, hasPlayerRelay() ? readWebShared() : null); // without the relay extension there is no share button: everything with a right is sent as before
         let known = inboxKnown.get(anon);
-        if (!known) { // 처음: 이미 있는 사본을 읽어 낡은 것을 지울 수 있게 한다
+        if (!known) {
+          // 처음: 남의 사본 목록은 읽지 않는다 — 규칙상 사본은 그 사람만 읽을 수 있어(GM 도 못 읽음) 목록 읽기가 거절되고, 그 거절이 "사본 쓰기 거절"로 보이며 아무것도 못 썼다.
+          // 대신 이 GM 이 가진 모든 핸드아웃 id 를 "모름"으로 두어, 보낼 것은 쓰고 못 볼 것은 (없어도 되는) 삭제로 한 번 정리한다.
           known = new Map();
-          const existing = await getDocs(collection(fb.db, "rooms", roomKey, "inbox", anon, "handouts"));
-          existing.forEach((d) => known.set(d.id, "?"));
+          for (const h of state.data.handouts || []) if (h?.id && !h._remote) known.set(h.id, "?");
           inboxKnown.set(anon, known);
         }
         for (const [id, copy] of Object.entries(want)) {
           const signature = JSON.stringify(copy);
           if (known.get(id) === signature) continue;
-          await setDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id), { ...copy, updatedAt: serverTimestamp() });
+          const path = `inbox/${anon.slice(0, 6)}…/handouts/${id}`;
+          try { await setDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id), { ...copy, updatedAt: serverTimestamp() }); }
+          catch (error) { lastInboxError = { op: "write", path, code: String(error?.code || error?.message || error).replace(/^firestore\//, "").slice(0, 60), at: new Date().toISOString() }; throw error; }
           known.set(id, signature);
+          inboxWrites.set(`${anon}:${id}`, new Date().toISOString());
         }
         for (const id of [...known.keys()]) {
           if (want[id]) continue;
-          await deleteDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id));
+          try { await deleteDoc(doc(fb.db, "rooms", roomKey, "inbox", anon, "handouts", id)); }
+          catch (error) { lastInboxError = { op: "delete", path: `inbox/${anon.slice(0, 6)}…/handouts/${id}`, code: String(error?.code || error?.message || error).replace(/^firestore\//, "").slice(0, 60), at: new Date().toISOString() }; throw error; }
           known.delete(id);
+          inboxWrites.delete(`${anon}:${id}`);
         }
       }
     } catch (error) {
@@ -2866,7 +2903,8 @@
     });
     if (!isActive()) return;
     if (room === "global") return;            // 룸 밖에서는 안 띄움
-    if (skipped) return;                      // 오늘 다시 보지 않기 체크된 상태
+    if (isGreeted(room)) return;              // 이미 동의한 룸: 다시 묻지 않는다(연결은 autoConnectSync 가 한다)
+    if (skipped) return;                      // 오늘 다시 보지 않기 체크된 상태(로컬 날짜, 모든 룸)
     if (alreadyMounted) return;
     if (greetingDismissed.has(room)) return;
     mountGreeting(room);
@@ -2939,6 +2977,11 @@
     const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); dismiss(); } };
     document.addEventListener("keydown", onKey, true);
     sh.querySelector(".gd-overlay").addEventListener("mousedown", (e) => { if (e.target === e.currentTarget) dismiss(); });
+    // '오늘은 다시 보지 않기'는 체크하는 순간 저장한다: 체크한 뒤 바깥을 눌러/Esc 로 닫아도 그날은 다시 뜨지 않는다(예전엔 확인을 눌러야만 저장됐다). 체크를 풀면 지운다.
+    sh.querySelector("input[data-skip-today]")?.addEventListener("change", (e) => {
+      if (e.target.checked) markSkipToday();
+      else { try { localStorage.removeItem(GREETING_SKIP_DAY_KEY); } catch (_) { /* 저장 불가 */ } }
+    });
     sh.addEventListener("click", (e) => {
       const b = e.target.closest('button[data-action="greeting-ok"]');
       if (!b) return;
@@ -4515,6 +4558,30 @@
   }
 
   // 본문 editor paste — 이미지 클립보드 / 이미지 URL / 일반 URL 자동 처리
+  // 이미지 파일 하나를 본문 편집기에 넣는다(붙여넣기·드래그 공통). Storage 에 올려 토큰으로 넣는다 — data URL 로 넣으면 Firestore 1MB 제한에 걸려
+  // 전송이 통째로 실패한다. 업로드 실패 시에만 data URL 로 폴백(로컬 전용). 토큰(ccf-ho-image://)은 브라우저가 못 그리므로 바로 풀어 보인다(저장은 토큰으로).
+  function insertEditorImageFile(editor, file) {
+    toast("이미지 업로드 중...");
+    uploadImageBlobToStorage(file).then((url) => {
+      editor.focus();
+      execEditor(editor, "insertImage", url);
+      resolveHandoutImagesIn(editor);
+    }).catch((error) => {
+      console.warn("[ccf-handout] 이미지 업로드 실패:", error);
+      toast("이미지 업로드 실패 — 임시로 나만 보이게 삽입됩니다");
+      const reader = new FileReader();
+      reader.onload = () => { editor.focus(); execEditor(editor, "insertImage", String(reader.result || "")); };
+      reader.readAsDataURL(file);
+    });
+  }
+  function onShadowDrop(event) {
+    const editor = event.target instanceof Element ? event.target.closest('.rich-editor[contenteditable="true"]') : null;
+    const files = [...(event.dataTransfer?.files || [])].filter((file) => file.type && file.type.startsWith("image/"));
+    if (!editor || !files.length) return;
+    event.preventDefault();
+    for (const file of files) insertEditorImageFile(editor, file);
+  }
+
   function onShadowPaste(event) {
     const editor = event.target instanceof Element ? event.target.closest('.rich-editor[contenteditable="true"]') : null;
     if (!editor) return;
@@ -4527,22 +4594,7 @@
         const file = item.getAsFile();
         if (!file) continue;
         event.preventDefault();
-        // Storage 에 올려 URL 로 삽입 — data URL 로 넣으면 Firestore 1MB 제한에 걸려
-        // 전송이 통째로 실패한다. 업로드 실패 시에만 data URL 로 폴백(로컬 전용).
-        toast("이미지 업로드 중...");
-        uploadImageBlobToStorage(file).then((url) => {
-          editor.focus();
-          execEditor(editor, "insertImage", url);
-        }).catch((error) => {
-          console.warn("[ccf-handout] 붙여넣기 이미지 업로드 실패:", error);
-          toast("이미지 업로드 실패 — 임시로 나만 보이게 삽입됩니다");
-          const reader = new FileReader();
-          reader.onload = () => {
-            editor.focus();
-            execEditor(editor, "insertImage", String(reader.result || ""));
-          };
-          reader.readAsDataURL(file);
-        });
+        insertEditorImageFile(editor, file);
         return;
       }
     }
@@ -4604,7 +4656,13 @@
     if (!el) return "";
     // contenteditable 본문 (rich-editor) 은 innerHTML 사용
     if (el.getAttribute && el.getAttribute("contenteditable") === "true") {
-      return renderEditorMacro(el) ?? (el.innerHTML || "");
+      const macro = renderEditorMacro(el);
+      if (macro != null) return macro;
+      // 화면에 보이게 풀어 둔 이미지(src 가 임시 주소)는 저장용으로 원래 토큰을 쓴다
+      if (!el.querySelector("img[data-ccf-ho-token]")) return el.innerHTML || "";
+      const copy = el.cloneNode(true);
+      copy.querySelectorAll("img[data-ccf-ho-token]").forEach((img) => { img.setAttribute("src", img.getAttribute("data-ccf-ho-token")); img.removeAttribute("data-ccf-ho-token"); img.removeAttribute("data-ccf-ho-resolving"); });
+      return copy.innerHTML || "";
     }
     return el.value || "";
   }
