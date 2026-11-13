@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.123
+// @version      0.1.124
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.123",
+    version: "0.1.124",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -235,7 +235,7 @@
     receiveDiag() {
       const room = getCurrentRoomKey();
       let skipDay = null; try { skipDay = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
-      return JSON.parse(JSON.stringify({ room, active: isActive(), greeted: isGreeted(room), skipToday: isSkippedToday(), skipDay, connected: !!fbState, myUid: fbState?.uid ? fbState.uid.slice(0, 6) + "…" : "", myCcfUid: myCcfUid ? myCcfUid.slice(0, 6) + "…" : "", syncReason: syncInfo?.reason || "", inboxSubscribed: !!unsubInbox, inboxActive, received: state.data.handouts.filter((h) => h._remote).length, lastReceived: lastInboxReceived, copies: state.data.handouts.filter((h) => h._remote).map((h) => ({ id: String(h.id).slice(0, 12), title: String(h.title || "").slice(0, 20), canSecret: h._canSecret === true, hasSecret: !!h.gmNotes, updatedAt: h.updatedAt || "" })), openShows: [...document.querySelectorAll('[data-ccf-handout-show="1"]')].map((x) => String(x.dataset.handoutId || "").slice(0, 12)), lastShow, pendingShows: pendingShows.size, gm: isAdminMode(), issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null }));
+      return JSON.parse(JSON.stringify({ room, active: isActive(), greeted: isGreeted(room), skipToday: isSkippedToday(), skipDay, connected: !!fbState, myUid: fbState?.uid ? fbState.uid.slice(0, 6) + "…" : "", myCcfUid: myCcfUid ? myCcfUid.slice(0, 6) + "…" : "", syncReason: syncInfo?.reason || "", inboxSubscribed: !!unsubInbox, inboxActive, received: state.data.handouts.filter((h) => h._remote).length, lastReceived: lastInboxReceived, copies: state.data.handouts.filter((h) => h._remote).map((h) => ({ id: String(h.id).slice(0, 12), title: String(h.title || "").slice(0, 20), canSecret: h._canSecret === true, hasSecret: !!h.gmNotes, updatedAt: h.updatedAt || "" })), openShows: [...document.querySelectorAll('[data-ccf-handout-show="1"]')].map((x) => String(x.dataset.handoutId || "").slice(0, 12)), lastShow, pendingShows: pendingShows.size, originalsSubscribed: !!unsubHandouts, originalsSkipped, gm: isAdminMode(), issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null }));
     },
     autoDetect(force) { return autoDetectMyCharacter({ force: !!force }); },
     gmInfo() { return remoteGmInfo; },
@@ -2157,6 +2157,7 @@
 
   // 디버그 — 현재 룸의 모든 핸드아웃 한 번 조회
   async function fetchAllFromFirestore() {
+    if (!isAdminMode()) return []; // 원본은 GM 만 읽는다
     const fb = await initFirebase();
     if (!fb) throw new Error("Firebase not ready");
     const { collection, getDocs } = fb.modules.fs;
@@ -2191,6 +2192,7 @@
   const ingestSkipLog = new Map(); // 핸드아웃 id → 건너뛴 이유(가장 최근 50개)
   const noteIngestSkip = (id, reason) => { ingestSkipLog.delete(id); ingestSkipLog.set(id, reason); if (ingestSkipLog.size > 50) ingestSkipLog.delete(ingestSkipLog.keys().next().value); };
   let lastPushError = null;      // { id, code, message, at } — 마지막으로 올리기에 실패한 것(성공하면 같은 id 의 기록은 지운다)
+  let originalsSkipped = 0; // 진단: 원본 구독을 건너뛴 횟수(GM 자리가 아님)
   async function subscribeToRoomHandouts() {
     const fb = await initFirebase();
     if (!fb) return;
@@ -2198,6 +2200,8 @@
     const roomKey = getCurrentRoomKey();
     if (roomKey === "global") return;
     if (subscribedRoom === roomKey && unsubHandouts) return;
+    // 원본은 GM 자리(meta/gm)를 가진 방장 브라우저만 읽는다(규칙). 그 밖의 사람은 묻지도 않는다 — 거절된 읽기가 "핸드아웃 읽기 거절"로 남았다. 자리를 잡으면 resubscribeAfterSeat 가 다시 부른다.
+    if (!ccfRole.known || !ccfRole.isOwner || lastGmDoc?.gmUid !== fb.uid) { originalsSkipped += 1; return; }
 
     if (unsubHandouts) { try { unsubHandouts(); } catch (_) {} unsubHandouts = null; }
 
@@ -2476,9 +2480,13 @@
     const { collection, addDoc, serverTimestamp } = fb.modules.fs;
     const roomKey = getCurrentRoomKey();
     if (roomKey === "global") throw new Error("not in a room");
+    const want = String(audience || "all");
+    const plList = mergePlListById(state.data.plList || []);
+    const audienceAnon = want === "all" ? [] : [...remoteMembers].filter(([anon, person]) => anon !== fb.uid && (person.ccfoliaUid === want || removeSpaces(findPlForMember(person, plList).pl?.name || "") === removeSpaces(want))).map(([anon]) => anon);
     const docRef = await addDoc(collection(fb.db, "rooms", roomKey, "shows"), {
       handoutId,
       audience: audience || "all",
+      audienceAnon, // 받는 사람의 익명 uid(그 사람 inbox 의 키): 계정 uid 를 못 읽는 받는 쪽(북마클릿 등)도 맞춘다
       atUid: fb.uid,
       atName: state.data.myCharacter || "",
       at: serverTimestamp()
@@ -2524,6 +2532,7 @@
     if (!ccfRole.known || !ccfRole.isOwner || !fbState?.uid || !lastGmDoc) return;
     if (lastGmDoc.gmUid === fbState.uid) {
       if (!unsubMembers) subscribeToMembers(); // the seat is ours: now the members may be read
+      if (!unsubHandouts) subscribeToRoomHandouts(); // ... and the originals
       return;
     }
     if (Date.now() - seatClaimAt < 60000) return;
@@ -2627,7 +2636,8 @@
     const audience = String(data.audience || "all").trim();
     const matched = audience === "all" || audience === "*" ||
                     removeSpaces(audience).toLowerCase() === removeSpaces(me).toLowerCase() ||
-                    (!!myCcfUid && audience === myCcfUid);
+                    (!!myCcfUid && audience === myCcfUid) ||
+                    (Array.isArray(data.audienceAnon) && !!fbState?.uid && data.audienceAnon.includes(fbState.uid));
     if (!matched) {
       lastShow = { at: new Date().toISOString(), id: String(data.handoutId).slice(0, 12), result: "대상 아님", audience: audience.slice(0, 8) };
       console.info("[ccf-handout] show signal skipped (audience mismatch):", audience, "vs", me);
@@ -2679,6 +2689,7 @@
     const me = state.data.myCharacter;
     const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
     const host = document.createElement("div");
+    if (!isPreview) document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((other) => { if (other.dataset.handoutId === handout.id && other.dataset.preview !== "1") other.remove(); });
     host.setAttribute("data-ccf-handout-show", "1");
     host.dataset.handoutId = handout.id || "";
     if (isPreview) host.dataset.preview = "1";
