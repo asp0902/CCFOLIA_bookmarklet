@@ -71,7 +71,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     if (perm.names.length) {
       const plNames = perm.names.filter((n) => !/\(GM\)/.test(n)).map((n) => n.replace(/^.(?=\S)/u, (m) => m)).map((n) => order.find((o) => n.endsWith(o)) || n);
       assert.deepEqual(plNames.filter((n) => order.includes(n)), order.filter((n) => plNames.includes(n)), 'the permission table follows the saved order: ' + JSON.stringify(perm.names));
-      assert.deepEqual([perm.gmRowCells, perm.gmCheckboxes], [4, 0], 'the GM row has no switches / popup');
+      assert.deepEqual([perm.gmRowCells, perm.gmCheckboxes], [0, 3], 'the GM row has its switches and popup again (0.1.125: the popup is a preview on the GM screen)');
       assert.deepEqual(perm.focusRing, ['none', 'none'], 'no focus ring on the body box');
       // 0.1.121: the public and secret boxes always have the same height (the taller content), live while typing; no resize grip
       const heights = () => page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; return [...s.querySelectorAll('.handout-edit-cols .rich-editor')].map((e) => Math.round(e.getBoundingClientRect().height)); });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.124
+// @version      0.1.125
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.124",
+    version: "0.1.125",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1049,7 +1049,7 @@
     .container[data-mode="settings"] header, .container[data-mode="settings"] .tabs, .container[data-mode="settings"] .panel-footer [data-action="export"], .container[data-mode="settings"] .panel-footer [data-action="import"] { display: none !important; }
     .container[data-mode="list"] .tab[data-tab="settings"] { display: none !important; }
     /* 탭 줄이 보일 때(탭 2개 이상)만 숨긴다: 그땐 탭 이름이 제목이다. 탭이 하나면 이 제목이 유일한 "핸드아웃" */
-    :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header h1 { display: none; }
+    :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header { display: none; } /* 제목은 탭 이름, '+'는 탭 줄로 옮겨 머리 줄에 남는 것이 없다 */
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
@@ -1131,8 +1131,10 @@
     /* 목록 탭의 검색: 탭 줄 오른쪽 끝(펼친 검색칸도 같은 줄, 탭 줄 높이는 그대로) */
     .connect-banner { display: flex; align-items: center; gap: 12px; margin: 8px 16px; padding: 10px 12px; border-radius: 4px; background: rgba(255,183,77,.12); color: #ffe0b2; font-size: 13px; }
     .connect-banner .btn { margin-left: auto; }
-    .tabs-search { margin-left: auto; display: flex; align-items: center; padding: 0 8px; min-width: 0; }
+    .tabs-search { margin-left: auto; display: flex; align-items: center; padding: 0 0 0 8px; min-width: 0; }
     .tabs-search:empty { display: none; }
+    .tabs .tabs-add { flex: 0 0 auto; width: 30px; height: 30px; margin: 0 8px 0 4px; align-self: center; }
+    .tabs-search:empty + .tabs-add { margin-left: auto; }
     .tabs-search .list-search-bar { min-height: 0; padding: 0; }
     .tabs-search .list-search-field { width: min(220px, 40vw); }
     .tabs-search .list-search { height: 26px; }
@@ -1227,7 +1229,7 @@
       border: 1px solid rgba(255,255,255,.12); border-radius: 4px; padding: 12px;
       background: rgba(0,0,0,.25); margin-top: 6px;
       max-height: 220px; overflow: auto; font-size: 0.875rem; line-height: 1.6; color: rgba(255,255,255,.92);
-      overflow-wrap: anywhere; word-break: break-word;
+      overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap;
     }
     .preview img.cch-img { max-width: 100%; height: auto; display: block; margin: 6px 0; border-radius: 6px; }
     .preview a { color: #82b1ff; overflow-wrap: anywhere; word-break: break-word; }
@@ -1374,6 +1376,7 @@
       transition: background-color 120ms, color 120ms;
     }
     .ft-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .ft-btn svg { pointer-events: none; display: block; }
     .ft-btn:active { background: rgba(255,255,255,.14); }
     .ft-btn code { font-family: ui-monospace, Consolas, monospace; font-size: 0.6875rem; }
     .ft-color-btn {
@@ -1814,9 +1817,6 @@
             <h1>핸드아웃</h1>
             <span class="meta"></span>
             <span class="spacer"></span>
-            <button class="header-btn" data-action="new-handout" title="추가" aria-label="추가">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            </button>
             <button class="header-btn edge-end" data-action="close" title="닫기" aria-label="닫기">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
@@ -1826,6 +1826,9 @@
             <button class="tab" data-tab="edit" data-active="0" style="display:none;">새로 만들기</button>
             <button class="tab" data-tab="settings" data-active="0">설정</button>
             <span class="tabs-search" data-tabs-search="1"></span>
+            <button class="list-search-btn tabs-add" data-action="new-handout" title="추가" aria-label="추가">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
           </div>
           <div class="body"></div>
           <div class="room-strip" data-room-strip="1"></div>
@@ -2667,7 +2670,7 @@
           <div class="rendered">${renderHandoutBody(handout.description)}</div>
           ${hasSecret && handout.gmNotes ? `
             <div class="secret-block">
-              <div class="secret-head">🔒 비밀 핸드아웃</div>
+              <div class="secret-head">🔒 비밀 내용</div>
               <div class="rendered">${renderHandoutBody(handout.gmNotes)}</div>
             </div>
           ` : ""}`;
@@ -2679,24 +2682,25 @@
       if (!handout) { host.remove(); return; }
       const body = host.shadowRoot?.querySelector(".show-body");
       if (!body) return;
-      const hasSecret = handout._canSecret === true || canViewSecret(handout, state.data.myCharacter, identityKeys());
+      const hasSecret = isAdminMode() || handout._canSecret === true || canViewSecret(handout, state.data.myCharacter, identityKeys());
       body.innerHTML = showBodyHtml(handout, hasSecret);
       resolveHandoutImagesIn(host.shadowRoot);
     });
   }
-  function showHandoutModal(handout, fromName, isPreview = false) {
+  function showHandoutModal(handout, fromName, isPreview = false, previewSecret = false) {
     const previewOpener = isPreview ? (state.shadow?.activeElement || document.activeElement) : null;
     const me = state.data.myCharacter;
-    const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
+    // GM 은 권한표에 자기 행이 없어도 늘 비밀 내용까지 본다. 미리보기는 부른 쪽이 정한다(권한표 GM 행 팝업 = 그 행의 체크대로).
+    const hasSecret = isPreview ? previewSecret === true : (isAdminMode() || handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
     const host = document.createElement("div");
     if (!isPreview) document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((other) => { if (other.dataset.handoutId === handout.id && other.dataset.preview !== "1") other.remove(); });
     host.setAttribute("data-ccf-handout-show", "1");
     host.dataset.handoutId = handout.id || "";
     if (isPreview) host.dataset.preview = "1";
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
-    const POPUP_W = 500;
+    const POPUP_W = 400; // 보기 창 기본 크기: 폭 400, 높이는 내용에 맞추되 최대 480 (예전 500×600 의 약 80%)
     const POPUP_W_COLLAPSED = 250;
-    const POPUP_H_INIT = 600;
+    const POPUP_H_INIT = 480;
     const existingCount = document.querySelectorAll('[data-ccf-handout-show="1"]').length;
     const offset = (existingCount % 8) * 24;
     const initLeft = Math.max(8, Math.round((window.innerWidth - POPUP_W) / 2) + offset);
@@ -2708,7 +2712,7 @@
         :host { all: initial; display: block; }
         * { box-sizing: border-box; font-family: "Noto Sans KR","Noto Sans JP","Roboto",system-ui,sans-serif; }
         .show-paper {
-          width: ${POPUP_W}px; height: ${POPUP_H_INIT}px; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px);
+          width: ${POPUP_W}px; height: auto; max-width: 92vw; max-height: min(${POPUP_H_INIT}px, 88vh);
           min-width: 240px; min-height: 160px;
           display: flex; flex-direction: column;
           background-color: rgba(44,44,44,0.95); color: #fff;
@@ -2753,11 +2757,11 @@
         .show-close:hover, .show-head-btn:hover { background: rgba(255,255,255,.1); }
         .show-head-btn[data-action="show-edit"] + .show-close { margin-left: -4px; }
         .show-close svg, .show-head-btn svg { pointer-events: none; }
-        .show-body { padding: 20px 24px; overflow: auto; }
+        .show-body { padding: 20px 24px; overflow: auto; flex: 1 1 auto; min-height: 0; }
         .show-body > *:first-child { margin-top: 0 !important; }
         .show-body > *:last-child { margin-bottom: 0 !important; }
         .show-img { width: 100%; max-height: 280px; object-fit: cover; margin-bottom: 16px; background: rgba(0,0,0,.25); }
-        .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); overflow-wrap: anywhere; word-break: break-word; }
+        .rendered { font-size: 0.9375rem; line-height: 1.65; color: rgba(255,255,255,.95); overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; } /* 편집기와 같이: 본문 속 줄바꿈 문자도 줄로 */
         .rendered > *:first-child { margin-top: 0 !important; }
         .rendered > *:last-child { margin-bottom: 0 !important; }
         .rendered img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
@@ -3864,7 +3868,8 @@
     if (myChar) {
       // GM 본인 행 — 실제 캐릭터명 + (GM) 배지. 관리자 = GM 으로 통일.
       const adminLabel = state.data.myCharacter || myChar;
-      rows.push({ key: myChar, label: `${adminLabel} (GM)`, self: true, initial: Array.from(String(adminLabel).trim())[0] || "" });
+      const selfPl = plList.find((p) => [p.name, ...(p.aliases || [])].some((n) => removeSpaces(n) === myChar));
+      rows.push({ key: myChar, label: `${adminLabel} (GM)`, self: true, image: plImageFor(selfPl || { name: adminLabel, aliases: [] }), initial: Array.from(String(adminLabel).trim())[0] || "" });
     }
     for (const pl of plList) {
       const name = removeSpaces(pl.name);
@@ -3942,9 +3947,9 @@
         <button type="button" class="ft-btn" data-format-cmd="quote" title="인용" aria-label="인용">&ldquo;</button>
         <button type="button" class="ft-btn" data-format-cmd="hr" title="가로줄" aria-label="가로줄">―</button>
         <span class="ft-sep" aria-hidden="true"></span>
-        <button type="button" class="ft-btn" data-format-cmd="align-left" title="왼쪽 정렬" aria-label="왼쪽 정렬">⯇</button>
-        <button type="button" class="ft-btn" data-format-cmd="align-center" title="가운데 정렬" aria-label="가운데 정렬">⯈⯇</button>
-        <button type="button" class="ft-btn" data-format-cmd="align-right" title="오른쪽 정렬" aria-label="오른쪽 정렬">⯈</button>
+        <button type="button" class="ft-btn" data-format-cmd="align-left" title="왼쪽 정렬" aria-label="왼쪽 정렬"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg></button>
+        <button type="button" class="ft-btn" data-format-cmd="align-center" title="가운데 정렬" aria-label="가운데 정렬"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg></button>
+        <button type="button" class="ft-btn" data-format-cmd="align-right" title="오른쪽 정렬" aria-label="오른쪽 정렬"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg></button>
         <span class="ft-sep" aria-hidden="true"></span>
         <label class="ft-btn ft-color-btn" title="폰트 색상" aria-label="폰트 색상">
           <span>A</span>
@@ -4118,16 +4123,12 @@
       const secret = permFlag(permH, key, "secret");
       const edit = permFlag(permH, key, "edit");
       const avatar = r.image || r.initial ? `<span class="pl-avatar" data-empty="${r.image ? "0" : "1"}"${r.initial ? ` data-initial="${escapeAttr(r.initial)}"` : ""}>${r.image ? `<img src="${escapeAttr(r.image)}" alt="" loading="lazy">` : ""}</span>` : "";
-      if (r.self) return `
-        <div class="perm-name">${avatar}${escapeHtml(r.label)}</div>
-        <div class="perm-cell perm-self" title="GM 은 모든 핸드아웃을 봅니다">—</div><div class="perm-cell perm-self">—</div><div class="perm-cell perm-self">—</div><div class="perm-cell perm-self">—</div>
-      `;
       return `
         <div class="perm-name">${avatar}${escapeHtml(r.label)}</div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="view" ${view ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="secret" ${secret ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="edit" ${edit ? "checked" : ""}></div>
-        <div class="perm-cell"><button class="popup-btn" data-action="row-popup" data-key="${escapeAttr(key)}">팝업</button></div>
+        <div class="perm-cell"><button class="popup-btn" data-action="row-popup" data-key="${escapeAttr(key)}"${r.self ? ` data-self="1" title="내 화면에 미리보기(체크한 대로)"` : ""}>팝업</button></div>
       `;
     }).join("");
 
@@ -4143,13 +4144,13 @@
       ${renderFormatToolbar()}
       <div class="handout-edit-cols">
         <div class="col">
-          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="description" aria-haspopup="dialog" title="공개 핸드아웃 미리보기">공개 핸드아웃</button></label>
-          <div class="rich-editor" contenteditable="true" data-field="description" data-format-receiver="1" data-placeholder="공개 핸드아웃 본문...">${renderHandoutBody(h.description)}</div>
+          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="description" aria-haspopup="dialog" title="공개 내용 미리보기">공개 내용</button></label>
+          <div class="rich-editor" contenteditable="true" data-field="description" data-format-receiver="1" data-placeholder="공개 내용 본문...">${renderHandoutBody(h.description)}</div>
           <div class="preview" data-preview="description" aria-label="공개 매크로 미리보기" hidden></div>
         </div>
         <div class="col">
-          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="gmNotes" aria-haspopup="dialog" title="비밀 핸드아웃 미리보기">비밀 핸드아웃</button></label>
-          <div class="rich-editor" contenteditable="true" data-field="gmNotes" data-format-receiver="1" data-placeholder="비밀 핸드아웃 본문...">${renderHandoutBody(h.gmNotes)}</div>
+          <label><button type="button" class="handout-preview-title" data-action="preview-handout" data-preview-field="gmNotes" aria-haspopup="dialog" title="비밀 내용 미리보기">비밀 내용</button></label>
+          <div class="rich-editor" contenteditable="true" data-field="gmNotes" data-format-receiver="1" data-placeholder="비밀 내용 본문...">${renderHandoutBody(h.gmNotes)}</div>
           <div class="preview" data-preview="gmNotes" aria-label="비밀 매크로 미리보기" hidden></div>
         </div>
       </div>
@@ -4393,7 +4394,7 @@
       if (field !== "description" && field !== "gmNotes") return;
       const title = getFieldValue("title").trim();
       showHandoutModal({
-        title: `${title ? title + " · " : ""}${field === "description" ? "공개" : "비밀"} 핸드아웃 미리보기`,
+        title: `${title ? title + " · " : ""}${field === "description" ? "공개" : "비밀"} 내용 미리보기`,
         description: getFieldValue(field)
       }, "", true);
       return;
@@ -4496,7 +4497,7 @@
     if (action === "import") { importJson(); return; }
     if (action === "close-detail") { closeDetail(); return; }
     if (action === "toggle-detail-secret") { toggleDetailSecret(btn); return; }
-    if (action === "row-popup") { rowPopupPlaceholder(btn.dataset.key); return; }
+    if (action === "row-popup") { if (btn.dataset.self === "1") gmRowPreview(btn.dataset.key); else rowPopupPlaceholder(btn.dataset.key); return; }
     if (action === "pl-modal-open") { openPlListDialog(); return; }
     if (action === "pl-modal-close") { closePlListDialog(); return; }
     if (action === "pl-modal-add") { addPlRow(); return; }
@@ -4542,6 +4543,13 @@
     }
   }
 
+  // 권한표 GM 행의 팝업: 저장하지 않은 지금 편집 내용을, 그 행의 공개·비밀 체크대로 GM 본인 화면에 띄운다(플레이어가 받는 모양 확인용). GM 의 실제 열람은 늘 전체다.
+  function gmRowPreview(key) {
+    const perm = state.formPermissions?.[key] || {};
+    const view = !!perm.view, secret = !!perm.secret;
+    if (!view && !secret) { toast("이 행의 '공개' 또는 '비밀'을 체크하면 그대로 미리 봅니다."); return; }
+    showHandoutModal({ id: "", title: getFieldValue("title").trim() || "(제목 없음)", image: view ? getFieldValue("image").trim() : "", description: view ? getFieldValue("description") : "", gmNotes: secret ? getFieldValue("gmNotes") : "" }, "", true, secret);
+  }
   function rowPopupPlaceholder(key) {
     // 호환용 — 권한 표 행별 팝업 버튼 핸들러. 편집 중인 handout이 있어야 의미 있음.
     const handoutId = (state.editingId && state.editingId !== "new") ? state.editingId : null;
@@ -5447,14 +5455,14 @@
           <button class="btn secondary small" data-action="close-detail">← 목록</button>
           ${manageable ? `<button class="btn secondary small" data-action="edit-handout" data-id="${escapeHtml(h.id)}">편집</button>` : ""}
           ${adminMode ? `<button class="btn secondary small" data-action="show-to-players" data-id="${escapeHtml(h.id)}">팝업</button>` : ""}
-          ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">GM Notes 숨기기</button>` : ""}
+          ${hasSecret && canSecret && adminMode ? `<button class="btn secondary small" data-action="toggle-detail-secret" data-show="1">비밀 내용 숨기기</button>` : ""}
         </div>
         <h2 style="margin:8px 0 4px 0;">${escapeHtml(h.title || "(제목 없음)")}</h2>
         ${h.image ? `<img class="detail-img" src="${escapeHtml(h.image)}" alt="">` : ""}
         <div class="preview" style="max-height:none;">${renderHandoutBody(h.description)}</div>
         ${hasSecret ? (
           canSecret
-            ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 GM NOTES (비밀)</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderHandoutBody(h.gmNotes)}</div></div>`
+            ? `<div class="secret-block" data-secret-block="1"><div class="secret-head">🔒 비밀 내용</div><div class="preview" style="max-height:none; background:transparent; border:0; padding:0;">${renderHandoutBody(h.gmNotes)}</div></div>`
             : `<div class="hidden-secret">이 핸드아웃에는 GM 전용 정보가 있지만, 현재 캐릭터(${escapeHtml(me)})에게는 공개되지 않았습니다.</div>`
         ) : ""}
         <div class="chip-row">
@@ -5475,7 +5483,7 @@
     const show = btn.dataset.show === "1";
     block.style.display = show ? "none" : "block";
     btn.dataset.show = show ? "0" : "1";
-    btn.textContent = show ? "GM Notes 보기" : "GM Notes 숨기기";
+    btn.textContent = show ? "비밀 내용 보기" : "비밀 내용 숨기기";
   }
 
   function showToPlayersPlaceholder(id) {
@@ -5503,6 +5511,16 @@
                    removeSpaces(audienceKey).toLowerCase() === removeSpaces(me).toLowerCase();
     if (isBroadcast || isSelf) {
       try { showHandoutModal(h, me); } catch (_) {}
+    }
+    if (!isBroadcast && !isSelf) {
+      // 그 PL 이 저장된 권한으로 볼 수 있어야 사본이 간다: 체크만 바꾸고 저장 안 했으면 먼저 저장하라고 알린다
+      const pl = mergePlListById(state.data.plList || []).find((p) => [p.name, ...(p.aliases || [])].some((n) => removeSpaces(n) === removeSpaces(audienceKey)));
+      const extra = pl?.uid ? [pl.uid] : [];
+      if (!canView(withoutAll(h), pl?.name || audienceKey, extra) && !canViewSecret(withoutAll(h), pl?.name || audienceKey, extra)) { toast(`${audienceKey}: 저장된 권한이 없습니다 — 공개·비밀을 체크하고 저장한 뒤 팝업하세요.`); return; }
+      markWebShared(h.id, true); // 공유 버튼과 같이: 사본이 쓰이도록
+      const target = pl?.uid || audienceKey; // 공유 버튼과 같은 대상 표기(계정 uid + 익명 uid 목록)
+      (async () => { clearTimeout(inboxTimer); await syncInboxes(); return sendShowSignal(handoutId, target); })().then(() => toast(`"${h.title}" → ${audienceKey} 팝업 송신됨`)).catch((error) => { noteFirebaseIssue("보여주기 신호 보내기", error); console.error("[ccf-handout] row show failed:", error); toast("팝업 송신 실패 — 콘솔 확인"); });
+      return;
     }
     sendShowSignal(handoutId, audienceKey).then(() => {
       const label = isBroadcast ? "플레이어 전체" : audienceKey;
