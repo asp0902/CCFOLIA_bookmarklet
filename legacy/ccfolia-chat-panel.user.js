@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.37
+// @version      0.5.38
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2006,7 +2006,36 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     const { outText, ...rest } = d;
     return { panel: PANEL_INDEX, sent: true, ...rest, ageMs: Date.now() - d.at, rendered };
   }
+  // 커맨드는 오리지널 채팅 입력칸으로 보낸다(코코포리아가 BCDice·roll-table 로 굴린다). 보내는 동안 오리지널의 탭·화자를 이 패널의 것으로 바꿨다가 되돌린다.
+  // 오리지널 입력칸을 못 찾으면 false(예전처럼 직접 쓰기 — 단순 주사위만 굴려진다).
+  async function sendCommandViaNative(text, channel, who) {
+    const store = findStore();
+    const app = store?.getState?.()?.app?.state;
+    if (!store || !app) return false;
+    const editor = [...document.querySelectorAll("textarea")].find((t) => !t.closest(".ccf-scp-panel, [role='dialog'], .MuiDialog-root") && t.offsetParent && t.closest("form")?.querySelector('button[type="submit"]'));
+    if (!editor) return false;
+    const button = editor.closest("form").querySelector('button[type="submit"]');
+    const keep = { roomChatTab: app.roomChatTab, roomChatName: app.roomChatName, roomChatId: app.roomChatId };
+    const leftover = editor.value;
+    const patch = (values) => store.dispatch({ type: "app/state/seted", payload: { ...store.getState().app.state, ...values } });
+    const setValue = (value) => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(editor, value); editor.dispatchEvent(new Event("input", { bubbles: true })); };
+    patch({ roomChatTab: channel, ...(who ? { roomChatName: who.name, roomChatId: who.id || "" } : {}) });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 오리지널이 새 탭·화자로 다시 그려진 뒤
+    setValue(text);
+    button.click();
+    let sent = false;
+    for (let i = 0; i < 30 && !sent; i += 1) { await new Promise((resolve) => setTimeout(resolve, 50)); sent = editor.value !== text; }
+    patch(keep);
+    if (!sent) setValue(leftover);
+    else if (leftover) { await new Promise((resolve) => setTimeout(resolve, 0)); if (!editor.value) setValue(leftover); }
+    if (!sent) throw new Error("커맨드를 보내지 못했습니다(오리지널 채팅 입력칸).");
+    return true;
+  }
   async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null, rollExtend = null) {
+    if (!meta && !speaker && !rollExtend && isChatCommandText(stripEnvelopes(text))) {
+      refreshSelectedChar();
+      if (await sendCommandViaNative(stripEnvelopes(text).replace(/[ \t]+$/, ""), channel, selectedChar)) { lastSendDiag = { input: String(text).slice(0, 120), viaNative: true, at: Date.now() }; return; }
+    }
     const ctx = await getAuthContext();
     tmark("auth");
     const template = await templateFor(ctx, !!(speaker || meta));
