@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.120
+// @version      0.1.121
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.120",
+    version: "0.1.121",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1313,7 +1313,7 @@
     .handout-preview-title { all: unset; cursor: pointer; }
     .handout-preview-title:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
     .handout-edit-cols .col .rich-editor {
-      width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: vertical;
+      width: 100%; min-height: 140px; max-height: 480px; overflow: auto; resize: none;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-radius: 4px;
       padding: 6px 10px; color: #fff;
       font-family: "Noto Sans KR", "Noto Sans JP", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -3690,6 +3690,7 @@
     if (tabsSearch) tabsSearch.innerHTML = state.activeTab === "list" ? (state.listSearchHtml || "") : "";
     // 본문에 들어간 Firestore 이미지 토큰을 실제 이미지로 교체 (비동기).
     resolveHandoutImagesIn(body);
+    if (state.activeTab === "edit") { syncEditorHeights(); body.querySelectorAll(".handout-edit-cols img").forEach((img) => img.addEventListener("load", syncEditorHeights, { once: true })); }
   }
 
   // 인사 창을 닫아 버렸거나 못 본 사람: 핸드아웃 목록 맨 위의 '연결' 한 번으로 동의·연결한다(동의 자체는 없애지 않는다).
@@ -3826,7 +3827,7 @@
       if (rows.some((r) => r.key === name)) continue;
       const aliasText = (pl.aliases || []).filter(Boolean).length ? ` (${(pl.aliases || []).join(", ")})` : "";
       const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}${pl.source === "playroom" ? " · 플레이룸" : ""}`;
-      rows.push({ key: name, label, image: pl.image || "", initial: Array.from(String(pl.name).trim())[0] || "" });
+      rows.push({ key: name, label, image: plImageFor(pl), initial: Array.from(String(pl.name).trim())[0] || "" });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
     const perms = h.permissions || {};
@@ -4699,6 +4700,14 @@
     // 그 외: 브라우저 기본 paste 진행
   }
 
+  // 공개·비밀 칸 높이: 둘 중 내용이 긴 쪽에 맞춰 둘 다 같은 높이(최소 140px, 최대 480px — 넘으면 각 칸 안에서 스크롤). 입력할 때마다·편집 탭을 그릴 때마다 맞춘다.
+  function syncEditorHeights() {
+    const editors = [...(state.shadow?.querySelectorAll(".handout-edit-cols .col .rich-editor") || [])];
+    if (editors.length < 2) return;
+    editors.forEach((el) => { el.style.height = "auto"; });
+    const want = Math.min(480, Math.max(140, ...editors.map((el) => el.scrollHeight + 2)));
+    editors.forEach((el) => { el.style.height = `${want}px`; });
+  }
   function renderEditorMacro(editor) {
     const text = editor.innerText || editor.textContent || "";
     return window.__CCF_ROLL20_BRIDGE_DEBUG__?.renderMacroHtml?.(text) ?? null;
@@ -4721,6 +4730,7 @@
     if (!ta) return;
     const field = ta.dataset.field;
     if (field !== "description" && field !== "gmNotes") return;
+    syncEditorHeights();
     const previewEl = state.shadow?.querySelector(`.preview[data-preview="${field}"]`);
     if (previewEl) {
       const html = renderEditorMacro(ta);
@@ -5071,12 +5081,13 @@
     const image = typeof item.image === "string" ? item.image : "";
     if (image) row.setAttribute("data-pl-image", image);
     else row.removeAttribute("data-pl-image");
+    const shown = plImageFor(item); // 병합 이름의 그림으로 대신 보일 수 있다(저장되는 image 는 그대로)
     const avatarEl = row.querySelector("[data-pl-avatar]");
     if (avatarEl) {
-      avatarEl.innerHTML = image
-        ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">`
+      avatarEl.innerHTML = shown
+        ? `<img src="${escapeAttr(shown)}" alt="" loading="lazy">`
         : "";
-      avatarEl.setAttribute("data-empty", image ? "0" : "1");
+      avatarEl.setAttribute("data-empty", shown ? "0" : "1");
       const initial = Array.from(String(item.name || "").trim())[0] || "";
       if (initial) avatarEl.setAttribute("data-initial", initial); else avatarEl.removeAttribute("data-initial");
     }
@@ -5194,8 +5205,24 @@
     const key = normalizePlNameKey(name || "");
     const pl = (state.data.plList || []).find((entry) =>
       [entry.name, ...(entry.aliases || [])].some((value) => normalizePlNameKey(value) === key));
-    const image = findChatAuthorImageByName(pl?.name || name) || pl?.image || "";
-    return /^https?:\/\//i.test(image) ? image : "";
+    return pl ? plImageFor(pl) : usableImage(findChatAuthorImageByName(name));
+  }
+  // PL 아바타: ① 그 PL 자신의 그림 ② 병합 이름들(병합 칩 순서) 중 처음으로 그림이 있는 것 — 채팅에 쓴 그 이름의 아이콘, 없으면 그 이름의 룸 캐릭터 아이콘 ③ 없음(이름 첫 글자).
+  const usableImage = (url) => (typeof url === "string" && /^https?:\/\//i.test(url) && !/\/blank\.gif(?:$|\?)/i.test(url) ? url : "");
+  function characterIconByName(name) {
+    const key = normalizePlNameKey(name || "");
+    if (!key) return "";
+    try { const c = Object.values(findCcfoliaStore()?.getState()?.entities?.roomCharacters?.entities || {}).find((item) => item && normalizePlNameKey(item.name) === key && usableImage(item.iconUrl)); return c ? c.iconUrl : ""; } catch (_) { return ""; }
+  }
+  function plImageFor(pl) {
+    if (!pl) return "";
+    const own = usableImage(findChatAuthorImageByName(pl.name)) || usableImage(pl.image) || characterIconByName(pl.name);
+    if (own) return own;
+    for (const alias of pl.aliases || []) {
+      const image = usableImage(findChatAuthorImageByName(alias)) || characterIconByName(alias);
+      if (image) return image;
+    }
+    return "";
   }
 
   // 모든 핸드아웃의 권한 키를 oldName → newName 으로 이전. 둘 다 있으면 OR 병합.

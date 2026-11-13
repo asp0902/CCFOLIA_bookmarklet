@@ -16,8 +16,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.evaluate(() => {
       localStorage.setItem('ccf-handout:greeted-skip-day', '2999-01-01');
       const value = { myCharacter: '드와이프', handouts: [{ id: 'h1', title: '지도', description: '', gmNotes: '', permissions: {}, order: 1 }], folders: [], plDeleted: {}, plDeletedMigrated: true,
-        plList: [{ name: '눈깅', id: '', role: 'player', aliases: [], image: '/blank.gif' }, { name: 'MURDER FEED', id: '', role: 'player', aliases: [], image: '' }, { name: '에르네스토', id: '', role: 'player', aliases: [], image: '' }] };
+        plList: [{ name: '눈깅', id: '', role: 'player', aliases: [], image: '/blank.gif' }, { name: 'MURDER FEED', id: '', role: 'player', aliases: ['머더 피드'], image: '' }, { name: '에르네스토', id: '', role: 'player', aliases: [], image: '' }] };
       window.__saved = null;
+      // the room's characters: the merged name '머더 피드' is a character with an icon (0.1.121: a PL without a picture shows the picture of a merged name)
+      document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => ({ entities: { roomCharacters: { entities: { c1: { name: '머더 피드', iconUrl: 'https://example.test/m.png' } } } } }), dispatch() {}, subscribe: () => () => {} } } } } };
       window.__CAPYBARA_TOOLKIT__ = { storage: { getRoomData: async () => ({ value }), setRoomData: async (f, k, v) => { window.__saved = JSON.parse(JSON.stringify(v)); } } };
     });
     await page.addScriptTag({ content: source });
@@ -34,6 +36,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     const before = await names();
     assert(before.includes('눈깅') && before.includes('에르네스토'), JSON.stringify(before));
     const avatar = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '눈깅'); const a = row.querySelector('[data-pl-avatar]'); return { initial: a.getAttribute('data-initial'), before: getComputedStyle(a, '::before').content, opacity: getComputedStyle(a).opacity }; });
+    const mfImg = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === 'MURDER FEED'); return row.querySelector('[data-pl-avatar] img')?.getAttribute('src') || null; });
+    assert.equal(mfImg, 'https://example.test/m.png', 'no own picture: the character icon of the merged name');
     const account = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const sel = s.querySelector('.pl-modal .pl-row [data-pl-account]'); return sel ? { first: sel.options[0]?.textContent, linked: sel.getAttribute('data-linked') } : null; });
     assert.deepEqual(account, { first: '계정 연결 안 됨', linked: '0' }, 'each PL row has an account select (0.1.120)');
     assert.deepEqual(avatar, { initial: '눈', before: '"눈"', opacity: '1' }, 'the first letter shows behind a blank picture: ' + JSON.stringify(avatar));
@@ -69,6 +73,16 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
       assert.deepEqual(plNames.filter((n) => order.includes(n)), order.filter((n) => plNames.includes(n)), 'the permission table follows the saved order: ' + JSON.stringify(perm.names));
       assert.deepEqual([perm.gmRowCells, perm.gmCheckboxes], [4, 0], 'the GM row has no switches / popup');
       assert.deepEqual(perm.focusRing, ['none', 'none'], 'no focus ring on the body box');
+      // 0.1.121: the public and secret boxes always have the same height (the taller content), live while typing; no resize grip
+      const heights = () => page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; return [...s.querySelectorAll('.handout-edit-cols .rich-editor')].map((e) => Math.round(e.getBoundingClientRect().height)); });
+      const type = (field, lines) => page.evaluate(([field, lines]) => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const e = s.querySelector(`.rich-editor[data-field="${field}"]`); e.innerHTML = Array.from({ length: lines }, (_, i) => `<div>줄 ${i + 1}</div>`).join(''); e.dispatchEvent(new Event('input', { bubbles: true, composed: true })); }, [field, lines]);
+      await type('description', 1); await type('gmNotes', 9); await page.waitForTimeout(100);
+      let h = await heights();
+      assert(h[0] === h[1] && h[0] > 140, 'public 1 line + secret 9 lines: same height, the taller one: ' + JSON.stringify(h));
+      await type('description', 14); await page.waitForTimeout(100);
+      const h2 = await heights();
+      assert(h2[0] === h2[1] && h2[0] > h[0], 'more lines in the public box: both grow: ' + JSON.stringify(h2));
+      assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccfolia-handout-root').shadowRoot.querySelector('.rich-editor')).resize), 'none', 'no resize grip');
     } else console.log('(edit form not opened in this replica; permission-table checks skipped)');
     assert.deepEqual(errors, []);
     console.log('handout pl order PASS', JSON.stringify({ order, perm: perm.names }));
