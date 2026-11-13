@@ -24,12 +24,12 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
       await page.waitForTimeout(600);
       return page;
     };
-    // the button opens a CCFOLIA-looking menu; choosing an item opens that tool's window
+    // the button opens the GM tools window at once (no menu), on the last tab; the tab of a tool is then chosen in the window
     const openTool = async (page, label) => {
-      await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-      await page.waitForSelector('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]');
-      await page.locator('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]', { hasText: label }).dispatchEvent('click');
+      if (!(await page.locator('#ccf-gm-tools .ccf-gt-window').count())) await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
       await page.waitForSelector('#ccf-gm-tools .ccf-gt-window');
+      const tab = page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: label });
+      if (await tab.count()) await tab.dispatchEvent('click');
     };
     const tabs = (page) => page.locator('#ccf-gm-tools .ccf-gt-tab').allTextContents();
     for (const order of [['handout', 'character-sheet', 'toolkit-presence'], ['toolkit-presence', 'character-sheet', 'handout'], ['character-sheet', 'toolkit-presence', 'handout']]) {
@@ -71,9 +71,9 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
         await page.waitForSelector('#ccf-gm-tools #ccfolia-handout-root', { state: 'attached' });
         await page.locator('#ccf-gm-tools .ccf-gt-close').dispatchEvent('click');
         assert.equal(await page.locator('#ccf-gm-tools').count(), 0, label + ': ✕ closes the window'); assert.equal(await page.locator('#ccfolia-handout-root').count(), 0);
-        await openTool(page, '핸드아웃');
+        await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click'); // the button alone: the last tab
         await page.waitForSelector('#ccf-gm-tools #ccfolia-handout-root', { state: 'attached' });
-        assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]').textContent), '핸드아웃', label + ': reopens on the chosen tab');
+        assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tab[aria-selected="true"]').textContent), '핸드아웃', label + ': the button reopens on the last tab');
         await page.locator('#ccf-gm-tools .ccf-gt-window').focus().catch(() => {});
         await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-window').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
         assert.equal(await page.locator('#ccf-gm-tools').count(), 0, label + ': Esc closes the window');
@@ -99,23 +99,15 @@ const toolbar = (gm, insane) => `<!doctype html><meta charset=utf-8><body style=
     assert.equal(await page.evaluate(() => document.querySelector('#ccf-gm-tools .ccf-gt-tabs').hidden), true, 'one visible tab: no tab strip');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ccf-gm-tools .ccf-gt-tabs')).display), 'none', 'and it is really not drawn (display)');
     await page.locator('#ccf-gm-tools .ccf-gt-close').dispatchEvent('click');
-    // the menu: CCFOLIA's MUI Menu measured (paper, list, item, hover, anchor below the button's left edge, Grow timing); outside click closes
+    // no menu any more: a click opens the window at once on the remembered tab, a second click closes it (toggle)
     await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-    await page.waitForSelector('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]'); await page.waitForTimeout(450);
-    const menu = await page.evaluate(() => {
-      const paper = document.querySelector('[data-ccf-tm-paper]'), pc = getComputedStyle(paper), ul = paper.querySelector('ul'), li = paper.querySelector('li'), lc = getComputedStyle(li), t = li.querySelector('.ccf-tm-text'), ic = li.querySelector('.ccf-tm-icon'), b = document.querySelector('[data-ccf-toolkit-menu-button]').getBoundingClientRect(), pr = paper.getBoundingClientRect(), lr = li.getBoundingClientRect(), ir = ic.getBoundingClientRect();
-      return { bg: pc.backgroundColor, radius: pc.borderRadius, shadow: pc.boxShadow, ulPad: getComputedStyle(ul).padding, item: [lc.padding, lc.fontFamily.split(',')[0], lc.fontSize, lc.lineHeight, lc.letterSpacing, Math.round(lr.height)], textMargin: getComputedStyle(t).margin, icon: [ir.width, ir.height], iconRight: Math.round(lr.right - ir.right), anchor: [Math.round(pr.left - b.left), Math.round(pr.top - b.bottom)], transition: pc.transition, opacity: pc.opacity, aria: document.querySelector('[data-ccf-toolkit-menu-button]').getAttribute('aria-expanded') };
-    });
-    assert.deepEqual(menu, { bg: 'rgba(44, 44, 44, 0.87)', radius: '4px', shadow: 'rgba(0, 0, 0, 0.2) 0px 5px 5px -3px, rgba(0, 0, 0, 0.14) 0px 8px 10px 1px, rgba(0, 0, 0, 0.12) 0px 3px 14px 2px', ulPad: '8px 0px', item: ['6px 16px', 'Roboto', '16px', '24px', '0.15008px', 36], textMargin: '0px 28px 0px 0px', icon: [20, 20], iconRight: 16, anchor: [0, 0], transition: menu.transition, opacity: '1', aria: 'true' }, 'menu look');
-    assert.match(menu.transition, /^opacity 0\.\d+s cubic-bezier\(0\.4, 0, 0\.2, 1\), transform 0\.\d+s cubic-bezier\(0\.4, 0, 0\.2, 1\)$/, 'Grow timing');
+    await page.waitForSelector('#ccf-gm-tools .ccf-gt-window');
+    assert.equal(await page.locator('[data-ccf-toolkit-menu], [data-ccf-tm-paper], [role="menuitem"]').count(), 0, 'no menu is drawn');
+    assert.equal(await page.evaluate(() => document.querySelector('[data-ccf-toolkit-menu-button]').getAttribute('aria-expanded')), 'true');
+    await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
+    assert.equal(await page.locator('#ccf-gm-tools').count(), 0, 'the second click closes the window');
+    assert.equal(await page.evaluate(() => document.querySelector('[data-ccf-toolkit-menu-button]').getAttribute('aria-expanded')), 'false');
     await page.evaluate(() => document.querySelector('[data-ccf-handout-greeting]')?.remove()); // the handout greeting overlay would take the pointer
-    await page.locator('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]').hover(); await page.waitForTimeout(50);
-    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.ccf-tm-item')).backgroundColor), 'rgba(255, 255, 255, 0.12)', 'the first item is focused on open (focus-visible, like the native menu)');
-    await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(50);
-    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.ccf-tm-item')).backgroundColor), 'rgba(255, 255, 255, 0.08)', 'item hover');
-    await page.mouse.click(5, 790);
-    await page.waitForFunction(() => !document.querySelector('[data-ccf-toolkit-menu]'), null, { timeout: 2000 });
-    assert.equal(await page.evaluate(() => document.querySelector('[data-ccf-toolkit-menu-button]').getAttribute('aria-expanded')), 'false', 'outside click closes the menu');
     // the tooltip: MUI Tooltip measured (below the button, centred, margin 14, 12px/500 Roboto on rgb(22,22,22), 4px 8px)
     await page.locator('[data-ccf-toolkit-menu-button]').hover();
     await page.waitForSelector('[role="tooltip"]'); await page.waitForTimeout(300);
