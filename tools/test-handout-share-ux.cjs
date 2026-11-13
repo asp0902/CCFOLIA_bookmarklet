@@ -27,12 +27,12 @@ const plain = x => JSON.parse(JSON.stringify(x));
 (async () => {
   // who is addressed: by the permission table, the GM's own row and a person's account key (it comes with their name key) left out, nobody without a right
   assert.deepEqual(plain(showAudienceKeys({ permissions: { '*': { view: true } } })), [], 'the old "all players" permission is ignored');
-  assert.deepEqual(plain(showAudienceKeys({ permissions: { '앨리스': { view: true }, 'acct-a': { view: true, secret: true }, '철수': { view: false, secret: false }, '카피바라': { view: true }, '밥': { view: false, secret: true }, 'acct-orphan': { view: true } } })), ['앨리스', '밥', 'acct-orphan']);
+  assert.deepEqual(plain(showAudienceKeys({ permissions: { '앨리스': { view: true }, 'acct-a': { view: true, secret: true }, '철수': { view: false, secret: false }, '카피바라': { view: true }, '밥': { view: false, secret: true }, 'acct-orphan': { view: true } } })), ['acct-a', '밥', 'acct-orphan']);
   assert.deepEqual(plain(showAudienceKeys({ permissions: {} })), []);
   // the share: list first (the tool syncs and waits), then the popup signal to the holders, show signals to the native players, one short toast
   calls.length = 0; toasts.length = 0;
   await shareHandoutNow({ id: 'h1', permissions: { '앨리스': { view: true } } });
-  assert.deepEqual(plain(calls), [['mark', 'h1', true], ['sync'], ['relay', 'popup', { handoutId: 'h1' }], ['show', 'h1', '앨리스']]);
+  assert.deepEqual(plain(calls), [['mark', 'h1', true], ['sync'], ['relay', 'popup', { handoutId: 'h1' }], ['show', 'h1', 'acct-a']]);
   assert.deepEqual(toasts, ['공유했습니다.']);
   // nobody can read it: the lists are synced, nothing is sent to anybody, and it says so
   calls.length = 0; toasts.length = 0; box.popupCount = 0;
