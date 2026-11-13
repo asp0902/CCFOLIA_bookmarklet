@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Others' Characters in My Character List by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-others-characters
-// @version      0.1.1
+// @version      0.1.2
 // @description  GM only: shows the characters owned by other people inside CCFOLIA's "My characters" list (shaded rows with a small owner icon); clicking one opens CCFOLIA's own edit dialog.
 // @description:ko GM 화면에서만: 코코포리아 '내 캐릭터 목록' 안에 다른 사람 소유 캐릭터를 옅은 음영 + 작은 소유자 아이콘 행으로 함께 보여 주고, 클릭하면 코코포리아 편집창을 엽니다(삭제 버튼 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.1";
+  const VERSION = "0.1.2";
   const ROW_ATTR = "data-ccf-others-row";
   const SAFE_ATTR = "data-capybara-toolkit-others";
   const DELETE_LABELS = ["토큰을 화면에서 삭제", "Remove token from screen", "コマを画面から削除"];
@@ -118,14 +118,30 @@
     return li;
   }
 
-  function nativeRows(dialog) {
+  // 코코포리아 번들로 확인한 실제 구조(내 캐릭터 목록 = 떠 있는 창): Paper > [제목 줄 | .scrollable-list > div > 정렬 목록 div > (클래스 없는 position:relative 래퍼 div > ListItem(button, dense) + 보조 동작)].
+  // 행의 삭제 버튼 이름(번역)이나 켜짐 여부(켜져 있지 않은 캐릭터는 "추가" 버튼)에 기대지 않고, 행 안의 이름 글자(.MuiListItemText-primary)로 행을 찾는다.
+  function rowOf(node) {
+    let row = node.closest(".MuiListItem-container, .MuiListItem-root, li, [role='listitem']");
+    if (!row) return null;
+    if (row.parentElement?.classList.contains("MuiListItem-container")) row = row.parentElement;
+    // 정렬용 래퍼(클래스 없는 div, 자식 하나)까지 올라간다: 형제 행은 그 래퍼의 형제다
+    while (row.parentElement && !row.parentElement.className && row.parentElement.children.length === 1 && !row.parentElement.matches("ul, ol, [role='list']")) row = row.parentElement;
+    return row;
+  }
+
+  function nativeRows(panel) {
     const rows = [];
-    dialog.querySelectorAll("button[aria-label], button[title]").forEach((button) => {
-      if (!DELETE_LABELS.some((text) => labelOf(button).includes(text))) return;
-      const row = button.closest('li, .MuiListItem-root, [role="listitem"], [role="row"]') || button.parentElement?.parentElement;
+    panel.querySelectorAll(".MuiListItemText-primary").forEach((name) => {
+      if (name.closest(`[${ROW_ATTR}]`)) return;
+      const row = rowOf(name);
       if (row && isNativeRow(row) && !rows.includes(row)) rows.push(row);
     });
     return rows;
+  }
+
+  // 네이티브 행이 없을 때 직접 그린 행을 붙일 목록 칸: MUI List 가 있으면 그것, 없으면 스크롤 영역(.scrollable-list)의 안쪽 div
+  function listContainer(panel) {
+    return panel.querySelector("ul.MuiList-root, [role='list'], ul") || panel.querySelector(".scrollable-list > div") || panel.querySelector(".scrollable-list");
   }
 
   function buildRow(template, entry, sheetApi) {
@@ -190,7 +206,7 @@
       let parent = last?.parentElement;
       if (!rows.length) {
         // 네이티브 행이 없다: 패널 안의 목록(ul / role=list)이 있으면 거기에, 직접 그린 행으로
-        const own = dialog.querySelector("ul.MuiList-root, ul, [role='list']");
+        const own = listContainer(dialog);
         if (!own) continue;
         parent = own;
         template = fallbackTemplate();
@@ -249,8 +265,8 @@
     out.ownedByOthers = all.filter((c) => c && c.owner && c.owner !== uid).length;
     out.othersListed = (readOthers() || []).length;
     const panels = listPanels();
-    out.panels = panels.map((panel) => ({ title: (panel.querySelector("h6, h5, h4, h3, h2")?.textContent || "").trim().slice(0, 20), nativeRows: nativeRows(panel).length, hasList: !!panel.querySelector("ul.MuiList-root, ul, [role='list']"), kind: panel.matches(".MuiDialog-root, [role='dialog']") ? "dialog" : "paper" }));
-    out.reason = !uid || !room ? "룸 정보/uid 없음" : !out.gm ? "GM(방장) 계정이 아님(소유자 비교 uid)" : !out.ownedByOthers ? "다른 사람 소유 캐릭터가 저장소에 없음" : !panels.length ? "'내 캐릭터 목록' 패널이 열려 있지 않음(패널을 열어야 함)" : panels.every((panel) => !nativeRows(panel).length && !panel.querySelector("ul, [role='list']")) ? "패널 안에 목록 요소를 못 찾음" : out.rowsInDom ? "정상: 행이 붙어 있음" : "조건은 맞는데 행이 없음(sync 실행 확인)";
+    out.panels = panels.map((panel) => ({ title: (panel.querySelector("h6, h5, h4, h3, h2")?.textContent || "").trim().slice(0, 20), nativeRows: nativeRows(panel).length, hasList: !!listContainer(panel), kind: panel.matches(".MuiDialog-root, [role='dialog']") ? "dialog" : "paper" }));
+    out.reason = !uid || !room ? "룸 정보/uid 없음" : !out.gm ? "GM(방장) 계정이 아님(소유자 비교 uid)" : !out.ownedByOthers ? "다른 사람 소유 캐릭터가 저장소에 없음" : !panels.length ? "'내 캐릭터 목록' 패널이 열려 있지 않음(패널을 열어야 함)" : panels.every((panel) => !nativeRows(panel).length && !listContainer(panel)) ? "패널 안에 목록 요소를 못 찾음" : out.rowsInDom ? "정상: 행이 붙어 있음" : "조건은 맞는데 행이 없음(sync 실행 확인)";
     return out;
   }
 

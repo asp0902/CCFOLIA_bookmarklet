@@ -96,6 +96,30 @@ const html = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
       assert.deepEqual([diag.gm, diag.ownedByOthers, diag.panels.map((x) => [x.kind, x.title, x.nativeRows]), diag.reason], [true, 1, [['paper', '내 캐릭터 목록', variant === 'paper-empty' ? 0 : 1]], '정상: 행이 붙어 있음'], variant + ': diag explains');
       assert.deepEqual(errors, []); await page.close();
     }
+    // the structure of the real panel (read from CCFOLIA's bundle): Paper > title bar + .scrollable-list > div > sorted list div > class-less relative wrapper > li.MuiListItem-container > ListItem(button) + secondary action
+    // (the token button of a character that is not on the board is "add", its tooltip name differs per language: rows are found by their name text, not by a delete label)
+    for (const variant of ['bundle-rows', 'bundle-empty']) {
+      const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+      const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+      const item = (name) => '<div style="position:relative"><li class="MuiListItem-container"><div class="MuiButtonBase-root MuiListItem-root MuiListItem-dense MuiListItem-gutters MuiListItem-button MuiListItem-secondaryAction" role="button" tabindex="0" style="display:flex"><div class="MuiListItemAvatar-root"><div class="MuiAvatar-root"><img class="MuiAvatar-img" src="https://example.test/a.png" width="40" height="40"></div></div><div class="MuiListItemText-root"><span class="MuiTypography-root MuiListItemText-primary">' + name + '</span><p class="MuiListItemText-secondary">메모</p></div></div><div class="MuiListItemSecondaryAction-root"><button class="MuiIconButton-root" aria-label="말로서 판면에 추가">+</button></div></li></div>';
+      const panel = '<div class="MuiPaper-root MuiPaper-elevation6" style="position:fixed;right:20px;top:60px;width:420px;background:#333"><div><h6 class="MuiTypography-root MuiTypography-subtitle2">내 캐릭터 목록</h6></div><div class="MuiList-root scrollable-list"><div><div class="css-sorted" id="rows">' + (variant === 'bundle-rows' ? item('연갈') + item('브릿지') : '') + '</div></div></div></div>';
+      await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div id="root"></div>' + panel }));
+      await page.goto('https://ccfolia.com/rooms/test');
+      await page.evaluate(() => {
+        const state = { app: { user: { uid: 'me' }, state: { roomId: 'r1', openRoomCharacter: false, openRoomCharacterId: null }, room: { members: { entities: { u1: { displayName: '하나' } } } } }, entities: { rooms: { entities: { r1: { owner: 'me' } } }, roomCharacters: { entities: { b1: { name: '하나의 캐릭터', owner: 'u1', order: 1, iconUrl: '' } } } } };
+        window.__dispatched = [];
+        document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, subscribe: () => () => {}, dispatch(action) { window.__dispatched.push(action); return action; } } } } } };
+      });
+      await page.addScriptTag({ content: source });
+      await page.waitForSelector('[data-ccf-others-row]', { timeout: 4000 });
+      const shape = await page.evaluate((variant) => { const own = document.querySelector('[data-ccf-others-row]'); const rows = document.getElementById('rows'); return { sibling: own.parentElement === rows || own.parentElement === rows.parentElement || own.parentElement.closest('#rows') === rows, nativeKept: rows.querySelectorAll('.MuiListItemText-primary').length - 1, last: variant === 'bundle-rows' ? rows.lastElementChild === own : true, buttons: own.querySelectorAll('button').length }; }, variant);
+      assert.deepEqual([shape.sibling, shape.last, shape.buttons], [true, true, 0], variant + ': the row is appended as a sibling of the native rows, no buttons (' + JSON.stringify(shape) + ')');
+      const diag = await page.evaluate(() => window.__CCF_OTHERS_CHARS__.diag());
+      assert.deepEqual(diag.panels.map((x) => [x.nativeRows, x.hasList]), [[variant === 'bundle-rows' ? 2 : 0, true]], variant + ': diag sees the rows by their names');
+      await page.locator('[data-ccf-others-row]').click();
+      assert.deepEqual(await page.evaluate(() => window.__dispatched.map((x) => x.payload.openRoomCharacterId)), ['b1']);
+      assert.deepEqual(errors, []); await page.close();
+    }
     // diag reasons: not the GM / no panel open
     {
       const page = await browser.newPage();
