@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.42
+// @version      0.3.43
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.42";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.43";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3166,6 +3166,15 @@
       entry.tabSignature = tabSignature;
     }
 
+    // 같은 탭에 같은 영상을 또 넣으면(목록이 안 보여 다시 시도한 경우 등) 하나만 둔다. 기존 중복은 지우지 않는다.
+    const duplicate = [...ccfBgmSlotMap.values()].some((other) => other?.videoId === videoId
+      && normalizeCcfBgmTabSignature(other.tabSignature) === (tabSignature || ""));
+    if (duplicate) {
+      debugLog("bgm-youtube-url-duplicate-skipped", { slotKey: normalizedSlotKey, videoId, tabSignature });
+      renderCcfYoutubeBgmLibraryItems(mountRoot);
+      return;
+    }
+
     // 지금 라이브러리에 네이티브 음원이 하나도 없다면 이 항목을 "맨 위"로 못박는다.
     // 안 그러면 나중에 파일 음원을 넣는 순간 그 뒤로 밀려난다.
     // 판단은 추가하는 이 순간 한 번만 — 렌더 때마다 하면 창이 닫혀 있는 순간에도
@@ -5288,8 +5297,14 @@
     const candidates = [];
 
     if (mountRoot instanceof HTMLElement) {
+      // URL 칸의 가장 가까운 컨테이너는 목록이 없는 작은 Paper(입력 상자)다. 사운드 라이브러리 서랍 전체(표시된 루트·Drawer)를 먼저 본다:
+      // 빈 탭(네이티브 음원 0개)에서 유튜브를 넣으면 이것 없이는 넣을 목록을 못 찾아, 일반 음원을 하나 넣어야 나타났다.
+      const outer = mountRoot.closest('[data-ccf-bgm-dialog-root="1"], .MuiDrawer-root, .MuiDialog-root');
+      if (outer instanceof HTMLElement) {
+        candidates.push(outer);
+      }
       const dialog = getCcfBgmDialogRoot(mountRoot);
-      if (dialog instanceof HTMLElement) {
+      if (dialog instanceof HTMLElement && dialog !== outer) {
         candidates.push(dialog);
       }
     }
@@ -5321,8 +5336,9 @@
       })
       .find((el) => {
         const text = normalizeSpace(el.textContent || "");
-        return /\bBGM\b/i.test(text)
-          && /효과음|効果音|サウンド|라이브러리|library|sound/i.test(text);
+        if (el.getAttribute("data-ccf-bgm-dialog-root") === "1" && el.querySelector('input[placeholder^="https://"]')) return true; // 탭 이름을 모두 바꾼 라이브러리
+        return /\bBGM\d*\b/i.test(text) // 탭 이름이 "BGM01" 같은 기본값이어도
+          && /효과음|効果音|サウンド|라이브러리|library|sound|\bSE\d*\b/i.test(text);
       });
     return drawer ? findCcfBgmMusicListInDialog(drawer) : null;
   }
@@ -9466,7 +9482,7 @@
     ccfBgmMultiSelectedEntries.clear();
   }
 
-  let ccfBgmLastMultiSelectMode = false;
+  var ccfBgmLastMultiSelectMode = false; // var: 시작 직후 렌더가 이 선언보다 먼저 이 함수를 불러 TDZ(ReferenceError)가 났다(테스트방 실측 로그)
   function syncCcfBgmYoutubeMultiSelectUI() {
     try {
       // 전체 dialog scope를 합쳐서 mode 한 번만 판정 (한 scope에서 잠시 sync race로
