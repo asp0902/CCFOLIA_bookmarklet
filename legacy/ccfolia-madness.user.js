@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Madness Alert (Cthulhu rooms) by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-madness
-// @version      0.1.1
+// @version      0.1.2
 // @description  Cthulhu rooms only: when a character loses 5 or more SAN at once, or 1/5 or more of the SAN it had when first seen today, a small card offers the madness table commands (nothing is sent by itself).
 // @description:ko 크툴루 룸에서만: 캐릭터의 SAN 이 한 번에 5 이상, 또는 오늘 처음 본 값의 1/5 이상 줄면 작은 알림 카드로 광기 표 커맨드를 제안합니다(자동 전송 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,15 +22,15 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.1";
+  const VERSION = "0.1.2";
   const SAFE_ATTR = "data-capybara-toolkit-madness";
-  const SAN_RE = /^(san|san値|sanity|이성|이성치|이성값|正気度|sanチェック)$/i;
+  const SAN_RE = /^(san|san[値치값점]|sanity|sanity[points값치]*|이성|이성[치값점]|정신력|正気度|正気度ポイント|sanチェック)$/i;
   // BCDice Cthulhu7th 도움말: TI = 狂気の発作(リアルタイム, 일시적 광기), LI = 狂気の発作(サマリー, 부정기 광기 쪽 요약표). 6판(Cthulhu)에는 이 표가 없을 수 있다.
   const DEFAULT_COMMANDS = { temporary: "TI", indefinite: "LI" };
 
   try { window.__CCF_MADNESS__?.disable?.(); } catch (error) { /* 이전 인스턴스 정리 실패 */ }
   const abort = new AbortController();
-  const state = { store: null, unsubscribe: null, last: new Map(), roomKey: "", queued: false, card: null };
+  const state = { store: null, unsubscribe: null, last: new Map(), roomKey: "", queued: false, card: null, scans: 0, lastEval: null, lastCard: null, labels: new Map() };
 
   function findStore() {
     if (state.store) return state.store;
@@ -70,12 +70,13 @@
     return { record: rec, alert: temporary || indefinite ? { temporary, indefinite, drop, cumulative, base: indefinite ? cumulative + next : rec.base } : null };
   }
 
-  function sanOf(character) {
+  function sanEntry(character) {
     for (const entry of Array.isArray(character?.status) ? character.status : []) {
-      if (entry && SAN_RE.test(String(entry.label || "").trim().replace(/\s+/g, "")) && Number.isFinite(Number(entry.value))) return Number(entry.value);
+      if (entry && SAN_RE.test(String(entry.label || "").trim().replace(/\s+/g, "")) && Number.isFinite(Number(entry.value))) return entry;
     }
     return null;
   }
+  function sanOf(character) { const entry = sanEntry(character); return entry ? Number(entry.value) : null; }
 
   function context() {
     const snapshot = state.store?.getState?.();
@@ -83,11 +84,13 @@
     const room = roomId ? snapshot?.entities?.rooms?.entities?.[roomId] : null;
     if (!roomId || !room) return null;
     const system = String(room.diceBotSystem || room.system || "");
-    return { snapshot, roomId, room, uid: snapshot?.app?.user?.uid || "", table: /7th|7版|7판/i.test(system), cthulhu: /cthulhu|coc|크툴루|クトゥルフ/i.test(system) };
+    const diceBotName = String(room.diceBotName || "");
+    return { snapshot, roomId, room, uid: snapshot?.app?.user?.uid || "", table: /7th|7版|7판/i.test(system + " " + diceBotName), system, diceBotName, cthulhu: /cthulhu|coc|크툴루|クトゥルフ|call of/i.test(system + " " + diceBotName) };
   }
 
   function scan() {
     state.queued = false;
+    state.scans += 1;
     const ctx = context();
     if (!ctx) return;
     if (state.roomKey !== ctx.roomId) { state.roomKey = ctx.roomId; state.last = new Map(); }
@@ -98,9 +101,11 @@
       const san = character ? sanOf(character) : null;
       if (san === null) continue;
       seen.add(id);
+      state.labels.set(id, String(sanEntry(character)?.label || ""));
       const prev = state.last.get(id);
       state.last.set(id, san);
-      if (prev === undefined || !ctx.cthulhu) { // 처음 본 값 = 기준값(알리지 않는다)
+      if (prev === undefined || !ctx.cthulhu) {
+        if (prev !== undefined && san !== prev) state.lastEval = { at: Date.now(), id, name: String(character.name || "").slice(0, 8), from: prev, to: san, alerted: false, reason: "크툴루 룸이 아님(시스템 " + ctx.system + ")" }; // 처음 본 값 = 기준값(알리지 않는다)
         if (prev === undefined && ctx.cthulhu) { data ||= readStore(ctx.roomId); if (!data.chars[id] || data.chars[id].day !== today()) { data.chars[id] = { day: today(), base: san }; writeStore(ctx.roomId, data); } }
         continue;
       }
@@ -110,6 +115,9 @@
       data.chars[id] = result.record; writeStore(ctx.roomId, data);
       const mine = character.owner && character.owner === ctx.uid;
       const gm = ctx.room.owner && ctx.room.owner === ctx.uid;
+      const drop = prev - san, base = result.record.base;
+      state.lastEval = { at: Date.now(), id, name: String(character.name || "").slice(0, 8), from: prev, to: san, alerted: !!(result.alert && (mine || gm)),
+        reason: !result.alert ? `알림 조건 아님: 이번 감소 ${Math.max(0, drop)}(<5), 오늘 누적 기준값 ${base}` : !(mine || gm) ? "조건은 맞지만 이 화면은 그 캐릭터 소유자도 GM도 아님" : "알림" };
       if (result.alert && (mine || gm)) showCard({ id, name: String(character.name || "").trim() || "캐릭터", from: prev, to: san, ...result.alert, commands: data.commands, table: ctx.table });
     }
     for (const id of [...state.last.keys()]) if (!seen.has(id)) state.last.delete(id);
@@ -137,6 +145,7 @@
     const card = document.createElement("div");
     card.setAttribute(SAFE_ATTR, "1");
     card.setAttribute("role", "alert");
+    state.lastCard = { at: Date.now(), name: info.name, from: info.from, to: info.to };
     card.style.cssText = "position:fixed;right:16px;bottom:200px;z-index:2147482990;width:300px;box-sizing:border-box;padding:12px 16px 8px;background:rgba(44,44,44,.95);color:#fff;border-radius:4px;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12);font:14px/1.5 Roboto,'Noto Sans KR',sans-serif";
     const reasons = [info.temporary ? `한 번에 −${info.drop}` : "", info.indefinite ? `오늘 누적 −${info.cumulative}(기준 ${info.base}의 1/5 이상)` : ""].filter(Boolean).join(" · ");
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -193,6 +202,23 @@
     return true;
   }
 
-  window.__CCF_MADNESS__ = { __owner: abort.signal, version: VERSION, evaluate, sanOf, disable, scan: () => scan(), state: () => ({ room: state.roomKey, last: [...state.last.entries()], card: !!state.card }) };
+  // 읽기만 하는 진단: 왜 카드가 안 뜨는지(방 시스템·크툴루 판정·SAN 라벨·추적 중인 캐릭터와 기준값·마지막 변화와 이유·카드 표시/위치)
+  function diag() {
+    const ctx = context();
+    const out = { version: VERSION, store: !!state.store, scans: state.scans, room: state.roomKey || null, system: ctx?.system ?? null, diceBotName: ctx?.diceBotName ?? null, cthulhu: ctx ? ctx.cthulhu : null, tableCommands: ctx ? ctx.table : null, uid: ctx?.uid ? ctx.uid.slice(0, 6) + "…" : "", gm: ctx ? !!(ctx.room.owner && ctx.room.owner === ctx.uid) : null, tracked: [], lastEval: state.lastEval && { ...state.lastEval, at: new Date(state.lastEval.at).toISOString() }, lastCard: state.lastCard && { ...state.lastCard, at: new Date(state.lastCard.at).toISOString() }, card: null, reason: "" };
+    const saved = state.roomKey ? readStore(state.roomKey) : { chars: {}, commands: DEFAULT_COMMANDS };
+    out.commands = saved.commands;
+    const characters = ctx?.snapshot?.entities?.roomCharacters?.entities || {};
+    for (const [id, character] of Object.entries(characters)) {
+      const statusLabels = (Array.isArray(character?.status) ? character.status : []).map((entry) => String(entry?.label || "")).slice(0, 8);
+      const san = character ? sanOf(character) : null;
+      out.tracked.push({ id: id.slice(0, 6), name: Array.from(String(character?.name || "")).slice(0, 4).join(""), owner: character?.owner === ctx?.uid ? "나" : "남", statusLabels, sanLabel: state.labels.get(id) || "", san, memory: state.last.has(id) ? state.last.get(id) : null, base: saved.chars[id] || null });
+    }
+    if (state.card) { const rect = state.card.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); out.card = { shown: true, rect: [Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height)], coveredBy: hit && !state.card.contains(hit) ? (hit.tagName.toLowerCase() + "." + String(hit.className || "").split(" ")[0]) : null }; } else out.card = { shown: false };
+    out.reason = !state.store ? "저장소를 못 찾음" : !ctx ? "룸 정보 없음" : !ctx.cthulhu ? `크툴루 룸으로 판정되지 않음(시스템 "${ctx.system}", 이름 "${ctx.diceBotName}")` : !out.tracked.some((t) => t.san !== null) ? "SAN 라벨(SAN/이성/正気度…)의 상태값을 가진 캐릭터가 없음(statusLabels 확인)" : !state.lastEval ? "아직 SAN 이 줄어든 변화를 못 봄(기준값만 저장됨)" : state.lastEval.reason;
+    return out;
+  }
+
+  window.__CCF_MADNESS__ = { __owner: abort.signal, version: VERSION, evaluate, sanOf, disable, diag, scan: () => scan(), state: () => ({ room: state.roomKey, last: [...state.last.entries()], card: !!state.card }) };
   start();
 })();

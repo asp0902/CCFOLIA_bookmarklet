@@ -59,6 +59,16 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-madness.u
     { const page = await open({ system: 'Cthulhu' }); await set(page, 40); assert.deepEqual((await card(page)).buttons, ['close'], '6th edition: no table buttons'); await page.close(); }
     // a baseline from yesterday is replaced by the first value seen today
     { const page = await open({ pre: { 'ccf-madness-v1:r1': JSON.stringify({ chars: { c1: { day: '2000-01-01', base: 100 } }, commands: {} }) } }); await set(page, 55); assert.equal(await card(page), null, '−2 against today\'s first value 57 (not yesterday\'s 100)'); await page.close(); }
+    // the real room system carries the edition ("Insane:Korean" is what a Korean inSANe room has): Cthulhu7th:Korean is a Cthulhu room with the 7th-edition tables; SAN label variants; diag explains
+    for (const label of ['SAN', '이성', 'SAN치', '正気度', 'San']) {
+      const page = await open({ system: 'Cthulhu7th:Korean' });
+      await page.evaluate((label) => { window.__state.entities.roomCharacters.entities.c1.status[1].label = label; }, label); await page.evaluate(() => window.__CCF_MADNESS__.scan()); await page.waitForTimeout(100);
+      await set(page, 40); const c = await card(page); assert(c && c.buttons.includes('temporary'), 'label ' + label + ': the card shows');
+      const d = await page.evaluate(() => window.__CCF_MADNESS__.diag());
+      assert.deepEqual([d.cthulhu, d.tableCommands, d.gm, d.tracked[0].sanLabel === label, d.tracked[0].san, d.lastEval.alerted, d.card.shown, d.card.coveredBy], [true, true, false, true, 40, true, true, null], 'diag for ' + label + ': ' + JSON.stringify(d)); await page.close();
+    }
+    { const page = await open({ system: 'Insane:Korean' }); await set(page, 40); const d = await page.evaluate(() => window.__CCF_MADNESS__.diag()); assert.deepEqual([d.cthulhu, d.card.shown], [false, false]); assert.match(d.reason, /크툴루 룸으로 판정되지 않음/); assert.match(d.lastEval.reason, /크툴루 룸이 아님/); await page.close(); }
+    { const page = await open({}); await set(page, 56); const d = await page.evaluate(() => window.__CCF_MADNESS__.diag()); assert.equal(d.lastEval.alerted, false); assert.match(d.lastEval.reason, /알림 조건 아님/); await page.close(); }
     console.log('madness PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
