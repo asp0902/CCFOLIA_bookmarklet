@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.107
+// @version      0.1.108
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.107"),
+    version: getUserscriptVersion("0.1.108"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10813,7 +10813,13 @@
     const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6, [role=\"heading\"]");
     for (const heading of headings) {
       if (!(heading instanceof HTMLElement) || !titles.has(normalizeMyCharacterName(heading.textContent))) continue;
-      const panel = heading.closest(".MuiPaper-root, [role=\"dialog\"]") || heading.parentElement;
+      // 제목 h6 에서 가장 가까운 Paper 는 제목 줄(MUI AppBar 도 Paper)이다: 목록(.scrollable-list / 행 이름)을 품은 바깥 Paper(창)까지 올라간다.
+      let panel = null;
+      for (let node = heading.parentElement; node; node = node.parentElement) {
+        if (node.matches?.(".MuiPaper-root, [role=\"dialog\"]")) { panel = node; if (node.querySelector(".scrollable-list, .MuiListItemText-primary")) break; }
+        if (node === document.body) break;
+      }
+      panel = panel || heading.parentElement;
       if (panel instanceof HTMLElement && isVisible(panel)) return panel;
     }
     return null;
