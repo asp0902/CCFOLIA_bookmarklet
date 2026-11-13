@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.36
+// @version      0.5.37
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -153,12 +153,22 @@
   // 제목 줄 더블클릭 = 접기/펴기(시트 창·핸드아웃 창과 같은 동작). 접힌 상태는 패널마다 기억하고, 접힌 동안 새 메시지가 오면 제목 줄에 점을 단다.
   let collapsed = false;
   let collapseCount = Infinity; // 접을 때의 메시지 수(되살린 접힘은 첫 그리기 수)
+  let collapseScroll = null; // 접을 때의 스크롤 { pinned, top }: 펼치면 바닥이었으면 바닥(새 메시지 포함), 아니면 같은 위치
   function setCollapsed(on) {
+    if (on && !collapsed && listEl) collapseScroll = { pinned: pinnedToBottom, top: listEl.scrollTop };
     collapsed = !!on;
     collapseCount = collapsed ? (lastSignature ? lastSignature.split(",").length : Infinity) : Infinity;
     if (panelEl) { panelEl.toggleAttribute("data-collapsed", collapsed); if (!collapsed) panelEl.removeAttribute("data-unread"); }
     savePrefs();
-    if (!collapsed) { try { safeLayout(); restoreScroll(); } catch (_) { /* 다음 그리기에서 */ } }
+    if (!collapsed) {
+      try { safeLayout(); } catch (_) { /* 다음 그리기에서 */ }
+      const saved = collapseScroll || { pinned: true, top: 0 };
+      collapseScroll = null;
+      if (listEl) {
+        if (saved.pinned) { pinnedToBottom = true; scrollListToBottom(); }
+        else { suppressScrollEval = true; listEl.scrollTop = saved.top; clearTimeout(suppressScrollTimer); suppressScrollTimer = setTimeout(() => { suppressScrollEval = false; }, 120); }
+      }
+    }
   }
   // 붙여넣은 이미지: 입력칸에는 토큰 원문({i:주소|설명|}) 대신 🖼 + 보이지 않는 태그 문자 하나(이미지마다 다름)를 넣는다. 둘이 한 글자(grapheme)라 커서·선택·백스페이스가 통째로 움직이고,
   // 입력칸 위에 썸네일과 × 를 보인다. 보낼 때 표식을 원래 토큰으로 되돌린다(전송 결과는 예전·오리지널과 같다).
@@ -1503,7 +1513,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   let fillRounds = 0;
   let fillChannel = "";
   function fillIfShort() {
-    if (!listEl || olderLoading || exhaustedNow()) return;
+    if (!listEl || collapsed || olderLoading || exhaustedNow()) return; // 접힌 동안 목록은 높이 0 이라 늘 "짧아" 보여 이전 대화를 계속 불러왔다
     if (fillChannel !== currentChannel) {
       fillChannel = currentChannel; fillRounds = 0;
       if (olderError) { olderExhausted = false; const st = chanState.get(currentChannel); if (st) st.exhausted = false; }
@@ -2693,7 +2703,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       if (!suppressScrollEval) lastUserScrollAt = Date.now();
       // 우리가 프로그램적으로 내린 스크롤은 무시한다. 안 그러면 높이가 아직 안 찬
       // 순간의 스크롤 이벤트가 "바닥 아님"으로 오판해 고정을 풀어 버린다(시작 시 튐).
-      if (suppressScrollEval) return;
+      if (suppressScrollEval || collapsed) return;
       tipEl.hidden = true;
       const gap = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
       pinnedToBottom = gap < 40;
