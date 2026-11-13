@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.33
+// @version      0.5.34
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.33";
+  const VERSION = "0.5.34";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1114,12 +1114,18 @@
     return splitEnvelope(text).envelope?.blockStyle?.hidden === true;
   }
   // 숨김/보이기를 반영한 새 본문(보이는 글은 그대로). 봉투에 다른 내용이 없으면 보이기 때 봉투를 통째로 없앤다.
-  function textWithHidden(text, hidden) {
+  function textWithHidden(text, hidden) { return textWithBlockFlag(text, "hidden", hidden); }
+  // 봉투의 blockStyle 표식 하나(hidden: 숨김, breakBefore: 위에 구분선)를 켜고 끈 새 본문(보이는 글은 그대로). 봉투에 다른 내용이 없으면 끌 때 봉투를 통째로 없앤다.
+  function textWithBlockFlag(text, key, on) {
     const { visible, envelope } = splitEnvelope(text);
     const env = envelope ? { ...envelope, blockStyle: { ...(envelope.blockStyle || {}) } } : { v: 1, text: visible, formatRuns: [], alignRuns: [], blockStyle: {} };
-    if (hidden) env.blockStyle.hidden = true; else delete env.blockStyle.hidden;
+    if (on) env.blockStyle[key] = true; else delete env.blockStyle[key];
     const trivial = !(env.formatRuns && env.formatRuns.length) && !(env.alignRuns && env.alignRuns.length) && !Object.keys(env.blockStyle).length && !env.source && !env.roll20Macro;
-    return !hidden && trivial ? visible : visible + encodeEnvelopeToInvisible(env);
+    return !on && trivial ? visible : visible + encodeEnvelopeToInvisible(env);
+  }
+  function hasBreakText(text) {
+    if (!text || String(text).indexOf(CCF_INVIS_START) < 0) return false;
+    return splitEnvelope(text).envelope?.blockStyle?.breakBefore === true;
   }
   async function readAllAuthUids() {
     return new Promise((resolve) => {
@@ -1150,6 +1156,13 @@ background: transparent; color: inherit; cursor: pointer; opacity: .7; align-ite
 .ccf-hide-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
 .ccf-hide-host:hover > .ccf-hide-btn, .ccf-hide-btn:focus-visible { display: inline-flex; }
 .ccf-hide-btn.ccf-hide-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
+/* 구분선 단추(GM): 눈 단추 왼쪽. 누를 때마다 그 메시지 위 구분선을 넣고 뺀다(메시지 봉투의 breakBefore). */
+.ccf-break-btn { display: none; position: absolute; top: 4px; right: 114px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+background: transparent; color: inherit; cursor: pointer; opacity: .7; align-items: center; justify-content: center; z-index: 3; }
+.ccf-break-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
+.ccf-hide-host:hover > .ccf-break-btn, .ccf-break-btn:focus-visible { display: inline-flex; }
+.ccf-break-btn.ccf-break-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
+.ccf-break-btn[data-on="1"] { color: #f50057; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] > :not(.ccf-hide-btn) { opacity: .38; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; position: absolute; right: 12px; bottom: 4px; font-size: 11px; opacity: .6; pointer-events: none; }
     `;
@@ -1159,14 +1172,19 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const li = event.target instanceof Element ? event.target.closest(".ccf-hide-host") : null;
       const eye = li?.querySelector(".ccf-hide-btn");
       if (!li || !eye) return;
-      const natives = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn"));
+      const natives = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn") && !b.classList.contains("ccf-break-btn"));
       // 네이티브 호버 버튼 묶음 안, 첫 버튼(수정) 바로 앞에 같은 클래스(크기·간격·호버 모양)로 끼워 넣는다.
+      const brk = li.querySelector(".ccf-break-btn");
       if (natives.length && !eye.classList.contains("ccf-hide-inline")) {
-        const first = natives[0];
+        const first = natives.filter((b) => !b.classList.contains("ccf-break-btn"))[0];
         eye.className = `${first.className} ccf-hide-btn ccf-hide-inline`;
         eye.style.cssText = "";
         first.parentElement.insertBefore(eye, first);
-        return;
+      }
+      if (brk && eye.classList.contains("ccf-hide-inline") && !brk.classList.contains("ccf-break-inline")) {
+        brk.className = `${eye.className.replace(/\bccf-hide-(btn|inline)\b/g, "").trim()} ccf-break-btn ccf-break-inline`;
+        brk.style.cssText = "";
+        eye.parentElement.insertBefore(brk, eye); // 눈 단추 왼쪽
       }
       if (eye.classList.contains("ccf-hide-inline")) return;
       // 묶음을 못 찾으면 줄 오른쪽 위에 절대배치(읽을 수 있는 버튼 위치가 있으면 그 왼쪽 가운데).
@@ -1203,12 +1221,14 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       return isGm;
     } catch (error) { scpHost.gmReason = `error: ${error?.message || error}`; return scpHost.isGm ?? null; }
   }
-  async function setMessageHidden(id, hidden) {
+  async function setMessageHidden(id, hidden) { return setMessageBlockFlag(id, "hidden", hidden); }
+  async function setMessageBlockFlag(id, key, on) {
+    const hidden = on; // 아래 안내 문구용
     if (!id) throw new Error("메시지를 찾지 못했습니다.");
-    if (scpHost.isGm !== true) throw new Error("GM(방장)만 메시지를 숨길 수 있습니다.");
+    if (scpHost.isGm !== true) throw new Error(key === "hidden" ? "GM(방장)만 메시지를 숨길 수 있습니다." : "GM(방장)만 구분선을 넣고 뺄 수 있습니다.");
     const entity = getRoomMessagesSlice()?.entities?.[id];
     const text = entity ? String(entity.text || "") : (olderMessages.get(id)?.text || "");
-    const next = textWithHidden(text, !!hidden);
+    const next = textWithBlockFlag(text, key, !!on);
     if (next === text) return false;
     const ctx = await getAuthContext();
     const url = `${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/messages/${encodeURIComponent(id)}?updateMask.fieldPaths=text&updateMask.fieldPaths=updatedAt`;
@@ -1217,7 +1237,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ fields: { text: { stringValue: next }, updatedAt: { timestampValue: new Date().toISOString() } } })
     });
-    if (!response.ok) throw new Error(`${hidden ? "숨기기" : "다시 보이기"} 실패 (${response.status})`);
+    if (!response.ok) throw new Error(`${key === "breakBefore" ? (on ? "구분선 넣기" : "구분선 빼기") : hidden ? "숨기기" : "다시 보이기"} 실패 (${response.status})`);
     lastSignature = null;
     return true;
   }
@@ -1251,6 +1271,25 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     }
     return row;
   }
+  const BREAK_ICON = "M4 11h16v2H4z"; // Material horizontal_rule
+  function makeBreakButton(getId, onNow) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ccf-break-btn";
+    btn.setAttribute(SAFE_ATTR, "1");
+    btn.dataset.on = onNow ? "1" : "0";
+    const label = onNow ? "구분선 빼기" : "위에 구분선";
+    btn.title = label; btn.setAttribute("aria-label", label);
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="${BREAK_ICON}"/></svg>`;
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault(); event.stopPropagation();
+      btn.disabled = true;
+      try { await setMessageBlockFlag(getId(), "breakBefore", !onNow); }
+      catch (error) { scpHost.toast?.(error?.message || "처리하지 못했습니다.", "error"); }
+      finally { btn.disabled = false; }
+    });
+    return btn;
+  }
   // 오리지널 채팅 줄에도 눈 버튼을 달기 위한 줄 ↔ 메시지 짝짓기: 줄의 원문(숨은 봉투 포함)이 같은 메시지를 찾고, 같은 글이 여럿이면 화면 아래(최근)부터 짝짓는다.
   function nativeRowKey(li) {
     const p = li.querySelector("p.MuiListItemText-secondary");
@@ -1271,7 +1310,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     return "";
   }
   function decorateNativeRows() {
-    if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root .ccf-hide-btn")) b.remove(); return; }
+    if (scpHost.isGm !== true) { for (const b of document.querySelectorAll(".MuiListItem-root .ccf-hide-btn, .MuiListItem-root .ccf-break-btn")) b.remove(); return; }
     const slice = getRoomMessagesSlice();
     if (!slice) return;
     const rows = [...document.querySelectorAll(".MuiListItem-root")].filter((li) => li instanceof HTMLElement && li.querySelector("h6.MuiListItemText-primary") && !li.closest(".ccf-scp-panel, .MuiPopover-root, .MuiMenu-root, .MuiDialog-root"));
@@ -1300,11 +1339,22 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const n = seen.get(key) || 0;
       seen.set(key, n + 1);
       const existing = li.querySelector(".ccf-hide-btn");
+      const existingBreak = li.querySelector(".ccf-break-btn");
       const fiberId = nativeRowMessageId(li);
       const known = fiberId && slice.entities?.[fiberId] && !slice.entities[fiberId].removed ? fiberId : "";
-      if (!list && !known) { existing?.remove(); return; }
+      if (!list && !known) { existing?.remove(); existingBreak?.remove(); return; }
       const id = known || (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
       const hiddenNow = known ? isHiddenText(String(slice.entities[known].text || "")) : isHiddenText(rawKeys[i]);
+      const breakNow = hasBreakText(String(slice.entities?.[id]?.text || ""));
+      if (!existingBreak || existingBreak.dataset.id !== id || existingBreak.dataset.on !== (breakNow ? "1" : "0")) {
+        existingBreak?.remove();
+        const brk = makeBreakButton(() => id, breakNow);
+        brk.dataset.id = id;
+        li.classList.add("ccf-hide-host");
+        const eyeNow = li.querySelector(".ccf-hide-btn");
+        if (eyeNow?.classList.contains("ccf-hide-inline")) { brk.className = `${eyeNow.className.replace(/\bccf-hide-(btn|inline)\b/g, "").trim()} ccf-break-btn ccf-break-inline`; eyeNow.parentElement.insertBefore(brk, eyeNow); }
+        else li.appendChild(brk);
+      }
       if (existing && existing.dataset.id === id && existing.dataset.hidden === String(hiddenNow)) return;
       existing?.remove();
       li.classList.add("ccf-hide-host");

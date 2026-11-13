@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.76";
-  const BUILD_ID = "2026-11-13-hide-edited-247";
+  const VERSION = "0.3.77";
+  const BUILD_ID = "2026-11-13-edit-remnant-break-button-248";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

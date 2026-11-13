@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.111
+// @version      0.1.112
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.111"),
+    version: getUserscriptVersion("0.1.112"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1040,6 +1040,15 @@
       }
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
+          // 편집으로 글을 지우면 React 는 원문 글 노드를 지우기만 한다(추가 노드 없음, 글자 변경 없음). 원문이 봉투를 잃으면 오버레이(예전 서식 글)를 걷고, 아니면 다시 그린다.
+          if (mutation.removedNodes.length) {
+            const target = mutation.target instanceof Element ? mutation.target : null;
+            // 원문 쪽(원문 감싸개 또는 렌더 루트 자신)에서 지워진 것만: 오버레이 안쪽을 우리가 다시 그릴 때 생기는 삭제는 무시한다(반복 방지)
+            const root = target?.classList.contains("ccf-original-hidden") ? target.parentElement : target?.classList.contains("ccf-render-root") ? target : null;
+            if (root && !root.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`) && ![...mutation.removedNodes].every((node) => node instanceof Element && (node.classList.contains("ccf-render-overlay") || node.classList.contains("ccf-original-hidden")))) {
+              if (!releaseStaleRenderRoot(root)) scanWithin(root);
+            }
+          }
           for (const node of mutation.addedNodes) {
             if (node instanceof Element) {
               if (node.closest?.(`[${CCF_SAFE_UI_ATTR}="1"]`)) continue;
@@ -5206,6 +5215,10 @@
         border: 1px solid rgba(255, 255, 255, 0.12) !important;
         border-radius: 6px !important;
         box-shadow: none !important;
+      }
+      /* 메시지 편집창에서는 구분선(—)을 쓰지 않는다: 메시지 호버의 구분선 단추로 넣고 뺀다(chat-panel). */
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] [data-inline-command="break"] {
+        display: none !important;
       }
       html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle {
         background-color: transparent !important;

@@ -41,14 +41,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       const diag = await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.hideDiag());
       assert.equal(diag.isGm, true); assert.equal(diag.gmReason, 'owner'); assert.equal(diag.gmAttr, '1');
       for (const id of ['own', 'theirs', 'fmt']) { // fmt = my message with a format envelope: the row shows only the visible text, the stored text carries the envelope
-        const info = await page.evaluate((rowId) => { const li = document.getElementById(rowId); const hide = li.querySelector('.ccf-hide-btn'); const native = li.querySelector('.native:not(.ccf-hide-btn)'); return { hide: !!hide, native: !!native, nativeVisible: native && getComputedStyle(native).display !== 'none' && getComputedStyle(native).visibility !== 'hidden' }; }, id);
+        const info = await page.evaluate((rowId) => { const li = document.getElementById(rowId); const hide = li.querySelector('.ccf-hide-btn'); const native = li.querySelector('.native:not(.ccf-hide-btn):not(.ccf-break-btn)'); return { hide: !!hide, native: !!native, nativeVisible: native && getComputedStyle(native).display !== 'none' && getComputedStyle(native).visibility !== 'hidden' }; }, id);
         assert.deepEqual(info, { hide: true, native: true, nativeVisible: true }, id + ': the eye button was added, the native button is untouched');
       }
       // hover: the eye goes into the native hover group, just before its first button (the edit / reply button)
       await page.locator('#own').hover(); await page.waitForTimeout(150);
-      assert.equal(await page.evaluate(() => { const g = document.querySelector('#own .hover-group'); const eye = g.querySelector('.ccf-hide-btn'); return !!eye && eye.nextElementSibling === g.querySelector('.native:not(.ccf-hide-btn)'); }), true, 'the eye sits right before the edit button');
+      assert.equal(await page.evaluate(() => { const g = document.querySelector('#own .hover-group'); const eye = g.querySelector('.ccf-hide-btn'); return !!eye && eye.nextElementSibling === g.querySelector('.native:not(.ccf-hide-btn):not(.ccf-break-btn)'); }), true, 'the eye sits right before the edit button');
       await page.locator('#theirs').hover(); await page.waitForTimeout(150);
-      assert.equal(await page.evaluate(() => { const g = document.querySelector('#theirs .hover-group'); const eye = g.querySelector('.ccf-hide-btn'); return !!eye && eye.nextElementSibling === g.querySelector('.native:not(.ccf-hide-btn)') && g.querySelectorAll('.native:not(.ccf-hide-btn)').length === 1; }), true, 'the reply button stays, the eye before it');
+      assert.equal(await page.evaluate(() => { const g = document.querySelector('#theirs .hover-group'); const eye = g.querySelector('.ccf-hide-btn'); return !!eye && eye.nextElementSibling === g.querySelector('.native:not(.ccf-hide-btn):not(.ccf-break-btn)') && g.querySelectorAll('.native:not(.ccf-hide-btn):not(.ccf-break-btn)').length === 1; }), true, 'the reply button stays, the eye before it');
       assert.deepEqual(errors, []);
       await page.context().close();
     }
