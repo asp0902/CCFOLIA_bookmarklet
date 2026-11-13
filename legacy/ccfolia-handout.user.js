@@ -2820,16 +2820,17 @@
   // GM: 서버에 없는 로컬 핸드아웃(올리기가 한 번 실패하고 다시 안 올린 것)을 룸마다 한 번 다시 올린다. 소유자 uid 는 올릴 때 현재 uid 로 채워진다.
   let repairedRoom = "";
   async function repairUnpushedHandouts() {
-    const room = getCurrentRoomKey();
-    if (room === "global" || repairedRoom === room || !isAdminMode()) return;
-    repairedRoom = room;
+    let room = "";
     try {
+      room = getCurrentRoomKey();
+      if (room === "global" || repairedRoom === room || !isAdminMode()) return;
+      repairedRoom = room;
       const remote = new Set((await fetchAllFromFirestore()).map((doc) => doc.id));
       for (const handout of state.data.handouts.filter((item) => item && item.id && !item._remote && !remote.has(item.id))) {
         if (!handout.ownerUid && fbState?.uid) handout.ownerUid = fbState.uid;
         await pushHandoutToFirestore(handout).catch((error) => noteFirebaseIssue("핸드아웃 다시 올리기", error));
       }
-    } catch (error) { noteFirebaseIssue("핸드아웃 다시 올리기", error); repairedRoom = ""; }
+    } catch (error) { repairedRoom = ""; try { noteFirebaseIssue("핸드아웃 다시 올리기", error); } catch (_) { /* 알림 실패는 무시 */ } }
   }
 
   function startSync() {
@@ -2837,7 +2838,7 @@
     refreshCcfoliaRole();
     syncStarting = initFirebase().then((fb) => {
       syncInfo = { reason: "" };
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]).then(() => { setTimeout(() => { repairUnpushedHandouts(); }, 4000); return fb; });
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]).then(() => { repairUnpushedHandouts(); return fb; });
     }).catch((error) => {
       syncInfo = { reason: String(error?.message || error).slice(0, 80) };
       throw error;
