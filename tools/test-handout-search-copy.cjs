@@ -29,7 +29,7 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
     const page = await browser.newPage();
     await page.route('https://ccfolia.com/**', r => r.fulfill({ body: '<html><body></body></html>', contentType: 'text/html' }));
     await page.goto('https://ccfolia.com/rooms/test');
-    const funcs = ['renderList', 'onShadowInput', 'closeListSearch', 'duplicateHandout', 'findHandout'].map(extract).join('\n');
+    const funcs = ['renderList', 'listSearchHtml', 'onShadowInput', 'closeListSearch', 'duplicateHandout', 'findHandout'].map(extract).join('\n');
     const helpers = source.slice(a, b);
     const out = await page.evaluate(async ([funcs, helpers]) => {
       const mk = (id, title, description, folderId, order) => ({ id, title, description, gmNotes: '', permissions: {}, folderId, order });
