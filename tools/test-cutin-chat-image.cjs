@@ -34,6 +34,10 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     assert.equal(await imgs('trigger').getAttribute('src'), GIF);
     const css = await imgs('trigger').evaluate((el) => { const c = getComputedStyle(el); return { maxHeight: c.maxHeight, maxWidth: c.maxWidth, radius: c.borderRadius }; });
     assert.equal(css.maxHeight, '200px'); assert.equal(css.maxWidth, '100%'); assert.notEqual(css.radius, '0px');
+    // centred in the message body (left gap = right gap ±1px), in a normal row as in a centred narration row
+    const gaps = await imgs('trigger').evaluate((el) => { const p = el.closest('p') || el.parentElement.parentElement, r = el.getBoundingClientRect(), b = p.getBoundingClientRect(); return { left: Math.round(r.left - b.left), right: Math.round(b.right - r.right) }; });
+    console.log('cut-in image gaps', JSON.stringify(gaps));
+    assert(Math.abs(gaps.left - gaps.right) <= 1, 'the cut-in image is centred: ' + JSON.stringify(gaps));
     // space is reserved: the width/height attributes are known (the image was preloaded when the list was read), so the row has its height before the image draws
     assert.equal(await imgs('trigger').evaluate((el) => [el.getAttribute('width'), el.getAttribute('height')]).then((v) => v.join('x')), '2x1');
     // the original text stays (React-safe), the image is appended last
