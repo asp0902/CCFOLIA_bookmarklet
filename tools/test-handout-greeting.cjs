@@ -22,27 +22,18 @@ const html = '<!doctype html><meta charset=utf-8><body style="background:#282828
     const greeting = (page) => page.locator('[data-ccf-handout-greeting]');
     const hit = (page) => page.evaluate(() => { const b = document.getElementById('tb').getBoundingClientRect(); const top = document.elementFromPoint(b.x + 20, b.y + 20); return top === document.getElementById('tb') ? 'toolbar' : (top?.hasAttribute('data-ccf-handout-greeting') ? 'greeting' : top?.tagName); });
     const greeted = (page) => page.evaluate(() => localStorage.getItem('ccf-handout:greeted:test'));
-    // up: it takes the pointer; Esc closes it, nothing is stored, the toolbar is reachable
+    // 0.1.120 policy: only 확인 closes it. Esc (real or synthetic, e.g. another script's Escape at room entry), a backdrop click or a click in the dialog keep it up.
     let page = await open();
     await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
-    assert.equal(await hit(page), 'greeting', 'while it is up the overlay covers the toolbar');
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('[data-ccf-handout-greeting]'), null, { timeout: 2000 });
-    assert.equal(await hit(page), 'toolbar', 'after Esc the toolbar takes the pointer');
-    assert.equal(await greeted(page), null, 'closing without 확인 is not consent');
-    await page.hover('#tb'); await page.click('#tb'); // hover and click reach the button
-    await page.waitForTimeout(1500);
-    assert.equal(await greeting(page).count(), 0, 'not shown again in this page load');
+    assert.equal(await hit(page), 'greeting', 'while it is up the overlay covers the toolbar (intended: press 확인)');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    assert.equal(await greeting(page).count(), 1, 'Esc keeps it');
+    await page.evaluate(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); }); await page.waitForTimeout(300);
+    assert.equal(await greeting(page).count(), 1, 'synthetic Escape / mousedown keep it');
+    await page.mouse.click(500, 350); await page.mouse.click(20, 650); await page.waitForTimeout(300);
+    assert.equal(await greeting(page).count(), 1, 'clicks in the dialog and on the backdrop keep it');
+    assert.equal(await greeted(page), null, 'no consent yet');
     assert.deepEqual(page.__errors, []); await page.context().close();
-    // backdrop click closes it too; a click on the dialog itself does not
-    page = await open();
-    await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
-    await page.mouse.click(500, 350); // the dialog paper
-    await page.waitForTimeout(300);
-    assert.equal(await greeting(page).count(), 1, 'a click inside the dialog keeps it');
-    await page.mouse.click(20, 650); // backdrop
-    await page.waitForFunction(() => !document.querySelector('[data-ccf-handout-greeting]'), null, { timeout: 2000 });
-    assert.equal(await greeted(page), null); await page.context().close();
     // 확인: consent stored, overlay removed, toolbar reachable; with 오늘 다시 보지 않기 the next load skips it
     page = await open();
     await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
@@ -56,15 +47,15 @@ const html = '<!doctype html><meta charset=utf-8><body style="background:#282828
     await page.waitForTimeout(2500);
     assert.equal(await greeting(page).count(), 0, '오늘 다시 보지 않기: not shown again today');
     await page.context().close();
-    // 0.1.118: checking 오늘 다시 보지 않기 and then closing by the backdrop (no 확인) still skips it today, in every room
+    // checking 오늘 다시 보지 않기 stores the local date at once (the window stays until 확인)
     page = await open();
     await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
     await page.locator('[data-ccf-handout-greeting] input[data-skip-today]').check();
-    await page.mouse.click(20, 650);
-    await page.waitForFunction(() => !document.querySelector('[data-ccf-handout-greeting]'), null, { timeout: 2000 });
     const stored = await page.evaluate(() => localStorage.getItem('ccf-handout:greeted-skip-day'));
     const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
-    assert.equal(stored, today, 'the box stores the local date at once'); assert.equal(await greeted(page), null, 'still no consent'); await page.context().close();
+    assert.equal(stored, today, 'the box stores the local date at once'); assert.equal(await greeting(page).count(), 1, 'still up'); assert.equal(await greeted(page), null, 'still no consent');
+    const log = await page.evaluate(() => window.__CCF_HANDOUT_DEBUG__.greetingLog()); assert.deepEqual(log, [], 'nothing removed it');
+    await page.context().close();
     page = await open({ 'ccf-handout:greeted-skip-day': today });
     await page.goto('https://ccfolia.com/rooms/other'); await page.addScriptTag({ content: source }); await page.waitForTimeout(2500);
     assert.equal(await greeting(page).count(), 0, 'another room today: not shown'); await page.context().close();
