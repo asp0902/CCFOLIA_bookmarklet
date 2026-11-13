@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.32
+// @version      0.5.33
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.32";
+  const VERSION = "0.5.33";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1035,7 +1035,47 @@
     return (clone.textContent || "").replace(/\s+/g, " ").trim();
   }
 
+  // 실제 "내 캐릭터 목록"은 Dialog 가 아니라 떠 있는 창(Paper: 제목 줄 AppBar(Paper) + .scrollable-list)이고, 행의 토큰 버튼은 활성이면 "삭제", 아니면 "추가"(번역 라벨)다.
+  // 그래서 제목으로 창을 찾아(제목에서 가장 가까운 Paper 는 제목 줄이므로 목록을 품은 바깥 Paper 까지) 행을 이름 글자로 찾고, 보조 동작 칸의 버튼 왼쪽(없으면 행 끝)에 시트 버튼을 단다.
+  const LIST_WINDOW_TITLES = ["내캐릭터목록", "mycharacters", "マイキャラクター一覧", "マイキャラクター", "キャラクター一覧", "캐릭터목록"];
+  function listWindows() {
+    const windows = new Set();
+    document.querySelectorAll("h6, h5, h4, h3, h2").forEach((heading) => {
+      if (heading.closest(`#${ROOT_ID}`) || !LIST_WINDOW_TITLES.includes(String(heading.textContent || "").replace(/\s+/g, "").toLowerCase())) return;
+      let found = null;
+      for (let node = heading.parentElement; node; node = node.parentElement) {
+        if (node.matches?.(".MuiPaper-root, [role='dialog']")) { found = node; if (node.querySelector(".scrollable-list, .MuiListItemText-primary")) break; }
+        if (node === document.body) break;
+      }
+      if (found instanceof HTMLElement && found.getClientRects().length) windows.add(found);
+    });
+    return [...windows];
+  }
+  function mountWindowRowButtons() {
+    for (const panel of listWindows()) {
+      panel.querySelectorAll(".MuiListItemText-primary").forEach((name) => {
+        if (name.closest("[data-ccf-others-row]")) return; // 다른 사람 캐릭터 행은 others-characters 가 자기 시트 버튼을 단다
+        const row = name.closest(".MuiListItem-container") || name.closest(".MuiListItem-root, li"); // 보조 동작 칸은 컨테이너 쪽에 있다
+        if (!row || row.querySelector(`[${ROW_BUTTON_ATTR}]`)) return;
+        const secondary = row.querySelector(".MuiListItemSecondaryAction-root");
+        const anchor = secondary?.querySelector("button");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = anchor?.className || "MuiButtonBase-root MuiIconButton-root";
+        button.setAttribute(ROW_BUTTON_ATTR, "1");
+        button.setAttribute("aria-label", "사이코로픽션 시트");
+        button.title = "사이코로픽션 시트";
+        button.innerHTML = diceIcon();
+        const stop = (event) => { event.stopPropagation(); };
+        button.addEventListener("click", (event) => { event.stopPropagation(); event.preventDefault(); openSheetForCharacterName(rowCharacterName(row, button)); }, { signal });
+        for (const type of ["mousedown", "mouseup", "pointerdown", "pointerup", "touchstart"]) button.addEventListener(type, stop, { signal });
+        if (anchor) anchor.parentElement.insertBefore(button, anchor); else (secondary || row).appendChild(button);
+      });
+    }
+  }
+
   function mountCharacterListButtons() {
+    mountWindowRowButtons();
     document.querySelectorAll('.MuiDialog-root, [role="dialog"]').forEach((dialog) => {
       if (!(dialog instanceof HTMLElement) || dialog.closest(`#${ROOT_ID}`)) return;
       dialog.querySelectorAll("button[aria-label], button[title]").forEach((remove) => {
