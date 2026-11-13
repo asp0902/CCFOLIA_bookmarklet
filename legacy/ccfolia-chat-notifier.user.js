@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.43
+// @version      0.3.44
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.43";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.44";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -530,6 +530,20 @@
   let ccfBgmLocalIntentGuardUntil = 0; // 이 시각까지는 원격 신호 적용 보류
   const BGM_LOCAL_INTENT_GUARD_MS = 2500; // 내 신호가 Firestore 에 반영될 때까지의 여유
   const CCF_BGM_ACTIVE_KEY = "ccf-chat-notifier:youtube-bgm:active";
+  const ccfBgmRoomIdNow = () => { const m = String(location.pathname || "").match(/^\/rooms\/([^/?#]+)/); return m ? m[1] : ""; };
+  // 마지막 재생 상태는 룸마다 따로 둔다: 전역 하나였을 때 A룸에서 재생하던 곡이 B룸에 들어가면 자동재생됐다.
+  const ccfBgmActiveKey = () => `${CCF_BGM_ACTIVE_KEY}:${ccfBgmRoomIdNow() || "none"}`;
+  try { window.localStorage.removeItem(CCF_BGM_ACTIVE_KEY); } catch (_) { /* 옛 전역 상태(룸 구분 없음)는 버린다 */ }
+  let ccfBgmSeenRoomId = ccfBgmRoomIdNow();
+  const ccfBgmRoomWatch = window.setInterval(() => {
+    const now = ccfBgmRoomIdNow();
+    if (now === ccfBgmSeenRoomId) return;
+    ccfBgmSeenRoomId = now;
+    // 새로고침 없이 다른 룸으로 옮겼다: 떠난 룸의 유튜브 BGM 을 멈춘다(내 화면만 — 룸에 정지 신호를 보내지 않는다). 새 룸은 그 룸의 상태로만 복원한다.
+    try { if (ccfBgmActiveSlotKey || ccfBgmPlayerVideoId) stopCcfYoutubeBgm("room-change"); } catch (_) { /* 플레이어가 아직 없음 */ }
+    ccfBgmRestoreConsumed = false;
+  }, 700);
+  registerTeardown(() => window.clearInterval(ccfBgmRoomWatch));
 
   // 사용자가 직접 재생/정지한 순간을 표시. 폴링은 이 표시를 보고 낡은 응답을 버린다.
   function markCcfBgmLocalPlaybackIntent() {
@@ -541,10 +555,10 @@
   function persistCcfBgmActiveSlot(slotKey, entryKey, videoId, state = "playing") {
     try {
       if (!slotKey || !entryKey) {
-        window.localStorage.removeItem(CCF_BGM_ACTIVE_KEY);
+        window.localStorage.removeItem(ccfBgmActiveKey());
         return;
       }
-      window.localStorage.setItem(CCF_BGM_ACTIVE_KEY, JSON.stringify({
+      window.localStorage.setItem(ccfBgmActiveKey(), JSON.stringify({
         slotKey,
         entryKey,
         videoId: videoId || "",
@@ -558,19 +572,19 @@
   // 새로고침 후 자동재생 여부 판단을 위해 last state 보존.
   function updateCcfBgmPersistedState(state) {
     try {
-      const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
+      const raw = window.localStorage.getItem(ccfBgmActiveKey());
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed.entryKey !== "string") return;
       parsed.state = state;
       parsed.updatedAt = Date.now();
-      window.localStorage.setItem(CCF_BGM_ACTIVE_KEY, JSON.stringify(parsed));
+      window.localStorage.setItem(ccfBgmActiveKey(), JSON.stringify(parsed));
     } catch (_) {}
   }
 
   function readCcfBgmPersistedActiveSlot() {
     try {
-      const raw = window.localStorage.getItem(CCF_BGM_ACTIVE_KEY);
+      const raw = window.localStorage.getItem(ccfBgmActiveKey());
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       return parsed && typeof parsed.entryKey === "string" ? parsed : null;
@@ -10511,7 +10525,7 @@ function migrateLegacyRoomDataToGlobal() {
         const key = window.localStorage.key(i);
         // CCF_BGM_ACTIVE_KEY 는 BGM_STORAGE_PREFIX 로 시작하지만 legacy 룸 데이터가
         // 아니라 last-played 상태 저장용. migration wipe 대상서 제외.
-        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY && key !== CCF_BGM_ACTIVE_KEY) {
+        if (key && key.startsWith(BGM_STORAGE_PREFIX) && key !== BGM_STORAGE_KEY && !key.startsWith(CCF_BGM_ACTIVE_KEY)) {
           try {
             const raw = window.localStorage.getItem(key);
             const parsed = raw ? JSON.parse(raw) : null;
