@@ -56,6 +56,26 @@ const html = '<!doctype html><meta charset=utf-8><body style="background:#282828
     await page.waitForTimeout(2500);
     assert.equal(await greeting(page).count(), 0, '오늘 다시 보지 않기: not shown again today');
     await page.context().close();
+    // 0.1.118: checking 오늘 다시 보지 않기 and then closing by the backdrop (no 확인) still skips it today, in every room
+    page = await open();
+    await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
+    await page.locator('[data-ccf-handout-greeting] input[data-skip-today]').check();
+    await page.mouse.click(20, 650);
+    await page.waitForFunction(() => !document.querySelector('[data-ccf-handout-greeting]'), null, { timeout: 2000 });
+    const stored = await page.evaluate(() => localStorage.getItem('ccf-handout:greeted-skip-day'));
+    const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+    assert.equal(stored, today, 'the box stores the local date at once'); assert.equal(await greeted(page), null, 'still no consent'); await page.context().close();
+    page = await open({ 'ccf-handout:greeted-skip-day': today });
+    await page.goto('https://ccfolia.com/rooms/other'); await page.addScriptTag({ content: source }); await page.waitForTimeout(2500);
+    assert.equal(await greeting(page).count(), 0, 'another room today: not shown'); await page.context().close();
+    // a room that was consented to: never asked again, whatever the day
+    page = await open({ 'ccf-handout:greeted:test': '1' });
+    await page.waitForTimeout(2500);
+    assert.equal(await greeting(page).count(), 0, 'consented room: not shown'); await page.context().close();
+    // the next day, in a room without consent: shown again
+    page = await open({ 'ccf-handout:greeted-skip-day': '2000-01-01' });
+    await greeting(page).waitFor({ state: 'attached', timeout: 8000 });
+    await page.context().close();
     console.log('handout greeting PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

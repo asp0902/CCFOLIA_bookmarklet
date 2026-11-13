@@ -54,9 +54,12 @@ const vm = require('node:vm');
   assert.deepEqual(Object.keys(copy(api.inboxCopiesFor({ ccfoliaUid: 'acct-b', displayName: '밥' }, plList, handouts, [], new Set()))), [], 'nothing shared yet: nothing sent');
   // writing: every member except the GM's own account, only what changed, stale copies deleted
   api.remoteMembers.set('gm-anon', { ccfoliaUid: 'acct-gm', displayName: 'GM' }); api.remoteMembers.set('anon-a', { ccfoliaUid: 'acct-a', displayName: '앨리스' }); api.remoteMembers.set('anon-b', { ccfoliaUid: 'acct-b', displayName: '밥' });
-  store.set('rooms/room/inbox/anon-b/handouts/old', { id: 'old' }); // left over from a handout that was deleted
+  // the published rules let only the person read their inbox (not the GM): listing it is refused. 0.1.117 listed it first, the refusal stopped every write ("사본 쓰기 권한 거절").
+  // The GM now never lists an inbox; a copy of a handout deleted in an earlier session cannot be found and stays (harmless: the person only sees its title until the GM shares again).
+  const realGetDocs = fsApi.getDocs; fsApi.getDocs = async (col) => { if (/\/inbox\//.test(col.prefix)) { const error = new Error('denied'); error.code = 'permission-denied'; throw error; } return realGetDocs(col); };
+  store.set('rooms/room/inbox/anon-b/handouts/old', { id: 'old' }); // left over from a handout deleted in an earlier session
   await api.syncInboxes();
-  assert.deepEqual([...store.keys()].sort(), ['rooms/room/inbox/anon-a/handouts/h1', 'rooms/room/inbox/anon-b/handouts/h2', 'rooms/room/inbox/anon-b/handouts/h3']);
+  assert.deepEqual([...store.keys()].sort(), ['rooms/room/inbox/anon-a/handouts/h1', 'rooms/room/inbox/anon-b/handouts/h2', 'rooms/room/inbox/anon-b/handouts/h3', 'rooms/room/inbox/anon-b/handouts/old'], 'written although the inbox cannot be listed');
   assert.equal(store.get('rooms/room/inbox/anon-a/handouts/h1').gmNotes, '비밀');
   // a right taken away deletes the copy; a changed text rewrites that copy
   handouts[1].permissions = {}; handouts[0].description = '바뀐 공개';
