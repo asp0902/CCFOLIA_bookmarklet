@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.38
+// @version      0.5.39
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.38";
+  const VERSION = "0.5.39";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -774,11 +774,14 @@
     if (!container?.isConnected) return;
     const sheets = state.data?.sheets || [];
     const button = "all:unset;box-sizing:border-box;cursor:pointer;display:inline-grid;place-items:center;border-radius:50%;width:34px;height:34px;color:rgba(255,255,255,.7)";
-    const signature = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name, sheet.player]));
+    const signature = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name, sheet.player, sheetImageUrl(sheet)]));
+    // 줄 앞 그림: 시트 이미지 → 연결된 코코포리아 캐릭터 아이콘 → 없으면(또는 깨지면) 회색 칸 위 이름 첫 글자(핸드아웃 PL 아바타와 같은 방식)
+    const avatar = (sheet) => { const url = sheetImageUrl(sheet); const initial = Array.from(String(sheet.name || sheet.player || "").trim())[0] || ""; return `<span data-tab-avatar style="position:relative;flex:0 0 36px;width:36px;height:36px;border-radius:4px;overflow:hidden;background:#616161;display:grid;place-items:center;color:#fff;font-size:16px;font-weight:700;line-height:1">${escapeHtml(initial)}${url ? `<img src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ""}</span>`; };
     if (container.__sig === signature && container.querySelector("#" + TAB_ID)) return;
     container.__sig = signature;
-    const rows = sheets.map((sheet) => `<div style="display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(255,255,255,.08)"><button type="button" data-tab-open="${escapeHtml(sheet.id)}" style="all:unset;box-sizing:border-box;flex:1;min-width:0;cursor:pointer;display:flex;align-items:baseline;gap:12px;padding:10px 8px"><strong style="font-size:15px;font-weight:700">${escapeHtml(sheet.name || "이름 없음")}</strong><span style="color:rgba(255,255,255,.6);font-size:13px">${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button type="button" data-tab-delete="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 삭제" title="삭제" style="${button}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>`).join("");
+    const rows = sheets.map((sheet) => `<div style="display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(255,255,255,.08)"><button type="button" data-tab-open="${escapeHtml(sheet.id)}" style="all:unset;box-sizing:border-box;flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:12px;padding:8px">${avatar(sheet)}<strong style="font-size:15px;font-weight:700">${escapeHtml(sheet.name || "이름 없음")}</strong><span style="color:rgba(255,255,255,.6);font-size:13px">${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button type="button" data-tab-delete="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 삭제" title="삭제" style="${button}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>`).join("");
     container.innerHTML = `<div id="${TAB_ID}" style="position:absolute;inset:0;overflow:auto;padding:0 24px 24px;font-family:Roboto,'Noto Sans KR',sans-serif;color:#fff"><div style="display:flex;align-items:center;justify-content:flex-end;min-height:48px"><button type="button" data-tab-add aria-label="시트 추가" title="시트 추가" style="${button}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button></div>${rows || '<p style="color:rgba(255,255,255,.6)">시트가 없습니다. ＋로 추가하세요.</p>'}</div>`;
+    container.querySelectorAll("[data-tab-avatar] img").forEach((img) => img.addEventListener("error", () => img.remove(), { once: true })); // 깨진 그림은 첫 글자로
   }
 
   function openSheetWindow(sheetId) {
