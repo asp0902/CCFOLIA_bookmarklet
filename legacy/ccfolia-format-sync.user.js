@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.110
+// @version      0.1.111
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.110"),
+    version: getUserscriptVersion("0.1.111"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4369,6 +4369,15 @@
       .ccf-inline-narrator-popover .ccf-inline-popover-title {
         font-size: 13px;
       }
+      /* 제목 줄 오른쪽 새로고침 아이콘(코코포리아 창 제목 줄의 small IconButton 모양: 5px 여백·20px 아이콘·원형 호버 음영), 창 외곽선 없음 */
+      .ccf-inline-narrator-popover .ccf-narrator-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -5px -5px 0 0; }
+      .ccf-inline-narrator-popover .ccf-narrator-refresh { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; padding: 5px; border-radius: 50%; color: #fff; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1); }
+      .ccf-inline-narrator-popover .ccf-narrator-refresh:hover { background-color: rgba(255, 255, 255, 0.08); }
+      .ccf-inline-narrator-popover .ccf-narrator-refresh:focus-visible { background-color: rgba(255, 255, 255, 0.12); }
+      .ccf-inline-popover.ccf-inline-narrator-popover { border: 0 !important; outline: 0 !important; }
+      /* 툴팁: 코코포리아 Tooltip 실측값(GM 도구 펭귄 툴팁과 같음) */
+      .ccf-ui-tip { position: fixed; z-index: 2147483647; pointer-events: none; padding: 4px 8px; border-radius: 4px; background: rgb(22, 22, 22); color: #fff; font: 500 12px/1.4em Roboto, Helvetica, Arial, sans-serif; white-space: nowrap; opacity: 0; transition: opacity 150ms; }
+      .ccf-ui-tip[data-open="1"] { opacity: 1; }
       .ccf-inline-narrator-popover [data-inline-popover-action="cancel"] {
         background: transparent;
       }
@@ -6768,7 +6777,44 @@
     return toolbar?.querySelector?.('[data-inline-command="narration"]') || null;
   }
 
+  // Sv(서식 저장) 단추: 이 룸에서 자동 적용 중인 프리셋(빨간 점이 켜진 것)이 하나라도 있으면 다른 서식 단추의 .active 와 같은 모양으로 켠다.
+  // 프리셋은 룸별 localStorage(stylePresetsKey) 라 툴바를 만들 때·룸을 옮겨 다시 그릴 때·프리셋을 고칠 때마다 다시 계산한다.
+  // [data-ccf-ui-tip] 단추의 툴팁(코코포리아 Tooltip 모양: 단추 아래 14px, 가운데). 팝오버 요소마다 한 번만 묶는다.
+  function bindUiTips(root) {
+    if (!(root instanceof HTMLElement) || root.__ccfUiTipBound) return;
+    root.__ccfUiTipBound = true;
+    let tip = null;
+    const hide = () => { tip?.remove(); tip = null; };
+    root.addEventListener("mouseover", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-ccf-ui-tip]") : null;
+      if (!target || !root.contains(target)) return;
+      if (tip?.__for === target) return;
+      hide();
+      tip = document.createElement("div");
+      tip.className = "ccf-ui-tip"; tip.setAttribute("role", "tooltip"); tip.textContent = target.getAttribute("data-ccf-ui-tip"); tip.__for = target;
+      document.body.appendChild(tip);
+      const r = target.getBoundingClientRect(), w = tip.offsetWidth;
+      tip.style.left = `${Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2))}px`;
+      tip.style.top = `${r.bottom + 14}px`;
+      requestAnimationFrame(() => { if (tip) tip.dataset.open = "1"; });
+    });
+    root.addEventListener("mouseout", (event) => { if (tip && !(event.relatedTarget instanceof Node && tip.__for.contains(event.relatedTarget))) hide(); });
+    root.addEventListener("click", hide);
+  }
+
+  function refreshInlineSvButton(toolbar) {
+    const btn = toolbar?.querySelector?.('[data-inline-command="style-clipboard"]');
+    if (!(btn instanceof HTMLElement)) return;
+    let on;
+    // 툴바는 스크립트 초기화 중에 만들어진다: 그때는 파일 뒤쪽의 프리셋 저장 키 상수가 아직 초기화 전(TDZ)이라 계산을 한 번 미룬다.
+    try { on = isPresetAutoEnabled() && readStylePresets().some((preset) => preset.auto !== false); }
+    catch (error) { if (error instanceof ReferenceError) setTimeout(() => refreshInlineSvButton(toolbar), 0); return; }
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
   function refreshInlineNarrationButton(toolbar) {
+    refreshInlineSvButton(toolbar);
     const btn = getNarratorButton(toolbar);
     if (!(btn instanceof HTMLElement)) return;
     const speaker = getCurrentSpeakerName();
@@ -6948,18 +6994,18 @@
     const currentSpeaker = getCurrentSpeakerName();
 
     popover.innerHTML = `
-      <div class="ccf-inline-popover-title">나레이션 캐릭터</div>
+      <div class="ccf-inline-popover-title ccf-narrator-title"><span>나레이션 캐릭터</span><button type="button" class="ccf-narrator-refresh" data-inline-narrator-action="refresh" aria-label="목록 새로고침" data-ccf-ui-tip="목록 새로고침"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button></div>
       <div class="ccf-code-note">선택한 캐릭터가 이 룸에서 보낸 메시지는 나레이션으로 표시됩니다.</div>
       <div class="ccf-narrator-note" data-inline-narrator-note style="display:none;"></div>
       <div data-inline-narrator-list-host>${buildInlineNarratorListMarkup([], initialSet, currentSpeaker)}</div>
       <div class="ccf-inline-popover-actions">
-        <button type="button" class="ccf-btn" data-inline-narrator-action="refresh">새로고침</button>
         <button type="button" class="ccf-btn primary" data-inline-narrator-action="save">저장</button>
         <button type="button" class="ccf-btn" data-inline-popover-action="cancel">닫기</button>
       </div>
     `;
     popover.classList.add("ccf-inline-narrator-popover", "open");
     popover.setAttribute("aria-hidden", "false");
+    bindUiTips(popover);
 
     inlinePopoverState = {
       kind: "narrator",
@@ -11751,6 +11797,7 @@
     if (!roomKey) return false; // 룸 밖에서는 프리셋을 저장하지 않는다
     try {
       localStorage.setItem(roomKey, JSON.stringify(list));
+      try { document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach(refreshInlineSvButton); } catch (_) { /* 표시만 */ }
       return true;
     } catch (error) {
       console.error("[ccf-format-sync] writeStylePresets failed", error);
@@ -11959,6 +12006,7 @@
     const roomId = stylePresetRoomId();
     if (!roomId) return;
     try { localStorage.setItem(`${STYLE_PRESETS_AUTO_KEY}:${roomId}`, on ? "1" : "0"); } catch (_) {}
+    try { document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach(refreshInlineSvButton); } catch (_) { /* 표시만 */ }
   }
 
   // 드래그: 프리셋 행 → 다른 프리셋 앞 / 폴더 머리글(그 폴더로) / 폴더 밖 칸, 폴더 머리글 → 다른 폴더 앞(폴더 순서)

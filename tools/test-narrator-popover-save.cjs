@@ -23,7 +23,14 @@ const KEY = 'ccf-format-narrators-v1:test';
     await pop.waitFor({ state: 'attached', timeout: 5000 });
     // the list is read from the page; with no characters on the page the saved name is still listed ("목록 없음") and can be toggled
     const buttons = await pop.locator('.ccf-inline-popover-actions button').allTextContents();
-    assert.deepEqual(buttons.map((t) => t.trim()), ['새로고침', '저장', '닫기'], 'refresh · save · close, left to right');
+    assert.deepEqual(buttons.map((t) => t.trim()), ['저장', '닫기'], 'save · close (refresh is an icon in the title row now)');
+    // refresh: an icon button at the right end of the title row, tooltip "목록 새로고침"; no outline around the window
+    const look = await pop.evaluate((p) => { const title = p.querySelector('.ccf-narrator-title'), btn = title?.querySelector('[data-inline-narrator-action="refresh"]'), r = btn?.getBoundingClientRect(), t = title?.getBoundingClientRect(), cs = getComputedStyle(p); return { inTitle: !!btn, atRight: !!r && Math.abs(r.right - t.right) <= 1, size: r ? [Math.round(r.width), Math.round(r.height)] : null, svg: !!btn?.querySelector('svg path'), border: cs.borderTopWidth + ' ' + cs.borderTopStyle, outline: cs.outlineStyle, label: btn?.getAttribute('aria-label') }; });
+    assert.deepEqual(look, { inTitle: true, atRight: true, size: [30, 30], svg: true, border: '0px none', outline: 'none', label: '목록 새로고침' }, JSON.stringify(look));
+    if (process.env.NARRATOR_SHOT) await pop.screenshot({ path: process.env.NARRATOR_SHOT });
+    await pop.locator('[data-inline-narrator-action="refresh"]').hover(); await page.waitForTimeout(250);
+    assert.equal(await page.locator('.ccf-ui-tip[data-open="1"]').textContent(), '목록 새로고침', 'tooltip');
+    await page.mouse.move(0, 0);
     assert.match(await pop.locator('.ccf-inline-popover-actions button.primary').textContent(), /저장/, 'save is the primary one');
     const item = (name) => pop.locator(`.ccf-narrator-item[data-inline-narrator-name="${name}"]`);
     await item('가').waitFor();

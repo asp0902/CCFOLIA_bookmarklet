@@ -35,7 +35,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
       await page.evaluate(() => document.querySelector('.ccf-inline-popover.open [data-inline-popover-action="cancel"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
       await page.waitForFunction(() => !document.querySelector('.ccf-inline-popover.open'));
     }
-    // the other popovers keep their own buttons (narrator: 새로고침 · 저장 · 닫기)
+    // the other popovers keep their own buttons (narrator: 저장 · 닫기, refresh as a title-row icon)
     await page.evaluate(() => document.querySelector('[data-inline-command="narration"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
     await page.waitForSelector('.ccf-inline-narrator-popover.open');
     assert.equal(await page.locator('.ccf-inline-narrator-popover .is-text-buttons').count(), 0, 'narrator popover is untouched');
