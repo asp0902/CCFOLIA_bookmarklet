@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.115
+// @version      0.1.116
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.115",
+    version: "0.1.116",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -186,6 +186,9 @@
       return pushHandoutToFirestore(h);
     },
     fetchAll() { return fetchAllFromFirestore(); },
+    // 진단: 받기 경로가 건너뛴 문서(id → 이유)와 마지막 올리기 실패(id·code)
+    ingestSkips() { return [...ingestSkipLog].map(([id, reason]) => ({ id, reason })); },
+    lastPushError() { return lastPushError ? { ...lastPushError } : null; },
     // 로컬 목록(내용 없이 id·제목·소유자 uid 앞부분·갱신 시각): 원격 문서와 견주어 "원격에만 있는 것"을 찾는 점검용
     localHandouts() { return state.data.handouts.map((h) => ({ id: h.id, title: String(h.title || "").slice(0, 30), owner: String(h.ownerUid || "").slice(0, 6), remote: h._remote === true, updatedAt: h.updatedAt || "" })); },
     subscribe() {
@@ -2061,7 +2064,11 @@
       // 정렬용 order 필드 (#32) — 수신측 ingestRemoteHandout 가 이 값을 우선 사용
       order: Number.isFinite(handout.order) ? handout.order : 0
     };
-    await setDoc(docRef, payload);
+    try { await setDoc(docRef, payload); } catch (error) {
+      lastPushError = { id: handout.id, code: String(error?.code || "").replace(/^firestore\//, "") || "error", message: String(error?.message || error).slice(0, 120), at: new Date().toISOString() };
+      throw error;
+    }
+    if (lastPushError?.id === handout.id) lastPushError = null;
     console.info("[ccf-handout] Firestore push OK:", handout.id);
     scheduleInboxSync();
     return docRef.path;
@@ -2123,6 +2130,9 @@
   let unsubHandouts = null;
   let subscribedRoom = null;
 
+  const ingestSkipLog = new Map(); // 핸드아웃 id → 건너뛴 이유(가장 최근 50개)
+  const noteIngestSkip = (id, reason) => { ingestSkipLog.delete(id); ingestSkipLog.set(id, reason); if (ingestSkipLog.size > 50) ingestSkipLog.delete(ingestSkipLog.keys().next().value); };
+  let lastPushError = null;      // { id, code, message, at } — 마지막으로 올리기에 실패한 것(성공하면 같은 id 의 기록은 지운다)
   async function subscribeToRoomHandouts() {
     const fb = await initFirebase();
     if (!fb) return;
@@ -2141,7 +2151,7 @@
         noteFirebaseOk("핸드아웃 읽기");
         snap.docChanges().forEach((change) => {
           const data = change.doc.data();
-          if (inboxActive) return;
+          if (inboxActive && !isAdminMode()) { noteIngestSkip(data.id || change.doc.id, "내 사본(inbox)이 진실이라 원본은 건너뜀"); return; }
           if (change.type === "removed") {
             ingestRemoteRemove(data.id);
           } else {
@@ -2165,9 +2175,11 @@
   function ingestRemoteHandout(data, changeType) {
     if (!fbState) return;
     if (!data || !data.id) return;
-    if (inboxActive && !data._viaInbox) return; // the person's own inbox is the source once it works (the shared originals will be the GM's only)
+    // the person's own inbox is the source once it works (the shared originals will be the GM's only). The GM is the exception: the GM's own inbox is empty and the originals ARE the GM's list
+    // (before 0.1.116 the GM's working inbox made every original — also those made under an old anonymous uid — be skipped here: remote 4, local 3).
+    if (inboxActive && !data._viaInbox && !isAdminMode()) { noteIngestSkip(data.id, "내 사본(inbox)이 진실이라 원본은 건너뜀"); return; }
     // 본인이 만든 핸드아웃 — 이미 local에 있음. skip
-    if (data.ownerUid === fbState.uid) return;
+    if (data.ownerUid === fbState.uid) { noteIngestSkip(data.id, "내가 만든 것(이미 로컬에 있음)"); return; }
 
     const me = state.data.myCharacter;
     // GM(방장)은 룸의 원본을 전부 본다: 옛 익명 uid 로 만든 것(브라우저 데이터를 지운 뒤 uid 가 바뀐 경우)·권한표에 GM 이름이 없는 것도 로컬 목록에서 빠지면 안 된다(예전엔 "권한 없음"으로 건너뛰어 원격 4 ≠ 로컬 3 이 됐다).
@@ -2175,6 +2187,7 @@
     const hasPublic = gm || canView(data, me, identityKeys());
     const hasSecret = gm || canViewSecret(data, me, identityKeys());
     if (!hasPublic && !hasSecret) {
+      noteIngestSkip(data.id, "권한 없음");
       console.info("[ccf-handout] remote skipped (no permission):", data.id, "as", me || "(미설정)");
       ingestRemoteRemove(data.id);
       return;
@@ -2215,6 +2228,7 @@
       }
     }
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
+    ingestSkipLog.delete(data.id);
     if (state.isOpen) render();
   }
 
@@ -2803,12 +2817,27 @@
   // 동기화 시작: Firebase 연결 + 구독 3종 + 방장 확인. 인사 팝업의 "확인"과 자동 연결(이미 동의한 룸)이 같은 함수를 쓴다.
   let syncInfo = { reason: "시작 전" };
   let syncStarting = null;
+  // GM: 서버에 없는 로컬 핸드아웃(올리기가 한 번 실패하고 다시 안 올린 것)을 룸마다 한 번 다시 올린다. 소유자 uid 는 올릴 때 현재 uid 로 채워진다.
+  let repairedRoom = "";
+  async function repairUnpushedHandouts() {
+    const room = getCurrentRoomKey();
+    if (room === "global" || repairedRoom === room || !isAdminMode()) return;
+    repairedRoom = room;
+    try {
+      const remote = new Set((await fetchAllFromFirestore()).map((doc) => doc.id));
+      for (const handout of state.data.handouts.filter((item) => item && item.id && !item._remote && !remote.has(item.id))) {
+        if (!handout.ownerUid && fbState?.uid) handout.ownerUid = fbState.uid;
+        await pushHandoutToFirestore(handout).catch((error) => noteFirebaseIssue("핸드아웃 다시 올리기", error));
+      }
+    } catch (error) { noteFirebaseIssue("핸드아웃 다시 올리기", error); repairedRoom = ""; }
+  }
+
   function startSync() {
     if (syncStarting) return syncStarting;
     refreshCcfoliaRole();
     syncStarting = initFirebase().then((fb) => {
       syncInfo = { reason: "" };
-      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]).then(() => fb);
+      return Promise.all([subscribeToRoomHandouts(), subscribeToRoomShows(), subscribeToRoomGm(), registerMember().then(subscribeToMembers), subscribeToFolders(), subscribeToInbox()]).then(() => { setTimeout(() => { repairUnpushedHandouts(); }, 4000); return fb; });
     }).catch((error) => {
       syncInfo = { reason: String(error?.message || error).slice(0, 80) };
       throw error;
