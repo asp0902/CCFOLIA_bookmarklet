@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.31
+// @version      0.5.32
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.31";
+  const VERSION = "0.5.32";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -191,7 +191,7 @@
   //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
   let panelSide = "left";
   // 배경을 불투명하게 만들지 여부. 기본은 반투명(원본과 동일한 질감). 켜면 |< 가림.
-  let opaqueBg = false;
+  let opaqueBg = true; // 패널은 다른 창(BGM 막대·내 캐릭터 목록) 위에 뜨므로 기본 불투명(원본의 0.87 반투명이면 뒤가 비쳐 겹쳐 보였다)
   // 기본값을 오른쪽 → 왼쪽으로 바꾼 뒤, 예전에 저장된 "right" 를 한 번 덮어쓰기 위한 표식.
   const SIDE_PREF_VERSION = 2;
 
@@ -827,8 +827,10 @@
     const plain = rows.filter((li) => {
       // 이어짐 줄뿐 아니라 묶음의 첫 줄(leader)도 본보기로 쓰지 않는다: 브리지가 그 줄의 아래 패딩을 5px 로, 아래 테두리를 0 으로 바꿔 두어서 거기서 읽으면 패널 줄의 아래 패딩·구분선이 틀어진다(실측: 오리지널 단독 줄은 16px).
       if (li.matches('[data-ccf-narration="1"], [data-ccf-prose-cont="1"], [data-ccf-prose-cont-leader="1"]')) return false;
-      if (li.querySelector('[data-ccf-narration="1"]')) return false;
-      return !!li.querySelector(".MuiListItemAvatar-root img");
+      if (li.querySelector('[data-ccf-narration="1"], [data-ccf-narration-force-hidden="1"], [data-ccf-narration-force-center="1"], [data-ccf-narration-hidden="1"]')) return false;
+      // 아이콘·이름이 실제로 보이는 줄만: 안 보이는 줄을 본보기로 쓰면 모든 복제 줄이 나레이션처럼(아이콘·이름 없이 가운데) 그려진다.
+      const avatar = li.querySelector(".MuiListItemAvatar-root"), head = li.querySelector("h6.MuiListItemText-primary");
+      return !!li.querySelector(".MuiListItemAvatar-root img") && !!avatar && !!head && getComputedStyle(avatar).display !== "none" && getComputedStyle(head).display !== "none";
     });
     const source = plain[plain.length - 1];
     if (!source) return ccfScpRowTemplate;
@@ -836,6 +838,9 @@
     const template = source.cloneNode(true);
     // 다른 스크립트가 남긴 표식과 렌더 결과를 모두 지워 "빈 줄"로 만든다.
     const strip = (el) => {
+      // format-sync 가 나레이션 줄에 직접 넣은 인라인 스타일(아이콘·이름 숨김, 본문 가운데)은 표식과 함께 걷는다.
+      if (el.dataset?.ccfNarrationForceHidden === "1") el.style.removeProperty("display");
+      if (el.dataset?.ccfNarrationForceCenter === "1") ["width", "text-align", "padding-left", "padding-right"].forEach((prop) => el.style.removeProperty(prop));
       [...el.attributes].forEach((attr) => {
         if (/^data-ccf|^data-ccr20/.test(attr.name)) el.removeAttribute(attr.name);
       });
@@ -2099,7 +2104,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBg,
+        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBgV2: opaqueBg,
         floating: handle.floating, rect: floatRect,
         selectedCharByRoom: getCharByRoom()
       }));
@@ -4375,7 +4380,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     if (prefs.sideV === SIDE_PREF_VERSION && (prefs.side === "left" || prefs.side === "right")) {
       panelSide = prefs.side;
     }
-    if (typeof prefs.opaqueBg === "boolean") opaqueBg = prefs.opaqueBg;
+    if (typeof prefs.opaqueBgV2 === "boolean") opaqueBg = prefs.opaqueBgV2; // 예전 opaqueBg(기본 false 가 저장돼 있음)는 읽지 않는다
     // 지난번에 열려 있던 다른 패널 목록은 1번 패널을 열기 전에 읽는다(열면서 목록을 다시 저장하기 때문).
     let savedOpen = [];
     try { const saved = JSON.parse(localStorage.getItem(SCP_LIST_KEY) || "{}"); savedOpen = Array.isArray(saved.open) ? saved.open : []; } catch (e) { /* 저장된 목록이 깨졌으면 무시 */ }
