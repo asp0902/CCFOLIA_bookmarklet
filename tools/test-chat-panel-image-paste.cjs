@@ -20,6 +20,6 @@ r = ctx.parse('그냥 {중괄호} 글자 **굵게**'); assert.equal(r.runs.filte
 assert.match(sync, /window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = \{ handle: handleImagePasteForTextInput \};/);
 assert.match(sync, /function handleImagePasteForTextInput\(event, insert\) \{[\s\S]*?uploadImageFilesToIfh\(\[file\]\)[\s\S]*?maybeOpenIfhHelpPage\(error\)/);
 assert.match(sync, /return false;\n  \}\n  window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__/, 'a plain text paste is left alone (false)');
-assert.match(panel, /inputEl\.addEventListener\("paste", \(e\) => \{\n\s+const api = window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__;/);
-assert.match(panel, /`\{i:\$\{String\(imageUrl\)/);
+assert.match(panel, /inputEl\.addEventListener\("paste", \(e\) => \{[\s\S]{0,800}?const api = window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__;/);
+assert.match(panel, /token: `\{i:\$\{url\}\|/); // 0.5.36: the token is kept aside, the box shows a 🖼 marker (tools/test-chat-panel-image-marker.cjs)
 console.log('chat panel image paste PASS');

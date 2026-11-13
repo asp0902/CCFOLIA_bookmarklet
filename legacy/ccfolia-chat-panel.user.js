@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.35
+// @version      0.5.36
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -53,12 +53,12 @@
       if (!leftmost) break;
       leftmost.setFloating(true);
     }
-    if (closed) { closed.open(); return closed; }
+    if (closed) { closed.openFresh(); return closed; }
     const index = Math.max(0, ...scpHost.instances.keys()) + 1;
-    return createPanelInstance(index);
+    return createPanelInstance(index, { fresh: true });
   };
 
-  const createPanelInstance = (INSTANCE_INDEX) => {
+  const createPanelInstance = (INSTANCE_INDEX, OPTIONS = {}) => {
 
   // 이 패널은 코코포리아 패널을 복제하지 않는다. 코코포리아 패널은 React 소유이고
   // 보이는 줄만 만들어 쓰는 가상 스크롤이라, 복제해도 원본과 같은 탭·같은 스크롤만
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.35";
+  const VERSION = "0.5.36";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -94,6 +94,7 @@
   const handle = {
     index: INSTANCE_INDEX, seq: 0, floating: false, width: 340,
     isOpen: () => !!panelEl, open: () => openPanel(), close: () => closePanel(), relayout: () => safeLayout(),
+    openFresh: () => { adoptOriginalChannel(); adoptFormatOnBuild = true; openPanel(); },
     setFloating: (on) => setFloating(on), isFloating: () => handle.floating
   };
   let floatRect = null; // 떠 있을 때의 위치·크기 { left, top, width, height }
@@ -146,6 +147,66 @@
   let onDocDragUp = null;
   let colorOverride = ""; // 색상 버튼으로 바꾼 값(비면 캐릭터 색 사용)
   let narrationOn = false; // 나레이션(Nr) 토글
+  // 새로 추가한 패널 = 그 순간 오리지널 채팅의 상태: 선택된 탭(앱 상태 roomChatTab), 유지(keep)가 켜진 서식(정렬·글자색·배경색·크기·괄호 회색·나레이션).
+  // 패널의 B/I/U/S 는 선택한 글자를 감싸는 단추라 켜짐 상태가 없어 넘길 것이 없다. 새로고침 뒤 되살린 패널은 자기 마지막 탭·서식을 쓴다.
+  let adoptFormatOnBuild = false;
+  // 제목 줄 더블클릭 = 접기/펴기(시트 창·핸드아웃 창과 같은 동작). 접힌 상태는 패널마다 기억하고, 접힌 동안 새 메시지가 오면 제목 줄에 점을 단다.
+  let collapsed = false;
+  let collapseCount = Infinity; // 접을 때의 메시지 수(되살린 접힘은 첫 그리기 수)
+  function setCollapsed(on) {
+    collapsed = !!on;
+    collapseCount = collapsed ? (lastSignature ? lastSignature.split(",").length : Infinity) : Infinity;
+    if (panelEl) { panelEl.toggleAttribute("data-collapsed", collapsed); if (!collapsed) panelEl.removeAttribute("data-unread"); }
+    savePrefs();
+    if (!collapsed) { try { safeLayout(); restoreScroll(); } catch (_) { /* 다음 그리기에서 */ } }
+  }
+  // 붙여넣은 이미지: 입력칸에는 토큰 원문({i:주소|설명|}) 대신 🖼 + 보이지 않는 태그 문자 하나(이미지마다 다름)를 넣는다. 둘이 한 글자(grapheme)라 커서·선택·백스페이스가 통째로 움직이고,
+  // 입력칸 위에 썸네일과 × 를 보인다. 보낼 때 표식을 원래 토큰으로 되돌린다(전송 결과는 예전·오리지널과 같다).
+  const pendingImages = new Map(); // 표식 -> { token, url, alt }
+  let imageSeq = 0;
+  let imageStripEl = null;
+  const IMAGE_MARK_RE = /\u{1F5BC}[\u{E0021}-\u{E007E}]/gu;
+  function expandImageMarkers(text) { return String(text || "").replace(IMAGE_MARK_RE, (mark) => pendingImages.get(mark)?.token || ""); }
+  function renderImageStrip() {
+    if (!inputEl) return;
+    const value = inputEl.value;
+    for (const mark of [...pendingImages.keys()]) if (!value.includes(mark)) pendingImages.delete(mark);
+    if (!pendingImages.size) { imageStripEl?.remove(); imageStripEl = null; return; }
+    if (!imageStripEl || !imageStripEl.isConnected) {
+      imageStripEl = document.createElement("div");
+      imageStripEl.className = "ccf-scp-images";
+      imageStripEl.setAttribute(SAFE_ATTR, "1");
+      inputEl.parentElement?.insertBefore(imageStripEl, inputEl);
+    }
+    imageStripEl.replaceChildren(...[...pendingImages.entries()].map(([mark, image]) => {
+      const chip = document.createElement("span");
+      chip.className = "ccf-scp-image-chip";
+      chip.title = image.alt || "이미지";
+      if (/^(?:https?:|data:image\/)/i.test(image.url)) { const img = document.createElement("img"); img.src = image.url; img.alt = ""; chip.appendChild(img); }
+      else chip.appendChild(document.createTextNode(`🖼 ${image.alt || "이미지"}`));
+      const x = document.createElement("button");
+      x.type = "button"; x.className = "ccf-scp-image-x"; x.title = "이미지 빼기"; x.setAttribute("aria-label", "이미지 빼기"); x.textContent = "×";
+      x.addEventListener("click", () => { inputEl.value = inputEl.value.split(mark).join(""); pendingImages.delete(mark); renderImageStrip(); inputEl.dispatchEvent(new Event("input", { bubbles: true })); inputEl.focus(); });
+      chip.appendChild(x);
+      return chip;
+    }));
+  }
+  function adoptOriginalChannel() {
+    try { const tab = findStore()?.getState()?.app?.state?.roomChatTab; if (typeof tab === "string" && tab) currentChannel = tab; } catch (_) { /* 기본 탭 */ }
+  }
+  function adoptOriginalFormat() {
+    const toolbar = [...document.querySelectorAll(".ccf-inline-toolbar")].find((t) => !t.closest(".ccf-scp-panel") && !t.closest('[data-ccf-edit-dialog="1"]'));
+    if (!toolbar) return false;
+    const on = (cmd) => !!toolbar.querySelector(`[data-inline-command="${cmd}"]`)?.classList.contains("active");
+    if (!on("keep")) return false; // 유지가 아니면 오리지널 서식은 다음 전송 뒤 사라지는 값이라 넘기지 않는다
+    const align = toolbar.querySelector('[data-inline-command="align"].active')?.getAttribute("data-align");
+    const color = String(toolbar.querySelector('[data-inline-color="color"]')?.value || "").toLowerCase();
+    const bg = String(toolbar.querySelector('[data-inline-color="backgroundColor"]')?.value || "").toLowerCase();
+    const size = String(toolbar.querySelector(".ccf-inline-size-input")?.value || "").replace(/[^0-9]/g, "").slice(0, 2);
+    Object.assign(fmtState, { keep: true, align: ["left", "center", "right"].includes(align) ? align : "left", color: /^#[0-9a-f]{6}$/.test(color) && color !== "#ffffff" ? color : "", bg: /^#[0-9a-f]{6}$/.test(bg) && bg !== "#010101" ? bg : "", size: size && size !== "16" ? size : "", paren: on("paren-gray") });
+    narrationOn = on("narration");
+    return true;
+  }
   let breakNext = false; // 구분선 토글: 다음 메시지 하나 앞에 구분선(보내면 꺼진다)
   let breakBtnEl = null;
   // 서식 두 번째 줄(정렬·글자색·배경색·크기·유지·()) 상태. 메시지 전체에 적용된다. 유지(keep)가 꺼져 있으면 전송 뒤 초기화.
@@ -1518,20 +1579,20 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       }
       applyRowMarkers([oldLast, ...appended].filter(Boolean));
       lastSignature = signature;
+      if (collapsed && collapseCount === Infinity) collapseCount = messages.length; if (collapsed && messages.length > collapseCount) panelEl?.setAttribute("data-unread", "1");
       restoreScroll();
       return;
     }
 
     lastSignature = signature;
+    if (collapsed && collapseCount === Infinity) collapseCount = messages.length; if (collapsed && messages.length > collapseCount) panelEl?.setAttribute("data-unread", "1");
     listEl.textContent = "";
     ccfScpInnerUl = null;
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "ccf-scp-empty";
-      empty.textContent = olderError
-        ? `이 탭에는 아직 메시지가 없습니다. (이전 대화를 불러오지 못했습니다: ${olderError})`
-        : (olderLoading ? "이전 대화를 불러오는 중…" : "이 탭에는 아직 메시지가 없습니다.");
-      listEl.appendChild(empty);
+      // 빈 탭은 오리지널처럼 빈 목록만(안내 문구 없음). 이전 대화를 못 불러온 오류만 알린다.
+      if (olderError) { empty.textContent = `이전 대화를 불러오지 못했습니다: ${olderError}`; listEl.appendChild(empty); }
       return;
     }
 
@@ -2134,7 +2195,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
 
   async function handleSend() {
     if (sending || !inputEl) return;
-    const text = inputEl.value.trim();
+    const text = expandImageMarkers(inputEl.value).trim();
     if (!text) return;
     sending = true;
     sendTiming = timingOn() ? { t0: performance.now(), marks: [["click", 0]] } : null;
@@ -2146,6 +2207,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       await sendMessage(text);
       tmark("sent");
       resetFmtStateAfterSend();
+      if (inputEl && !inputEl.value) { pendingImages.clear(); renderImageStrip(); }
       setStatus("");
     } catch (error) {
       console.error("[ccf-chat-panel] send failed", error);
@@ -2173,7 +2235,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBgV2: opaqueBg,
-        floating: handle.floating, rect: floatRect,
+        floating: handle.floating, rect: floatRect, collapsed,
         selectedCharByRoom: getCharByRoom()
       }));
     } catch (error) { /* 저장 실패는 무시 */ }
@@ -2243,6 +2305,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         border-bottom: 1px solid var(--scp-line, rgba(128,128,128,.32)); }
       /* 제목은 네이티브처럼 막대 정중앙. 닫기 버튼이 오른쪽에 있어도 가운데를 유지하도록
          양옆에 같은 폭의 여백(스페이서)을 둔다. */
+      .ccf-scp-panel[data-collapsed] { height: auto !important; min-height: 0 !important; bottom: auto !important; }
+      .ccf-scp-panel[data-collapsed] > :not(.ccf-scp-bar) { display: none !important; }
+      .ccf-scp-panel[data-collapsed] > .ccf-scp-bar { cursor: default; }
+      .ccf-scp-panel[data-unread] .ccf-scp-title::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 6px; vertical-align: middle; border-radius: 50%; background: #f50057; }
       .ccf-scp-title { flex: 1 1 auto; text-align: center;
         font-size: var(--scp-header-size, 15px); font-weight: var(--scp-header-weight, 500);
         color: var(--scp-header-color, inherit); letter-spacing: var(--scp-header-spacing, normal);
@@ -2330,6 +2396,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         font-size: var(--scp-text-size, inherit); line-height: var(--scp-text-line, 1.5);
         color: var(--scp-text-color, inherit); }
       .ccf-scp-empty { opacity: .55; padding: 16px 4px; text-align: center; }
+      .ccf-scp-images { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 0; }
+      .ccf-scp-image-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 160px; height: 48px; padding: 0 4px; border-radius: 4px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.8); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .ccf-scp-image-chip img { height: 44px; width: auto; max-width: 120px; object-fit: cover; border-radius: 3px; display: block; }
+      .ccf-scp-image-x { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 18px; cursor: pointer; }
       /* 하단은 헤더처럼 불투명. 패딩 0 — 각 섹션(이름 바/주사위/입력)이 네이티브처럼
          패널 폭을 꽉 채우고 자체 좌우 인셋(8px)을 가진다. */
       .ccf-scp-compose { flex: 0 0 auto; padding: 0 0 10px;
@@ -2580,7 +2650,13 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       if (!handle.floating || event.button !== 0 || event.target.closest("button")) return;
       startFloatDrag(event);
     });
+    bar.addEventListener("dblclick", (event) => {
+      if (event.target.closest("button")) return; // 톱니 위의 더블클릭은 무시
+      event.preventDefault();
+      setCollapsed(!collapsed);
+    });
     panel.appendChild(bar);
+    if (readPrefs().collapsed === true) { collapsed = true; panel.setAttribute("data-collapsed", ""); }
     // 떠 있을 때만 쓰는 크기 조절 손잡이(가장자리·모서리).
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
       const grip = document.createElement("div");
@@ -3198,6 +3274,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         Object.assign(fmtState, { align: ["left", "center", "right"].includes(saved.align) ? saved.align : "left", color: hex(saved.color), bg: hex(saved.bg), size: String(saved.size || "").replace(/[^0-9]/g, "").slice(0, 2), paren: !!saved.paren, keep: !!saved.keep });
       }
     } catch (e) { /* noop */ }
+    if (adoptFormatOnBuild) { adoptFormatOnBuild = false; if (adoptOriginalFormat()) nrBtn.classList.toggle("is-active", narrationOn); }
     fmtUiSync = syncFmtUi;
     syncFmtUi();
     compose.appendChild(fmtRow);
@@ -3249,12 +3326,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         api.handle(e, (imageUrl, alt) => {
           if (!target || !target.isConnected) return;
           const clean = (value, max) => String(value || "").replace(/[|{}\r\n]+/g, " ").trim().slice(0, max);
-          const marker = `{i:${String(imageUrl).replace(/[|{}\s]/g, "")}|${clean(alt, 40)}|}`;
+          const url = String(imageUrl).replace(/[|{}\s]/g, "");
+          const marker = `🖼${String.fromCodePoint(0xE0021 + (imageSeq++ % 94))}`;
+          pendingImages.set(marker, { token: `{i:${url}|${clean(alt, 40)}|}`, url, alt: clean(alt, 40) });
           const start = target.selectionStart ?? target.value.length, end = target.selectionEnd ?? start;
           target.value = target.value.slice(0, start) + marker + target.value.slice(end);
           target.setSelectionRange(start + marker.length, start + marker.length);
           target.dispatchEvent(new Event("input", { bubbles: true }));
           target.focus();
+          renderImageStrip();
         });
       } catch (error) { console.warn("[ccf-chat-panel] image paste failed", error); }
     }, true);
@@ -3306,6 +3386,22 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       return true;
     };
     inputEl.addEventListener("input", buildSuggest);
+    inputEl.addEventListener("input", () => { if (pendingImages.size) renderImageStrip(); });
+    // 브라우저 입력칸은 표식(🖼+태그 문자)을 한 번에 지우지 않는다(태그 문자만 지움): 표식 바로 옆의 Backspace/Delete 는 표식을 통째로 지운다.
+    inputEl.addEventListener("keydown", (event) => {
+      if (!pendingImages.size || (event.key !== "Backspace" && event.key !== "Delete") || event.isComposing) return;
+      const a = inputEl.selectionStart ?? 0, b = inputEl.selectionEnd ?? 0;
+      if (a !== b) return;
+      const value = inputEl.value;
+      for (const mark of pendingImages.keys()) {
+        const at = event.key === "Backspace" ? a - mark.length : a;
+        if (at < 0 || value.slice(at, at + mark.length) !== mark) continue;
+        event.preventDefault();
+        inputEl.setRangeText("", at, at + mark.length, "end");
+        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
+    });
     inputEl.addEventListener("input", () => { warmTemplateIfNeeded(); });
     inputEl.addEventListener("focus", () => { warmTemplateIfNeeded(); });
     inputEl.addEventListener("focus", buildSuggest); // 다시 포커스해도 추천이 뜨게
@@ -4438,7 +4534,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     if (INSTANCE_INDEX > 1) {
       // 추가로 만든 패널: 메뉴·키 처리·미러·API 는 1번 패널이 하나만 갖는다. 여기서는 자기 설정만 읽고 패널을 연다.
       const own = readPrefs();
-      if (own.channel) currentChannel = own.channel;
+      if (OPTIONS.fresh) { adoptOriginalChannel(); adoptFormatOnBuild = true; } // 새로 추가: 이전에 같은 번호 패널이 기억한 탭·서식이 아니라 오리지널의 지금 상태로
+      else if (own.channel) currentChannel = own.channel;
       openPanel();
       return;
     }

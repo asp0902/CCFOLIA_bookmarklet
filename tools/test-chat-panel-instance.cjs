@@ -4,7 +4,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/asp92/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 // The panel script builds its panel through createPanelInstance(index): the whole script loads, the API is there, the first panel keeps the old id and gets the shared class.
 const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-panel.user.js'), 'utf8');
-assert.match(source, /const createPanelInstance = \(INSTANCE_INDEX\) => \{/);
+assert.match(source, /const createPanelInstance = \(INSTANCE_INDEX(, OPTIONS = \{\})?\) => \{/);
 assert.match(source, /const PANEL_ID = INSTANCE_INDEX === 1 \? "ccf-second-chat-panel" : `ccf-chat-panel-\$\{INSTANCE_INDEX\}`;/);
 assert.match(source, /createPanelInstance\(1\);\n?\r?\n?\}\)\(\);/);
 assert.doesNotMatch(source, /closest\(`#\$\{PANEL_ID\}`\)/, 'exclusion of the panels is class based');
