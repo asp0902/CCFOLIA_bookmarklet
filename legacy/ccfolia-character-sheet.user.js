@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.39
+// @version      0.5.40
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.39";
+  const VERSION = "0.5.40";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1720,7 +1720,9 @@
     // 시트는 닫기 버튼·Esc 로만 닫힌다. 보낸 뒤 채팅 입력칸에 포커스를 가져가지 않는다.
     if (submit) {
       const submitButton = findSubmitScope(editor)?.querySelector('button[type="submit"]');
-      submitButton?.click();
+      // 서식 바(format-sync)에게 "시트가 보낸 판정"임을 알린다: 유지 서식·나레이션을 굴림이 깨지지 않는 자리(공백 뒤)에 붙인다
+      editor.setAttribute("data-ccf-sheet-command", "1");
+      try { submitButton?.click(); } finally { editor.removeAttribute("data-ccf-sheet-command"); }
       // 보내면 코코포리아가 입력칸을 비운다 → 원복. 끝까지 안 비워지면(전송 실패) 원복하고 안내.
       const started = Date.now();
       const watch = () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.114
+// @version      0.1.115
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.114"),
+    version: getUserscriptVersion("0.1.115"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1582,8 +1582,12 @@
     // 나타날 때만 바닥 고정하고, 재렌더는 스크롤에 손대지 않는다.
     const isFirstRender = el.getAttribute(CCF_RENDERED_ATTR) !== "1";
 
-    const renderText = envelope.text || visibleText || "";
-    const runs = normalizeRuns(envelope.formatRuns, renderText.length);
+    // 시트가 보낸 판정(command 봉투): 봉투 뒤에 코코포리아가 붙이는 굴림 결과까지 그린다(명령에 준 서식이 결과에도 이어진다).
+    // (원래 글자만: 그려 둔 오버레이의 글자는 빼고 읽는다 — 안 그러면 다시 그릴 때마다 결과가 덧붙는다)
+    const sourceText = envelope.command === true ? (() => { const copy = el.cloneNode(true); copy.querySelectorAll(".ccf-render-overlay").forEach((node) => node.remove()); return copy.textContent || ""; })() : "";
+    const commandTail = envelope.command === true ? sourceText.slice(sourceText.indexOf(INVIS_END, sourceText.indexOf(INVIS_START) + INVIS_START.length) + INVIS_END.length) : "";
+    const renderText = (envelope.text || visibleText || "") + commandTail;
+    const runs = normalizeRuns(commandTail ? (envelope.formatRuns || []).map((run) => (Number(run.end) >= String(envelope.text || "").length ? { ...run, end: renderText.length } : run)) : envelope.formatRuns, renderText.length);
     // 나레이션 상태에서도 Roll20 CSS 매크로가 우선한다: 가운데 정렬·이탤릭을 강제하지 않고 매크로의 서식을 쓴다.
     const macro = envelope.roll20Macro === true;
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
@@ -14131,6 +14135,18 @@
     // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
     // 커맨드는 어떤 나레이션 상태에서도 원문 그대로. 입력칸에 이미 봉투(보이지 않는 글자)가 붙어 있으면(앞선 서식·나레이션 상태, 매크로 펼침 등) 걷어 내고 보낸다.
     if (isChatCommandText(rawText) || endsWithCutinTrigger(rawText)) {
+      // 시트 단추가 보낸 판정(BCDice 명령, / 커맨드 제외): 유지 서식·나레이션을 "명령 + 공백 + 봉투(command)"로 붙인다. 공백 뒤는 BCDice 가 설명(코멘트)으로 읽어 굴림은 그대로다.
+      if (editor.getAttribute?.("data-ccf-sheet-command") === "1" && !rawText.trimStart().startsWith("/") && !endsWithCutinTrigger(rawText)) {
+        const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
+        const kept = keepOn && state.lastStyle ? cleanupStyle(state.lastStyle) : {};
+        const runs = Object.keys(kept).length ? [{ start: 0, end: rawText.length, style: kept }] : [];
+        if (runs.length || blockStyle.narration === true) {
+          const envelope = { v: 1, text: rawText, formatRuns: runs, alignRuns: getEffectiveAlignRuns(rawText, [], blockStyle), blockStyle, command: true };
+          const outgoing = `${rawText} ${encodeEnvelopeToInvisible(envelope)}`;
+          if (currentText !== outgoing) setEditorText(editor, outgoing);
+          return true;
+        }
+      }
       if (currentText !== rawText) setEditorText(editor, rawText);
       return true;
     }

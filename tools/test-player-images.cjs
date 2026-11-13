@@ -19,7 +19,9 @@ const context = { HTMLElement, isLikelyChatAuthorItem: () => true, extractChatAu
   normalizePlNameKey: name => name.trim(), state: { data: { plList: [{ name: 'A', aliases: ['Alias'], image: 'https://old.test/a' }] } },
   findChatAuthorImageByName: () => 'https://new.test/a' };
 vm.createContext(context);
-vm.runInContext(extract('ccfolia-handout.user.js', ['collectChatAuthorEntries', 'extractChatAuthorImage', 'getPlayerImage']), context);
+vm.runInContext(extract('ccfolia-handout.user.js', ['collectChatAuthorEntries', 'extractChatAuthorImage', 'getPlayerImage', 'characterIconByName', 'plImageFor']), context);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.user.js'), 'utf8').match(/  const usableImage = [^\n]*/)[0].replace('const ', 'var '), context); // 0.1.121: PL pictures go through plImageFor
+context.findCcfoliaStore = () => null;
 const entries = context.collectChatAuthorEntries([new HTMLElement('A', null), new HTMLElement('A', image('https://new.test/a')), new HTMLElement('A', { complete: true, naturalWidth: 0, currentSrc: 'https://broken.test/a' })]);
 assert.equal(entries.length, 1);
 assert.equal(entries[0].image, 'https://new.test/a');
@@ -30,7 +32,7 @@ context.window = { __CCF_HANDOUT_DEBUG__: { getPlayers: () => [{ name: 'A' }], g
 context.cleanText = value => String(value || '');
 context.escapeHtml = value => value.replaceAll('"', '&quot;');
 vm.runInContext(extract('ccfolia-character-sheet.user.js', ['permissionRows', 'renderPlayerAvatar']), context);
-assert.equal(context.permissionRows({ permissions: {} })[1].image, 'https://old.test/a');
+assert.equal(context.permissionRows({})[1].image, 'https://old.test/a'); // permissionRows takes the permission map itself
 assert(context.renderPlayerAvatar('https://old.test/a').includes('<img'));
 assert(!context.renderPlayerAvatar('javascript:alert(1)').includes('<img'));
 assert(!context.renderPlayerAvatar('').includes('<img'));
