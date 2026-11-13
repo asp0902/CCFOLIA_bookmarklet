@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.118
+// @version      0.1.119
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.118",
+    version: "0.1.119",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1120,6 +1120,13 @@
       transition: color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms cubic-bezier(0.4,0,0.2,1);
     }
     .tab:hover { color: #fff; background: rgba(255,255,255,.04); }
+    /* 목록 탭의 검색: 탭 줄 오른쪽 끝(펼친 검색칸도 같은 줄, 탭 줄 높이는 그대로) */
+    .tabs-search { margin-left: auto; display: flex; align-items: center; padding: 0 8px; min-width: 0; }
+    .tabs-search:empty { display: none; }
+    .tabs-search .list-search-bar { min-height: 0; padding: 0; }
+    .tabs-search .list-search-field { width: min(220px, 40vw); }
+    .tabs-search .list-search { height: 26px; }
+    .tabs-search .list-search-btn { width: 30px; height: 30px; }
     .tab[data-active="1"] { color: #fff; border-bottom-color: #fff; }
     .body { overflow: auto; padding: 0; flex: 1; background: transparent; }
     .body-pad { padding: 20px 24px 24px; }
@@ -1310,7 +1317,7 @@
       word-break: break-word;
     }
     .handout-edit-cols .col .rich-editor:hover { border-color: rgba(255,255,255,.35); }
-    .handout-edit-cols .col .rich-editor:focus { outline: none; border-color: #fff; }
+    .handout-edit-cols .col .rich-editor:focus, .handout-edit-cols .col .rich-editor:focus-visible { outline: none !important; box-shadow: none !important; border-color: rgba(255,255,255,.6); }
     /* contenteditable 블록 wrap 기본 margin 제거 — 텍스트가 너무 아래로 내려가는 문제 해결 */
     .handout-edit-cols .col .rich-editor > * { margin-top: 0; }
     .handout-edit-cols .col .rich-editor > *:first-child { margin-top: 0; }
@@ -1405,6 +1412,7 @@
     .perm-grid .perm-name {
       color: #fff; padding: 8px 0; font-size: 0.875rem; line-height: 1.4;
     }
+    .perm-grid .perm-self { color: rgba(255,255,255,.3); justify-content: center; text-align: center; }
     .perm-grid .perm-cell {
       display: flex; justify-content: center; align-items: center;
     }
@@ -1662,10 +1670,15 @@
       border-left: 3px solid transparent; transition: background-color 150ms;
     }
     .pl-modal .pl-row[data-pl-role="gm"] { border-left-color: #fff; }
+    .pl-modal .pl-drag { cursor: grab; color: rgba(255,255,255,.45); font-size: 14px; letter-spacing: -3px; text-align: center; user-select: none; border-radius: 3px; }
+    .pl-modal .pl-drag:hover, .pl-modal .pl-drag:focus-visible { color: #fff; background: rgba(255,255,255,.08); outline: none; }
+    .pl-modal .pl-row[data-dragging="1"] { opacity: .4; }
+    .pl-modal .pl-row[data-drop="before"] { box-shadow: inset 0 2px 0 #2196f3; }
+    .pl-modal .pl-row[data-drop="after"] { box-shadow: inset 0 -2px 0 #2196f3; }
     .pl-modal .pl-row[data-pl-merged="1"] { background: rgba(255,255,255,.05); padding-top: 6px; padding-bottom: 6px; }
     .pl-modal .pl-row-main {
       display: grid;
-      grid-template-columns: 24px 28px minmax(0,1fr) minmax(0,140px) 60px 28px;
+      grid-template-columns: 16px 24px 28px minmax(0,1fr) minmax(0,140px) 60px 28px;
       gap: 4px 8px; align-items: center; min-width: 0;
     }
     /* 폴더 (#56) */
@@ -1693,8 +1706,10 @@
       overflow: hidden; background: rgba(255,255,255,.08); flex: 0 0 28px;
       vertical-align: middle;
     }
-    .pl-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .pl-avatar[data-empty="1"] { opacity: .35; }
+    .pl-avatar { position: relative; }
+    .pl-avatar::before { content: attr(data-initial); position: absolute; inset: 0; display: grid; place-items: center; background: #616161; color: rgba(255,255,255,.9); font-size: 12px; font-weight: 700; line-height: 1; }
+    .pl-avatar img { position: relative; width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pl-avatar[data-empty="1"]:not([data-initial]) { opacity: .35; }
     .settings-pl-row .pl-avatar { width: 24px; height: 24px; flex: 0 0 24px; }
     .perm-grid .perm-name .pl-avatar {
       width: 22px; height: 22px; flex: 0 0 22px; margin-right: 6px;
@@ -1798,6 +1813,7 @@
             <button class="tab" data-tab="list" data-active="1">목록</button>
             <button class="tab" data-tab="edit" data-active="0" style="display:none;">새로 만들기</button>
             <button class="tab" data-tab="settings" data-active="0">설정</button>
+            <span class="tabs-search" data-tabs-search="1"></span>
           </div>
           <div class="body"></div>
           <div class="room-strip" data-room-strip="1"></div>
@@ -3630,6 +3646,8 @@
     else if (state.activeTab === "edit") inner = renderEdit();
     else inner = renderSettings();
     body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${inner}</div>`;
+    const tabsSearch = state.shadow.querySelector("[data-tabs-search]");
+    if (tabsSearch) tabsSearch.innerHTML = state.activeTab === "list" ? (state.listSearchHtml || "") : "";
     // 본문에 들어간 Firestore 이미지 토큰을 실제 이미지로 교체 (비동기).
     resolveHandoutImagesIn(body);
   }
@@ -3647,6 +3665,7 @@
         </label>
       </div>
     ` : "";
+    state.listSearchHtml = "";
     if (!state.data.handouts.length && !(state.data.folders || []).length) {
       return previewToggle;
     }
@@ -3655,7 +3674,7 @@
     const sortedHandouts = [...state.data.handouts].filter((h) => matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
     const noResult = searchQuery && !state.data.handouts.some((h) => matchesHandoutSearch(h, searchQuery)) ? `<div class="list-no-result">검색 결과가 없습니다.</div>` : "";
     // 검색: 목록 위 오른쪽의 아이콘 버튼 → 누르면 밑줄만 있는 한 줄 검색칸(자동 포커스, X = 지우고 닫기, Esc = 닫기, 비어 있을 때 바깥을 누르면 닫힘)
-    const searchBar = state.searchOpen
+    state.listSearchHtml = state.searchOpen
       ? `<div class="list-search-bar"><div class="list-search-field"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"><button class="list-search-btn" data-action="search-close" aria-label="검색 닫기" title="지우고 닫기">${ICON_X_SMALL}</button></div></div>`
       : `<div class="list-search-bar"><button class="list-search-btn" data-action="search-open" aria-label="검색" title="검색">${ICON_SEARCH}</button></div>`;
     const renderCard = (h) => {
@@ -3695,7 +3714,7 @@
     if (!adminMode) {
       const cards = sortedHandouts.map(renderCard).join("");
       return `
-        ${searchBar}<div class="list">${cards}</div>${noResult}
+        <div class="list">${cards}</div>${noResult}
         ${previewToggle}
       `;
     }
@@ -3722,7 +3741,7 @@
     }).join("");
     const rootCards = sortedHandouts.filter((h) => !inFolder(h)).map(renderCard).join("");
     return `
-      ${searchBar}<div class="list">${folderSections}${rootCards}</div>${noResult}
+      <div class="list">${folderSections}${rootCards}</div>${noResult}
       ${previewToggle}
     `;
   }
@@ -3752,7 +3771,7 @@
     if (myChar) {
       // GM 본인 행 — 실제 캐릭터명 + (GM) 배지. 관리자 = GM 으로 통일.
       const adminLabel = state.data.myCharacter || myChar;
-      rows.push({ key: myChar, label: `${adminLabel} (GM)` });
+      rows.push({ key: myChar, label: `${adminLabel} (GM)`, self: true, initial: Array.from(String(adminLabel).trim())[0] || "" });
     }
     for (const pl of plList) {
       const name = removeSpaces(pl.name);
@@ -3761,7 +3780,7 @@
       if (rows.some((r) => r.key === name)) continue;
       const aliasText = (pl.aliases || []).filter(Boolean).length ? ` (${(pl.aliases || []).join(", ")})` : "";
       const label = `${pl.role === "gm" ? `${name} (GM)` : name}${aliasText}${pl.source === "playroom" ? " · 플레이룸" : ""}`;
-      rows.push({ key: name, label, image: pl.image || "" });
+      rows.push({ key: name, label, image: pl.image || "", initial: Array.from(String(pl.name).trim())[0] || "" });
     }
     // permissions 에만 있고 위 목록에 없는 orphan 키도 표시
     const perms = h.permissions || {};
@@ -4005,8 +4024,13 @@
       const view = permFlag(permH, key, "view");
       const secret = permFlag(permH, key, "secret");
       const edit = permFlag(permH, key, "edit");
+      const avatar = r.image || r.initial ? `<span class="pl-avatar" data-empty="${r.image ? "0" : "1"}"${r.initial ? ` data-initial="${escapeAttr(r.initial)}"` : ""}>${r.image ? `<img src="${escapeAttr(r.image)}" alt="" loading="lazy">` : ""}</span>` : "";
+      if (r.self) return `
+        <div class="perm-name">${avatar}${escapeHtml(r.label)}</div>
+        <div class="perm-cell perm-self" title="GM 은 모든 핸드아웃을 봅니다">—</div><div class="perm-cell perm-self">—</div><div class="perm-cell perm-self">—</div><div class="perm-cell perm-self">—</div>
+      `;
       return `
-        <div class="perm-name">${r.image ? `<span class="pl-avatar" data-empty="0"><img src="${escapeAttr(r.image)}" alt="" loading="lazy"></span>` : ""}${escapeHtml(r.label)}</div>
+        <div class="perm-name">${avatar}${escapeHtml(r.label)}</div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="view" ${view ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="secret" ${secret ? "checked" : ""}></div>
         <div class="perm-cell"><input type="checkbox" data-perm-key="${escapeAttr(key)}" data-perm-col="edit" ${edit ? "checked" : ""}></div>
@@ -4823,6 +4847,7 @@
     row.className = "pl-row";
     row.innerHTML = `
       <div class="pl-row-main">
+        <span class="pl-drag" draggable="true" tabindex="0" role="button" title="끌어서 순서 바꾸기 (키보드: 위/아래 화살표)" aria-label="순서 바꾸기">⋮⋮</span>
         <input class="pl-merge-check" type="checkbox" data-pl-merge-check title="병합 선택" aria-label="병합 선택">
         <span class="pl-avatar" data-pl-avatar aria-hidden="true"></span>
         <input type="text" placeholder="대표 이름" data-pl-field="name">
@@ -4843,6 +4868,39 @@
     `;
     host.appendChild(row);
     writePlRow(row, item || { name: "", id: "", role: "player", aliases: [] });
+    bindPlRowReorder(row);
+  }
+  // PL 목록 창: 행 왼쪽 손잡이를 끌어 순서를 바꾼다(키보드: 손잡이에서 위/아래 화살표). 저장은 화면 순서 그대로 plList 에 들어가고, 권한표·PL 목록·팝업 대상이 그 순서를 따른다.
+  function bindPlRowReorder(row) {
+    const handle = row.querySelector(".pl-drag");
+    if (!handle) return;
+    const clear = () => row.parentElement?.querySelectorAll(".pl-row[data-drop]").forEach((r) => r.removeAttribute("data-drop"));
+    handle.addEventListener("dragstart", (event) => { row.setAttribute("data-dragging", "1"); try { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "pl-row"); event.dataTransfer.setDragImage(row, 12, 12); } catch (_) {} });
+    handle.addEventListener("dragend", () => { row.removeAttribute("data-dragging"); clear(); });
+    row.addEventListener("dragover", (event) => {
+      const dragging = row.parentElement?.querySelector('.pl-row[data-dragging="1"]');
+      if (!dragging || dragging === row) return;
+      event.preventDefault();
+      clear();
+      const r = row.getBoundingClientRect();
+      row.setAttribute("data-drop", event.clientY < r.top + r.height / 2 ? "before" : "after");
+    });
+    row.addEventListener("drop", (event) => {
+      const dragging = row.parentElement?.querySelector('.pl-row[data-dragging="1"]');
+      const where = row.getAttribute("data-drop");
+      clear();
+      if (!dragging || dragging === row || !where) return;
+      event.preventDefault();
+      if (where === "before") row.before(dragging); else row.after(dragging);
+    });
+    handle.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      const sibling = event.key === "ArrowUp" ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling?.classList.contains("pl-row")) return;
+      if (event.key === "ArrowUp") sibling.before(row); else sibling.after(row);
+      handle.focus();
+    });
   }
 
   async function refreshPlListInDialog() {
@@ -4955,6 +5013,8 @@
         ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">`
         : "";
       avatarEl.setAttribute("data-empty", image ? "0" : "1");
+      const initial = Array.from(String(item.name || "").trim())[0] || "";
+      if (initial) avatarEl.setAttribute("data-initial", initial); else avatarEl.removeAttribute("data-initial");
     }
 
     const aliases = (item.aliases || []).filter(Boolean);
