@@ -6,7 +6,8 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'legacy', 'ccfolia-cha
 const start = source.indexOf('  function pick(obj, keys)');
 const end = source.indexOf('  function readMessages(channel)');
 assert(start >= 0 && end > start, 'helpers not found');
-const { toPanelMessage, relayView, relayIconUrl } = new Function(`${source.slice(start, end)}; return { toPanelMessage, relayView, relayIconUrl };`)();
+const { toPanelMessage, relayView, relayIconUrl } = new Function(`const isHiddenText = () => false; /* the hidden flag lives in a function outside this slice (real code: same scope, hoisted) */
+${source.slice(start, end)}; return { toPanelMessage, relayView, relayIconUrl };`)();
 const view = (id, msg) => relayView(toPanelMessage(id, { name: 'A', ...msg }), 'main');
 assert.equal(view('w', { text: 'psst', to: 'someone' }), null, 'whisper dropped');
 assert.equal(view('w2', { text: 'psst', to: ['x'] }), null, 'whisper (list) dropped');
