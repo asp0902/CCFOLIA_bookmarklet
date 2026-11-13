@@ -16,7 +16,7 @@
  * GM 이 만든 캐릭터의 소유권을 참가자가 가져가면 GM 의 '내 캐릭터 목록'(owner = 내 uid)에서 사라진다. 코코포리아는 누구나 다른 사람 소유 캐릭터를 편집할 수 있으므로(번들 확인: 비밀 캐릭터만 소유자·편집 권한자 제한)
  * 목록 끝에 다른 사람 소유 캐릭터를 이어 붙인다. 네이티브 행 하나를 본떠 만들고(React 가 다시 그려도 값이 같으면 DOM 을 건드리지 않는다), 삭제 같은 네이티브 버튼은 넣지 않는다.
  * 편집창은 코코포리아의 보드 캐릭터 더블클릭과 같은 상태 변경(app/state/seted: openRoomCharacter + openRoomCharacterId)으로 연다.
- * 인세인 룸이면 사이코로픽션 시트 버튼도 붙는다(시트 스크립트의 __CCF_CHARACTER_SHEET_DEBUG__.openForCharacter).
+ * 행 자체는 룸의 룰·다이스봇과 무관하게 모든 룸에서 붙는다. 인세인 룸이면 사이코로픽션 시트 버튼도 붙는다(시트 스크립트의 __CCF_CHARACTER_SHEET_DEBUG__.openForCharacter).
  */
 (() => {
   "use strict";
