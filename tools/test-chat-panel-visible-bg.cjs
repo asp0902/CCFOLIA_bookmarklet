@@ -26,5 +26,14 @@ const measured = ctx.visible(new Element('rgb(18, 18, 18)', null, 'linear-gradie
 assert.equal(measured, 'rgb(40, 40, 40)');
 // the compose color is read from the paper that holds both the tab bar and the input, not from the input well
 assert.match(source, /while \(paper && !paper\.contains\(nativeTabBar\)\) paper = paper\.parentElement;/);
-assert.match(source, /set\("--scp-bottom-bg", visibleBackgroundOf\(paper, pageBg\)\)/);
+assert.match(source, /set\("--scp-bottom-bg", opaqueBg \? visibleBackgroundOf\(paper, pageBg\) : layersOver\(paper, native\)\)/);
+// chat-panel 0.5.40: by default the panel copies the original's layers (translucent over the same board) instead of mixing them over the page's background
+const c2 = source.indexOf('  // 반투명 색 두 개를 겹친 색'), d2 = source.indexOf('  function toOpaqueColor(', c2);
+const ctx2 = vm.createContext({ Element, getComputedStyle: (e) => ({ backgroundColor: e.bg, backgroundImage: e.img }), String, Number, Math });
+const solid = source.slice(source.indexOf('  function solidGradientColorOf('), source.indexOf('\n  }', source.indexOf('  function solidGradientColorOf(')) + 4);
+vm.runInContext(`${source.slice(c2, d2)}\n${solid}\nthis.layersOver = layersOver;`, ctx2);
+const panelRoot = new Element('rgba(44, 44, 44, 0.87)');
+assert.equal(ctx2.layersOver(new Element('rgba(0, 0, 0, 0)', panelRoot), panelRoot), 'transparent', 'a region without its own colour shows the panel colour');
+assert.equal(ctx2.layersOver(new Element('rgb(33, 33, 33)', panelRoot), panelRoot), 'rgb(33, 33, 33)');
+assert.equal(ctx2.layersOver(new Element('rgba(0, 0, 0, 0)', new Element('rgba(0, 0, 0, 0.5)', panelRoot)), panelRoot), 'rgba(0, 0, 0, 0.5)', 'translucent layers stay translucent');
 console.log('chat panel visible bg PASS');

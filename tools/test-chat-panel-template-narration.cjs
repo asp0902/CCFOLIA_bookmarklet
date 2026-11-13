@@ -45,9 +45,9 @@ const IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICT
     assert.deepEqual([rows[0].avatar, /에르네스토 - /.test(rows[0].head), rows[0].align !== 'center'], [true, true, true], 'first row of 에르네스토: avatar, name, time, not centred ' + JSON.stringify(rows[0]));
     assert.equal(rows[1].cont, true, 'same speaker -> follow-up row');
     assert.deepEqual([rows[2].avatar, /드와이프 - /.test(rows[2].head), rows[2].align !== 'center'], [true, true, true], 'another speaker: avatar, name, time ' + JSON.stringify(rows[2]));
-    // opaque panel body
+    // panel body = the original's own colour (translucent like the original since chat-panel 0.5.40: both look the same over the board)
     const bg = await page.evaluate(() => getComputedStyle(document.getElementById('ccf-second-chat-panel')).getPropertyValue('--scp-bg').trim());
-    assert(!/rgba\([^)]*,\s*0?\.\d+\)/.test(bg), 'the panel background is opaque: ' + bg);
+    assert(bg && bg !== 'transparent', 'the panel takes the original background: ' + bg);
     assert.deepEqual(errors, []);
     console.log('chat panel template narration PASS', JSON.stringify(rows));
   } finally { await browser.close(); }

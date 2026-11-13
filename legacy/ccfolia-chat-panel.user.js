@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.39
+// @version      0.5.40
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -262,7 +262,7 @@
   //   오른쪽으로 두면 밀려난 룸 채팅이 상단바 아이콘을 덮어버려, 사용자 선택으로 왼쪽을 기본으로.
   let panelSide = "left";
   // 배경을 불투명하게 만들지 여부. 기본은 반투명(원본과 동일한 질감). 켜면 |< 가림.
-  let opaqueBg = true; // 패널은 다른 창(BGM 막대·내 캐릭터 목록) 위에 뜨므로 기본 불투명(원본의 0.87 반투명이면 뒤가 비쳐 겹쳐 보였다)
+  let opaqueBg = false; // 패널은 다른 창(BGM 막대·내 캐릭터 목록) 위에 뜨므로 기본 불투명(원본의 0.87 반투명이면 뒤가 비쳐 겹쳐 보였다)
   // 기본값을 오른쪽 → 왼쪽으로 바꾼 뒤, 예전에 저장된 "right" 를 한 번 덮어쓰기 위한 표식.
   const SIDE_PREF_VERSION = 2;
 
@@ -2322,7 +2322,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
   function savePrefs() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBgV2: opaqueBg,
+        channel: currentChannel, open: !!panelEl, side: panelSide, sideV: SIDE_PREF_VERSION, opaqueBgV3: opaqueBg,
         floating: handle.floating, rect: floatRect, collapsed,
         selectedCharByRoom: getCharByRoom()
       }));
@@ -3962,6 +3962,30 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
 
   // 반투명한 배경을 그대로 쓰면 뒤에 있는 코코포리아 UI(패널 접기 "|<" 버튼 등)가
   // 비쳐 보인다. 페이지 바탕색 위에 미리 겹쳐 같은 색의 불투명한 값으로 만든다.
+  // 반투명 색 두 개를 겹친 색(위 top, 아래 bottom; 둘 다 반투명일 수 있다)
+  function overColor(top, bottom) {
+    const nums = (value) => (String(value || "").match(/[\d.]+/g) || []).map(Number);
+    const t = nums(top), b = nums(bottom);
+    if (t.length < 3) return bottom; if (b.length < 3) return top;
+    const ta = t.length > 3 ? t[3] : 1, ba = b.length > 3 ? b[3] : 1;
+    const a = ta + ba * (1 - ta);
+    if (a <= 0) return "transparent";
+    const mix = (i) => Math.round((t[i] * ta + b[i] * ba * (1 - ta)) / a);
+    return a >= 1 ? `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})` : `rgba(${mix(0)}, ${mix(1)}, ${mix(2)}, ${Math.round(a * 1000) / 1000})`;
+  }
+  // 오리지널 패널 안의 한 구역이 패널 바탕 위에 얹는 층만(그 구역부터 오리지널 패널 바로 아래까지, MUI 오버레이 포함). 없으면 transparent.
+  function layersOver(el, root) {
+    const layers = []; // 위에서 아래 순
+    for (let e = el; e instanceof Element && e !== root; e = e.parentElement) {
+      const cs = getComputedStyle(e);
+      const overlay = solidGradientColorOf(cs.backgroundImage);
+      if (overlay) layers.push(overlay);
+      if (cs.backgroundColor && !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(cs.backgroundColor)) layers.push(cs.backgroundColor);
+    }
+    let acc = "";
+    for (let i = layers.length - 1; i >= 0; i -= 1) acc = acc ? overColor(layers[i], acc) : layers[i];
+    return acc || "transparent";
+  }
   function toOpaqueColor(color, backdrop) {
     const nums = (value) => {
       const found = String(value || "").match(/[\d.]+/g);
@@ -4095,7 +4119,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       for (let el = nativeTabBar.parentElement; el && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(tabsBg); el = el.parentElement) {
         tabsBg = getComputedStyle(el).backgroundColor;
       }
-      set("--scp-tabs-bg", toOpaqueColor(tabsBg, pageBg));
+      set("--scp-tabs-bg", opaqueBg ? toOpaqueColor(tabsBg, pageBg) : layersOver(nativeTabBar, native));
     }
 
     try {
@@ -4155,7 +4179,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     if (nativeInput) {
       let paper = nativeInput.parentElement;
       if (nativeTabBar) { while (paper && !paper.contains(nativeTabBar)) paper = paper.parentElement; }
-      if (paper && paper !== document.body) set("--scp-bottom-bg", visibleBackgroundOf(paper, pageBg));
+      if (paper && paper !== document.body) set("--scp-bottom-bg", opaqueBg ? visibleBackgroundOf(paper, pageBg) : layersOver(paper, native));
     }
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
@@ -4164,7 +4188,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       const hs = getComputedStyle(header.bar);
       const barRect = header.bar.getBoundingClientRect();
       set("--scp-header-h", `${Math.round(barRect.height)}px`);
-      set("--scp-header-bg", toOpaqueColor(hs.backgroundColor, pageBg));
+      set("--scp-header-bg", opaqueBg ? toOpaqueColor(hs.backgroundColor, pageBg) : layersOver(header.bar, native));
       // 우측 여백·아이콘 색: 네이티브 헤더의 맨 오른쪽 아이콘 버튼(설정 톱니)을 찾아
       // 그것과 오른쪽 끝 사이 간격을 그대로 쓰고, 색도 그 아이콘에서 읽는다.
       const icons = [...header.bar.querySelectorAll("button, svg")]
@@ -4633,7 +4657,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     if (prefs.sideV === SIDE_PREF_VERSION && (prefs.side === "left" || prefs.side === "right")) {
       panelSide = prefs.side;
     }
-    if (typeof prefs.opaqueBgV2 === "boolean") opaqueBg = prefs.opaqueBgV2; // 예전 opaqueBg(기본 false 가 저장돼 있음)는 읽지 않는다
+    if (typeof prefs.opaqueBgV3 === "boolean") opaqueBg = prefs.opaqueBgV3; // 예전 opaqueBg(기본 false 가 저장돼 있음)는 읽지 않는다
     // 지난번에 열려 있던 다른 패널 목록은 1번 패널을 열기 전에 읽는다(열면서 목록을 다시 저장하기 때문).
     let savedOpen = [];
     try { const saved = JSON.parse(localStorage.getItem(SCP_LIST_KEY) || "{}"); savedOpen = Array.isArray(saved.open) ? saved.open : []; } catch (e) { /* 저장된 목록이 깨졌으면 무시 */ }
