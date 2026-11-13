@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.38
+// @version      0.5.39
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1234,8 +1234,12 @@ background: transparent; color: inherit; cursor: pointer; opacity: .7; align-ite
 .ccf-hide-host:hover > .ccf-break-btn, .ccf-break-btn:focus-visible { display: inline-flex; }
 .ccf-break-btn.ccf-break-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
 .ccf-break-btn[data-on="1"] { color: #f50057; }
-html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] > :not(.ccf-hide-btn) { opacity: .38; }
-html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; position: absolute; right: 12px; bottom: 4px; font-size: 11px; opacity: .6; pointer-events: none; }
+/* 숨긴 메시지(GM 화면): 이름·시각 줄 + "숨긴 메시지 · 펼치기" 한 줄로 접는다. 펼치면 흐리게 전체를 보인다(이 페이지 동안 기억). */
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]:not([data-ccf-unfolded]) :is(p.MuiListItemText-secondary, .ccf-scp-text) { display: none !important; }
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"][data-ccf-unfolded] :is(p.MuiListItemText-secondary, .ccf-scp-text) { opacity: .38; }
+.ccf-hidden-fold { display: none; }
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold { all: unset; display: block; cursor: pointer; font-size: 12px; line-height: 20px; color: rgba(255,255,255,.5); }
+html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: rgba(255,255,255,.8); text-decoration: underline; }
     `;
     (document.head || document.documentElement).appendChild(style);
     // 눈 버튼 위치: 줄에 마우스를 올리면 나오는 네이티브 호버 버튼(답장·수정) 묶음의 바로 왼쪽, 같은 세로 가운데에 붙인다(그 묶음의 실제 위치를 읽는다). 못 읽으면 CSS 기본 위치.
@@ -1243,7 +1247,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       const li = event.target instanceof Element ? event.target.closest(".ccf-hide-host") : null;
       const eye = li?.querySelector(".ccf-hide-btn");
       if (!li || !eye) return;
-      const natives = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn") && !b.classList.contains("ccf-break-btn"));
+      const natives = [...li.querySelectorAll("button")].filter((b) => b !== eye && !b.classList.contains("ccf-hide-btn") && !b.classList.contains("ccf-break-btn") && !b.classList.contains("ccf-hidden-fold"));
       // 네이티브 호버 버튼 묶음 안, 첫 버튼(수정) 바로 앞에 같은 클래스(크기·간격·호버 모양)로 끼워 넣는다.
       const brk = li.querySelector(".ccf-break-btn");
       if (natives.length && !eye.classList.contains("ccf-hide-inline")) {
@@ -1257,15 +1261,30 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
         brk.style.cssText = "";
         eye.parentElement.insertBefore(brk, eye); // 눈 단추 왼쪽
       }
-      if (eye.classList.contains("ccf-hide-inline")) return;
+      if (eye.classList.contains("ccf-hide-inline")) { alignHoverGroup(li, eye.parentElement); return; }
       // 묶음을 못 찾으면 줄 오른쪽 위에 절대배치(읽을 수 있는 버튼 위치가 있으면 그 왼쪽 가운데).
       const lr = li.getBoundingClientRect();
       const others = natives.map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.left > lr.left + lr.width * 0.4);
-      if (!others.length) return;
+      if (!others.length) { alignHoverGroup(li, eye); if (brk) alignHoverGroup(li, brk); return; } // 패널 줄(네이티브 묶음 없음): 눈·구분선을 이름 줄 높이에
       const left = Math.min(...others.map((r) => r.left)), top = Math.min(...others.map((r) => r.top)), bottom = Math.max(...others.map((r) => r.bottom));
       eye.style.right = `${Math.max(0, Math.round(lr.right - left + 2))}px`;
       eye.style.top = `${Math.max(0, Math.round((top + bottom) / 2 - lr.top - 15))}px`;
     }, true);
+  }
+  // 호버 버튼 묶음을 이름·시각 줄 높이에(이어진 줄은 첫 글줄 높이에) 맞춘다: 묶음의 세로 가운데 = 그 줄의 세로 가운데. 묶음이 줄에 절대배치일 때만 top 을 바꾼다.
+  function alignHoverGroup(li, group) {
+    if (!(li instanceof HTMLElement) || !(group instanceof HTMLElement) || group === li) return;
+    if (getComputedStyle(group).position !== "absolute") return;
+    const head = li.querySelector("h6.MuiListItemText-primary, .ccf-scp-name");
+    let lineTop, lineHeight;
+    if (head && head.getBoundingClientRect().height > 0) { const r = head.getBoundingClientRect(); lineTop = r.top; lineHeight = r.height; }
+    else {
+      const body = li.querySelector("p.MuiListItemText-secondary, .ccf-scp-text, .ccf-hidden-fold");
+      if (!body) return;
+      const r = body.getBoundingClientRect(); lineTop = r.top; lineHeight = Math.min(r.height, parseFloat(getComputedStyle(body).lineHeight) || 20);
+    }
+    const parentTop = (group.offsetParent || li).getBoundingClientRect().top;
+    group.style.top = `${Math.round(lineTop - parentTop + lineHeight / 2 - group.offsetHeight / 2)}px`;
   }
   // GM 판정은 코코포리아의 getIsOwner 와 같은 기준이다: 현재 방(app.state.roomId)의 owner === 로그인한 uid(app.user.uid).
   // 방 정보나 uid 가 아직 없으면(저장소 준비 전) null 로 굳지 않고 이유를 남겨 다음 확인(1.5초마다)에서 다시 본다. 브라우저에 저장된 로그인 uid 들(IndexedDB)은 보조 근거로 합친다.
@@ -1287,7 +1306,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       if (!uids.length) { scpHost.gmReason = "no-login-uid"; return scpHost.isGm ?? null; }
       const isGm = uids.includes(String(room.owner));
       scpHost.gmReason = isGm ? "owner" : "not-owner";
-      if (scpHost.isGm !== isGm) { scpHost.isGm = isGm; lastSignature = null; }
+      if (scpHost.isGm !== isGm) { scpHost.isGm = isGm; lastSignature = null; try { if (listEl) renderList(); } catch (_) { /* 다음 그리기에서 */ } } // GM 이 정해지면 숨긴 메시지(접힌 줄)까지 다시 그린다
       document.documentElement.setAttribute("data-ccf-gm", isGm ? "1" : "0");
       return isGm;
     } catch (error) { scpHost.gmReason = `error: ${error?.message || error}`; return scpHost.isGm ?? null; }
@@ -1314,6 +1333,32 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   }
   const EYE_ON = "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z";
   const EYE_OFF = "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z";
+  const unfoldedHidden = new Set(); // 펼쳐 본 숨긴 메시지 id(이 페이지 동안)
+  function applyHiddenFold(row, id, hidden) {
+    if (!(row instanceof HTMLElement)) return;
+    row.toggleAttribute("data-ccf-hidden-row", !!hidden);
+    if (hidden) row.setAttribute("data-ccf-hidden-row", "1");
+    let fold = row.querySelector(":scope .ccf-hidden-fold");
+    if (!hidden) { fold?.remove(); row.removeAttribute("data-ccf-unfolded"); return; }
+    const open = unfoldedHidden.has(id);
+    row.toggleAttribute("data-ccf-unfolded", open);
+    const body = row.querySelector("p.MuiListItemText-secondary, .ccf-scp-text");
+    if (!fold && body?.parentElement) {
+      fold = document.createElement("button");
+      fold.type = "button"; fold.className = "ccf-hidden-fold"; fold.setAttribute(SAFE_ATTR, "1");
+      fold.addEventListener("click", (event) => {
+        event.preventDefault(); event.stopPropagation();
+        const key = fold.dataset.id;
+        if (unfoldedHidden.has(key)) unfoldedHidden.delete(key); else unfoldedHidden.add(key);
+        const r = fold.closest("[data-ccf-hidden-row]");
+        const nowOpen = unfoldedHidden.has(key);
+        r?.toggleAttribute("data-ccf-unfolded", nowOpen);
+        fold.textContent = nowOpen ? "숨긴 메시지 · 접기" : "숨긴 메시지 · 펼치기";
+      });
+      body.parentElement.insertBefore(fold, body);
+    }
+    if (fold) { fold.dataset.id = id; fold.textContent = open ? "숨긴 메시지 · 접기" : "숨긴 메시지 · 펼치기"; }
+  }
   // 눈 버튼(GM 에게만): 호버하면 줄 오른쪽 위에 나온다. 숨겨진 줄에서는 '다시 보이기'(사선 눈).
   function makeHideButton(getId, hiddenNow, onDone) {
     const btn = document.createElement("button");
@@ -1335,9 +1380,12 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   function decorateHideState(row, msg) {
     if (!(row instanceof HTMLElement) || !msg) return row;
     row.setAttribute("data-ccf-msg-id", String(msg.id || ""));
-    if (msg.hidden) row.setAttribute("data-ccf-hidden-row", "1");
+    if (msg.hidden) applyHiddenFold(row, String(msg.id || ""), true);
     if (scpHost.isGm === true && msg.id) {
       row.classList.add("ccf-hide-host");
+      const brk = makeBreakButton(() => msg.id, hasBreakText(String(msg.text || ""))); // 구분선 단추(오리지널과 같은 저장: 봉투의 breakBefore)
+      brk.dataset.id = String(msg.id);
+      row.appendChild(brk);
       row.appendChild(makeHideButton(() => msg.id, !!msg.hidden, () => renderListInner()));
     }
     return row;
@@ -1416,6 +1464,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
       if (!list && !known) { existing?.remove(); existingBreak?.remove(); return; }
       const id = known || (list[list.length - (total.get(key) - n)] || list[list.length - 1]).id;
       const hiddenNow = known ? isHiddenText(String(slice.entities[known].text || "")) : isHiddenText(rawKeys[i]);
+      applyHiddenFold(li, id, hiddenNow);
       const breakNow = hasBreakText(String(slice.entities?.[id]?.text || ""));
       if (!existingBreak || existingBreak.dataset.id !== id || existingBreak.dataset.on !== (breakNow ? "1" : "0")) {
         existingBreak?.remove();
@@ -1549,7 +1598,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
 
     // 숨긴 메시지: GM 이 아닌 화면에서는 줄 자체를 빼고, GM 에게는 흐리게 남긴다.
     const visibleMessages = scpHost.isGm === true ? messages.slice() : messages.filter((m) => !m.hidden);
-    const signature = (scpHost.isGm === true ? "gm:" : "") + visibleMessages.map((m) => (m.hidden ? `${m.id}!` : m.id)).join(",");
+    const signature = (scpHost.isGm === true ? "gm:" : "") + visibleMessages.map((m) => (m.hidden ? `${m.id}!` : m.id) + (hasBreakText(String(m.text || "")) ? "^" : "")).join(","); // 구분선을 넣고 빼도 다시 그린다
     messages.length = 0; messages.push(...visibleMessages);
     if (signature === lastSignature) return;
 
