@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.16
+// @version      0.0.17
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -90,7 +90,7 @@
   const MENU_BUTTON_ATTR = "data-ccf-toolkit-menu-button";
   // 이전 전신 펭귄 실루엣(tools/gen-penguin-svg.cjs 가 만든 path, 눈 1.9배 수정 포함)을 그대로 두고 viewBox 만 머리 쪽(10.3 0.5 9.8 9.8)으로 잘라 확대한 것: 도형은 새로 그리지 않았다.
   const PENGUIN_SVG = '<svg width="24" height="24" viewBox="10.3 0.5 9.8 9.8" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.73 2L14.48 2.01L15.26 2.25L15.76 2.51L17.02 3.38L18.62 3.95L19.03 4.31L19.21 4.7L17.99 4.85L17.23 5.05L15.74 5.84L15.41 6.09L15.41 6.75L16.2 7.79L16.48 8.4L16.72 9.37L16.75 10.39L16.59 11.94L16.59 12.83L16.67 13.49L16.62 14.85L16.46 15.79L16.04 17.18L15.62 18.07L15.33 18.49L15.11 18.66L14.71 18.66L14.65 18.76L14.36 20.07L13.68 21.3L13.68 21.93L13.87 22.15L14.11 22.26L15 22.28L15.47 22.41L16 22.7L16.25 22.95L16.33 23.16L15.5 23.15L15.47 23.36L15.19 23.28L14.45 23.28L14.29 23.51L13.77 23.31L13.14 23.31L13.11 23.41L12.41 23.38L12.35 23.75L11.44 23.75L11.41 23.96L10.75 23.8L10.05 23.8L9.86 24.01L9.36 23.88L8.68 23.88L8.66 23.99L8.18 23.72L7.96 23.4L7.99 22.16L7.7 22.06L7.44 21.35L6.99 19.41L6.78 17.97L6.13 17.97L5.73 19.04L5.33 19.5L5.22 19.56L4.96 19.53L4.79 19.15L4.82 18.07L5 16.47L5.5 14.09L6.07 12.38L6.94 10.68L7.73 8.77L8.49 7.66L10.19 6.12L10.92 4.1L11.5 3.15L11.96 2.69L12.43 2.38L13.04 2.12L13.72 2.01ZM14.57 5.25L14.83 5.33L14.54 5.62L14.44 5.83L14.44 6.85L15.28 8.11L15.59 8.71L15.88 9.68L15.96 10.65L15.67 12.36L14.75 15.64L13.65 18.99L13.1 20.25L12.04 20.21L11.46 20.47L9.89 20.47L9.55 20.63L9.18 21.02L8.54 20.22L8.25 19.54L7.99 17.94L8.01 16.84L8.17 15.69L8.36 14.9L9.22 12.8L9.27 11.39L9.19 10.97L9.48 10.23L10.02 9.56L11.12 8.73L12.18 7.64L12.63 7.01L13.02 6.06L13.25 5.79L13.77 5.45L14.56 5.26ZM14.37 3.66a0.55 0.55 0 1 0 1.1 0a0.55 0.55 0 1 0 -1.1 0ZM14.63 3.66a0.29 0.29 0 1 0 0.58 0a0.29 0.29 0 1 0 -0.58 0Z"/></svg>';
-  const menuState = { button: null, menu: null, frame: 0 };
+  const menuState = { button: null, frame: 0 };
 
   // section:true 항목은 공용 "설정" 탭 안의 소제목 구역으로 그려지고 메뉴·탭으로는 따로 나오지 않는다.
   function visibleRegistryItems() {
@@ -110,85 +110,10 @@
       || labelled(["내 캐릭터 목록", "내 캐릭터", "캐릭터 목록", "My characters", "My character", "マイキャラクター", "キャラクター一覧"]);
   }
 
-  // ---- 펭귄 버튼의 메뉴·툴팁: 코코포리아의 MUI Menu / Tooltip 을 잰 값 그대로 (룸 메뉴·계정 메뉴·툴바 버튼, 테스트 룸 실측) ----
+  // ---- 펭귄 버튼의 툴팁: 코코포리아의 MUI Tooltip 을 잰 값 그대로 (버튼은 메뉴 없이 GM 도구 창을 바로 열고, 다시 누르면 닫는다) (룸 메뉴·계정 메뉴·툴바 버튼, 테스트 룸 실측) ----
   // 메뉴: 투명 백드롭(fixed, 바깥 클릭으로 닫힘) 위에 paper rgba(44,44,44,.87) 모서리 4 elevation8 그림자, ul 패딩 8 0, 항목 padding 6 16, Roboto 16/24 자간 .15008px,
   // hover rgba(255,255,255,.08) · focus-visible .12, 글자 왼쪽(margin-right 28)·아이콘 오른쪽 20px, 버튼 아래 왼쪽 맞춤, Grow(opacity 전체 시간 · transform 0.666배, scale .75→1, 시간은 높이로 정하는 auto).
   const MUI_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
-  const muiAutoDuration = (height) => { const c = height / 36; return Math.round((4 + 15 * c ** 0.25 + c / 5) * 10); };
-  function closeToolkitMenu() {
-    const root = menuState.menu;
-    menuState.menu = null;
-    menuState.button?.setAttribute("aria-expanded", "false");
-    if (!root) return;
-    const paper = root.querySelector("[data-ccf-tm-paper]");
-    root.setAttribute("data-closing", "1");
-    root.style.pointerEvents = "none";
-    if (paper) { paper.style.opacity = "0"; paper.style.transform = "scale(0.75, 0.5625)"; }
-    window.setTimeout(() => root.remove(), 200);
-  }
-
-  function openToolkitMenu() {
-    closeToolkitMenu();
-    hideToolkitTip();
-    const items = toolkitMenuItems();
-    if (!items.length || !menuState.button) return;
-    const root = document.createElement("div");
-    root.setAttribute(SAFE_UI_ATTR, "1");
-    root.setAttribute("data-ccf-toolkit-menu", "1");
-    root.style.cssText = "position:fixed;inset:0;z-index:2147483000";
-    const backdrop = document.createElement("div");
-    backdrop.style.cssText = "position:fixed;inset:0;background:transparent;-webkit-tap-highlight-color:transparent";
-    const paper = document.createElement("div");
-    paper.setAttribute("data-ccf-tm-paper", "1");
-    paper.setAttribute("tabindex", "-1");
-    paper.style.cssText = "position:absolute;box-sizing:border-box;min-width:16px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);overflow-y:auto;overflow-x:hidden;outline:0;background:rgba(44,44,44,.87);color:#fff;border-radius:4px;font-family:'Noto Sans KR',Roboto,Helvetica,Arial,sans-serif;box-shadow:0px 5px 5px -3px rgba(0,0,0,.2),0px 8px 10px 1px rgba(0,0,0,.14),0px 3px 14px 2px rgba(0,0,0,.12);opacity:0;transform:scale(0.75,0.5625);transform-origin:0 0";
-    const list = document.createElement("ul");
-    list.setAttribute("role", "menu");
-    list.style.cssText = "list-style:none;margin:0;padding:8px 0;position:relative";
-    for (const item of items) {
-      const row = document.createElement("li");
-      row.setAttribute("role", "menuitem");
-      row.setAttribute("tabindex", "-1");
-      row.setAttribute("data-ccf-menu-item", item.id);
-      row.className = "ccf-tm-item";
-      let badge = "";
-      try { badge = item.badge ? String(item.badge() || "") : ""; } catch (_) { badge = ""; }
-      row.innerHTML = `<span class="ccf-tm-text">${escapeHtml(item.label)}</span>${badge ? `<span class="ccf-tm-badge">${escapeHtml(badge)}</span>` : ""}<span class="ccf-tm-icon">${item.icon || ""}</span>`;
-      row.addEventListener("click", (event) => {
-        event.preventDefault(); event.stopPropagation(); closeToolkitMenu();
-        try { if (typeof item.mount === "function") openGmTools(item.id); else item.onClick?.(); } catch (error) { console.warn("[toolkit-menu] item failed", error); }
-      });
-      list.appendChild(row);
-    }
-    paper.appendChild(list);
-    root.append(backdrop, paper);
-    const style = document.createElement("style");
-    style.textContent = ".ccf-tm-item{display:flex;align-items:center;justify-content:flex-start;position:relative;box-sizing:border-box;padding:6px 16px;margin:0;cursor:pointer;user-select:none;white-space:nowrap;outline:0;font-family:Roboto,Helvetica,Arial,sans-serif;font-weight:400;font-size:1rem;line-height:1.5;letter-spacing:.00938em;color:inherit}.ccf-tm-item:hover{background:rgba(255,255,255,.08)}.ccf-tm-item:focus-visible{background:rgba(255,255,255,.12)}.ccf-tm-text{flex:1 1 auto;margin:0 28px 0 0}.ccf-tm-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:0 0 auto}.ccf-tm-icon svg{width:20px;height:20px}.ccf-tm-badge{min-width:20px;margin:0 8px 0 -16px;padding:0 6px;border-radius:10px;background:#f50057;font-size:12px;text-align:center}";
-    root.appendChild(style);
-    document.documentElement.appendChild(root);
-    // 버튼 아래 왼쪽 맞춤 (MUI marginThreshold 16 안으로)
-    const rect = menuState.button.getBoundingClientRect();
-    const width = paper.offsetWidth, height = paper.offsetHeight;
-    paper.style.left = `${Math.round(Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)))}px`;
-    paper.style.top = `${Math.round(Math.max(16, Math.min(rect.bottom, window.innerHeight - height - 16)))}px`;
-    const duration = muiAutoDuration(height);
-    paper.style.transition = `opacity ${duration}ms ${MUI_EASE}, transform ${Math.round(duration * 0.666)}ms ${MUI_EASE}`;
-    void paper.offsetHeight; // 시작 상태를 확정한 뒤 바로 끝 상태로 (requestAnimationFrame 은 가려진 창에서 멈춘다)
-    paper.style.opacity = "1"; paper.style.transform = "none";
-    backdrop.addEventListener("mousedown", (event) => { event.preventDefault(); closeToolkitMenu(); menuState.button?.focus(); });
-    root.addEventListener("keydown", (event) => {
-      const rows = [...list.children], at = rows.indexOf(document.activeElement);
-      if (event.key === "Escape") { event.stopPropagation(); closeToolkitMenu(); menuState.button?.focus(); }
-      else if (event.key === "ArrowDown") { event.preventDefault(); rows[(at + 1) % rows.length]?.focus(); }
-      else if (event.key === "ArrowUp") { event.preventDefault(); rows[(at < 1 ? rows.length : at) - 1]?.focus(); }
-      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); document.activeElement?.click?.(); }
-      else if (event.key === "Tab") { event.preventDefault(); closeToolkitMenu(); }
-    });
-    menuState.menu = root;
-    menuState.button.setAttribute("aria-expanded", "true");
-    list.firstElementChild?.focus({ preventScroll: true });
-  }
-
   // 툴팁(MUI Tooltip): 배경 rgb(22,22,22), Roboto 12/500 흰색, 패딩 4 8, 모서리 4, 위쪽 여백 14 · 가운데 맞춤 · 버튼 아래, 100ms 뒤 Grow(opacity 200ms · transform 133ms), 최대 폭 300.
   const tipState = { node: null, timer: 0 };
   function hideToolkitTip() {
@@ -203,7 +128,7 @@
     window.clearTimeout(tipState.timer);
     tipState.timer = window.setTimeout(() => {
       tipState.timer = 0;
-      if (tipState.node || menuState.menu || !menuState.button || menuState.button.hidden) return;
+      if (tipState.node || !menuState.button || menuState.button.hidden) return;
       const node = document.createElement("div");
       node.setAttribute(SAFE_UI_ATTR, "1");
       node.setAttribute("role", "tooltip");
@@ -346,7 +271,6 @@
     if (!tabs.length) return false;
     const wanted = tabs.find((item) => item.id === tabId) || tabs.find((item) => item.id === rememberedToolTab()) || tabs[0];
     if (!toolsState.host) {
-      closeToolkitMenu();
       ensureToolsStyle();
       const host = document.createElement("div");
       host.id = "ccf-gm-tools";
@@ -397,7 +321,7 @@
     const items = toolkitMenuItems();
     const anchor = items.length && isCcfoliaRoom() ? findMenuAnchor() : null;
     if (!anchor?.parentElement) {
-      if (menuState.button && !menuState.button.hidden) { menuState.button.hidden = true; closeToolkitMenu(); }
+      if (menuState.button && !menuState.button.hidden) { menuState.button.hidden = true; hideToolkitTip(); }
       return;
     }
     if (!menuState.button || !menuState.button.isConnected) {
@@ -407,7 +331,7 @@
       button.setAttribute(MENU_BUTTON_ATTR, "1");
       button.setAttribute(SAFE_UI_ATTR, "1");
       button.setAttribute("aria-label", "GM 도구");
-      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-haspopup", "dialog");
       button.setAttribute("aria-expanded", "false");
       button.addEventListener("mouseenter", showToolkitTip, { signal: abort.signal });
       button.addEventListener("mouseleave", hideToolkitTip, { signal: abort.signal });
@@ -415,7 +339,8 @@
       button.addEventListener("blur", hideToolkitTip, { signal: abort.signal });
       button.className = anchor.className.replace(/Mui-(?:disabled|focusVisible)/g, "").trim();
       button.innerHTML = PENGUIN_SVG;
-      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); hideToolkitTip(); menuState.menu ? closeToolkitMenu() : openToolkitMenu(); }, { signal: abort.signal });
+      button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); hideToolkitTip(); toolsState.host ? closeGmTools() : openGmTools(); // 메뉴 없이 GM 도구 창을 바로 연다(마지막에 연 탭, 열려 있으면 닫기)
+       }, { signal: abort.signal });
       menuState.button = button;
     }
     const button = menuState.button;
@@ -448,7 +373,7 @@
       scheduleToolkitMenuSync();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    abort.signal.addEventListener("abort", () => { observer.disconnect(); closeToolkitMenu(); hideToolkitTip(); closeGmTools(); document.getElementById("ccf-gm-tools-style")?.remove(); menuState.button?.remove(); style.remove(); }, { once: true });
+    abort.signal.addEventListener("abort", () => { observer.disconnect(); hideToolkitTip(); closeGmTools(); document.getElementById("ccf-gm-tools-style")?.remove(); menuState.button?.remove(); style.remove(); }, { once: true });
     scheduleToolkitMenuSync();
   }
 

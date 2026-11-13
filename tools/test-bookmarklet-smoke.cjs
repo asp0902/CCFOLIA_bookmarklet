@@ -60,7 +60,7 @@ const roomHtml = `<!doctype html><meta charset=utf-8><body style="background:#28
 
     // phone push through the page: settings from the penguin menu, then a direct fetch to ntfy
     await page.locator('[data-ccf-toolkit-menu-button]').dispatchEvent('click');
-    await page.locator('[data-ccf-toolkit-menu]:not([data-closing]) [role="menuitem"]', { hasText: '설정' }).dispatchEvent('click'); // the penguin opens a menu; the shared settings tab holds the ntfy settings
+    await page.locator('#ccf-gm-tools .ccf-gt-tab', { hasText: '설정' }).dispatchEvent('click'); // the penguin opens the window at once; the shared settings tab holds the ntfy settings
     await page.waitForSelector('#ccf-ntfy-dialog form');
     await page.locator('#ccf-ntfy-dialog [data-a="new"]').click();
     await page.locator('#ccf-ntfy-dialog [name="enabled"]').check();
