@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.33
+// @version      0.5.34
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.33";
+  const VERSION = "0.5.34";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1745,14 +1745,14 @@
       #${ROOT_ID} .ccf-cs-duo { display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:0 24px;align-items:start }
       #${ROOT_ID} .ccf-cs-duo>.ccf-cs-form-section { min-width:0 }
       @container (max-width:640px) { #${ROOT_ID} .ccf-cs-duo { grid-template-columns:minmax(0,1fr) } }
-      #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:120px minmax(0,1fr);gap:24px;align-items:start }
+      #${ROOT_ID} .ccf-cs-top { display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:stretch }
       #${ROOT_ID} .ccf-cs-top>.ccf-cs-stats-items { grid-column:auto }
-      #${ROOT_ID} .ccf-cs-portrait { width:120px;height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-portrait { align-self:stretch;height:100%;width:auto;aspect-ratio:1;min-height:120px;padding:0;border:1px solid rgba(255,255,255,.24);border-radius:0;background:#1b1b1b;color:#9e9e9e;overflow:hidden;cursor:pointer }
       #${ROOT_ID} .ccf-cs-portrait img { display:block;width:100%;height:100%;object-fit:cover }
       #${ROOT_ID} .ccf-cs-portrait:hover { border-color:rgba(255,255,255,.6) }
-      #${ROOT_ID} .ccf-cs-respect { display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-height:44px;padding:0 12px 0 0;background:#1b1b1b }
-      #${ROOT_ID} .ccf-cs-respect strong { align-self:stretch;display:grid;place-items:center;padding:0 16px;margin-right:4px;background:#000;color:#fff;font-size:14px }
-      #${ROOT_ID} .ccf-cs-respect label { display:inline-flex;align-items:center;gap:6px;color:#e0e0e0;font-size:13px }
+      #${ROOT_ID} .ccf-cs-respect { display:flex;align-items:center;flex-wrap:wrap;gap:8px 8px;min-height:44px;padding:0 8px 0 0;background:#1b1b1b }
+      #${ROOT_ID} .ccf-cs-respect strong { align-self:stretch;display:grid;place-items:center;padding:0 12px;margin-right:0;background:#000;color:#fff;font-size:14px }
+      #${ROOT_ID} .ccf-cs-respect label { display:inline-flex;align-items:center;gap:4px;color:#e0e0e0;font-size:13px }
       #${ROOT_ID} .ccf-cs-respect-toggle input { position:absolute;opacity:0;width:1px!important;min-height:0!important;height:1px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-respect-toggle i { position:relative;flex:0 0 38px;width:38px;height:20px;border-radius:10px;background:#616161;transition:background-color 120ms }
       #${ROOT_ID} .ccf-cs-respect-toggle i::after { content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.5);transition:transform 120ms }
@@ -1760,10 +1760,10 @@
       #${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect-toggle:focus-within,#${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect-number:focus-within,#${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect label:focus-within { color:#e0e0e0 }
       #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i::after { transform:translateX(18px) }
       #${ROOT_ID} .ccf-cs-respect-toggle input:focus-visible+i { outline:2px solid #2196f3;outline-offset:2px }
-      #${ROOT_ID} .ccf-cs-respect-number input { width:44px!important;min-height:24px!important;height:24px;padding:0 4px!important;border:0!important;border-radius:3px;background:rgba(255,255,255,.1)!important;background-image:none!important;text-align:center;font-size:15px;-moz-appearance:textfield;appearance:textfield }
+      #${ROOT_ID} .ccf-cs-respect-number input { width:36px!important;min-height:24px!important;height:24px;padding:0 4px!important;border:0!important;border-radius:3px;background:rgba(255,255,255,.1)!important;background-image:none!important;text-align:center;font-size:15px;-moz-appearance:textfield;appearance:textfield }
       #${ROOT_ID} .ccf-cs-respect-number input::-webkit-inner-spin-button,#${ROOT_ID} .ccf-cs-respect-number input::-webkit-outer-spin-button { -webkit-appearance:none;margin:0 }
       #${ROOT_ID} .ccf-cs-respect-number input:focus { background:rgba(255,255,255,.16)!important;box-shadow:inset 0 -2px 0 #f50057;outline:0 }
-      #${ROOT_ID} .ccf-cs-respect-roll { margin-left:auto;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#e0e0e0;display:grid;place-items:center;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-respect-roll { margin-left:auto;flex:0 0 36px;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#e0e0e0;display:grid;place-items:center;cursor:pointer }
       #${ROOT_ID} .ccf-cs-respect-roll:hover { background:rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-respect-roll svg { width:24px;height:24px }
       #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
