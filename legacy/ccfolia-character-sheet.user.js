@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.35
+// @version      0.5.36
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.35";
+  const VERSION = "0.5.36";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -418,7 +418,7 @@
     const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0]?.id || "";
     const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
     sheets.forEach((sheet) => { delete sheet.permissions; });
-    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene), sceneTables: normalizeSceneTables(value.sceneTables) };
+    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene), sceneTables: normalizeSceneTables(value.sceneTables), roomUpdatedAt: Number(value.roomUpdatedAt) || 0 };
   }
 
   async function loadData(key) {
@@ -489,6 +489,22 @@
       if (!shared.ready) { shared.ready = true; status("저장됨 · 룸 공유"); }
       sharedPushSoon();
     }, (error) => { sharedDenied(error); });
+    // 룸 단위 설정(장면표 목록·시트 보기 권한·장면 카운터)은 시트가 아니라 룸의 것: GM 만 meta/sheetRoom 에 쓰고(기존 규칙: meta 는 GM 쓰기, 로그인한 누구나 읽기) 모두 받는다.
+    shared.unsubRoom?.(); shared.roomSeen = false; shared.roomPushed = "";
+    shared.unsubRoom = onSnapshot(collection(fb.db, "rooms", state.roomKey, "meta"), (snap) => {
+      snap.docChanges().forEach((change) => { if (change.doc.id === "sheetRoom" && change.type !== "removed") sharedApplyRoom(change.doc.data()); });
+      if (!shared.roomSeen) { shared.roomSeen = true; sharedPushSoon(); }
+    }, () => { /* 읽지 못하면 룸 설정은 이 브라우저 것만 쓴다 */ });
+  }
+  const sharedRoomBody = () => JSON.stringify({ permissions: state.data.permissions || {}, scene: state.data.scene, sceneTables: state.data.sceneTables || [] });
+  function sharedApplyRoom(data) {
+    const at = Number(data?.updatedAt) || 0;
+    if (at <= (state.data.roomUpdatedAt || 0)) return;
+    let parsed; try { parsed = JSON.parse(data.json); } catch (_) { return; }
+    state.data.permissions = normalizePermissions(parsed.permissions); state.data.scene = normalizeScene(parsed.scene); state.data.sceneTables = normalizeSceneTables(parsed.sceneTables);
+    state.data.roomUpdatedAt = at; shared.roomPushed = sharedRoomBody();
+    clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
+    if (state.open) render();
   }
   function sharedApply(id, data, fb) {
     const local = state.data.sheets.find((sheet) => sheet.id === id);
@@ -559,12 +575,20 @@
         await writeBatch(fb.db).set(base("sheets", id), { json: "{}", ownerUid, updatedAt: now, deleted: true }).commit();
         shared.remote.set(id, { ownerUid, updatedAt: now, deleted: true });
       }
+      const roomBody = sharedRoomBody();
+      if (gm && shared.roomSeen && roomBody !== shared.roomPushed) {
+        try {
+          await writeBatch(fb.db).set(base("meta", "sheetRoom"), { json: roomBody, updatedAt: now }).commit();
+          state.data.roomUpdatedAt = now; shared.roomPushed = roomBody;
+          clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
+        } catch (error) { shared.roomPushed = roomBody; console.warn("[ccf-character-sheet] room settings not shared", error); } // 시트 공유와 따로: 거절돼도 시트는 계속
+      }
     } catch (error) {
       if (!sharedDenied(error)) shared.timer = setTimeout(sharedPush, 15000);
     } finally { shared.pushing = false; }
   }
   const sharedInterval = setInterval(sharedTick, 3000);
-  signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); });
+  signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); shared.unsubRoom?.(); });
 
   function currentSheet() {
     return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0] || null;
