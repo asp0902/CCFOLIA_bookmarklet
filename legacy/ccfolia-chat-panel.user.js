@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.30
+// @version      0.5.31
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.30";
+  const VERSION = "0.5.31";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -4594,7 +4594,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     } catch (_) { return null; }
   }
   const helpDialogs = () => [...document.querySelectorAll(".MuiDialog-root")];
-  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) relayHelpCache = { ...help, system: helpSystem() }; } }).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(() => { for (const dialog of helpDialogs()) { const help = readHelpDialog(dialog); if (help) { relayHelpCache = { ...help, system: helpSystem() }; saveRelayHelp(helpSystem(), help); } } }).observe(document.body, { childList: true, subtree: true });
   let helpProbing = false;
   // Small static pictures of CCFOLIA's own site (the default account picture /ccfolia.png, the default card back /images/trump/..): read from the GM's page and sent as PNG data URIs, so the play room needs no extra image host.
   const RELAY_STATIC_PATH = /^\/(?:ccfolia\.png|images\/[\w\-./\[\]]{1,100}\.png)$/;
@@ -4620,22 +4620,39 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
   const helpSystem = () => { try { return String(Object.values(findStore()?.getState()?.entities?.rooms?.entities || {})[0]?.diceBotSystem || "").slice(0, 60); } catch (_) { return ""; } };
   // Opens the native dialog out of sight, reads it and closes it again - only when nothing is stored yet or the room's dice system changed since the stored text (otherwise the text is updated when the GM opens the dialog
   // themself); never while the GM is typing, focus goes back to where it was.
+  // 도움말 다이얼로그는 사용자 눈에 띄면 안 된다. 예전 구현은 docs.bcdice.org 링크를 못 읽은 시스템(readHelpDialog 가 null)에서 다이얼로그를 닫지 않아, 숨김 CSS 를 걷는 순간 입장 때마다 "채팅 커맨드" 창이 뜨고 남았다.
+  // 지금은 ① 시스템마다 결과(읽음/못 읽음)를 localStorage 에 남겨 다음 입장부터는 열지 않고 ② 이번 페이지에서도 시스템당 한 번만 열며 ③ 읽었든 못 읽었든 반드시 닫고(Escape, 안 되면 앱 상태 openRoomDiceBotInfo=false) ④ 닫힌 뒤에야 숨김 CSS 를 거둔다.
+  const helpProbed = new Set();
+  const helpStoreKey = (system) => `ccf-relay-help-v1:${system}`;
+  function saveRelayHelp(system, help) { try { localStorage.setItem(helpStoreKey(system), JSON.stringify({ help: help || null })); } catch (_) { /* 저장 불가 */ } }
+  function closeHelpByState() { try { const store = findStore(), appState = store?.getState?.()?.app?.state; if (store && appState && "openRoomDiceBotInfo" in appState) store.dispatch({ type: "app/state/seted", payload: { ...appState, openRoomDiceBotInfo: false } }); } catch (_) { /* 상태를 못 바꿈 */ } }
+  const helpOpen = () => helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"));
   async function relayHelpProbe() {
-    if (helpProbing || (relayHelpCache && relayHelpCache.system === helpSystem())) return;
+    const system = helpSystem();
+    if (helpProbing || (relayHelpCache && relayHelpCache.system === system)) return;
+    try { const saved = JSON.parse(localStorage.getItem(helpStoreKey(system)) || "null"); if (saved) { if (saved.help) relayHelpCache = { ...saved.help, system }; helpProbed.add(system); return; } } catch (_) { /* 저장값 없음 */ }
+    if (helpProbed.has(system)) return;
     const active = document.activeElement;
     if (active && active !== document.body && /^(INPUT|TEXTAREA)$/.test(active.tagName) || active?.isContentEditable) return;
     const button = [...document.querySelectorAll("button[aria-label]")].find((b) => /커맨드|コマンド|command/i.test(b.getAttribute("aria-label")) && !b.closest(".ccf-scp-panel"));
-    if (!button || helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root"))) return;
+    if (!button || helpOpen()) return;
+    helpProbed.add(system);
     helpProbing = true;
-    const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;transition:none !important;pointer-events:none !important}";
+    const hide = document.createElement("style"); hide.textContent = ".MuiDialog-root,.MuiBackdrop-root,.MuiDialog-paper{opacity:0 !important;visibility:hidden !important;transition:none !important;pointer-events:none !important}";
     document.head.append(hide);
     try {
       button.click();
       let dialog = null;
-      for (let i = 0; i < 20 && !dialog; i += 1) { await new Promise((r) => setTimeout(r, 100)); dialog = helpDialogs().find((d) => readHelpDialog(d)); }
-      if (dialog) { relayHelpCache = { ...readHelpDialog(dialog), system: helpSystem() }; (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true })); }
-      for (let i = 0; i < 20 && helpDialogs().some((d) => d.querySelector(".MuiDialogContent-root")); i += 1) await new Promise((r) => setTimeout(r, 100));
-    } finally { hide.remove(); helpProbing = false; try { active?.focus?.(); } catch (_) {} }
+      for (let i = 0; i < 20 && !dialog; i += 1) { await new Promise((r) => setTimeout(r, 100)); dialog = helpDialogs().find((d) => d.querySelector(".MuiDialogContent-root")); }
+      const help = dialog ? readHelpDialog(dialog) : null;
+      if (help) relayHelpCache = { ...help, system };
+      saveRelayHelp(system, help); // 못 읽은 시스템도 기록해서 다시 열지 않는다
+      if (dialog) (dialog.querySelector(".MuiDialog-container") || dialog).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+      for (let i = 0; i < 10 && helpOpen(); i += 1) await new Promise((r) => setTimeout(r, 100));
+    } finally {
+      if (helpOpen()) { closeHelpByState(); for (let i = 0; i < 15 && helpOpen(); i += 1) await new Promise((r) => setTimeout(r, 100)); }
+      hide.remove(); helpProbing = false; try { active?.focus?.(); } catch (_) {}
+    }
   }
   // known: 상대가 이미 가진 해시. 같으면 그 부분은 비워 보낸다(CSS 는 100KB 이상이라 바뀔 때만).
   function relayMirror(known = {}) {
