@@ -19,7 +19,7 @@ function extract(name) {
     await page.addScriptTag({ path: path.join(root, 'legacy/ccfolia-roll20-css-bridge.user.js') });
     const css = source.split('const STYLE_CSS = `')[1].split('`;')[0];
     await page.addStyleTag({ content: css });
-    const funcs = ['renderEdit', 'renderEditorMacro', 'onShadowInput', 'onShadowClick', 'showHandoutModal', 'getFieldValue', 'saveHandoutFromForm'].map(extract).join('\n');
+    const funcs = ['renderEdit', 'renderEditorMacro', 'syncEditorHeights', 'onShadowInput', 'onShadowClick', 'showHandoutModal', 'getFieldValue', 'saveHandoutFromForm'].map(extract).join('\n');
     const result = await page.evaluate(async (funcs) => {
       const state = { editingId: 'new', data: { handouts: [], folders: [{ id: 'f1', name: 'Folder' }] }, formPermissions: {}, shadow: document.body };
       const ICON_TRASH = '';
