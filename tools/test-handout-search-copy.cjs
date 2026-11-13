@@ -42,7 +42,7 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
       const toast = () => {}, saveAll = async () => {}, pushHandoutToFirestore = async () => {}, noteFirebaseIssue = () => {}, scheduleWebSync = () => {};
       let n = 0; const uuid = () => 'copy' + (++n), getNextOrder = () => 99;
       return await eval(`(async () => { ${helpers}\n${funcs}
-        const render = () => { document.body.innerHTML = renderList(); };
+        const render = () => { const list = renderList(); if (/data-list-search|search-open/.test(list)) throw new Error("the search is drawn in the list body (it belongs to the tab row)"); document.body.innerHTML = '<div class="tabs"><span class="tabs-search">' + (state.listSearchHtml || "") + '</span></div>' + list; }; // 0.1.119: the search sits at the right end of the tab row
         const titles = () => [...document.querySelectorAll('.card .card-title-btn')].map(e => e.textContent);
         const folders = () => [...document.querySelectorAll('.folder-section .folder-name')].map(e => e.textContent);
         const res = {};
