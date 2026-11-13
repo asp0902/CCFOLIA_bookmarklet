@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.112
+// @version      0.1.113
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.112"),
+    version: getUserscriptVersion("0.1.113"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10780,6 +10780,36 @@
     return looksLikeCcfDiceCommand(body);
   }
 
+  // 컷인 트리거: 코코포리아는 메시지 글이 컷인 이름으로 "끝나면" 그 컷인을 재생한다(번들 0f872b7d getRoomEffectIdsByText: text.lastIndexOf(name)+name.length === text.length).
+  // 서식·나레이션 봉투(보이지 않는 글자)가 글 끝에 붙으면 끝맺음이 깨져 재생되지 않으므로, 이런 글은 커맨드처럼 원문 그대로 보낸다(나레이션 모드 자체는 그대로 유지).
+  function endsWithCutinTrigger(text) {
+    const body = String(text || "");
+    if (!body) return false;
+    try {
+      // (컷인 이미지 쪽 cutinChatFindStore 는 다른 범위라 여기서 보이지 않는다: 같은 방식으로 저장소를 찾는다)
+      let store = endsWithCutinTrigger.store;
+      if (!store) {
+        const root = document.getElementById("root") || document.body?.firstElementChild;
+        const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+        const seen = new WeakSet();
+        const walk = (node, depth = 0) => {
+          if (store || !node || depth > 50) return;
+          for (const v of [node.memoizedProps, node.memoizedProps?.store, node.memoizedProps?.value, node.memoizedState, node.stateNode]) {
+            if (store || !v || typeof v !== "object" || seen.has(v)) continue;
+            seen.add(v);
+            if (typeof v.getState === "function" && typeof v.dispatch === "function" && typeof v.subscribe === "function") store = v;
+          }
+          walk(node.child, depth + 1); walk(node.sibling, depth + 1);
+        };
+        walk(key ? root[key]?.stateNode?.current : null);
+        endsWithCutinTrigger.store = store;
+      }
+      const slice = store?.getState()?.entities?.roomEffects;
+      const entities = slice?.entities && typeof slice.entities === "object" ? Object.values(slice.entities) : [];
+      return entities.some((effect) => { const name = typeof effect?.name === "string" ? effect.name : ""; return !!name && name.length <= body.length && body.lastIndexOf(name) + name.length === body.length; });
+    } catch (_) { return false; }
+  }
+
   function looksLikeCcfDiceCommand(text) {
     const raw = String(text || "");
     if (!raw) return false;
@@ -14100,7 +14130,7 @@
     // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
     // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
     // 커맨드는 어떤 나레이션 상태에서도 원문 그대로. 입력칸에 이미 봉투(보이지 않는 글자)가 붙어 있으면(앞선 서식·나레이션 상태, 매크로 펼침 등) 걷어 내고 보낸다.
-    if (isChatCommandText(rawText)) {
+    if (isChatCommandText(rawText) || endsWithCutinTrigger(rawText)) {
       if (currentText !== rawText) setEditorText(editor, rawText);
       return true;
     }

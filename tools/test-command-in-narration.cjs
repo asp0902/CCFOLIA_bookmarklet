@@ -18,6 +18,9 @@ const TABLE = '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째'
       window.__sent = [];
       document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.querySelector('#composer textarea').value); });
       localStorage.setItem('ccf-format-narrators-v1:test', JSON.stringify(['서술자'])); // the speaker is a narrator: automatic narration is on
+      // the room's cut-ins (CCFOLIA plays one when a message ends with its name)
+      const state = { app: { state: { roomId: 'test' } }, entities: { roomEffects: { ids: ['e1'], entities: { e1: { name: '폭발', imageUrl: null, soundUrl: null } } } } };
+      document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
     });
     await page.addScriptTag({ content: source });
     await page.locator('.ccf-inline-toolbar').first().waitFor({ state: 'attached', timeout: 8000 });
@@ -45,6 +48,16 @@ const TABLE = '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째'
       await page.locator('#composer button[type=submit]').dispatchEvent('click');
       await page.waitForTimeout(120);
       assert.deepEqual(await page.evaluate(() => window.__sent.slice()), [text], label + ' with an envelope in the box: sent without it');
+    }
+    // a cut-in trigger (the message ends with the cut-in's name) goes out without the narration envelope, so CCFOLIA plays the cut-in; other text keeps the narration
+    for (const [label, text, raw] of [['ends with the cut-in name', '쾅! 폭발', true], ['only the cut-in name', '폭발', true], ['name in the middle', '폭발 직전이다', false]]) {
+      await page.evaluate(() => { window.__sent.length = 0; });
+      await setText(text);
+      await page.locator('#composer button[type=submit]').dispatchEvent('click');
+      await page.waitForTimeout(150);
+      const sent = await page.evaluate(() => window.__sent.slice());
+      assert.equal(sent.length, 1, label + ': sent once');
+      assert.equal(envelope.test(sent[0]), !raw, `${label}: ${raw ? 'no envelope' : 'narration envelope kept'} (${JSON.stringify(sent[0].slice(0, 20))})`);
     }
     assert.deepEqual(errors, [], 'no page errors');
     console.log('command in narration (original panel) PASS');

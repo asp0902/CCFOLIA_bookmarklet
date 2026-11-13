@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.34
+// @version      0.5.35
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.34";
+  const VERSION = "0.5.35";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1949,7 +1949,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]::after { content: "숨김"; posi
     // 서식: 마크다운 마커를 파싱해 봉투(invisible envelope)를 만든다. 다이스 판정이면
     // 서식은 무시하고 명령 원문만 보낸다(판정 카드에 서식은 의미 없음).
     // meta(다른 곳에서 넘어온 메시지, 예: 롤20)는 서식·판정 해석 없이 그대로 보내고, 출처만 봉투에 보이지 않게 싣는다.
-    const isCommand = !meta && isChatCommandText(stripEnvelopes(text));
+    // 컷인 트리거(코코포리아: 글이 컷인 이름으로 끝나면 재생)도 커맨드처럼 원문 그대로 — 봉투가 끝에 붙으면 재생되지 않는다.
+    const endsWithCutin = (body) => { try { return Object.values(findStore()?.getState()?.entities?.roomEffects?.entities || {}).some((effect) => { const name = typeof effect?.name === "string" ? effect.name : ""; return !!name && name.length <= body.length && body.lastIndexOf(name) + name.length === body.length; }); } catch (_) { return false; } };
+    const isCommand = !meta && (isChatCommandText(stripEnvelopes(text)) || endsWithCutin(stripEnvelopes(text)));
     const parsed = meta ? { text: String(text), runs: [], alignRuns: [] }
       : isCommand ? { text: stripEnvelopes(text), runs: [], alignRuns: [], narration: false }
       : parseFormatMarkers(stripEnvelopes(text));
