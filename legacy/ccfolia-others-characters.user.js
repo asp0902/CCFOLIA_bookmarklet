@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Others' Characters in My Character List by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-others-characters
-// @version      0.1.2
+// @version      0.1.3
 // @description  GM only: shows the characters owned by other people inside CCFOLIA's "My characters" list (shaded rows with a small owner icon); clicking one opens CCFOLIA's own edit dialog.
 // @description:ko GM 화면에서만: 코코포리아 '내 캐릭터 목록' 안에 다른 사람 소유 캐릭터를 옅은 음영 + 작은 소유자 아이콘 행으로 함께 보여 주고, 클릭하면 코코포리아 편집창을 엽니다(삭제 버튼 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.2";
+  const VERSION = "0.1.3";
   const ROW_ATTR = "data-ccf-others-row";
   const SAFE_ATTR = "data-capybara-toolkit-others";
   const DELETE_LABELS = ["토큰을 화면에서 삭제", "Remove token from screen", "コマを画面から削除"];
@@ -85,12 +85,24 @@
   // 실제 코코포리아의 "내 캐릭터 목록"은 MUI Dialog 가 아니라 떠 있는 Paper 패널(제목 h6)이다. 제목으로 패널을 찾고, 대화상자(Dialog)로 그려진 경우도 같이 본다.
   const PANEL_TITLES = ["내캐릭터목록", "mycharacters", "マイキャラクター", "キャラクター一覧", "캐릭터목록"];
   const normalize = (text) => String(text || "").replace(/\s+/g, "").toLowerCase();
+  // 제목 h6 를 감싸는 가장 가까운 Paper 는 제목 줄(AppBar 도 MuiPaper-root)이다. 목록(.scrollable-list / 행 이름)을 품은 바깥 Paper(창)까지 올라간다.
+  function windowOf(heading) {
+    let fallback = null;
+    for (let node = heading.parentElement; node; node = node.parentElement) {
+      if (node.matches?.(".MuiPaper-root, [role='dialog']")) {
+        fallback = node;
+        if (node.querySelector(".scrollable-list, .MuiListItemText-primary")) return node;
+      }
+      if (node === document.body) break;
+    }
+    return fallback;
+  }
   function listPanels() {
     const panels = new Set();
     document.querySelectorAll('.MuiDialog-root, [role="dialog"]').forEach((dialog) => { if (dialog.querySelector("button[aria-label], button[title]")) panels.add(dialog); });
     document.querySelectorAll("h6, h5, h4, h3, h2").forEach((heading) => {
       if (!PANEL_TITLES.includes(normalize(heading.textContent))) return;
-      const panel = heading.closest(".MuiPaper-root") || heading.closest('[role="dialog"]');
+      const panel = windowOf(heading);
       if (panel instanceof HTMLElement) panels.add(panel);
     });
     return [...panels].filter((panel) => panel.getClientRects().length);
@@ -265,6 +277,8 @@
     out.ownedByOthers = all.filter((c) => c && c.owner && c.owner !== uid).length;
     out.othersListed = (readOthers() || []).length;
     const panels = listPanels();
+    out.titleCandidates = [...document.querySelectorAll("h6, h5, h4, h3, h2")].filter((heading) => PANEL_TITLES.includes(normalize(heading.textContent))).map((heading) => ({ visible: heading.getClientRects().length > 0, chain: (() => { const chain = []; for (let node = heading.parentElement; node && chain.length < 8; node = node.parentElement) chain.push(node.tagName.toLowerCase() + (node.className && typeof node.className === "string" ? "." + node.className.split(" ").filter(Boolean).slice(0, 3).join(".") : "")); return chain; })(), picked: panels.includes(windowOf(heading)), names: (windowOf(heading)?.querySelectorAll(".MuiListItemText-primary").length) ?? 0 }));
+    out.scrollableLists = document.querySelectorAll(".scrollable-list").length;
     out.panels = panels.map((panel) => ({ title: (panel.querySelector("h6, h5, h4, h3, h2")?.textContent || "").trim().slice(0, 20), nativeRows: nativeRows(panel).length, hasList: !!listContainer(panel), kind: panel.matches(".MuiDialog-root, [role='dialog']") ? "dialog" : "paper" }));
     out.reason = !uid || !room ? "룸 정보/uid 없음" : !out.gm ? "GM(방장) 계정이 아님(소유자 비교 uid)" : !out.ownedByOthers ? "다른 사람 소유 캐릭터가 저장소에 없음" : !panels.length ? "'내 캐릭터 목록' 패널이 열려 있지 않음(패널을 열어야 함)" : panels.every((panel) => !nativeRows(panel).length && !listContainer(panel)) ? "패널 안에 목록 요소를 못 찾음" : out.rowsInDom ? "정상: 행이 붙어 있음" : "조건은 맞는데 행이 없음(sync 실행 확인)";
     return out;
