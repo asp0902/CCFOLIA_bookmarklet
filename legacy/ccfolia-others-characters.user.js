@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Others' Characters in My Character List by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-others-characters
-// @version      0.1.4
+// @version      0.1.5
 // @description  GM only: shows the characters owned by other people inside CCFOLIA's "My characters" list (shaded rows with a small owner icon); clicking one opens CCFOLIA's own edit dialog.
 // @description:ko GM 화면에서만: 코코포리아 '내 캐릭터 목록' 안에 다른 사람 소유 캐릭터를 옅은 음영 + 작은 소유자 아이콘 행으로 함께 보여 주고, 클릭하면 코코포리아 편집창을 엽니다(삭제 버튼 없음).
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -21,7 +21,7 @@
 (() => {
   "use strict";
   if (location.hostname !== "ccfolia.com" && !location.hostname.endsWith(".ccfolia.com")) return;
-  const VERSION = "0.1.4";
+  const VERSION = "0.1.5";
   const ROW_ATTR = "data-ccf-others-row";
   const SAFE_ATTR = "data-capybara-toolkit-others";
   const DELETE_LABELS = ["토큰을 화면에서 삭제", "Remove token from screen", "コマを画面から削除"];
@@ -30,7 +30,7 @@
 
   try { window.__CCF_OTHERS_CHARS__?.disable?.(); } catch (error) { /* 이전 인스턴스 정리 실패 */ }
   const abort = new AbortController();
-  const state = { store: null, frame: 0, unsubscribe: null, finder: 0 };
+  const state = { store: null, frame: 0, unsubscribe: null, finder: 0, syncCount: 0, lastSyncAt: 0, lastSyncResult: "", lastError: "" };
 
   function findStore() {
     if (state.store) return state.store;
@@ -64,8 +64,8 @@
     const members = snapshot?.app?.room?.members?.entities || {};
     const list = [];
     for (const [id, character] of Object.entries(snapshot?.entities?.roomCharacters?.entities || {})) {
-      if (!character || !character.owner || character.owner === uid || !String(character.name || "").trim()) continue;
-      list.push({ id, name: String(character.name).trim(), icon: /^https?:\/\//i.test(character.iconUrl || "") ? character.iconUrl : "", order: Number(character.order) || 0, owner: String(character.owner), ownerName: String(members[character.owner]?.displayName || "").trim() });
+      if (!character || !character.owner || character.owner === uid) continue;
+      list.push({ id, name: String(character.name || "").trim() || "NONAME", icon: /^https?:\/\//i.test(character.iconUrl || "") ? character.iconUrl : "", order: Number(character.order) || 0, owner: String(character.owner), ownerName: String(members[character.owner]?.displayName || "").trim() });
     }
     list.sort((a, b) => (a.ownerName || a.owner).localeCompare(b.ownerName || b.owner, "ko") || a.order - b.order || a.name.localeCompare(b.name, "ko"));
     return list;
@@ -203,9 +203,20 @@
 
   function clearRows() { document.querySelectorAll(`[${ROW_ATTR}]`).forEach((node) => node.remove()); }
 
+  // sync 는 예외를 삼키지 않고 기록한다(diag 의 lastError / lastSyncResult)
   function sync() {
     state.frame = 0;
-    if (!state.store) return;
+    state.syncCount += 1; state.lastSyncAt = Date.now();
+    try {
+      const inserted = syncInner();
+      state.lastSyncResult = state.store ? `ok: ${inserted || 0}행 새로 붙임, DOM 의 다른 사람 행 ${document.querySelectorAll(`[${ROW_ATTR}]`).length}` : "저장소 없음";
+      state.lastError = "";
+    } catch (error) { state.lastError = String(error?.stack || error?.message || error).slice(0, 300); state.lastSyncResult = "예외"; }
+  }
+
+  function syncInner() {
+    let inserted = 0;
+    if (!state.store) return 0;
     const dialogs = listPanels();
     if (!dialogs.length) { if (document.querySelector(`[${ROW_ATTR}]`)) clearRows(); return; }
     const others = readOthers();
@@ -226,14 +237,17 @@
       }
       if (!parent) continue;
       const signature = JSON.stringify([others.map((c) => [c.id, c.name, c.icon, c.ownerName]), !!sheetApi]);
+      // 행이 늦게 그려지기 전에 직접 그린 행을 다른 칸에 붙였다면(네이티브 행이 없던 때) 걷어낸다: 목록 칸이 바뀌면 이전 칸의 행은 남기지 않는다
+      dialog.querySelectorAll(`[${ROW_ATTR}]`).forEach((node) => { if (node.parentElement !== parent) node.remove(); });
       const present = [...parent.children].filter((node) => node.hasAttribute(ROW_ATTR));
       // 이미 같은 목록이 맨 끝에 같은 순서로 붙어 있으면 아무것도 쓰지 않는다
       if (parent.getAttribute("data-ccf-others-sig") === signature && present.length === others.length && present.every((node, index) => node.getAttribute(ROW_ATTR) === others[index].id) && (last ? last.nextElementSibling : parent.firstElementChild) === present[0] || (!others.length && !present.length)) continue;
       present.forEach((node) => node.remove());
       parent.setAttribute("data-ccf-others-sig", signature);
       let anchor = last;
-      for (const entry of others) { const row = buildRow(template, entry, sheetApi); if (anchor) anchor.after(row); else parent.prepend(row); anchor = row; }
+      for (const entry of others) { const row = buildRow(template, entry, sheetApi); if (anchor) anchor.after(row); else parent.prepend(row); anchor = row; inserted += 1; }
     }
+    return inserted;
   }
 
   function schedule() { if (!state.frame) state.frame = requestAnimationFrame(sync); }
@@ -264,7 +278,8 @@
 
   // 안 보이는 이유를 돌려준다(읽기만 한다): window.__CCF_OTHERS_CHARS__.diag()
   function diag() {
-    const out = { version: VERSION, store: !!state.store, gm: null, reason: "", room: null, uid: "", panels: [], characters: 0, ownedByOthers: 0, othersListed: 0, rowsInDom: document.querySelectorAll(`[${ROW_ATTR}]`).length };
+    sync(); // 호출할 때 실제로 한 번 돌린다(주입 포함): 결과는 아래 lastSyncResult / lastError
+    const out = { syncCount: state.syncCount, lastSyncAt: state.lastSyncAt ? new Date(state.lastSyncAt).toISOString() : "", lastSyncResult: state.lastSyncResult, lastError: state.lastError, otherNames: [], version: VERSION, store: !!state.store, gm: null, reason: "", room: null, uid: "", panels: [], characters: 0, ownedByOthers: 0, othersListed: 0, rowsInDom: document.querySelectorAll(`[${ROW_ATTR}]`).length };
     const snapshot = state.store?.getState?.();
     if (!snapshot) { out.reason = "저장소를 아직 못 찾음"; return out; }
     const uid = snapshot?.app?.user?.uid || "";
@@ -275,7 +290,9 @@
     const all = Object.values(snapshot?.entities?.roomCharacters?.entities || {});
     out.characters = all.length;
     out.ownedByOthers = all.filter((c) => c && c.owner && c.owner !== uid).length;
-    out.othersListed = (readOthers() || []).length;
+    const listed = readOthers() || [];
+    out.othersListed = listed.length;
+    out.otherNames = listed.map((entry) => Array.from(entry.name).slice(0, 4).join(""));
     const panels = listPanels();
     out.titleCandidates = [...document.querySelectorAll("h6, h5, h4, h3, h2")].filter((heading) => PANEL_TITLES.includes(normalize(heading.textContent))).map((heading) => ({ visible: heading.getClientRects().length > 0, chain: (() => { const chain = []; for (let node = heading.parentElement; node && chain.length < 8; node = node.parentElement) chain.push(node.tagName.toLowerCase() + (node.className && typeof node.className === "string" ? "." + node.className.split(" ").filter(Boolean).slice(0, 3).join(".") : "")); return chain; })(), picked: panels.includes(windowOf(heading)), names: (windowOf(heading)?.querySelectorAll(".MuiListItemText-primary").length) ?? 0 }));
     out.scrollableLists = document.querySelectorAll(".scrollable-list").length;

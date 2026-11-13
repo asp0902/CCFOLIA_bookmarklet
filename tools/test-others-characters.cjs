@@ -120,6 +120,29 @@ const html = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
       assert.deepEqual(await page.evaluate(() => window.__dispatched.map((x) => x.payload.openRoomCharacterId)), ['b1']);
       assert.deepEqual(errors, []); await page.close();
     }
+    // the panel is opened first and its rows are drawn later; 4 characters of my own and 2 of other people, one of them without a name (CCFOLIA draws NONAME): both are listed, after the native rows
+    {
+      const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+      const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+      const item = (name) => '<div style="position:relative"><li class="MuiListItem-container"><div class="MuiListItem-root MuiListItem-button" role="button" style="display:flex"><div class="MuiListItemText-root"><span class="MuiTypography-root MuiListItemText-primary">' + name + '</span></div></div><div class="MuiListItemSecondaryAction-root"><button class="MuiIconButton-root" aria-label="x">x</button></div></li></div>';
+      const panel = '<div class="MuiPaper-root MuiPaper-elevation6" style="position:fixed;right:20px;top:60px;width:420px;background:#333"><div><header class="MuiPaper-root MuiPaper-elevation0 MuiAppBar-root"><div class="MuiToolbar-root"><h6 class="MuiTypography-root MuiTypography-subtitle2">내 캐릭터 목록</h6></div></header></div><div class="MuiList-root scrollable-list"><div><div class="css-sorted" id="rows"></div></div></div></div>';
+      await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div id="root"></div>' + panel }));
+      await page.goto('https://ccfolia.com/rooms/test');
+      await page.evaluate(() => {
+        const mine = (n, i) => [n, { name: n, owner: 'me', order: i }];
+        const state = { app: { user: { uid: 'me' }, state: { roomId: 'r1', openRoomCharacter: false, openRoomCharacterId: null }, room: { members: { entities: { u1: { displayName: '하나' }, u2: { displayName: '둘' } } } } }, entities: { rooms: { entities: { r1: { owner: 'me' } } }, roomCharacters: { entities: Object.fromEntries([mine('가', 1), mine('나', 2), mine('다', 3), mine('라', 4), ['x1', { name: '남의캐릭터', owner: 'u1', order: 1 }], ['x2', { name: '', owner: 'u2', order: 1 }]]) } } };
+        window.__dispatched = [];
+        document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, subscribe: () => () => {}, dispatch(action) { window.__dispatched.push(action); return action; } } } } } };
+      });
+      await page.addScriptTag({ content: source });
+      await page.waitForTimeout(500); // the panel is there, no native rows yet
+      await page.evaluate((html) => { document.getElementById('rows').innerHTML = html; }, ['가', '나', '다', '라'].map(item).join(''));
+      await page.waitForFunction(() => document.querySelectorAll('[data-ccf-others-row]').length === 2 && document.getElementById('rows').lastElementChild.hasAttribute('data-ccf-others-row'), null, { timeout: 4000 });
+      assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[data-ccf-others-row] .MuiListItemText-primary')].map((n) => n.textContent)), ['NONAME', '남의캐릭터'], 'both are listed (the nameless one as NONAME), after the four native rows');
+      const diag = await page.evaluate(() => window.__CCF_OTHERS_CHARS__.diag());
+      assert.deepEqual([diag.othersListed, diag.otherNames, diag.rowsInDom, diag.lastError, diag.syncCount > 0, diag.lastSyncResult.startsWith('ok'), diag.panels[0].nativeRows], [2, ['NONA', '남의캐릭'], 2, '', true, true, 4], 'diag: sync counters, result and the names');
+      assert.deepEqual(errors, []); await page.close();
+    }
     // diag reasons: not the GM / no panel open
     {
       const page = await browser.newPage();
