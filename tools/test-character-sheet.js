@@ -144,7 +144,8 @@ assert.doesNotMatch(source, /function playerField\(value\)/);
 assert.doesNotMatch(source, /<label>플레이어<select data-field="player">/);
 assert.match(source, /ccf-cs-player-link \{[^}]*color:#fff/);
 assert.match(source, /ccf-cs-player-link svg \{ width:18px;height:18px \}/);
-assert.match(source, /ccf-cs-stats-items \{[^}]*grid-template-columns:minmax\(220px,\.8fr\) minmax\(0,1\.2fr\)/);
+assert.match(source, /ccf-cs-stats-items \{[^}]*grid-template-columns:minmax\(0,1\.3fr\) minmax\(0,1fr\)/);
+assert.match(source, /ccf-cs-portrait-stats \{[^}]*align-items:stretch;align-self:start/); // 0.5.37: the picture is as tall as the three status rows
 assert.match(source, /vitalField\("생명력", "life", sheet\.life, "lifeMax", sheet\.lifeMax\)/);
 assert.match(source, /vitalField\("이성치", "sanity", sheet\.sanity, "sanityMax", sheet\.sanityMax\)/);
 assert.match(source, /numberField\("merit", "공적점", sheet\.merit\)/);
