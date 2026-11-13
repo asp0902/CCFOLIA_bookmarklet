@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.121
+// @version      0.1.123
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.121",
+    version: "0.1.123",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -186,10 +186,10 @@
       const targets = [...remoteMembers].filter(([anon]) => anon !== fbState?.uid).map(([anon, person]) => {
         const copy = inboxCopiesFor(person, plList, [h], state.data.folders, null)[h.id];
         const found = findPlForMember(person, plList), pl = found.pl;
-        return { anon: anon.slice(0, 6) + "…", name: person.displayName || "", matchedPl: pl?.name || null, matchedBy: found.how || null, ownedCharacters: ownedCharacterNames(person.ccfoliaUid).map((n) => Array.from(n).slice(0, 6).join("")), view: !!copy?.access?.view, secret: !!copy?.access?.secret, copyWrittenAt: inboxWrites.get(`${anon}:${h.id}`) || null };
+        return { anon: anon.slice(0, 6) + "…", name: person.displayName || "", matchedPl: pl?.name || null, matchedBy: found.how || null, ownedCharacters: ownedCharacterNames(person.ccfoliaUid).map((n) => Array.from(n).slice(0, 6).join("")), view: !!copy?.access?.view, secret: !!copy?.access?.secret, copyHasSecretText: !!copy?.gmNotes, signature: copy ? shortHash(JSON.stringify(copy)) : null, writtenSignature: (() => { const k = inboxKnown.get(anon)?.get(h.id); return k ? (k === "?" ? "?" : shortHash(k)) : null; })(), copyWrittenAt: inboxWrites.get(`${anon}:${h.id}`) || null };
       });
       const permissions = Object.fromEntries(Object.entries(h.permissions || {}).map(([key, perm]) => [key.length > 12 ? key.slice(0, 6) + "…" : key, { view: !!perm?.view, secret: !!perm?.secret }]));
-      return JSON.parse(JSON.stringify({ id: h.id, title: (h.title || "").slice(0, 30), permissions, sharedOnWeb: readWebShared().has(h.id), members: remoteMembers.size, targets, nobodyCanSee: !targets.some((t) => t.view || t.secret), lastInboxError, inboxPausedUntil: inboxDeniedAt ? new Date(inboxDeniedAt + 300000).toISOString() : null, gm: isAdminMode(), seatIsMine: !!(lastGmDoc && fbState?.uid && lastGmDoc.gmUid === fbState.uid) }));
+      return JSON.parse(JSON.stringify({ id: h.id, title: (h.title || "").slice(0, 30), hasSecretText: !!h.gmNotes, permissions, sharedOnWeb: readWebShared().has(h.id), members: remoteMembers.size, targets, nobodyCanSee: !targets.some((t) => t.view || t.secret), lastInboxError, inboxPausedUntil: inboxDeniedAt ? new Date(inboxDeniedAt + 300000).toISOString() : null, gm: isAdminMode(), seatIsMine: !!(lastGmDoc && fbState?.uid && lastGmDoc.gmUid === fbState.uid) }));
     },
     seat() { return JSON.parse(JSON.stringify({ roomKey: getCurrentRoomKey(), seatPath: `rooms/${getCurrentRoomKey()}/meta/gm`, myUid: fbState?.uid || "", myCcfUid, role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seat: lastGmDoc, claim: seatClaimLog, issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null })); },
     initFirebase() { return initFirebase(); },
@@ -235,7 +235,7 @@
     receiveDiag() {
       const room = getCurrentRoomKey();
       let skipDay = null; try { skipDay = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
-      return JSON.parse(JSON.stringify({ room, active: isActive(), greeted: isGreeted(room), skipToday: isSkippedToday(), skipDay, connected: !!fbState, myUid: fbState?.uid ? fbState.uid.slice(0, 6) + "…" : "", myCcfUid: myCcfUid ? myCcfUid.slice(0, 6) + "…" : "", syncReason: syncInfo?.reason || "", inboxSubscribed: !!unsubInbox, inboxActive, received: state.data.handouts.filter((h) => h._remote).length, lastReceived: lastInboxReceived, gm: isAdminMode(), issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null }));
+      return JSON.parse(JSON.stringify({ room, active: isActive(), greeted: isGreeted(room), skipToday: isSkippedToday(), skipDay, connected: !!fbState, myUid: fbState?.uid ? fbState.uid.slice(0, 6) + "…" : "", myCcfUid: myCcfUid ? myCcfUid.slice(0, 6) + "…" : "", syncReason: syncInfo?.reason || "", inboxSubscribed: !!unsubInbox, inboxActive, received: state.data.handouts.filter((h) => h._remote).length, lastReceived: lastInboxReceived, copies: state.data.handouts.filter((h) => h._remote).map((h) => ({ id: String(h.id).slice(0, 12), title: String(h.title || "").slice(0, 20), canSecret: h._canSecret === true, hasSecret: !!h.gmNotes, updatedAt: h.updatedAt || "" })), openShows: [...document.querySelectorAll('[data-ccf-handout-show="1"]')].map((x) => String(x.dataset.handoutId || "").slice(0, 12)), lastShow, pendingShows: pendingShows.size, gm: isAdminMode(), issue: firebaseIssue ? { where: firebaseIssue.where, code: firebaseIssue.code, at: firebaseIssue.at.toISOString() } : null }));
     },
     autoDetect(force) { return autoDetectMyCharacter({ force: !!force }); },
     gmInfo() { return remoteGmInfo; },
@@ -481,9 +481,10 @@
     const perms = h.permissions || {};
     const myKey = removeSpaces(state.data.myCharacter || "");
     const plUids = new Set((state.data.plList || []).map((p) => p.uid).filter(Boolean));
-    return Object.entries(perms)
+    const uidOfName = new Map((state.data.plList || []).filter((p) => p.uid).flatMap((p) => [p.name, ...(p.aliases || [])].map((n) => [removeSpaces(n), p.uid])));
+    return [...new Set(Object.entries(perms)
       .filter(([key, perm]) => key !== ALL_KEY && perm && (perm.view || perm.secret) && key !== myKey && !plUids.has(key)) // only the people named one by one; an account key of a known person comes with that person's name key
-      .map(([key]) => key);
+      .map(([key]) => uidOfName.get(key) || key))]; // 계정이 연결된 PL 은 계정 uid 로 보낸다: 받는 쪽은 자기 계정은 알지만 GM 이 붙인 PL 이름은 모른다
   }
   async function shareHandoutNow(h) {
     // 권한표에서 아무에게도 공개·비밀을 체크하지 않았으면 공유해도 아무에게도 가지 않는다(설계): 먼저 분명히 알린다.
@@ -2168,6 +2169,7 @@
 
   async function refreshRemoteHandoutFromFirestore(handoutId) {
     if (!handoutId) return null;
+    if (!isAdminMode()) return findHandout(handoutId) || null; // 원본은 GM 만 읽는다(규칙): 플레이어는 내 사본(inbox)만 쓴다
     const fb = await initFirebase();
     if (!fb) return null;
     const { doc, getDoc } = fb.modules.fs;
@@ -2216,6 +2218,7 @@
         });
       },
       (error) => {
+        if (error?.code === "permission-denied" && !isAdminMode()) { console.info("[ccf-handout] originals are GM-only; this player reads its own copies (inbox)"); return; }
         noteFirebaseIssue("핸드아웃 읽기", error);
         console.error("[ccf-handout] subscribe error:", error);
         toast("실시간 수신 실패 — 콘솔 확인");
@@ -2286,6 +2289,7 @@
     saveAll(state.data).catch((error) => console.warn("[ccf-handout] saveAll failed:", error));
     ingestSkipLog.delete(data.id);
     if (state.isOpen) render();
+    if (!isNew) refreshOpenShows(handout.id, handout);
   }
 
   // ===== 수신자별 사본(inbox) =====
@@ -2304,11 +2308,12 @@
       noteFirebaseOk("내 사본 읽기");
       snap.docChanges().forEach((change) => {
         const data = change.doc.data() || {};
-        lastInboxReceived = { at: new Date().toISOString(), id: String(data.id || change.doc.id).slice(0, 12), type: change.type };
+        lastInboxReceived = { at: new Date().toISOString(), id: String(data.id || change.doc.id).slice(0, 12), type: change.type, secret: data.access?.secret === true, hasSecretText: !!data.gmNotes };
         if (change.type === "removed") { ingestRemoteRemove(data.id || change.doc.id); return; }
         const access = data.access || {};
         // 받은 사본은 기존 수신 경로를 그대로 쓴다: 권한표 자리에 이 사본의 권한(전체 대상)을 넣는다.
         ingestRemoteHandout({ ...data, permissions: { [ALL_KEY]: { view: access.view === true, secret: access.secret === true, edit: false } }, _viaInbox: true }, change.type);
+        showPendingFor(data.id || change.doc.id);
       });
     }, (error) => { inboxActive = false; noteFirebaseIssue("내 사본 읽기", error); console.info("[ccf-handout] inbox not readable (rules not published yet?):", error?.code || error); });
     registerTeardown(() => { try { unsubInbox?.(); } catch (_) {} unsubInbox = null; inboxActive = false; });
@@ -2356,6 +2361,7 @@
     }
     return out;
   }
+  const shortHash = (text) => { let x = 5381; for (let i = 0; i < text.length; i += 1) x = ((x * 33) ^ text.charCodeAt(i)) >>> 0; return x.toString(36); };
   const inboxKnown = new Map(); // 익명 uid -> Map(핸드아웃 id -> 서명): 이미 써 둔 것
   let inboxBusy = false, inboxWanted = false, inboxTimer = 0, inboxDeniedAt = 0;
   let lastInboxError = null; // { op, path, code, at } — shareDiag 용
@@ -2602,6 +2608,16 @@
     });
   }
 
+  const pendingShows = new Map(); // 핸드아웃 id -> { atName, until }: 사본보다 먼저 온 보여주기 신호
+  let lastShow = null; // receiveDiag 용: 마지막 보여주기 신호 처리 결과
+  function showPendingFor(id) {
+    const pending = pendingShows.get(id);
+    if (!pending) return;
+    pendingShows.delete(id);
+    if (pending.until < Date.now()) return;
+    const h = findHandout(id);
+    if (h) { showHandoutModal(h, pending.atName); lastShow = { at: new Date().toISOString(), id: String(id).slice(0, 12), result: "사본이 온 뒤 띄움" }; }
+  }
   function ingestShowSignal(signalId, data) {
     if (!data || !data.handoutId) return;
     if (seenShowIds.has(signalId)) return;
@@ -2613,15 +2629,18 @@
                     removeSpaces(audience).toLowerCase() === removeSpaces(me).toLowerCase() ||
                     (!!myCcfUid && audience === myCcfUid);
     if (!matched) {
+      lastShow = { at: new Date().toISOString(), id: String(data.handoutId).slice(0, 12), result: "대상 아님", audience: audience.slice(0, 8) };
       console.info("[ccf-handout] show signal skipped (audience mismatch):", audience, "vs", me);
       return;
     }
-    const tryShow = (attempt) => {
+    const tryShow = () => {
       const h = state.data.handouts.find((x) => x.id === data.handoutId);
       if (h) { showHandoutModal(h, data.atName); return; }
-      if (attempt < 5) setTimeout(() => tryShow(attempt + 1), 500);
-      else console.warn("[ccf-handout] show signal: handout not found locally", data.handoutId);
+      // 사본이 아직 안 왔다: 3분 동안 기다렸다가 사본이 들어오는 순간 띄운다(ingestRemoteHandout)
+      pendingShows.set(data.handoutId, { atName: data.atName, until: Date.now() + 180000 });
+      lastShow = { at: new Date().toISOString(), id: String(data.handoutId).slice(0, 12), result: "사본 기다리는 중" };
     };
+    if (!isAdminMode()) { tryShow(); if (!pendingShows.has(data.handoutId)) lastShow = { at: new Date().toISOString(), id: String(data.handoutId).slice(0, 12), result: "띄움" }; return; }
     refreshRemoteHandoutFromFirestore(data.handoutId)
       .then((fresh) => {
         if (fresh) showHandoutModal(fresh, data.atName);
@@ -2633,12 +2652,36 @@
       });
   }
 
+  function showBodyHtml(handout, hasSecret) {
+    return `${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
+          <div class="rendered">${renderHandoutBody(handout.description)}</div>
+          ${hasSecret && handout.gmNotes ? `
+            <div class="secret-block">
+              <div class="secret-head">🔒 비밀 핸드아웃</div>
+              <div class="rendered">${renderHandoutBody(handout.gmNotes)}</div>
+            </div>
+          ` : ""}`;
+  }
+  // 열려 있는 보기 창을 새 사본으로 다시 그린다(비밀 권한이 켜지면 비밀 본문이 나타나고 꺼지면 사라짐). 사본이 지워졌으면(볼 권한이 없어짐) 창을 닫는다.
+  function refreshOpenShows(id, handout) {
+    document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((host) => {
+      if (host.dataset.handoutId !== id || host.dataset.preview === "1") return;
+      if (!handout) { host.remove(); return; }
+      const body = host.shadowRoot?.querySelector(".show-body");
+      if (!body) return;
+      const hasSecret = handout._canSecret === true || canViewSecret(handout, state.data.myCharacter, identityKeys());
+      body.innerHTML = showBodyHtml(handout, hasSecret);
+      resolveHandoutImagesIn(host.shadowRoot);
+    });
+  }
   function showHandoutModal(handout, fromName, isPreview = false) {
     const previewOpener = isPreview ? (state.shadow?.activeElement || document.activeElement) : null;
     const me = state.data.myCharacter;
     const hasSecret = !isPreview && (handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
     const host = document.createElement("div");
     host.setAttribute("data-ccf-handout-show", "1");
+    host.dataset.handoutId = handout.id || "";
+    if (isPreview) host.dataset.preview = "1";
     // 카스케이드 초기 위치 — 기존 팝업 N개 있으면 (N%8) * 24px offset
     const POPUP_W = 500;
     const POPUP_W_COLLAPSED = 250;
@@ -2736,16 +2779,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
           </button>
         </div>
-        <div class="show-body">
-          ${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
-          <div class="rendered">${renderHandoutBody(handout.description)}</div>
-          ${hasSecret && handout.gmNotes ? `
-            <div class="secret-block">
-              <div class="secret-head">🔒 비밀 핸드아웃</div>
-              <div class="rendered">${renderHandoutBody(handout.gmNotes)}</div>
-            </div>
-          ` : ""}
-        </div>
+        <div class="show-body">${showBodyHtml(handout, hasSecret)}</div>
       </div>
     `;
     const paper = sh.querySelector(".show-paper");
@@ -2841,6 +2875,7 @@
     const before = state.data.handouts.length;
     state.data.handouts = state.data.handouts.filter((h) => h.id !== id);
     if (state.data.handouts.length !== before) {
+      refreshOpenShows(id, null);
       saveAll(state.data).catch(() => {});
       if (state.isOpen) render();
       toast("핸드아웃이 삭제되었습니다.");
@@ -4136,11 +4171,12 @@
       const merged = aliases.length > 0 ? "1" : "0";
       const perms = aggregatePermissionsForPl(pl);
       const aliasHtml = aliases.map((a) => `<span class="settings-pl-alias" title="${escapeAttr(a)}">${escapeHtml(a)}</span>`).join("");
-      const image = getPlayerImage(pl.name);
+      const image = plImageFor(pl); // 권한표·PL 목록 창과 같은 함수: 자기 그림 → 병합 이름의 그림 → 첫 글자
+      const initial = Array.from(String(pl.name || "").trim())[0] || "";
       return `
         <div class="settings-pl-row" data-pl-role="${role}" data-pl-merged="${merged}">
           <span class="settings-pl-strip" aria-hidden="true"></span>
-          <span class="pl-avatar" data-empty="${image ? "0" : "1"}" aria-hidden="true">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : ""}</span>
+          <span class="pl-avatar" data-empty="${image ? "0" : "1"}"${initial ? ` data-initial="${escapeAttr(initial)}"` : ""} aria-hidden="true">${image ? `<img src="${escapeAttr(image)}" alt="" loading="lazy">` : ""}</span>
           <div class="settings-pl-main">
             <div class="settings-pl-name-row">
               <span class="settings-pl-name" title="${escapeAttr(name)}">${escapeHtml(name)}</span>

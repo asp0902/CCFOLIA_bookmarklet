@@ -16,10 +16,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.evaluate(() => {
       localStorage.setItem('ccf-handout:greeted-skip-day', '2999-01-01');
       const value = { myCharacter: '드와이프', handouts: [{ id: 'h1', title: '지도', description: '', gmNotes: '', permissions: {}, order: 1 }], folders: [], plDeleted: {}, plDeletedMigrated: true,
-        plList: [{ name: '눈깅', id: '', role: 'player', aliases: [], image: '/blank.gif' }, { name: 'MURDER FEED', id: '', role: 'player', aliases: ['머더 피드'], image: '' }, { name: '에르네스토', id: '', role: 'player', aliases: [], image: '' }] };
+        plList: [{ name: '눈깅', id: '', role: 'player', aliases: ['에르네스토 캐릭'], image: '/blank.gif' }, { name: 'MURDER FEED', id: '', role: 'player', aliases: ['머더 피드'], image: '' }, { name: '에르네스토', id: '', role: 'player', aliases: [], image: '' }, { name: '빈칸', id: '', role: 'player', aliases: [], image: '' }] };
       window.__saved = null;
       // the room's characters: the merged name '머더 피드' is a character with an icon (0.1.121: a PL without a picture shows the picture of a merged name)
-      document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => ({ entities: { roomCharacters: { entities: { c1: { name: '머더 피드', iconUrl: 'https://example.test/m.png' } } } } }), dispatch() {}, subscribe: () => () => {} } } } } };
+      document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => ({ entities: { roomCharacters: { entities: { c1: { name: '머더 피드', iconUrl: 'https://example.test/m.png' }, c2: { name: '에르네스토 캐릭', iconUrl: 'https://example.test/e.png' } } } } }), dispatch() {}, subscribe: () => () => {} } } } } };
       window.__CAPYBARA_TOOLKIT__ = { storage: { getRoomData: async () => ({ value }), setRoomData: async (f, k, v) => { window.__saved = JSON.parse(JSON.stringify(v)); } } };
     });
     await page.addScriptTag({ content: source });
@@ -35,12 +35,12 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     const names = () => page.evaluate(() => [...document.querySelector('#ccfolia-handout-root').shadowRoot.querySelectorAll('.pl-modal [data-pl-rows-host] .pl-row')].map((r) => r.querySelector('[data-pl-field="name"]').value));
     const before = await names();
     assert(before.includes('눈깅') && before.includes('에르네스토'), JSON.stringify(before));
-    const avatar = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '눈깅'); const a = row.querySelector('[data-pl-avatar]'); return { initial: a.getAttribute('data-initial'), before: getComputedStyle(a, '::before').content, opacity: getComputedStyle(a).opacity }; });
+    const avatar = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '빈칸'); const a = row.querySelector('[data-pl-avatar]'); return { initial: a.getAttribute('data-initial'), before: getComputedStyle(a, '::before').content, opacity: getComputedStyle(a).opacity }; });
     const mfImg = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const row = [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === 'MURDER FEED'); return row.querySelector('[data-pl-avatar] img')?.getAttribute('src') || null; });
     assert.equal(mfImg, 'https://example.test/m.png', 'no own picture: the character icon of the merged name');
     const account = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const sel = s.querySelector('.pl-modal .pl-row [data-pl-account]'); return sel ? { first: sel.options[0]?.textContent, linked: sel.getAttribute('data-linked') } : null; });
     assert.deepEqual(account, { first: '계정 연결 안 됨', linked: '0' }, 'each PL row has an account select (0.1.120)');
-    assert.deepEqual(avatar, { initial: '눈', before: '"눈"', opacity: '1' }, 'the first letter shows behind a blank picture: ' + JSON.stringify(avatar));
+    assert.deepEqual(avatar, { initial: '빈', before: '"빈"', opacity: '1' }, 'the first letter shows behind a blank picture: ' + JSON.stringify(avatar));
     // drag 에르네스토 above 눈깅 with the handle
     const handle = await page.evaluateHandle(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; return [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '에르네스토').querySelector('.pl-drag'); });
     const target = await page.evaluateHandle(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; return [...s.querySelectorAll('.pl-modal .pl-row')].find((r) => r.querySelector('[data-pl-field="name"]').value === '눈깅'); });
