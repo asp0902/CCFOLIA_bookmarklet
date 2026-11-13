@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.128
+// @version      0.1.129
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.128",
+    version: "0.1.129",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -329,8 +329,11 @@
   async function saveAll(data) {
     const tk = toolkit();
     if (!tk?.storage?.setRoomData) return;
+    let roomTitle = data?.roomTitle || "";
+    try { const st = findCcfoliaStore()?.getState(); const room = st?.entities?.rooms?.entities?.[st?.app?.state?.roomId] || Object.values(st?.entities?.rooms?.entities || {})[0]; if (room?.name) roomTitle = String(room.name).slice(0, 80); } catch (_) { /* 제목 없이 */ }
     const payload = {
       ...data,
+      roomTitle,
       myCharacterOptions: Array.isArray(state.myCharacterOptions)
         ? state.myCharacterOptions
         : (Array.isArray(data?.myCharacterOptions) ? data.myCharacterOptions : [])
@@ -1223,6 +1226,17 @@
       letter-spacing: .02em; font-weight: 500;
     }
     .card .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
+    .scope-bar { display: flex; gap: 4px; margin-bottom: 8px; }
+    .scope-btn { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 14px; font-size: 0.8125rem; color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.18); }
+    .scope-btn[aria-pressed="true"] { color: #fff; border-color: #2196f3; background: rgba(33,150,243,.16); }
+    .all-rooms-note { font-size: 0.75rem; color: rgba(255,255,255,.5); margin: 0 0 8px; }
+    .room-group { border: 1px solid rgba(255,255,255,.08); border-radius: 4px; margin-bottom: 6px; }
+    .room-group > summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; }
+    .room-group .room-name { font-weight: 700; font-size: 0.875rem; }
+    .room-group .room-meta { flex: 1; font-size: 0.75rem; color: rgba(255,255,255,.5); }
+    .room-group .room-open { font-size: 0.75rem; color: #82b1ff; }
+    .room-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 22px; border-top: 1px solid rgba(255,255,255,.05); }
+    .room-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; }
     .edit-status { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
     .edit-status .badge { font-size: 0.6875rem; padding: 2px 8px; border-radius: 4px; color: rgba(255,255,255,.7); background: rgba(255,255,255,.08); letter-spacing: .02em; font-weight: 500; }
     .edit-status .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
@@ -3742,7 +3756,7 @@
     });
     const body = state.shadow.querySelector(".body");
     let inner;
-    if (state.activeTab === "list") inner = renderList();
+    if (state.activeTab === "list") inner = state.scope === "all" && isAdminMode() ? renderList() : renderScopeBar() + renderList();
     else if (state.activeTab === "edit") inner = renderEdit();
     else inner = renderSettings();
     body.innerHTML = `<div class="body-pad" data-tab="${escapeAttr(state.activeTab)}">${state.activeTab === "list" ? renderConnectBanner() : ""}${inner}</div>`;
@@ -3759,7 +3773,66 @@
     if (room === "global" || isGreeted(room) || fbState) return "";
     return `<div class="connect-banner"><span>이 룸의 핸드아웃을 받으려면 연결이 필요합니다.</span><button class="btn small" data-action="greeting-connect">연결</button></div>`;
   }
+  // ===== 전체 룸 보기 (GM): 이 브라우저에 저장된 룸마다 핸드아웃을 묶어 보여 주고, 다른 룸 것은 보기·이 룸으로 복사만 한다(편집·공유는 그 룸에서).
+  // ponytail: 이 브라우저의 로컬 데이터만 — 다른 PC·다른 브라우저 목록은 안 보인다(룸 색인 users/{uid}/handoutRooms 은 필요해지면).
+  function listSearchHtml() {
+    return state.searchOpen
+      ? `<div class="list-search-bar"><div class="list-search-field"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"><button class="list-search-btn" data-action="search-close" aria-label="검색 닫기" title="지우고 닫기">${ICON_X_SMALL}</button></div></div>`
+      : `<div class="list-search-bar"><button class="list-search-btn" data-action="search-open" aria-label="검색" title="검색">${ICON_SEARCH}</button></div>`;
+  }
+  function renderScopeBar() {
+    if (!isAdminMode()) return "";
+    const all = state.scope === "all";
+    return `<div class="scope-bar" role="group" aria-label="보기 범위"><button type="button" class="scope-btn" data-action="scope" data-scope="room" aria-pressed="${all ? "false" : "true"}">이 룸</button><button type="button" class="scope-btn" data-action="scope" data-scope="all" aria-pressed="${all ? "true" : "false"}">전체 룸</button></div>`;
+  }
+  async function loadAllRooms() {
+    if (state.allRoomsLoading) return;
+    state.allRoomsLoading = true;
+    try {
+      const rows = (await toolkit()?.storage?.listRoomData?.(STORAGE_FEATURE)) || [];
+      state.allRooms = rows.map((r) => ({ room: String(r.roomKey || ""), title: String(r.value?.roomTitle || ""), updatedAt: String(r.updatedAt || ""), handouts: (r.value?.handouts || []).filter((h) => h && h.id && !h._remote) }))
+        .filter((r) => r.room && r.room !== "global");
+    } catch (error) { state.allRooms = []; console.warn("[ccf-handout] all rooms load failed", error); }
+    finally { state.allRoomsLoading = false; }
+    if (state.isOpen) render();
+  }
+  function renderAllRooms() {
+    if (!state.allRooms) { loadAllRooms(); return `<div class="list-no-result">불러오는 중…</div>`; }
+    const cur = getCurrentRoomKey();
+    const q = String(state.search || "").trim();
+    const groups = state.allRooms.map((g) => (g.room === cur ? { ...g, handouts: state.data.handouts.filter((h) => !h._remote) } : g))
+      .filter((g) => g.handouts.length)
+      .sort((a, b) => (a.room === cur ? -1 : b.room === cur ? 1 : String(b.updatedAt).localeCompare(String(a.updatedAt))));
+    if (!groups.some((g) => g.room === cur) && state.data.handouts.some((h) => !h._remote)) groups.unshift({ room: cur, title: "", updatedAt: "", handouts: state.data.handouts.filter((h) => !h._remote) });
+    const html = groups.map((g) => {
+      const items = g.handouts.filter((h) => matchesHandoutSearch(h, q)).sort(compareByOrder);
+      if (q && !items.length) return "";
+      const here = g.room === cur;
+      const name = g.title || `룸 ${g.room.slice(0, 6)}`;
+      const date = g.updatedAt ? new Date(g.updatedAt).toLocaleDateString() : "";
+      return `<details class="room-group" data-room="${escapeAttr(g.room)}"${here || q ? " open" : ""}><summary><span class="room-name">${escapeHtml(name)}</span><span class="room-meta">${items.length}개${date ? ` · ${escapeHtml(date)}` : ""}${here ? " · 현재 룸" : ""}</span>${here ? "" : `<a class="room-open" href="/rooms/${encodeURIComponent(g.room)}" target="_blank" rel="noopener">열기</a>`}</summary>`
+        + items.map((h) => `<div class="room-item"><span class="room-item-title">${escapeHtml(h.title || "(제목 없음)")}</span><button type="button" class="btn small secondary" data-action="room-view" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">보기</button>${here ? "" : `<button type="button" class="btn small secondary" data-action="room-copy" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">이 룸으로 복사</button>`}</div>`).join("")
+        + "</details>";
+    }).join("");
+    return `<div class="all-rooms-note">이 브라우저에 저장된 룸만 보입니다(다른 PC·브라우저의 목록은 안 보임). 다른 룸 것의 편집·공유는 그 룸에서.</div>${html || '<div class="list-no-result">핸드아웃이 있는 룸이 없습니다.</div>'}`;
+  }
+  function findRoomHandout(room, id) {
+    if (room === getCurrentRoomKey()) return findHandout(id);
+    return state.allRooms?.find((g) => g.room === room)?.handouts.find((h) => h.id === id) || null;
+  }
+  async function copyHandoutHere(room, id) {
+    const src = findRoomHandout(room, id);
+    if (!src) return;
+    const copy = { ...JSON.parse(JSON.stringify(src)), id: uuid(), permissions: {}, folderId: "", order: getNextOrder(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    delete copy._remote; delete copy._canSecret; delete copy._canView; delete copy.ownerUid;
+    state.data.handouts.push(copy);
+    await saveAll(state.data);
+    if (isAdminMode()) pushHandoutToFirestore(copy).catch((error) => console.warn("[ccf-handout] copy push failed", error));
+    toast(`"${copy.title || "(제목 없음)"}" 이 룸으로 복사했습니다(권한표·공유는 비움).`);
+    render();
+  }
   function renderList() {
+    if (state.scope === "all" && isAdminMode()) { state.listSearchHtml = listSearchHtml(); return renderScopeBar() + renderAllRooms(); }
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
     state.listSearchHtml = "";
@@ -3771,9 +3844,7 @@
     const sortedHandouts = [...state.data.handouts].filter((h) => matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
     const noResult = searchQuery && !state.data.handouts.some((h) => matchesHandoutSearch(h, searchQuery)) ? `<div class="list-no-result">검색 결과가 없습니다.</div>` : "";
     // 검색: 목록 위 오른쪽의 아이콘 버튼 → 누르면 밑줄만 있는 한 줄 검색칸(자동 포커스, X = 지우고 닫기, Esc = 닫기, 비어 있을 때 바깥을 누르면 닫힘)
-    state.listSearchHtml = state.searchOpen
-      ? `<div class="list-search-bar"><div class="list-search-field"><input class="list-search" type="search" data-list-search="1" placeholder="제목·본문 검색" aria-label="핸드아웃 검색" value="${escapeAttr(state.search || "")}"><button class="list-search-btn" data-action="search-close" aria-label="검색 닫기" title="지우고 닫기">${ICON_X_SMALL}</button></div></div>`
-      : `<div class="list-search-bar"><button class="list-search-btn" data-action="search-open" aria-label="검색" title="검색">${ICON_SEARCH}</button></div>`;
+    state.listSearchHtml = listSearchHtml();
     const renderCard = (h) => {
       ensurePermissions(h);
       const manageable = canManageHandout(h);
@@ -4504,6 +4575,9 @@
     }
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
+    if (action === "scope") { state.scope = btn.dataset.scope === "all" ? "all" : "room"; if (state.scope === "all") state.allRooms = null; render(); return; }
+    if (action === "room-view") { const h = findRoomHandout(btn.dataset.room, id); if (h) showHandoutModal({ ...h, id: "" }, "", true, true); return; }
+    if (action === "room-copy") { copyHandoutHere(btn.dataset.room, id); return; }
     if (action === "close") { closePanel(); return; }
     if (action === "greeting-connect") {
       const room = getCurrentRoomKey();

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.101";
-  const BUILD_ID = "2026-11-13-handout-paste-272";
+  const VERSION = "0.3.102";
+  const BUILD_ID = "2026-11-13-handout-all-rooms-273";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -274,6 +274,7 @@
       setSetting,
       getRoomData,
       setRoomData,
+      listRoomData,
       backupKnownLocalStorage
     }
   };
@@ -479,6 +480,12 @@
 
   async function getRoomData(featureId, roomKey = getCurrentRoomKey()) {
     return idbGet(STORE_ROOM_DATA, `room:${featureId}:${roomKey}`);
+  }
+
+  // 이 브라우저에 저장된 한 기능의 모든 룸 데이터(전체 룸 보기용)
+  async function listRoomData(featureId) {
+    const all = await withStore(STORE_ROOM_DATA, "readonly", (objectStore) => objectStore.getAll());
+    return (all || []).filter((record) => record && record.featureId === featureId);
   }
 
   async function setRoomData(featureId, roomKey, value) {
