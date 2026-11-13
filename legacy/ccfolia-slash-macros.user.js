@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Slash Macros by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-slash-macros
-// @version      0.1.3
+// @version      0.1.4
 // @description  Save and run multi-line slash command macros from the CCFOLIA chat input.
 // @description:ko 채팅 슬래시 커맨드 본문을 커스텀 커맨드로 저장하고 /m <이름>으로 펼쳐서 실행합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -49,6 +49,8 @@
 
   ccfSmLifecycle.installDebugApi({
     listMacros() { return readMacros(); },
+    roomShare() { return { status: roomShare.status, room: roomShare.roomKey, count: roomShare.list.length, mine: roomShare.list.filter((m) => m.ownerUid === roomShare.uid && !m.deleted).map((m) => m.name) }; },
+    openManager() { openManageModal(); },
     addMacro(name, body) { saveMacro(name, body); return readMacros(); }
   });
 
@@ -222,6 +224,7 @@
     if (idx >= 0) list[idx] = entry; else list.push(entry);
     writeMacros(list);
     _macrosCache = null;
+    if (myRoomEntry(cleanName)) setMacroShared(entry, true).catch((error) => console.warn("[CCF Slash] room update failed", error));
   }
 
   function deleteMacro(name) {
@@ -230,6 +233,8 @@
     if (next.length === list.length) return false;
     writeMacros(next);
     _macrosCache = null;
+    const gone = list.find((m) => m.name === name);
+    if (gone && myRoomEntry(name)) setMacroShared(gone, false).catch((error) => console.warn("[CCF Slash] room unshare failed", error));
     return true;
   }
 
@@ -246,6 +251,72 @@
     writeMacros(list);
     _macrosCache = null;
     return true;
+  }
+
+  // ----- room sharing (rooms/{room}/macros, 핸드아웃과 같은 Firebase 연결) ---------------
+  // 내 커맨드는 그대로 이 브라우저에 둔다. '룸 공유'를 켠 것만 룸 문서로 올라가고, 룸 구성원 모두의 목록·자동완성에 '룸 커맨드'로 보인다(이름 겹치면 내 것 우선, 룸 것은 "이름 (공유)").
+  // 고치기·지우기는 만든 사람 또는 GM(규칙). 공유를 끄면 deleted 표시. 핸드아웃 연결이 없거나 규칙이 거절하면 공유 단추를 끄고 한 줄로 알린다.
+  const roomShare = { list: [], status: "no-connection", unsub: null, roomKey: "", uid: "" };
+  let modalRefresh = null;
+  const sharedFb = () => { const f = window.__CCF_HANDOUT_FB__?.state?.(); return f?.db && f.uid && f.modules?.fs ? f : null; };
+  const sharedIsGm = () => { try { return !!window.__CCF_HANDOUT_FB__?.isGm?.(); } catch (_) { return false; } };
+  function roomKeyNow() { const m = String(location.pathname || "").match(/^\/rooms\/([^/?#]+)/); if (!m) return ""; try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; } }
+  function macroDocId(uid, name) { let h = 5381; for (const ch of String(name)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0; return `${uid}_${h.toString(36)}`; }
+  function myDisplayName() {
+    try {
+      const root = document.getElementById("root"); const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+      const q = key ? [root[key].stateNode.current] : [];
+      while (q.length) { const n = q.shift(); const st = n?.memoizedProps?.store?.getState?.(); if (st) { const uid = st.app?.user?.uid; const m = st.entities?.roomMembers?.entities?.[uid]; return String(m?.name || m?.displayName || st.app?.user?.displayName || "").slice(0, 40); } if (n?.child) q.push(n.child); if (n?.sibling) q.push(n.sibling); }
+    } catch (_) { /* 이름 없이 */ }
+    return "";
+  }
+  function syncRoomShare() {
+    const fb = sharedFb(), key = roomKeyNow();
+    if (!fb || !key) {
+      if (roomShare.unsub) { try { roomShare.unsub(); } catch (_) {} roomShare.unsub = null; }
+      const next = key ? "no-connection" : "no-room";
+      if (roomShare.status !== next) { roomShare.status = next; roomShare.list = []; modalRefresh?.(); }
+      return;
+    }
+    if (roomShare.unsub && roomShare.roomKey === key && roomShare.uid === fb.uid) return;
+    if (roomShare.status === "denied" && roomShare.roomKey === key && Date.now() - (roomShare.deniedAt || 0) < 60000) return; // 규칙이 거절하면 1분 쉬었다 다시
+    try { roomShare.unsub?.(); } catch (_) {}
+    roomShare.roomKey = key; roomShare.uid = fb.uid; roomShare.status = "loading";
+    const { collection, onSnapshot } = fb.modules.fs;
+    roomShare.unsub = onSnapshot(collection(fb.db, "rooms", key, "macros"), (snap) => {
+      const list = [];
+      snap.forEach((d) => { const v = d.data() || {}; if (typeof v.name === "string" && v.name.trim() && typeof v.body === "string") list.push({ id: d.id, name: v.name, body: v.body, ownerUid: String(v.ownerUid || ""), ownerName: String(v.ownerName || ""), deleted: v.deleted === true }); });
+      roomShare.list = list; roomShare.status = "ok"; modalRefresh?.();
+    }, (error) => { roomShare.status = error?.code === "permission-denied" ? "denied" : "error"; roomShare.deniedAt = Date.now(); roomShare.list = []; roomShare.unsub = null; modalRefresh?.(); });
+  }
+  const roomShareTimer = setInterval(syncRoomShare, 3000);
+  ccfSmRegisterTeardown(() => { clearInterval(roomShareTimer); try { roomShare.unsub?.(); } catch (_) {} roomShare.unsub = null; });
+  const myRoomEntry = (name) => roomShare.list.find((m) => m.ownerUid === roomShare.uid && m.name === name && !m.deleted);
+  const othersRoomMacros = () => roomShare.list.filter((m) => !m.deleted && m.ownerUid !== roomShare.uid);
+  function roomShareNote() {
+    if (roomShare.status === "no-connection") return "룸 공유는 핸드아웃 연결(인사 창의 확인) 뒤에 쓸 수 있습니다.";
+    if (roomShare.status === "denied") return "룸 공유 규칙이 아직 게시되지 않아 공유할 수 없습니다.";
+    if (roomShare.status === "error") return "룸 커맨드를 읽지 못했습니다.";
+    if (roomShare.status === "loading") return "룸 커맨드를 읽는 중…";
+    return "";
+  }
+  async function setMacroShared(macro, on) {
+    const fb = sharedFb();
+    if (!fb || roomShare.status !== "ok") throw new Error(roomShareNote() || "룸 공유를 쓸 수 없습니다.");
+    const { doc, setDoc } = fb.modules.fs;
+    await setDoc(doc(fb.db, "rooms", roomShare.roomKey, "macros", macroDocId(fb.uid, macro.name)), { name: macro.name, body: macro.body, ownerUid: fb.uid, ownerName: myDisplayName(), updatedAt: Date.now(), deleted: !on });
+  }
+  async function deleteRoomMacro(entry) {
+    const fb = sharedFb();
+    if (!fb) throw new Error(roomShareNote());
+    const { doc, deleteDoc } = fb.modules.fs;
+    await deleteDoc(doc(fb.db, "rooms", roomShare.roomKey, "macros", entry.id));
+  }
+  // 자동완성: 내 것 + 룸 것(이름이 내 것과 겹치지 않는 것만, "이름 (공유)")
+  function popupMacros() {
+    const mine = readMacros();
+    const names = new Set(mine.map((m) => m.name));
+    return [...mine, ...othersRoomMacros().filter((m) => !names.has(m.name)).map((m) => ({ name: `${m.name} (공유)`, body: m.body, shared: true }))];
   }
 
   // 다른 탭에서 변경되면 캐시 무효화
@@ -420,7 +491,7 @@
     const triggerMatch = value.match(TRIGGER_PATTERN);
     if (triggerMatch) {
       const filter = (triggerMatch[1] || "").trim().toLowerCase();
-      const all = readMacros();
+      const all = popupMacros();
       const items = !filter ? all : all.filter((m) => m.name.toLowerCase().includes(filter));
       if (items.length) renderPopup(editor, items, "review");
       else if (popup.boundEditor === editor) hidePopup();
@@ -435,7 +506,7 @@
       return;
     }
     const lower = trimmed.toLowerCase();
-    const matches = readMacros().filter((m) => m.name.toLowerCase().startsWith(lower));
+    const matches = popupMacros().filter((m) => m.name.toLowerCase().startsWith(lower));
     if (matches.length) {
       renderPopup(editor, matches, "review");
     } else if (popup.boundEditor === editor) {
@@ -578,6 +649,7 @@
         </div>
         <div class="ccf-sm-modal-body">
           <div class="ccf-sm-modal-list" data-role="list"></div>
+          <div class="ccf-sm-room" data-role="room"></div>
           <div class="ccf-sm-modal-form" data-role="form">
             <label class="ccf-sm-modal-label">
               <span>이름 (예: roll-weather)</span>
@@ -603,8 +675,38 @@
     const bodyEl = root.querySelector('[data-role="body"]');
     const statusEl = root.querySelector('[data-role="status"]');
     const formEl = root.querySelector('[data-role="form"]');
+    const roomEl = root.querySelector('[data-role="room"]');
+
+    const renderRoom = () => {
+      const others = othersRoomMacros();
+      const note = roomShareNote();
+      const gm = sharedIsGm();
+      roomEl.innerHTML = `<div class="ccf-sm-room-head"><strong>룸 커맨드</strong>${note ? `<span class="ccf-sm-room-note">${escapeHtml(note)}</span>` : ""}</div>` + (others.length
+        ? others.map((m) => `<div class="ccf-sm-modal-row ccf-sm-room-row" data-room-id="${escapeHtml(m.id)}"><div class="ccf-sm-modal-row-main"><strong>${escapeHtml(m.name)} <span class="ccf-sm-room-owner">(공유${m.ownerName ? ` · ${escapeHtml(m.ownerName)}` : ""})</span></strong><code>${escapeHtml(previewBody(m.body))}</code></div><div class="ccf-sm-modal-row-actions"><button type="button" data-action="copy">내 커맨드로 복사</button>${gm ? '<button type="button" data-action="room-delete">삭제</button>' : ""}</div></div>`).join("")
+        : (roomShare.status === "ok" ? '<p class="ccf-sm-modal-empty">다른 사람이 공유한 커맨드가 없습니다.</p>' : ""));
+    };
+    roomEl.addEventListener("click", async (event) => {
+      const row = event.target instanceof Element ? event.target.closest("[data-room-id]") : null;
+      const action = event.target instanceof Element ? event.target.getAttribute("data-action") : null;
+      const entry = row && roomShare.list.find((m) => m.id === row.getAttribute("data-room-id"));
+      if (!entry || !action) return;
+      try {
+        if (action === "copy") {
+          const exists = readMacros().some((m) => m.name === entry.name);
+          const name = exists ? `${entry.name} (복사)` : entry.name;
+          saveMacro(name, entry.body);
+          statusEl.textContent = `'${name}' 내 커맨드로 복사됨`;
+          refresh();
+        } else if (action === "room-delete") {
+          if (!confirm(`룸 커맨드 '${entry.name}'을(를) 룸에서 지울까요? (만든 사람의 개인 커맨드는 남습니다)`)) return;
+          await deleteRoomMacro(entry);
+          statusEl.textContent = `'${entry.name}' 룸에서 지움`;
+        }
+      } catch (error) { statusEl.textContent = error?.message || "처리하지 못했습니다."; }
+    }, ccfSmWithSignal());
 
     const refresh = () => {
+      renderRoom();
       const macros = readMacros();
       if (!macros.length) {
         listEl.innerHTML = '<p class="ccf-sm-modal-empty">저장된 커스텀 커맨드가 없습니다. 아래에서 추가하세요.</p>';
@@ -618,6 +720,7 @@
             <code>${escapeHtml(previewBody(m.body))}</code>
           </div>
           <div class="ccf-sm-modal-row-actions">
+            ${(() => { const on = !!myRoomEntry(m.name), usable = roomShare.status === "ok"; return `<button type="button" data-action="share" data-on="${on ? "1" : "0"}"${usable || on ? "" : " disabled"} title="${escapeHtml(usable ? (on ? "룸 공유 끄기" : "이 룸의 모두에게 공유") : roomShareNote())}">${on ? "공유 중" : "룸 공유"}</button>`; })()}
             <button type="button" data-action="edit">편집</button>
             <button type="button" data-action="delete">삭제</button>
           </div>
@@ -633,6 +736,11 @@
       const action = event.target instanceof Element ? event.target.getAttribute("data-action") : null;
       const target = readMacros().find((m) => m.name === name);
       if (!target) return;
+      if (action === "share") {
+        const on = !myRoomEntry(target.name);
+        setMacroShared(target, on).then(() => { statusEl.textContent = on ? `'${target.name}' 룸에 공유됨` : `'${target.name}' 룸 공유 끔`; }).catch((error) => { statusEl.textContent = error?.message || "공유하지 못했습니다."; });
+        return;
+      }
       if (action === "edit") {
         nameEl.value = target.name;
         bodyEl.value = target.body;
@@ -678,6 +786,8 @@
     requestAnimationFrame(cleanForeignInjections);
     setTimeout(cleanForeignInjections, 200);
 
+    modalRefresh = () => { if (root.isConnected) refresh(); else modalRefresh = null; };
+    syncRoomShare();
     refresh();
     nameEl.focus();
   }
@@ -985,6 +1095,12 @@
         font-size: 11px; cursor: pointer;
       }
       #${MODAL_ID} .ccf-sm-modal-row-actions button:hover { background: rgba(255,255,255,0.12); }
+      #${MODAL_ID} .ccf-sm-modal-row-actions button[data-action="share"][data-on="1"] { border-color: rgba(33,150,243,.7); color: #90caf9; }
+      #${MODAL_ID} .ccf-sm-modal-row-actions button:disabled { opacity: .45; cursor: default; }
+      #${MODAL_ID} .ccf-sm-room { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+      #${MODAL_ID} .ccf-sm-room-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+      #${MODAL_ID} .ccf-sm-room-note { font-size: 11px; opacity: .7; }
+      #${MODAL_ID} .ccf-sm-room-owner { font-weight: 400; opacity: .7; font-size: 11px; }
 
       #${MODAL_ID} .ccf-sm-modal-form {
         display: grid; gap: 10px;
