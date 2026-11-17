@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.44
+// @version      0.5.45
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.44";
+  const VERSION = "0.5.45";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -603,7 +603,18 @@
   signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); shared.unsubRoom?.(); });
 
   function currentSheet() {
-    return state.data.sheets.find((sheet) => sheet.id === state.data.selectedId) || state.data.sheets[0] || null;
+    const sheets = visibleSheets();
+    return sheets.find((sheet) => sheet.id === state.data.selectedId) || sheets[0] || null;
+  }
+  // 0.5.45: 플레이어에게는 본인 시트만 보인다(GM 은 전체). 본인 = 룸 공유 시트의 소유자(ownerUid)가 나이거나, 연결 캐릭터(player)가 내 캐릭터(roomCharacters.owner = 나).
+  // 아직 공유되지 않은(이 브라우저에만 있는) 시트는 내가 만든 것이라 보인다. 남의 시트는 목록·시트 탭·열기에서 빠진다(비밀·사명은 규칙이 이미 소유자·GM 만 읽게 한다).
+  function visibleSheets() {
+    const sheets = state.data?.sheets || [];
+    const uid = sharedFb()?.uid;
+    if (!uid || sharedIsGm()) return sheets;
+    let mine = null;
+    const myNames = () => mine || (mine = (() => { try { return new Set(Object.values(findCharacterStore()?.getState()?.entities?.roomCharacters?.entities || {}).filter((c) => c && String(c.owner) === uid).map((c) => String(c.name || "").trim())); } catch (_) { return new Set(); } })());
+    return sheets.filter((sheet) => { const remote = shared.remote.get(sheet.id); return !remote || remote.ownerUid === uid || (!!sheet.player && myNames().has(String(sheet.player).trim())); });
   }
 
   // 사이코로픽션 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다. 인세인 룸 감지일 때만 보인다.
@@ -784,7 +795,7 @@
   function renderSheetTab() {
     const container = state.tabContainer;
     if (!container?.isConnected) return;
-    const sheets = state.data?.sheets || [];
+    const sheets = visibleSheets();
     const button = "all:unset;box-sizing:border-box;cursor:pointer;display:inline-grid;place-items:center;border-radius:50%;width:34px;height:34px;color:rgba(255,255,255,.7)";
     const signature = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name, sheet.player, sheetImageUrl(sheet)]));
     // 줄 앞 그림: 시트 이미지 → 연결된 코코포리아 캐릭터 아이콘 → 없으면(또는 깨지면) 회색 칸 위 이름 첫 글자(핸드아웃 PL 아바타와 같은 방식)
@@ -914,7 +925,7 @@
   }
 
   function renderSheetList() {
-    const rows = state.data.sheets.map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
+    const rows = visibleSheets().map((sheet) => `<div class="ccf-cs-sheet-item"><button class="ccf-cs-sheet-row" data-action="open-sheet" data-sheet-id="${escapeHtml(sheet.id)}"><strong>${escapeHtml(sheet.name || "이름 없음")}</strong><span>${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button class="ccf-cs-sheet-delete" data-action="delete-sheet-list" data-sheet-id="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 시트 삭제" title="삭제">${closeIcon()}</button></div>`).join("");
     return `<section class="ccf-cs-panel-section ccf-cs-sheet-panel"><div class="ccf-cs-sheet-list">${rows || '<p class="ccf-cs-empty">시트가 없습니다. ＋로 추가하세요.</p>'}</div></section>`;
   }
 
