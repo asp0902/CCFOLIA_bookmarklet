@@ -60,6 +60,18 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
     assert.match(read('legacy/ccfolia-character-sheet.user.js'), /html\[data-ccf-theme-scheme="dark"\] #\$\{ROOT_ID\} \.ccf-cs-dialog \{ background:var\(--ccf-theme-paper\)!important \}/);
     assert.match(read('legacy/ccfolia-toolkit-presence.user.js'), /html\[data-ccf-theme-scheme="dark"\] #ccf-gm-tools \.ccf-gt-window\{background:var\(--ccf-theme-paper\)!important/);
     assert.equal((read('legacy/ccfolia-handout.user.js').match(/:host-context\(html\[data-ccf-theme-scheme="dark"\]\)/g) || []).length, 2, 'handout list + view windows');
+    // 0.2.43: 글꼴 section (my screen only): family / scale / spacing / weight, kept after a reload, 글꼴 기본값 resets
+    await page.evaluate(() => { const p = document.createElement('p'); p.className = 'MuiTypography-root'; p.id = 'typo'; p.textContent = '글자'; document.body.appendChild(p); window.__fontsAsked = []; window.__CCF_ENSURE_GOOGLE_FONTS__ = (f) => window.__fontsAsked.push(f); });
+    const sf = (key, v) => page.locator(`#ccf-theme-switcher-panel [data-screen-font="${key}"]`).evaluate((el, val) => { el.value = val; el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); }, v);
+    await sf('family', 'Nanum Myeongjo'); await sf('spacing', '1'); await sf('weight', '700');
+    const typo = () => page.locator('#typo').evaluate((e) => { const c = getComputedStyle(e); return [c.fontFamily.split(',')[0].replace(/"/g, ''), c.letterSpacing]; });
+    assert.deepEqual(await typo(), ['Nanum Myeongjo', '1px']);
+    assert((await page.evaluate(() => window.__fontsAsked)).includes('Nanum Myeongjo'), 'the font is loaded');
+    await load();
+    await page.evaluate(() => { const p = document.createElement('p'); p.className = 'MuiTypography-root'; p.id = 'typo'; p.textContent = '글자'; document.body.appendChild(p); });
+    assert.deepEqual(await typo(), ['Nanum Myeongjo', '1px'], 'kept after a reload');
+    await page.locator('#ccf-theme-switcher-panel [data-action="screen-font-reset"]').dispatchEvent('click');
+    assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-ccf-screen-font')), null, 'reset = the current look');
     assert.deepEqual(errors, []);
     console.log('theme extras PASS');
   } finally { await browser.close(); }
