@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.44
+// @version      0.5.45
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2092,7 +2092,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     return true;
   }
   async function sendMessageOnce(text, channel = currentChannel, speaker = null, meta = null, rollExtend = null) {
-    if (!meta && !speaker && !rollExtend && isChatCommandText(stripEnvelopes(text))) {
+    // 인라인 롤 [[..]]: 오리지널 입력칸으로 보내 Roll20 CSS 변환(roll20-css-bridge)이 굴리게 한다(패널이 직접 쓰면 계산을 건너뛰어 [[1D10]] 글자 그대로 나갔다). 그 기능이 꺼져 있으면 오리지널과 같게 글자 그대로.
+    const inlineRoll = !meta && !speaker && !rollExtend && /\[\[[^\]]+\]\]/.test(stripEnvelopes(text)) && !!window.__CCF_ROLL20_BRIDGE_DEBUG__;
+    if (!meta && !speaker && !rollExtend && (inlineRoll || isChatCommandText(stripEnvelopes(text)))) {
       refreshSelectedChar();
       if (await sendCommandViaNative(stripEnvelopes(text).replace(/[ \t]+$/, ""), channel, selectedChar)) { lastSendDiag = { input: String(text).slice(0, 120), viaNative: true, at: Date.now() }; return; }
     }
