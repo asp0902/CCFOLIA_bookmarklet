@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.133
+// @version      0.1.134
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.133",
+    version: "0.1.134",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -2754,8 +2754,14 @@
             0px 9px 46px 8px rgba(0,0,0,0.12);
           overflow: hidden;
           transition: opacity 150ms;
-          resize: both;
+          resize: both; position: relative;
         }
+        .rz { position: absolute; z-index: 2; touch-action: none; }
+        .rz-e { top: 0; right: 0; width: 6px; height: calc(100% - 16px); cursor: ew-resize; }
+        .rz-w { top: 0; left: 0; width: 6px; height: 100%; cursor: ew-resize; }
+        .rz-s { left: 0; bottom: 0; height: 6px; width: calc(100% - 16px); cursor: ns-resize; }
+        .rz-n { left: 0; top: 0; height: 4px; width: 100%; cursor: ns-resize; }
+        .show-paper[data-collapsed="1"] .rz { display: none; }
         .show-paper[data-collapsed="1"] {
           /* 제목 툴바(헤더)만 남기고 본문/이미지/리사이즈 핸들 전부 접음 (#95) */
           height: auto !important;
@@ -2827,10 +2833,30 @@
           </button>
         </div>
         <div class="show-body">${showBodyHtml(handout, hasSecret)}</div>
+        <div class="rz rz-n" data-rz="n"></div><div class="rz rz-e" data-rz="e"></div><div class="rz rz-s" data-rz="s"></div><div class="rz rz-w" data-rz="w"></div>
       </div>
     `;
     const paper = sh.querySelector(".show-paper");
     const head = sh.querySelector(".show-head");
+    // 0.1.134: 가장자리 손잡이(가로만·세로만) + 크기 저장(모서리 리사이즈 포함). 최소 240×160, 최대 92vw×88vh, 화면 밖으로 안 나감.
+    const SHOW_SIZE_KEY = "ccf-handout:show-size-v1";
+    const saveShowSize = () => { const w = parseFloat(paper.style.width) || 0, h = parseFloat(paper.style.height) || 0; if (w || h) try { localStorage.setItem(SHOW_SIZE_KEY, JSON.stringify({ w, h })); } catch (_) {} };
+    try { const sz = JSON.parse(localStorage.getItem(SHOW_SIZE_KEY) || "null"); if (sz?.w) paper.style.width = `${sz.w}px`; if (sz?.h) { paper.style.height = `${sz.h}px`; paper.style.maxHeight = "88vh"; } } catch (_) {}
+    paper.addEventListener("pointerup", saveShowSize); // 모서리(브라우저 리사이즈) 끝
+    sh.querySelectorAll("[data-rz]").forEach((grip) => grip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const d = grip.dataset.rz, r = paper.getBoundingClientRect(), hr = host.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+      const move = (ev) => {
+        if (d === "e") paper.style.width = `${clamp(r.width + ev.clientX - sx, 240, Math.min(innerWidth * 0.92, innerWidth - hr.left))}px`;
+        else if (d === "w") { const w = clamp(r.width - (ev.clientX - sx), 240, Math.min(innerWidth * 0.92, hr.left + r.width)); host.style.left = `${hr.left + r.width - w}px`; paper.style.width = `${w}px`; }
+        else { paper.style.maxHeight = "88vh"; if (d === "s") paper.style.height = `${clamp(r.height + ev.clientY - sy, 160, Math.min(innerHeight * 0.88, innerHeight - hr.top))}px`; else { const h = clamp(r.height - (ev.clientY - sy), 160, Math.min(innerHeight * 0.88, hr.top + r.height)); host.style.top = `${hr.top + r.height - h}px`; paper.style.height = `${h}px`; } }
+      };
+      const up = () => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up); saveShowSize(); };
+      grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+    }));
     // 더블클릭 = 접기/펼치기 토글 (닫기 버튼 위 더블클릭은 제외)
     head.addEventListener("dblclick", (e) => {
       if (e.target.closest("button")) return;
