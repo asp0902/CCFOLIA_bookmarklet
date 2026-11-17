@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.123
+// @version      0.1.124
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.123"),
+    version: getUserscriptVersion("0.1.124"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -260,6 +260,13 @@
 
   ccfFsLifecycle.installDebugApi();
 
+  // 0.1.124 메시지 글꼴: 봉투에는 글꼴 이름이 아니라 이 목록의 id(style.fontId)를 싣는다. 받는 쪽은 목록에서 찾아 Google Fonts 로 불러오고, 모르는 id 는 기본 글꼴.
+  // (다른 사용자가 보낸 값이라 임의 이름·주소는 받지 않는다.) 모두 Google Fonts 의 무료(OFL) 한글 글꼴.
+  window.__CCF_MESSAGE_FONTS__ = window.__CCF_MESSAGE_FONTS__ || Object.freeze({
+    "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo",
+    "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans",
+    "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle"
+  });
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
     // 구분선 줄이 안 먹을 때: 표식이 붙은 줄마다 줄 요소·조상·계산된 여백·첫 글자까지의 거리와, 규칙이 든 style 이 있는지.
@@ -2084,6 +2091,7 @@
 
   function cleanupStyle(style) {
     const out = {};
+    if (typeof style.fontId === "string" && Object.prototype.hasOwnProperty.call(window.__CCF_MESSAGE_FONTS__ || {}, style.fontId)) out.fontId = style.fontId;
     if (style.bold) out.bold = true;
     if (style.italic) out.italic = true;
     if (style.underline) out.underline = true;
@@ -2724,6 +2732,7 @@
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
     if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
+    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;
@@ -4188,6 +4197,7 @@
       }
 
       /* 구분선 단추의 가로줄은 단추 정중앙(블록으로 두어 글자 기준선에 얹히지 않게). */
+      .ccf-inline-toolbar .ccf-inline-font { height: 24px; max-width: 92px; padding: 0 2px; font-size: 12px; color: rgb(66,66,66); background: rgba(255,255,255,.9); border: 0; border-radius: 2px; }
       .ccf-inline-toolbar [data-inline-command="break"] {
         display: inline-flex;
         align-items: center;
@@ -5642,6 +5652,7 @@
         <input type="color" value="#010101" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
+      <select class="ccf-inline-font" data-inline-font aria-label="글꼴" title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
       <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
       <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
       <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
@@ -5917,6 +5928,11 @@
 
     toolbar.addEventListener("change", (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      if (target?.matches?.("[data-inline-font]")) {
+        if (target.value) window.__CCF_ENSURE_GOOGLE_FONTS__?.((window.__CCF_MESSAGE_FONTS__ || {})[target.value] || "");
+        applyInlineToolbarStyle(toolbar, { selectionOverride: getInlineToolbarSelection(toolbar) });
+        return;
+      }
       if (target?.matches?.('input[type="color"][data-inline-color]')) {
         updateInlineToolbarVisuals(toolbar);
         applyInlineToolbarStyle(toolbar, {
@@ -6523,7 +6539,8 @@
       strike: toolbar.querySelector('[data-inline-command="strike"]')?.classList.contains("active") || false,
       color,
       backgroundColor,
-      fontSize: fontSize ?? undefined
+      fontSize: fontSize ?? undefined,
+      fontId: toolbar.querySelector("[data-inline-font]")?.value || undefined
     };
   }
 
@@ -6573,6 +6590,8 @@
       backgroundColor.value = "#010101";
     }
 
+    const fontSelect = toolbar.querySelector("[data-inline-font]");
+    if (fontSelect instanceof HTMLSelectElement) fontSelect.value = "";
     const sizeInput = toolbar.querySelector("[data-inline-size]");
     if (sizeInput instanceof HTMLInputElement) {
       sizeInput.value = "";
@@ -14680,6 +14699,7 @@
 
   function cleanupStyle(style) {
     const out = {};
+    if (typeof style.fontId === "string" && Object.prototype.hasOwnProperty.call(window.__CCF_MESSAGE_FONTS__ || {}, style.fontId)) out.fontId = style.fontId;
     if (style.bold) out.bold = true;
     if (style.italic) out.italic = true;
     if (style.underline) out.underline = true;
@@ -15608,6 +15628,7 @@
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
     if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
+    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.42
+// @version      0.2.43
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.42"),
+    version: getUserscriptVersion("0.2.43"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1168,6 +1168,8 @@
           color: var(--ccf-theme-placeholder, rgba(244, 240, 235, 0.42));
         }
 
+        #${PANEL_ID} .ccf-theme-font { display: grid; gap: 6px; margin: 10px 0; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); }
+        #${PANEL_ID} .ccf-theme-font-title { font-size: 13px; }
         #${PANEL_ID} .ccf-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
         #${PANEL_ID} .ccf-theme-preset { border: 1px solid; border-radius: 4px; }
         #${PANEL_ID} .ccf-theme-actions {
@@ -2528,6 +2530,14 @@
           <div class="ccf-theme-presets" role="group" aria-label="색 프리셋">
             ${THEME_COLOR_PRESETS.map((preset, index) => `<button type="button" class="ccf-theme-btn ccf-theme-preset" data-action="color-preset" data-preset="${index}" title="${escapeHtml(preset.name)}" style="background:${preset.theme.paper};color:${preset.theme.text};border-color:${preset.theme.accent}">${escapeHtml(preset.name)}</button>`).join("")}
           </div>
+          <div class="ccf-theme-font" role="group" aria-label="글꼴">
+            <strong class="ccf-theme-font-title">글꼴</strong>
+            <label class="ccf-theme-field"><span>화면 글꼴</span><input class="ccf-theme-color-code" type="text" list="ccf-screen-font-list" data-screen-font="family" placeholder="기본" aria-label="화면 글꼴"><datalist id="ccf-screen-font-list">${Object.values(screenFontList()).map((name) => `<option value="${escapeHtml(name)}">`).join("")}</datalist></label>
+            <label class="ccf-theme-field"><span>크기 배율 <b data-screen-font-out="scale"></b></span><input type="range" min="0.8" max="1.3" step="0.05" data-screen-font="scale" aria-label="크기 배율"></label>
+            <label class="ccf-theme-field"><span>자간 <b data-screen-font-out="spacing"></b></span><input type="range" min="-1" max="3" step="0.1" data-screen-font="spacing" aria-label="자간"></label>
+            <label class="ccf-theme-field"><span>굵기</span><select class="ccf-theme-select" data-screen-font="weight" aria-label="굵기"><option value="">기본</option><option value="300">가늘게</option><option value="400">보통</option><option value="500">중간</option><option value="700">굵게</option><option value="900">아주 굵게</option></select></label>
+            <button type="button" class="ccf-theme-btn" data-action="screen-font-reset">글꼴 기본값</button>
+          </div>
           <div class="ccf-theme-actions">
             <button type="button" class="ccf-theme-btn" data-action="save-theme">현재 색상 저장</button>
             <button type="button" class="ccf-theme-btn" data-action="reset">기본 테마로 복원</button>
@@ -2590,6 +2600,12 @@
 
         if (action === "save-theme") {
           openSaveThemeDialog();
+          return;
+        }
+
+        if (action === "screen-font-reset") {
+          settings = { ...settings, screenFont: normalizeScreenFont({}) };
+          persistSettings(); applyTheme(settings);
           return;
         }
 
@@ -2672,6 +2688,16 @@
         persistSettings();
         applyTheme(settings);
       };
+      // 0.2.43 화면 글꼴 구역
+      const onScreenFont = (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.dataset?.screenFont) return;
+        settings = { ...settings, screenFont: normalizeScreenFont({ ...settings.screenFont, [target.dataset.screenFont]: target.value }) };
+        persistSettings(); applyTheme(settings, { syncUi: target.tagName === "SELECT" });
+        syncScreenFontUi();
+      };
+      panel.addEventListener("input", onScreenFont);
+      panel.addEventListener("change", onScreenFont);
       panel.addEventListener("input", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLInputElement) || !target.dataset.extra) return;
@@ -4184,6 +4210,7 @@
   function applyTheme(nextSettings, options = {}) {
     const { syncUi = true } = options;
     settings = normalizeSettings(nextSettings);
+    try { applyScreenFont(); } catch (error) { console.warn("[CCF Theme] screen font", error); }
 
     const root = document.documentElement;
     const varsStyle = document.getElementById(VARS_STYLE_ID);
@@ -4293,8 +4320,16 @@
     });
     panel.querySelectorAll("[data-extra-out]").forEach((out) => { const key = out.getAttribute("data-extra-out"); out.textContent = key === "alpha" ? `${extra.alpha}%` : `${extra.blur}px`; });
 
+    syncScreenFontUi();
     syncThemeNameInput();
     syncUnsungDuetToggle();
+  }
+  function syncScreenFontUi() {
+    const panel = getPanel();
+    if (!(panel instanceof HTMLElement)) return;
+    const f = normalizeScreenFont(settings.screenFont);
+    panel.querySelectorAll("[data-screen-font]").forEach((input) => { if (document.activeElement !== input) input.value = String(f[input.dataset.screenFont] ?? ""); });
+    panel.querySelectorAll("[data-screen-font-out]").forEach((out) => { const k = out.getAttribute("data-screen-font-out"); out.textContent = k === "scale" ? `${f.scale}배` : `${f.spacing}px`; });
   }
 
   function getUiThemePreview() {
@@ -6749,8 +6784,42 @@
       customTheme: normalizeTheme(value?.customTheme || value?.theme || base.customTheme),
       savedThemes,
       unsungDuetEnabled: typeof value?.unsungDuetEnabled === "boolean" ? value.unsungDuetEnabled : true,
-      selectedSheetTheme: sheetThemeId
+      selectedSheetTheme: sheetThemeId,
+      screenFont: normalizeScreenFont(value?.screenFont)
     };
+  }
+
+  // 0.2.43 화면 글꼴(내 화면만): 목록(메시지 글꼴과 같은 Google 무료 한글 글꼴) 또는 직접 입력한 글꼴 이름, 크기 배율 0.8~1.3, 자간 -1~3px, 굵기. 기본 = 지금.
+  // 테마 모드(기본값/라이트/커스텀)와 따로 켜진다.
+  const SCREEN_FONT_FALLBACK_LIST = { "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang" };
+  function screenFontList() { return window.__CCF_MESSAGE_FONTS__ || SCREEN_FONT_FALLBACK_LIST; }
+  function normalizeScreenFont(value) {
+    const v = value && typeof value === "object" ? value : {};
+    const num = (n, lo, hi, d) => { const x = Number(n); return n === "" || n == null || !Number.isFinite(x) ? d : Math.max(lo, Math.min(hi, Math.round(x * 100) / 100)); };
+    return {
+      family: String(v.family || "").replace(/[^\w\s,'"\-가-힣]/g, "").slice(0, 80),
+      scale: num(v.scale, 0.8, 1.3, 1),
+      spacing: num(v.spacing, -1, 3, 0),
+      weight: ["", "300", "400", "500", "700", "900"].includes(String(v.weight || "")) ? String(v.weight || "") : ""
+    };
+  }
+  function applyScreenFont() {
+    const f = normalizeScreenFont(settings?.screenFont);
+    const root = document.documentElement;
+    let style = document.getElementById("ccf-screen-font-style");
+    const on = !!(f.family || f.scale !== 1 || f.spacing || f.weight);
+    if (!on) { style?.remove(); root.removeAttribute("data-ccf-screen-font"); return; }
+    if (f.family) window.__CCF_ENSURE_GOOGLE_FONTS__?.(f.family);
+    if (!style) { style = document.createElement("style"); style.id = "ccf-screen-font-style"; (document.head || root).appendChild(style); }
+    const T = 'html[data-ccf-screen-font="1"]';
+    const text = [".MuiTypography-root", ".MuiListItemText-root", ".MuiInputBase-input", ".MuiButton-root", ".MuiTab-root", ".MuiMenuItem-root"].map((sel) => `${T} ${sel}`).join(",");
+    style.textContent = [
+      f.family ? `${T} body, ${text} { font-family: "${f.family}", Roboto, "Noto Sans KR", sans-serif !important; }` : "",
+      f.spacing ? `${text} { letter-spacing: ${f.spacing}px !important; }` : "",
+      f.weight ? `${T} .MuiListItemText-root, ${T} .MuiInputBase-input { font-weight: ${f.weight} !important; }` : "",
+      f.scale !== 1 ? `${T} .MuiListItemText-root, ${T} .MuiInputBase-input { zoom: ${f.scale}; }` : ""
+    ].join("\n");
+    root.setAttribute("data-ccf-screen-font", "1");
   }
 
   function normalizeMode(value, savedThemes = settings?.savedThemes || []) {
