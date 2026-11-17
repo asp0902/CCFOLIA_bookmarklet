@@ -451,6 +451,10 @@
   const nServer = el("input", { type: "text", id: "ntfy-server", autocomplete: "off", spellcheck: "false", placeholder: NTFY_DEFAULT_SERVER });
   const nScope = el("select", { id: "ntfy-scope" }, el("option", { value: "all", text: "다른 사람의 모든 메시지" }), el("option", { value: "keywords", text: "키워드가 들어간 메시지만" }));
   const nKeywords = el("input", { type: "text", id: "ntfy-keywords", autocomplete: "off", placeholder: "키워드(쉼표로 구분): 내 캐릭터 이름 등" });
+  // 1.52.18: 알림 조건이 '전체'면 키워드 칸을 숨긴다(값은 지우지 않음), '키워드'면 보인다
+  const syncKeywordBox = () => { nKeywords.hidden = nScope.value !== "keywords"; };
+  nScope.addEventListener("change", syncKeywordBox);
+  syncKeywordBox();
   const nAway = el("input", { type: "checkbox", id: "ntfy-away" });
   const nAwayMin = el("input", { type: "number", id: "ntfy-away-min", min: "1", max: "60", step: "1", value: "2", class: "short", style: "width:64px" });
   const nText = el("input", { type: "checkbox", id: "ntfy-text" });
@@ -563,6 +567,7 @@
     nTopic.value = n.topic || "";
     nServer.value = n.server && n.server !== NTFY_DEFAULT_SERVER ? n.server : "";
     nScope.value = n.scope === "keywords" ? "keywords" : "all";
+    syncKeywordBox();
     nKeywords.value = (n.keywords || []).join(", ");
     nAway.checked = n.onlyAway !== false;
     nAwayMin.value = String(Math.min(60, Math.max(1, Math.round(Number(n.awayMinutes) || 2))));
