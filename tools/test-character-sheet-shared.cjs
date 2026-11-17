@@ -21,7 +21,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     const parts = changedPath.split('/'), id = parts.pop(), col = parts.join('/');
     for (const entry of pages) if (entry.subs.has(col)) await entry.page.evaluate(([c, i, d]) => window.__fsEmit(c, i, d), [col, id, store.get(changedPath) ?? null]).catch(() => {});
   };
-  const open = async ({ uid, gm = false, seed = null, denied = false }) => {
+  const open = async ({ uid, gm = false, seed = null, denied = false, chars = null }) => {
     const context = await browser.newContext({ viewport: { width: 1300, height: 900 } });
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.__errors = errors;
@@ -60,6 +60,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     }, { uid, gm, seed });
     await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><span class="MuiTypography-caption">인세인</span><div id="root"></div></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
+    // the room's characters (name -> owner uid): a player sees only their own sheets (owner, or the linked character is theirs) - character-sheet 0.5.45
+    if (chars) await page.evaluate((chars) => { const entities = Object.fromEntries(Object.entries(chars).map(([name, owner], i) => ['c' + i, { name, owner }])); const st = { entities: { roomCharacters: { entities } } }; document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => st, subscribe: () => () => {}, dispatch() {} } } } } }; }, chars);
     await page.addScriptTag({ content: source });
     return page;
   };
@@ -80,7 +82,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     const up = store.get('rooms/test/sheets/s1'), upSecret = store.get('rooms/test/sheetSecrets/s1');
     assert.equal(up.ownerUid, 'uA'); assert(!/시트 비밀|사명 비밀/.test(up.json), 'the public document carries no secret text'); assert.match(upSecret.json, /시트 비밀/);
     // B: empty browser
-    const B = await open({ uid: 'uB' });
+    const B = await open({ uid: 'uB', chars: { 시크릿: 'uB' } });
     await wait(B, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.length === 1);
     let b = await sheetOf(B);
     assert.deepEqual([b.name, b.skills, b.curiosity, b.fear, b.respec.empathy, b.respec.newWorld], ['에르네스토', ['0:0', '1:2'], '1', '0:1', 3, true], 'B sees skills / curiosity / fear / respec');
@@ -112,6 +114,15 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await G.reload(); await G.addScriptTag({ content: source });
     await wait(B, (r) => { const d = window.__CCF_CHARACTER_SHEET_DEBUG__.data(); return JSON.stringify(d.sceneTables) === JSON.stringify(r.sceneTables) && d.scene.cycle === 2 && d.permissions['시크릿']?.edit === true && d.design?.accent === '#ff5252' && d.design?.bg === 60; }, roomSettings);
     assert.match(store.get('rooms/test/meta/sheetRoom').json, /거리 장면표/);
+    // 0.5.45: a player with no link to the sheet does not see it (the list is empty); the GM sees it
+    const C = await open({ uid: 'uC', chars: { 다른이: 'uC' } });
+    await wait(C, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.length >= 1);
+    await C.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
+    await C.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-panel', { timeout: 6000 });
+    assert.equal(await C.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').count(), 0, "a player does not see another player's sheet");
+    await G.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
+    await G.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root .ccf-cs-dialog.is-editor', { timeout: 6000 });
+    assert(await G.locator('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root .ccf-cs-dialog.is-editor').count() >= 1, 'the GM sees it');
     // rules not deployed: nothing breaks, the sheet stays in the browser, the status line says so
     const D = await open({ uid: 'uD', denied: true, seed: { version: 1, selectedId: 's9', sheets: [{ ...original, id: 's9', name: '로컬만' }], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });
     await D.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
