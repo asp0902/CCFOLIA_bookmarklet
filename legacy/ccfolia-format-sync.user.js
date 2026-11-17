@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.118
+// @version      0.1.119
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.118"),
+    version: getUserscriptVersion("0.1.119"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -10813,8 +10813,9 @@
       }
       const slice = store?.getState()?.entities?.roomEffects;
       const entities = slice?.entities && typeof slice.entities === "object" ? Object.values(slice.entities) : [];
-      return entities.some((effect) => { const name = typeof effect?.name === "string" ? effect.name : ""; return !!name && name.length <= body.length && body.lastIndexOf(name) + name.length === body.length; });
-    } catch (_) { return false; }
+      const hit = entities.map((effect) => (typeof effect?.name === "string" ? effect.name : "")).filter((name) => !!name && name.length <= body.length && body.lastIndexOf(name) + name.length === body.length).sort((a, b) => b.length - a.length)[0];
+      return hit || ""; // 0.1.119: 맞은 컷인 이름(가장 긴 것)을 돌려준다 — 봉투를 그 앞에 넣는다
+    } catch (_) { return ""; }
   }
 
   function looksLikeCcfDiceCommand(text) {
@@ -14197,6 +14198,22 @@
     // 유실되어 텍스트만 전송됨 — bridge가 로드돼 있으면 전부 위임한다.
     // 판정 명령은 원문 그대로 보내야 코코포리아가 굴린다 (봉투가 붙으면 결과 없음).
     // 커맨드는 어떤 나레이션 상태에서도 원문 그대로. 입력칸에 이미 봉투(보이지 않는 글자)가 붙어 있으면(앞선 서식·나레이션 상태, 매크로 펼침 등) 걷어 내고 보낸다.
+    // 0.1.119: 컷인 이름으로 끝나는 글도 나레이션·서식을 싣는다 — 봉투를 컷인 이름 "앞"에 넣어(글 + 봉투 + 컷인 이름) 끝맺음을 지킨다.
+    // 렌더는 봉투 앞까지만 보여 주므로 컷인 이름(@…)은 화면에서 빠진다.
+    const cutinName = !isChatCommandText(rawText) ? endsWithCutinTrigger(rawText) : "";
+    const cutinBody = cutinName ? rawText.slice(0, rawText.length - cutinName.length) : "";
+    if (cutinName && cutinBody.trim()) {
+      const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
+      const bodyRuns = state.runs.length ? cloneRuns(state.runs, cutinBody.length) : (keepOn && state.lastStyle && Object.keys(cleanupStyle(state.lastStyle)).length ? [{ start: 0, end: cutinBody.length, style: cleanupStyle(state.lastStyle) }] : []);
+      const prepared = prepareRunsForTransport(bodyRuns, cutinBody.length);
+      const alignRuns = getEffectiveAlignRuns(cutinBody, state.alignRuns, blockStyle);
+      if (!prepared.failed && (prepared.runs.length || alignRuns.length || blockStyle.narration === true || blockStyle.breakBefore)) {
+        const envelope = { v: 1, text: cutinBody, formatRuns: prepared.runs, alignRuns, blockStyle };
+        const outgoing = `${cutinBody}${encodeEnvelopeToInvisible(envelope)}${cutinName}`;
+        if (currentText !== outgoing) setEditorText(editor, outgoing);
+        return true;
+      }
+    }
     if (isChatCommandText(rawText) || endsWithCutinTrigger(rawText)) {
       // 시트 단추가 보낸 판정(BCDice 명령, / 커맨드 제외): 유지 서식·나레이션을 "명령 + 공백 + 봉투(command)"로 붙인다. 공백 뒤는 BCDice 가 설명(코멘트)으로 읽어 굴림은 그대로다.
       if (editor.getAttribute?.("data-ccf-sheet-command") === "1" && !rawText.trimStart().startsWith("/") && !endsWithCutinTrigger(rawText)) {
