@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.134
+// @version      0.1.135
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.134",
+    version: "0.1.135",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -3735,6 +3735,27 @@
     bd.setAttribute("data-open", state.isOpen ? "1" : "0");
     const meta = state.shadow.querySelector("header .meta");
     meta.textContent = "";
+    const adminMode = isAdminMode();
+    const newButton = state.shadow.querySelector('[data-action="new-handout"]');
+    if (newButton) newButton.style.display = adminMode ? "" : "none";
+    const settingsTab = state.shadow.querySelector('.tab[data-tab="settings"]');
+    if (settingsTab) {
+      settingsTab.style.display = adminMode ? "" : "none";
+      if (!adminMode && state.activeTab === "settings") state.activeTab = "list";
+    }
+    // 편집 탭 동적 표시 — editingId가 있을 때만 보임
+    const editTab = state.shadow.querySelector('.tab[data-tab="edit"]');
+    if (editTab) {
+      if (state.editingId) {
+        editTab.style.display = "";
+        editTab.textContent = state.editingId === "new" ? "새로 만들기" : "편집";
+      } else {
+        editTab.style.display = "none";
+        if (state.activeTab === "edit") state.activeTab = "list";
+      }
+    }
+    if (state.embedded) { if (state.mode === "settings") state.activeTab = "settings"; else if (state.activeTab === "settings") state.activeTab = "list"; }
+    // 0.1.135: 상태 3줄·바닥 단추는 탭 보정(권한·편집 탭·GM 도구 안의 탭) 뒤에 그린다 — 앞에서 그리면 설정 탭에서 핸드아웃 탭으로 옮긴 그 렌더에 3줄이 남았다.
     const roomStrip = state.shadow.querySelector("[data-room-strip]");
     if (roomStrip) {
       let stripHtml = "";
@@ -3765,26 +3786,6 @@
       footerActions.innerHTML = actionsHtml;
       footerActions.hidden = actionsHtml.length === 0;
     }
-    const adminMode = isAdminMode();
-    const newButton = state.shadow.querySelector('[data-action="new-handout"]');
-    if (newButton) newButton.style.display = adminMode ? "" : "none";
-    const settingsTab = state.shadow.querySelector('.tab[data-tab="settings"]');
-    if (settingsTab) {
-      settingsTab.style.display = adminMode ? "" : "none";
-      if (!adminMode && state.activeTab === "settings") state.activeTab = "list";
-    }
-    // 편집 탭 동적 표시 — editingId가 있을 때만 보임
-    const editTab = state.shadow.querySelector('.tab[data-tab="edit"]');
-    if (editTab) {
-      if (state.editingId) {
-        editTab.style.display = "";
-        editTab.textContent = state.editingId === "new" ? "새로 만들기" : "편집";
-      } else {
-        editTab.style.display = "none";
-        if (state.activeTab === "edit") state.activeTab = "list";
-      }
-    }
-    if (state.embedded) { if (state.mode === "settings") state.activeTab = "settings"; else if (state.activeTab === "settings") state.activeTab = "list"; }
     state.shadow.querySelectorAll(".tab").forEach((t) => {
       t.setAttribute("data-active", t.dataset.tab === state.activeTab ? "1" : "0");
     });
