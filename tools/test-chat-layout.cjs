@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
     const page = await browser.newPage({ viewport: { width: 1300, height: 800 } });
-    const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.on('console', (m) => { if (/chat grips failed/.test(m.text())) errors.push(m.text()); }); // 0.2.46: no TDZ error at start-up
     const dice = ['D4', 'D6', 'D8', 'D10', 'D12', 'D20', 'D100'].map((d) => `<button type="button" aria-label="${d}">${d}</button>`).join('');
     await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><body style="margin:0;background:#222;color:#fff"><div style="display:flex;height:100vh"><main style="flex:1">map</main>
       <div class="MuiDrawer-root MuiDrawer-docked" style="width:376px;flex:0 0 auto"><div class="MuiDrawer-paper" style="position:fixed;right:0;top:0;bottom:0;width:376px;background:#333">
