@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.130
+// @version      0.1.131
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.130",
+    version: "0.1.131",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -3789,7 +3789,7 @@
   function renderScopeBar() {
     if (!isAdminMode()) return "";
     const all = state.scope === "all";
-    return `<div class="scope-bar" role="group" aria-label="보기 범위"><button type="button" class="scope-btn" data-action="scope" data-scope="room" aria-pressed="${all ? "false" : "true"}">이 룸</button><button type="button" class="scope-btn" data-action="scope" data-scope="all" aria-pressed="${all ? "true" : "false"}">전체 룸</button></div>`;
+    return `<div class="scope-bar" role="group" aria-label="보기 범위"><button type="button" class="scope-btn" data-action="scope" data-scope="all" aria-pressed="${all ? "true" : "false"}">전체</button><button type="button" class="scope-btn" data-action="scope" data-scope="room" aria-pressed="${all ? "false" : "true"}">현재</button></div>`;
   }
   async function loadAllRooms() {
     if (state.allRoomsLoading) return;
@@ -3820,7 +3820,7 @@
         + items.map((h) => `<div class="room-item"><span class="room-item-title">${escapeHtml(h.title || "(제목 없음)")}</span><button type="button" class="btn small secondary" data-action="room-view" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">보기</button>${here ? "" : `<button type="button" class="btn small secondary" data-action="room-copy" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">이 룸으로 복사</button>`}</div>`).join("")
         + "</details>";
     }).join("");
-    return `<div class="all-rooms-note">이 브라우저에 저장된 룸만 보입니다(다른 PC·브라우저의 목록은 안 보임). 다른 룸 것의 편집·공유는 그 룸에서.</div>${html || '<div class="list-no-result">핸드아웃이 있는 룸이 없습니다.</div>'}`;
+    return `${html || '<div class="list-no-result">핸드아웃이 있는 룸이 없습니다.</div>'}`;
   }
   function findRoomHandout(room, id) {
     if (room === getCurrentRoomKey()) return findHandout(id);

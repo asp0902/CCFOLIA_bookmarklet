@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.43
+// @version      0.5.44
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -511,11 +511,10 @@
       out.push(toPanelMessage(id, msg));
     }
     // 위로 스크롤해 따로 불러온 오래된 메시지(코코포리아 저장소가 아직 안 가진 것)를 합친다.
-    for (const old of olderMessages.values()) {
-      if (old.channel === channel && !seen.has(old.id)) out.push(old);
-    }
-    out.sort((a, b) => a.at - b.at);
-    return out.slice(-(MAX_RENDER + olderMessages.size));
+    // 순서는 코코포리아 저장소의 목록 순서 그대로(오리지널 채팅과 같다). 시각으로 다시 정렬하면 같은 초(나노초를 버림)·시계 차이가 있는 메시지가 오리지널과 다르게 섞였다.
+    // 위로 불러온 옛 메시지는 저장소 것보다 오래됐으므로 앞에, 그들끼리는 시각순.
+    const older = [...olderMessages.values()].filter((old) => old.channel === channel && !seen.has(old.id)).sort((a, b) => a.at - b.at);
+    return [...older, ...out].slice(-(MAX_RENDER + olderMessages.size));
   }
 
   /* ---------------- 이전 대화 불러오기 ----------------
