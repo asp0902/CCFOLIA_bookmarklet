@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.47
+// @version      0.5.48
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -3629,6 +3629,21 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         return api.attached(inputEl);
       };
       if (!attachFs()) { let tries = 0; const timer = window.setInterval(() => { tries += 1; if (attachFs() || tries > 60) window.clearInterval(timer); }, 1000); }
+    }
+    // 0.5.48 입력칸 글꼴 = 오리지널 입력칸의 계산된 값(글꼴 대체 순서·크기·줄 높이·자간·굵기). 테마가 바꿔도 따라간다(겹침 표시는 format-sync 가 입력칸 값을 따른다).
+    {
+      const syncInputFont = () => {
+        if (panelEl !== panel || !inputEl) return false;
+        const native = [...document.querySelectorAll('textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel") && t.offsetParent);
+        if (!native) return true;
+        const cs = getComputedStyle(native);
+        for (const [prop, css] of [["fontFamily", "font-family"], ["fontSize", "font-size"], ["lineHeight", "line-height"], ["letterSpacing", "letter-spacing"], ["fontWeight", "font-weight"]]) {
+          if (getComputedStyle(inputEl)[prop] !== cs[prop]) inputEl.style.setProperty(css, cs[prop], "important");
+        }
+        return true;
+      };
+      syncInputFont();
+      const fontTimer = window.setInterval(() => { if (!syncInputFont()) window.clearInterval(fontTimer); }, 2000);
     }
     fmtUiSync?.(); // 화면에 붙은 뒤에야 입력칸 글자 크기를 읽을 수 있으니 크기 칸을 다시 채운다
     [300, 1200].forEach((ms) => window.setTimeout(() => { if (panelEl === panel) fmtUiSync?.(); }, ms)); // 스타일이 자리잡은 뒤에도 한 번 더

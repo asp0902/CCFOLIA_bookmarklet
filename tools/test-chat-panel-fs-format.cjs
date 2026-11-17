@@ -16,7 +16,7 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     const writes = [];
-    await context.route('https://ccfolia.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<body style="background:#222;color:#fff"><div id="root"></div></body>' }));
+    await context.route('https://ccfolia.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<body style="background:#222;color:#fff"><div id="root"></div><textarea name="text" style="font-family:Roboto, Helvetica, Arial, sans-serif;font-size:16px;line-height:23px;letter-spacing:0.15px;font-weight:400"></textarea></body>' }));
     await context.route('https://firestore.googleapis.com/**', async (route) => {
       const req = route.request();
       if (req.method() === 'POST' && /:runQuery/.test(req.url())) return route.fulfill({ contentType: 'application/json', body: '[]' });
@@ -39,6 +39,10 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     const ui = await page.evaluate((P) => ({ toolbar: !!document.querySelector(P + ' .ccf-inline-toolbar [data-inline-command="bold"]'), ownRow: getComputedStyle(document.querySelector(P + ' .ccf-scp-fmt')).display }), P);
     assert.deepEqual(ui, { toolbar: true, ownRow: 'none' }, 'the original toolbar in the panel, its own row hidden');
     const input = page.locator(P + ' .ccf-scp-input');
+    // chat-panel 0.5.48: the input's font = the original input's computed font (family, size, line height, letter spacing, weight), and the in-box preview follows it
+    await page.waitForTimeout(300);
+    const fontOf = (sel) => page.evaluate((sel) => { const c = getComputedStyle(document.querySelector(sel)); return [c.fontFamily, c.fontSize, c.lineHeight, c.letterSpacing, c.fontWeight]; }, sel);
+    assert.deepEqual(await fontOf(P + ' .ccf-scp-input'), await fontOf('body > textarea[name="text"]'), 'same font as the original input');
     const sent = () => writes.map((w) => { try { return JSON.parse(w).fields?.text?.stringValue; } catch (_) { return null; } }).filter(Boolean);
     const send = async () => { const n = sent().length; await page.locator(P + ' .ccf-scp-send').dispatchEvent('click'); await page.waitForFunction((n) => true, n); await page.waitForTimeout(700); return sent().slice(n); };
     // B on a selection: no markup in the box, a bold run in the message
