@@ -24,7 +24,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.waitForTimeout(1200);
     const s = (js, arg) => page.evaluate(([js, arg]) => new Function('s', 'arg', js)(document.querySelector('#ccfolia-handout-root').shadowRoot, arg), [js, arg]);
     await page.evaluate(() => window.__CCF_HANDOUT_DEBUG__.open()); await page.waitForTimeout(300);
-    assert.equal(await s(`return [...s.querySelectorAll('.scope-btn')].map((b) => b.textContent + ':' + b.getAttribute('aria-pressed')).join(',');`), '이 룸:true,전체 룸:false');
+    assert.equal(await s(`return [...s.querySelectorAll('.scope-btn')].map((b) => b.textContent + ':' + b.getAttribute('aria-pressed')).join(',');`), '전체:false,현재:true');
     await s(`s.querySelector('.scope-btn[data-scope="all"]').click();`); await page.waitForTimeout(300);
     const groups = () => s(`return [...s.querySelectorAll('.room-group')].map((g) => ({ room: g.dataset.room, name: g.querySelector('.room-name').textContent, meta: g.querySelector('.room-meta').textContent, items: [...g.querySelectorAll('.room-item-title')].map((t) => t.textContent) }));`);
     let g = await groups();
