@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.48
+// @version      0.5.49
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4801,7 +4801,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     const observer = new MutationObserver(() => { if (active) ensureMenuItem(); });
     observer.observe(document.body, { childList: true, subtree: true });
     // 애니메이션 중 삽입이 밀리는 경우를 대비한 보조 폴링.
-    const timer = window.setInterval(() => { if (active) ensureMenuItem(); }, 1000);
+    // 0.5.49: GM 판정과 오리지널 줄 눈·구분선 단추는 추가 패널이 닫혀 있어도 돈다(패널을 열 때만 돌아서, 닫아 두면 isGm 이 null 로 남고 눈 단추가 하나도 없었다). 패널이 열려 있으면 패널 쪽 주기가 맡는다.
+    const timer = window.setInterval(() => {
+      if (!active) return;
+      ensureMenuItem();
+      if (panelEl) return;
+      const now = Date.now();
+      if (now - (scpHost.gmCheckedAt || 0) > (scpHost.isGm == null ? 1500 : 5000)) { scpHost.gmCheckedAt = now; refreshGm().then(() => decorateNativeRows()).catch(() => {}); }
+      else decorateNativeRows();
+    }, 1000);
     ensureMenuItem();
 
   // ── 네이티브 미러링(GM 쪽): 코코포리아의 실제 CSS와 화면 요소의 "모양"(템플릿)을 참여자 플레이 룸에 보낸다 ──
