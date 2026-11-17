@@ -144,6 +144,15 @@ const key = 'ccf-theme-switcher-settings-v1';
     assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['3', '2', '3'], 'dice of the formatted check');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
     assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');
+    // 0.2.39: an item use from the sheet becomes an item card
+    await page.evaluate(() => { document.querySelector('#check').textContent = '[아이템] 부적\n자신 이외의 누군가가 주사위를 굴렸을 때 사용할 수 있다.'; });
+    await page.waitForSelector('#check > .ccf-roll20-item-card');
+    const itemCard = await page.evaluate(() => {
+      const c = document.querySelector('#check > .ccf-roll20-item-card'); const q = (sel) => c.querySelector(sel)?.textContent || null;
+      return { label: q('.ccf-roll20-item-label'), name: q('.ccf-roll20-item-name'), text: q('.ccf-roll20-item-text'), labelColor: getComputedStyle(c.querySelector('.ccf-roll20-item-label')).color, align: getComputedStyle(c).textAlign };
+    });
+    assert.deepEqual(itemCard, { label: '아이템', name: '부적', text: '자신 이외의 누군가가 주사위를 굴렸을 때 사용할 수 있다.', labelColor: 'rgb(255, 77, 85)', align: 'center' });
+    if (process.env.SCREENSHOT_DIR) await page.locator('#check > .ccf-roll20-item-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-item.png') });
     assert.deepEqual(errors, []);
     console.log('PASS: theme selection, persistence, toggle, restoration, native/custom styles and responsive viewports');
   } finally {

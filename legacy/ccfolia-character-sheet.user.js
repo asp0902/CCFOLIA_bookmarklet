@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.40
+// @version      0.5.41
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.40";
+  const VERSION = "0.5.41";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1453,9 +1453,11 @@
     return `<label class="ccf-cs-vital"><span>${label}</span><span><input type="number" min="0" data-field="${valueName}" value="${Number(value) || 0}" aria-label="현재 ${label}"><input type="number" min="0" data-field="${maxName}" value="${Number(max) || 0}" aria-label="최대 ${label}"></span></label>`;
   }
 
+  // 아이템 사용 글: 채팅 테마(인세인 Roll20)가 아이템 카드로 그린다. 설명은 알려진 기본 아이템만(나머지는 이름만).
+  const ITEM_TEXTS = Object.freeze({ 부적: "자신 이외의 누군가가 행동판정을 위해 주사위를 굴렸을 때 사용할 수 있다.\n굴림결과와 관계없이 다시 주사위를 굴리게 할 수 있다." });
   function renderItemFields(items) {
     const entries = Object.entries(normalizeItems(items));
-    return `<div class="ccf-cs-item-fields">${entries.map(([label, value]) => `<label>${escapeHtml(label)}<input type="number" min="0" data-item="${escapeHtml(label)}" value="${value}"></label>`).join("")}</div>`;
+    return `<div class="ccf-cs-item-fields">${entries.map(([label, value]) => `<span class="ccf-cs-item-cell"><label>${escapeHtml(label)}<input type="number" min="0" data-item="${escapeHtml(label)}" value="${value}"></label><button type="button" class="ccf-cs-item-use ccf-cs-roll-public" data-item-use="${escapeHtml(label)}" aria-label="${escapeHtml(label)} 사용" title="${escapeHtml(label)} 사용(채팅에 아이템 카드)">${d20Icon()}</button></span>`).join("")}</div>`;
   }
 
   function handleInput(event) {
@@ -1593,6 +1595,7 @@
       const fear = currentSheet().fear;
       return fear ? inputSkillRoll(fear, "", false, button.dataset.secret === "1") : status("공포심을 먼저 선택");
     }
+    if (button.dataset.itemUse) { const name = button.dataset.itemUse; const text = ITEM_TEXTS[name]; return writeChat(`[아이템] ${name}${text ? `\n${text}` : ""}`); }
     if (button.dataset.command) { if (button.closest(".ccf-cs-menu")) closeSceneUi(); return sendCommand(applyRollOptions(button.dataset.command, button.dataset.secret === "1")); }
     if (button.dataset.roll) return inputSkillRoll(button.dataset.roll, "", false, event.shiftKey);
   }
@@ -1917,6 +1920,9 @@
       #${ROOT_ID} .ccf-cs-profile-memo textarea { width:calc(100% + 32px);min-height:140px;margin:0 -16px;padding:0 16px;background-color:transparent;resize:none }
       #${ROOT_ID} .ccf-cs-stats-items { grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:start }
       #${ROOT_ID} .ccf-cs-stats,#${ROOT_ID} .ccf-cs-item-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
+      /* 아이템 사용 단추: 라벨 밖(라벨 글자를 눌러도 보내지 않게), 칸 오른쪽 위 */
+      #${ROOT_ID} .ccf-cs-item-cell { position:relative;display:block;min-width:0 }
+      #${ROOT_ID} .ccf-cs-item-use { position:absolute;top:0;right:0;width:22px;height:22px;padding:0;border:0;background:transparent;cursor:pointer;display:inline-grid;place-items:center }
       #${ROOT_ID} .ccf-cs-vital { grid-column:1/-1 }
       #${ROOT_ID} .ccf-cs-vital>span:last-child { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       #${ROOT_ID} .ccf-cs-field-pair,#${ROOT_ID} .ccf-cs-skill-options { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
