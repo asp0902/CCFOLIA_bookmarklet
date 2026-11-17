@@ -525,6 +525,31 @@
     nToast,
     el("div", { class: "row", style: "margin-top:12px" }, ntfySave, ntfyTest));
 
+  // ---- 핸드아웃 Drive 동기화(1.52.19): 클라이언트 ID 는 사용자가 Google Cloud 에서 직접 만든 것(이 브라우저 chrome.storage.local 에만). 로그인·동의는 사용자가 직접.
+  const dClient = el("input", { type: "text", id: "drive-client", autocomplete: "off", spellcheck: "false", placeholder: "…apps.googleusercontent.com" });
+  const dSave = el("button", { type: "button", id: "drive-save", text: "저장" });
+  const dConnect = el("button", { type: "button", class: "contained", id: "drive-connect", text: "연결" });
+  const dDisconnect = el("button", { type: "button", id: "drive-disconnect", text: "연결 해제" });
+  const dStatus = el("p", { class: "muted", id: "drive-status", text: "" });
+  const driveAsk = (op) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: "drive-sync", op }, (res) => resolve(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : res || { ok: false })); } catch (error) { resolve({ ok: false, error: String(error?.message || error) }); } });
+  const showDrive = (res) => {
+    const st = res?.result || {};
+    const last = st.last ? ` · 마지막 ${st.last.ok ? "동기화" : "오류"} ${new Date(st.last.at).toLocaleString()}${st.last.ok ? "" : ` (${st.last.detail})`}` : "";
+    dStatus.textContent = !res?.ok ? `오류: ${res?.error || "알 수 없음"}` : !st.hasClientId ? "클라이언트 ID 를 붙여 넣고 저장하세요(안내서: docs/handout-drive-setup.md)." : st.connected ? `연결됨${last}` : "연결 안 됨";
+    dDisconnect.disabled = !st.connected; dConnect.disabled = !st.hasClientId;
+  };
+  dSave.addEventListener("click", async () => { const v = dClient.value.trim(); if (v && !/^[\w.-]+\.apps\.googleusercontent\.com$/.test(v)) { dStatus.textContent = "클라이언트 ID 형식이 아닙니다(…apps.googleusercontent.com)."; return; } await chrome.storage.local.set({ driveClientId: v }); showDrive(await driveAsk("status")); });
+  dConnect.addEventListener("click", async () => { dStatus.textContent = "구글 로그인 창에서 직접 로그인·허용하세요…"; showDrive(await driveAsk("connect")); });
+  dDisconnect.addEventListener("click", async () => { showDrive(await driveAsk("disconnect")); });
+  const driveSection = el("div", { class: "ntfy drive" },
+    el("div", { class: "ntfy-head" }, el("h3", { class: "section", text: "핸드아웃 Drive 동기화" })),
+    el("p", { class: "muted", text: "내가 GM 으로 만든 핸드아웃을 내 Google Drive 에 자동으로 올리고 받습니다(변경 이력 포함). 권한은 drive.file 하나." }),
+    el("div", { class: "field" }, el("label", { for: "drive-client", text: "OAuth 클라이언트 ID" }), el("div", { class: "row" }, dClient, dSave)),
+    dStatus,
+    el("div", { class: "row", style: "margin-top:8px" }, dConnect, dDisconnect));
+  chrome.storage.local.get(["driveClientId"], (v) => { dClient.value = v.driveClientId || ""; });
+  driveAsk("status").then(showDrive);
+
   // 참가 승인: 제목을 누르면 상태 문장(룸·실시간 연결·구조 점검·미러)이 펼쳐진다. 기본은 접힘(창을 열 때마다). 오류(빨강) 줄은 접혀 있어도 보인다. 참가자 목록은 항상 보인다.
   const statusLines = el("div", { class: "status-lines collapsed", id: "approval-status" }, roomLine, socketLine, healthLine, mirrorLine, errorLine);
   const approvalToggle = el("button", { type: "button", class: "section-toggle", id: "approval-toggle", "aria-expanded": "false", "aria-controls": "approval-status" }, "참가 승인");
@@ -545,7 +570,8 @@
       el("div", { class: "field" }, el("label", { for: "r20", text: "롤20 캠페인 주소 (채팅을 이 룸으로 받기 · 비우면 해제)" }), r20),
       toast,
       el("div", { class: "approval" }, approvalTitle, statusLines, participants),
-      ntfySection),
+      ntfySection,
+      driveSection),
     el("footer", {}, stop, el("span", { class: "spacer" }), save, close));
   const backdrop = el("div", { class: "backdrop" }, paper);
   backdrop.addEventListener("mousedown", event => { if (event.target === backdrop) closeModal(); });
