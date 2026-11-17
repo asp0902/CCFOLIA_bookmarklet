@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const sheet = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character-sheet.user.js'), 'utf8');
-assert.match(sheet, /<span class="ccf-cs-item-cell"><label>\$\{escapeHtml\(label\)\}<input[^`]*<\/label><button type="button" class="ccf-cs-item-use/, 'the button is outside the label');
+assert.match(sheet, /<span class="ccf-cs-item-cell"><label>\$\{ITEM_TEXTS\[label\][\s\S]{0,400}?<input type="number"[^>]*><\/label>[\s\S]{0,300}?<button type="button" class="ccf-cs-item-use/, 'the button is outside the label (0.5.46: the name may be a description toggle)');
 assert.match(sheet, /if \(button\.dataset\.itemUse\) \{ const name = button\.dataset\.itemUse; const text = ITEM_TEXTS\[name\]; return writeChat\(`\[아이템\] \$\{name\}/, 'it sends "[아이템] 이름"');
 assert.doesNotMatch(sheet.slice(sheet.indexOf('if (button.dataset.itemUse)'), sheet.indexOf('if (button.dataset.itemUse)') + 300), /items\[|data-item="/, 'the count is not touched');
 console.log('item card (sheet) PASS');

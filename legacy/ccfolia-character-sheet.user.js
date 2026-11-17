@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.45
+// @version      0.5.46
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.45";
+  const VERSION = "0.5.46";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1577,7 +1577,7 @@
   const ITEM_TEXTS = Object.freeze({ 부적: "자신 이외의 누군가가 행동판정을 위해 주사위를 굴렸을 때 사용할 수 있다.\n굴림결과와 관계없이 다시 주사위를 굴리게 할 수 있다." });
   function renderItemFields(items) {
     const entries = Object.entries(normalizeItems(items));
-    return `<div class="ccf-cs-item-fields">${entries.map(([label, value]) => `<span class="ccf-cs-item-cell"><label>${escapeHtml(label)}<input type="number" min="0" data-item="${escapeHtml(label)}" value="${value}"></label><button type="button" class="ccf-cs-item-use ccf-cs-roll-public" data-item-use="${escapeHtml(label)}" aria-label="${escapeHtml(label)} 사용" title="${escapeHtml(label)} 사용(채팅에 아이템 카드)">${d20Icon()}</button></span>`).join("")}</div>`;
+    return `<div class="ccf-cs-item-fields">${entries.map(([label, value]) => `<span class="ccf-cs-item-cell"><label>${ITEM_TEXTS[label] ? `<span class="ccf-cs-item-name" data-item-desc="${escapeHtml(label)}" role="button" tabindex="0" aria-expanded="${state.itemDesc === label}" title="설명 보기">${escapeHtml(label)}</span>` : escapeHtml(label)}<input type="number" min="0" data-item="${escapeHtml(label)}" value="${value}"></label>${state.itemDesc === label && ITEM_TEXTS[label] ? `<span class="ccf-cs-item-desc" role="tooltip">${escapeHtml(ITEM_TEXTS[label])}</span>` : ""}<button type="button" class="ccf-cs-item-use ccf-cs-roll-public" data-item-use="${escapeHtml(label)}" aria-label="${escapeHtml(label)} 사용" title="${escapeHtml(label)} 사용(채팅에 아이템 카드)">${d20Icon()}</button></span>`).join("")}</div>`;
   }
 
   function handleInput(event) {
@@ -1663,6 +1663,10 @@
 
   function handleClick(event) {
     if (event.target.classList?.contains("ccf-cs-link-picker")) return closeLinkPicker();
+    // 0.5.46: 아이템 이름을 누르면 그 칸 아래에 설명(설명이 있는 아이템만). 다시 누르거나 다른 곳을 누르면 닫힌다. 라벨이라 입력칸으로 포커스가 가지 않게 막는다.
+    const itemName = event.target.closest?.("[data-item-desc]");
+    if (itemName) { event.preventDefault(); state.itemDesc = state.itemDesc === itemName.dataset.itemDesc ? "" : itemName.dataset.itemDesc; render(); return; }
+    if (state.itemDesc && !event.target.closest?.(".ccf-cs-item-desc")) { state.itemDesc = ""; render(); }
     if (event.target.closest?.('[data-action="design-reset"]')) { state.data.design = normalizeDesign({}); saveSoon(); render(); return; }
     const button = event.target.closest("button");
     if (!button) return;
@@ -2063,6 +2067,8 @@
       #${ROOT_ID} .ccf-cs-stats,#${ROOT_ID} .ccf-cs-item-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
       /* 아이템 사용 단추: 라벨 밖(라벨 글자를 눌러도 보내지 않게), 칸 오른쪽 위 */
       #${ROOT_ID} .ccf-cs-item-cell { position:relative;display:block;min-width:0 }
+      #${ROOT_ID} .ccf-cs-item-name { cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px }
+      #${ROOT_ID} .ccf-cs-item-desc { position:absolute;z-index:3;left:0;right:0;top:100%;margin-top:4px;padding:8px 10px;white-space:pre-wrap;font-size:13px;line-height:1.5;color:#fff;background:#616161;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.4) }
       #${ROOT_ID} .ccf-cs-item-use { position:absolute;top:0;right:0;width:22px;height:22px;padding:0;border:0;background:transparent;cursor:pointer;display:inline-grid;place-items:center }
       #${ROOT_ID} .ccf-cs-vital { grid-column:1/-1 }
       #${ROOT_ID} .ccf-cs-vital>span:last-child { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px }
