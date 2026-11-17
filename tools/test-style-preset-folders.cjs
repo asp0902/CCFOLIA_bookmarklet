@@ -78,8 +78,20 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     assert.equal((await stored('presets')).find((p) => p.name === '가운데').align, 'center', 'the stored align survives an edit');
 
     // (3) folders (the popover is still open from the edit above)
+    const listTop = () => pop.locator('[data-style-preset-list]').evaluate((e) => Math.round(e.getBoundingClientRect().top));
+    const topBefore = await listTop();
     await pop.locator('[data-inline-style-action="add-menu"]').dispatchEvent('click');
     assert.deepEqual(await pop.locator('.ccf-style-add-menu button').allTextContents(), ['프리셋 추가', '폴더 추가']);
+    // format-sync 0.1.121: a floating CCFOLIA menu next to + (MUI paper #424242), the modal content is not pushed down; outside click / Esc close it
+    const place = await page.evaluate(() => { const m = document.querySelector('.ccf-style-add-menu'), b = document.querySelector('[data-inline-style-action="add-menu"]'); const mr = m.getBoundingClientRect(), br = b.getBoundingClientRect(); const cs = getComputedStyle(m); return { fixed: cs.position, bg: cs.backgroundColor, below: Math.round(mr.top - br.bottom), rightAligned: Math.abs(Math.round(mr.right - br.right)) <= 6 }; });
+    assert.deepEqual(place, { fixed: 'fixed', bg: 'rgb(66, 66, 66)', below: 4, rightAligned: true }, JSON.stringify(place));
+    assert.equal(await listTop(), topBefore, 'the list is not pushed down');
+    { const t = await pop.locator('.ccf-inline-popover-title').boundingBox(); await page.mouse.click(t.x + 5, t.y + t.height / 2); } // elsewhere in the modal
+    assert.equal(await pop.locator('.ccf-style-add-menu').count(), 0, 'outside click closes the menu (the modal stays)');
+    await pop.locator('[data-inline-style-action="add-menu"]').dispatchEvent('click');
+    await page.keyboard.press('Escape');
+    assert.equal(await pop.locator('.ccf-style-add-menu').count(), 0, 'Esc closes');
+    await pop.locator('[data-inline-style-action="add-menu"]').dispatchEvent('click');
     await pop.locator('[data-inline-style-action="folder-add-start"]').dispatchEvent('click');
     await pop.locator('[data-style-folder-name]').fill('강조'); await pop.locator('[data-style-folder-name]').press('Enter');
     await page.waitForSelector('.ccf-style-folder');

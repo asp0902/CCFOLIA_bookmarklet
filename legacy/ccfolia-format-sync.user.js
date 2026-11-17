@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.120
+// @version      0.1.121
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.120"),
+    version: getUserscriptVersion("0.1.121"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4267,9 +4267,10 @@
       .ccf-style-folder-body { margin-left: 14px; }
       .ccf-style-folder-empty { color: rgba(255, 255, 255, 0.45); font-size: 11px; padding: 3px 6px; }
       .ccf-style-root-drop { color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 3px 6px; text-align: center; }
-      .ccf-style-add-menu { display: flex; flex-direction: column; margin: 2px 0 6px; background: rgba(255, 255, 255, 0.06); }
-      .ccf-style-add-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 10px; font-size: 12px; color: #fff; }
-      .ccf-style-add-menu button:hover { background: rgba(255, 255, 255, 0.14); }
+      /* 0.1.121: + 를 누르면 코코포리아 메뉴(MUI Menu) 모양으로 단추 옆에 뜬다 — 모달 내용은 밀리지 않는다 */
+      .ccf-style-add-menu { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; min-width: 128px; padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+      .ccf-style-add-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #fff; white-space: nowrap; }
+      .ccf-style-add-menu button:hover, .ccf-style-add-menu button:focus-visible { background: rgba(255, 255, 255, 0.08); }
       .ccf-style-folder-add-row { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
       .ccf-style-folder-add-row .ccf-inline-popover-field { flex: 1; min-width: 0; }
       .ccf-style-builder-extra { display: flex; gap: 4px; margin-top: 2px; }
@@ -5721,6 +5722,25 @@
           if (host.firstChild) { host.textContent = ""; styleAction.setAttribute("aria-expanded", "false"); return; }
           host.innerHTML = '<div class="ccf-style-add-menu" role="menu"><button type="button" role="menuitem" data-inline-style-action="add">프리셋 추가</button><button type="button" role="menuitem" data-inline-style-action="folder-add-start">폴더 추가</button></div>';
           styleAction.setAttribute("aria-expanded", "true");
+          // 단추 바로 아래·오른쪽 끝 맞춤으로 띄운다. 바깥을 누르면 닫는다(Esc 는 아래 키 처리가 닫는다).
+          const menu = host.firstChild, r = styleAction.getBoundingClientRect();
+          menu.style.top = `${Math.round(r.bottom + 4)}px`;
+          menu.style.left = `${Math.round(Math.max(4, Math.min(window.innerWidth - menu.offsetWidth - 4, r.right - menu.offsetWidth)))}px`;
+          const closeOutside = (e) => {
+            if (!host.contains(menu)) { document.removeEventListener("pointerdown", closeOutside, true); return; }
+            if (menu.contains(e.target) || styleAction.contains(e.target)) return;
+            document.removeEventListener("pointerdown", closeOutside, true);
+            host.textContent = ""; styleAction.setAttribute("aria-expanded", "false");
+          };
+          const closeOnEsc = (e) => {
+            if (!host.contains(menu)) { document.removeEventListener("keydown", closeOnEsc, true); return; }
+            if (e.key !== "Escape") return;
+            e.preventDefault(); e.stopPropagation();
+            document.removeEventListener("keydown", closeOnEsc, true);
+            host.textContent = ""; styleAction.setAttribute("aria-expanded", "false");
+          };
+          document.addEventListener("pointerdown", closeOutside, true);
+          document.addEventListener("keydown", closeOnEsc, true); // 포커스가 어디 있든 Esc 는 메뉴만 닫는다(모달은 그대로)
           return;
         }
         if (action === "folder-add-start") {
