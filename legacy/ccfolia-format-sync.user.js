@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.121
+// @version      0.1.122
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.121"),
+    version: getUserscriptVersion("0.1.122"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1584,7 +1584,7 @@
 
     // 시트가 보낸 판정(command 봉투): 봉투 뒤에 코코포리아가 붙이는 굴림 결과까지 그린다(명령에 준 서식이 결과에도 이어진다).
     // (원래 글자만: 그려 둔 오버레이의 글자는 빼고 읽는다 — 안 그러면 다시 그릴 때마다 결과가 덧붙는다)
-    const sourceText = envelope.command === true ? (() => { const copy = el.cloneNode(true); copy.querySelectorAll(".ccf-render-overlay").forEach((node) => node.remove()); return copy.textContent || ""; })() : "";
+    const sourceText = envelope.command === true ? (() => { const copy = el.cloneNode(true); copy.querySelectorAll(`.ccf-render-overlay, ${toolkitRowAddonSelector()}`).forEach((node) => node.remove()); return copy.textContent || ""; })() : "";
     const commandTail = envelope.command === true ? sourceText.slice(sourceText.indexOf(INVIS_END, sourceText.indexOf(INVIS_START) + INVIS_START.length) + INVIS_END.length) : "";
     const renderText = (envelope.text || visibleText || "") + commandTail;
     const runs = normalizeRuns(commandTail ? (envelope.formatRuns || []).map((run) => (Number(run.end) >= String(envelope.text || "").length ? { ...run, end: renderText.length } : run)) : envelope.formatRuns, renderText.length);
@@ -1668,6 +1668,10 @@
     applyNarrationMessageLayout(el, false);
   }
 
+  // 0.1.122: 툴킷이 메시지 줄에 덧붙인 것(인세인 판정 카드·컷인 이미지)은 원문이 아니다 — 숨김 래퍼에 넣지 않고 오버레이 뒤에 둔다.
+  // (나레이션 판정에서 카드가 렌더보다 먼저 붙으면 카드가 숨겨지고 그 글자가 오버레이에 납작하게 이어 붙었다.)
+  function toolkitRowAddonSelector() { return ".ccf-roll20-emotion-card, .ccf-cutin-chat-image"; } // 함수 선언(호이스팅): 초기화 순서와 무관
+  function isToolkitRowAddon(node) { return node instanceof Element && node.matches(toolkitRowAddonSelector()); }
   function ensureRenderOverlay(el) {
     el.classList.add("ccf-render-root");
 
@@ -1678,7 +1682,7 @@
       const hidden = el.querySelector(":scope > .ccf-original-hidden");
       if (hidden) {
         for (const child of [...el.childNodes]) {
-          if (child !== hidden && child !== existing) hidden.appendChild(child);
+          if (child !== hidden && child !== existing && !isToolkitRowAddon(child)) hidden.appendChild(child);
         }
       }
       return existing;
@@ -1691,14 +1695,14 @@
     // 발생해 기존 전역 MutationObserver가 감지한다.
     const hidden = document.createElement("span");
     hidden.className = "ccf-original-hidden";
-    while (el.firstChild) {
-      hidden.appendChild(el.firstChild);
+    for (const child of [...el.childNodes]) {
+      if (!isToolkitRowAddon(child)) hidden.appendChild(child);
     }
-    el.appendChild(hidden);
+    el.insertBefore(hidden, el.firstChild);
 
     const overlay = document.createElement("span");
     overlay.className = "ccf-render-overlay";
-    el.appendChild(overlay);
+    hidden.after(overlay); // 덧붙인 것(카드 등)은 오버레이 뒤
     return overlay;
   }
 
