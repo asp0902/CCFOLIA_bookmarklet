@@ -78,7 +78,7 @@ const flush = page => page.waitForTimeout(80);
       assert(Math.abs(layout.titleGap - layout.topGap) <= 1, `6차: the gap under the title (${layout.titleGap}px) equals the gap above it (${layout.topGap}px)`);
       assert(layout.sectionGap >= 28, `clear gap before the 스마트폰 알림 section (${layout.sectionGap}px)`);
       assert.equal(layout.color, 'rgba(255, 255, 255, 0.5)', 'status lines are light grey');
-      assert.deepEqual(layout.h3.slice(-2), ['스마트폰 알림', '스마트폰에 연결하는 방법']);
+      assert.deepEqual(layout.h3.slice(-3), ['스마트폰 알림', '스마트폰에 연결하는 방법', '핸드아웃 Drive 동기화']); // 1.52.19: the Drive section after the ntfy one
       // 6차: switch beside the section title (no checkbox row), ? toggles the how-to block, the intro line is gone, the status line shows only with a message
       const sixth = await page.evaluate(async () => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot, vis = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0;

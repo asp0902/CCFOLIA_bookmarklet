@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.138
+// @version      0.1.139
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.138",
+    version: "0.1.139",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -339,6 +339,59 @@
         : (Array.isArray(data?.myCharacterOptions) ? data.myCharacterOptions : [])
     };
     await tk.storage.setRoomData(STORAGE_FEATURE, getCurrentRoomKey(), payload);
+    driveUploadSoon(payload);
+  }
+
+  // ===== 0.1.139 Google Drive 동기화(확장 전용): 확장 브리지(drive-bridge.js)가 <html data-capybara-drive="1"> 로 연결됨을 알린다. =====
+  // 내가 GM 으로 만든 원본만(받은 사본 _remote 제외). 저장 5초 뒤 올리고(지운 것은 Drive 휴지통), 룸에 들어오면 한 번 받는다. 실패해도 로컬·Firebase 는 그대로.
+  function driveOn() { return document.documentElement.dataset.capybaraDrive === "1" && isAdminMode() && getCurrentRoomKey() !== "global"; }
+  let driveSeq = 0;
+  function driveRequest(op, extra = {}) {
+    return new Promise((resolve) => {
+      const id = `d${Date.now().toString(36)}${(driveSeq += 1)}`;
+      const timer = setTimeout(() => { window.removeEventListener("message", onReply); resolve({ ok: false, error: "응답 없음" }); }, 60000);
+      function onReply(event) {
+        const d = event.data;
+        if (event.source !== window || !d || d.source !== "capybara-drive" || d.direction !== "bridge" || d.id !== id) return;
+        clearTimeout(timer); window.removeEventListener("message", onReply); resolve(d);
+      }
+      window.addEventListener("message", onReply);
+      window.postMessage({ source: "capybara-drive", direction: "page", id, op, room: getCurrentRoomKey(), roomTitle: state.data?.roomTitle || "", ...extra }, location.origin);
+    });
+  }
+  const driveOriginals = (data) => (data?.handouts || []).filter((h) => h && h.id && !h._remote).map((h) => { const o = {}; for (const [k, v] of Object.entries(h)) if (!k.startsWith("_")) o[k] = v; return o; });
+  function driveUploadSoon(data) {
+    if (!driveOn()) return;
+    clearTimeout(state.driveTimer);
+    state.driveTimer = setTimeout(async () => {
+      const handouts = driveOriginals(data || state.data);
+      const ids = new Set(handouts.map((h) => h.id));
+      const deletedIds = [...(state.driveKnownIds || [])].filter((id) => !ids.has(id));
+      const res = await driveRequest("upload", { handouts, deletedIds });
+      if (res.ok) state.driveKnownIds = ids;
+      state.driveLast = { ok: !!res.ok, at: Date.now(), error: res.ok ? "" : String(res.error || "") };
+    }, 5000);
+  }
+  async function driveDownloadNow({ quiet = false } = {}) {
+    if (!driveOn()) return false;
+    const room = getCurrentRoomKey();
+    const res = await driveRequest("download", { handouts: driveOriginals(state.data) });
+    state.driveLast = { ok: !!res.ok, at: Date.now(), error: res.ok ? "" : String(res.error || "") };
+    if (!res.ok || room !== getCurrentRoomKey()) { if (!quiet && !res.ok) toast(`Drive 받기 실패: ${res.error || ""}`); return false; }
+    const { handouts = [], added = [], updated = [], conflicts = [] } = res.result || {};
+    state.driveKnownIds = new Set(handouts.map((h) => h.id));
+    if (added.length || updated.length) {
+      const remote = state.data.handouts.filter((h) => h._remote);
+      state.data.handouts = [...handouts.map(ensurePermissions), ...remote];
+      ensureOrderField(state.data.handouts);
+      const tk = toolkit();
+      if (tk?.storage?.setRoomData) await tk.storage.setRoomData(STORAGE_FEATURE, room, { ...state.data }); // 받은 것을 다시 올리지 않게 saveAll 을 거치지 않는다
+      if (isAdminMode()) for (const id of [...added, ...updated]) { const h = findHandout(id); if (h) pushHandoutToFirestore(h).catch(() => {}); }
+      if (state.isOpen) render();
+    }
+    if (conflicts.length) toast(`Drive 충돌 ${conflicts.length}건: 최신 쪽을 남기고 다른 쪽은 변경 이력에 보관했습니다.`);
+    else if (!quiet && (added.length || updated.length)) toast(`Drive 에서 받음: 새 ${added.length}건 · 갱신 ${updated.length}건`);
+    return true;
   }
 
   // ===== state =====
@@ -3672,6 +3725,7 @@
     }
     state.isOpen = true;
     render();
+    if (state.driveDownloadedRoom !== room && driveOn()) { state.driveDownloadedRoom = room; driveDownloadNow({ quiet: true }).catch(() => {}); }
     // 화면 발화자 전체 수집(바닥 근처 제한 없음) + 이미지 백필 — 변동 시 화면 갱신
     collectAllVisibleChatAuthors()
       .then((added) => backfillPlImagesFromChatHistory().then((updated) => added || updated))

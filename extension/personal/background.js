@@ -1,5 +1,8 @@
 "use strict";
 
+// 핸드아웃 Google Drive 동기화(drive-core: 동기화 로직, drive-background: 로그인·메시지 처리)
+importScripts("drive-core.js", "drive-background.js");
+
 const isRoomTab = tab => { try { return new URL(tab.url).origin === "https://ccfolia.com"; } catch (_) { return false; } };
 const isRoll20Tab = tab => { try { return new URL(tab.url).origin === "https://app.roll20.net"; } catch (_) { return false; } };
 const flagError = async (tabId, error) => {
