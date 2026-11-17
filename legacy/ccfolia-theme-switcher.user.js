@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.46
+// @version      0.2.47
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.46"),
+    version: getUserscriptVersion("0.2.47"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -6875,8 +6875,9 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
 
   // 0.2.43 화면 글꼴(내 화면만): 목록(메시지 글꼴과 같은 Google 무료 한글 글꼴) 또는 직접 입력한 글꼴 이름, 크기 배율 0.8~1.3, 자간 -1~3px, 굵기. 기본 = 지금.
   // 테마 모드(기본값/라이트/커스텀)와 따로 켜진다.
-  const SCREEN_FONT_FALLBACK_LIST = { "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang" };
-  function screenFontList() { return window.__CCF_MESSAGE_FONTS__ || SCREEN_FONT_FALLBACK_LIST; }
+
+  // 함수 안 값(호이스팅된 함수만 씀): 시작 직후 ensureUi 가 패널을 만들 때 불린다 — 바깥 const 였을 때 format-sync 가 아직 없으면 TDZ 로 초기화가 한 번 실패했다
+  function screenFontList() { return window.__CCF_MESSAGE_FONTS__ || { "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang" }; }
   function normalizeScreenFont(value) {
     const v = value && typeof value === "object" ? value : {};
     const num = (n, lo, hi, d) => { const x = Number(n); return n === "" || n == null || !Number.isFinite(x) ? d : Math.max(lo, Math.min(hi, Math.round(x * 100) / 100)); };
