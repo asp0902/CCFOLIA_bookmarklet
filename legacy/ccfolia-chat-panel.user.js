@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.46
+// @version      0.5.47
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -177,6 +177,27 @@
   let imageStripEl = null;
   const IMAGE_MARK_RE = /\u{1F5BC}[\u{E0021}-\u{E007E}]/gu;
   function expandImageMarkers(text) { return String(text || "").replace(IMAGE_MARK_RE, (mark) => pendingImages.get(mark)?.token || ""); }
+  // 0.5.47 서식은 오리지널 입력칸의 장치(format-sync)를 그대로 쓴다: 입력칸을 등록하면 오리지널 서식 툴바·입력칸 겹침 표시가 붙고, 보낼 때 오리지널과 같은 준비(봉투)를 거친다.
+  const fsExternal = () => window.__CCF_FORMAT_SYNC_EXTERNAL__ || null;
+  const fsAttached = () => !!(inputEl && fsExternal()?.attached?.(inputEl));
+  // 준비된 글(글 + 봉투) 안의 그림 표식을 오리지널과 같은 그림 run(imageUrl)으로 바꾼다: 표식 자리에 설명 글자, 그 구간에 그림.
+  function imageMarkersIntoEnvelope(prepared) {
+    IMAGE_MARK_RE.lastIndex = 0; // 전역(g) 정규식: 앞선 사용의 위치가 남아 있으면 test 가 놓친다
+    if (!pendingImages.size || !IMAGE_MARK_RE.test(prepared)) return prepared;
+    IMAGE_MARK_RE.lastIndex = 0;
+    const found = splitEnvelope(prepared);
+    if (!found.envelope || typeof found.envelope.text !== "string") return expandImageMarkers(prepared);
+    const env = found.envelope;
+    let text = env.text, runs = (env.formatRuns || []).map((r) => ({ ...r, style: { ...r.style } }));
+    for (let m; (m = new RegExp(IMAGE_MARK_RE.source, "u").exec(text));) {
+      const info = pendingImages.get(m[0]); const alt = (info?.alt || "이미지").slice(0, 80); const at = m.index, len = m[0].length, delta = alt.length - len;
+      text = text.slice(0, at) + alt + text.slice(at + len);
+      runs = runs.map((r) => ({ ...r, start: r.start >= at + len ? r.start + delta : r.start, end: r.end > at ? r.end + delta : r.end }));
+      if (info?.url) runs.push({ start: at, end: at + alt.length, style: { imageUrl: info.url, imageAlt: alt } });
+    }
+    const tail = prepared.slice(prepared.indexOf(CCF_INVIS_END, prepared.indexOf(CCF_INVIS_START)) + CCF_INVIS_END.length); // 봉투 뒤(컷인 이름 등)
+    return text + encodeEnvelopeToInvisible({ ...env, text, formatRuns: runs }) + tail;
+  }
   function renderImageStrip() {
     if (!inputEl) return;
     const value = inputEl.value;
@@ -1905,6 +1926,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     const alignRuns = alignSpans.map((sp) => ({ start: lineAt(sp.start), end: lineAt(Math.max(sp.end - 1, sp.start)) + 1, align: sp.align }));
     return { text, runs, alignRuns, narration };
   }
+  if (typeof window !== "undefined") window.__CCF_FORMAT_MARKERS__ = { parse: parseFormatMarkers }; // 0.5.46: the character sheet renders its text fields with the same syntax
 
   // 크툴루(CoC 7판) CC<=X 판정. 네이티브 형식(diceDiag)을 그대로 재현한다:
   //   result: "(1D100<=X) 보너스, 패널티 주사위[0] ＞ R ＞ R ＞ 어려운 성공"
@@ -2296,7 +2318,16 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
 
   async function handleSend() {
     if (sending || !inputEl) return;
-    const text = expandImageMarkers(inputEl.value).trim();
+    if (!expandImageMarkers(inputEl.value).trim()) return;
+    // 서식 장치가 붙어 있으면 오리지널과 같은 준비: 서식이 있으면 "글 + 봉투"(그대로 보낸다), 없으면(평문·커맨드) 예전 길로.
+    let prepared = null;
+    if (fsAttached()) {
+      const before = inputEl.value;
+      prepared = fsExternal().prepare(inputEl);
+      if (prepared === null) { inputEl.value = before; return; }
+      if (!prepared.includes(CCF_INVIS_START)) prepared = null;
+    }
+    const text = prepared ? imageMarkersIntoEnvelope(prepared) : expandImageMarkers(inputEl.value).trim();
     if (!text) return;
     sending = true;
     sendTiming = timingOn() ? { t0: performance.now(), marks: [["click", 0]] } : null;
@@ -2304,8 +2335,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     const keptText = inputEl.value;
     inputEl.value = "";
     pinnedToBottom = true;
+    if (prepared) inputEl.dispatchEvent(new Event("input", { bubbles: true })); // 서식 장치가 빈 입력칸을 보게
     try {
-      await sendMessage(text);
+      await (prepared ? sendMessage(text, currentChannel, null, { rawEnvelope: true }) : sendMessage(text));
+      if (prepared && inputEl) fsExternal()?.afterSend?.(inputEl);
       tmark("sent");
       resetFmtStateAfterSend();
       if (inputEl && !inputEl.value) { pendingImages.clear(); renderImageStrip(); }
@@ -2647,6 +2680,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         cursor: pointer; background: var(--scp-send-bg, #2196f3);
         color: var(--scp-send-color, #fff); font-weight: 700; font-size: 13px; }
       .ccf-scp-send:hover { filter: brightness(1.08); }
+      .ccf-scp-panel.is-fs .ccf-scp-fmt { display: none !important; }
       .ccf-scp-status { font-size: 11px; margin-top: 4px; min-height: 14px; opacity: .7; }
       .ccf-scp-status.is-error { color: #ff8a8a; opacity: 1; }
       /* 네이티브 입력 영역에서 잰 값(탭 48px, 서식 버튼 30×30 #282828, 입력창 우물 rgba(0,0,0,.2), 12px 안내 줄). */
@@ -3454,6 +3488,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     // 서식 단축키(오리지널 서식 도구와 같다): Ctrl/Cmd+B 굵게, +I 기울임, +U 밑줄, +` 취소선. 선택한 글을 마커로 감싼다(보낼 때 서식으로 바뀐다). 한글 입력 상태에서도 되도록 물리 키(code)로 판단한다.
     inputEl.addEventListener("keydown", (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (fsAttached()) return; // 오리지널 서식 장치의 단축키를 쓴다
       const marker = { KeyB: "**", KeyI: "*", KeyU: "__", Backquote: "~~" }[e.code] || ({ b: "**", i: "*", u: "__", "`": "~~" })[String(e.key || "").toLowerCase()];
       if (!marker) return;
       e.preventDefault();
@@ -3583,6 +3618,18 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
 
     document.body.appendChild(panel);
     panelEl = panel;
+    // 0.5.47 오리지널 서식 장치 붙이기(format-sync 가 늦게 뜨면 기다렸다 붙인다). 붙으면 패널 자체 서식 줄은 숨긴다.
+    {
+      const attachFs = () => {
+        if (panelEl !== panel || !inputEl) return true;
+        const api = fsExternal();
+        if (!api) return false;
+        if (!api.attached(inputEl)) api.attach(compose, inputEl, { speakerName: () => selectedChar?.name || "" });
+        panel.classList.toggle("is-fs", api.attached(inputEl));
+        return api.attached(inputEl);
+      };
+      if (!attachFs()) { let tries = 0; const timer = window.setInterval(() => { tries += 1; if (attachFs() || tries > 60) window.clearInterval(timer); }, 1000); }
+    }
     fmtUiSync?.(); // 화면에 붙은 뒤에야 입력칸 글자 크기를 읽을 수 있으니 크기 칸을 다시 채운다
     [300, 1200].forEach((ms) => window.setTimeout(() => { if (panelEl === panel) fmtUiSync?.(); }, ms)); // 스타일이 자리잡은 뒤에도 한 번 더
 
@@ -4980,7 +5027,6 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     };
   }
 
-    window.__CCF_FORMAT_MARKERS__ = { parse: parseFormatMarkers }; // 0.5.46: the character sheet renders its text fields with the same syntax
     window.__CCF_SECOND_CHAT_PANEL__ = {
       version: VERSION,
       open: openPanel,

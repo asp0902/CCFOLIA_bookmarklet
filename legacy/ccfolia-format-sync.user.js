@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.119
+// @version      0.1.120
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.119"),
+    version: getUserscriptVersion("0.1.120"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2979,6 +2979,9 @@
 
   let activeComposer = null;
   let activeEditor = null;
+  // 0.1.120 외부 입력칸(추가 채팅 패널): 등록한 입력칸에는 오리지널과 같은 서식 장치(툴바·서식 상태·입력칸 겹침 표시·전송 봉투)가 붙는다.
+  // composer.__ccfExternalEditor = 그 입력칸, composer.__ccfSpeakerName() = 화자 이름(나레이터 자동 판정용).
+  const EXTERNAL_COMPOSERS = new Set();
   let lastFocusedEditor = null;
   let modalMode = readStoredModalMode();
   let modalDraftText = null;
@@ -11040,6 +11043,9 @@
   }
 
   function getCurrentSpeakerName() {
+    if (activeComposer && typeof activeComposer.__ccfSpeakerName === "function") {
+      try { return normalizeMyCharacterName(activeComposer.__ccfSpeakerName() || ""); } catch (_) { return ""; }
+    }
     const btn = findCharacterSelectButton();
     if (btn) {
       const inlineName = normalizeMyCharacterName(btn.textContent || "");
@@ -13546,6 +13552,27 @@
   }
   // preview: 붙여넣은 그림의 저장 토큰(로컬 ccf-local:// · Firestore ccf-fs-image://)을 화면에 그릴 주소로(추가 패널 미리보기). Firestore 는 캐시에 없으면 저장소에서 읽는다.
   window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = { handle: handleImagePasteForTextInput, preview: (url) => { const now = resolveRenderableImageUrl(url); if (now || !isFirestoreImageToken(normalizeImageUrl(url))) return Promise.resolve(now || ""); return Promise.resolve(resolveFirestoreImageToken(normalizeImageUrl(url))).catch(() => ""); } };
+  window.__CCF_FORMAT_SYNC_EXTERNAL__ = {
+    // 입력칸을 등록하면 오리지널 서식 툴바가 입력칸 바로 앞에 붙고, 서식 상태·겹침 표시가 오리지널과 같게 돈다.
+    attach(composer, editor, { speakerName } = {}) {
+      if (!(composer instanceof HTMLElement) || !(editor instanceof HTMLElement)) return false;
+      composer.__ccfExternalEditor = editor; editor.__ccfExternal = true;
+      if (typeof speakerName === "function") composer.__ccfSpeakerName = speakerName;
+      EXTERNAL_COMPOSERS.add(composer);
+      try { ensureInlineToolbarForComposer(composer); bindEditorVisualPreview(); } catch (error) { console.warn("[CCF] external attach failed", error); }
+      return true;
+    },
+    attached(editor) { return !!editor?.__ccfExternal && [...EXTERNAL_COMPOSERS].some((c) => c.__ccfExternalEditor === editor && c.isConnected); },
+    // 보내기 직전: 오리지널 Enter 와 같은 준비(봉투·나레이션·제목 #·유지 서식·컷인). 입력칸 값이 보낼 글이 된다. false = 보내지 말 것.
+    prepare(editor) {
+      const composer = [...EXTERNAL_COMPOSERS].find((c) => c.__ccfExternalEditor === editor) || null;
+      activeComposer = composer; activeEditor = editor; lastFocusedEditor = editor;
+      if (preparePayloadForSend(editor, { composer }) === false) return null;
+      return getEditorText(editor);
+    },
+    // 보낸 뒤: 오리지널처럼 서식 토글을 되돌린다(유지가 켜져 있으면 그대로).
+    afterSend(editor) { try { scheduleInlineFormatResetAfterSend(editor); } catch (_) {} }
+  };
   // ---- 0.1.118 색 픽커: 서식 바의 색 칸(오리지널·추가 패널·핸드아웃 편집기·시트 글자 칸·서식 만들기)을 누르면 브라우저 픽커 대신 이 창 ----
   // 고르는 동안은 미리보기만, [확인] = 적용·닫기, 바깥/Esc = 취소. 확인한 색은 최근순 12칸(중복 없음)으로 브라우저에 저장(모든 룸 공용), 누르면 선택, 우클릭/× = 삭제.
   const RECENT_COLORS_KEY = "ccf-format-recent-colors-v1";
@@ -13612,6 +13639,7 @@
     editors.forEach((candidate) => {
       const editor = normalizeEditorCandidate(candidate);
       if (!editor) return;
+      if (editor.__ccfExternal) return; // 외부 입력칸은 자기 Enter·붙여넣기 처리를 쓰고, 보내기 직전에 prepare 를 부른다
       if (editor.dataset.ccfPasteBound !== "1") {
         editor.dataset.ccfPasteBound = "1";
         editor.addEventListener("paste", (event) => {
@@ -14057,7 +14085,7 @@
     if (node.closest && node.closest(`[${SAFE_UI_ATTR}="1"]`)) return null;
     if (node.closest && node.closest(`#${MODAL_ID}`)) return null;
     // 툴킷의 추가 채팅 패널 입력칸은 자체 서식 줄을 갖고 있다. 여기에 서식 도구줄이 또 붙어 중복되지 않게 제외한다.
-    if (node.closest && node.closest(".ccf-scp-panel")) return null;
+    if (node.closest && node.closest(".ccf-scp-panel") && !node.__ccfExternal) return null;
     const candidate = node.matches?.(EDITOR_SELECTOR) ? node : node.closest?.(EDITOR_SELECTOR);
     if (!(candidate instanceof HTMLElement)) return null;
     if (isCharacterNameInput(candidate)) return null;
@@ -15667,6 +15695,10 @@
         result.add(bar);
       }
     });
+    for (const bar of EXTERNAL_COMPOSERS) {
+      if (bar.isConnected && bar.__ccfExternalEditor?.isConnected) result.add(bar);
+      else EXTERNAL_COMPOSERS.delete(bar);
+    }
 
     return [...result];
   }
@@ -15778,6 +15810,7 @@
     if (!(el instanceof HTMLElement)) return false;
     // MUI 다이얼로그 컨테이너는 채팅 컴포저가 아니다.
     if (el.closest('[role="dialog"], .MuiDialog-root') || el.getAttribute('role') === 'dialog') return false;
+    if (EXTERNAL_COMPOSERS.has(el)) return true;
     if (el.closest(".ccf-scp-panel")) return false;
     const submit = el.querySelector('button[type="submit"]');
     if (!submit) return false;
@@ -15885,6 +15918,7 @@
 
   function findEditorFromComposer(bar) {
     if (!bar) return null;
+    if (bar.__ccfExternalEditor) return bar.__ccfExternalEditor.isConnected ? bar.__ccfExternalEditor : null;
     if (bar instanceof Element && bar.closest(".ccf-scp-panel")) return null;
 
     if (bar instanceof HTMLElement
