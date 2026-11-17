@@ -29,7 +29,7 @@ const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
       document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
       // stand-in for format-sync's paste handler: an image file was pasted and uploaded
       let n = 0;
-      window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = { handle: (event, insert) => { event.preventDefault(); n += 1; insert(n === 1 ? IMG : 'ccf-firestore-image://abc' + n, '스크린샷' + n); return true; } };
+      window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = { handle: (event, insert) => { event.preventDefault(); n += 1; insert(n === 1 ? IMG : 'ccf-firestore-image://abc' + n, '스크린샷' + n); return true; }, preview: async (url) => (/^ccf-firestore-image:/.test(url) ? IMG : '') }; // 0.5.43: a stored picture's token resolves to a real thumbnail
     }, IMG);
     await page.addScriptTag({ content: source });
     await page.waitForTimeout(300);
@@ -50,7 +50,7 @@ const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     assert.equal(st.value, '앞 ', 'one Backspace removed the whole image marker'); assert.deepEqual(st.chips, [], 'its thumbnail is gone');
     // paste again (a stored image) and send: the sent text carries the token as before
     await paste(); await page.keyboard.type(' 끝');
-    st = await look(); assert.deepEqual(st.chips, ['🖼 스크린샷2']);
+    await page.waitForTimeout(100); st = await look(); assert.deepEqual(st.chips, ['img'], 'a stored (large) picture shows as a real thumbnail, not the text'); assert.match(await page.evaluate(() => document.querySelector('#ccf-second-chat-panel .ccf-scp-image-chip img').getAttribute('src') || ''), /^data:image\//, 'its src is the resolved picture');
     await page.locator('#ccf-second-chat-panel .ccf-scp-send').dispatchEvent('click');
     await page.waitForTimeout(800);
     const sent = writes.map((w) => { try { return JSON.parse(w).fields?.text?.stringValue; } catch (_) { return null; } }).filter(Boolean);
