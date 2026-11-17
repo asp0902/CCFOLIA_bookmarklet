@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.34
+// @version      0.2.35
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.34"),
+    version: getUserscriptVersion("0.2.35"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1838,7 +1838,7 @@
       ${scope} .ccf-roll20-emotion-card {
         position: relative; display: block !important; box-sizing: border-box;
         width: 100%; margin: 6px 0; padding: 21px 16px;
-        border: 1px solid #aaa; border-radius: 0; background: #fff !important;
+        border: 1px solid #999; border-radius: 0; background: #fff !important;
         color: #333 !important; font-size: 15px !important; line-height: 1.4 !important;
         font-weight: bold; font-style: normal; text-align: center;
         white-space: normal; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: 0;
@@ -1879,8 +1879,14 @@
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
       ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 18px; font-weight: bold; line-height: 1.3; }
-      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 15px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(131,199,209,0),#83c7d1 75%); }
-      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(202,130,144,0),#ca8290 75%); }
+      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 15px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
+      /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 회보라, 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
+      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(117,117,130,0),rgb(117,117,130) 75%); }
+      ${scope} .ccf-roll20-check-card[data-result="fumble"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(210,31,31,0),rgb(210,31,31) 75%); }
+      ${scope} .ccf-roll20-die.is-six { color: rgb(209,187,31); }
+      ${scope} .ccf-roll20-die.is-six svg { stroke: rgb(209,187,31); }
+      ${scope} .ccf-roll20-die.is-one { color: rgb(255,0,12); }
+      ${scope} .ccf-roll20-die.is-one svg { stroke: rgb(255,0,12); }
       ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 14px; font-weight: normal; }
       ${scope} .ccf-roll20-check-target b { font-weight: bold; }
     `;
@@ -5133,14 +5139,14 @@
 
   function appendInsaneRoll20Check(card, check) {
     card.classList.add('ccf-roll20-check-card');
-    card.dataset.result = /실패|펌블/.test(check.result) ? 'failure' : 'success';
+    card.dataset.result = /펌블/.test(check.result) ? 'fumble' : /실패/.test(check.result) ? 'failure' : /스페셜/.test(check.result) ? 'special' : 'success';
     const body = document.createElement('span');
     body.className = 'ccf-roll20-check-body';
     const dice = document.createElement('span');
     dice.className = 'ccf-roll20-check-dice';
     const makeDie = (value, total = false) => {
       const die = document.createElement('span');
-      die.className = 'ccf-roll20-die' + (total ? ' is-total' : '');
+      die.className = 'ccf-roll20-die' + (total ? ' is-total' : String(value) === '6' ? ' is-six' : String(value) === '1' ? ' is-one' : '');
       die.innerHTML = '<svg viewBox="0 0 60 66" aria-hidden="true"><path d="M30 2 57 18 55 49 30 64 5 49 3 18Z M30 2 15 24 45 24 30 2 M3 18 15 24 5 49 30 44 55 49 45 24 57 18 M15 24 30 44 45 24 M5 49 30 64 30 44 55 49"/></svg>';
       const number = document.createElement('b'); number.textContent = value; die.appendChild(number);
       return die;
