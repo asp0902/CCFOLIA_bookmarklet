@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.35
+// @version      0.2.36
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.35"),
+    version: getUserscriptVersion("0.2.36"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5021,8 +5021,9 @@
     document.querySelectorAll('.MuiListItemText-root > p.MuiTypography-body2').forEach(host => {
       if (!host.closest('.MuiListItem-root')) return;
       const existing = host.querySelector(':scope > .ccf-roll20-emotion-card');
-      const original = Array.from(host.childNodes).filter(node => node !== existing)
-        .map(node => node.textContent || '').join('');
+      // 원문만: 서식 바(format-sync)가 그린 오버레이(명령+결과 사본)와 보이지 않는 서식 봉투 글자는 뺀다 — 섞이면 판정이 두 번 이어 붙은 글로 읽혀 특기명 자리에 원문 전체가 들어갔다.
+      const original = Array.from(host.childNodes).filter(node => node !== existing && !(node instanceof Element && node.classList.contains('ccf-render-overlay')))
+        .map(node => node.textContent || '').join('').replace(/\u2063{3}[\s\S]*?\u2062{3}/g, '').replace(/[\u200B-\u200D\u2060-\u2064\uFEFF]/g, '');
       const match = original.match(/^\s*(.*?)\s*감정표\s*[（(][1-6][)）]\s*[＞>→]\s*(.+?[（(]\s*플러스\s*[)）])\s*[／/]\s*(.+?[（(]\s*마이너스\s*[)）])\s*$/u);
       const check = parseInsaneRoll20Check(original);
       const scene = !match && !check ? parseInsaneRoll20Scene(original) : null;
@@ -5133,7 +5134,7 @@
       .replace(/［/g, '[').replace(/］/g, ']');
     const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)\s*$/i);
     if (!match) return null;
-    return { skill: match[1].replace(/^2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim() || '판정',
+    return { skill: match[1].replace(/^2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim().replace(/^\[(.*)\]$/, '$1').trim() || '판정',
       target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6] };
   }
 

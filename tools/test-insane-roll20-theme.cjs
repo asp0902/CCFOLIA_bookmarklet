@@ -129,6 +129,19 @@ const key = 'ccf-theme-switcher-settings-v1';
     await page.waitForSelector('.ccf-roll20-check-card');
     await setCheck('2D6>=5 시간 (2D6>=5) > 10[9,1] > 10 > 성공');
     await page.waitForFunction(() => !document.querySelector('.ccf-roll20-check-card'));
+    // 0.2.36: a check the format bar drew (a command sent with a kept format: hidden original with the envelope + an overlay copy) still becomes the right card;
+    // the skill shows without its [brackets]
+    await page.evaluate(() => {
+      const host = document.querySelector('#check'); host.textContent = '';
+      const env = '⁣⁣⁣' + '​‌‍⁠'.repeat(8) + '⁢⁢⁢';
+      const hidden = document.createElement('span'); hidden.className = 'ccf-original-hidden'; hidden.textContent = '2D6-2>=10 [우주/공포심] ' + env + ' (2D6-2>=10) ＞ 5[2,3]-2 ＞ 3 ＞ 실패';
+      const overlay = document.createElement('span'); overlay.className = 'ccf-render-overlay'; overlay.style.fontStyle = 'italic'; overlay.textContent = '2D6-2>=10 [우주/공포심] (2D6-2>=10) ＞ 5[2,3]-2 ＞ 3 ＞ 실패';
+      host.append(hidden, overlay);
+    });
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '우주/공포심', null, { timeout: 4000 });
+    assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['3', '2', '3'], 'dice of the formatted check');
+    assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
+    assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');
     assert.deepEqual(errors, []);
     console.log('PASS: theme selection, persistence, toggle, restoration, native/custom styles and responsive viewports');
   } finally {
