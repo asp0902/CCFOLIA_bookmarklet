@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.41
+// @version      0.2.42
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.41"),
+    version: getUserscriptVersion("0.2.42"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4195,7 +4195,7 @@
       root.removeAttribute("data-ccf-theme-active");
       root.removeAttribute(DEFAULT_MODE_ATTR);
       root.removeAttribute("data-ccf-theme-mode");
-      ["accent", "uitext", "scrollbar", "blur"].forEach((name) => root.removeAttribute(`data-ccf-theme-${name}`));
+      ["accent", "uitext", "scrollbar", "blur", "scheme"].forEach((name) => root.removeAttribute(`data-ccf-theme-${name}`));
       varsStyle.textContent = "";
       if (syncUi) syncUiFromSettings();
       queueDefaultModeUiRefresh();
@@ -4245,6 +4245,8 @@
 
     root.setAttribute("data-ccf-theme-active", "1");
     root.setAttribute("data-ccf-theme-mode", settings.mode);
+    // 0.2.42: 툴킷 창(시트·핸드아웃·GM 도구)은 어두운 테마일 때 테마의 패널·글자색을 따른다(밝은 테마는 창 안 글자가 흰색 기준이라 그대로)
+    root.setAttribute("data-ccf-theme-scheme", derived.colorScheme === "light" ? "light" : "dark");
     varsStyle.textContent = `
       :root[data-ccf-theme-active="1"] {
         color-scheme: ${derived.colorScheme};
