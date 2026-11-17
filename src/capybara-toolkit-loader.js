@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.138";
-  const BUILD_ID = "2026-11-17-all-rooms-2-309";
+  const VERSION = "0.3.139";
+  const BUILD_ID = "2026-11-17-theme-windows-310";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

@@ -51,6 +51,15 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
     assert.deepEqual((await attrs()).slice(1), [null, null, null, null], 'no extras');
     assert.equal(await css('.MuiTabs-indicator', 'backgroundColor'), 'rgb(244, 240, 235)', 'accent untouched: the theme own rule (text color) as before 0.2.41');
     assert.equal(await css('.MuiDrawer-paper', 'backgroundColor').then((c) => /rgba\(.*0\.\d+\)/.test(c)), false, 'opaque');
+    // 0.2.42: the colour scheme attribute (toolkit windows follow a dark theme's paper / text)
+    await page.locator('[data-action="color-preset"][data-preset="3"]').dispatchEvent('click');
+    assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-ccf-theme-scheme')), 'dark', '밤 = dark');
+    await page.locator('[data-action="color-preset"][data-preset="1"]').dispatchEvent('click');
+    assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-ccf-theme-scheme')), 'light', '벚꽃 = light');
+    const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.match(read('legacy/ccfolia-character-sheet.user.js'), /html\[data-ccf-theme-scheme="dark"\] #\$\{ROOT_ID\} \.ccf-cs-dialog \{ background:var\(--ccf-theme-paper\)!important \}/);
+    assert.match(read('legacy/ccfolia-toolkit-presence.user.js'), /html\[data-ccf-theme-scheme="dark"\] #ccf-gm-tools \.ccf-gt-window\{background:var\(--ccf-theme-paper\)!important/);
+    assert.equal((read('legacy/ccfolia-handout.user.js').match(/:host-context\(html\[data-ccf-theme-scheme="dark"\]\)/g) || []).length, 2, 'handout list + view windows');
     assert.deepEqual(errors, []);
     console.log('theme extras PASS');
   } finally { await browser.close(); }

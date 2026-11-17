@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.137
+// @version      0.1.138
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.137",
+    version: "0.1.138",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1059,6 +1059,7 @@
     .settings-pl-row > .settings-pl-role { justify-self: end; } /* PL·GM 표시: 줄 오른쪽 신호등 바로 왼쪽(같은 열) */
     /* 탭 줄이 보일 때(탭 2개 이상)만 숨긴다: 그땐 탭 이름이 제목이다. 탭이 하나면 이 제목이 유일한 "핸드아웃" */
     :host-context(.ccf-gt-body:not([data-single-tab])) .container[data-embedded="1"] header { display: none; } /* 제목은 탭 이름, '+'는 탭 줄로 옮겨 머리 줄에 남는 것이 없다 */
+    :host-context(html[data-ccf-theme-scheme="dark"]) .panel { background-color: var(--ccf-theme-paper) !important; } /* 0.1.138: 어두운 테마 색을 따른다 */
     .panel {
       position: absolute; pointer-events: auto;
       display: flex; flex-direction: column;
@@ -2764,6 +2765,7 @@
         .rz-s { left: 0; bottom: 0; height: 6px; width: calc(100% - 16px); cursor: ns-resize; }
         .rz-n { left: 0; top: 0; height: 4px; width: 100%; cursor: ns-resize; }
         .show-paper[data-collapsed="1"] .rz { display: none; }
+        :host-context(html[data-ccf-theme-scheme="dark"]) .show-paper { background-color: var(--ccf-theme-paper) !important; }
         .show-paper[data-collapsed="1"] {
           /* 제목 툴바(헤더)만 남기고 본문/이미지/리사이즈 핸들 전부 접음 (#95) */
           height: auto !important;
