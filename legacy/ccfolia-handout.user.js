@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.136
+// @version      0.1.137
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.136",
+    version: "0.1.137",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1405,6 +1405,8 @@
     .sv-menu .sv-folder { padding: 6px 14px 2px; font-size: 0.75rem; color: rgba(255,255,255,.6); }
     .sv-menu .sv-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 14px; cursor: pointer; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sv-menu .sv-item:hover, .sv-menu .sv-item:focus-visible { background: rgba(255,255,255,.08); }
+    .all-rooms-controls { display: flex; gap: 6px; margin: 4px 0 8px; }
+    .all-rooms-controls select { flex: 1 1 0; min-width: 0; height: 30px; color: #fff; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.2); border-radius: 4px; font: inherit; font-size: 0.8125rem; }
     .sv-menu .sv-empty { padding: 8px 14px; font-size: 0.8125rem; color: rgba(255,255,255,.7); white-space: normal; }
     .ft-btn svg { pointer-events: none; display: block; }
     .ft-btn:active { background: rgba(255,255,255,.14); }
@@ -2132,11 +2134,11 @@
   }
 
   // Firestore 핸드아웃 push (GM → 룸 컬렉션)
-  async function pushHandoutToFirestore(handout) {
+  async function pushHandoutToFirestore(handout, targetRoom = "") {
     const fb = await initFirebase();
     if (!fb) throw new Error("Firebase not ready");
     const { doc, setDoc, serverTimestamp } = fb.modules.fs;
-    const roomKey = getCurrentRoomKey();
+    const roomKey = targetRoom || getCurrentRoomKey(); // 0.1.137: 전체 룸 보기에서 다른 룸에도 쓴다(그 룸 GM 이어야 규칙이 받는다)
     if (roomKey === "global") throw new Error("not in a room");
     const docRef = doc(fb.db, "rooms", roomKey, "handouts", handout.id);
     const payload = {
@@ -2166,11 +2168,11 @@
   }
 
   // Firestore 핸드아웃 삭제
-  async function deleteHandoutFromFirestore(id) {
+  async function deleteHandoutFromFirestore(id, targetRoom = "") {
     const fb = await initFirebase();
     if (!fb) throw new Error("Firebase not ready");
     const { doc, deleteDoc, setDoc } = fb.modules.fs;
-    const roomKey = getCurrentRoomKey();
+    const roomKey = targetRoom || getCurrentRoomKey();
     if (roomKey === "global") throw new Error("not in a room");
     const ref = doc(fb.db, "rooms", roomKey, "handouts", id);
     try {
@@ -3831,25 +3833,87 @@
     finally { state.allRoomsLoading = false; }
     if (state.isOpen) render();
   }
+  const roomLabel = (g) => g.title || `룸 ${String(g.room).slice(0, 6)}`;
+  function allRoomGroups() {
+    const cur = getCurrentRoomKey();
+    const groups = (state.allRooms || []).map((g) => (g.room === cur ? { ...g, handouts: state.data.handouts.filter((h) => !h._remote) } : g)).filter((g) => g.handouts.length);
+    if (!groups.some((g) => g.room === cur) && state.data.handouts.some((h) => !h._remote)) groups.unshift({ room: cur, title: "", updatedAt: "", handouts: state.data.handouts.filter((h) => !h._remote) });
+    return groups;
+  }
   function renderAllRooms() {
     if (!state.allRooms) { loadAllRooms(); return `<div class="list-no-result">불러오는 중…</div>`; }
     const cur = getCurrentRoomKey();
     const q = String(state.search || "").trim();
-    const groups = state.allRooms.map((g) => (g.room === cur ? { ...g, handouts: state.data.handouts.filter((h) => !h._remote) } : g))
-      .filter((g) => g.handouts.length)
-      .sort((a, b) => (a.room === cur ? -1 : b.room === cur ? 1 : String(b.updatedAt).localeCompare(String(a.updatedAt))));
-    if (!groups.some((g) => g.room === cur) && state.data.handouts.some((h) => !h._remote)) groups.unshift({ room: cur, title: "", updatedAt: "", handouts: state.data.handouts.filter((h) => !h._remote) });
-    const html = groups.map((g) => {
+    // 0.1.137: 정렬(최근 수정 / 룸 이름)·룸 필터. 현재 룸은 늘 맨 위.
+    const all = allRoomGroups();
+    const byName = state.allSort === "name";
+    const groups = all.filter((g) => !state.allFilter || g.room === state.allFilter)
+      .sort((a, b) => (a.room === cur ? -1 : b.room === cur ? 1 : byName ? roomLabel(a).localeCompare(roomLabel(b), "ko") : String(b.updatedAt).localeCompare(String(a.updatedAt))));
+    const controls = `<div class="all-rooms-controls"><select data-all-sort aria-label="정렬"><option value="recent"${byName ? "" : " selected"}>최근 수정</option><option value="name"${byName ? " selected" : ""}>룸 이름</option></select><select data-all-filter aria-label="룸 필터"><option value="">모든 룸</option>${all.map((g) => `<option value="${escapeAttr(g.room)}"${state.allFilter === g.room ? " selected" : ""}>${escapeHtml(roomLabel(g))}</option>`).join("")}</select></div>`;
+    const html = controls + groups.map((g) => {
       const items = g.handouts.filter((h) => matchesHandoutSearch(h, q)).sort(compareByOrder);
       if (q && !items.length) return "";
       const here = g.room === cur;
       const name = g.title || `룸 ${g.room.slice(0, 6)}`;
       const date = g.updatedAt ? new Date(g.updatedAt).toLocaleDateString() : "";
       return `<details class="room-group" data-room="${escapeAttr(g.room)}"${here || q ? " open" : ""}><summary><span class="room-name">${escapeHtml(name)}</span><span class="room-meta">${items.length}개${date ? ` · ${escapeHtml(date)}` : ""}${here ? " · 현재 룸" : ""}</span>${here ? "" : `<a class="room-open" href="/rooms/${encodeURIComponent(g.room)}" target="_blank" rel="noopener">열기</a>`}</summary>`
-        + items.map((h) => `<div class="room-item"><span class="room-item-title">${escapeHtml(h.title || "(제목 없음)")}</span><button type="button" class="btn small secondary" data-action="room-view" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">보기</button>${here ? "" : `<button type="button" class="btn small secondary" data-action="room-copy" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">이 룸으로 복사</button>`}</div>`).join("")
+        + items.map((h) => `<div class="room-item" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}"><span class="room-item-title">${escapeHtml(h.title || "(제목 없음)")}</span><button type="button" class="btn small secondary" data-action="room-view" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">보기</button>${here ? "" : `<button type="button" class="btn small secondary" data-action="room-copy" data-room="${escapeAttr(g.room)}" data-id="${escapeAttr(h.id)}">이 룸으로 복사</button>`}</div>`).join("")
         + "</details>";
     }).join("");
-    return `${html || '<div class="list-no-result">핸드아웃이 있는 룸이 없습니다.</div>'}`;
+    return html.length > controls.length ? html : controls + '<div class="list-no-result">핸드아웃이 있는 룸이 없습니다.</div>';
+  }
+  // 다른 룸(또는 이 룸)의 저장 데이터를 고친다. 이 브라우저의 룸별 저장소 그대로.
+  async function updateRoomValue(room, mutate) {
+    if (room === getCurrentRoomKey()) { mutate(state.data); await saveAll(state.data); return; }
+    const tk = toolkit();
+    if (!tk?.storage?.setRoomData) throw new Error("저장소를 쓸 수 없습니다");
+    const rec = await tk.storage.getRoomData(STORAGE_FEATURE, room);
+    const value = rec?.value && typeof rec.value === "object" ? rec.value : { handouts: [] };
+    if (!Array.isArray(value.handouts)) value.handouts = [];
+    mutate(value);
+    await tk.storage.setRoomData(STORAGE_FEATURE, room, value);
+  }
+  // 복사(권한표·공유·폴더는 비움) → 대상 룸 저장소 + 그 룸 Firestore. move = 원본 삭제까지.
+  async function copyHandoutToRoom(fromRoom, id, toRoom, move = false) {
+    const src = findRoomHandout(fromRoom, id);
+    if (!src || !toRoom || toRoom === fromRoom) return;
+    const target = allRoomGroups().find((g) => g.room === toRoom);
+    if (move && !confirm(`"${src.title || "(제목 없음)"}"을(를) ${roomLabel(target || { room: toRoom })}(으)로 옮깁니다. 원래 룸에서는 지워집니다. 진행할까요?`)) return;
+    const now = new Date().toISOString();
+    const copy = { ...JSON.parse(JSON.stringify(src)), id: uuid(), permissions: {}, folderId: "", createdAt: now, updatedAt: now };
+    delete copy._remote; delete copy._canSecret; delete copy._canView; delete copy.ownerUid;
+    await updateRoomValue(toRoom, (v) => { copy.order = Math.max(0, ...v.handouts.map((h) => Number(h.order) || 0)) + 1; v.handouts.push(copy); });
+    pushHandoutToFirestore(copy, toRoom).catch((error) => console.warn("[ccf-handout] copy push failed", error));
+    if (move) await removeRoomHandout(fromRoom, id, false);
+    state.allRooms = null;
+    toast(`"${copy.title || "(제목 없음)"}" ${move ? "옮겼습니다" : "복사했습니다"} → ${roomLabel(target || { room: toRoom })} (권한표·공유는 비움).`);
+    render();
+  }
+  async function removeRoomHandout(room, id, ask = true) {
+    const src = findRoomHandout(room, id);
+    if (!src) return;
+    if (ask && !confirm(`"${src.title || "(제목 없음)"}" 핸드아웃을 삭제할까요?`)) return;
+    await updateRoomValue(room, (v) => { v.handouts = v.handouts.filter((h) => h.id !== id); });
+    deleteHandoutFromFirestore(id, room).catch((error) => console.warn("[ccf-handout] delete in other room failed", error));
+    state.allRooms = null;
+    render();
+  }
+  // 전체 룸 줄 우클릭 메뉴(GM). 이 브라우저에 그 룸 핸드아웃 원본이 있다 = 그 룸에서 GM 으로 만든 것이라 편집·삭제를 연다(규칙이 최종 확인).
+  function openRoomItemMenu(event, room, id, toPick = "") {
+    closeSvMenu();
+    const cur = getCurrentRoomKey();
+    const others = allRoomGroups().filter((g) => g.room !== room);
+    const item = (action, label, extra = "") => `<button type="button" class="sv-item" role="menuitem" data-action="${action}" data-room="${escapeAttr(room)}" data-id="${escapeAttr(id)}"${extra}>${escapeHtml(label)}</button>`;
+    const html = toPick
+      ? others.map((g) => item(toPick === "move" ? "room-move-to" : "room-copy-to", roomLabel(g), ` data-target="${escapeAttr(g.room)}"`)).join("") || '<div class="sv-empty">다른 룸이 없습니다.</div>'
+      : [item("room-view", "보기"), item("room-edit", "편집"), room !== cur ? item("room-copy", "이 룸으로 복사") : "", item("room-pick-copy", "다른 룸으로 복사…"), item("room-pick-move", "다른 룸으로 이동…"), item("room-delete", "삭제")].join("");
+    const menu = document.createElement("div");
+    menu.className = "sv-menu card-menu"; menu.setAttribute("role", "menu");
+    menu.innerHTML = html;
+    const panel = state.shadow.querySelector(".panel") || state.shadow;
+    panel.appendChild(menu);
+    const pr = panel.getBoundingClientRect?.();
+    if (pr) { menu.style.left = `${Math.round(Math.min(event.clientX, pr.right - 200) - pr.left)}px`; menu.style.top = `${Math.round(event.clientY - pr.top)}px`; }
   }
   function findRoomHandout(room, id) {
     if (room === getCurrentRoomKey()) return findHandout(id);
@@ -3945,6 +4009,7 @@
   }
 
   function findHandout(id) {
+    if (state.editingRoom && id === state.editingId) return findRoomHandout(state.editingRoom, id); // 0.1.137: 전체 룸에서 다른 룸 것을 편집 중
     return state.data.handouts.find((h) => h.id === id) || null;
   }
 
@@ -4610,6 +4675,15 @@
     if (action === "scope") { state.scope = btn.dataset.scope === "all" ? "all" : "room"; if (state.scope === "all") state.allRooms = null; render(); return; }
     if (action === "room-view") { const h = findRoomHandout(btn.dataset.room, id); if (h) showHandoutModal({ ...h, id: "" }, "", true, true); return; }
     if (action === "room-copy") { copyHandoutHere(btn.dataset.room, id); return; }
+    if (action === "room-pick-copy" || action === "room-pick-move") { const r = btn.getBoundingClientRect(); openRoomItemMenu({ clientX: r.left, clientY: r.top }, btn.dataset.room, id, action === "room-pick-move" ? "move" : "copy"); return; }
+    if (action === "room-copy-to" || action === "room-move-to") { copyHandoutToRoom(btn.dataset.room, id, btn.dataset.target, action === "room-move-to"); return; }
+    if (action === "room-delete") { removeRoomHandout(btn.dataset.room, id); return; }
+    if (action === "room-edit") {
+      const here = btn.dataset.room === getCurrentRoomKey();
+      state.editingRoom = here ? "" : btn.dataset.room; state.editingId = id; state.formPermissionsForId = null; setTab("edit");
+      if (!here) toast("다른 룸의 핸드아웃: 제목·본문·이미지를 고칩니다(권한표는 그 룸에서).");
+      return;
+    }
     if (action === "close") { closePanel(); return; }
     if (action === "greeting-connect") {
       const room = getCurrentRoomKey();
@@ -4700,7 +4774,7 @@
     }
     if (action === "show-to-players") { showToPlayersPlaceholder(id); return; }
     if (action === "save-handout") { saveHandoutFromForm(); return; }
-    if (action === "cancel-edit") { state.editingId = null; state.formPermissionsForId = null; setTab("list"); return; }
+    if (action === "cancel-edit") { state.editingId = null; state.editingRoom = ""; state.formPermissionsForId = null; setTab("list"); return; }
     if (action === "save-settings") { saveSettingsFromForm(); return; }
     if (action === "export") { exportJson(); return; }
     if (action === "import") { importJson(); return; }
@@ -4719,6 +4793,9 @@
   }
 
   function onShadowChange(event) {
+    const allSort = event.target.closest?.("select[data-all-sort]"), allFilter = event.target.closest?.("select[data-all-filter]");
+    if (allSort) { state.allSort = allSort.value === "name" ? "name" : "recent"; render(); return; }
+    if (allFilter) { state.allFilter = allFilter.value || ""; render(); return; }
     // 폰트 색상 picker — 선택된 색상을 현재 본문 editor 에 적용
     const colorInp = event.target.closest('input[type="color"][data-format-cmd="color"]');
     if (colorInp) {
@@ -5099,6 +5176,15 @@
     const id = isNew ? uuid() : state.editingId;
     const now = new Date().toISOString();
     const existing = isNew ? null : findHandout(state.editingId);
+    if (state.editingRoom && existing) {
+      // 0.1.137 다른 룸 핸드아웃: 제목·이미지·본문만 바꿔 그 룸 저장소와 그 룸 Firestore 에 쓴다(권한표·폴더·순서는 그대로).
+      const room = state.editingRoom, updated = { ...existing, title, image, description, gmNotes, updatedAt: now };
+      await updateRoomValue(room, (v) => { v.handouts = v.handouts.map((h) => (h.id === updated.id ? updated : h)); });
+      pushHandoutToFirestore(updated, room).catch((error) => console.warn("[ccf-handout] other room push failed", error));
+      state.editingRoom = ""; state.editingId = null; state.allRooms = null; setTab("list");
+      toast(`저장했습니다 → ${roomLabel({ room, title: "" })}`);
+      return;
+    }
     const handout = {
       id, title, image, description, gmNotes, permissions: permissionsWithAccounts,
       folderId: (state.data.folders || []).some((folder) => folder.id === getFieldValue("folderId")) ? getFieldValue("folderId") : "",
@@ -5475,6 +5561,8 @@
     return h && canManageHandout(h) ? h : null;
   }
   function onCardContextMenu(event) {
+    const roomItem = event.target.closest?.(".room-item[data-room][data-id]");
+    if (roomItem && isAdminMode()) { event.preventDefault(); openRoomItemMenu(event, roomItem.dataset.room, roomItem.dataset.id); return; }
     const h = manageableCard(event);
     if (!h) return;
     event.preventDefault();
