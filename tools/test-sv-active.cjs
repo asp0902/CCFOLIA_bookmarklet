@@ -17,7 +17,7 @@ const BODY = '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b
     const sv = () => page.evaluate(() => { const b = document.querySelector('.ccf-inline-toolbar [data-inline-command="style-clipboard"]'); const active = document.querySelector('.ccf-inline-toolbar [data-inline-command="bold"]'); return { on: b.classList.contains('active'), bg: getComputedStyle(b).backgroundColor }; });
     await page.goto('https://ccfolia.com/rooms/r1');
     await page.evaluate(() => {
-      localStorage.setItem('ccf-format-style-presets-v1:r1', JSON.stringify([{ name: '빨강', style: { color: '#ff0000' }, auto: false, savedAt: 1 }, { name: '굵게', style: { bold: true }, auto: false, savedAt: 2 }]));
+      localStorage.setItem('ccf-format-style-presets-shared-migrated-1117', '1'); /* format-sync 0.1.123: seeded as room-only presets (no merge into the shared list) */ localStorage.setItem('ccf-format-style-presets-v1:r1', JSON.stringify([{ name: '빨강', style: { color: '#ff0000' }, auto: false, savedAt: 1 }, { name: '굵게', style: { bold: true }, auto: false, savedAt: 2 }]));
       localStorage.setItem('ccf-format-style-presets-v1:r2', JSON.stringify([{ name: '파랑', style: { color: '#0000ff' }, savedAt: 3 }]));
     });
     await load('r1');

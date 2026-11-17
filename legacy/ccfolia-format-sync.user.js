@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.122
+// @version      0.1.123
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.122"),
+    version: getUserscriptVersion("0.1.123"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4272,6 +4272,8 @@
       .ccf-style-folder-empty { color: rgba(255, 255, 255, 0.45); font-size: 11px; padding: 3px 6px; }
       .ccf-style-root-drop { color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 3px 6px; text-align: center; }
       /* 0.1.121: + 를 누르면 코코포리아 메뉴(MUI Menu) 모양으로 단추 옆에 뜬다 — 모달 내용은 밀리지 않는다 */
+      .ccf-style-preset-scope { all: unset; box-sizing: border-box; cursor: pointer; flex: 0 0 auto; padding: 0 5px; height: 18px; line-height: 18px; border-radius: 9px; font-size: 10px; color: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.18); }
+      .ccf-style-preset-scope.is-room { color: #fff; background: rgba(33,150,243,.85); border-color: transparent; }
       .ccf-style-add-menu { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; min-width: 128px; padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
       .ccf-style-add-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #fff; white-space: nowrap; }
       .ccf-style-add-menu button:hover, .ccf-style-add-menu button:focus-visible { background: rgba(255, 255, 255, 0.08); }
@@ -5745,6 +5747,10 @@
           };
           document.addEventListener("pointerdown", closeOutside, true);
           document.addEventListener("keydown", closeOnEsc, true); // 포커스가 어디 있든 Esc 는 메뉴만 닫는다(모달은 그대로)
+          return;
+        }
+        if (action === "scope") {
+          if (toggleStylePresetRoom(Number(styleAction.getAttribute("data-preset-index")))) openInlineStyleClipboardPopover(toolbar, { reuseContext: true });
           return;
         }
         if (action === "folder-add-start") {
@@ -11833,8 +11839,8 @@
   // ===== 서식 프리셋 (#70) — 여러 서식을 이름으로 저장/삭제/적용 =====
   const STYLE_PRESETS_STORAGE_KEY = "ccf-format-style-presets-v1";
 
-  // 서식 프리셋은 룸별로 저장한다: 키 = 전역 키 + ":" + 룸 ID. 룸 밖(홈)에는 프리셋이 없다.
-  // 처음 그 룸에 들어갔을 때 그 룸 목록이 아직 없으면 기존 전역 목록을 복사해 준다(전역 원본은 지우지 않아 다른 룸 첫 진입 때도 복사 대상이다).
+  // 0.1.123 서식 프리셋 = 공용(모든 룸, 전역 키) + 이 룸 전용(룸 키 = 전역 키 + ":" + 룸 ID). 한 목록으로 합쳐 보이고(공용 먼저), 룸 전용은 room: true.
+  // 새 프리셋·폴더는 공용. 행의 '룸' 단추로 이 룸 전용 ↔ 공용 전환. 예전(룸별 완전 분리) 데이터는 한 번 공용으로 합친다(migrateStylePresetsToShared).
   function stylePresetRoomId() {
     const match = String(location.pathname || "").match(/^\/rooms\/([^/?#]+)/);
     if (!match) return "";
@@ -11846,21 +11852,16 @@
     return roomId ? `${STYLE_PRESETS_STORAGE_KEY}:${roomId}` : "";
   }
 
+  const readPresetArray = (key) => { try { const parsed = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(parsed) ? parsed.filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim()) : []; } catch (_) { return []; } };
   function readStylePresets() {
     let list = [];
     const roomKey = stylePresetsKey();
     if (!roomKey) return list;
-    try {
-      let rawList = localStorage.getItem(roomKey);
-      if (rawList == null) {
-        const inherited = localStorage.getItem(STYLE_PRESETS_STORAGE_KEY);
-        if (inherited != null) { try { localStorage.setItem(roomKey, inherited); } catch (_) { /* 저장 실패해도 읽기는 계속 */ } rawList = inherited; }
-      }
-      const parsed = JSON.parse(rawList || "[]");
-      if (Array.isArray(parsed)) {
-        list = parsed.filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
-      }
-    } catch (error) { /* 손상 데이터 무시 */ }
+    migrateStylePresetsToShared();
+    list = [
+      ...readPresetArray(STYLE_PRESETS_STORAGE_KEY).map((p) => { const { room, ...rest } = p; return rest; }),
+      ...readPresetArray(roomKey).map((p) => ({ ...p, room: true }))
+    ];
     // 기존 단일 클립보드 → 프리셋 1개로 마이그레이션
     if (!list.length) {
       const legacy = readStyleClipboard();
@@ -11877,7 +11878,8 @@
     const roomKey = stylePresetsKey();
     if (!roomKey) return false; // 룸 밖에서는 프리셋을 저장하지 않는다
     try {
-      localStorage.setItem(roomKey, JSON.stringify(list));
+      localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(list.filter((p) => !p.room)));
+      localStorage.setItem(roomKey, JSON.stringify(list.filter((p) => p.room)));
       try { document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach(refreshInlineSvButton); } catch (_) { /* 표시만 */ }
       return true;
     } catch (error) {
@@ -11899,19 +11901,72 @@
   function readStyleFolders() {
     const key = styleFoldersKey();
     if (!key) return [];
-    try {
-      const parsed = JSON.parse(localStorage.getItem(key) || "[]");
-      if (!Array.isArray(parsed)) return [];
-      const seen = new Set();
-      return parsed.filter((f) => f && typeof f.id === "string" && f.id && typeof f.name === "string" && f.name.trim() && !seen.has(f.id) && seen.add(f.id))
-        .map((f) => ({ id: f.id, name: f.name.trim().slice(0, 40), open: f.open !== false }));
-    } catch (_) { return []; }
+    migrateStylePresetsToShared();
+    const read = (k, room) => { try { const parsed = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(parsed) ? parsed.map((f) => ({ ...f, room })) : []; } catch (_) { return []; } };
+    const seen = new Set();
+    return [...read(STYLE_FOLDERS_STORAGE_KEY, false), ...read(key, true)]
+      .filter((f) => f && typeof f.id === "string" && f.id && typeof f.name === "string" && f.name.trim() && !seen.has(f.id) && seen.add(f.id))
+      .map((f) => ({ id: f.id, name: f.name.trim().slice(0, 40), open: f.open !== false, ...(f.room ? { room: true } : {}) }));
   }
 
   function writeStyleFolders(list) {
     const key = styleFoldersKey();
     if (!key) return false;
-    try { localStorage.setItem(key, JSON.stringify(list)); return true; } catch (error) { console.error("[ccf-format-sync] writeStyleFolders failed", error); return false; }
+    const strip = (f) => { const { room, ...rest } = f; return rest; };
+    try {
+      localStorage.setItem(STYLE_FOLDERS_STORAGE_KEY, JSON.stringify(list.filter((f) => !f.room).map(strip)));
+      localStorage.setItem(key, JSON.stringify(list.filter((f) => f.room).map(strip)));
+      return true;
+    } catch (error) { console.error("[ccf-format-sync] writeStyleFolders failed", error); return false; }
+  }
+
+  // 0.1.123 한 번만: 룸별 목록(첫 진입 때 복사된 공용 사본 + 그 룸에서 더한 것)을 공용으로 합친다. 같은 이름·같은 서식은 하나로, 이름만 같고 서식이 다르면 "이름 (룸)"으로 올린다.
+  // 합치기 전 원본 전부를 백업 키에 한 번 남기고, 끝나면 룸 키는 비운다(이후 '이 룸 전용'으로 정한 것만 들어간다). 유실 없음: 지우는 것은 공용에 똑같은 것이 있는 사본뿐.
+  const STYLE_PRESETS_MIGRATED_KEY = "ccf-format-style-presets-shared-migrated-1117";
+  const STYLE_PRESETS_BACKUP_KEY = "ccf-format-style-presets-backup-1117";
+  function migrateStylePresetsToShared() {
+    try {
+      if (localStorage.getItem(STYLE_PRESETS_MIGRATED_KEY) === "1") return;
+      const roomPresetKeys = [], roomFolderKeys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i) || "";
+        if (k.startsWith(`${STYLE_PRESETS_STORAGE_KEY}:`)) roomPresetKeys.push(k);
+        else if (k.startsWith(`${STYLE_FOLDERS_STORAGE_KEY}:`)) roomFolderKeys.push(k);
+      }
+      const backup = {};
+      for (const k of [STYLE_PRESETS_STORAGE_KEY, STYLE_FOLDERS_STORAGE_KEY, ...roomPresetKeys, ...roomFolderKeys]) { const v = localStorage.getItem(k); if (v != null) backup[k] = v; }
+      if (localStorage.getItem(STYLE_PRESETS_BACKUP_KEY) == null) localStorage.setItem(STYLE_PRESETS_BACKUP_KEY, JSON.stringify(backup));
+      const shared = readPresetArray(STYLE_PRESETS_STORAGE_KEY);
+      const sig = (p) => JSON.stringify([p.style || {}, p.align || "left"]);
+      let folders = []; try { folders = JSON.parse(localStorage.getItem(STYLE_FOLDERS_STORAGE_KEY) || "[]"); if (!Array.isArray(folders)) folders = []; } catch (_) { folders = []; }
+      for (const k of roomFolderKeys) {
+        let list = []; try { list = JSON.parse(localStorage.getItem(k) || "[]"); } catch (_) { list = []; }
+        for (const f of Array.isArray(list) ? list : []) if (f && f.id && !folders.some((g) => g.id === f.id)) folders.push(f);
+      }
+      for (const k of roomPresetKeys) {
+        const room = k.slice(STYLE_PRESETS_STORAGE_KEY.length + 1);
+        for (const p of readPresetArray(k)) {
+          if (shared.some((q) => q.name === p.name && sig(q) === sig(p))) continue;
+          const named = shared.some((q) => q.name === p.name) ? { ...p, name: `${p.name} (${room.slice(0, 12)})` } : p;
+          if (shared.some((q) => q.name === named.name && sig(q) === sig(named))) continue;
+          const { room: _r, ...rest } = named;
+          shared.push(rest);
+        }
+      }
+      localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(shared));
+      localStorage.setItem(STYLE_FOLDERS_STORAGE_KEY, JSON.stringify(folders));
+      for (const k of [...roomPresetKeys, ...roomFolderKeys]) localStorage.setItem(k, "[]");
+      localStorage.setItem(STYLE_PRESETS_MIGRATED_KEY, "1");
+    } catch (error) { console.warn("[ccf-format-sync] preset migration skipped", error); }
+  }
+
+  // 이 룸 전용 ↔ 공용 전환(프리셋 하나).
+  function toggleStylePresetRoom(index) {
+    const list = readStylePresets();
+    const preset = list[index];
+    if (!preset) return false;
+    if (preset.room) delete preset.room; else preset.room = true;
+    return writeStylePresets(list);
   }
 
   function addStyleFolder(name) {
@@ -11954,6 +12009,7 @@
       <div class="ccf-style-preset-row" draggable="true" data-preset-index="${index}">
         <button type="button" class="ccf-style-preset-auto-dot" data-inline-style-action="auto" data-preset-index="${index}" data-on="${preset.auto === false ? "0" : "1"}" role="switch" aria-checked="${preset.auto === false ? "false" : "true"}" title="자동 적용 ${preset.auto === false ? "꺼짐" : "켜짐"} — 클릭으로 전환" aria-label="자동 적용"></button>
         <button type="button" class="ccf-style-preset-apply" data-inline-style-action="apply" data-preset-index="${index}" title="선택 영역에 적용" style="${escapeHtml(stylePresetPreviewCss(preset.style, preset.align))}">${escapeHtml(preset.name)}</button>
+        <button type="button" class="ccf-style-preset-scope${preset.room ? " is-room" : ""}" data-inline-style-action="scope" data-preset-index="${index}" aria-pressed="${preset.room ? "true" : "false"}" title="${preset.room ? "이 룸 전용 — 누르면 공용(모든 룸)으로" : "공용(모든 룸) — 누르면 이 룸 전용으로"}" aria-label="이 룸 전용">룸</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="edit" data-preset-index="${index}" title="편집 — 서식을 아래 빌더에 불러옴" aria-label="편집">✎</button>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="remove" data-preset-index="${index}" title="삭제" aria-label="삭제">×</button>
       </div>`;

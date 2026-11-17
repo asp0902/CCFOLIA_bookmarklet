@@ -16,7 +16,7 @@ const themeSource = fs.readFileSync(root + 'ccfolia-theme-switcher.user.js', 'ut
       const errors = []; page.on('pageerror', (e) => errors.push(e.message));
       await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#282828;color:#fff"><div role="log"><ul id="list"></ul></div><form id="composer"><textarea name="text" class="MuiInputBase-input" rows="3"></textarea><button type="submit">전송</button><button type="button" aria-label="D100">D100</button></form></body>' }));
       await page.goto('https://ccfolia.com/rooms/A');
-      await page.evaluate(() => { localStorage.setItem('ccf-format-style-presets-v1:A', JSON.stringify([{ name: '굵은서식', style: { bold: true }, auto: true, savedAt: 1 }, { name: '꺼진서식', style: { italic: true }, auto: false, savedAt: 2 }])); });
+      await page.evaluate(() => { localStorage.setItem('ccf-format-style-presets-shared-migrated-1117', '1'); /* format-sync 0.1.123: seeded as room-only presets (no merge into the shared list) */ localStorage.setItem('ccf-format-style-presets-v1:A', JSON.stringify([{ name: '굵은서식', style: { bold: true }, auto: true, savedAt: 1 }, { name: '꺼진서식', style: { italic: true }, auto: false, savedAt: 2 }])); });
       await page.addScriptTag({ content: sync });
       if (theme) await page.addScriptTag({ content: themeSource });
       await page.waitForSelector('[data-inline-command="bold"]', { state: 'attached' });

@@ -19,7 +19,7 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     await page.evaluate(() => {
       window.__sent = []; document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.querySelector('#composer textarea').value); });
       // old data: a plain array, no folders, one preset with a stored align
-      localStorage.setItem('ccf-format-style-presets-v1:test', JSON.stringify([{ name: '빨강', style: { color: '#ff0000', bold: true }, align: 'left', savedAt: 1 }, { name: '가운데', style: { italic: true }, align: 'center', savedAt: 2 }]));
+      localStorage.setItem('ccf-format-style-presets-shared-migrated-1117', '1'); /* format-sync 0.1.123: seeded as room-only presets (no merge into the shared list) */ localStorage.setItem('ccf-format-style-presets-v1:test', JSON.stringify([{ name: '빨강', style: { color: '#ff0000', bold: true }, align: 'left', savedAt: 1 }, { name: '가운데', style: { italic: true }, align: 'center', savedAt: 2 }]));
     });
     await page.addScriptTag({ content: source });
     await page.locator('.ccf-inline-toolbar').first().waitFor({ state: 'attached', timeout: 8000 });
@@ -27,7 +27,8 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     const open = async () => { await page.evaluate(() => document.querySelector('[data-inline-command="style-clipboard"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))); await page.waitForSelector('.ccf-inline-popover.open [data-style-preset-list]'); };
     const pop = page.locator('.ccf-inline-popover.open');
     const keyOf = (k) => `ccf-format-style-${k}-v1:test`;
-    const stored = (k) => page.evaluate((key) => JSON.parse(localStorage.getItem(key) || 'null'), keyOf(k));
+    // format-sync 0.1.123: the list = shared (global key) + this room's own (room key)
+    const stored = (k) => page.evaluate((key) => [...(JSON.parse(localStorage.getItem(key.split(':')[0]) || '[]')), ...(JSON.parse(localStorage.getItem(key) || '[]'))], keyOf(k));
     const sendAndDecode = async () => { await page.evaluate(() => { window.__sent.length = 0; }); await page.locator('#composer button[type=submit]').dispatchEvent('click'); await page.waitForTimeout(2300); /* the send's own restore/reset timers (180ms..2s) finish first */ return decode((await page.evaluate(() => window.__sent[0])) || ''); };
     const reset = async (text) => { await page.evaluate((t) => { const el = document.querySelector('#composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, t); el.dispatchEvent(new Event('input', { bubbles: true })); }, text); };
 
