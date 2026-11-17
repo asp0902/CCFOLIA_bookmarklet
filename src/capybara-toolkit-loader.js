@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.110";
-  const BUILD_ID = "2026-11-17-insane-table-281";
+  const VERSION = "0.3.111";
+  const BUILD_ID = "2026-11-17-player-visibility-282";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

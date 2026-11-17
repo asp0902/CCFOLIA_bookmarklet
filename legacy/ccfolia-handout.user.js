@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.129
+// @version      0.1.130
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -52,7 +52,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.129",
+    version: "0.1.130",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -232,6 +232,7 @@
     },
     // 받는 쪽(플레이어) 점검: 연결·동의·내 사본 구독·받은 수·마지막 수신. docs/handout-receive-snippet.js 가 부른다.
     greetingLog() { return greetingLog.slice(-10); },
+    visibilityDiag() { const all = state.data.handouts || []; return { gm: isAdminMode(), role: { known: ccfRole.known, isOwner: ccfRole.isOwner }, seatIsMine: !!(lastGmDoc && fbState?.uid && lastGmDoc.gmUid === fbState.uid), local: all.length, copies: all.filter((h) => h._remote === true).length, copiesWithSecret: all.filter((h) => h._remote === true && h._canSecret === true).length, localNotCopies: all.filter((h) => h._remote !== true).length, shownToMe: all.filter(visibleToMe).length }; },
     receiveDiag() {
       const room = getCurrentRoomKey();
       let skipDay = null; try { skipDay = localStorage.getItem(GREETING_SKIP_DAY_KEY); } catch (_) {}
@@ -829,6 +830,10 @@
   function canView(h, name, extraKeys) { return permFor(h, name, extraKeys, "view"); }
   function canViewSecret(h, name, extraKeys) { return permFor(h, name, extraKeys, "secret"); }
   function canEdit(h, name, extraKeys) { return permFor(h, name, extraKeys, "edit"); }
+  // 플레이어 화면에 보일 수 있는 핸드아웃: 내게 온 사본(inbox)만. 이 브라우저에 남은 다른 데이터(같은 브라우저로 GM 을 했던 때의 원본 등)는 그리지 않는다.
+  const visibleToMe = (h) => !!h && (isAdminMode() || h._remote === true);
+  // 비밀 내용: GM 은 항상, 플레이어는 사본이 비밀 권한을 가졌을 때만(로컬 권한표는 믿지 않는다)
+  const secretVisibleToMe = (h) => !!h && (isAdminMode() || (h._remote === true && h._canSecret === true));
 
   // ===== 계정 기준 식별 =====
   // 사람 = 코코포리아 계정 uid. 이 확장의 익명 계정 uid 는 브라우저가 바뀌면 바뀌므로, 각자가 자기 문서 rooms/{room}/members/{익명uid} 에 { ccfoliaUid, displayName } 을 적어 둔다.
@@ -2652,6 +2657,7 @@
     pendingShows.delete(id);
     if (pending.until < Date.now()) return;
     const h = findHandout(id);
+    if (!visibleToMe(h)) return;
     if (h) { showHandoutModal(h, pending.atName); lastShow = { at: new Date().toISOString(), id: String(id).slice(0, 12), result: "사본이 온 뒤 띄움" }; }
   }
   function ingestShowSignal(signalId, data) {
@@ -2671,7 +2677,7 @@
       return;
     }
     const tryShow = () => {
-      const h = state.data.handouts.find((x) => x.id === data.handoutId);
+      const h = state.data.handouts.find((x) => x.id === data.handoutId && visibleToMe(x));
       if (h) { showHandoutModal(h, data.atName); return; }
       // 사본이 아직 안 왔다: 3분 동안 기다렸다가 사본이 들어오는 순간 띄운다(ingestRemoteHandout)
       pendingShows.set(data.handoutId, { atName: data.atName, until: Date.now() + 180000 });
@@ -2706,7 +2712,7 @@
       if (!handout) { host.remove(); return; }
       const body = host.shadowRoot?.querySelector(".show-body");
       if (!body) return;
-      const hasSecret = isAdminMode() || handout._canSecret === true || canViewSecret(handout, state.data.myCharacter, identityKeys());
+      const hasSecret = secretVisibleToMe(handout);
       body.innerHTML = showBodyHtml(handout, hasSecret);
       resolveHandoutImagesIn(host.shadowRoot);
     });
@@ -2715,7 +2721,7 @@
     const previewOpener = isPreview ? (state.shadow?.activeElement || document.activeElement) : null;
     const me = state.data.myCharacter;
     // GM 은 권한표에 자기 행이 없어도 늘 비밀 내용까지 본다. 미리보기는 부른 쪽이 정한다(권한표 GM 행 팝업 = 그 행의 체크대로).
-    const hasSecret = isPreview ? previewSecret === true : (isAdminMode() || handout._canSecret === true || canViewSecret(handout, me, identityKeys()));
+    const hasSecret = isPreview ? previewSecret === true : secretVisibleToMe(handout);
     const host = document.createElement("div");
     if (!isPreview) document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((other) => { if (other.dataset.handoutId === handout.id && other.dataset.preview !== "1") other.remove(); });
     host.setAttribute("data-ccf-handout-show", "1");
@@ -3841,7 +3847,7 @@
     }
     // order 기준 정렬 (#32) — 원본 배열은 그대로 두고 표시용 복사본만 정렬
     const searchQuery = String(state.search || "").trim();
-    const sortedHandouts = [...state.data.handouts].filter((h) => matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
+    const sortedHandouts = [...state.data.handouts].filter((h) => visibleToMe(h) && matchesHandoutSearch(h, searchQuery)).sort(compareByOrder);
     const noResult = searchQuery && !state.data.handouts.some((h) => matchesHandoutSearch(h, searchQuery)) ? `<div class="list-no-result">검색 결과가 없습니다.</div>` : "";
     // 검색: 목록 위 오른쪽의 아이콘 버튼 → 누르면 밑줄만 있는 한 줄 검색칸(자동 포커스, X = 지우고 닫기, Esc = 닫기, 비어 있을 때 바깥을 누르면 닫힘)
     state.listSearchHtml = listSearchHtml();
@@ -3849,7 +3855,7 @@
       ensurePermissions(h);
       const manageable = canManageHandout(h);
       const permissionName = getPermissionCharacterName();
-      const canSecret = adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys());
+      const canSecret = secretVisibleToMe(h);
       const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
       return `
         <article class="card" data-id="${escapeHtml(h.id)}" data-order="${Number.isFinite(h.order) ? h.order : ""}">
@@ -5662,7 +5668,7 @@
     const me = state.data.myCharacter;
     const adminMode = isAdminMode();
     const permissionName = getPermissionCharacterName();
-    const canSecret = (adminMode || h._canSecret === true || canViewSecret(h, permissionName, identityKeys()));
+    const canSecret = (secretVisibleToMe(h));
     const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
     const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");

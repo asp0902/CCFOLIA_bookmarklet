@@ -20,7 +20,7 @@ const code = cut('  function ingestRemoteHandout(data, changeType) {', '  // ===
         const state = { data: { myCharacter: '눈깅', handouts: [] }, isOpen: false };
         const permFor = (h, name, extra, col) => !!(h.permissions && h.permissions[ALL_KEY] && h.permissions[ALL_KEY][col]);
         const canView = (h, n, e) => permFor(h, n, e, 'view'), canViewSecret = (h, n, e) => permFor(h, n, e, 'secret');
-        const noteIngestSkip = () => {}, identityKeys = () => [], isAdminMode = () => false, getNextOrder = () => 0, toast = () => {}, saveAll = async () => {}, render = () => {};
+        const noteIngestSkip = () => {}, identityKeys = () => [], isAdminMode = () => false, secretVisibleToMe = (h) => !!h && h._remote === true && h._canSecret === true, getNextOrder = () => 0, toast = () => {}, saveAll = async () => {}, render = () => {};
         const escapeHtml = (v) => String(v || '').replace(/[&<>"]/g, (c) => '&#' + c.charCodeAt(0) + ';'), escapeAttr = escapeHtml, renderHandoutBody = (v) => escapeHtml(v);
         const canManageHandout = () => false, openPanel = async () => {}, setTab = () => {}, resolveHandoutImagesIn = () => {}, registerTeardown = () => {};
       `;

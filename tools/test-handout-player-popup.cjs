@@ -10,7 +10,7 @@ assert(a > 0 && b > a, 'code not found');
 const shown = [], originalReads = [];
 const box = {
   state: { data: { myCharacter: '에르네스토', handouts: [] } }, myCcfUid: 'acct-n', fbState: { uid: 'anon-p' }, seenShowIds: new Set(),
-  removeSpaces: (v) => String(v || '').replace(/\s+/g, ''), isAdminMode: () => false,
+  removeSpaces: (v) => String(v || '').replace(/\s+/g, ''), isAdminMode: () => false, visibleToMe: (h) => !!h,
   findHandout: (id) => box.state.data.handouts.find((h) => h.id === id), showHandoutModal: (h, from) => shown.push([h.id, from]),
   refreshRemoteHandoutFromFirestore: async (id) => { originalReads.push(id); return null; },
   console: { info() {}, warn() {} }, Date, Map, Set, String, setTimeout

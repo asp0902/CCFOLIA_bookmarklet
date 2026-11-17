@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.21
+// @version      0.0.22
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -293,6 +293,11 @@
       toolsState.tabsKey = "";
       menuState.button?.setAttribute("aria-expanded", "true");
     }
+    // 창 제목: GM(방장)에게만 "GM 도구", 플레이어에게는 "도구" — 같은 창이 모두에게 열리므로 이름이 GM 전용처럼 보이지 않게 한다(GM 전용 기능은 각 탭이 스스로 숨긴다).
+    const gm = document.documentElement.getAttribute("data-ccf-gm") === "1" || (() => { try { return !!window.__CCF_HANDOUT_FB__?.isGm?.(); } catch (_) { return false; } })();
+    const title = gm ? "GM 도구" : "도구";
+    toolsState.host.querySelector(".ccf-gt-window > header > h2").textContent = title;
+    toolsState.host.querySelector(".ccf-gt-window").setAttribute("aria-label", title);
     return showToolTab(wanted.id);
   }
 
