@@ -11,7 +11,7 @@ const run = ({ state, loop = true, slot = 'BGM01', now = 285.4, total = 285.5, a
   const calls = [];
   const box = {
     HTMLInputElement: class {}, Date, Math, Number, String, Object,
-    ccfBgmProgressRoot: { querySelector: () => null },
+    ccfBgmProgressRoot: { querySelector: () => null, getAttribute: () => null, setAttribute() {} }, ccfBgmLastNativeMedia: null, // chat-notifier 0.3.46: the idle mark
     ccfBgmPlayer: { getPlayerState: () => state, seekTo: (t) => calls.push(`seekTo(${t})`), playVideo: () => calls.push('play') },
     ccfBgmActiveSlotKey: slot, ccfBgmActiveLoop: loop, ccfBgmLoopArmed: armed, ccfBgmStopping: stopping, readCcfBgmPlaybackTime: () => ({ now, total }), debugLog() {}, serializeError: String, formatCcfBgmTime: String
   };

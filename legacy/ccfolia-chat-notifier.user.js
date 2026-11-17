@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.45
+// @version      0.3.46
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.45";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.46";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -6572,6 +6572,14 @@
       displayNow = 0;
     }
 
+    // 0.3.46: 진행바(둘째 줄)는 실제로 곡이 걸려 있을 때만 보인다 — 유튜브 BGM 이 재생·일시정지·버퍼링 중이거나 반복 재시작 대기, 또는 네이티브 오디오가 지금 재생 중.
+    // 끝난 곡·정지·룸 이동·삭제 뒤, 룸 입장 때 잠깐 울리고 끝난 소리(00:02/00:02 로 남던 것)는 숨긴다. 매 주기 같은 판정을 탄다.
+    const nativeMedia = ccfBgmLastNativeMedia;
+    const hasTrack = (!!ccfBgmActiveSlotKey && (playerState === 1 || playerState === 2 || playerState === 3 || shouldRestartEndedCcfBgm(playerState)))
+      || (!!nativeMedia && !nativeMedia.paused && !nativeMedia.ended && nativeMedia.isConnected !== false);
+    const idleWant = hasTrack ? "0" : "1";
+    if (ccfBgmProgressRoot.getAttribute("data-ccf-bgm-idle") !== idleWant) ccfBgmProgressRoot.setAttribute("data-ccf-bgm-idle", idleWant);
+
     // dragging 중에만 자동 갱신 차단. focus 자체엔 영향 없음.
     if (range instanceof HTMLInputElement && range.dataset.ccfDragging !== "1") {
       range.value = String(Math.round(ratio * 1000));
@@ -8437,6 +8445,7 @@
         border-top: 0 !important;
       }
 
+      .ccf-bgm-progress-root[data-ccf-bgm-idle="1"] { display: none !important; }
       .ccf-bgm-progress-root {
         box-sizing: border-box !important;
         display: flex !important;
