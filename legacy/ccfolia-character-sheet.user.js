@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.46
+// @version      0.5.47
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.46";
+  const VERSION = "0.5.47";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1918,6 +1918,10 @@
       #${ROOT_ID}.is-embedded .ccf-cs-dialog>header [data-action="close"] { display:none }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed { height:auto!important;min-height:0;bottom:auto!important;top:calc(50% - 32px)!important;margin:0 auto;grid-template-rows:64px }
       #${ROOT_ID} .ccf-cs-dialog.is-collapsed>:not(header) { display:none!important }
+      /* 0.5.47: 접으면 폭도 줄인다 — 핸드아웃 보기 창 접힘(250px)과 같은 값. 제목은 말줄임, 단추는 그대로 */
+      #${ROOT_ID} .ccf-cs-dialog.is-collapsed { width:250px!important;min-width:0!important }
+      #${ROOT_ID} .ccf-cs-dialog.is-collapsed header h2 { min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis }
+      #${ROOT_ID} .ccf-cs-dialog.is-collapsed header .ccf-cs-player-link { display:none!important }
       #${ROOT_ID} header,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border:0 }
       #${ROOT_ID} .ccf-cs-dialog>header { background:#212121!important;color:#fff }
       #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }

@@ -56,10 +56,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.deepEqual(lookup, { title: ['20px', '700', '32px'], radius: '4px', bg: 'rgba(44, 44, 44, 0.87)', shadow: 3, header: 64 }, 'CCFOLIA dialog title / radius / paper / shadow / app bar height');
     // 14.3: double-click on the top bar folds the window to the bar and unfolds it again; a double-click on a button does nothing
     const hdr = () => page.locator('#ccf-character-sheet-root .ccf-cs-dialog > header');
-    await hdr().dblclick({ position: { x: 300, y: 32 } });
+    const wide = (await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).width;
+    await hdr().dblclick({ position: { x: 150, y: 32 } });
     assert.equal(await page.evaluate(() => Math.round(document.querySelector('#ccf-character-sheet-root .ccf-cs-dialog').getBoundingClientRect().height)), 64, 'folded to the bar');
-    await hdr().dblclick({ position: { x: 300, y: 32 } });
+    assert.equal(Math.round((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).width), 250, '0.5.47: folded narrow (250px, as the handout view window)');
+    if (process.env.SCREENSHOT_DIR) await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'sheet-folded.png') });
+    await hdr().dblclick({ position: { x: 100, y: 32 } });
     assert((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).height > 300, 'unfolded');
+    assert.equal((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).width, wide, 'the original width back');
     await page.locator('#ccf-character-sheet-root [data-action="back-list"]').dblclick(); await page.waitForTimeout(150);
     assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-collapsed').count(), 0, 'a double-click on a button does not fold');
     await page.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();
