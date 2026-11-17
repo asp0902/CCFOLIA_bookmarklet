@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.132
+// @version      0.1.133
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.132",
+    version: "0.1.133",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1914,6 +1914,7 @@
     // capture: false 로 등록 — pointerdown 캡처와 충돌 회피
     shadow.addEventListener("click", onShadowClick);
     shadow.addEventListener("dblclick", onShadowDblClick);
+    shadow.addEventListener("contextmenu", onCardContextMenu);
     shadow.addEventListener("change", onShadowChange);
     shadow.addEventListener("input", onShadowInput);
     shadow.addEventListener("compositionend", onShadowInput);
@@ -3864,9 +3865,6 @@
             ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
             ${manageable && hasPlayerRelay() ? (readWebShared().has(h.id) ? `<button class="card-icon-btn is-shared" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="공유 중단" aria-label="공유 중단" aria-pressed="true">${WEB_SHARE_ICON}</button>` : `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="공유" aria-label="공유" aria-pressed="false">${WEB_SHARE_ICON}</button>`) : ""} <!-- 공유·공유 중단은 한 단추: 공유 중이면 켜진 표시(파랑)로 누르면 중단 -->
-            ${manageable && adminMode ? `<button class="card-icon-btn" data-action="duplicate-handout" data-id="${escapeHtml(h.id)}" title="복제" aria-label="복제">${ICON_COPY}</button>` : ""}
-            ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
-            ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
           </div>
         </article>
       `;
@@ -4007,7 +4005,6 @@
   const ICON_PENCIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   // MUI CloseIcon (코코포리아 스타일 X)
   const ICON_SEARCH = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>`;
-  const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>`;
   const ICON_X_SMALL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   // MUI DragIndicatorIcon (6-dot grip)
   const ICON_DRAG_HANDLE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" style="pointer-events:none;"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
@@ -4561,6 +4558,7 @@
       return;
     }
     if (state.shadow?.querySelector(".sv-menu") && !event.target.closest(".sv-menu")) closeSvMenu();
+    if (event.target.closest(".sv-menu.card-menu")) closeSvMenu(); // 0.1.133: 줄 우클릭 메뉴 항목은 아래 data-action 처리로 이어진다
     const addChoiceOverlay = event.target.closest('.add-choice-overlay[data-action="add-choice-close"]');
     if (addChoiceOverlay && event.target === addChoiceOverlay) {
       closeAddChoiceDialog();
@@ -5442,7 +5440,29 @@
   }
 
   // alias chip 더블클릭 — 대표 승격 + 권한 키 마이그레이션 (#15/#31)
+  // 0.1.133: 목록 줄의 편집·복제·삭제는 줄 우클릭 메뉴(GM). 메뉴 모양은 Sv 메뉴와 같은 것. 줄 더블클릭 = 편집.
+  function manageableCard(event) {
+    const card = event.target.closest?.(".list .card[data-id], .card[data-id]");
+    const h = card && isAdminMode() && state.data.handouts.find((x) => x.id === card.dataset.id);
+    return h && canManageHandout(h) ? h : null;
+  }
+  function onCardContextMenu(event) {
+    const h = manageableCard(event);
+    if (!h) return;
+    event.preventDefault();
+    closeSvMenu();
+    const id = escapeAttr(h.id);
+    const menu = document.createElement("div");
+    menu.className = "sv-menu card-menu"; menu.setAttribute("role", "menu");
+    menu.innerHTML = [["edit-handout", "편집"], ["duplicate-handout", "복제"], ["delete-handout", "삭제"]].map(([action, label]) => `<button type="button" class="sv-item" role="menuitem" data-action="${action}" data-id="${id}">${label}</button>`).join("");
+    const panel = state.shadow.querySelector(".panel") || state.shadow;
+    panel.appendChild(menu);
+    const pr = panel.getBoundingClientRect?.();
+    if (pr) { menu.style.left = `${Math.round(event.clientX - pr.left)}px`; menu.style.top = `${Math.round(event.clientY - pr.top)}px`; }
+  }
   function onShadowDblClick(event) {
+    const h = !event.target.closest?.(".card-icon-btn") && manageableCard(event);
+    if (h) { event.preventDefault(); state.editingId = h.id; state.formPermissionsForId = null; setTab("edit"); return; }
     const chip = event.target.closest?.(".pl-alias-chip");
     if (!chip) return;
     event.preventDefault();

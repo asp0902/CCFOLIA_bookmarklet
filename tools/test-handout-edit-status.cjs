@@ -27,7 +27,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     const card = await s(`const c = s.querySelector('.card[data-id="h1"]'); return { text: c.innerText, status: !!c.querySelector('.badge, .summary-row') };`);
     assert.equal(card.status, false, 'no status line on the card');
     assert.match(card.text, /바깥 상황/); 
-    await s(`s.querySelector('[data-action="edit-handout"][data-id="h1"]').click();`); await page.waitForTimeout(300);
+    await s(`(s.querySelector('.card[data-id="h1"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, clientX: 20, clientY: 20 })), s.querySelector('.card-menu [data-action="edit-handout"]')).click();`); await page.waitForTimeout(300);
     const edit = await s(`const st = s.querySelector('.perm-section .edit-status'); return { badges: st ? [...st.querySelectorAll('.badge')].map((b) => b.textContent) : null, beforeTable: !!st && !!st.nextElementSibling?.classList.contains('perm-title'), text: s.querySelector('.body').innerText };`);
     assert.deepEqual(edit.badges, ['비밀', '눈깅, MURDER FEED, 연결 안 된 계정'], 'status in the editor, names, one person once: ' + JSON.stringify(edit.badges));
     assert.equal(edit.beforeTable, true, 'above the permission table');

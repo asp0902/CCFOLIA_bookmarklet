@@ -43,7 +43,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.evaluate(() => document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((h) => h.remove()));
     const nlLines = await page.evaluate(async (id) => {
       const s = document.querySelector('#ccfolia-handout-root').shadowRoot;
-      s.querySelector(`[data-action="edit-handout"][data-id="${id}"]`)?.click();
+      (s.querySelector(`.card[data-id="${id}"]`).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, clientX: 20, clientY: 20 })), s.querySelector('.card-menu [data-action="edit-handout"]'))?.click();
       await new Promise((r) => setTimeout(r, 300));
       const ed = s.querySelector('.rich-editor[data-field="description"]'); ed.innerHTML = '<span>가\n나\n\n다</span>';
       const editorLines = ed.innerText.split('\n').length;
@@ -60,7 +60,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
       const s = document.querySelector('#ccfolia-handout-root').shadowRoot;
       document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((h) => h.remove());
       s.querySelector('.tab[data-tab="list"]')?.click(); await new Promise((r) => setTimeout(r, 100));
-      s.querySelector(`[data-action="edit-handout"][data-id="${id}"]`).click(); await new Promise((r) => setTimeout(r, 300));
+      (s.querySelector(`.card[data-id="${id}"]`).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, clientX: 20, clientY: 20 })), s.querySelector('.card-menu [data-action="edit-handout"]')).click(); await new Promise((r) => setTimeout(r, 300));
       const out = [];
       for (const cols of [['view'], ['view', 'secret']]) {
         for (const c of cols) { const box = s.querySelector(`input[data-perm-key="드와이프"][data-perm-col="${c}"]`); if (!box.checked) box.click(); }
