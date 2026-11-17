@@ -129,8 +129,12 @@ const flush = page => page.waitForTimeout(80);
       assert.equal(await q(page, 'hr').count(), 0, 'no divider lines');
       assert.equal(await q(page, '#ntfy-away-min').inputValue(), '2', 'idle minutes default 2');
       // extension 1.52.17: labels TOPIC / 알림 조건, no public-server note, the keyword box on the same line, right of the select
-      const ntfyUi = await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; const label = (id) => r.querySelector(`label[for="${id}"]`)?.textContent; const s = r.getElementById('ntfy-scope').getBoundingClientRect(), k = r.getElementById('ntfy-keywords').getBoundingClientRect(); return { topic: label('ntfy-topic'), scope: label('ntfy-scope'), warn: !!r.querySelector('.ntfy .warn'), sameLine: Math.abs((s.top + s.height / 2) - (k.top + k.height / 2)) < 4, right: k.left >= s.right }; });
+      const ntfyUi = await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; const label = (id) => r.querySelector(`label[for="${id}"]`)?.textContent; r.getElementById('ntfy-scope').value = 'keywords'; r.getElementById('ntfy-scope').dispatchEvent(new Event('change')); const s = r.getElementById('ntfy-scope').getBoundingClientRect(), k = r.getElementById('ntfy-keywords').getBoundingClientRect(); return { topic: label('ntfy-topic'), scope: label('ntfy-scope'), warn: !!r.querySelector('.ntfy .warn'), sameLine: Math.abs((s.top + s.height / 2) - (k.top + k.height / 2)) < 4, right: k.left >= s.right }; });
       assert.deepEqual(ntfyUi, { topic: 'TOPIC', scope: '알림 조건', warn: false, sameLine: true, right: true }, JSON.stringify(ntfyUi));
+      // 1.52.18: '전체' hides the keyword box (its value kept), '키워드' shows it
+      const kwShown = () => page.evaluate(() => { const k = document.getElementById('capybara-share-modal-host').shadowRoot.getElementById('ntfy-keywords'); return !k.hidden && k.getBoundingClientRect().width > 0; });
+      await q(page, '#ntfy-scope').selectOption('all'); assert.equal(await kwShown(), false, '전체: hidden');
+      await q(page, '#ntfy-scope').selectOption('keywords'); assert.equal(await kwShown(), true, '키워드: shown');
       await q(page, '#ntfy-topic').fill('capy-test'); await q(page, '#ntfy-away-min').fill('99'); await q(page, '#ntfy-save').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__store.ntfy)).awayMinutes, 60, 'idle minutes clamped to 1..60');
       assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('capybara-share-modal-host').shadowRoot.querySelector('.body > .field')).marginTop), '0px', 'first field sits close to the header');
