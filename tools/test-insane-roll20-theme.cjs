@@ -139,11 +139,18 @@ const key = 'ccf-theme-switcher-settings-v1';
       host.append(hidden, overlay);
     });
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '공포판정 : 우주', null, { timeout: 4000 }); // 0.2.37: a fear check reads like Roll20
-    // 0.2.37: the field / skill card above the check card (the skill found in the Insane skill table): 6.괴이 / 우주 12
-    assert.deepEqual(await page.locator('#check > .ccf-roll20-emotion-card').evaluateAll((cards) => cards.map((c) => c.className.includes('ccf-roll20-table-card') ? c.innerText.split(String.fromCharCode(10)).join(' ').trim() : 'check')), ['6 6.괴이 우주 12', 'check'], 'table card first, then the check card');
+    // 0.2.40: a skill check gets no field / skill table card (only the check card); 1px smaller texts (skill 17, result 14, target 13)
+    assert.deepEqual(await page.locator('#check > .ccf-roll20-emotion-card').evaluateAll((cards) => cards.map((c) => c.className.includes('ccf-roll20-table-card') ? 'table' : 'check')), ['check'], 'no table card on a skill check');
+    assert.deepEqual(await page.evaluate(() => ['.ccf-roll20-check-skill', '.ccf-roll20-check-result', '.ccf-roll20-check-target'].map((q) => getComputedStyle(document.querySelector(q)).fontSize)), ['17px', '14px', '13px']);
     assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['3', '2', '3'], 'dice of the formatted check');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
     assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');
+    // 0.2.40: a skill-table roll (RTT / TPT …, BCDice Insane:Korean text) becomes the field / skill card
+    for (const [text, want] of [['RTT 랜덤 특기 결정표(1,6) ＞ 《파괴／폭력6》', '1 1.폭력 파괴 6'], ['TPT 지정특기(지각)표(12) ＞ 《그늘／지각12》', '3 3.지각 그늘 12']]) {
+      await page.evaluate((t) => { document.querySelector('#check').textContent = t; }, text);
+      await page.waitForFunction((w) => document.querySelector('#check > .ccf-roll20-table-card')?.innerText.split(String.fromCharCode(10)).join(' ').trim() === w, want, { timeout: 4000 });
+      assert.equal(await page.locator('#check > .ccf-roll20-emotion-card').count(), 1, 'only the table card');
+    }
     // 0.2.39: an item use from the sheet becomes an item card
     await page.evaluate(() => { document.querySelector('#check').textContent = '[아이템] 부적\n자신 이외의 누군가가 주사위를 굴렸을 때 사용할 수 있다.'; });
     await page.waitForSelector('#check > .ccf-roll20-item-card');

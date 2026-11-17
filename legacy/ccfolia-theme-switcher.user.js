@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.39
+// @version      0.2.40
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.39"),
+    version: getUserscriptVersion("0.2.40"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1878,8 +1878,8 @@
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
-      ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 18px; font-weight: bold; line-height: 1.3; }
-      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 15px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
+      ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 17px; font-weight: bold; line-height: 1.3; }
+      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 14px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
       /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 분홍(사용자 결정), 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
       ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(202,130,144,0),#ca8290 75%); } /* 실패: 사용자 결정으로 분홍 유지 */
       ${scope} .ccf-roll20-check-card[data-result="fumble"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(210,31,31,0),rgb(210,31,31) 75%); }
@@ -1896,7 +1896,7 @@
       ${scope} .ccf-roll20-die.is-six svg { stroke: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-one { color: rgb(255,0,12); }
       ${scope} .ccf-roll20-die.is-one svg { stroke: rgb(255,0,12); }
-      ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 14px; font-weight: normal; }
+      ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 13px; font-weight: normal; }
       ${scope} .ccf-roll20-check-target b { font-weight: bold; }
     `;
   }
@@ -5037,6 +5037,17 @@
       const check = parseInsaneRoll20Check(original);
       const item = !check ? original.match(/^\s*\[아이템\]\s*([^\n]+?)\s*(?:\n([\s\S]*?))?\s*$/) : null;
       const scene = !match && !check ? parseInsaneRoll20Scene(original) : null;
+      // 0.2.40: 분야·특기 표 카드는 특기표 굴림(RTT·TVT/TET/TPT/TST/TKT/TMT: "… 특기 …표(…) ＞ 《특기／분야N》")에만. 일반 특기 판정에는 안 붙인다.
+      const skillRoll = !check && !item ? original.match(/특기[^＞>]*[＞>]\s*《([^／/》]+)[／/][^》]*》\s*$/u) : null;
+      const place = skillRoll && insaneSkillPlace(skillRoll[1].trim());
+      if (place) {
+        const signatureTable = JSON.stringify([original, 'table']);
+        if (existing && host.getAttribute('data-ccf-roll20-emotion') === signatureTable) return;
+        host.querySelectorAll(':scope > .ccf-roll20-emotion-card').forEach(node => node.remove());
+        host.setAttribute('data-ccf-roll20-emotion', signatureTable);
+        host.appendChild(makeInsaneRoll20TableCard(place));
+        return;
+      }
       if (item) {
         const signatureItem = JSON.stringify([original, 'item']);
         if (existing && host.getAttribute('data-ccf-roll20-emotion') === signatureItem) return;
@@ -5084,7 +5095,6 @@
       }
       if (check) appendInsaneRoll20Check(card, check);
       else card.appendChild(document.createTextNode(result));
-      if (check?.table) host.appendChild(makeInsaneRoll20TableCard(check.table));
       host.setAttribute('data-ccf-roll20-emotion', signature);
       host.appendChild(card);
     });
