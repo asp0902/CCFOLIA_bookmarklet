@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.33
+// @version      0.2.34
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.33"),
+    version: getUserscriptVersion("0.2.34"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1858,27 +1858,31 @@
         display: block; margin-bottom: 5px; color: #999 !important;
         font-size: 11px; line-height: 1.4; font-weight: normal;
       }
-      ${scope} .ccf-roll20-check-card { padding: 12px 16px; }
+      /* 판정 카드: Roll20 캡처(docs/img/insane-roll-roll20.png)에서 잰 값 — 결과 띠는 카드 폭 36% 지점부터 오른쪽 끝까지, 목표치는 숫자만 굵게 */
+      ${scope} .ccf-roll20-check-card { padding: 20px 0 22px; }
+      ${scope} .ccf-roll20-check-card > small { font-size: 13px; margin-bottom: 8px; }
       /* 장면표 결과: 감정표와 같은 꺾쇠 상자 안에 작은 회색 이름 / 굵은 표 이름 / 결과 문장 (위 장식·제목은 Roll20 매크로 사용자가 따로 넣는 이미지라 만들지 않는다) */
       ${scope} .ccf-roll20-scene-card { font-weight: normal; }
       ${scope} .ccf-roll20-scene-name { display: block; margin-bottom: 8px; color: #333 !important; font-size: 16px; line-height: 1.4; font-weight: bold; }
       ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 13px; line-height: 1.5; font-weight: normal; white-space: pre-line; }
       ${scope} .ccf-roll20-check-body {
-        display: grid; grid-template-columns: 72px minmax(0,1fr); align-items: center; gap: 8px;
+        display: grid; grid-template-columns: 36% minmax(0,1fr); align-items: center; gap: 0;
       }
       ${scope} .ccf-roll20-check-dice { display: grid; justify-items: center; gap: 2px; }
+      ${scope} .ccf-roll20-check-dice > span:last-child { display: flex; gap: 8px; }
       ${scope} .ccf-roll20-die {
         position: relative; display: inline-grid; place-items: center;
-        width: 22px; height: 24px; font-size: 12px; font-weight: normal; line-height: 1;
+        width: 22px; height: 24px; font-size: 13px; font-weight: normal; line-height: 1;
       }
-      ${scope} .ccf-roll20-die.is-total { width: 58px; height: 64px; font-size: 28px; font-weight: bold; }
+      ${scope} .ccf-roll20-die.is-total { width: 66px; height: 72px; font-size: 32px; font-weight: bold; }
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
-      ${scope} .ccf-roll20-check-skill { display: block; margin-bottom: 8px; font-size: 18px; }
-      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 0; color: white; background: linear-gradient(to right,transparent,#83c7d1); }
-      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,transparent,#ca8290); }
-      ${scope} .ccf-roll20-check-target { display: block; margin-top: 6px; font-size: 12px; font-weight: normal; }
+      ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 18px; font-weight: bold; line-height: 1.3; }
+      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 15px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(131,199,209,0),#83c7d1 75%); }
+      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(202,130,144,0),#ca8290 75%); }
+      ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 14px; font-weight: normal; }
+      ${scope} .ccf-roll20-check-target b { font-weight: bold; }
     `;
   }
 
@@ -5147,7 +5151,8 @@
     dice.appendChild(faces);
     const detail = document.createElement('span'); detail.className = 'ccf-roll20-check-detail';
     for (const [key, value] of [['skill', check.skill], ['result', check.result], ['target', `목표치 ${check.target}`]]) {
-      const field = document.createElement('span'); field.className = `ccf-roll20-check-${key}`; field.textContent = value;
+      const field = document.createElement('span'); field.className = `ccf-roll20-check-${key}`;
+      if (key === 'target') { field.textContent = '목표치 '; const num = document.createElement('b'); num.textContent = check.target; field.appendChild(num); } else field.textContent = value;
       detail.appendChild(field);
     }
     body.append(dice, detail);
