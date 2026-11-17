@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.109
+// @version      0.3.110
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -64,12 +64,11 @@
   const EDITOR_SELECTOR = 'textarea, input[type="text"], [contenteditable="true"], [role="textbox"]';
   const MESSAGE_HINT_RE = /message|chat|comment|send|input|textbox|\uBA54\uC2DC\uC9C0|\uCC44\uD305|\uC785\uB825|\uBC1C\uC5B8/i;
   const NAME_HINT_RE = /name|character|display.?name|chara|nickname|profile|\uC774\uB984|\uCE90\uB9AD\uD130|\uB2C9\uB124\uC784/i;
-  const CCF_SUITE_SCRIPT_STATE_KEY = "ccf-suite-script-states-v1";
   const CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.109"),
+    version: getUserscriptVersion("0.3.110"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -428,10 +427,7 @@
     return container.innerHTML;
   }
 
-  if (!isCcfSuiteScriptEnabled(CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO.id)) {
-    return;
-  }
-
+  // 항상 켜짐(로더 alwaysOn): 예전 수트 관리자에 꺼 둔 기록이 있어도 시작한다 — 인라인 롤 [[..]] 계산이 여기 있다.
   start();
 
   function start() {
@@ -493,15 +489,6 @@
       return runtimeVersion || fallbackVersion;
     } catch (error) {
       return fallbackVersion;
-    }
-  }
-
-  function isCcfSuiteScriptEnabled(scriptId) {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(CCF_SUITE_SCRIPT_STATE_KEY) || "{}");
-      return !parsed || typeof parsed !== "object" || parsed[scriptId] !== false;
-    } catch (error) {
-      return true;
     }
   }
 
@@ -6273,7 +6260,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.109",
+    version: "0.3.110",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
