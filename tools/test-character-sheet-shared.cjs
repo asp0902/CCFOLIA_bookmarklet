@@ -106,11 +106,11 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     assert.equal((await sheetOf(G)).memo, '새 소유자의 메모');
     const g = await sheetOf(G); assert.deepEqual(strip(g), strip(await sheetOf(B)), 'the GM has the same sheet'); assert.deepEqual([g.secret, g.mission], ['시트 비밀', '사명 비밀']);
     // room settings (scene tables / view permissions / scene counter) are the room's: the GM shares them (meta/sheetRoom), everybody receives them, a player cannot write them
-    const roomSettings = { permissions: { 시크릿: { view: true, secret: false, edit: true } }, scene: { cycle: 2, number: 3 }, sceneTables: [{ macroName: '/거리', tableName: '거리 장면표', body: '/roll-table\n거리 장면표\n1:a' }] };
+    const roomSettings = { permissions: { 시크릿: { view: true, secret: false, edit: true } }, scene: { cycle: 2, number: 3 }, sceneTables: [{ macroName: '/거리', tableName: '거리 장면표', body: '/roll-table\n거리 장면표\n1:a' }], design: { font: 'serif', size: 18, color: '#eeeeee', accent: '#ff5252', bg: 60 } }; // 0.5.43: the sheet design is a room setting too
     await wait(G, () => !!localStorage.getItem('ccf-character-sheet:test'));
     await G.evaluate((r) => { const k = 'ccf-character-sheet:test'; const d = JSON.parse(localStorage.getItem(k)); Object.assign(d, r); localStorage.setItem(k, JSON.stringify(d)); }, roomSettings);
     await G.reload(); await G.addScriptTag({ content: source });
-    await wait(B, (r) => { const d = window.__CCF_CHARACTER_SHEET_DEBUG__.data(); return JSON.stringify(d.sceneTables) === JSON.stringify(r.sceneTables) && d.scene.cycle === 2 && d.permissions['시크릿']?.edit === true; }, roomSettings);
+    await wait(B, (r) => { const d = window.__CCF_CHARACTER_SHEET_DEBUG__.data(); return JSON.stringify(d.sceneTables) === JSON.stringify(r.sceneTables) && d.scene.cycle === 2 && d.permissions['시크릿']?.edit === true && d.design?.accent === '#ff5252' && d.design?.bg === 60; }, roomSettings);
     assert.match(store.get('rooms/test/meta/sheetRoom').json, /거리 장면표/);
     // rules not deployed: nothing breaks, the sheet stays in the browser, the status line says so
     const D = await open({ uid: 'uD', denied: true, seed: { version: 1, selectedId: 's9', sheets: [{ ...original, id: 's9', name: '로컬만' }], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });

@@ -67,7 +67,7 @@ assert.match(source, /ccf-cs-skill input \{ appearance:none;width:13px/);
 assert.match(source, /ccf-cs-skills \{[^}]*grid-template-columns:repeat\(5,max-content 8px\) max-content/);
 assert.match(source, /ccf-cs-gap \{[^}]*width:6px/);
 assert.match(source, /select option \{ color:#000 \}/);
-assert.match(source, /main label:focus-within \{ color:#2196f3 \}/);
+assert.match(source, /main label:focus-within \{ color:var\(--ccf-cs-accent,#2196f3\) \}/); // 0.5.43: the accent comes from 시트 디자인 (default #2196f3)
 assert.match(source, /background-position:center bottom;background-size:0 2px/);
 assert.match(source, /background-size:100% 2px/);
 assert.match(source, /function updateSkillsView\(\)/);

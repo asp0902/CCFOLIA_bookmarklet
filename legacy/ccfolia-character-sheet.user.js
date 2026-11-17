@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.42
+// @version      0.5.43
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.42";
+  const VERSION = "0.5.43";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -400,6 +400,7 @@
       .filter((item) => item.macroName && /^\/roll-table\b/.test(item.body.trim()) && !seen.has(item.macroName) && seen.add(item.macroName));
   }
 
+  const DESIGN_DEFAULT = Object.freeze({ font: "", size: 16, color: "#ffffff", accent: "#2196f3", bg: 87 });
   function normalizeData(value) {
     if (!value || !Array.isArray(value.sheets)) return makeData();
     const sheets = value.sheets.map((raw, index) => {
@@ -418,7 +419,7 @@
     const selectedId = sheets.some((sheet) => sheet.id === value.selectedId) ? value.selectedId : sheets[0]?.id || "";
     const legacyPermissions = value.sheets.find((sheet) => sheet.id === selectedId)?.permissions;
     sheets.forEach((sheet) => { delete sheet.permissions; });
-    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene), sceneTables: normalizeSceneTables(value.sceneTables), roomUpdatedAt: Number(value.roomUpdatedAt) || 0 };
+    return { version: 1, selectedId, sheets, permissions: normalizePermissions(value.permissions || legacyPermissions), scene: normalizeScene(value.scene), sceneTables: normalizeSceneTables(value.sceneTables), design: normalizeDesign(value.design), roomUpdatedAt: Number(value.roomUpdatedAt) || 0 };
   }
 
   async function loadData(key) {
@@ -496,12 +497,12 @@
       if (!shared.roomSeen) { shared.roomSeen = true; sharedPushSoon(); }
     }, () => { /* 읽지 못하면 룸 설정은 이 브라우저 것만 쓴다 */ });
   }
-  const sharedRoomBody = () => JSON.stringify({ permissions: state.data.permissions || {}, scene: state.data.scene, sceneTables: state.data.sceneTables || [] });
+  const sharedRoomBody = () => JSON.stringify({ permissions: state.data.permissions || {}, scene: state.data.scene, sceneTables: state.data.sceneTables || [], design: state.data.design || {} });
   function sharedApplyRoom(data) {
     const at = Number(data?.updatedAt) || 0;
     if (at <= (state.data.roomUpdatedAt || 0)) return;
     let parsed; try { parsed = JSON.parse(data.json); } catch (_) { return; }
-    state.data.permissions = normalizePermissions(parsed.permissions); state.data.scene = normalizeScene(parsed.scene); state.data.sceneTables = normalizeSceneTables(parsed.sceneTables);
+    state.data.permissions = normalizePermissions(parsed.permissions); state.data.scene = normalizeScene(parsed.scene); state.data.sceneTables = normalizeSceneTables(parsed.sceneTables); state.data.design = normalizeDesign(parsed.design);
     state.data.roomUpdatedAt = at; shared.roomPushed = sharedRoomBody();
     clearTimeout(state.saveTimer); state.saveTimer = setTimeout(saveData, 120);
     if (state.open) render();
@@ -891,6 +892,7 @@
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
     decorateFmt(dialog);
+    applyDesign(dialog);
     renderSheetTab(); // GM 도구 탭의 관리 목록도 같은 데이터(이름·플레이어)로 맞춘다
   }
 
@@ -908,7 +910,36 @@
       const value = state.data.permissions?.[key] || {};
       return `<div class="ccf-cs-perm-name">${key === "*" ? "" : renderPlayerAvatar(image)}${escapeHtml(label)}</div>${["view", "secret", "edit"].map((column) => `<label class="ccf-cs-perm-cell"><input type="checkbox" data-perm-key="${escapeHtml(key)}" data-perm-col="${column}"${value[column] ? " checked" : ""}><span></span></label>`).join("")}`;
     }).join("");
-    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>모든 캐릭터 시트에 공통 적용됩니다.<br>전체: 특기·어빌리티·인물 표시<br>개인: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>전체</b><b>개인</b><b>수정</b>${rows}</div></section>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-settings"><h3>시트 권한</h3><p>모든 캐릭터 시트에 공통 적용됩니다.<br>전체: 특기·어빌리티·인물 표시<br>개인: 메모 표시<br>수정: 시트 열람 및 수정</p><div class="ccf-cs-perm-grid"><b>이름</b><b>전체</b><b>개인</b><b>수정</b>${rows}</div></section>${renderDesignSettings()}`;
+  }
+
+  // ---- 0.5.43 시트 디자인: 글꼴·본문 크기·글자색·강조색·창 배경 불투명도. 룸 설정(meta/sheetRoom)이라 GM 이 정하면 룸 전원. 빈 값 = 지금 모양 ----
+  function normalizeDesign(value) {
+    const v = value && typeof value === "object" ? value : {};
+    const hex = (c, d) => (/^#[0-9a-f]{6}$/i.test(String(c || "")) ? String(c).toLowerCase() : d);
+    const num = (n, lo, hi, d) => (Number.isFinite(Number(n)) && n !== "" && n !== null ? Math.max(lo, Math.min(hi, Math.round(Number(n)))) : d);
+    return { font: String(v.font || "").replace(/[;{}<>"]/g, "").slice(0, 60), size: num(v.size, 10, 28, 16), color: hex(v.color, "#ffffff"), accent: hex(v.accent, "#2196f3"), bg: num(v.bg, 20, 100, 87) }; // 기본값 = DESIGN_DEFAULT (상태를 처음 읽을 때 불려서 상수 대신 값)
+  }
+  function applyDesign(dialog) {
+    if (!dialog) return;
+    const d = normalizeDesign(state.data.design);
+    dialog.style.fontFamily = d.font ? `${d.font}, Roboto, 'Noto Sans KR', sans-serif` : "";
+    dialog.style.color = d.color === DESIGN_DEFAULT.color ? "" : d.color;
+    dialog.style.setProperty("--ccf-cs-text", d.color);
+    dialog.style.setProperty("--ccf-cs-size", `${d.size}px`);
+    dialog.style.setProperty("--ccf-cs-accent", d.accent);
+    dialog.style.setProperty("--ccf-cs-bg", String(d.bg / 100));
+  }
+  function renderDesignSettings() {
+    const d = normalizeDesign(state.data.design);
+    const row = (label, control) => `<label class="ccf-cs-design-row"><span>${label}</span>${control}</label>`;
+    return `<section class="ccf-cs-panel-section ccf-cs-settings ccf-cs-design"><h3>시트 디자인</h3><p>이 룸의 모든 캐릭터 시트 창에 적용됩니다(GM 이 정하면 룸 전원).</p>`
+      + row("글꼴", `<input data-design="font" list="ccf-cs-font-list" placeholder="기본" value="${escapeHtml(d.font)}"><datalist id="ccf-cs-font-list">${["Noto Sans KR", "Noto Serif KR", "Nanum Gothic", "Nanum Myeongjo", "serif", "monospace"].map((f) => `<option value="${f}">`).join("")}</datalist>`)
+      + row("본문 크기", `<input data-design="size" type="number" min="10" max="28" value="${d.size}">`)
+      + row("글자색", `<input data-design="color" type="color" value="${d.color}">`)
+      + row("강조색", `<input data-design="accent" type="color" value="${d.accent}">`)
+      + row("창 배경 불투명도", `<input data-design="bg" type="range" min="20" max="100" value="${d.bg}">`)
+      + `<button type="button" class="ccf-cs-design-reset" data-action="design-reset">기본값으로</button></section>`;
   }
 
   function enableDialogDrag(dialog) {
@@ -1530,6 +1561,12 @@
     const sheet = currentSheet();
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
     state.lastEditAt = Date.now();
+    if (target.dataset.design) {
+      state.data.design = normalizeDesign({ ...normalizeDesign(state.data.design), [target.dataset.design]: target.value });
+      applyDesign(document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`));
+      saveSoon();
+      return;
+    }
     if (!sheet && !target.dataset.permKey) return;
     if (target.dataset.tableToggle !== undefined) { toggleSceneTable(Number(target.dataset.tableToggle), target.checked); return; }
     if (target.dataset.commandSelect !== undefined) {
@@ -1602,6 +1639,7 @@
 
   function handleClick(event) {
     if (event.target.classList?.contains("ccf-cs-link-picker")) return closeLinkPicker();
+    if (event.target.closest?.('[data-action="design-reset"]')) { state.data.design = normalizeDesign({}); saveSoon(); render(); return; }
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
@@ -1838,7 +1876,7 @@
       [${DIALOG_BUTTON_ATTR}] svg { width:24px;height:24px;pointer-events:none }
       #${ROOT_ID},#${ROOT_ID} * { box-sizing:border-box;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0 }
       #${ROOT_ID} { position:fixed;inset:0;z-index:2147483000;color:#eee;font-size:14px;pointer-events:none }
-      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(44,44,44,.87);background-image:none;border:0;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden }
+      #${ROOT_ID} .ccf-cs-dialog { position:absolute;inset:10px;margin:auto;width:min(500px,calc(100vw - 20px));height:min(600px,calc(100vh - 20px));pointer-events:auto;display:grid;background:rgba(44,44,44,var(--ccf-cs-bg,.87));accent-color:var(--ccf-cs-accent,var(--ccf-cs-accent,#2196f3));background-image:none;border:0;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden }
       #${ROOT_ID} .ccf-cs-dialog.is-editor { grid-template-rows:64px minmax(0,1fr) auto }
       /* 폭은 내용에 맞춘다: 가장 넓은 줄은 리스펙 줄(한 줄 유지에 약 850px 필요, 특기 표는 734px): 본문 좌우 여백 40 + 스크롤바 여유 포함해 860(14.7: 예전 900에서 줄임) */
       #${ROOT_ID} .ccf-cs-dialog.is-editor { width:min(860px,calc(100vw - 64px));height:min(900px,calc(100vh - 64px)) }
@@ -1899,6 +1937,11 @@
       #${ROOT_ID} .ccf-cs-sheet-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-sheet-row span { overflow:hidden;color:#bdbdbd;text-overflow:ellipsis;white-space:nowrap }
       #${ROOT_ID} .ccf-cs-settings { display:grid;gap:18px }
+      #${ROOT_ID} .ccf-cs-design { gap:10px }
+      #${ROOT_ID} .ccf-cs-design-row { display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px }
+      #${ROOT_ID} .ccf-cs-design-row input[type="color"] { width:48px;min-height:28px;height:28px;padding:0;border:0;background:none }
+      #${ROOT_ID} .ccf-cs-design-row input[type="range"] { padding:0;border:0;background:none }
+      #${ROOT_ID} .ccf-cs-design-reset { justify-self:end;padding:4px 12px;color:var(--ccf-cs-accent,#2196f3);background:none;border:0;border-radius:4px;cursor:pointer }
       #${ROOT_ID} .ccf-cs-perm-name { display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere }
       #${ROOT_ID} .ccf-cs-player-avatar { display:inline-flex;width:24px;height:24px;flex:0 0 24px;border-radius:0;overflow:hidden;background:rgba(255,255,255,.08) }
       #${ROOT_ID} .ccf-cs-player-avatar img { display:block;width:100%;height:100%;object-fit:cover;border-radius:0 }
@@ -1911,15 +1954,15 @@
       #${ROOT_ID} .ccf-cs-section-add { width:32px;font-size:20px }
       #${ROOT_ID} .ccf-cs-section-wide { overflow-x:auto }
       #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px;transition:color 200ms cubic-bezier(.4,0,.2,1) }
-      #${ROOT_ID} .ccf-cs-dialog main label:focus-within { color:#2196f3 }
-      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:36px;padding:4px 2px 2px;color:#fff;font-size:16px;background-color:transparent;background-image:linear-gradient(#2196f3,#2196f3);background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
+      #${ROOT_ID} .ccf-cs-dialog main label:focus-within { color:var(--ccf-cs-accent,#2196f3) }
+      #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:36px;padding:4px 2px 2px;color:var(--ccf-cs-text,#fff);font-size:var(--ccf-cs-size,16px);background-color:transparent;background-image:linear-gradient(var(--ccf-cs-accent,#2196f3),var(--ccf-cs-accent,#2196f3));background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} select { padding-right:32px }
       #${ROOT_ID} select option { color:#000 }
       #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87);border-bottom-width:2px }
       #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:transparent;border-bottom-width:2px;background-size:100% 2px }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
       #${ROOT_ID} .ccf-cs-fmt-hidden { display:none!important }
-      #${ROOT_ID} .ccf-cs-fmt-view { width:100%;padding:4px 2px 2px;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border-bottom:1px solid rgba(255,255,255,.55) }
+      #${ROOT_ID} .ccf-cs-fmt-view { width:100%;padding:4px 2px 2px;font-size:var(--ccf-cs-size,16px);white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border-bottom:1px solid rgba(255,255,255,.55) }
       #${ROOT_ID} .ccf-cs-repeater-fields .ccf-cs-fmt-view { height:36px;min-height:36px!important;overflow:hidden;white-space:nowrap;text-overflow:ellipsis }
       #${ROOT_ID} .ccf-cs-profile-memo .ccf-cs-fmt-view { border:0;padding:0;color:#fff }
       #${ROOT_ID} .ccf-cs-fmt-bar { position:fixed;z-index:10;pointer-events:auto;display:flex;gap:2px;padding:2px;background:#424242;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.5) }
@@ -1977,10 +2020,10 @@
       #${ROOT_ID} .ccf-cs-respect-toggle input { position:absolute;opacity:0;width:1px!important;min-height:0!important;height:1px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-respect-toggle i { position:relative;flex:0 0 38px;width:38px;height:20px;border-radius:10px;background:#616161;transition:background-color 120ms }
       #${ROOT_ID} .ccf-cs-respect-toggle i::after { content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.5);transition:transform 120ms }
-      #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i { background:#2196f3 }
+      #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i { background:var(--ccf-cs-accent,#2196f3) }
       #${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect-toggle:focus-within,#${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect-number:focus-within,#${ROOT_ID} .ccf-cs-dialog main .ccf-cs-respect label:focus-within { color:#e0e0e0 }
       #${ROOT_ID} .ccf-cs-respect-toggle input:checked+i::after { transform:translateX(18px) }
-      #${ROOT_ID} .ccf-cs-respect-toggle input:focus-visible+i { outline:2px solid #2196f3;outline-offset:2px }
+      #${ROOT_ID} .ccf-cs-respect-toggle input:focus-visible+i { outline:2px solid var(--ccf-cs-accent,#2196f3);outline-offset:2px }
       #${ROOT_ID} .ccf-cs-respect-number input { width:36px!important;min-height:24px!important;height:24px;padding:0 4px!important;border:0!important;border-radius:3px;background:rgba(255,255,255,.1)!important;background-image:none!important;text-align:center;font-size:15px;-moz-appearance:textfield;appearance:textfield }
       #${ROOT_ID} .ccf-cs-respect-number input::-webkit-inner-spin-button,#${ROOT_ID} .ccf-cs-respect-number input::-webkit-outer-spin-button { -webkit-appearance:none;margin:0 }
       #${ROOT_ID} .ccf-cs-respect-number input:focus { background:rgba(255,255,255,.16)!important;box-shadow:inset 0 -2px 0 #f50057;outline:0 }
