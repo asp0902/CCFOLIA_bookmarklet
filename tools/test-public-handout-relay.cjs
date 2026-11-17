@@ -16,7 +16,8 @@ assert.doesNotMatch(bridge.match(/const body = action[\s\S]*?\n        const res
 assert.match(bridge, /"chat.send", "piece.move", "status.set"/); // the commands the bridge hands to the page
 assert.match(bridge, /relayDeliveredCommandIds/);
 // The share/stop buttons and requests exist only when the extension marked the page.
-assert.equal((handout.match(/manageable && hasPlayerRelay\(\) \? `<button class="card-icon-btn" data-action="web-(?:share-handout|stop-sharing)"/g) || []).length, 2);
+// handout 0.1.132: one toggle button (share / stop sharing by state), only with the extension's mark
+assert.match(handout, /manageable && hasPlayerRelay\(\) \? \(readWebShared\(\)\.has\(h\.id\) \? `<button class="card-icon-btn is-shared" data-action="web-stop-sharing"[^`]*` : `<button class="card-icon-btn" data-action="web-share-handout"/);
 assert.match(handout.match(/function requestPublicRelay[^\n]*\n[^\n]*/)?.[0] || "", /!hasPlayerRelay\(\)/);
 assert.match(handout, /const hasPlayerRelay = \(\) => document\.documentElement\.dataset\.capybaraPlayerRelay === "1"/);
 {
