@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.45
+// @version      0.5.46
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -4980,6 +4980,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     };
   }
 
+    window.__CCF_FORMAT_MARKERS__ = { parse: parseFormatMarkers }; // 0.5.46: the character sheet renders its text fields with the same syntax
     window.__CCF_SECOND_CHAT_PANEL__ = {
       version: VERSION,
       open: openPanel,

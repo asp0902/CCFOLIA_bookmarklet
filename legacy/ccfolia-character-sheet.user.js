@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.41
+// @version      0.5.42
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.41";
+  const VERSION = "0.5.42";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -861,6 +861,10 @@
       event.preventDefault();
       inputSkillRoll(skill.dataset.roll, "", false, true);
     }, { signal });
+    // 0.5.42: 글자 칸 서식 — 포커스 시 서식 바, 포커스가 떠나면 서식대로 보기
+    root.addEventListener("focusin", (event) => { if (event.target.matches?.(FMT_SEL)) showFmtBar(event.target); }, { signal });
+    root.addEventListener("focusout", (event) => { if (event.target.matches?.(FMT_SEL)) setTimeout(() => { if (document.activeElement === event.target) return; if (!document.activeElement?.closest?.(".ccf-cs-fmt-bar")) hideFmtBar(); decorateFmt(event.target.parentElement); }, 0); }, { signal });
+    root.addEventListener("click", (event) => { const view = event.target.closest?.(".ccf-cs-fmt-view"); if (!view) return; event.preventDefault(); const ta = view.previousElementSibling; view.remove(); ta.classList.remove("ccf-cs-fmt-hidden"); ta.focus(); }, { signal, capture: true });
     root.addEventListener("input", handleInput, { signal });
     root.addEventListener("change", handleInput, { signal });
     (state.embedded || document.body).appendChild(root);
@@ -886,6 +890,7 @@
     dialog.querySelector("main").scrollTop = scrollTop;
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
+    decorateFmt(dialog);
     renderSheetTab(); // GM 도구 탭의 관리 목록도 같은 데이터(이름·플레이어)로 맞춘다
   }
 
@@ -1340,6 +1345,66 @@
       return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : ""}<button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
+
+  // ---- 0.5.42 글자 칸 서식: 채팅 패널과 같은 문법(**굵게** *기울임* __밑줄__ ~~취소~~ {c:#색|글|} {s:크기|글|} [글|루비] [글^툴팁]). 저장은 원문 그대로 ----
+  const FMT_SEL = 'textarea[data-field="memo"],textarea[data-prop="detail"],textarea.ccf-cs-inline-memo';
+  function fmtHtml(src) {
+    const parse = window.__CCF_FORMAT_MARKERS__?.parse;
+    if (!parse || !src) return "";
+    const { text, runs } = parse(String(src));
+    if (!runs.length) return "";
+    const pts = [...new Set([0, text.length, ...runs.flatMap((r) => [r.start, r.end])])].sort((a, b) => a - b);
+    let html = "";
+    for (let k = 0; k < pts.length - 1; k += 1) {
+      const a = pts[k], b = pts[k + 1];
+      const st = Object.assign({}, ...runs.filter((r) => r.start <= a && r.end >= b).map((r) => r.style));
+      const deco = [st.underline && "underline", st.strike && "line-through"].filter(Boolean).join(" ");
+      const css = [st.bold && "font-weight:700", st.italic && "font-style:italic", deco && `text-decoration:${deco}`, st.color && `color:${st.color}`, st.backgroundColor && `background:${st.backgroundColor}`, st.fontSize && `font-size:${st.fontSize}px`, st.blur && "filter:blur(4px)", st.codeMode && "font-family:monospace"].filter(Boolean).join(";");
+      let seg = escapeHtml(text.slice(a, b));
+      if (st.rubyText) seg = `<ruby>${seg}<rt>${escapeHtml(st.rubyText)}</rt></ruby>`;
+      html += css || st.tooltipText ? `<span style="${css}"${st.tooltipText ? ` title="${escapeHtml(st.tooltipText)}"` : ""}>${seg}</span>` : seg;
+    }
+    return html;
+  }
+  function decorateFmt(scope) {
+    scope?.querySelectorAll?.(FMT_SEL).forEach((ta) => {
+      if (ta.nextElementSibling?.classList.contains("ccf-cs-fmt-view")) ta.nextElementSibling.remove();
+      ta.classList.remove("ccf-cs-fmt-hidden");
+      if (document.activeElement === ta) return;
+      const html = fmtHtml(ta.value);
+      if (!html) return;
+      const view = document.createElement("div");
+      view.className = "ccf-cs-fmt-view";
+      view.style.minHeight = `${ta.offsetHeight}px`;
+      view.innerHTML = html;
+      ta.after(view);
+      ta.classList.add("ccf-cs-fmt-hidden");
+    });
+  }
+  const FMT_WRAPS = [["B", "**", "**", "font-weight:700"], ["I", "*", "*", "font-style:italic"], ["U", "__", "__", "text-decoration:underline"], ["S", "~~", "~~", "text-decoration:line-through"]];
+  function wrapFmt(ta, open, close) {
+    const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.slice(s, e);
+    ta.setRangeText(open + sel + close, s, e, "end");
+    ta.setSelectionRange(s + open.length, s + open.length + sel.length);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function showFmtBar(ta) {
+    hideFmtBar();
+    const bar = document.createElement("div");
+    bar.className = "ccf-cs-fmt-bar";
+    bar.innerHTML = FMT_WRAPS.map(([label, , , css], i) => `<button type="button" data-fmt="${i}" style="${css}" title="${label}">${label}</button>`).join("") + `<input type="color" value="#ff5252" title="글자색" aria-label="글자색">`;
+    bar.addEventListener("mousedown", (event) => { if (event.target.tagName === "BUTTON") event.preventDefault(); });
+    bar.addEventListener("click", (event) => { const b = event.target.closest("[data-fmt]"); if (b) { const [, o, c] = FMT_WRAPS[b.dataset.fmt]; wrapFmt(ta, o, c); } });
+    const color = bar.querySelector("input");
+    let range = null;
+    color.addEventListener("pointerdown", () => { range = [ta.selectionStart, ta.selectionEnd]; });
+    color.addEventListener("change", () => { ta.focus(); if (range) ta.setSelectionRange(...range); wrapFmt(ta, `{c:${color.value}|`, "|}"); });
+    document.getElementById(ROOT_ID)?.appendChild(bar);
+    const r = ta.getBoundingClientRect();
+    bar.style.left = `${r.left}px`;
+    bar.style.top = `${Math.max(0, r.top - 30)}px`;
+  }
+  function hideFmtBar() { document.querySelectorAll(".ccf-cs-fmt-bar").forEach((bar) => bar.remove()); }
 
   function resizeInlineMemos(scope) {
     scope?.querySelectorAll?.(".ccf-cs-inline-memo").forEach((textarea) => {
@@ -1853,6 +1918,14 @@
       #${ROOT_ID} input:not([type="checkbox"]):hover,#${ROOT_ID} select:hover,#${ROOT_ID} textarea:hover { border-bottom-color:rgba(255,255,255,.87);border-bottom-width:2px }
       #${ROOT_ID} input:not([type="checkbox"]):focus,#${ROOT_ID} select:focus,#${ROOT_ID} textarea:focus { border-bottom-color:transparent;border-bottom-width:2px;background-size:100% 2px }
       #${ROOT_ID} textarea { min-height:100px;resize:vertical }
+      #${ROOT_ID} .ccf-cs-fmt-hidden { display:none!important }
+      #${ROOT_ID} .ccf-cs-fmt-view { width:100%;padding:4px 2px 2px;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border-bottom:1px solid rgba(255,255,255,.55) }
+      #${ROOT_ID} .ccf-cs-repeater-fields .ccf-cs-fmt-view { height:36px;min-height:36px!important;overflow:hidden;white-space:nowrap;text-overflow:ellipsis }
+      #${ROOT_ID} .ccf-cs-profile-memo .ccf-cs-fmt-view { border:0;padding:0;color:#fff }
+      #${ROOT_ID} .ccf-cs-fmt-bar { position:fixed;z-index:10;pointer-events:auto;display:flex;gap:2px;padding:2px;background:#424242;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.5) }
+      #${ROOT_ID} .ccf-cs-fmt-bar button { min-width:24px;height:24px;padding:0 4px;color:#fff;background:none;border:0;border-radius:2px;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-fmt-bar button:hover { background:rgba(255,255,255,.15) }
+      #${ROOT_ID} .ccf-cs-fmt-bar input[type="color"] { width:24px;min-height:24px;height:24px;padding:0;border:0;background:none }
       #${ROOT_ID} .ccf-cs-basic { display:grid;grid-template-columns:minmax(0,1fr);gap:16px }
       #${ROOT_ID} .ccf-cs-menu-host { position:relative;display:inline-flex }
       #${ROOT_ID} .ccf-cs-menu,#${ROOT_ID} .ccf-cs-submenu { z-index:5;min-width:152px;padding:8px 0;background:#424242;color:#fff;border-radius:4px;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12) }
