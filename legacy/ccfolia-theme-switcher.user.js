@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.37
+// @version      0.2.38
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.37"),
+    version: getUserscriptVersion("0.2.38"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1880,8 +1880,8 @@
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
       ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 18px; font-weight: bold; line-height: 1.3; }
       ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 15px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
-      /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 회보라, 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
-      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(117,117,130,0),rgb(117,117,130) 75%); }
+      /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 분홍(사용자 결정), 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
+      ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(202,130,144,0),#ca8290 75%); } /* 실패: 사용자 결정으로 분홍 유지 */
       ${scope} .ccf-roll20-check-card[data-result="fumble"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(210,31,31,0),rgb(210,31,31) 75%); }
       ${scope} .ccf-roll20-table-card { display: flex !important; justify-content: space-between; align-items: center; padding: 16px 40px; font-size: 15px !important; }
       ${scope} .ccf-roll20-table-side { display: inline-flex; align-items: center; gap: 8px; }
