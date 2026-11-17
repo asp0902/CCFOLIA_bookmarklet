@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.43
+// @version      0.5.44
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.43";
+  const VERSION = "0.5.44";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -90,6 +90,17 @@
     return gaps;
   }
 
+  // 0.5.44: 시트 창 머리줄(제목·닫기)이 화면 밖으로 나가 있으면 안쪽으로 되돌린다(판정 뒤 창이 위로 올라가 머리줄이 안 보이던 제보). 다시 그릴 때·판정 뒤·창 크기 바뀔 때.
+  function keepDialogInView(dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`)) {
+    if (!dialog || state.embedded || !dialog.isConnected) return;
+    const r = dialog.getBoundingClientRect(), head = dialog.querySelector("header")?.getBoundingClientRect() || r;
+    let dx = 0, dy = 0;
+    if (head.top < 0) dy = 8 - head.top; else if (head.top > innerHeight - 48) dy = innerHeight - 48 - head.top;
+    if (r.right < 80) dx = 80 - r.right; else if (r.left > innerWidth - 80) dx = innerWidth - 80 - r.left;
+    if (!dx && !dy) return;
+    state.dialogPosition = { x: state.dialogPosition.x + dx, y: state.dialogPosition.y + dy };
+    dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
+  }
   function clampDialogDrag(rect, deltaX, deltaY, viewportWidth, viewportHeight, margin = 8) {
     return {
       x: Math.min(Math.max(deltaX, margin - rect.left), viewportWidth - margin - rect.right),
@@ -867,6 +878,7 @@
     root.addEventListener("focusout", (event) => { if (event.target.matches?.(FMT_SEL)) setTimeout(() => { if (document.activeElement === event.target) return; if (!document.activeElement?.closest?.(".ccf-cs-fmt-bar")) hideFmtBar(); decorateFmt(event.target.parentElement); }, 0); }, { signal });
     root.addEventListener("click", (event) => { const view = event.target.closest?.(".ccf-cs-fmt-view"); if (!view) return; event.preventDefault(); const ta = view.previousElementSibling; view.remove(); ta.classList.remove("ccf-cs-fmt-hidden"); ta.focus(); }, { signal, capture: true });
     root.addEventListener("input", handleInput, { signal });
+    window.addEventListener("resize", () => keepDialogInView(), { signal });
     root.addEventListener("change", handleInput, { signal });
     (state.embedded || document.body).appendChild(root);
     root.classList.toggle("is-embedded", !!state.embedded);
@@ -889,6 +901,7 @@
     const dialog = root.querySelector(".ccf-cs-dialog");
     dialog.style.transform = `translate3d(${state.dialogPosition.x}px,${state.dialogPosition.y}px,0)`;
     dialog.querySelector("main").scrollTop = scrollTop;
+    keepDialogInView(dialog);
     enableDialogDrag(dialog);
     resizeInlineMemos(dialog);
     decorateFmt(dialog);
@@ -1838,6 +1851,7 @@
         setTimeout(watch, 60);
       };
       setTimeout(watch, 60);
+      [120, 600].forEach((ms) => setTimeout(() => keepDialogInView(), ms));
     }
   }
 
