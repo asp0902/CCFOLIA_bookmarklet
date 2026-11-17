@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.42
+// @version      0.5.43
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -192,8 +192,14 @@
       const chip = document.createElement("span");
       chip.className = "ccf-scp-image-chip";
       chip.title = image.alt || "이미지";
-      if (/^(?:https?:|data:image\/)/i.test(image.url)) { const img = document.createElement("img"); img.src = image.url; img.alt = ""; chip.appendChild(img); }
-      else chip.appendChild(document.createTextNode(`🖼 ${image.alt || "이미지"}`));
+      const img = document.createElement("img"); img.alt = "";
+      if (/^(?:https?:|data:image\/|blob:)/i.test(image.url)) img.src = image.url;
+      else {
+        // 큰 그림은 서식 바가 저장 토큰(ccf-local:// · ccf-fs-image://)으로 바꿔 둔다: 그 토큰을 그림 주소로 풀어 보여 준다(전에는 "🖼 image" 글자만 — 깨진 그림처럼 보였다).
+        image.preview ||= Promise.resolve(window.__CCF_FORMAT_SYNC_IMAGE_PASTE__?.preview?.(image.url)).catch(() => "");
+        image.preview.then((src) => { if (src) img.src = src; else if (img.isConnected) img.replaceWith(document.createTextNode(image.alt || "이미지")); });
+      }
+      chip.appendChild(img);
       const x = document.createElement("button");
       x.type = "button"; x.className = "ccf-scp-image-x"; x.title = "이미지 빼기"; x.setAttribute("aria-label", "이미지 빼기"); x.textContent = "×";
       x.addEventListener("click", () => { inputEl.value = inputEl.value.split(mark).join(""); pendingImages.delete(mark); renderImageStrip(); inputEl.dispatchEvent(new Event("input", { bubbles: true })); inputEl.focus(); });
@@ -2686,7 +2692,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       #${PANEL_ID} .ccf-scp-fmt-size.is-current::placeholder { color: rgba(255,255,255,.92); opacity: 1; }
       /* 글자 크기 칸과 유지 버튼은 같은 가로 길이(45+45 = 30px 열 3칸) — 위 줄 Tip·Bl·</> 아래를 정확히 채워 Sv 가 Nr 바로 아래에 온다. */
       #${PANEL_ID} .ccf-scp-fmt-keep { width: 45px; min-width: 45px; flex: 0 0 45px; }
-      #${PANEL_ID} .ccf-scp-fmt-size { width: 45px; min-width: 45px; flex: 0 0 45px; padding: 0 4px; text-align: center; color: inherit; font-size: 12px; background: rgb(66, 66, 66); } /* 오리지널 서식 바의 크기 칸과 같은 모양(12px + 음영) */
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 45px; min-width: 45px; flex: 0 0 45px; padding: 0 4px; text-align: center; color: inherit; font-size: 12px; background: rgb(66, 66, 66); }
+      /* 크기 칸: 두·세 자리가 들어가는 최소 폭(32px), 고르면 흰 외곽선 — 오리지널 서식 바와 같은 값 */
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 32px; min-width: 32px; flex: 0 0 32px; padding: 0 2px; }
+      #${PANEL_ID} .ccf-scp-fmt-size:focus, #${PANEL_ID} .ccf-scp-fmt-size:focus-visible { outline: 1px solid #fff; outline-offset: -1px; } /* 오리지널 서식 바의 크기 칸과 같은 모양(12px + 음영) */
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.5); }
       #${PANEL_ID} .ccf-scp-fmt-toggle { font-weight: 700; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */

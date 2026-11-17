@@ -17,9 +17,9 @@ r = ctx.parse('{i:https://example.com/a.png?x=1&y=2||}');
 assert.equal(r.text, '이미지', 'no alt -> the default placeholder'); assert.equal(r.runs[0].style.imageUrl, 'https://example.com/a.png?x=1&y=2');
 r = ctx.parse('그냥 {중괄호} 글자 **굵게**'); assert.equal(r.runs.filter((x) => x.style.imageUrl).length, 0);
 // the exported handler of format-sync and the paste listener of the panel
-assert.match(sync, /window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = \{ handle: handleImagePasteForTextInput \};/);
+assert.match(sync, /window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = \{ handle: handleImagePasteForTextInput, preview: /); // 0.1.117: preview resolves a stored-picture token
 assert.match(sync, /function handleImagePasteForTextInput\(event, insert\) \{[\s\S]*?uploadImageFilesToIfh\(\[file\]\)[\s\S]*?maybeOpenIfhHelpPage\(error\)/);
-assert.match(sync, /return false;\n  \}\n  window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__/, 'a plain text paste is left alone (false)');
+assert.match(sync, /return false;\n  \}\n  \/\/ preview:[^\n]*\n  window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__/,'a plain text paste is left alone (false)');
 assert.match(panel, /inputEl\.addEventListener\("paste", \(e\) => \{[\s\S]{0,800}?const api = window\.__CCF_FORMAT_SYNC_IMAGE_PASTE__;/);
 assert.match(panel, /token: `\{i:\$\{url\}\|/); // 0.5.36: the token is kept aside, the box shows a 🖼 marker (tools/test-chat-panel-image-marker.cjs)
 console.log('chat panel image paste PASS');
