@@ -39,6 +39,7 @@
     .muted { color: rgba(255,255,255,.7); font-size: .875rem; }
     p.status-line { margin: 2px 0; line-height: 1.4; font-size: 13px; color: rgba(255,255,255,.5); }
     .ntfy { margin-top: 30px; }
+    .ntfy-scope-row select { flex: 0 0 auto; width: auto; } .ntfy-scope-row input { flex: 1 1 auto; min-width: 0; }
     .ntfy-head { display: flex; align-items: center; gap: 4px; margin: 16px 0 4px; }
     .ntfy-head h3 { margin: 0; }
     .ntfy-head .switch .sw { margin: 0; }
@@ -511,11 +512,10 @@
     el("div", { class: "ntfy-head" }, el("h3", { class: "section", text: "스마트폰 알림" }),
       el("label", { class: "switch", title: "스마트폰 알림 사용" }, nEnabled, el("span", { class: "sw" }, el("span", { class: "track" }), el("span", { class: "base" }, el("span", { class: "thumb" })))),
       ntfyHelpButton),
-    el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "topic 이름 (추측하기 어려운 이름 — 이 이름을 아는 사람은 누구나 알림을 볼 수 있으니 남에게 알리지 마세요)" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
-    el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알릴 메시지" }), nScope, nKeywords),
+    el("div", { class: "field" }, el("label", { for: "ntfy-topic", text: "TOPIC" }), el("div", { class: "row" }, nTopic, ntfyCopy, ntfyNew)),
+    el("div", { class: "field" }, el("label", { for: "ntfy-scope", text: "알림 조건" }), el("div", { class: "row ntfy-scope-row" }, nScope, nKeywords)),
     el("label", { class: "check" }, nAway, el("span", {}, el("span", { text: "PC에서 이 룸을 보고 있지 않을 때만 알림 (다른 탭·창이거나, 조작이 없을 때 — 조작 없는 시간: " }), nAwayMin, el("span", { text: " 분)" }))),
     el("label", { class: "check" }, nText, el("span", { text: "알림에 메시지 앞부분(60자)도 넣기" })),
-    el("p", { class: "warn", text: "켜면 메시지 내용이 공개 서버(ntfy.sh)를 거칩니다. 기본은 보낸 사람 이름과 룸 이름만 보냅니다." }),
     el("div", { class: "field" }, el("label", { for: "ntfy-server", text: "서버 주소 (비우면 https://ntfy.sh · 자체 서버는 사이트 접근 허용이 따로 필요합니다)" }), nServer),
     ntfyHelp,
     nToast,
