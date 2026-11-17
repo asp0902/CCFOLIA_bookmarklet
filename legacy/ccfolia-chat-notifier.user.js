@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.44
+// @version      0.3.45
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.44";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.45";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4023,6 +4023,8 @@
   }
 
   function stopCcfYoutubeBgm(reason = "manual") {
+    // 플레이룸(릴레이)에는 어떤 이유로 멈추든 정지를 알린다: 직접 정지만 알렸을 때 다른 BGM으로 바뀜·룸 이동·곡 삭제 뒤에도 서버에 "재생 중"이 남아, 나중에 들어온 참가자에게 옛 곡이 자동재생됐다.
+    try { window.dispatchEvent(new CustomEvent("capybara-bgm-signal", { detail: { state: "stopped", videoId: "", title: "", loop: true } })); } catch (_) {}
     // stopVideo() 는 ENDED 를 발생시키는데, 반복재생(loop) ON 이면 onStateChange 가
     // 이를 "곡이 끝났다"로 보고 seekTo(0)+playVideo() 로 되살린다
     // → 정지 → ENDED → 재생 → … 앞 0~1초 무한 반복. 정지 중임을 표시해 구분한다.

@@ -93,7 +93,8 @@
     connectedTitle = roomTitle;
     await rememberInvite(id, result.inviteUrl || "");
     if (lastScene) post(`/api/admin/rooms/${encodeURIComponent(id)}/scene`, lastScene).catch(() => {});
-    if (lastBgm) post(`/api/admin/rooms/${encodeURIComponent(id)}/bgm`, lastBgm).catch(() => {});
+    // 이 탭에서 받은 신호가 없으면 "정지"로 맞춘다: 서버에 남은 옛 "재생 중"(삭제한 곡 포함)이 참가자에게 자동재생되지 않게.
+    post(`/api/admin/rooms/${encodeURIComponent(id)}/bgm`, lastBgm || { state: "stopped" }).catch(() => {});
     startPolling();
     pollCommands();
     openSocket();
