@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.117
+// @version      0.1.118
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.117"),
+    version: getUserscriptVersion("0.1.118"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -13545,6 +13545,65 @@
   }
   // preview: 붙여넣은 그림의 저장 토큰(로컬 ccf-local:// · Firestore ccf-fs-image://)을 화면에 그릴 주소로(추가 패널 미리보기). Firestore 는 캐시에 없으면 저장소에서 읽는다.
   window.__CCF_FORMAT_SYNC_IMAGE_PASTE__ = { handle: handleImagePasteForTextInput, preview: (url) => { const now = resolveRenderableImageUrl(url); if (now || !isFirestoreImageToken(normalizeImageUrl(url))) return Promise.resolve(now || ""); return Promise.resolve(resolveFirestoreImageToken(normalizeImageUrl(url))).catch(() => ""); } };
+  // ---- 0.1.118 색 픽커: 서식 바의 색 칸(오리지널·추가 패널·핸드아웃 편집기·시트 글자 칸·서식 만들기)을 누르면 브라우저 픽커 대신 이 창 ----
+  // 고르는 동안은 미리보기만, [확인] = 적용·닫기, 바깥/Esc = 취소. 확인한 색은 최근순 12칸(중복 없음)으로 브라우저에 저장(모든 룸 공용), 누르면 선택, 우클릭/× = 삭제.
+  const RECENT_COLORS_KEY = "ccf-format-recent-colors-v1";
+  const COLOR_PICK_TARGETS = 'input[type="color"][data-inline-color], input[type="color"][data-style-builder-color], input[type="color"][data-style-builder-bg], #ccf-color, #ccf-bgcolor, .ccf-scp-fmt input[type="color"], input[type="color"][data-format-cmd="color"], .ccf-cs-fmt-bar input[type="color"]';
+  const isHex6 = (c) => /^#[0-9a-f]{6}$/i.test(String(c || ""));
+  const readRecentColors = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_COLORS_KEY) || "[]"); return Array.isArray(v) ? v.filter(isHex6).slice(0, 12) : []; } catch (_) { return []; } };
+  const writeRecentColors = (list) => { try { localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(list.slice(0, 12))); } catch (_) {} };
+  function closeColorPick() { document.getElementById("ccf-color-pick")?.remove(); }
+  function openColorPick(target) {
+    closeColorPick();
+    if (!document.getElementById("ccf-color-pick-style")) {
+      const st = document.createElement("style"); st.id = "ccf-color-pick-style";
+      st.textContent = `#ccf-color-pick{position:fixed;z-index:2147483647;display:grid;gap:8px;width:220px;padding:10px;background:#424242;color:#fff;border-radius:4px;font:13px/1.4 "Noto Sans KR",Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
+#ccf-color-pick .row{display:flex;gap:6px;align-items:center}#ccf-color-pick .end{justify-content:flex-end}
+#ccf-color-pick input[type=color]{width:36px;height:28px;padding:0;border:0;background:none;cursor:pointer}
+#ccf-color-pick .hex{width:80px;height:26px;padding:0 6px;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:2px;font:inherit}
+#ccf-color-pick .pv{flex:1;height:26px;border-radius:2px;border:1px solid rgba(255,255,255,.3)}
+#ccf-color-pick .recent{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;min-height:28px}#ccf-color-pick .recent small{grid-column:1/-1;color:rgba(255,255,255,.6)}
+#ccf-color-pick .sw{position:relative;height:28px;border-radius:2px;border:1px solid rgba(255,255,255,.25);cursor:pointer}
+#ccf-color-pick .sw b{position:absolute;top:-6px;right:-6px;display:none;width:14px;height:14px;line-height:13px;text-align:center;font-size:11px;color:#fff;background:#616161;border-radius:50%}#ccf-color-pick .sw:hover b{display:block}
+#ccf-color-pick button{padding:4px 14px;color:#2196f3;background:none;border:0;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}#ccf-color-pick button:hover{background:rgba(33,150,243,.08)}`;
+      document.head.appendChild(st);
+    }
+    let value = isHex6(target.value) ? target.value.toLowerCase() : "#ffffff";
+    const pop = document.createElement("div");
+    pop.id = "ccf-color-pick"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "색 고르기");
+    pop.innerHTML = `<div class="row"><input type="color" aria-label="색 고르기"><input class="hex" maxlength="7" aria-label="색 코드"><span class="pv"></span></div><div class="recent"></div><div class="row end"><button type="button" data-ok>확인</button></div>`;
+    const [native, hex] = pop.querySelectorAll("input"), pv = pop.querySelector(".pv"), recent = pop.querySelector(".recent");
+    const sync = (from) => { if (from !== native) native.value = value; if (from !== hex) hex.value = value; pv.style.background = value; };
+    const drawRecent = () => { const list = readRecentColors(); recent.innerHTML = list.map((c) => `<span class="sw" data-c="${c}" style="background:${c}" title="${c} (우클릭: 삭제)"><b data-del="${c}" title="삭제">×</b></span>`).join("") || "<small>확인으로 적용한 색이 여기에 쌓입니다</small>"; };
+    const remove = (c) => { writeRecentColors(readRecentColors().filter((x) => x !== c)); drawRecent(); };
+    sync(); drawRecent();
+    native.addEventListener("input", () => { value = native.value.toLowerCase(); sync(native); });
+    hex.addEventListener("input", () => { const v = hex.value.trim().replace(/^(?!#)/, "#"); if (isHex6(v)) { value = v.toLowerCase(); sync(hex); } });
+    pop.addEventListener("mousedown", (e) => { if (!e.target.closest("input")) e.preventDefault(); }); // 편집 중인 입력칸의 포커스·선택을 지킨다
+    pop.addEventListener("contextmenu", (e) => { const sw = e.target.closest(".sw"); if (sw) { e.preventDefault(); remove(sw.dataset.c); } });
+    pop.addEventListener("click", (e) => {
+      const del = e.target.closest("[data-del]"); if (del) { remove(del.dataset.del); return; }
+      const sw = e.target.closest(".sw"); if (sw) { value = sw.dataset.c; sync(); return; }
+      if (!e.target.closest("[data-ok]")) return;
+      writeRecentColors([value, ...readRecentColors().filter((c) => c !== value)]);
+      closeColorPick();
+      target.value = value;
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    document.body.appendChild(pop);
+    const r = target.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, r.left))}px`;
+    pop.style.top = `${r.bottom + 4 + h > innerHeight ? Math.max(4, r.top - h - 4) : r.bottom + 4}px`;
+  }
+  document.addEventListener("click", (e) => {
+    const t = e.composedPath?.()[0] || e.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== "color" || t.closest("#ccf-color-pick") || !t.matches(COLOR_PICK_TARGETS)) return;
+    e.preventDefault(); // 브라우저 기본 픽커 대신
+    openColorPick(t);
+  }, true);
+  document.addEventListener("pointerdown", (e) => { const pop = document.getElementById("ccf-color-pick"); if (pop && !e.composedPath().includes(pop)) closeColorPick(); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.getElementById("ccf-color-pick")) { e.stopPropagation(); closeColorPick(); } }, true);
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
