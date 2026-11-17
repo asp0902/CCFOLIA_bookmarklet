@@ -116,7 +116,7 @@ const flush = page => page.waitForTimeout(80);
       const gaps = await page.evaluate(() => {
         const r = document.getElementById('capybara-share-modal-host').shadowRoot;
         const top = id => r.getElementById(id).getBoundingClientRect();
-        const measure = () => ({ socketToRoom: Math.round(top('socket').top - top('room').bottom), healthDisplay: getComputedStyle(r.getElementById('health')).display, errorsDisplay: getComputedStyle(r.getElementById('relay-errors')).display, ntfyMargin: getComputedStyle(r.querySelector('.ntfy p.warn')).marginTop });
+        const measure = () => ({ socketToRoom: Math.round(top('socket').top - top('room').bottom), healthDisplay: getComputedStyle(r.getElementById('health')).display, errorsDisplay: getComputedStyle(r.getElementById('relay-errors')).display, ntfyMargin: getComputedStyle(r.querySelector('.ntfy ol.muted')).marginTop });
         const now = measure();
         r.querySelectorAll('p.status-line').forEach(p => p.classList.remove('status-line'));
         const before = measure();
@@ -128,6 +128,9 @@ const flush = page => page.waitForTimeout(80);
       assert.notEqual(gaps.now.ntfyMargin, '2px', 'ntfy paragraph keeps its own look');
       assert.equal(await q(page, 'hr').count(), 0, 'no divider lines');
       assert.equal(await q(page, '#ntfy-away-min').inputValue(), '2', 'idle minutes default 2');
+      // extension 1.52.17: labels TOPIC / 알림 조건, no public-server note, the keyword box on the same line, right of the select
+      const ntfyUi = await page.evaluate(() => { const r = document.getElementById('capybara-share-modal-host').shadowRoot; const label = (id) => r.querySelector(`label[for="${id}"]`)?.textContent; const s = r.getElementById('ntfy-scope').getBoundingClientRect(), k = r.getElementById('ntfy-keywords').getBoundingClientRect(); return { topic: label('ntfy-topic'), scope: label('ntfy-scope'), warn: !!r.querySelector('.ntfy .warn'), sameLine: Math.abs((s.top + s.height / 2) - (k.top + k.height / 2)) < 4, right: k.left >= s.right }; });
+      assert.deepEqual(ntfyUi, { topic: 'TOPIC', scope: '알림 조건', warn: false, sameLine: true, right: true }, JSON.stringify(ntfyUi));
       await q(page, '#ntfy-topic').fill('capy-test'); await q(page, '#ntfy-away-min').fill('99'); await q(page, '#ntfy-save').click(); await flush(page);
       assert.equal((await page.evaluate(() => window.__store.ntfy)).awayMinutes, 60, 'idle minutes clamped to 1..60');
       assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('capybara-share-modal-host').shadowRoot.querySelector('.body > .field')).marginTop), '0px', 'first field sits close to the header');
