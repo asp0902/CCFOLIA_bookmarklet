@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.135
+// @version      0.1.136
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.135",
+    version: "0.1.136",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -4183,8 +4183,9 @@
   function readRoomStylePresets() {
     const room = getCurrentRoomKey();
     const read = (key) => { try { const v = JSON.parse(localStorage.getItem(key) || "null"); return Array.isArray(v) ? v : null; } catch (_) { return null; } };
-    const presets = (read(`ccf-format-style-presets-v1:${room}`) || read("ccf-format-style-presets-v1") || []).filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
-    const folders = (read(`ccf-format-style-folders-v1:${room}`) || []).filter((f) => f && f.id && f.name);
+    // format-sync 0.1.123: 공용(모든 룸) + 이 룸 전용을 한 목록으로(공용 먼저) — 서식 바 Sv 와 같은 목록·같은 순서
+    const presets = [...(read("ccf-format-style-presets-v1") || []), ...(read(`ccf-format-style-presets-v1:${room}`) || [])].filter((p) => p && typeof p === "object" && typeof p.name === "string" && p.name.trim());
+    const folders = [...(read("ccf-format-style-folders-v1") || []), ...(read(`ccf-format-style-folders-v1:${room}`) || [])].filter((f) => f && f.id && f.name);
     return { presets, folders };
   }
   function presetCssText(style = {}) {

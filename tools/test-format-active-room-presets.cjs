@@ -4,7 +4,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/asp92/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 
 // 1) 서식 바 버튼이 커서/선택 영역의 실제 서식과 자동 서식(프리셋 이름)을 활성 모양(.ccf-fmt-current)으로 보여 준다(눌러서 켠 .active 와 별개).
-// 2) 서식 프리셋은 룸별로 저장된다: 첫 진입 때 전역 목록 복사(원본 유지), 룸 A에서 바꾼 것은 룸 B에 안 보임, 홈에서는 비어 있음, 다른 탭의 변경이 반영됨.
+// 2) 서식 프리셋 = 공용(모든 룸) + 이 룸 전용(format-sync 0.1.123): 옛 룸별 목록 1회 합치기(중복 없음·백업), 새 프리셋은 공용, '룸' 단추로 전환.
 const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8');
 const GLOBAL_KEY = 'ccf-format-style-presets-v1';
 (async () => {
@@ -26,46 +26,50 @@ const GLOBAL_KEY = 'ccf-format-style-presets-v1';
     const caret = async (page, start, end = start) => { await page.evaluate(([s, e]) => { const t = document.querySelector('textarea[name=text]'); t.focus(); t.setSelectionRange(s, e); t.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true })); }, [start, end]); await page.waitForTimeout(120); };
     const presetRows = async (page) => { await page.locator('[data-inline-command="style-clipboard"]').first().click(); await page.waitForSelector('.ccf-inline-popover.open'); await page.waitForTimeout(100); return page.locator('.ccf-style-preset-apply').allTextContents(); };
 
-    // ---- 2) per-room presets
+    // ---- 2) presets: shared by every room (global key) + this room's own (room key) - format-sync 0.1.123
     await context.addInitScript(() => {});
-    let a = await open('/rooms/A', () => { if (!localStorage.getItem('ccf-test-seeded')) { localStorage.setItem('ccf-test-seeded', '1'); localStorage.setItem('ccf-format-style-presets-v1', JSON.stringify([{ name: '전역서식', style: { bold: true }, auto: true, savedAt: 1 }])); } });
-    assert.deepEqual((await presetRows(a)).map((t) => t.trim()).filter(Boolean).length, 1, 'first visit: the global list is copied into room A');
-    assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:A')).length), 1);
-    assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1')).length), 1, 'the global original stays');
+    const P = (k) => (page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key) || 'null'), k);
+    const shared = P('ccf-format-style-presets-v1'), roomA = P('ccf-format-style-presets-v1:A'), roomB = P('ccf-format-style-presets-v1:B');
+    // the old per-room data: A and B each hold the copy of the global list + their own; B has a same-named preset with another style
+    let a = await open('/rooms/A', () => { if (!localStorage.getItem('ccf-test-seeded')) { localStorage.setItem('ccf-test-seeded', '1');
+      localStorage.setItem('ccf-format-style-presets-v1', JSON.stringify([{ name: '전역서식', style: { bold: true }, auto: true, savedAt: 1 }]));
+      localStorage.setItem('ccf-format-style-presets-v1:A', JSON.stringify([{ name: '전역서식', style: { bold: true }, auto: true, savedAt: 1 }, { name: '옛룸A', style: { strike: true }, auto: false, savedAt: 2 }]));
+      localStorage.setItem('ccf-format-style-presets-v1:B', JSON.stringify([{ name: '전역서식', style: { bold: true }, auto: true, savedAt: 1 }, { name: '옛룸A', style: { color: '#ff0000' }, auto: false, savedAt: 3 }])); } });
+    // migration (once): merged into the shared list without duplicates; a same name with another style comes up as "name (room)"; the room keys are emptied; a backup of everything
+    assert.deepEqual((await shared(a)).map((p) => p.name), ['전역서식', '옛룸A', '옛룸A (B)']);
+    assert.deepEqual([await roomA(a), await roomB(a)], [[], []]);
+    const backup = await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-backup-1117') || 'null'));
+    assert(backup && JSON.parse(backup['ccf-format-style-presets-v1:B']).length === 2, 'backup of the old lists');
+    assert.equal((await presetRows(a)).filter((t) => t.trim()).length, 3, 'room A shows the shared list');
     assert.equal(await a.locator('.ccf-inline-popover.open [data-preset-room]').count(), 0, 'the "이 룸의 서식 프리셋" caption was removed');
-    // add a preset in room A (builder: bold + name)
+    // a new preset is shared
     await a.evaluate(() => { const t = document.querySelector('textarea[name=text]'); t.value = '문장'; t.dispatchEvent(new Event('input', { bubbles: true })); });
     await a.locator('.ccf-inline-popover.open [data-style-preset-name]').fill('룸A서식');
     await a.locator('.ccf-inline-popover.open [data-style-builder="italic"]').click();
     await a.locator('.ccf-inline-popover.open .ccf-inline-popover-actions [data-inline-style-action="add"]').click();
     await a.waitForTimeout(200);
-    assert.deepEqual(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:A')).map((p) => p.name)), ['전역서식', '룸A서식']);
-    assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1')).length), 1, 'the global list is not touched by a room change');
-    // another tab of the same room sees the change at once (storage event); a second room starts from the global list, not from room A
-    const a2 = await open('/rooms/A');
-    await a2.locator('[data-inline-command="style-clipboard"]').first().click();
-    await a2.waitForSelector('.ccf-inline-popover.open .ccf-style-preset-apply');
-    assert.equal(await a2.locator('.ccf-style-preset-apply').count(), 2, 'room A (second tab) shows both');
-    await a.evaluate(() => { const list = JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:A')); list.push({ name: '세번째', style: { underline: true }, auto: true, savedAt: 3 }); localStorage.setItem('ccf-format-style-presets-v1:A', JSON.stringify(list)); });
-    await a2.waitForFunction(() => document.querySelectorAll('.ccf-style-preset-apply').length === 3, null, { timeout: 4000 });
+    assert.deepEqual((await shared(a)).map((p) => p.name), ['전역서식', '옛룸A', '옛룸A (B)', '룸A서식'], 'new = shared');
     const b = await open('/rooms/B');
-    assert.equal((await presetRows(b)).filter((t) => t.trim()).length, 1, 'room B: only the copy of the global list (room A changes are not here)');
-    assert.deepEqual(await b.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:B')).map((p) => p.name)), ['전역서식']);
-    // the per-preset auto switch is part of the room's list: switching it off in B does not change A
-    await b.locator('.ccf-style-preset-auto-dot').first().click(); await b.waitForTimeout(150);
-    assert.equal(await b.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:B'))[0].auto), false);
-    assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:A'))[0].auto), true, 'room A keeps its own auto switch');
-    // reload keeps it; outside a room (home) there is no list
-    await b.reload();
-    await b.addScriptTag({ content: source }); await b.waitForSelector('[data-inline-command="bold"]', { state: 'attached' }); await b.waitForTimeout(400);
-    assert.equal(await b.evaluate(() => JSON.parse(localStorage.getItem('ccf-format-style-presets-v1:B'))[0].auto), false, 'survives a reload');
-    // outside a room (home) the format bar and its presets are not shown at all, and nothing is read or written for presets
+    assert.equal((await presetRows(b)).filter((t) => t.trim()).length, 4, 'room B sees the shared presets');
+    // 이 룸 전용: the '룸' toggle moves it into room A only; again moves it back
+    await a.locator('.ccf-style-preset-scope').nth(3).click(); await a.waitForTimeout(200);
+    assert.deepEqual([(await shared(a)).length, (await roomA(a)).map((p) => p.name)], [3, ['룸A서식']]);
+    assert.equal(await a.locator('.ccf-style-preset-scope.is-room').count(), 1, 'marked 이 룸');
+    const b2 = await open('/rooms/B');
+    assert.equal((await presetRows(b2)).filter((t) => t.trim()).length, 3, 'room B does not show A-only');
+    const a2 = await open('/rooms/A');
+    assert.equal((await presetRows(a2)).filter((t) => t.trim()).length, 4, 'room A (another tab) shows shared + its own');
+    await a.locator('.ccf-style-preset-scope.is-room').first().click(); await a.waitForTimeout(200);
+    assert.deepEqual([(await shared(a)).length, (await roomA(a)).length], [4, 0], 'back to shared');
+    // the migration runs once: emptied room keys are not merged again
+    await a.reload(); await a.addScriptTag({ content: source }); await a.waitForSelector('[data-inline-command="bold"]', { state: 'attached' }); await a.waitForTimeout(400);
+    assert.equal((await shared(a)).length, 4);
+    // outside a room (home) the format bar and its presets are not shown at all
     const home = await open('/home', null, false);
     assert.equal(await home.locator('[data-inline-command="style-clipboard"]').count(), 0, 'home: no preset button');
-    assert.deepEqual(await home.evaluate(() => Object.keys(localStorage).filter((k) => /^ccf-format-style-presets-v1:$/.test(k))), []);
-    await home.close(); await b.close(); await a2.close();
+    await home.close(); await b.close(); await b2.close(); await a2.close();
 
-    // ---- 1) current formatting on the buttons (room A has the preset 룸A서식=italic and 전역서식=bold)
+    // ---- 1) current formatting on the buttons (the shared presets include 룸A서식=italic and 전역서식=bold)
     const page = a;
     await page.evaluate(() => { const t = document.querySelector('textarea[name=text]'); t.value = '굵게 보통 전역서식 끝'; t.dispatchEvent(new Event('input', { bubbles: true })); });
     await page.waitForTimeout(150);
