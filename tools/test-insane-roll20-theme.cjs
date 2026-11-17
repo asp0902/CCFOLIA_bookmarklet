@@ -107,6 +107,8 @@ const key = 'ccf-theme-switcher-settings-v1';
     assert.equal(await page.locator('.ccf-roll20-check-skill').textContent(), '시간');
     assert.equal(await page.locator('.ccf-roll20-die b').allTextContents().then(x => x.join(',')), '10,4,6');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 5');
+    assert.deepEqual(await page.locator('.ccf-roll20-check-dice > span:last-child .ccf-roll20-die').evaluateAll((d) => d.map((e) => e.className.replace('ccf-roll20-die', '').trim())), ['', 'is-six'], 'a face of 6 is gold (is-six), 1 red (is-one)');
+    assert.equal(await page.locator('.ccf-roll20-check-target b').textContent(), '5', 'only the target number bold');
     assert.equal(await page.locator('.ccf-roll20-check-card > small').textContent(), '브릿지');
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
