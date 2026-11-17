@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.117";
-  const BUILD_ID = "2026-11-17-bridge-always-288";
+  const VERSION = "0.3.118";
+  const BUILD_ID = "2026-11-17-share-toggle-289";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

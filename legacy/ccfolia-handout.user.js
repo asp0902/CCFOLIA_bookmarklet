@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.131
+// @version      0.1.132
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -25,7 +25,6 @@
   // 투명 배경, currentColor로 다크/라이트 자동 적응, MUI IconButton 표준 24px.
   const JOURNAL_ICON_HTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;pointer-events:none;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M16 4.2l.7 1.5 1.5.7-1.5.7L16 8.5l-.7-1.4-1.5-.7 1.5-.7z" fill="currentColor" stroke="none"/></svg>`;
   const WEB_SHARE_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>`;
-  const WEB_STOP_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l16 16M9.5 4.5A9 9 0 0 1 19.5 14M14.5 19.5A9 9 0 0 1 4.5 10"/></svg>`;
   const PUBLIC_RELAY_SOURCE = "capybara-public-handout-relay-v1";
   const pendingPublicRelayRequests = new Set();
 
@@ -52,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.131",
+    version: "0.1.132",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -543,6 +542,7 @@
     writeWebShared(set);
     scheduleWebSync(200);
     scheduleInboxSync(300);
+    if (state.isOpen) render(); // 공유 단추(공유 ↔ 공유 중단)를 바로 바꿔 그린다
     return set.size;
   }
   // 참여자 승인·수신자 지정은 릴레이 쪽에서 바뀌므로, 올려 둔 핸드아웃이 있으면 가끔 다시 계산한다(바뀐 사람의 목록만 실제로 전송된다).
@@ -1230,6 +1230,7 @@
       border: 0; color: rgba(255,255,255,.7); background: rgba(255,255,255,.08);
       letter-spacing: .02em; font-weight: 500;
     }
+    .card .card-icon-btn.is-shared { color: #2196f3; }
     .card .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
     .scope-bar { display: flex; gap: 4px; margin-bottom: 8px; }
     .scope-btn { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 14px; font-size: 0.8125rem; color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.18); }
@@ -3862,8 +3863,7 @@
           <div class="head">
             ${adminMode ? `<span class="handout-drag-handle" data-handout-drag-handle="1" data-id="${escapeHtml(h.id)}" title="드래그로 순서 변경" aria-label="드래그 핸들">${ICON_DRAG_HANDLE}</span>` : ""}
             <button class="card-title-btn" data-action="view-handout" data-id="${escapeHtml(h.id)}" title="열기">${escapeHtml(h.title || "(제목 없음)")}</button>
-            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="공유" aria-label="공유">${WEB_SHARE_ICON}</button>` : ""}
-            ${manageable && hasPlayerRelay() ? `<button class="card-icon-btn" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="공유 중단" aria-label="공유 중단">${WEB_STOP_ICON}</button>` : ""}
+            ${manageable && hasPlayerRelay() ? (readWebShared().has(h.id) ? `<button class="card-icon-btn is-shared" data-action="web-stop-sharing" data-id="${escapeHtml(h.id)}" title="공유 중단" aria-label="공유 중단" aria-pressed="true">${WEB_SHARE_ICON}</button>` : `<button class="card-icon-btn" data-action="web-share-handout" data-id="${escapeHtml(h.id)}" title="공유" aria-label="공유" aria-pressed="false">${WEB_SHARE_ICON}</button>`) : ""} <!-- 공유·공유 중단은 한 단추: 공유 중이면 켜진 표시(파랑)로 누르면 중단 -->
             ${manageable && adminMode ? `<button class="card-icon-btn" data-action="duplicate-handout" data-id="${escapeHtml(h.id)}" title="복제" aria-label="복제">${ICON_COPY}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn" data-action="edit-handout" data-id="${escapeHtml(h.id)}" title="편집" aria-label="편집">${ICON_PENCIL}</button>` : ""}
             ${manageable ? `<button class="card-icon-btn danger" data-action="delete-handout" data-id="${escapeHtml(h.id)}" title="삭제" aria-label="삭제">${ICON_X_SMALL}</button>` : ""}
