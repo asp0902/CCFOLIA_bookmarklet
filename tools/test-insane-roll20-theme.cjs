@@ -138,7 +138,9 @@ const key = 'ccf-theme-switcher-settings-v1';
       const overlay = document.createElement('span'); overlay.className = 'ccf-render-overlay'; overlay.style.fontStyle = 'italic'; overlay.textContent = '2D6-2>=10 [우주/공포심] (2D6-2>=10) ＞ 5[2,3]-2 ＞ 3 ＞ 실패';
       host.append(hidden, overlay);
     });
-    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '우주/공포심', null, { timeout: 4000 });
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '공포판정 : 우주', null, { timeout: 4000 }); // 0.2.37: a fear check reads like Roll20
+    // 0.2.37: the field / skill card above the check card (the skill found in the Insane skill table): 6.괴이 / 우주 12
+    assert.deepEqual(await page.locator('#check > .ccf-roll20-emotion-card').evaluateAll((cards) => cards.map((c) => c.className.includes('ccf-roll20-table-card') ? c.innerText.split(String.fromCharCode(10)).join(' ').trim() : 'check')), ['6 6.괴이 우주 12', 'check'], 'table card first, then the check card');
     assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['3', '2', '3'], 'dice of the formatted check');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
     assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');
