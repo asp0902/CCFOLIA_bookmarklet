@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.144";
-  const BUILD_ID = "2026-11-17-chat-layout-tdz-315";
+  const VERSION = "0.3.145";
+  const BUILD_ID = "2026-11-17-theme-init-316";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
