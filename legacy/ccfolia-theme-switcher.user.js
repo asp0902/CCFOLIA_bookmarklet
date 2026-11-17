@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.45
+// @version      0.2.46
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.45"),
+    version: getUserscriptVersion("0.2.46"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4232,8 +4232,8 @@
   }
 
   // ---- 0.2.45 채팅 크기 조절·주사위 줄 숨기기 (모두 기본 = 지금 모양, 브라우저 저장) ----
-  const CHAT_LAYOUT_STYLE_ID = "ccf-chat-layout-style";
-  const readPx = (key, lo, hi) => { try { const n = Number(localStorage.getItem(key)); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : 0; } catch (_) { return 0; } };
+  // 함수 선언(호이스팅): 스크립트 시작 직후 ensureUi 가 이 아래 선언보다 먼저 불린다(const 면 TDZ 오류였다)
+  function readPx(key, lo, hi) { try { const n = Number(localStorage.getItem(key)); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : 0; } catch (_) { return 0; } }
   function chatComposerTextarea() { return [...document.querySelectorAll('form textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel, [role='dialog']") && t.offsetParent) || null; }
   function applyChatLayout() {
     const root = document.documentElement;
@@ -4244,8 +4244,8 @@
     root.toggleAttribute("data-ccf-chat-w", !!chatW);
     if (inputH) root.style.setProperty("--ccf-input-h", `${inputH}px`); else root.style.removeProperty("--ccf-input-h");
     if (chatW) root.style.setProperty("--ccf-chat-w", `${chatW}px`); else root.style.removeProperty("--ccf-chat-w");
-    if (!document.getElementById(CHAT_LAYOUT_STYLE_ID)) {
-      const style = document.createElement("style"); style.id = CHAT_LAYOUT_STYLE_ID;
+    if (!document.getElementById("ccf-chat-layout-style")) {
+      const style = document.createElement("style"); style.id = "ccf-chat-layout-style";
       const dice = ["D4", "D6", "D8", "D10", "D12", "D20", "D100"].map((d) => `html[data-ccf-hide-dice] form button[aria-label="${d}"]`).join(",");
       style.textContent = `${dice} { display: none !important; }
 html[data-ccf-input-h] form .MuiInputBase-inputMultiline[name="text"] { min-height: var(--ccf-input-h) !important; }
