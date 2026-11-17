@@ -34,7 +34,7 @@ function extract(name) { const start = source.search(new RegExp(`  (?:async )?fu
     const out = await page.evaluate(async ([funcs, helpers]) => {
       const mk = (id, title, description, folderId, order) => ({ id, title, description, gmNotes: '', permissions: {}, folderId, order });
       const state = { search: '', plPreview: false, data: { myCharacter: 'GM', folders: [{ id: 'f1', name: '1막', collapsed: true }, { id: 'f2', name: '2막', collapsed: false }], handouts: [mk('a', '의식', '밤에 열린다', 'f1', 1), mk('b', '지도', '마을 약도', 'f2', 2), mk('c', '편지', '의식 초대장', '', 3)] }, shadow: document.body };
-      let admin = true; const isAdminMode = () => admin;
+      let admin = true; const isAdminMode = () => admin; const visibleToMe = (h) => !!h && (isAdminMode() || h._remote === true);
       const escapeHtml = s => String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;'); const escapeAttr = escapeHtml;
       const ensurePermissions = h => h, canManageHandout = () => true, hasPlayerRelay = () => false, canViewSecret = () => false, getPermissionCharacterName = () => 'GM', identityKeys = () => [];
       const compareByOrder = (x, y) => x.order - y.order, ALL_KEY = '*';
