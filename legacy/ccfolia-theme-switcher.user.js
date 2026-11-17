@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.36
+// @version      0.2.37
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -220,7 +220,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.36"),
+    version: getUserscriptVersion("0.2.37"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1883,6 +1883,11 @@
       /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 회보라, 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
       ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(117,117,130,0),rgb(117,117,130) 75%); }
       ${scope} .ccf-roll20-check-card[data-result="fumble"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(210,31,31,0),rgb(210,31,31) 75%); }
+      ${scope} .ccf-roll20-table-card { display: flex !important; justify-content: space-between; align-items: center; padding: 16px 40px; font-size: 15px !important; }
+      ${scope} .ccf-roll20-table-side { display: inline-flex; align-items: center; gap: 8px; }
+      ${scope} .ccf-roll20-badge { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; box-sizing: border-box; border-radius: 6px; color: #fff; font-size: 14px; }
+      ${scope} .ccf-roll20-badge.is-field { background: #000; }
+      ${scope} .ccf-roll20-badge.is-skill { background: #999; }
       ${scope} .ccf-roll20-die.is-six { color: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-six svg { stroke: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-one { color: rgb(255,0,12); }
@@ -5022,7 +5027,7 @@
       if (!host.closest('.MuiListItem-root')) return;
       const existing = host.querySelector(':scope > .ccf-roll20-emotion-card');
       // 원문만: 서식 바(format-sync)가 그린 오버레이(명령+결과 사본)와 보이지 않는 서식 봉투 글자는 뺀다 — 섞이면 판정이 두 번 이어 붙은 글로 읽혀 특기명 자리에 원문 전체가 들어갔다.
-      const original = Array.from(host.childNodes).filter(node => node !== existing && !(node instanceof Element && node.classList.contains('ccf-render-overlay')))
+      const original = Array.from(host.childNodes).filter(node => node !== existing && !(node instanceof Element && (node.classList.contains('ccf-render-overlay') || node.classList.contains('ccf-roll20-emotion-card'))))
         .map(node => node.textContent || '').join('').replace(/\u2063{3}[\s\S]*?\u2062{3}/g, '').replace(/[\u200B-\u200D\u2060-\u2064\uFEFF]/g, '');
       const match = original.match(/^\s*(.*?)\s*감정표\s*[（(][1-6][)）]\s*[＞>→]\s*(.+?[（(]\s*플러스\s*[)）])\s*[／/]\s*(.+?[（(]\s*마이너스\s*[)）])\s*$/u);
       const check = parseInsaneRoll20Check(original);
@@ -5041,7 +5046,7 @@
       const result = match ? `${match[2]} / ${match[3]}`.replace(/（/g, '(').replace(/）/g, ')').replace(/\s+\(/g, '(') : '';
       const signature = JSON.stringify([original, name]);
       if (existing && host.getAttribute('data-ccf-roll20-emotion') === signature) return;
-      existing?.remove();
+      host.querySelectorAll(':scope > .ccf-roll20-emotion-card').forEach(node => node.remove());
       const card = document.createElement('span');
       card.className = 'ccf-roll20-emotion-card';
       if (scene) {
@@ -5057,6 +5062,7 @@
       }
       if (check) appendInsaneRoll20Check(card, check);
       else card.appendChild(document.createTextNode(result));
+      if (check?.table) host.appendChild(makeInsaneRoll20TableCard(check.table));
       host.setAttribute('data-ccf-roll20-emotion', signature);
       host.appendChild(card);
     });
@@ -5134,10 +5140,37 @@
       .replace(/［/g, '[').replace(/］/g, ']');
     const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)\s*$/i);
     if (!match) return null;
-    return { skill: match[1].replace(/^2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim().replace(/^\[(.*)\]$/, '$1').trim() || '판정',
+    const raw = match[1].replace(/^S?2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim();
+    const parts = raw.replace(/^\[(.*)\]$/, '$1').split('/').map(part => part.trim()).filter(Boolean);
+    const fear = parts.includes('공포심');
+    const table = parts.map(insaneSkillPlace).find(Boolean) || null;
+    const skillText = fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
+    return { skill: skillText || '판정', table,
       target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6] };
   }
 
+  // 인세인 특기표(사이코로픽션 시트와 같은 표): 분야 1~6, 특기 번호 2~12. 시트의 특기 판정 글("… [특기]")에서 특기명을 찾아 분야·번호 카드를 판정 카드 위에 붙인다.
+  const INSANE_SKILL_TABLE = Object.freeze([
+    ['폭력', '소각', '고문', '포박', '협박', '파괴', '구타', '절단', '찌르기', '사격', '전쟁', '매장'],
+    ['정서', '연심', '기쁨', '걱정', '부끄러움', '웃음', '인내', '놀람', '노여움', '원한', '슬픔', '친애'],
+    ['지각', '고통', '관능', '촉감', '냄새', '맛', '소리', '풍경', '추적', '예술', '제육감', '그늘'],
+    ['기술', '분해', '전자기기', '정리', '약품', '효율', '미디어', '카메라', '탈것', '기계', '함정', '병기'],
+    ['지식', '물리학', '수학', '화학', '생물학', '의학', '교양', '인류학', '역사', '민속학', '고고학', '천문학'],
+    ['괴이', '시간', '혼돈', '심해', '죽음', '영혼', '마술', '암흑', '종말', '꿈', '지저', '우주']
+  ]);
+  function insaneSkillPlace(name) {
+    for (let column = 0; column < INSANE_SKILL_TABLE.length; column += 1) {
+      const row = INSANE_SKILL_TABLE[column].indexOf(name, 1);
+      if (row > 0) return { field: column + 1, fieldName: INSANE_SKILL_TABLE[column][0], skill: name, number: row + 1 };
+    }
+    return null;
+  }
+  function makeInsaneRoll20TableCard(table) {
+    const card = document.createElement('span');
+    card.className = 'ccf-roll20-emotion-card ccf-roll20-table-card';
+    card.innerHTML = `<span class="ccf-roll20-table-side"><b class="ccf-roll20-badge is-field">${table.field}</b><b>${table.field}.${table.fieldName}</b></span><span class="ccf-roll20-table-side"><b>${table.skill}</b><b class="ccf-roll20-badge is-skill">${table.number}</b></span>`;
+    return card;
+  }
   function appendInsaneRoll20Check(card, check) {
     card.classList.add('ccf-roll20-check-card');
     card.dataset.result = /펌블/.test(check.result) ? 'fumble' : /실패/.test(check.result) ? 'failure' : /스페셜/.test(check.result) ? 'special' : 'success';
