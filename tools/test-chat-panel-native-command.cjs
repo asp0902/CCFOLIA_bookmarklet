@@ -53,6 +53,13 @@ const TABLE = '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째'
       const app = await page.evaluate(() => window.__state.app.state);
       assert.deepEqual([app.roomChatTab, app.roomChatName, app.roomChatId], ['main', '오리지널 화자', 'c-orig'], `${cmd}: the original tab / speaker are put back`);
     }
+    // 0.5.45: an inline roll [[..]] goes through the original box when Roll20 CSS 변환 is on (it rolls there); off -> the panel writes it as before
+    await page.evaluate(() => { window.__CCF_ROLL20_BRIDGE_DEBUG__ = {}; });
+    const before = await page.evaluate(() => window.__nativeSent.length);
+    await send('친구가 [[1D10]]명이다.');
+    assert.equal(await page.evaluate(() => window.__nativeSent.length), before + 1, 'inline roll -> the original box');
+    assert.equal((await page.evaluate(() => window.__nativeSent.slice(-1)[0])).text, '친구가 [[1D10]]명이다.');
+    await page.evaluate(() => { delete window.__CCF_ROLL20_BRIDGE_DEBUG__; });
     // plain text: the panel's own Firestore write
     const w = writes.length;
     await send('그냥 말');
