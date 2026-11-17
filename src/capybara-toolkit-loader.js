@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.116";
-  const BUILD_ID = "2026-11-17-panel-inline-roll-287";
+  const VERSION = "0.3.117";
+  const BUILD_ID = "2026-11-17-bridge-always-288";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -58,7 +58,10 @@
       debugKey: "__CCF_ROLL20_BRIDGE_DEBUG__",
       title: "Roll20 CSS 변환",
       summary: "Roll20 CSS 코코포리아에 반영",
-      scripts: ["legacy/ccfolia-roll20-css-bridge.user.js"]
+      scripts: ["legacy/ccfolia-roll20-css-bridge.user.js"],
+      // 모두에게 항상: 인라인 롤 [[..]] 계산이 이 기능에 있어 플레이어가 켜지 않으면 굴려지지 않았다(사용자 결정, Roll20 매크로 변환·나레이션도 같이 켜짐)
+      alwaysOn: true,
+      hiddenFromPanel: true
     },
     {
       id: "ccf-theme-switcher",
