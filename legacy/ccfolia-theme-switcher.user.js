@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.44
+// @version      0.2.45
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.44"),
+    version: getUserscriptVersion("0.2.45"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1171,6 +1171,7 @@
         #${PANEL_ID} .ccf-theme-font { display: grid; gap: 6px; margin: 10px 0; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); }
         #${PANEL_ID} .ccf-theme-font-title { font-size: 13px; }
         #${PANEL_ID} .ccf-theme-check { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+        #${PANEL_ID} .ccf-theme-hint { font-size: 11px; opacity: .65; line-height: 1.4; }
         #${PANEL_ID} .ccf-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
         #${PANEL_ID} .ccf-theme-preset { border: 1px solid; border-radius: 4px; }
         #${PANEL_ID} .ccf-theme-actions {
@@ -2459,6 +2460,7 @@
     // 이전엔 ensureUi 안의 어떤 호출이 한 번 throw 하면 그 이후 호출이 영영
     // 실행되지 않아 다이스 카드 인젝션이 침묵 실패하는 경로가 있었음.
     try { mountToggle(); } catch (e) { try { console.warn("[CCF Theme] mountToggle failed", e); } catch (_) {} }
+    try { ensureChatGrips(); } catch (e) { try { console.warn("[CCF Theme] chat grips failed", e); } catch (_) {} }
     try { applyDicebotAttribute(); } catch (e) { try { console.warn("[CCF Theme] applyDicebotAttribute failed", e); } catch (_) {} }
     try { installCutinVolumeAbsolutePatch(); } catch (e) { try { console.warn("[CCF Theme] installCutinVolumeAbsolutePatch failed", e); } catch (_) {} }
     try { bindCutinVolumeRatioInputs(); } catch (e) { try { console.warn("[CCF Theme] bindCutinVolumeRatioInputs failed", e); } catch (_) {} }
@@ -2543,6 +2545,8 @@
             <strong class="ccf-theme-font-title">채팅</strong>
             <label class="ccf-theme-check"><input type="checkbox" data-prose-pref="ccf-prose-merge"> 같은 사람의 연속 메시지 합치기</label>
             <label class="ccf-theme-check"><input type="checkbox" data-prose-pref="ccf-prose-split-avatar"> 스탠딩(아바타)이 다르면 따로 표시</label>
+            <label class="ccf-theme-check"><input type="checkbox" data-layout-pref="ccf-hide-dice-row"> 주사위 버튼(D4~D100) 숨기기</label>
+            <span class="ccf-theme-hint">입력칸 위쪽 가장자리·채팅창 왼쪽 가장자리를 끌면 높이·폭이 바뀝니다(더블클릭 = 기본).</span>
           </div>
           <div class="ccf-theme-actions">
             <button type="button" class="ccf-theme-btn" data-action="save-theme">현재 색상 저장</button>
@@ -2694,6 +2698,13 @@
         persistSettings();
         applyTheme(settings);
       };
+      // 0.2.45 주사위 줄 숨기기(브라우저 설정, 기본 꺼짐)
+      panel.addEventListener("change", (event) => {
+        const box = event.target;
+        if (!(box instanceof HTMLInputElement) || !box.dataset.layoutPref) return;
+        try { localStorage.setItem(box.dataset.layoutPref, box.checked ? "on" : "off"); } catch (_) { /* 저장 불가 */ }
+        applyChatLayout();
+      });
       // 0.2.44 채팅 묶음 설정(roll20-css-bridge 의 연속 메시지 합치기): 브라우저 설정, 바꾸면 바로 다시 훑는다
       panel.addEventListener("change", (event) => {
         const box = event.target;
@@ -4220,6 +4231,64 @@
     });
   }
 
+  // ---- 0.2.45 채팅 크기 조절·주사위 줄 숨기기 (모두 기본 = 지금 모양, 브라우저 저장) ----
+  const CHAT_LAYOUT_STYLE_ID = "ccf-chat-layout-style";
+  const readPx = (key, lo, hi) => { try { const n = Number(localStorage.getItem(key)); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : 0; } catch (_) { return 0; } };
+  function chatComposerTextarea() { return [...document.querySelectorAll('form textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel, [role='dialog']") && t.offsetParent) || null; }
+  function applyChatLayout() {
+    const root = document.documentElement;
+    let hideDice = false; try { hideDice = localStorage.getItem("ccf-hide-dice-row") === "on"; } catch (_) {}
+    const inputH = readPx("ccf-chat-input-height", 40, 600), chatW = readPx("ccf-chat-width", 280, 1200);
+    root.toggleAttribute("data-ccf-hide-dice", hideDice);
+    root.toggleAttribute("data-ccf-input-h", !!inputH);
+    root.toggleAttribute("data-ccf-chat-w", !!chatW);
+    if (inputH) root.style.setProperty("--ccf-input-h", `${inputH}px`); else root.style.removeProperty("--ccf-input-h");
+    if (chatW) root.style.setProperty("--ccf-chat-w", `${chatW}px`); else root.style.removeProperty("--ccf-chat-w");
+    if (!document.getElementById(CHAT_LAYOUT_STYLE_ID)) {
+      const style = document.createElement("style"); style.id = CHAT_LAYOUT_STYLE_ID;
+      const dice = ["D4", "D6", "D8", "D10", "D12", "D20", "D100"].map((d) => `html[data-ccf-hide-dice] form button[aria-label="${d}"]`).join(",");
+      style.textContent = `${dice} { display: none !important; }
+html[data-ccf-input-h] form .MuiInputBase-inputMultiline[name="text"] { min-height: var(--ccf-input-h) !important; }
+html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]) > .MuiDrawer-paper { width: var(--ccf-chat-w) !important; }
+.ccf-input-grip { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 3; }
+.ccf-chat-grip { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 1300; }
+.ccf-input-grip:hover, .ccf-chat-grip:hover { background: rgba(33,150,243,.35); }`;
+      (document.head || root).appendChild(style);
+    }
+  }
+  function startGripDrag(event, onMove, onEnd) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const move = (e) => onMove(e);
+    const up = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); onEnd(); };
+    document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+  }
+  function ensureChatGrips() {
+    applyChatLayout();
+    const ta = chatComposerTextarea();
+    const base = ta?.closest(".MuiInputBase-root");
+    if (base && !base.querySelector(":scope > .ccf-input-grip")) {
+      const grip = document.createElement("div"); grip.className = "ccf-input-grip"; grip.title = "끌어서 입력칸 높이 조절(더블클릭 = 기본)"; grip.setAttribute("data-ccf-safe-markup", "1");
+      if (getComputedStyle(base).position === "static") base.style.position = "relative";
+      grip.addEventListener("pointerdown", (event) => {
+        const startY = event.clientY, startH = ta.getBoundingClientRect().height;
+        startGripDrag(event, (e) => { const h = Math.max(40, Math.min(600, Math.round(startH - (e.clientY - startY)))); try { localStorage.setItem("ccf-chat-input-height", String(h)); } catch (_) {} applyChatLayout(); }, () => {});
+      });
+      grip.addEventListener("dblclick", () => { try { localStorage.removeItem("ccf-chat-input-height"); } catch (_) {} applyChatLayout(); });
+      base.appendChild(grip);
+    }
+    const paper = ta?.closest(".MuiDrawer-paper");
+    if (paper && !paper.querySelector(":scope > .ccf-chat-grip")) {
+      const grip = document.createElement("div"); grip.className = "ccf-chat-grip"; grip.title = "끌어서 채팅창 폭 조절(더블클릭 = 기본)"; grip.setAttribute("data-ccf-safe-markup", "1");
+      grip.addEventListener("pointerdown", (event) => {
+        const startX = event.clientX, startW = paper.getBoundingClientRect().width;
+        startGripDrag(event, (e) => { const w = Math.max(280, Math.min(1200, Math.round(startW - (e.clientX - startX)))); try { localStorage.setItem("ccf-chat-width", String(w)); } catch (_) {} applyChatLayout(); }, () => { window.dispatchEvent(new Event("resize")); });
+      });
+      grip.addEventListener("dblclick", () => { try { localStorage.removeItem("ccf-chat-width"); } catch (_) {} applyChatLayout(); window.dispatchEvent(new Event("resize")); });
+      paper.appendChild(grip);
+    }
+  }
+
   function applyTheme(nextSettings, options = {}) {
     const { syncUi = true } = options;
     settings = normalizeSettings(nextSettings);
@@ -4341,6 +4410,7 @@
     const panel = getPanel();
     if (!(panel instanceof HTMLElement)) return;
     panel.querySelectorAll("[data-prose-pref]").forEach((box) => { let v = null; try { v = localStorage.getItem(box.dataset.prosePref); } catch (_) {} box.checked = v !== "off"; });
+    panel.querySelectorAll("[data-layout-pref]").forEach((box) => { let v = null; try { v = localStorage.getItem(box.dataset.layoutPref); } catch (_) {} box.checked = v === "on"; });
     const f = normalizeScreenFont(settings.screenFont);
     panel.querySelectorAll("[data-screen-font]").forEach((input) => { if (document.activeElement !== input) input.value = String(f[input.dataset.screenFont] ?? ""); });
     panel.querySelectorAll("[data-screen-font-out]").forEach((out) => { const k = out.getAttribute("data-screen-font-out"); out.textContent = k === "scale" ? `${f.scale}배` : `${f.spacing}px`; });
