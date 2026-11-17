@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.41
+// @version      0.5.42
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -740,11 +740,15 @@
   const readSavedTail = () => {
     try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.tail); return v >= 1 && v <= 30 ? v : -1; } catch (e) { return -1; }
   };
+  // 지난번에 채택한 아래 여백 보정: 새로고침 뒤 첫 그리기부터 바로 쓴다(전에는 0 에서 다시 재서 같은 값이 여러 번 나온 뒤에야 붙어, 마지막 줄 아래 여백이 한참 늦게 생겼다).
+  const readSavedAdjust = () => {
+    try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.adjust); return Number.isFinite(v) && v >= -30 && v <= 40 ? v : 0; } catch (e) { return 0; }
+  };
   const readSavedToTabs = () => {
     try { const v = Number(JSON.parse(localStorage.getItem(SCP_TAIL_KEY) || "null")?.toTabs); return v >= 1 && v <= 60 ? v : -1; } catch (e) { return -1; }
   };
   const saveTailState = () => {
-    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: ccfScpListTail >= 0 ? ccfScpListTail : undefined, toTabs: ccfScpNativeToTabs >= 0 ? ccfScpNativeToTabs : undefined, rowGap: ccfScpNativeRowGap >= 0 ? ccfScpNativeRowGap : undefined })); } catch (e) { /* 저장 실패는 무시 */ }
+    try { localStorage.setItem(SCP_TAIL_KEY, JSON.stringify({ tail: ccfScpListTail >= 0 ? ccfScpListTail : undefined, toTabs: ccfScpNativeToTabs >= 0 ? ccfScpNativeToTabs : undefined, rowGap: ccfScpNativeRowGap >= 0 ? ccfScpNativeRowGap : undefined, adjust: panelAdjust || undefined })); } catch (e) { /* 저장 실패는 무시 */ }
   };
   const adoptTail = (value) => {
     ccfScpListTail = value;
@@ -872,7 +876,7 @@
     if (Math.abs(delta) < (adjustDiag.adopted > 0 ? 1 : 0.75)) { adjustSample = null; adjustDiag.count = 0; return skip("equal"); }
     if (adjustSample && Math.abs(adjustSample.value - delta) < 0.5) adjustSample.count += 1; else adjustSample = { value: delta, count: 1 };
     adjustDiag.count = adjustSample.count;
-    if (adjustSample.count < 3) return skip("waiting-for-3-equal");
+    if (adjustSample.count < 2) return skip("waiting-for-2-equal");
     const base = ccfScpListTail >= 0 ? ccfScpListTail : 8;
     const next = Math.max(-base, Math.min(40, panelAdjust - delta));
     adjustSample = null;
@@ -880,6 +884,7 @@
     panelAdjust = next;
     adjustDiag.adopted += 1; adjustDiag.lastAdoptAt = Date.now(); adjustDiag.lastNext = next; adjustDiag.reason = "adopted";
     panelEl?.style.setProperty("--scp-list-adjust", `${panelAdjust}px`);
+    saveTailState();
     // 아래 패딩이 바뀌면 스크롤 범위가 달라지므로 바닥에 있던 목록은 다시 바닥에 맞춘다(안 그러면 다음 측정이 바닥 상태가 아니라 건너뛴다).
     if (pinnedToBottom && listEl) listEl.scrollTop = listEl.scrollHeight;
   }
@@ -1534,6 +1539,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     if (ccfScpListTail < 0) ccfScpListTail = readSavedTail();
     if (ccfScpNativeToTabs < 0) ccfScpNativeToTabs = readSavedToTabs();
     if (panelEl && ccfScpListTail >= 0) panelEl.style.setProperty("--scp-list-tail", `${ccfScpListTail}px`);
+    if (!panelAdjust && !adjustDiag.adopted) { panelAdjust = readSavedAdjust(); if (panelEl && panelAdjust) panelEl.style.setProperty("--scp-list-adjust", `${panelAdjust}px`); }
     rows.forEach((row, i) => {
       if (!(row instanceof HTMLElement)) return;
       const next = rows[i + 1];
