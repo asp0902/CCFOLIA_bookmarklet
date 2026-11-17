@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.110
+// @version      0.3.111
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.110"),
+    version: getUserscriptVersion("0.3.111"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5916,11 +5916,15 @@
     if (forceBottom) {
       chatScrollers.forEach((scroller) => { scroller.__ccr20Pinned = true; });
     }
+    // 0.3.111: 연속 메시지 합치기 끄기(ccf-prose-merge=off: 아무것도 묶지 않음), 같은 이름이라도 스탠딩(아바타 그림)이 다르면 따로(ccf-prose-split-avatar, 기본 켬)
+    let mergeOn = true, splitAvatar = true;
+    try { mergeOn = localStorage.getItem("ccf-prose-merge") !== "off"; splitAvatar = localStorage.getItem("ccf-prose-split-avatar") !== "off"; } catch (_) { /* 기본값 */ }
     const authors = messages.map((li) => {
-      const author = extractAuthor(li);
+      const author = mergeOn ? extractAuthor(li) : null;
       if (!author) return author;
+      const key = splitAvatar ? author + "\\u0000av" + (li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src") || "") : author;
       // #69 — 나레이션 메시지는 같은 화자라도 일반 발화와 묶지 않음 (별도 그룹 키)
-      return rowIsNarration(li) ? author + "\\u0000nr" : author;
+      return rowIsNarration(li) ? key + "\\u0000nr" : key;
     });
     let changed = false;
     for (let i = 0; i < messages.length; i++) {
@@ -6260,7 +6264,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.110",
+    version: "0.3.111",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
 const bridge = read('legacy/ccfolia-roll20-css-bridge.user.js'), editor = read('log editor/index.html'), logPackage = read('legacy/ccfolia-log-package.user.js');
 // the bridge part (a real page with the second IIFE of the script, no stubs) is tools/test-bridge-group-runs.cjs; here only the wiring
-assert.ok(bridge.includes('return rowIsNarration(li) ? author + "\\\\u0000nr" : author;'), 'the group key uses the data based check');
+assert.ok(bridge.includes('return rowIsNarration(li) ? key + "\\\\u0000nr" : key;'), 'the group key uses the data based check (0.3.111: the key may carry the standing picture)');
 // the helper lives in the second IIFE (where processList is): it must not use names of the first IIFE (INVIS_START, extractEnvelope)
 const second = bridge.slice(bridge.indexOf('// ===== Prose Mode'));
 const helper = second.slice(second.indexOf('const narrationByText'), second.indexOf('function processList('));

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.43
+// @version      0.2.44
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.43"),
+    version: getUserscriptVersion("0.2.44"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1170,6 +1170,7 @@
 
         #${PANEL_ID} .ccf-theme-font { display: grid; gap: 6px; margin: 10px 0; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); }
         #${PANEL_ID} .ccf-theme-font-title { font-size: 13px; }
+        #${PANEL_ID} .ccf-theme-check { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
         #${PANEL_ID} .ccf-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
         #${PANEL_ID} .ccf-theme-preset { border: 1px solid; border-radius: 4px; }
         #${PANEL_ID} .ccf-theme-actions {
@@ -2538,6 +2539,11 @@
             <label class="ccf-theme-field"><span>굵기</span><select class="ccf-theme-select" data-screen-font="weight" aria-label="굵기"><option value="">기본</option><option value="300">가늘게</option><option value="400">보통</option><option value="500">중간</option><option value="700">굵게</option><option value="900">아주 굵게</option></select></label>
             <button type="button" class="ccf-theme-btn" data-action="screen-font-reset">글꼴 기본값</button>
           </div>
+          <div class="ccf-theme-font" role="group" aria-label="채팅">
+            <strong class="ccf-theme-font-title">채팅</strong>
+            <label class="ccf-theme-check"><input type="checkbox" data-prose-pref="ccf-prose-merge"> 같은 사람의 연속 메시지 합치기</label>
+            <label class="ccf-theme-check"><input type="checkbox" data-prose-pref="ccf-prose-split-avatar"> 스탠딩(아바타)이 다르면 따로 표시</label>
+          </div>
           <div class="ccf-theme-actions">
             <button type="button" class="ccf-theme-btn" data-action="save-theme">현재 색상 저장</button>
             <button type="button" class="ccf-theme-btn" data-action="reset">기본 테마로 복원</button>
@@ -2688,6 +2694,13 @@
         persistSettings();
         applyTheme(settings);
       };
+      // 0.2.44 채팅 묶음 설정(roll20-css-bridge 의 연속 메시지 합치기): 브라우저 설정, 바꾸면 바로 다시 훑는다
+      panel.addEventListener("change", (event) => {
+        const box = event.target;
+        if (!(box instanceof HTMLInputElement) || !box.dataset.prosePref) return;
+        try { localStorage.setItem(box.dataset.prosePref, box.checked ? "on" : "off"); } catch (_) { /* 저장 불가 */ }
+        try { window.__CCF_PROSE_MODE_DEBUG__?.rescan?.(); } catch (_) { /* 브리지가 없으면 다음 로드에서 */ }
+      });
       // 0.2.43 화면 글꼴 구역
       const onScreenFont = (event) => {
         const target = event.target;
@@ -4327,6 +4340,7 @@
   function syncScreenFontUi() {
     const panel = getPanel();
     if (!(panel instanceof HTMLElement)) return;
+    panel.querySelectorAll("[data-prose-pref]").forEach((box) => { let v = null; try { v = localStorage.getItem(box.dataset.prosePref); } catch (_) {} box.checked = v !== "off"; });
     const f = normalizeScreenFont(settings.screenFont);
     panel.querySelectorAll("[data-screen-font]").forEach((input) => { if (document.activeElement !== input) input.value = String(f[input.dataset.screenFont] ?? ""); });
     panel.querySelectorAll("[data-screen-font-out]").forEach((out) => { const k = out.getAttribute("data-screen-font-out"); out.textContent = k === "scale" ? `${f.scale}배` : `${f.spacing}px`; });
