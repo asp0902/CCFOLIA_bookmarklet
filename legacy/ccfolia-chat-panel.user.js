@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.40
+// @version      0.5.41
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2680,7 +2680,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       #${PANEL_ID} .ccf-scp-fmt-size.is-current::placeholder { color: rgba(255,255,255,.92); opacity: 1; }
       /* 글자 크기 칸과 유지 버튼은 같은 가로 길이(45+45 = 30px 열 3칸) — 위 줄 Tip·Bl·</> 아래를 정확히 채워 Sv 가 Nr 바로 아래에 온다. */
       #${PANEL_ID} .ccf-scp-fmt-keep { width: 45px; min-width: 45px; flex: 0 0 45px; }
-      #${PANEL_ID} .ccf-scp-fmt-size { width: 45px; min-width: 45px; flex: 0 0 45px; padding: 0 4px; text-align: center; color: inherit; font-size: 13px; }
+      #${PANEL_ID} .ccf-scp-fmt-size { width: 45px; min-width: 45px; flex: 0 0 45px; padding: 0 4px; text-align: center; color: inherit; font-size: 12px; background: rgb(66, 66, 66); } /* 오리지널 서식 바의 크기 칸과 같은 모양(12px + 음영) */
       #${PANEL_ID} .ccf-scp-fmt-size::placeholder { color: rgba(255,255,255,.5); }
       #${PANEL_ID} .ccf-scp-fmt-toggle { font-weight: 700; }
       #${PANEL_ID} .ccf-scp-actions { min-height: 38px; } /* 안내 문구는 없애되 네이티브 하단 줄(37px) 자리는 디자인 통일을 위해 비워 둔다 */
