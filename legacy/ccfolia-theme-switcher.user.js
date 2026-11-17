@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.40
+// @version      0.2.41
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -196,6 +196,23 @@
     inputBg: "#1a191b"
   });
 
+  // 0.2.41 추가 색·투명도(비우면 = 자동 = 지금 모양). 저장 테마·내보내기에 같이 실리고, 옛 파일은 기본값으로 채운다.
+  const EXTRA_COLOR_DEFS = Object.freeze([
+    { key: "accent", label: "강조색" },
+    { key: "uiText", label: "UI 글자색" },
+    { key: "scrollbar", label: "스크롤바" }
+  ]);
+  // 원클릭 색 프리셋(우리가 정한 값)
+  const THEME_COLOR_PRESETS = Object.freeze([
+    { name: "심해", theme: { bg: "#0b1a26", appbar: "#0f2433", paper: "#112a3b", border: "#1f4a63", text: "#d6ecf7", inputBg: "#0d2231", accent: "#4fc3f7" } },
+    { name: "벚꽃", theme: { bg: "#fbeff3", appbar: "#f4d7e1", paper: "#fff7fa", border: "#e3b3c4", text: "#5a3341", inputBg: "#ffffff", accent: "#e0608a" } },
+    { name: "숲", theme: { bg: "#132018", appbar: "#1a2b20", paper: "#1d3124", border: "#35523f", text: "#e3eee5", inputBg: "#172619", accent: "#7cc48a" } },
+    { name: "밤", theme: { bg: "#12121f", appbar: "#1a1a2e", paper: "#1e1e33", border: "#38385a", text: "#e6e6f5", inputBg: "#16162a", accent: "#9d8cff" } },
+    { name: "양피지", theme: { bg: "#efe3c8", appbar: "#e0cfa8", paper: "#f6ecd6", border: "#c4ab7a", text: "#3e2f1c", inputBg: "#fbf5e6", accent: "#9c5b24" } },
+    { name: "다크", theme: { bg: "#121212", appbar: "#1e1e1e", paper: "#1c1c1c", border: "#3a3a3a", text: "#eeeeee", inputBg: "#181818", accent: "#90caf9" } },
+    { name: "라이트", theme: { bg: "#f5f5f5", appbar: "#e8e8e8", paper: "#ffffff", border: "#cfcfcf", text: "#222222", inputBg: "#ffffff", accent: "#1976d2" } }
+  ]);
+
   const DEFAULT_MODE_FALLBACK_THEME = Object.freeze({
     bg: "#202020",
     appbar: "#212121",
@@ -220,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.40"),
+    version: getUserscriptVersion("0.2.41"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -564,6 +581,32 @@
           border: 2px solid var(--ccf-theme-bg);
           border-radius: 999px;
         }
+
+        /* 0.2.41 추가 색: 스크롤바 / 강조색(MUI 파랑 자리) / UI 글자색 / 뒤 흐림 */
+        html[data-ccf-theme-active="1"][data-ccf-theme-scrollbar="1"] ::-webkit-scrollbar-thumb { background: var(--ccf-theme-scrollbar); }
+        html[data-ccf-theme-active="1"][data-ccf-theme-scrollbar="1"] * { scrollbar-color: var(--ccf-theme-scrollbar) transparent; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiTabs-indicator,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiButton-containedPrimary,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiLinearProgress-bar { background-color: var(--ccf-theme-accent) !important; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiSwitch-switchBase.Mui-checked,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiCheckbox-root.Mui-checked,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiRadio-root.Mui-checked,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiSlider-root,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiCircularProgress-root,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiFormLabel-root.Mui-focused,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiTab-root.Mui-selected,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiButton-textPrimary,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiButton-outlinedPrimary { color: var(--ccf-theme-accent) !important; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiInput-underline::after,
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiFilledInput-underline::after { border-bottom-color: var(--ccf-theme-accent) !important; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--ccf-theme-accent) !important; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] { accent-color: var(--ccf-theme-accent); }
+        html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiIconButton-root,
+        html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiTab-root:not(.Mui-selected),
+        html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiButton-root:not(.MuiButton-containedPrimary) { color: var(--ccf-theme-uitext) !important; }
+        html[data-ccf-theme-active="1"][data-ccf-theme-blur="1"] .MuiDrawer-paper,
+        html[data-ccf-theme-active="1"][data-ccf-theme-blur="1"] .MuiAppBar-root { backdrop-filter: blur(var(--ccf-theme-blur)) !important; }
 
         html[data-ccf-theme-active="1"] .MuiAppBar-root,
         html[data-ccf-theme-active="1"] [${APPBAR_ATTR}="1"] {
@@ -1125,6 +1168,8 @@
           color: var(--ccf-theme-placeholder, rgba(244, 240, 235, 0.42));
         }
 
+        #${PANEL_ID} .ccf-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+        #${PANEL_ID} .ccf-theme-preset { border: 1px solid; border-radius: 4px; }
         #${PANEL_ID} .ccf-theme-actions {
           display: flex;
           flex-wrap: nowrap;
@@ -2467,6 +2512,22 @@
               </label>
             `).join("")}
           </div>
+          <div class="ccf-theme-grid ccf-theme-extras">
+            ${EXTRA_COLOR_DEFS.map((field) => `
+              <label class="ccf-theme-field">
+                <span>${escapeHtml(field.label)}</span>
+                <div class="ccf-theme-color-control">
+                  <input class="ccf-theme-color" type="color" data-extra="${field.key}" aria-label="${escapeHtml(field.label)} 색상" value="#000000">
+                  <input class="ccf-theme-color-code" type="text" data-extra="${field.key}" data-role="extra-code" spellcheck="false" autocomplete="off" placeholder="자동" aria-label="${escapeHtml(field.label)} code" value="">
+                </div>
+              </label>
+            `).join("")}
+            <label class="ccf-theme-field"><span>바·패널 불투명도 <b data-extra-out="alpha"></b></span><input type="range" min="0" max="100" step="1" data-extra="alpha" aria-label="바·패널 불투명도"></label>
+            <label class="ccf-theme-field"><span>뒤 흐림 <b data-extra-out="blur"></b></span><input type="range" min="0" max="12" step="1" data-extra="blur" aria-label="뒤 흐림"></label>
+          </div>
+          <div class="ccf-theme-presets" role="group" aria-label="색 프리셋">
+            ${THEME_COLOR_PRESETS.map((preset, index) => `<button type="button" class="ccf-theme-btn ccf-theme-preset" data-action="color-preset" data-preset="${index}" title="${escapeHtml(preset.name)}" style="background:${preset.theme.paper};color:${preset.theme.text};border-color:${preset.theme.accent}">${escapeHtml(preset.name)}</button>`).join("")}
+          </div>
           <div class="ccf-theme-actions">
             <button type="button" class="ccf-theme-btn" data-action="save-theme">현재 색상 저장</button>
             <button type="button" class="ccf-theme-btn" data-action="reset">기본 테마로 복원</button>
@@ -2532,6 +2593,16 @@
           return;
         }
 
+        if (action === "color-preset") {
+          const preset = THEME_COLOR_PRESETS[Number(target.dataset.preset)];
+          if (!preset) return;
+          settings = { ...settings, mode: MODE_CUSTOM, customTheme: normalizeTheme(preset.theme) };
+          persistSettings();
+          applyTheme(settings);
+          setStatus(`'${preset.name}' 색을 적용했습니다.`, "success");
+          return;
+        }
+
         if (action === "import-theme") {
           triggerThemeImport();
           return;
@@ -2594,6 +2665,21 @@
         }
       });
 
+      // 0.2.41 추가 색·투명도: 바꾸면 커스텀 테마에 저장(코드 칸을 비우면 자동)
+      const applyExtra = (key, value) => {
+        ensureCustomMode();
+        settings.customTheme = normalizeTheme({ ...settings.customTheme, [key]: value });
+        persistSettings();
+        applyTheme(settings);
+      };
+      panel.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || !target.dataset.extra) return;
+        const key = target.dataset.extra;
+        if (target.type === "range") applyExtra(key, Number(target.value));
+        else if (target.type === "color") applyExtra(key, target.value);
+        else { const v = target.value.trim(); if (!v) applyExtra(key, ""); else if (parseColorCode(v, "")) applyExtra(key, v); }
+      });
       panel.addEventListener("input", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) return;
@@ -4109,6 +4195,7 @@
       root.removeAttribute("data-ccf-theme-active");
       root.removeAttribute(DEFAULT_MODE_ATTR);
       root.removeAttribute("data-ccf-theme-mode");
+      ["accent", "uitext", "scrollbar", "blur"].forEach((name) => root.removeAttribute(`data-ccf-theme-${name}`));
       varsStyle.textContent = "";
       if (syncUi) syncUiFromSettings();
       queueDefaultModeUiRefresh();
@@ -4141,6 +4228,20 @@
       "--ccf-theme-success": derived.success,
       "--ccf-theme-error": derived.error
     };
+
+    // 0.2.41 추가 색·투명도: 패널·상하단 바·입력부 배경에 알파, 뒤 흐림, 강조색·UI 글자색·스크롤바(비우면 손대지 않음)
+    const extra = normalizeTheme(theme);
+    if (extra.alpha < 100) {
+      for (const [name, color] of [["--ccf-theme-paper", theme.paper], ["--ccf-theme-appbar", theme.appbar], ["--ccf-theme-input-bg", theme.inputBg]]) {
+        const rgb = hexToRgb(parseColorCode(color, "#000000"));
+        if (rgb) vars[name] = rgbaString(rgb, extra.alpha / 100);
+      }
+    }
+    const flags = { accent: extra.accent, uitext: extra.uiText, scrollbar: extra.scrollbar, blur: extra.blur ? `${extra.blur}px` : "" };
+    for (const [name, value] of Object.entries(flags)) {
+      if (value) { vars[`--ccf-theme-${name}`] = value; root.setAttribute(`data-ccf-theme-${name}`, "1"); }
+      else root.removeAttribute(`data-ccf-theme-${name}`);
+    }
 
     root.setAttribute("data-ccf-theme-active", "1");
     root.setAttribute("data-ccf-theme-mode", settings.mode);
@@ -4179,6 +4280,16 @@
       if (!Object.prototype.hasOwnProperty.call(themeForInputs, key)) return;
       input.value = formatColorCodeForDisplay(themeForInputs[key]);
     });
+
+    const extra = normalizeTheme(themeForInputs);
+    panel.querySelectorAll("input[data-extra]").forEach((input) => {
+      if (!(input instanceof HTMLInputElement) || document.activeElement === input) return;
+      const value = extra[input.dataset.extra];
+      if (input.type === "range") input.value = String(value);
+      else if (input.type === "color") input.value = value || "#000000";
+      else input.value = value ? formatColorCodeForDisplay(value) : "";
+    });
+    panel.querySelectorAll("[data-extra-out]").forEach((out) => { const key = out.getAttribute("data-extra-out"); out.textContent = key === "alpha" ? `${extra.alpha}%` : `${extra.blur}px`; });
 
     syncThemeNameInput();
     syncUnsungDuetToggle();
@@ -6451,6 +6562,7 @@
       root.removeAttribute("data-ccf-theme-active");
       root.removeAttribute(DEFAULT_MODE_ATTR);
       root.removeAttribute("data-ccf-theme-mode");
+      ["accent", "uitext", "scrollbar", "blur"].forEach((name) => root.removeAttribute(`data-ccf-theme-${name}`));
       varsStyle.textContent = "";
     }
 
@@ -6673,6 +6785,10 @@
     for (const field of FIELD_DEFS) {
       next[field.key] = parseColorCode(theme?.[field.key], fallback[field.key]);
     }
+    for (const field of EXTRA_COLOR_DEFS) next[field.key] = parseColorCode(theme?.[field.key], "");
+    const num = (value, lo, hi, d) => { const n = Number(value); return value === "" || value === null || value === undefined || !Number.isFinite(n) ? d : Math.max(lo, Math.min(hi, Math.round(n))); };
+    next.alpha = num(theme?.alpha, 0, 100, 100);
+    next.blur = num(theme?.blur, 0, 12, 0);
     return next;
   }
 
@@ -6685,7 +6801,7 @@
     const left = normalizeOptionalTheme(a);
     const right = normalizeOptionalTheme(b);
     if (!left || !right) return false;
-    return FIELD_DEFS.every((field) => left[field.key] === right[field.key]);
+    return [...FIELD_DEFS, ...EXTRA_COLOR_DEFS, { key: "alpha" }, { key: "blur" }].every((field) => left[field.key] === right[field.key]);
   }
 
   function normalizeSavedThemes(list) {
