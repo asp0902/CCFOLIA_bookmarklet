@@ -13,19 +13,19 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   const store = new Map(); // path -> data
-  const pages = []; // { page, uid, gm, subs: Set<collection path> }
+  const pages = []; // { page, uid, gm, subs: Map<collection path, where filter|null> }
   let deny = false;
   const denyError = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
   const under = (collectionPath) => [...store.entries()].filter(([p]) => p.startsWith(collectionPath + '/') && !p.slice(collectionPath.length + 1).includes('/'));
   const emit = async (changedPath) => {
     const parts = changedPath.split('/'), id = parts.pop(), col = parts.join('/');
-    for (const entry of pages) if (entry.subs.has(col)) await entry.page.evaluate(([c, i, d]) => window.__fsEmit(c, i, d), [col, id, store.get(changedPath) ?? null]).catch(() => {});
+    for (const entry of pages) if (entry.subs.has(col)) { const f = entry.subs.get(col), d = store.get(changedPath) ?? null; const shown = d && (!f || d[f.field] === f.value) ? d : null; await entry.page.evaluate(([c, i, d]) => window.__fsEmit(c, i, d), [col, id, shown]).catch(() => {}); }
   };
   const open = async ({ uid, gm = false, seed = null, denied = false, chars = null }) => {
     const context = await browser.newContext({ viewport: { width: 1300, height: 900 } });
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.__errors = errors;
-    const entry = { page, uid, gm, subs: new Set() }; pages.push(entry);
+    const entry = { page, uid, gm, subs: new Map() }; pages.push(entry);
     await page.exposeFunction('__nget', (p) => {
       const parts = p.split('/'); const col = parts[2];
       if (col === 'sheetSecrets') { const sheet = store.get(`rooms/test/sheets/${parts[3]}`); if (!(gm || (sheet && sheet.ownerUid === uid))) throw denyError(); }
@@ -37,14 +37,17 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
       const after = new Map(store); for (const [p, d] of ops) after.set(p, d);
       for (const [p, d] of ops) {
         const col = p.split('/')[2];
-        if (col === 'sheets' && !(gm || d.ownerUid === uid)) throw denyError();
+        if (col === 'sheets' && !(gm || (d.ownerUid === uid && (!store.has(p) || store.get(p).ownerUid === uid)))) throw denyError(); // 2026-11-18 rules: update = GM or the current owner
         if (col === 'sheetSecrets' && !(gm || after.get(`rooms/test/sheets/${p.split('/')[3]}`)?.ownerUid === uid)) throw denyError();
         if (col === 'meta' && !gm) throw denyError(); // meta/{docId}: only the GM writes (existing rule)
       }
       for (const [p, d] of ops) store.set(p, d);
       for (const [p] of ops) await emit(p);
     });
-    await page.exposeFunction('__nsub', (col) => { entry.subs.add(col); return under(col).map(([p, d]) => [p.split('/').pop(), d]); });
+    await page.exposeFunction('__nsub', (col, f) => {
+      if (col.endsWith('/sheets') && !gm && !(f && f.field === 'ownerUid' && f.value === uid)) throw denyError(); // a player may not list every sheet
+      entry.subs.set(col, f || null); return under(col).filter(([, d]) => !f || d[f.field] === f.value).map(([p, d]) => [p.split('/').pop(), d]);
+    });
     await page.addInitScript(({ uid, gm, seed }) => {
       if (seed) localStorage.setItem('ccf-character-sheet:test', JSON.stringify(seed));
       const handlers = new Map();
@@ -52,9 +55,10 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
       let ops;
       const fs = {
         collection: (db, ...p) => ({ path: p.join('/') }), doc: (db, ...p) => ({ path: p.join('/'), id: p[p.length - 1] }),
+        query: (ref, w) => ({ path: ref.path, where: w }), where: (field, op, value) => ({ field, value }),
         getDoc: async (ref) => { const d = await window.__nget(ref.path); return { exists: () => d !== null, data: () => d }; },
         writeBatch: () => { ops = []; const b = { set(ref, data) { ops.push([ref.path, data]); return b; }, commit: () => window.__nbatch(ops) }; return b; },
-        onSnapshot: (ref, cb) => { handlers.set(ref.path, { cb }); window.__nsub(ref.path).then((rows) => cb({ docChanges: () => rows.map(([id, data]) => ({ type: 'added', doc: { id, data: () => data } })) })); return () => handlers.delete(ref.path); }
+        onSnapshot: (ref, cb, onError) => { handlers.set(ref.path, { cb }); window.__nsub(ref.path, ref.where || null).then((rows) => cb({ docChanges: () => rows.map(([id, data]) => ({ type: 'added', doc: { id, data: () => data } })) }), (e) => onError?.(e)); return () => handlers.delete(ref.path); }
       };
       window.__CCF_HANDOUT_FB__ = { state: () => ({ db: {}, uid, modules: { fs } }), isGm: () => gm, roomKey: () => 'test' };
     }, { uid, gm, seed });
@@ -81,32 +85,37 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await new Promise((resolve, reject) => { const t0 = Date.now(); const poll = () => (store.has('rooms/test/sheets/s1') && store.has('rooms/test/sheetSecrets/s1') ? resolve() : Date.now() - t0 > 12000 ? reject(new Error('A did not upload')) : setTimeout(poll, 200)); poll(); });
     const up = store.get('rooms/test/sheets/s1'), upSecret = store.get('rooms/test/sheetSecrets/s1');
     assert.equal(up.ownerUid, 'uA'); assert(!/시트 비밀|사명 비밀/.test(up.json), 'the public document carries no secret text'); assert.match(upSecret.json, /시트 비밀/);
-    // B: empty browser
-    const B = await open({ uid: 'uB', chars: { 시크릿: 'uB' } });
+    // 0.5.49 (rules 2026-11-18): a player reads only their own sheets (an ownerUid query) -> B, linked by name only, gets nothing yet
+    const B = await open({ uid: 'uB', chars: { 시크릿: 'cB' } });
+    await B.waitForTimeout(1500);
+    assert.equal(await B.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.length), 0, "B does not read A's sheet");
+    // the GM hands the sheet to the member whose CCFOLIA character it is linked to (members: toolkit uid uB <-> CCFOLIA uid cB)
+    store.set('rooms/test/members/uB', { ccfoliaUid: 'cB', displayName: 'B' });
+    const G = await open({ uid: 'uG', gm: true, chars: { 시크릿: 'cB' } });
+    await new Promise((resolve, reject) => { const t0 = Date.now(); const poll = () => (store.get('rooms/test/sheets/s1')?.ownerUid === 'uB' ? resolve() : Date.now() - t0 > 12000 ? reject(new Error('the GM did not hand the sheet over')) : setTimeout(poll, 200)); poll(); });
+    assert.match(store.get('rooms/test/sheetSecrets/s1').json, /시트 비밀/, 'the secret part is kept');
+    // B (now the owner) receives it with the secret part
     await wait(B, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.length === 1);
+    await wait(B, () => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets[0].secret === '시트 비밀');
     let b = await sheetOf(B);
     assert.deepEqual([b.name, b.skills, b.curiosity, b.fear, b.respec.empathy, b.respec.newWorld], ['에르네스토', ['0:0', '1:2'], '1', '0:1', 3, true], 'B sees skills / curiosity / fear / respec');
-    assert.deepEqual([b.secret, b.mission], ['', ''], 'B (not owner, not GM) does not get the secret part');
-    // every field arrives: deep comparison of A's and B's sheets, apart from the secret part (by permission) and updatedAt
     const strip = ({ secret, mission, updatedAt, ...rest }) => rest;
     assert.deepEqual(strip(b), strip(await sheetOf(A)), 'B has every field of A (items, abilities, people, madness, profile, extensions, unknown keys...)');
     assert.deepEqual(b.items, original.items, 'items');
-    // B edits the memo: it goes up with ownerUid uB, without touching the secrets
+    // B edits the memo: it goes up (B is the owner now)
     await B.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
     await B.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root [data-field="memo"]', { timeout: 6000 });
     if (await B.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').count()) await B.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();
     await B.locator('#ccf-character-sheet-root [data-field="memo"]').fill('새 소유자의 메모');
-    await new Promise((resolve, reject) => { const t0 = Date.now(); const poll = () => (store.get('rooms/test/sheets/s1')?.ownerUid === 'uB' ? resolve() : Date.now() - t0 > 12000 ? reject(new Error('B did not push')) : setTimeout(poll, 200)); poll(); });
-    assert.match(store.get('rooms/test/sheets/s1').json, /새 소유자의 메모/);
-    assert.match(store.get('rooms/test/sheetSecrets/s1').json, /시트 비밀/, "B's empty secret did not overwrite the stored secret part");
-    // A receives it and keeps its own secret text
-    await wait(A, () => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets[0].memo === '새 소유자의 메모');
-    const a = await sheetOf(A); assert.deepEqual([a.secret, a.mission], ['시트 비밀', '사명 비밀'], 'A keeps the secret text');
-    // the GM reads the secret part too
-    const G = await open({ uid: 'uG', gm: true });
-    await wait(G, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets[0]?.secret === '시트 비밀');
-    assert.equal((await sheetOf(G)).memo, '새 소유자의 메모');
+    await new Promise((resolve, reject) => { const t0 = Date.now(); const poll = () => (/새 소유자의 메모/.test(store.get('rooms/test/sheets/s1')?.json || '') ? resolve() : Date.now() - t0 > 12000 ? reject(new Error('B did not push')) : setTimeout(poll, 200)); poll(); });
+    assert.equal(store.get('rooms/test/sheets/s1').ownerUid, 'uB');
+    assert.match(store.get('rooms/test/sheetSecrets/s1').json, /시트 비밀/, "B's write kept the secret part");
+    // the GM reads everything
+    await wait(G, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets[0]?.memo === '새 소유자의 메모');
     const g = await sheetOf(G); assert.deepEqual(strip(g), strip(await sheetOf(B)), 'the GM has the same sheet'); assert.deepEqual([g.secret, g.mission], ['시트 비밀', '사명 비밀']);
+    // A (no longer the owner) does not write it back
+    await A.waitForTimeout(1500);
+    assert.equal(store.get('rooms/test/sheets/s1').ownerUid, 'uB', 'A does not take it back');
     // room settings (scene tables / view permissions / scene counter) are the room's: the GM shares them (meta/sheetRoom), everybody receives them, a player cannot write them
     const roomSettings = { permissions: { 시크릿: { view: true, secret: false, edit: true } }, scene: { cycle: 2, number: 3 }, sceneTables: [{ macroName: '/거리', tableName: '거리 장면표', body: '/roll-table\n거리 장면표\n1:a' }], design: { font: 'serif', size: 18, color: '#eeeeee', accent: '#ff5252', bg: 60 } }; // 0.5.43: the sheet design is a room setting too
     await wait(G, () => !!localStorage.getItem('ccf-character-sheet:test'));
@@ -114,9 +123,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await G.reload(); await G.addScriptTag({ content: source });
     await wait(B, (r) => { const d = window.__CCF_CHARACTER_SHEET_DEBUG__.data(); return JSON.stringify(d.sceneTables) === JSON.stringify(r.sceneTables) && d.scene.cycle === 2 && d.permissions['시크릿']?.edit === true && d.design?.accent === '#ff5252' && d.design?.bg === 60; }, roomSettings);
     assert.match(store.get('rooms/test/meta/sheetRoom').json, /거리 장면표/);
-    // 0.5.45: a player with no link to the sheet does not see it (the list is empty); the GM sees it
-    const C = await open({ uid: 'uC', chars: { 다른이: 'uC' } });
-    await wait(C, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.length >= 1);
+    // a player with no link to the sheet does not read it at all
+    const C = await open({ uid: 'uC', chars: { 다른이: 'cC' } });
+    await C.waitForTimeout(1500);
     await C.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
     await C.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-panel', { timeout: 6000 });
     assert.equal(await C.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').count(), 0, "a player does not see another player's sheet");

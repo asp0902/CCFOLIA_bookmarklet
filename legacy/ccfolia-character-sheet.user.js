@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.48
+// @version      0.5.49
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.48";
+  const VERSION = "0.5.49";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -488,10 +488,13 @@
     if (!state.active || shared.denied || !state.roomKey || state.dataRoom !== state.roomKey) return;
     const fb = sharedFb();
     if (!fb) return;
-    if (shared.room === state.roomKey && shared.unsub) return;
-    shared.unsub?.(); shared.room = state.roomKey; shared.remote.clear(); shared.pushed.clear(); shared.known.clear(); shared.secretOk.clear(); shared.ready = false;
-    const { collection, onSnapshot } = fb.modules.fs;
-    shared.unsub = onSnapshot(collection(fb.db, "rooms", state.roomKey, "sheets"), (snap) => {
+    // 0.5.49: GM 은 시트 전체, 플레이어는 자기 것(ownerUid == 나)만 구독한다(규칙: 읽기 = GM 또는 소유자). GM 판정이 바뀌면 다시 구독.
+    const gmNow = sharedIsGm();
+    if (shared.room === state.roomKey && shared.unsub && shared.subGm === gmNow) return;
+    shared.unsub?.(); shared.room = state.roomKey; shared.remote.clear(); shared.pushed.clear(); shared.known.clear(); shared.secretOk.clear(); shared.ready = false; shared.subGm = gmNow;
+    const { collection, onSnapshot, query, where } = fb.modules.fs;
+    const sheetsRef = collection(fb.db, "rooms", state.roomKey, "sheets");
+    shared.unsub = onSnapshot(gmNow || !query || !where ? sheetsRef : query(sheetsRef, where("ownerUid", "==", fb.uid)), (snap) => {
       snap.docChanges().forEach((change) => {
         const id = change.doc.id, data = change.doc.data();
         if (change.type === "removed") { shared.remote.delete(id); return; }
@@ -501,6 +504,12 @@
       if (!shared.ready) { shared.ready = true; status("저장됨 · 룸 공유"); }
       sharedPushSoon();
     }, (error) => { sharedDenied(error); });
+    shared.unsubMembers?.(); shared.members = [];
+    if (gmNow) shared.unsubMembers = onSnapshot(collection(fb.db, "rooms", state.roomKey, "members"), (snap) => {
+      shared.members = snap.docs ? snap.docs.map((d) => ({ uid: d.id, ccf: String(d.data()?.ccfoliaUid || ""), at: Number(d.data()?.updatedAt?.toMillis?.() || 0) })) : shared.members;
+      snap.docChanges?.().forEach?.((ch) => { const d = ch.doc; shared.members = shared.members.filter((m) => m.uid !== d.id); if (ch.type !== "removed") shared.members.push({ uid: d.id, ccf: String(d.data()?.ccfoliaUid || ""), at: Number(d.data()?.updatedAt?.toMillis?.() || 0) }); });
+      sharedPushSoon();
+    }, () => { /* 구성원 목록을 못 읽으면 소유자 자동 넘기기만 쉰다 */ });
     // 룸 단위 설정(장면표 목록·시트 보기 권한·장면 카운터)은 시트가 아니라 룸의 것: GM 만 meta/sheetRoom 에 쓰고(기존 규칙: meta 는 GM 쓰기, 로그인한 누구나 읽기) 모두 받는다.
     shared.unsubRoom?.(); shared.roomSeen = false; shared.roomPushed = "";
     shared.unsubRoom = onSnapshot(collection(fb.db, "rooms", state.roomKey, "meta"), (snap) => {
@@ -556,6 +565,18 @@
     if (!shared.ready || shared.denied) return;
     clearTimeout(shared.timer); shared.timer = setTimeout(sharedPush, 900);
   }
+  // 0.5.49 소유자 넘기기(GM): 시트의 연결 캐릭터(player)를 코코포리아에서 가진 사람(roomCharacters.owner = 코코포리아 uid)을 구성원 목록(members: 툴킷 uid ↔ 코코포리아 uid)에서 찾아
+  // 그 툴킷 uid 를 시트 소유자로 쓴다(그 사람이 가장 최근에 쓴 브라우저). 못 찾으면 지금 소유자 그대로.
+  function desiredOwner(sheet, current) {
+    const name = String(sheet?.player || "").trim();
+    if (!name || !shared.members?.length) return current;
+    let ccf = "";
+    try { ccf = String(Object.values(findCharacterStore()?.getState()?.entities?.roomCharacters?.entities || {}).find((c) => c && String(c.name || "").trim() === name)?.owner || ""); } catch (_) { ccf = ""; }
+    if (!ccf) return current;
+    const mine = shared.members.filter((m) => m.ccf === ccf).sort((a, b) => b.at - a.at);
+    if (!mine.length || mine.some((m) => m.uid === current)) return current;
+    return mine[0].uid;
+  }
   async function sharedPush() {
     const fb = sharedFb();
     if (!fb || !shared.ready || shared.denied || shared.pushing || state.dataRoom !== state.roomKey || shared.room !== state.roomKey) return;
@@ -565,11 +586,14 @@
       const base = (...path) => doc(fb.db, "rooms", room, ...path);
       for (const sheet of [...state.data.sheets]) {
         const body = sheetBody(sheet), secret = sheetSecret(sheet), pushed = shared.pushed.get(sheet.id), remote = shared.remote.get(sheet.id);
-        if (pushed && pushed.body === body && pushed.secret === secret) continue;
+        // 0.5.49 플레이어는 자기 시트만 쓴다(규칙: 수정 = GM 또는 지금 소유자) — 남의 시트를 쓰려다 거절되면 공유 전체가 꺼지므로 아예 건너뛴다
+        if (!gm && remote && remote.ownerUid !== fb.uid) continue;
+        const handTo = gm && remote ? desiredOwner(sheet, remote.ownerUid) : "";
+        if (pushed && pushed.body === body && pushed.secret === secret && !(handTo && handTo !== remote.ownerUid)) continue;
         if (!pushed && remote && (sheet.updatedAt || 0) <= remote.updatedAt) continue; // 공유 쪽이 더 최신: 위에서 받아 쓴다
         if (sheetBeingEdited(sheet.id) && Date.now() - state.lastEditAt < 1200) { shared.timer = setTimeout(sharedPush, 1200); continue; }
         sheet.updatedAt = pushed || !sheet.updatedAt ? now : sheet.updatedAt;
-        const ownerUid = gm && remote ? remote.ownerUid : fb.uid;
+        const ownerUid = gm && remote ? (handTo || remote.ownerUid) : fb.uid;
         const batch = writeBatch(fb.db);
         batch.set(base("sheets", sheet.id), { json: body, ownerUid, updatedAt: sheet.updatedAt, deleted: false });
         // 비밀·사명은 읽을 수 있었던(또는 이 브라우저에서 만든) 시트만 쓴다: 소유권을 넘겨받은 직후 빈 값으로 원래 값을 덮지 않게.
@@ -583,6 +607,7 @@
         const remote = shared.remote.get(id);
         shared.known.delete(id); shared.pushed.delete(id);
         if (!remote || remote.deleted) continue;
+        if (!gm && remote.ownerUid !== fb.uid) continue; // 0.5.49 남의 시트는 지우지 않는다(이 브라우저에서 안 보이게 됐을 뿐)
         const ownerUid = gm ? remote.ownerUid : fb.uid;
         await writeBatch(fb.db).set(base("sheets", id), { json: "{}", ownerUid, updatedAt: now, deleted: true }).commit();
         shared.remote.set(id, { ownerUid, updatedAt: now, deleted: true });
@@ -600,7 +625,7 @@
     } finally { shared.pushing = false; }
   }
   const sharedInterval = setInterval(sharedTick, 3000);
-  signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); shared.unsubRoom?.(); });
+  signal.addEventListener("abort", () => { clearInterval(sharedInterval); clearTimeout(shared.timer); shared.unsub?.(); shared.unsubRoom?.(); shared.unsubMembers?.(); });
 
   function currentSheet() {
     const sheets = visibleSheets();
