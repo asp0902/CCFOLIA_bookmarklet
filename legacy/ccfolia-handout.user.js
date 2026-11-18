@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.141
+// @version      0.1.142
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.141",
+    version: "0.1.142",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -369,6 +369,7 @@
       const deletedIds = [...(state.driveKnownIds || [])].filter((id) => !ids.has(id));
       const res = await driveRequest("upload", { handouts, deletedIds });
       if (res.ok) state.driveKnownIds = ids;
+      if (res.ok && res.result?.skipped?.length) toast(`Drive: 그림 포함 5MB 가 넘는 핸드아웃 ${res.result.skipped.length}건은 올리지 못했습니다(그림을 줄이거나 링크로).`);
       state.driveLast = { ok: !!res.ok, at: Date.now(), error: res.ok ? "" : String(res.error || "") };
     }, 5000);
   }
