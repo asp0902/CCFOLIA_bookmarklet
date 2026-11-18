@@ -101,6 +101,10 @@ function mockDrive() {
   // a second PC finds the existing root / room folder instead of making new ones
   const c = core.createSync(api, {}); await c.download('ChW_QP77I', '테스트 룸', []);
   assert.equal([...drive.files.values()].filter((f) => f.name === '카피바라IV 핸드아웃').length, 1, 'one root folder');
+  // a handout over Drive's 5MB multipart limit is skipped (reported), the others still go up
+  const big = { id: 'big', title: '큰 그림', description: '<img src="data:image/png;base64,' + 'A'.repeat(5 * 1024 * 1024) + '">', updatedAt: '2026-11-18T01:00:00Z' };
+  r = await a.upload('ChW_QP77I', '테스트 룸', [big, { ...h1b, id: 'small', updatedAt: '2026-11-18T01:00:00Z' }]);
+  assert.deepEqual([r.changed, r.skipped], [1, ['big']]);
   // a failing call rejects (the caller keeps local storage untouched)
   const bad = core.createSync(core.makeDriveApi(async () => ({ ok: false, status: 401 }), async () => 'x'), {});
   await assert.rejects(bad.upload('R', 'r', [h1]), /Drive 401/);

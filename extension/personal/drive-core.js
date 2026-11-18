@@ -96,17 +96,19 @@
     async function upload(room, roomTitle, handouts, { deletedIds = [] } = {}) {
       const folder = await ensureRoom(room, roomTitle);
       const files = (state.files[room] ||= {}), synced = (state.synced[room] ||= {});
-      let changed = 0;
+      let changed = 0; const skipped = [];
       for (const h of handouts || []) {
         if (!h || !h.id || h._remote) continue;
         if (synced[h.id] && synced[h.id] === stamp(h)) continue;
         const content = serializeHandout(room, roomTitle, h);
+        // Drive 멀티파트 업로드는 5MB 까지. 본문 그림은 보통 저장 때 Firebase Storage 주소로 바뀌어 작지만, 업로드에 실패해 data: 로 남은 큰 그림이 있으면 넘을 수 있다.
+        if (content.length > 4.8 * 1024 * 1024) { const err = new Error(`"${h.title || h.id}" 이(가) 너무 큽니다(그림 포함 5MB 초과) — 그 핸드아웃만 건너뜀`); err.tooLarge = true; skipped.push(h.id); console.warn("[drive]", err.message); continue; }
         if (!files[h.id]) { const found = await api.find({ prop: "capybaraHandout", value: h.id, parent: folder }); files[h.id] = found[0]?.id || ""; }
         if (files[h.id]) await api.updateFile(files[h.id], content); else files[h.id] = await api.createFile(`${h.id}.json`, { capybaraHandout: h.id }, folder, content);
         synced[h.id] = stamp(h); changed += 1;
       }
       for (const id of deletedIds) { if (files[id]) { await api.trash(files[id]); delete files[id]; delete synced[id]; changed += 1; } }
-      return { changed };
+      return { changed, skipped };
     }
     // 받기: Drive 쪽 파일을 읽어 로컬과 합친다. 없는 것은 추가, 둘 다 있으면 updatedAt 이 새로운 쪽.
     // 둘 다 마지막 동기화 뒤에 바뀌었으면(충돌) 이긴 쪽을 쓰고, 진 쪽은 Drive 버전으로 남겨 conflicts 에 알린다.
