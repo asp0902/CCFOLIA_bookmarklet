@@ -63,9 +63,15 @@ service cloud.firestore {
       // 쓰기: 룸 구성원(members/{내 uid} 가 있는 사람)이 ownerUid 를 자기 uid 로 적어 쓴다 - 소유권을 넘겨받는 것도 이 "신고"다(코코포리아 소유권은 서버가 검증할 수 없어 위조 가능, 핸드아웃 members 와 같은 신뢰 수준).
       // GM 은 모두 쓴다. 지우기는 GM 또는 현재 ownerUid.
       function isMember(roomId) { return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)); }
+      // 2026-11-18: 읽기 = GM 또는 소유자(플레이어는 ownerUid 쿼리로 자기 것만 구독). 수정 = GM 또는 지금 소유자(남의 시트를 자기 uid 로 덮어쓰던 구멍 막기).
+      // 소유자 넘기기는 GM 이 한다(시트의 연결 캐릭터를 코코포리아에서 가진 구성원에게 자동으로).
       match /sheets/{sheetId} {
-        allow read: if signedIn();
-        allow create, update: if (isGm(roomId) || (isMember(roomId) && request.resource.data.ownerUid == request.auth.uid))
+        allow read: if isGm(roomId) || (signedIn() && resource.data.ownerUid == request.auth.uid);
+        allow create: if (isGm(roomId) || (isMember(roomId) && request.resource.data.ownerUid == request.auth.uid))
+          && request.resource.data.keys().hasOnly(['json', 'ownerUid', 'updatedAt', 'deleted'])
+          && request.resource.data.json is string && request.resource.data.json.size() <= 600000
+          && request.resource.data.ownerUid is string && request.resource.data.updatedAt is number;
+        allow update: if (isGm(roomId) || (isMember(roomId) && resource.data.ownerUid == request.auth.uid && request.resource.data.ownerUid == request.auth.uid))
           && request.resource.data.keys().hasOnly(['json', 'ownerUid', 'updatedAt', 'deleted'])
           && request.resource.data.json is string && request.resource.data.json.size() <= 600000
           && request.resource.data.ownerUid is string && request.resource.data.updatedAt is number;
