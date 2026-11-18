@@ -642,7 +642,8 @@ function markSpeakerRuns(wrappers) {
     const item = wrapper.querySelector(".MuiListItem-root"), head = wrapper.querySelector('[data-cm-slot="name"]');
     const name = head && [...head.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.nodeValue.trim());
     if (!item || !name) return null;
-    const author = name.nodeValue.replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
+    const icon = wrapper.querySelector('[data-cm-slot="icon"]')?.getAttribute("src") || "";
+    const author = `${name.nodeValue.replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "")}\0av${icon}`; // 같은 이름이라도 스탠딩(아이콘)이 다르면 따로(GM 화면 기본값과 같음)
     return item.getAttribute("data-ccf-narration") === "1" || item.querySelector('.ccf-render-root[data-ccf-narration="1"]') ? `${author}\0nr` : author;
   });
   const set = (el, name, on) => { if (on) el.setAttribute(name, "1"); else el.removeAttribute(name); };
@@ -780,6 +781,9 @@ function decodeEnvelope(full) {
     // The visible text is what is outside the envelope (it may stand before or after it, e.g. Roll20 header rows start with the envelope). The envelope's own text is what its runs
     // refer to; if it is not the visible text (the message was edited afterwards) the formatting is stale and the visible text is shown plain.
     const visible = full.slice(0, a) + full.slice(b + INVIS_END.length);
+    // 컷인 이름으로 끝나는 글(format-sync 0.1.119: 글 + 봉투 + 컷인 이름): 봉투의 글은 봉투 앞까지 — 컷인 이름은 그리지 않는다(GM 화면과 같음)
+    const before = full.slice(0, a);
+    if (env && typeof env.text === "string" && a > 0 && full.length > b + INVIS_END.length && env.text.trim() === before.trim()) return { text: before, env, visible: before };
     if (env && typeof env.text === "string" && env.text.trim() !== visible.trim()) return { text: visible, env: null, visible };
     return { text: env && typeof env.text === "string" ? env.text : visible, env, visible };
   } catch (_) { return { text: full.slice(0, a), env: null, visible: full.slice(0, a) }; }
@@ -797,7 +801,21 @@ const applyExtraCss = (span, extra) => {
     span.style[key] = value;
   }
 };
+// 메시지 글꼴: 봉투의 글꼴 id → 허용 목록의 Google 무료 한글 글꼴(툴킷 format-sync 의 window.__CCF_MESSAGE_FONTS__ 와 같은 목록). 모르는 id 는 기본 글꼴.
+const MESSAGE_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle" });
+const loadedFonts = new Set();
+function messageFont(id) {
+  const family = Object.prototype.hasOwnProperty.call(MESSAGE_FONTS, id) ? MESSAGE_FONTS[id] : "";
+  if (family && !loadedFonts.has(family)) {
+    loadedFonts.add(family);
+    const link = document.createElement("link"); link.rel = "stylesheet"; link.href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}&display=swap`;
+    document.head.append(link);
+  }
+  return family;
+}
 function styleSegment(span, style) {
+  const family = typeof style.fontId === "string" ? messageFont(style.fontId) : "";
+  if (family) span.style.fontFamily = `"${family}", sans-serif`;
   if (style.bold) span.style.fontWeight = "700";
   if (style.italic) span.style.fontStyle = "italic";
   const deco = []; if (style.underline) deco.push("underline"); if (style.strike) deco.push("line-through");
@@ -942,6 +960,9 @@ function renderRich(container, full, toolkit = false) {
       const active = runs.filter(r => r.start <= from && r.end >= to);
       const ruby = active.find(r => r.style.rubyText);
       if (!active.length) { lineEl.append(piece); continue; }
+      // 붙여 넣은 그림(서식 run 의 imageUrl): 이 페이지가 받을 수 있는 주소(코코포리아 CDN·imgur·data 그림)만 그림으로, 그 밖(툴킷 저장 토큰 등)은 설명 글자 그대로
+      const pic = active.find(r => typeof r.style.imageUrl === "string" && /^(https:\/\/storage\.ccfolia-cdn\.net\/|https:\/\/i\.imgur\.com\/|data:image\/(png|jpe?g|gif|webp);)/.test(r.style.imageUrl));
+      if (pic) { const img = document.createElement("img"); img.src = pic.style.imageUrl; img.alt = piece; img.referrerPolicy = "no-referrer"; img.className = "msg-image"; img.style.maxWidth = "100%"; img.style.maxHeight = "320px"; img.style.display = "block"; lineEl.append(img); continue; }
       const span = document.createElement(ruby ? "ruby" : "span");
       if (toolkit) span.className = "ccf-frag";
       for (const r of active) styleSegment(span, r.style);
