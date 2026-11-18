@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.140
+// @version      0.1.141
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.140",
+    version: "0.1.141",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -371,6 +371,69 @@
       if (res.ok) state.driveKnownIds = ids;
       state.driveLast = { ok: !!res.ok, at: Date.now(), error: res.ok ? "" : String(res.error || "") };
     }, 5000);
+  }
+  // 0.1.141 첫 연결(이 브라우저에서 처음): 방향을 고른다 — 합치기(최신 우선, 기본) / 이 PC → Drive / Drive → 이 PC. 덮어쓰기 전에 이 룸의 로컬 원본을 백업 키에 남긴다.
+  const DRIVE_FIRST_KEY = "ccf-handout:drive-first-done";
+  function driveFirstDone() { try { return localStorage.getItem(DRIVE_FIRST_KEY) === "1"; } catch (_) { return true; } }
+  function driveBackupLocal(room) { try { localStorage.setItem(`ccf-handout:drive-backup:${room}`, JSON.stringify({ at: new Date().toISOString(), handouts: driveOriginals(state.data) })); } catch (_) { /* 용량 부족이면 백업 없이 합치기만 권한다 */ } }
+  async function openDriveFirstChoice() {
+    closeDriveHistory();
+    const box = document.createElement("div");
+    box.className = "drive-history"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Drive 동기화 시작");
+    box.innerHTML = `<div class="drive-history-card"><div class="drive-history-head"><strong>Drive 동기화 시작 — 방향 선택</strong></div><div class="drive-history-view"><p>이 브라우저에서 처음 Drive 와 맞춥니다. 이 룸의 핸드아웃은 먼저 이 브라우저에 백업해 둡니다.</p><div class="drive-history-actions"><button type="button" class="btn small" data-action="drive-first" data-dir="merge">합치기(최신 우선)</button><button type="button" class="btn small secondary" data-action="drive-first" data-dir="push">이 PC → Drive</button><button type="button" class="btn small secondary" data-action="drive-first" data-dir="pull">Drive → 이 PC</button></div></div></div>`;
+    (state.shadow.querySelector(".panel") || state.shadow).appendChild(box);
+  }
+  async function driveFirstRun(dir) {
+    const room = getCurrentRoomKey();
+    closeDriveHistory();
+    driveBackupLocal(room);
+    let ok = false;
+    if (dir === "push") { const res = await driveRequest("upload", { handouts: driveOriginals(state.data) }); ok = !!res.ok; if (!ok) toast(`Drive 올리기 실패: ${res.error || ""}`); else { state.driveKnownIds = new Set(driveOriginals(state.data).map((h) => h.id)); toast("이 PC 의 핸드아웃을 Drive 에 올렸습니다."); } }
+    else if (dir === "pull") {
+      const res = await driveRequest("download", { handouts: [] });
+      ok = !!res.ok;
+      if (!ok) toast(`Drive 받기 실패: ${res.error || ""}`);
+      else {
+        const remote = state.data.handouts.filter((h) => h._remote);
+        state.data.handouts = [...(res.result?.handouts || []).map(ensurePermissions), ...remote];
+        ensureOrderField(state.data.handouts);
+        state.driveKnownIds = new Set((res.result?.handouts || []).map((h) => h.id));
+        const tk = toolkit(); if (tk?.storage?.setRoomData) await tk.storage.setRoomData(STORAGE_FEATURE, room, { ...state.data });
+        if (isAdminMode()) for (const h of res.result?.handouts || []) pushHandoutToFirestore(h).catch(() => {});
+        toast("Drive 의 핸드아웃으로 바꿨습니다(이전 것은 이 브라우저에 백업).");
+        render();
+      }
+    } else ok = await driveDownloadNow();
+    if (ok) { try { localStorage.setItem(DRIVE_FIRST_KEY, "1"); } catch (_) {} }
+  }
+  // '전체 룸'을 열 때: Drive 색인(rooms.json)의 룸마다 받아 이 브라우저의 그 룸 저장소와 합친다 — 다른 PC 에서 만든 룸·핸드아웃도 보인다.
+  async function driveSyncAllRooms() {
+    if (!driveOn() || state.driveAllBusy) return;
+    state.driveAllBusy = true;
+    try {
+      const res = await driveRequest("rooms");
+      if (!res.ok) { state.driveLast = { ok: false, at: Date.now(), error: String(res.error || "") }; return; }
+      const cur = getCurrentRoomKey(), tk = toolkit();
+      let changed = false;
+      for (const r of res.result?.rooms || []) {
+        if (!r.room || r.room === cur || r.room === "global") continue;
+        const rec = await tk?.storage?.getRoomData?.(STORAGE_FEATURE, r.room);
+        const value = rec?.value && typeof rec.value === "object" ? rec.value : { handouts: [] };
+        const got = await driveRequest("download", { room: r.room, roomTitle: r.title || value.roomTitle || "", handouts: driveOriginals(value) });
+        if (!got.ok) continue;
+        const { handouts = [], added = [], updated = [] } = got.result || {};
+        if (!added.length && !updated.length) continue;
+        await updateRoomValue(r.room, (v) => { const remote = (v.handouts || []).filter((h) => h._remote); v.handouts = [...handouts, ...remote]; if (!v.roomTitle && r.title) v.roomTitle = r.title; });
+        changed = true;
+      }
+      state.driveLast = { ok: true, at: Date.now(), error: "" };
+      if (changed) { state.allRooms = null; if (state.isOpen) render(); }
+    } finally { state.driveAllBusy = false; }
+  }
+  function driveStatusLine() {
+    if (!driveOn()) return "";
+    const last = state.driveLast;
+    return last ? `Drive: ${last.ok ? "마지막 동기화" : "오류"} ${new Date(last.at).toLocaleString()}${last.ok ? "" : ` (${last.error})`}` : "Drive: 연결됨(아직 동기화 전)";
   }
   // 0.1.140 변경 이력(Drive 버전): 날짜 목록 → 고르면 미리보기 → '이 버전으로 되돌리기'(지금 내용도 버전으로 남는다) / '보관'(Drive 자동 정리에서 빼기).
   function closeDriveHistory() { state.shadow?.querySelectorAll(".drive-history").forEach((el) => el.remove()); }
@@ -3781,7 +3844,7 @@
     }
     state.isOpen = true;
     render();
-    if (state.driveDownloadedRoom !== room && driveOn()) { state.driveDownloadedRoom = room; driveDownloadNow({ quiet: true }).catch(() => {}); }
+    if (state.driveDownloadedRoom !== room && driveOn()) { state.driveDownloadedRoom = room; (driveFirstDone() ? driveDownloadNow({ quiet: true }) : openDriveFirstChoice()).catch(() => {}); }
     // 화면 발화자 전체 수집(바닥 근처 제한 없음) + 이미지 백필 — 변동 시 화면 갱신
     collectAllVisibleChatAuthors()
       .then((added) => backfillPlImagesFromChatHistory().then((updated) => added || updated))
@@ -3878,6 +3941,7 @@
           <span class="room-info" data-sync-line>${escapeHtml(syncRoleLine())}</span>
           <span class="room-info" data-firebase-line>Firebase: ${escapeHtml(firebaseIssueLabel())}</span>
           <span class="room-info">룸 ${escapeHtml(getCurrentRoomKey())} · 핸드아웃 ${state.data.handouts.length}건</span>
+          ${driveStatusLine() ? `<span class="room-info" data-drive-line>${escapeHtml(driveStatusLine())}</span>` : ""}
         `;
       }
       const showStrip = stripHtml.length > 0;
@@ -4784,10 +4848,11 @@
     }
     const id = btn.dataset.id;
     console.info("[ccf-handout] click", action, id || "");
-    if (action === "scope") { state.scope = btn.dataset.scope === "all" ? "all" : "room"; if (state.scope === "all") state.allRooms = null; render(); return; }
+    if (action === "scope") { state.scope = btn.dataset.scope === "all" ? "all" : "room"; if (state.scope === "all") { state.allRooms = null; driveSyncAllRooms().catch(() => {}); } render(); return; }
     if (action === "room-view") { const h = findRoomHandout(btn.dataset.room, id); if (h) showHandoutModal({ ...h, id: "" }, "", true, true); return; }
     if (action === "room-copy") { copyHandoutHere(btn.dataset.room, id); return; }
     if (action === "drive-history") { openDriveHistory(id); return; }
+    if (action === "drive-first") { driveFirstRun(btn.dataset.dir); return; }
     if (action === "drive-history-close") { closeDriveHistory(); return; }
     if (action === "drive-version") { showDriveVersion(id, btn.dataset.rev, btn); return; }
     if (action === "drive-restore") { restoreDriveVersion(id, btn.dataset.rev); return; }

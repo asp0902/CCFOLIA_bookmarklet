@@ -143,6 +143,13 @@
       if (toUpload.length) { for (const h of toUpload) synced[h.id] = ""; await upload(room, roomTitle, toUpload); }
       return { handouts: [...result.values()], added, updated, conflicts };
     }
+    // 색인(rooms.json): 다른 PC 에서 올린 룸 목록 — '전체 룸'에서 이 PC 에 없는 룸도 받는다.
+    async function readIndex() {
+      const rootId = await ensureRoot();
+      const found = await api.find({ prop: "capybaraIndex", value: "1", parent: rootId });
+      if (!found[0]) return [];
+      try { const v = JSON.parse(await api.read(found[0].id)); return Array.isArray(v?.rooms) ? v.rooms.filter((r) => r && typeof r.room === "string") : []; } catch (_) { return []; }
+    }
     async function history(room, handoutId) {
       const fileId = state.files[room]?.[handoutId];
       if (!fileId) return [];
@@ -162,7 +169,7 @@
       return next;
     }
     async function keep(room, handoutId, revId, on = true) { const fileId = state.files[room]?.[handoutId]; if (fileId) await api.keepRevision(fileId, revId, on); }
-    return { state, upload, download, history, readVersion, restore, keep, writeIndex, ensureRoom };
+    return { state, upload, download, history, readVersion, restore, keep, writeIndex, readIndex, ensureRoom };
   }
 
   const exported = { makeDriveApi, createSync, serializeHandout, parseHandoutFile, roomFolderName, ROOT_NAME };

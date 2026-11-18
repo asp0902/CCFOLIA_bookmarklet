@@ -4,7 +4,7 @@
   "use strict";
   if (location.origin !== "https://ccfolia.com" || window.top !== window) return;
   const SOURCE = "capybara-drive";
-  const OPS = new Set(["status", "upload", "download", "history", "read", "restore", "keep"]);
+  const OPS = new Set(["status", "upload", "download", "history", "read", "restore", "keep", "rooms"]);
   const mark = (on) => { document.documentElement.dataset.capybaraDrive = on ? "1" : "0"; };
   const refresh = async () => { try { const { driveConnected } = await chrome.storage.local.get(["driveConnected"]); mark(!!driveConnected); } catch (_) { mark(false); } };
   refresh();

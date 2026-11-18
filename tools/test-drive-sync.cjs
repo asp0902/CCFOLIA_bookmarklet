@@ -97,6 +97,7 @@ function mockDrive() {
   // the room index
   await a.writeIndex([{ room: 'ChW_QP77I', title: '테스트 룸' }]);
   assert(/"ChW_QP77I"/.test([...drive.files.values()].find((f) => f.name === 'rooms.json').content));
+  assert.deepEqual(await core.createSync(api, {}).readIndex(), [{ room: 'ChW_QP77I', title: '테스트 룸' }], 'another PC reads the room index');
   // a second PC finds the existing root / room folder instead of making new ones
   const c = core.createSync(api, {}); await c.download('ChW_QP77I', '테스트 룸', []);
   assert.equal([...drive.files.values()].filter((f) => f.name === '카피바라IV 핸드아웃').length, 1, 'one root folder');

@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.148";
-  const BUILD_ID = "2026-11-18-drive-history-319";
+  const VERSION = "0.3.149";
+  const BUILD_ID = "2026-11-18-drive-first-320";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
