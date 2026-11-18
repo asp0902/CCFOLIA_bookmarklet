@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.49
+// @version      0.5.50
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1034,7 +1034,7 @@
       btn.style.opacity = "0.35";
     });
 
-    if (msg.name === prevName) {
+    if (prevName != null && contKey(msg) === prevName) {
       // 같은 화자 이어짐 표시를 붙이면 roll20-bridge 의 CSS 가 네이티브와 똑같이
       // 아이콘·이름을 숨기고 간격을 좁혀 준다(그 스크립트의 JS 는 우리 패널을 건너뛰지만
       // CSS 는 전역이라 그대로 적용된다). 직접 숨기면 간격이 원본보다 크게 남는다.
@@ -1514,6 +1514,13 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       li.appendChild(btn);
     });
   }
+  // 0.5.50: 연속 묶기 기준 = 오리지널(roll20-css-bridge)과 같은 설정 — 합치기 끄기(ccf-prose-merge=off), 같은 이름이라도 스탠딩(아이콘)이 다르면 따로(ccf-prose-split-avatar, 기본 켬)
+  function contKey(msg) {
+    let merge = true, split = true;
+    try { merge = localStorage.getItem("ccf-prose-merge") !== "off"; split = localStorage.getItem("ccf-prose-split-avatar") !== "off"; } catch (_) { /* 기본값 */ }
+    if (!merge || !msg) return null;
+    return split ? `${msg.name} ${msg.icon || ""}` : msg.name;
+  }
   function buildRow(msg, prevName) {
     return decorateHideState(buildRowCore(msg, prevName), msg);
   }
@@ -1521,7 +1528,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     const cloned = buildRowFromNativeTemplate(msg, prevName);
     if (cloned) return cloned;
 
-    const isCont = msg.name === prevName;
+    const isCont = prevName != null && contKey(msg) === prevName;
     const row = document.createElement("li");
     row.className = "ccf-scp-row" + (isCont ? " is-cont" : "");
     const avatar = document.createElement("div");
@@ -1660,11 +1667,11 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         && signature.startsWith(lastSignature + ",")) {
       const oldCount = lastSignature.split(",").length;
       const oldLast = ccfScpInnerUl.lastElementChild;
-      let prevName = messages[oldCount - 1]?.name ?? null;
+      let prevName = messages[oldCount - 1] ? contKey(messages[oldCount - 1]) : null;
       const appended = [];
       for (const msg of messages.slice(oldCount)) {
         const row = buildRow(msg, prevName);
-        prevName = msg.name;
+        prevName = contKey(msg);
         ccfScpInnerUl.appendChild(row);
         appended.push(row);
       }
@@ -1691,7 +1698,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     let prevName = null;
     for (const msg of messages) {
       frag.appendChild(buildRow(msg, prevName));
-      prevName = msg.name;
+      prevName = contKey(msg);
     }
     applyRowMarkers([...frag.children]);
 
