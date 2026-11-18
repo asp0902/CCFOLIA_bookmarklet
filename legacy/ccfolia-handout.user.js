@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.139
+// @version      0.1.140
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.139",
+    version: "0.1.140",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -371,6 +371,51 @@
       if (res.ok) state.driveKnownIds = ids;
       state.driveLast = { ok: !!res.ok, at: Date.now(), error: res.ok ? "" : String(res.error || "") };
     }, 5000);
+  }
+  // 0.1.140 변경 이력(Drive 버전): 날짜 목록 → 고르면 미리보기 → '이 버전으로 되돌리기'(지금 내용도 버전으로 남는다) / '보관'(Drive 자동 정리에서 빼기).
+  function closeDriveHistory() { state.shadow?.querySelectorAll(".drive-history").forEach((el) => el.remove()); }
+  async function openDriveHistory(id) {
+    const h = findHandout(id);
+    if (!h || !driveOn()) return;
+    closeDriveHistory();
+    const box = document.createElement("div");
+    box.className = "drive-history"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "변경 이력");
+    box.innerHTML = `<div class="drive-history-card"><div class="drive-history-head"><strong>변경 이력 — ${escapeHtml(h.title || "(제목 없음)")}</strong><button type="button" class="btn small secondary" data-action="drive-history-close">닫기</button></div><div class="drive-history-body"><div class="drive-history-list">불러오는 중…</div><div class="drive-history-view"></div></div></div>`;
+    (state.shadow.querySelector(".panel") || state.shadow).appendChild(box);
+    const res = await driveRequest("history", { handoutId: id });
+    const list = box.querySelector(".drive-history-list");
+    if (!res.ok) { list.textContent = `불러오지 못했습니다: ${res.error || ""}`; return; }
+    const versions = (res.result?.versions || []).slice().reverse();
+    list.innerHTML = versions.length ? versions.map((v, i) => `<button type="button" class="drive-history-item" data-action="drive-version" data-id="${escapeAttr(id)}" data-rev="${escapeAttr(v.id)}">${escapeHtml(v.at ? new Date(v.at).toLocaleString() : v.id)}${i === 0 ? " · 지금" : ""}${v.kept ? " · 보관됨" : ""}</button>`).join("") : "아직 Drive 에 올라간 버전이 없습니다.";
+  }
+  async function showDriveVersion(id, rev, btn) {
+    const box = state.shadow?.querySelector(".drive-history");
+    if (!box) return;
+    box.querySelectorAll(".drive-history-item").forEach((b) => b.toggleAttribute("aria-current", b === btn));
+    const view = box.querySelector(".drive-history-view");
+    view.textContent = "불러오는 중…";
+    const res = await driveRequest("read", { handoutId: id, revId: rev });
+    const v = res.ok ? res.result?.handout : null;
+    if (!v) { view.textContent = `불러오지 못했습니다: ${res.error || ""}`; return; }
+    view.innerHTML = `<div class="drive-history-title">${escapeHtml(v.title || "(제목 없음)")}</div><div class="drive-history-text rendered">${renderHandoutBody(v.description || "")}</div>${v.gmNotes ? `<div class="drive-history-secret rendered">${renderHandoutBody(v.gmNotes)}</div>` : ""}<div class="drive-history-actions"><button type="button" class="btn small" data-action="drive-restore" data-id="${escapeAttr(id)}" data-rev="${escapeAttr(rev)}">이 버전으로 되돌리기</button><button type="button" class="btn small secondary" data-action="drive-keep" data-id="${escapeAttr(id)}" data-rev="${escapeAttr(rev)}">이 버전 보관</button></div>`;
+  }
+  async function restoreDriveVersion(id, rev) {
+    if (!confirm("이 버전으로 되돌릴까요? 지금 내용은 변경 이력에 남습니다.")) return;
+    const res = await driveRequest("restore", { handoutId: id, revId: rev });
+    const v = res.ok ? res.result?.handout : null;
+    if (!v) { toast(`되돌리지 못했습니다: ${res.error || ""}`); return; }
+    const i = state.data.handouts.findIndex((h) => h.id === id);
+    if (i >= 0) state.data.handouts[i] = ensurePermissions({ ...state.data.handouts[i], ...v });
+    await saveAll(state.data);
+    if (isAdminMode()) pushHandoutToFirestore(state.data.handouts[i]).catch(() => {});
+    closeDriveHistory();
+    toast("되돌렸습니다.");
+    render();
+  }
+  async function keepDriveVersion(id, rev) {
+    const res = await driveRequest("keep", { handoutId: id, revId: rev, on: true });
+    toast(res.ok ? "이 버전을 보관했습니다(Drive 자동 정리에서 빠집니다)." : `보관하지 못했습니다: ${res.error || ""}`);
+    if (res.ok) openDriveHistory(id);
   }
   async function driveDownloadNow({ quiet = false } = {}) {
     if (!driveOn()) return false;
@@ -1155,6 +1200,17 @@
     }
     header .header-btn:hover { background: rgba(255,255,255,.08); }
     header .header-btn.edge-end { margin-right: -3px; }
+    .drive-history { position: absolute; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center; padding: 40px 12px; background: rgba(0,0,0,.4); }
+    .drive-history-card { width: min(560px, 100%); max-height: calc(100% - 20px); display: flex; flex-direction: column; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14); }
+    .drive-history-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .drive-history-body { display: grid; grid-template-columns: 180px 1fr; min-height: 0; overflow: hidden; }
+    .drive-history-list { overflow: auto; border-right: 1px solid rgba(255,255,255,.12); padding: 6px 0; font-size: 0.8125rem; }
+    .drive-history-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 12px; cursor: pointer; font-size: 0.8125rem; }
+    .drive-history-item:hover, .drive-history-item[aria-current] { background: rgba(255,255,255,.08); }
+    .drive-history-view { overflow: auto; padding: 10px 14px; font-size: 0.875rem; }
+    .drive-history-title { font-weight: 700; margin-bottom: 6px; }
+    .drive-history-secret { margin-top: 10px; padding: 8px; border: 1px dashed rgba(244,67,54,.5); }
+    .drive-history-actions { display: flex; gap: 6px; margin-top: 12px; }
     .add-choice-overlay {
       position: absolute; inset: 0; z-index: 5;
       display: none; align-items: flex-start; justify-content: flex-end;
@@ -3837,7 +3893,7 @@
         const isReadOnly = (editing && !canManageHandout(editing)) || (state.editingId === "new" && !isAdminMode());
         actionsHtml = isReadOnly
           ? `<button class="btn small secondary" data-action="cancel-edit">목록으로</button>`
-          : `<button class="btn small secondary" data-action="save-handout">저장</button><button class="btn small secondary" data-action="cancel-edit">취소</button>`;
+          : `<button class="btn small secondary" data-action="save-handout">저장</button><button class="btn small secondary" data-action="cancel-edit">취소</button>${editing && driveOn() && !state.editingRoom ? `<button class="btn small secondary" data-action="drive-history" data-id="${escapeAttr(editing.id)}">변경 이력</button>` : ""}`;
       } else if (state.activeTab === "settings") {
         actionsHtml = `<button class="btn small secondary" data-action="save-settings">저장</button>`;
       }
@@ -4731,6 +4787,11 @@
     if (action === "scope") { state.scope = btn.dataset.scope === "all" ? "all" : "room"; if (state.scope === "all") state.allRooms = null; render(); return; }
     if (action === "room-view") { const h = findRoomHandout(btn.dataset.room, id); if (h) showHandoutModal({ ...h, id: "" }, "", true, true); return; }
     if (action === "room-copy") { copyHandoutHere(btn.dataset.room, id); return; }
+    if (action === "drive-history") { openDriveHistory(id); return; }
+    if (action === "drive-history-close") { closeDriveHistory(); return; }
+    if (action === "drive-version") { showDriveVersion(id, btn.dataset.rev, btn); return; }
+    if (action === "drive-restore") { restoreDriveVersion(id, btn.dataset.rev); return; }
+    if (action === "drive-keep") { keepDriveVersion(id, btn.dataset.rev); return; }
     if (action === "room-pick-copy" || action === "room-pick-move") { const r = btn.getBoundingClientRect(); openRoomItemMenu({ clientX: r.left, clientY: r.top }, btn.dataset.room, id, action === "room-pick-move" ? "move" : "copy"); return; }
     if (action === "room-copy-to" || action === "room-move-to") { copyHandoutToRoom(btn.dataset.room, id, btn.dataset.target, action === "room-move-to"); return; }
     if (action === "room-delete") { removeRoomHandout(btn.dataset.room, id); return; }
@@ -5626,7 +5687,7 @@
     const id = escapeAttr(h.id);
     const menu = document.createElement("div");
     menu.className = "sv-menu card-menu"; menu.setAttribute("role", "menu");
-    menu.innerHTML = [["edit-handout", "편집"], ["duplicate-handout", "복제"], ["delete-handout", "삭제"]].map(([action, label]) => `<button type="button" class="sv-item" role="menuitem" data-action="${action}" data-id="${id}">${label}</button>`).join("");
+    menu.innerHTML = [["edit-handout", "편집"], ["duplicate-handout", "복제"], ...(driveOn() ? [["drive-history", "변경 이력"]] : []), ["delete-handout", "삭제"]].map(([action, label]) => `<button type="button" class="sv-item" role="menuitem" data-action="${action}" data-id="${id}">${label}</button>`).join("");
     const panel = state.shadow.querySelector(".panel") || state.shadow;
     panel.appendChild(menu);
     const pr = panel.getBoundingClientRect?.();
