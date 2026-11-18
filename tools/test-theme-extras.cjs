@@ -14,7 +14,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
     await page.route('**/*', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><body>
       <header class="MuiAppBar-root">bar <button class="MuiIconButton-root">i</button></header>
       <div class="MuiDrawer-paper" style="width:200px;height:100px">drawer <span class="MuiTabs-indicator" style="display:block;height:2px"></span>
-      <span class="MuiSwitch-switchBase Mui-checked">sw</span></div></body></html>` }));
+      <span class="MuiSwitch-switchBase Mui-checked">sw</span><p class="MuiListItemText-secondary">2D6 <span class="MuiTypography-body2" id="dice" style="color:rgb(33,150,243)">＞ 8</span></p></div></body></html>` }));
     const load = async () => { await page.goto('https://ccfolia.com/rooms/theme-test'); await page.addScriptTag({ content: source }); await page.waitForSelector('#ccf-theme-switcher-panel [data-action="color-preset"]', { state: 'attached' }); };
     await load();
     const css = (sel, prop) => page.locator(sel).first().evaluate((el, p) => getComputedStyle(el)[p], prop);
@@ -25,6 +25,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
     assert.deepEqual(await attrs(), ['1', '1', null, null, null], 'accent on, the rest auto');
     assert.equal(await css('.MuiTabs-indicator', 'backgroundColor'), 'rgb(79, 195, 247)', 'tab underline = accent');
     assert.equal(await css('.MuiSwitch-switchBase', 'color'), 'rgb(79, 195, 247)', 'switch = accent');
+    assert.equal(await css('#dice', 'color'), 'rgb(79, 195, 247)', '0.2.48: the dice result text = accent');
     assert.equal(await css('.MuiDrawer-paper', 'backgroundColor'), 'rgb(17, 42, 59)', 'panel opaque by default');
     // opacity + blur
     const setRange = (key, v) => page.locator(`#ccf-theme-switcher-panel input[data-extra="${key}"]`).evaluate((el, val) => { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); }, v);

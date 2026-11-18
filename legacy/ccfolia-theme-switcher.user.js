@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.47
+// @version      0.2.48
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.47"),
+    version: getUserscriptVersion("0.2.48"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -602,6 +602,8 @@
         html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiFilledInput-underline::after { border-bottom-color: var(--ccf-theme-accent) !important; }
         html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--ccf-theme-accent) !important; }
         html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] { accent-color: var(--ccf-theme-accent); }
+        /* 0.2.48: 다이스 결과 글자(코코포리아는 메시지 본문 안 span.MuiTypography-body2 를 MUI 파랑으로 칠한다) */
+        html[data-ccf-theme-active="1"][data-ccf-theme-accent="1"] .MuiListItemText-secondary > span.MuiTypography-body2 { color: var(--ccf-theme-accent) !important; }
         html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiIconButton-root,
         html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiTab-root:not(.Mui-selected),
         html[data-ccf-theme-active="1"][data-ccf-theme-uitext="1"] .MuiButton-root:not(.MuiButton-containedPrimary) { color: var(--ccf-theme-uitext) !important; }
