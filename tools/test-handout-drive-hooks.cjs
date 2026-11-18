@@ -14,7 +14,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
       document.documentElement.dataset.capybaraPlayerRelay = '1';
-      document.documentElement.dataset.capybaraDrive = '1';
+      document.documentElement.dataset.capybaraDrive = '1'; localStorage.setItem('ccf-handout:drive-first-done', '1'); // 0.1.141: past the first-connection choice
       window.__driveCalls = [];
       window.addEventListener('message', (e) => { const d = e.data; if (!d || d.source !== 'capybara-drive' || d.direction !== 'page') return; window.__driveCalls.push({ op: d.op, ids: (d.handouts || []).map((h) => h.id), deleted: d.deletedIds || [], remoteSent: (d.handouts || []).some((h) => h._remote) });
         const result = d.op === 'download' ? { handouts: [...d.handouts, { id: 'd1', title: 'Drive 에서 온 지도', description: '', gmNotes: '', permissions: {}, order: 5, updatedAt: '2026-11-17T10:00:00Z' }], added: ['d1'], updated: [], conflicts: [] } : { changed: 1 };

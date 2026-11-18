@@ -60,6 +60,7 @@
     if (op === "status") return status();
     if (op === "connect") { await authorize(true); return status(); }
     if (op === "disconnect") { await disconnect(); return status(); }
+    if (op === "rooms") return serial(() => withSync(async (sync) => ({ rooms: await sync.readIndex() })));
     if (!room || room === "global") throw new Error("룸이 없습니다");
     return serial(() => withSync(async (sync) => {
       try {
@@ -79,6 +80,7 @@
   }
   async function indexRooms(sync, room, roomTitle) {
     const { driveRooms = {} } = await chrome.storage.local.get(["driveRooms"]);
+    for (const r of await sync.readIndex().catch(() => [])) if (!(r.room in driveRooms)) driveRooms[r.room] = r.title || ""; // 다른 PC 가 올린 룸도 색인에 남긴다
     driveRooms[room] = roomTitle || driveRooms[room] || "";
     await chrome.storage.local.set({ driveRooms });
     return Object.entries(driveRooms).map(([id, title]) => ({ room: id, title }));

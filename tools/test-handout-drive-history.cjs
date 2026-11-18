@@ -14,7 +14,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-handout.u
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
       document.documentElement.dataset.capybaraPlayerRelay = '1';
-      document.documentElement.dataset.capybaraDrive = '1';
+      document.documentElement.dataset.capybaraDrive = '1'; localStorage.setItem('ccf-handout:drive-first-done', '1'); // 0.1.141: past the first-connection choice
       window.__driveCalls = [];
       window.addEventListener('message', (e) => { const d = e.data; if (!d || d.source !== 'capybara-drive' || d.direction !== 'page') return; window.__driveCalls.push({ op: d.op, ids: (d.handouts || []).map((h) => h.id), deleted: d.deletedIds || [], remoteSent: (d.handouts || []).some((h) => h._remote) });
         const versions = [{ id: 'r1', at: '2026-11-17T10:00:00Z', kept: false }, { id: 'r2', at: '2026-11-17T11:00:00Z', kept: true }];
