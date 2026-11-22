@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.52
+// @version      0.5.53
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -2711,7 +2711,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       #${PANEL_ID} .ccf-scp-fmt-btn { width: 30px; min-width: 30px; height: 30px; padding: 0; border-radius: 0;
         background: rgb(40,40,40); border: 0; font-size: 12px; font-weight: 400; }
       #${PANEL_ID} .ccf-scp-fmt-btn:hover { background: rgb(55,55,55); }
-      #${PANEL_ID} .ccf-scp-inputwrap { margin: 0; padding: 4px 8px; background: rgba(0,0,0,.2); }
+      #${PANEL_ID} .ccf-scp-inputwrap { margin: 0; padding: 4px var(--scp-input-padr, 8px) 4px var(--scp-input-padl, 8px); background: rgba(0,0,0,.2); }
       #${PANEL_ID} .ccf-scp-input { min-height: 72px; padding: 0; border: 0; border-radius: 0; background: transparent;
         font-size: 16px; line-height: 1.5; resize: none; }
       #${PANEL_ID} .ccf-scp-input:focus { border: 0; }
@@ -3431,6 +3431,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     // 입력창 + 매크로 자동완성 드롭업(입력 단어가 화자 팔레트 커맨드에 걸리면 추천).
     const inputWrap = document.createElement("div");
     inputWrap.className = "ccf-scp-inputwrap";
+    inputWrap.setAttribute("data-ccf-toolbar-anchor", "1"); // 0.5.53: 오리지널 서식 바는 입력 우물 "바깥"(우물 앞, 패널 폭 그대로)에 붙는다 — 오리지널과 같은 자리
     const suggestEl = document.createElement("div");
     suggestEl.className = "ccf-scp-suggest";
     suggestEl.hidden = true;
@@ -4269,6 +4270,13 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       let paper = nativeInput.parentElement;
       if (nativeTabBar) { while (paper && !paper.contains(nativeTabBar)) paper = paper.parentElement; }
       if (paper && paper !== document.body) set("--scp-bottom-bg", opaqueBg ? visibleBackgroundOf(paper, pageBg) : layersOver(paper, native));
+      // 0.5.53 입력칸 글 시작 위치: 오리지널 입력칸 글자가 하단 Paper 왼쪽/오른쪽 끝에서 떨어진 거리(입력칸 위치 + 안쪽 여백)를 그대로 우물 안쪽 여백으로.
+      if (paper && paper !== document.body) {
+        const pr = paper.getBoundingClientRect(), tr = nativeInput.getBoundingClientRect(), ts = getComputedStyle(nativeInput);
+        const padL = Math.round(tr.left - pr.left + (parseFloat(ts.paddingLeft) || 0)), padR = Math.round(pr.right - tr.right + (parseFloat(ts.paddingRight) || 0));
+        if (tr.width > 0 && padL >= 0 && padL <= 40) set("--scp-input-padl", `${padL}px`);
+        if (tr.width > 0 && padR >= 0 && padR <= 40) set("--scp-input-padr", `${padR}px`);
+      }
     }
 
     // 헤더도 네이티브에서 읽어 높이·글꼴·정렬을 맞춘다.
