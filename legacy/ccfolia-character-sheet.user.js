@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.58
+// @version      0.5.59
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.58";
+  const VERSION = "0.5.59";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1684,6 +1684,9 @@
     }).join("")}</section>${column < CATEGORIES.length - 1 ? `<i class="ccf-cs-gap${sheet.removedGaps[column] ? " is-active" : ""}" aria-hidden="true"></i>` : ""}`).join("")}</div>`;
   }
 
+  function noteDiamond() {
+    return `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M6 .9 11.1 6 6 11.1.9 6Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter"/></svg>`;
+  }
   function renderRepeaters(key, items, fields) {
     const heading = `<div class="ccf-cs-repeater-head" aria-hidden="true"><div class="ccf-cs-repeater-fields">${fields.map(([, label]) => `<span>${label}</span>`).join("")}</div></div>`;
     return `<div class="ccf-cs-repeaters ccf-cs-${key}">${heading}${items.map((item, index) => {
@@ -1691,7 +1694,8 @@
       const noteOpen = state.openNotes.has(noteKey);
       const itemName = item.name || `${index + 1}번 항목`;
       const memo = item.memo || (key === "abilities" ? item.effect : "") || (key === "people" ? item.detail : "");
-      const noteButton = `<button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button>`;
+      // 0.5.59 메모(설명) 단추 = 마름모 SVG(Roll20 시트처럼): 비었으면 빈 마름모 ◇, 내용 있으면 채운 마름모 ◆, 펼치면 강조색
+      const noteButton = `<button class="ccf-cs-note-toggle${memo ? " is-filled" : ""}${noteOpen ? " is-open" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteDiamond()}</button>`;
       // 0.5.57 어빌리티 줄의 메모 단추는 삭제(×) 단추 바로 왼쪽(탭 순서도 그 자리)
       return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : noteButton}<div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div>${key === "abilities" ? noteButton : ""}<button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
@@ -1945,7 +1949,7 @@
     if (target.dataset.list) {
       const item = sheet[target.dataset.list]?.[Number(target.dataset.index)];
       if (item) item[target.dataset.prop] = target.type === "checkbox" ? target.checked : target.value;
-      if (target.classList.contains("ccf-cs-inline-memo")) resizeInlineMemos(target.parentElement);
+      if (target.classList.contains("ccf-cs-inline-memo")) { resizeInlineMemos(target.parentElement); target.parentElement?.querySelector(".ccf-cs-note-toggle")?.classList.toggle("is-filled", !!target.value); }
       saveSoon();
       return;
     }
@@ -2438,9 +2442,11 @@
       #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1fr) calc(3em + 20px) minmax(0,1fr) }
       #${ROOT_ID} .ccf-cs-ability-roll { width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border:0;border-radius:0;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-ability-roll svg { width:20px;height:20px;fill:none;stroke:currentColor;pointer-events:none }
-      #${ROOT_ID} .ccf-cs-note-toggle { align-self:center;justify-self:center;width:13px;min-width:13px;height:13px;min-height:13px;padding:0;background:rgba(255,255,255,.7);border:0;border-radius:0;cursor:pointer }
-      #${ROOT_ID} .ccf-cs-note-toggle:hover { background:#fff }
-      #${ROOT_ID} .ccf-cs-note-toggle.is-active { background:#f50057 }
+      #${ROOT_ID} .ccf-cs-note-toggle { align-self:center;justify-self:center;display:inline-flex;align-items:center;justify-content:center;width:13px;min-width:13px;height:13px;min-height:13px;padding:0;color:rgba(255,255,255,.7);background:none;border:0;border-radius:0;cursor:pointer }
+      #${ROOT_ID} .ccf-cs-note-toggle svg { display:block;width:12px;height:12px;fill:none;overflow:visible }
+      #${ROOT_ID} .ccf-cs-note-toggle.is-filled svg { fill:currentColor }
+      #${ROOT_ID} .ccf-cs-note-toggle:hover { color:#fff }
+      #${ROOT_ID} .ccf-cs-note-toggle.is-open { color:#f50057 }
       #${ROOT_ID} .ccf-cs-people .ccf-cs-repeater-fields,#${ROOT_ID} .ccf-cs-people .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 72px;align-items:center }
       #${ROOT_ID} .ccf-cs-shelter { display:inline-flex;align-items:center;gap:6px;color:#e0e0e0;font-size:13px }
       #${ROOT_ID} .ccf-cs-people .ccf-cs-repeater-head .ccf-cs-repeater-fields span:last-child { padding-left:0 }

@@ -151,9 +151,12 @@ assert.match(source, /vitalField\("생명력", "life", sheet\.life, "lifeMax", s
 assert.match(source, /vitalField\("이성치", "sanity", sheet\.sanity, "sanityMax", sheet\.sanityMax\)/);
 assert.match(source, /numberField\("merit", "공적점", sheet\.merit\)/);
 assert.match(source, /textField\("etc", "ETC", sheet\.etc\)/);
-assert.match(source, /ccf-cs-note-toggle\$\{noteOpen \|\| memo \? " is-active" : ""\}/);
-assert.match(source, /ccf-cs-note-toggle \{[^}]*width:13px[^}]*height:13px[^}]*border-radius:0/);
-assert.match(source, /ccf-cs-note-toggle\.is-active \{ background:#f50057 \}/);
+// 0.5.59 memo buttons: an inline SVG diamond, empty (no memo) / filled (memo), the accent colour when open; the same 13px box
+assert.match(source, /ccf-cs-note-toggle\$\{memo \? " is-filled" : ""\}\$\{noteOpen \? " is-open" : ""\}/);
+assert.match(source, /ccf-cs-note-toggle \{[^}]*width:13px[^}]*height:13px/);
+assert.match(source, /ccf-cs-note-toggle\.is-filled svg \{ fill:currentColor \}/);
+assert.match(source, /ccf-cs-note-toggle\.is-open \{ color:#f50057 \}/);
+assert.match(source, /function noteDiamond\(\)[\s\S]{0,200}<svg viewBox="0 0 12 12"/);
 assert.doesNotMatch(source, /noteOpen \|\| memo \? "◆" : "◇"/);
 assert.deepEqual(
   JSON.parse(JSON.stringify(hook.normalizePermissions({ "*": { view: 1 }, 빈값: {}, "": { edit: true } }))),
