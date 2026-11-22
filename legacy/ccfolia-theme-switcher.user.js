@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.56
+// @version      0.2.57
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.56"),
+    version: getUserscriptVersion("0.2.57"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1950,6 +1950,7 @@
       ${scope} .ccf-roll20-badge { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; box-sizing: border-box; border-radius: 6px; color: #fff; font-size: 13px; }
       ${scope} .ccf-roll20-badge.is-field { background: #000; }
       ${scope} .ccf-roll20-badge.is-skill { background: #999; }
+      ${scope} .ccf-roll20-badge.is-plot { background: #666; }
       ${scope} .ccf-roll20-die.is-six { color: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-six svg { stroke: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-one { color: rgb(255,0,12); }
@@ -5293,6 +5294,16 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
         host.appendChild(makeInsaneAbilityCard(speaker, ability, check));
         return;
       }
+      // 0.2.57 플롯 카드(Roll20 인세인 시트): 시트가 보낸 "S1D6 [플롯]"/"sc(n) [플롯]"의 결과가 보이는 글(보낸 사람·공개 후)만. 결과가 숨겨진 시크릿 표시는 건드리지 않는다
+      const plot = !match && !check ? original.match(/^\s*(?:S1D6|sc\(([1-6])\))\s*\[플롯\]\s*(?:\(1D6\)|c\(\d\))\s*[＞>]\s*([1-6])\s*$/i) : null;
+      if (plot) {
+        const signaturePlot = JSON.stringify([original, 'plot']);
+        if (existing && host.getAttribute('data-ccf-roll20-emotion') === signaturePlot) return;
+        host.querySelectorAll(':scope > .ccf-roll20-emotion-card').forEach(node => node.remove());
+        host.setAttribute('data-ccf-roll20-emotion', signaturePlot);
+        host.appendChild(makeInsanePlotCard(plot[1] || '1d6', plot[2]));
+        return;
+      }
       const scene = !match && !check ? parseInsaneRoll20Scene(original) : null;
       // 0.2.40: 분야·특기 표 카드는 특기표 굴림(RTT·TVT/TET/TPT/TST/TKT/TMT: "… 특기 …표(…) ＞ 《특기／분야N》")에만. 일반 특기 판정에는 안 붙인다.
       const skillRoll = !check && !item ? original.match(/특기[^＞>]*[＞>]\s*《([^／/》]+)[／/][^》]*》\s*$/u) : null;
@@ -5460,6 +5471,13 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const card = document.createElement('span');
     card.className = 'ccf-roll20-emotion-card ccf-roll20-table-card';
     card.innerHTML = `<span class="ccf-roll20-table-side"><b class="ccf-roll20-badge is-field">${table.field}</b><b>${table.field}.${table.fieldName}</b></span><span class="ccf-roll20-table-side"><b>${table.skill}</b><b class="ccf-roll20-badge is-skill">${table.number}</b></span>`;
+    return card;
+  }
+  // 플롯 카드: 특기표 카드와 같은 틀·배지 — 왼쪽 "플롯 [무엇으로(1d6 / 숫자)]", 오른쪽 "속도 [결과]"
+  function makeInsanePlotCard(by, speed) {
+    const card = document.createElement('span');
+    card.className = 'ccf-roll20-emotion-card ccf-roll20-table-card ccf-roll20-plot-card';
+    card.innerHTML = `<span class="ccf-roll20-table-side"><b>플롯</b><b class="ccf-roll20-badge is-plot">${by}</b></span><span class="ccf-roll20-table-side"><b>속도</b><b class="ccf-roll20-badge is-field">${speed}</b></span>`;
     return card;
   }
   // 어빌리티 사용 카드(Roll20 인세인 시트의 어빌리티 결과 모양): 위(캐릭터 이름·종류·어빌리티명) / 선 / 판정(있으면, 판정 카드와 같은 부품) / 선 / 설명(가운데)

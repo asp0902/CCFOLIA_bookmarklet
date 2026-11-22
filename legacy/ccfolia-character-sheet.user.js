@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.60
+// @version      0.5.61
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.60";
+  const VERSION = "0.5.61";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -2110,7 +2110,8 @@
   // 플롯 전송: 고정값 n = sc(n)(BCDice 시크릿 계산), 가변 = S1D6(시크릿 1D6). sc(1D6) 은 BCDice Insane 에서 굴려지지 않는 명령이라(unsupported command) 글자로만 나갔다.
   function plotCommand(value) {
     const v = String(value || "");
-    return v === "1D6" ? "S1D6" : /^[1-6]$/.test(v) ? `sc(${v})` : "";
+    // 0.5.61 주석 [플롯] = 시트가 보낸 플롯 표식(직접 친 S1D6 과 구분, 테마가 플롯 카드로 그린다). 공백 뒤라 굴림은 그대로
+    return v === "1D6" ? "S1D6 [플롯]" : /^[1-6]$/.test(v) ? `sc(${v}) [플롯]` : "";
   }
   function sendPlot(sheet) {
     const command = plotCommand(sheet?.plot);
