@@ -42,21 +42,23 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     assert.equal(await imgs('trigger').evaluate((el) => [el.getAttribute('width'), el.getAttribute('height')]).then((v) => v.join('x')), '2x1');
     // the original text stays (React-safe), the image is appended last
     assert.equal(await page.locator('#trigger').evaluate((p) => p.firstChild.nodeType === 3 && p.firstChild.nodeValue === '번개' && p.lastElementChild.classList.contains('ccf-cutin-chat-image')), true);
-    // 0.1.125: a cut-in-only message keeps its text visible (CCFOLIA default) with the image below; hiding is opt-in ("on", CSS only, the text node stays)
-    const look = (id) => page.locator('#' + id).evaluate((p) => { const c = getComputedStyle(p), r = p.getBoundingClientRect(), img = p.querySelector('.ccf-cutin-chat-image img'); return { fontSize: c.fontSize, hideAttr: p.getAttribute('data-ccf-cutin-hide'), textNode: p.firstChild.nodeValue, imgVisible: !img || img.getBoundingClientRect().height > 0 }; });
-    assert.equal((await look('trigger')).hideAttr, null, 'trigger-only row: text not hidden');
-    assert.notEqual((await look('trigger')).fontSize, '0px', 'trigger-only row: text visible');
-    assert.equal((await look('trigger')).imgVisible, true, 'image shown');
-    await addRow('visible', '평범한 말'); await page.waitForTimeout(300);
-    assert.deepEqual(await look('visible'), { fontSize: await page.locator('#visible').evaluate((p) => getComputedStyle(p).fontSize), hideAttr: null, textNode: '평범한 말', imgVisible: true }, 'plain row untouched');
-    assert.notEqual((await look('visible')).fontSize, '0px');
-    await page.evaluate(() => localStorage.setItem('ccfCutinChatHideText', 'on'));
-    await page.evaluate(() => { document.getElementById('trigger').firstChild.nodeValue = '번개'; });
+    // 0.1.130 one rule: a cut-in-only message whose picture is drawn (loaded) hides the text "@name" (CSS only, the text node stays) and shows the picture;
+    // no picture (sound only) or a picture that fails to load -> the text shows. Plain rows untouched.
+    const look = (id) => page.locator('#' + id).evaluate((p) => { const c = getComputedStyle(p), img = p.querySelector('.ccf-cutin-chat-image img'); return { fontSize: c.fontSize, hideAttr: p.getAttribute('data-ccf-cutin-hide'), textNode: p.firstChild.nodeValue, img: !!img && img.getBoundingClientRect().height > 0 }; });
     await page.waitForFunction(() => document.getElementById('trigger').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 3000 });
-    assert.deepEqual(await look('trigger'), { fontSize: '0px', hideAttr: '1', textNode: '번개', imgVisible: true }, 'opt-in: text hidden, node kept, image shown');
-    await page.evaluate(() => localStorage.removeItem('ccfCutinChatHideText'));
-    await page.evaluate(() => { document.getElementById('trigger').firstChild.nodeValue = '번개'; });
-    await page.waitForFunction(() => !document.getElementById('trigger').hasAttribute('data-ccf-cutin-hide'), null, { timeout: 3000 });
+    assert.deepEqual(await look('trigger'), { fontSize: '0px', hideAttr: '1', textNode: '번개', img: true }, 'picture drawn: text hidden, node kept, picture shown');
+    await addRow('visible', '평범한 말'); await page.waitForTimeout(300);
+    assert.equal((await look('visible')).hideAttr, null, 'plain row untouched');
+    assert.notEqual((await look('visible')).fontSize, '0px');
+    await addRow('nopic', '이미지 없음'); await page.waitForTimeout(400);
+    assert.deepEqual(await look('nopic'), { fontSize: (await look('visible')).fontSize, hideAttr: null, textNode: '이미지 없음', img: false }, 'no picture: the text shows');
+    await page.evaluate(() => { window.__state.entities.roomEffects.ids.push('e4'); window.__state.entities.roomEffects.entities.e4 = { name: '깨진 그림', imageUrl: 'https://broken.invalid/x.png' }; window.__state.entities.roomEffects = { ...window.__state.entities.roomEffects }; });
+    await addRow('broken', '깨진 그림');
+    await page.waitForFunction(() => !document.querySelector('#broken .ccf-cutin-chat-image'), null, { timeout: 6000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    const br = await look('broken');
+    assert.equal(br.hideAttr, null, 'load failed: text shows ' + JSON.stringify(br)); assert.notEqual(br.fontSize, '0px'); assert.equal(br.img, false);
+    assert.equal(/ccfCutinChatHideText/.test(source), false, 'the switch is gone');
     // the trigger can also be the cut-in's message field
     await addRow('trigger2', '!불꽃');
     await page.waitForSelector('#trigger2 .ccf-cutin-chat-image img');
