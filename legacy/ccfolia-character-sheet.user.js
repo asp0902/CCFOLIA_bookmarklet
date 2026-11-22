@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.57
+// @version      0.5.58
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.57";
+  const VERSION = "0.5.58";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1404,13 +1404,13 @@
     form.querySelector('input[name="detail"]')?.focus();
   }
 
-  // 0.5.56 회피 입력 창: 사용할 특기(고르면 그 특기의 목표치를 시트 습득 특기에서 계산, 공포심이면 공포심 체크), 목표치(직접 고칠 수 있음),
-  // 추가 수정치(시트 전체 수정치와 더함), 공포심(-2, 시트의 다른 판정과 같은 규칙) → "2D6±n>=목표치 [회피/특기(/공포심)]". 마지막 값은 시트에 기억.
+  // 0.5.58 회피 입력 창(인세인 회피 규칙): 플롯(속도) 1~6 → 목표치 = 플롯+4(직접 고칠 수 있고, 플롯을 바꾸기 전까지 유지),
+  // 특기 토글(명중판정과 같은 특기를 습득 = +1), 공포심(-2), 추가 수정치(시트 전체 수정치와 더함) → "2D6±n>=목표치 [회피/속도N(/특기)(/공포심)]".
+  // 플롯은 시트의 플롯과 같은 값(가변·미정이면 빈 칸). 마지막 값은 시트에 기억.
   function evadeCommand(sheet, values, secret) {
-    const skillName = values.skill ? (() => { const [c, r] = values.skill.split(":").map(Number); return CATEGORIES[c]?.[r + 1] || ""; })() : "";
-    const total = (values.fear ? -2 : 0) + clampModifier(sheet?.modifier) + (Math.round(Number(values.extra)) || 0);
+    const total = (values.skill ? 1 : 0) + (values.fear ? -2 : 0) + clampModifier(sheet?.modifier) + (Math.round(Number(values.extra)) || 0);
     const mod = total > 0 ? `+${total}` : total < 0 ? String(total) : "";
-    return `${rollCommandPrefix(secret)}2D6${mod}>=${values.target} [회피${skillName ? `/${skillName}` : ""}${values.fear ? "/공포심" : ""}]`;
+    return `${rollCommandPrefix(secret)}2D6${mod}>=${values.target} [회피${values.plot ? `/속도${values.plot}` : ""}${values.skill ? "/특기" : ""}${values.fear ? "/공포심" : ""}]`;
   }
   function openEvadeForm(secret) {
     closeSceneUi();
@@ -1418,26 +1418,25 @@
     const sheet = currentSheet();
     if (!dialog || !sheet) return;
     const last = sheet.evade && typeof sheet.evade === "object" ? sheet.evade : {};
-    const skillOptions = CATEGORIES.map((column, c) => `<optgroup label="${column[0]}">${column.slice(1).map((name, r) => `<option value="${c}:${r}"${last.skill === `${c}:${r}` ? " selected" : ""}>${name}</option>`).join("")}</optgroup>`).join("");
+    const plot = /^[1-6]$/.test(String(sheet.plot || "")) ? String(sheet.plot) : "";
+    const target = plot && String(last.plot || "") !== plot ? Number(plot) + 4 : Number(last.target) || (plot ? Number(plot) + 4 : 5);
     const form = document.createElement("form");
     form.className = "ccf-cs-scene-form ccf-cs-evade-form";
     form.setAttribute("role", "dialog");
     form.setAttribute("aria-label", "회피 판정");
     form.innerHTML = `<h3>회피 판정${secret ? " (비공개)" : ""}</h3>`
-      + `<label>사용할 특기<select name="skill"><option value="">특기 없이</option>${skillOptions}</select></label>`
-      + `<div class="ccf-cs-scene-numbers"><label>목표치<input type="number" min="2" max="12" name="target" value="${Number(last.target) || 5}"></label><label>추가 수정치<input type="number" min="-9" max="9" name="extra" value="${Math.round(Number(last.extra)) || 0}"></label></div>`
+      + `<div class="ccf-cs-scene-numbers"><label>플롯(속도)<select name="plot"><option value="">-</option>${[1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}"${plot === String(n) ? " selected" : ""}>${n}</option>`).join("")}</select></label><label>목표치<input type="number" min="2" max="12" name="target" value="${target}"></label><label>추가 수정치<input type="number" min="-9" max="9" name="extra" value="${Math.round(Number(last.extra)) || 0}"></label></div>`
+      + `<label class="ccf-cs-evade-fear"><input type="checkbox" name="skill"${last.skill === true ? " checked" : ""}> 특기(+1, 명중판정과 같은 특기 습득)</label>`
       + `<label class="ccf-cs-evade-fear"><input type="checkbox" name="fear"${last.fear ? " checked" : ""}> 공포심(-2)</label>`
       + `<p class="ccf-cs-evade-preview" aria-live="polite"></p>`
       + `<div class="ccf-cs-scene-actions"><button type="button" data-action="scene-cancel">취소</button><button type="submit">굴림</button></div>`;
-    const read = () => { const d = new FormData(form); return { skill: String(d.get("skill") || ""), target: Math.max(2, Math.min(12, Math.round(Number(d.get("target"))) || 5)), extra: Math.round(Number(d.get("extra"))) || 0, fear: d.get("fear") === "on" }; };
+    const read = () => { const d = new FormData(form); return { plot: String(d.get("plot") || ""), target: Math.max(2, Math.min(12, Math.round(Number(d.get("target"))) || 5)), extra: Math.round(Number(d.get("extra"))) || 0, skill: d.get("skill") === "on", fear: d.get("fear") === "on" }; };
     const preview = () => { form.querySelector(".ccf-cs-evade-preview").textContent = evadeCommand(sheet, read(), secret); };
-    form.querySelector('select[name="skill"]').addEventListener("change", (event) => {
-      const id = event.target.value;
-      if (id) {
-        const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
-        if (target) form.querySelector('input[name="target"]').value = String(target);
-        form.querySelector('input[name="fear"]').checked = sheet.fear === id;
-      }
+    form.querySelector('select[name="plot"]').addEventListener("change", (event) => {
+      const value = event.target.value;
+      if (value) form.querySelector('input[name="target"]').value = String(Number(value) + 4);
+      // 시트 플롯과 같은 값(빈 칸은 시트 플롯을 지우지 않음 — 가변일 수 있음)
+      if (value) { sheet.plot = value; saveSoon(); const select = dialog.querySelector("[data-plot-select]"); if (select) select.value = value; const send = dialog.querySelector('[data-action="plot-send"]'); if (send) send.disabled = false; }
       preview();
     });
     form.addEventListener("input", preview);
@@ -1451,7 +1450,7 @@
     });
     dialog.appendChild(form);
     preview();
-    form.querySelector('select[name="skill"]')?.focus();
+    form.querySelector('select[name="plot"]')?.focus();
   }
 
   // ---- 판정: 공개(회색) / 비공개(빨강, 명령 앞 S) 20면체+눈 아이콘, 전체 수정치 ----
