@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Handout by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-handout
-// @version      0.1.143
+// @version      0.1.144
 // @description  Roll20 스타일 핸드아웃(공개/비밀, 이미지, 캐릭터 할당) 기능. 1단계는 GM 본인 화면 전용 로컬 도구.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -51,7 +51,7 @@
     id: "ccf-handout",
     name: "CCFOLIA Handout",
     // 콘솔 버전 확인 지점. 상단 @version 과 함께 올릴 것.
-    version: "0.1.143",
+    version: "0.1.144",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-handout"
   });
 
@@ -1392,7 +1392,7 @@
     /* MUI List dense — 카드는 ListItem 톤 */
     .list { display: flex; flex-direction: column; }
     .card {
-      border: 0; border-radius: 0; padding: 8px 16px 12px;
+      border: 0; border-radius: 0; padding: 8px 16px 10px; /* 0.1.144: 아래 -2px */
       background: transparent;
       border-bottom: 1px solid rgba(255,255,255,.08);
       transition: background-color 150ms cubic-bezier(0.4,0,0.2,1);
@@ -1408,7 +1408,7 @@
     }
     .card .card-icon-btn.is-shared { color: #2196f3; }
     .card .badge.secret { background: rgba(244,67,54,.18); color: #ff8a80; }
-    .scope-bar { display: flex; gap: 4px; margin-bottom: 8px; }
+    .scope-bar { display: flex; gap: 4px; margin-bottom: 8px; padding-left: var(--ccf-scope-indent, 16px); } /* 0.1.144: '목록' 탭 글자·목록 줄 내용 시작선에 맞춤 */
     .scope-btn { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 14px; font-size: 0.8125rem; color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.18); }
     .scope-btn[aria-pressed="true"] { color: #fff; border-color: #2196f3; background: rgba(33,150,243,.16); }
     .all-rooms-note { font-size: 0.75rem; color: rgba(255,255,255,.5); margin: 0 0 8px; }
@@ -2704,7 +2704,7 @@
       at: serverTimestamp()
     });
     console.info("[ccf-handout] show signal:", docRef.id, handoutId, audience);
-    return docRef.id;
+    return { id: docRef.id, anon: audienceAnon.length };
   }
 
   async function subscribeToRoomShows() {
@@ -2878,12 +2878,18 @@
   function showBodyHtml(handout, hasSecret) {
     return `${handout.image ? `<img class="show-img" src="${escapeAttr(handout.image)}" alt="">` : ""}
           <div class="rendered">${renderHandoutBody(handout.description)}</div>
-          ${hasSecret && handout.gmNotes ? `
+          ${hasSecret && hasRichContent(handout.gmNotes) ? `
             <div class="secret-block">
               <div class="secret-head">🔒 비밀 내용</div>
               <div class="rendered">${renderHandoutBody(handout.gmNotes)}</div>
             </div>
           ` : ""}`;
+  }
+  // 0.1.144 비밀 내용이 비었는지(태그·공백·nbsp·빈 줄·빈 서식 조각만) — 그림이 있으면 내용 있음. 보기 창·행 팝업·전체 보기·미리보기가 같이 쓴다.
+  function hasRichContent(text) {
+    const s = String(text || "");
+    if (/<img\b|\{i:/i.test(s)) return true;
+    return s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;|\u00a0/gi, " ").replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").trim().length > 0;
   }
   // 열려 있는 보기 창을 새 사본으로 다시 그린다(비밀 권한이 켜지면 비밀 본문이 나타나고 꺼지면 사라짐). 사본이 지워졌으면(볼 권한이 없어짐) 창을 닫는다.
   function refreshOpenShows(id, handout) {
@@ -4128,7 +4134,7 @@
       const manageable = canManageHandout(h);
       const permissionName = getPermissionCharacterName();
       const canSecret = secretVisibleToMe(h);
-      const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
+      const hasSecret = hasRichContent(h.gmNotes);
       return `
         <article class="card" data-id="${escapeHtml(h.id)}" data-order="${Number.isFinite(h.order) ? h.order : ""}">
           <div class="head">
@@ -5990,7 +5996,7 @@
     const adminMode = isAdminMode();
     const permissionName = getPermissionCharacterName();
     const canSecret = (secretVisibleToMe(h));
-    const hasSecret = !!(h.gmNotes && h.gmNotes.trim());
+    const hasSecret = hasRichContent(h.gmNotes);
     const manageable = canManageHandout(h);
     const body = state.shadow.querySelector(".body");
     body.innerHTML = `
@@ -6030,13 +6036,23 @@
     btn.textContent = show ? "비밀 내용 보기" : "비밀 내용 숨기기";
   }
 
+  // 0.1.144 핸드아웃 안의 '팝업': 공유되지 않은 핸드아웃이면 권한표대로 먼저 공유(사본 쓰기)하고 이어서 팝업 신호를 보낸다.
+  // 예전에는 신호만 보내서, 사본이 없는 플레이어 화면은 그릴 게 없어 아무것도 안 떴다(GM 화면엔 '송신됨'만 보임). 받을 사람이 없으면 보내지 않고 이유를 알린다.
+  function handoutPopupRecipients(h) {
+    const plList = mergePlListById(state.data.plList || []);
+    return plList.filter((pl) => { const extra = pl.uid ? [pl.uid] : []; return canView(h, pl.name, extra) || canViewSecret(h, pl.name, extra); });
+  }
   function showToPlayersPlaceholder(id) {
     const h = findHandout(id);
     if (!h) return;
+    const recipients = handoutPopupRecipients(h);
+    if (!recipients.length) { toast("받을 사람이 없습니다 — 권한표에서 볼 사람을 지정하세요"); return; }
     // 관리자 본인 화면에도 즉시 표시 (#52 — Firestore roundtrip 이전에 로컬 표시)
     try { showHandoutModal(h, state.data.myCharacter || ""); } catch (_) {}
-    sendShowSignal(id, "all").then(() => {
-      toast(`"${h.title}" 권한자 전체에게 팝업 송신됨`);
+    const wasShared = readWebShared().has(h.id);
+    if (!wasShared) markWebShared(h.id, true); // 공유 토글도 켜진다
+    (async () => { clearTimeout(inboxTimer); await syncInboxes(); return sendShowSignal(id, "all"); })().then(() => {
+      toast(`"${h.title}" 팝업을 ${recipients.length}명에게 보냄${wasShared ? "" : " (공유도 켬)"}`);
     }).catch((error) => {
       noteFirebaseIssue("보여주기 신호 보내기", error);
       console.error("[ccf-handout] show send failed:", error);
@@ -6051,6 +6067,7 @@
     // (자기 자신은 Firestore 신호에서 skip 되므로 로컬에서 띄워야 함)
     const me = state.data.myCharacter || "";
     const isBroadcast = audienceKey === ALL_KEY || audienceKey === "all" || audienceKey === "*";
+    if (isBroadcast) return showToPlayersPlaceholder(handoutId); // 0.1.144 '전체' 팝업 = 핸드아웃 안의 팝업과 같은 길(공유 먼저, 받을 사람 수·이유 표시)
     const isSelf = !!me && !!audienceKey &&
                    removeSpaces(audienceKey).toLowerCase() === removeSpaces(me).toLowerCase();
     if (isBroadcast || isSelf) {
@@ -6063,7 +6080,7 @@
       if (!canView(withoutAll(h), pl?.name || audienceKey, extra) && !canViewSecret(withoutAll(h), pl?.name || audienceKey, extra)) { toast(`${audienceKey}: 저장된 권한이 없습니다 — 공개·비밀을 체크하고 저장한 뒤 팝업하세요.`); return; }
       markWebShared(h.id, true); // 공유 버튼과 같이: 사본이 쓰이도록
       const target = pl?.uid || audienceKey; // 공유 버튼과 같은 대상 표기(계정 uid + 익명 uid 목록)
-      (async () => { clearTimeout(inboxTimer); await syncInboxes(); return sendShowSignal(handoutId, target); })().then(() => toast(`"${h.title}" → ${audienceKey} 팝업 송신됨`)).catch((error) => { noteFirebaseIssue("보여주기 신호 보내기", error); console.error("[ccf-handout] row show failed:", error); toast("팝업 송신 실패 — 콘솔 확인"); });
+      (async () => { clearTimeout(inboxTimer); await syncInboxes(); return sendShowSignal(handoutId, target); })().then((sent) => toast(sent?.anon ? `"${h.title}" → ${audienceKey} 팝업 보냄` : `"${h.title}" → ${audienceKey}: 받을 브라우저를 찾지 못함 — 그 플레이어가 툴킷을 켜고 핸드아웃 공유에 동의했는지 확인하세요`)).catch((error) => { noteFirebaseIssue("보여주기 신호 보내기", error); console.error("[ccf-handout] row show failed:", error); toast("팝업 송신 실패 — 콘솔 확인"); });
       return;
     }
     sendShowSignal(handoutId, audienceKey).then(() => {

@@ -177,6 +177,8 @@ let myHandouts = [], legacyHandout = false;
 const handoutSeenKey = "capybara-handout-seen";
 const readSeen = () => { try { return JSON.parse(localStorage.getItem(handoutSeenKey) || "{}") || {}; } catch (_) { return {}; } };
 const writeSeen = seen => { try { localStorage.setItem(handoutSeenKey, JSON.stringify(seen)); } catch (_) {} };
+// 비밀 내용이 비었는지(태그·공백·nbsp만) — 그림이 있으면 내용 있음(툴킷 handout 의 hasRichContent 와 같은 판정)
+const hasRichContent = text => { const s = String(text || ""); if (/<img\b|\{i:/i.test(s)) return true; return s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;|\u00a0/gi, " ").replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").trim().length > 0; };
 const handoutStamp = item => `${item.updatedAt || ""}|${item.html.length}|${item.secretHtml.length}`;
 const handoutIsNew = item => readSeen()[item.id] !== handoutStamp(item);
 function refreshHandoutButton() {
@@ -204,7 +206,7 @@ async function openHandoutDetail(id) {
   const item = myHandouts.find(h => h.id === id); if (!item) return;
   openDetailId = id;
   const seen = readSeen(); seen[item.id] = handoutStamp(item); writeSeen(seen); refreshHandoutButton();
-  const body = await handoutNodes(item.html), secret = item.secretHtml ? await handoutNodes(item.secretHtml) : null;
+  const body = await handoutNodes(item.html), secret = hasRichContent(item.secretHtml) ? await handoutNodes(item.secretHtml) : null;
   openDialog(item.title || "핸드아웃", (box, foot, close) => {
     box.classList.add("handout-detail"); box.id = "handout-detail";
     const main = el("div", "handout-body"); main.append(...body); box.append(main);
@@ -222,7 +224,7 @@ function openHandoutList() {
       for (const item of items) {
         const row = el("button", "handout-row"); row.type = "button";
         row.append(el("span", "handout-title", item.title || "(제목 없음)")); if (handoutIsNew(item)) row.append(el("i", "handout-dot"));
-        if (item.secretHtml) row.append(el("small", "", "비밀 포함"));
+        if (hasRichContent(item.secretHtml)) row.append(el("small", "", "비밀 포함"));
         row.addEventListener("click", () => { close(); openHandoutDetail(item.id); }); box.append(row);
       }
     }
