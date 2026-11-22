@@ -84,11 +84,18 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
   };
   try {
     // 1) the GM has a sheet linked to the player's character; the player (bookmarklet, member not registered yet) has a blank copy from the duplicates time
-    const G = await open({ uid: 'uG', gm: true, ccf: 'cG', chars: { 에르네스토: 'cB' }, seed: seed([SHEET('real')]) });
+    const G = await open({ uid: 'uG', gm: true, ccf: 'cG', chars: { 에르네스토: 'cB' }, seed: seed([EMPTY('blankgm', 2000), SHEET('real'), { ...SHEET('free'), player: '', name: '연결 없음' }, { ...SHEET('lost'), player: '없는캐릭', name: '없는캐릭' }]) });
+    // character-sheet 0.5.55: the GM list shows a light per sheet (gray not linked / red character not found / yellow not handed over / green handed over)
+    const lights = (page) => page.evaluate(() => { let c = document.getElementById('tab-probe'); if (!c) { c = document.createElement('div'); c.id = 'tab-probe'; c.style.cssText = 'position:relative;width:600px;height:400px'; document.body.append(c); window.__CCF_TOOLKIT_MENU__.items.get('saikoro').mount(c); } return Object.fromEntries([...c.querySelectorAll('[data-tab-open]')].map((b) => { const l = b.parentElement.querySelector('[data-tab-light]'); return [b.dataset.tabOpen, [l?.dataset.tabLight, l?.title]]; })); });
     await until(() => store.has('rooms/test/sheets/real') && store.has('rooms/test/meta/sheetIndex'), 'GM uploads the sheet and the index');
     assert.equal(JSON.parse(store.get('rooms/test/meta/sheetIndex').json)['에르네스토'].id, 'real', 'index: character -> sheet');
     // the GM sees why it is not handed over
     await wait(G, () => /구성원 등록 없음/.test(Object.values(window.__CCF_CHARACTER_SHEET_DEBUG__.shared().issues || {}).join(' ')));
+    await until(() => store.has('rooms/test/sheets/lost'), 'all uploaded');
+    await G.waitForTimeout(1200);
+    let l = await lights(G);
+    assert.equal(l.free[0], 'gray', 'not linked: gray ' + JSON.stringify(l)); assert.equal(l.lost[0], 'red', 'character not found: red ' + JSON.stringify(l));
+    assert.equal(l.real[0], 'yellow'); assert.match(l.real[1], /구성원 등록 없음/, 'the reason in the tooltip');
     // 2) the player's character button: no new blank sheet while the GM's linked sheet exists, a reason instead
     const B = await open({ uid: 'uB', ccf: 'cB', chars: { 에르네스토: 'cB' } });
     await B.waitForFunction(() => window.__CCF_CHARACTER_SHEET_DEBUG__?.shared().ready, null, { timeout: 12000 });
@@ -97,12 +104,19 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await B.waitForTimeout(1500);
     assert.equal(await B.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets.length), 0, 'no blank sheet made');
     assert.match((await B.evaluate(() => window.__alerts || [])).join(' '), /GM이 연결/, 'the player is told why');
-    assert.equal([...store.keys()].filter((k) => k.startsWith('rooms/test/sheets/')).length, 1, 'nothing new uploaded');
+    assert.equal([...store.entries()].filter(([k, d]) => k.startsWith('rooms/test/sheets/') && d.ownerUid === 'uB').length, 0, 'nothing new uploaded by the player');
     // 3) the player registers as a member -> the GM hands the sheet over -> the player gets the real one (with content)
     store.set('rooms/test/members/uB', { ccfoliaUid: 'cB' });
     const gOpts = { uid: 'uG', gm: true, ccf: 'cG', chars: { 에르네스토: 'cB' } }, bOpts = { uid: 'uB', ccf: 'cB', chars: { 에르네스토: 'cB' } };
     let G2 = await reopen(G, gOpts); // members are read when the GM page subscribes
     await until(() => store.get('rooms/test/sheets/real')?.ownerUid === 'uB', 'handed over to the player');
+    await G2.waitForTimeout(1500);
+    l = await lights(G2);
+    assert.equal(l.real[0], 'green', 'handed over: green ' + JSON.stringify(l));
+    // two sheets of the same character: each row says which one (time, content, handed over)
+    const dups = await G2.evaluate(() => [...document.querySelectorAll('#tab-probe [data-tab-dup]')].map((d) => d.textContent));
+    assert.equal(dups.length, 2, 'both rows carry the info ' + JSON.stringify(dups)); assert(dups.some((t) => /내용 있음 · 캐릭터 버튼이 여는 시트/.test(t)) && dups.some((t) => /비어 있음/.test(t)), JSON.stringify(dups));
+    if (process.env.CAPTURE) await G2.locator('#tab-probe').screenshot({ path: process.env.CAPTURE });
     let B2 = await reopen(B, bOpts);
     await wait(B2, () => window.__CCF_CHARACTER_SHEET_DEBUG__?.data().sheets.some((s) => s.id === 'real' && s.memo === '내용 있음'));
     // 4) the player's browser also has a blank copy of the same character (duplicates time): the character opens the real one, the blank one is hidden (kept)
