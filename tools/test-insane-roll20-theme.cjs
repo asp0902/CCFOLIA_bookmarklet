@@ -85,8 +85,8 @@ const key = 'ccf-theme-switcher-settings-v1';
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       assert.equal(await color('.MuiDialog-paper'), before, 'colours stay native');
-      assert.equal(await color('.ccf-roll20-emotion-card', 'fontSize'), '15px');
-      assert.equal(await color('.ccf-roll20-emotion-card > small', 'fontSize'), '11px');
+      assert.equal(await color('.ccf-roll20-emotion-card', 'fontSize'), '14px'); // theme 0.2.54: every card text 1px smaller
+      assert.equal(await color('.ccf-roll20-emotion-card > small', 'fontSize'), '10px');
       assert.equal(await color('.ccf-roll20-emotion-card > small', 'marginBottom'), '5px');
       assert.equal(await color('.ccf-roll20-emotion-card', 'paddingTop'), '21px');
       assert.equal(await color('.ccf-roll20-emotion-card', 'paddingBottom'), '21px');
@@ -120,7 +120,7 @@ const key = 'ccf-theme-switcher-settings-v1';
       await setCheck(`2D6+1>=7 긴 특기 이름 (2D6+1>=7) > 4[2,2]+1 > 5 > ${result}`);
       await page.waitForFunction(result => document.querySelector('.ccf-roll20-check-result')?.textContent === result, result);
       assert.equal(await page.locator('.ccf-roll20-check-card').count(), 1);
-      assert.equal(await page.locator('.ccf-roll20-die.is-total').textContent(), '5');
+      assert.equal(await page.locator('.ccf-roll20-die.is-total b').textContent(), '4', 'the d20 shows the dice sum (Roll20)'); assert.equal(await page.locator('.ccf-roll20-check-mod').textContent(), '+1', 'the modifier beside the d20');
     }
     // theme-switcher 0.2.49: the real BCDice Insane:Korean output (bcdice.onlinesession.app, 2026-11-22) - fumble / special carry a note in parentheses
     for (const [text, result, note, dice] of [
@@ -154,6 +154,21 @@ const key = 'ccf-theme-switcher-settings-v1';
     const sizes = await page.evaluate(() => { const c = document.querySelector('.ccf-roll20-ability-card'), fs = (sel) => getComputedStyle(c.querySelector(sel)).fontSize; return [fs(':scope > small'), fs('.ccf-roll20-item-label'), fs('.ccf-roll20-item-name'), fs('.ccf-roll20-ability-text'), fs('.ccf-roll20-check-skill'), fs('.ccf-roll20-check-result'), fs('.ccf-roll20-check-target')]; });
     assert.deepEqual(sizes, ['12px', '15px', '18px', '13px', '16px', '13px', '12px'], 'ability card text sizes ' + JSON.stringify(sizes));
     if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-ability-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-ability-card.png') });
+    // theme 0.2.54: Roll20 modifier look: "9[6,3]-2 > 7" -> d20 9, "-2" right of it; no modifier -> nothing; numbers centred in the dice (text box centre = die centre ±0.5px)
+    await setCheck('2D6-2>=10 [회피] (2D6-2>=10) ＞ 9[6,3]-2 ＞ 7 ＞ 실패');
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-mod')?.textContent === '-2');
+    const modInfo = await page.evaluate(() => { const d = document.querySelector('.ccf-roll20-die.is-total'), m = d.querySelector('.ccf-roll20-check-mod'), dr = d.getBoundingClientRect(), mr = m.getBoundingClientRect(); return { sum: d.querySelector('b').textContent, rightOf: mr.left >= dr.right - 1, result: document.querySelector('.ccf-roll20-check-result').textContent }; });
+    assert.deepEqual(modInfo, { sum: '9', rightOf: true, result: '실패' }, 'modifier shown right of the d20 ' + JSON.stringify(modInfo));
+    for (const [text, dice] of [['2D6>=5 [웃음] (2D6>=5) ＞ 7[1,6] ＞ 7 ＞ 성공', '1,6'], ['2D6>=5 [웃음] (2D6>=5) ＞ 12[6,6] ＞ 12 ＞ 스페셜', '6,6'], ['2D6>=5 [웃음] (2D6>=5) ＞ 10[4,6] ＞ 10 ＞ 성공', '4,6']]) {
+      await setCheck(text);
+      await page.waitForFunction((dice) => [...document.querySelectorAll('.ccf-roll20-die:not(.is-total) b')].map((b) => b.textContent).join() === dice, dice);
+      assert.equal(await page.locator('.ccf-roll20-check-mod').count(), 0, 'no modifier: nothing beside the d20');
+      const off = await page.evaluate(() => [...document.querySelectorAll('.ccf-roll20-die')].map((d) => { const r = d.getBoundingClientRect(), b = d.querySelector('b').getBoundingClientRect(); return [Math.abs((r.left + r.right) / 2 - (b.left + b.right) / 2), Math.abs((r.top + r.bottom) / 2 - (b.top + b.bottom) / 2), d.querySelector('b').textContent]; }));
+      assert(off.every(([x, y]) => x <= 0.5 && y <= 0.5), 'numbers in the middle of the dice ' + JSON.stringify(off));
+    }
+    const sizes2 = await page.evaluate(() => { const fs = (sel) => getComputedStyle(document.querySelector(sel)).fontSize; const d = document.querySelector('.ccf-roll20-die.is-total').getBoundingClientRect(), sd = document.querySelector('.ccf-roll20-die:not(.is-total)').getBoundingClientRect(); return { skill: fs('.ccf-roll20-check-skill'), result: fs('.ccf-roll20-check-result'), target: fs('.ccf-roll20-check-target'), total: fs('.ccf-roll20-die.is-total'), small: fs('.ccf-roll20-die:not(.is-total)'), d20: [Math.round(d.width), Math.round(d.height)], die: [Math.round(sd.width), Math.round(sd.height)] }; });
+    assert.deepEqual(sizes2, { skill: '16px', result: '13px', target: '12px', total: '31px', small: '12px', d20: [64, 70], die: [21, 23] }, 'every Insane card 1px smaller, dice scaled ' + JSON.stringify(sizes2));
+    if (process.env.SCREENSHOT_DIR) { await setCheck('2D6-2>=10 [회피] (2D6-2>=10) ＞ 9[6,3]-2 ＞ 7 ＞ 실패'); await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-mod')); await page.locator('.ccf-roll20-check-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-modifier-card.png') }); }
     // theme 0.2.52: an evasion check from the sheet form shows "회피 : 특기"
     await setCheck('2D6>=5 [회피/웃음] (2D6>=5) ＞ 8[3,5] ＞ 8 ＞ 성공');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '회피 : 웃음', null, { timeout: 4000 });
@@ -184,8 +199,8 @@ const key = 'ccf-theme-switcher-settings-v1';
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '공포판정 : 우주', null, { timeout: 4000 }); // 0.2.37: a fear check reads like Roll20
     // 0.2.40: a skill check gets no field / skill table card (only the check card); 1px smaller texts (skill 17, result 14, target 13)
     assert.deepEqual(await page.locator('#check > .ccf-roll20-emotion-card').evaluateAll((cards) => cards.map((c) => c.className.includes('ccf-roll20-table-card') ? 'table' : 'check')), ['check'], 'no table card on a skill check');
-    assert.deepEqual(await page.evaluate(() => ['.ccf-roll20-check-skill', '.ccf-roll20-check-result', '.ccf-roll20-check-target'].map((q) => getComputedStyle(document.querySelector(q)).fontSize)), ['17px', '14px', '13px']);
-    assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['3', '2', '3'], 'dice of the formatted check');
+    assert.deepEqual(await page.evaluate(() => ['.ccf-roll20-check-skill', '.ccf-roll20-check-result', '.ccf-roll20-check-target'].map((q) => getComputedStyle(document.querySelector(q)).fontSize)), ['16px', '13px', '12px'] /* 0.2.54 -1px */);
+    assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['5', '2', '3'], 'dice of the formatted check: the d20 shows the dice sum (0.2.54)'); assert.equal(await page.locator('.ccf-roll20-check-mod').textContent(), '-2');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
     assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');
     // 0.2.40: a skill-table roll (RTT / TPT …, BCDice Insane:Korean text) becomes the field / skill card
