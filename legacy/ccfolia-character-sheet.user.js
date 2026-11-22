@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.51
+// @version      0.5.52
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.51";
+  const VERSION = "0.5.52";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1077,7 +1077,7 @@
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}${state.collapsed ? " is-collapsed" : ""}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option><option value="1D6">가변</option>${[1, 2, 3, 4, 5, 6].map((value) => `<option value="${value}">${value}</option>`).join("")}</select></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option>${[["1D6", "가변"], ...[1, 2, 3, 4, 5, 6].map((value) => [String(value), String(value)])].map(([value, label]) => `<option value="${value}"${String(sheet.plot || "") === value ? " selected" : ""}>${label}</option>`).join("")}</select><button data-action="plot-send" aria-label="플롯 보내기"${sheet.plot ? "" : " disabled"}>${d20Icon()}</button></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     checkD20Font();
     const dialog = root.querySelector(".ccf-cs-dialog");
@@ -1771,10 +1771,12 @@
       if (command) sendCommand(command);
       return;
     }
+    // 0.5.52 플롯: 고르기만 하면 시트에 저장(다시 열어도 유지), 옆 주사위 단추를 눌러야 보낸다.
     if (target.dataset.plotSelect !== undefined) {
-      const value = target.value;
-      target.value = "";
-      if (value) writeChat(`sc(${value})`);
+      sheet.plot = target.value;
+      saveSoon();
+      const send = target.parentElement?.querySelector('[data-action="plot-send"]');
+      if (send) send.disabled = !sheet.plot;
       return;
     }
     if (target.dataset.respec) {
@@ -1843,6 +1845,7 @@
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
+    if (button.dataset.action === "plot-send") return sendPlot(currentSheet());
     if (button.dataset.action === "link-pick") return openLinkPicker();
     if (button.dataset.action === "link-close") return closeLinkPicker();
     if (button.dataset.action === "link-choose") return chooseLinkedCharacter(button.dataset.name || "");
@@ -1971,6 +1974,16 @@
   }
 
   // 목표치가 정해지지 않은 명령(2D6>=? [회피] 처럼 ? 가 남은 것)은 작은 입력으로 숫자를 받아 채운 뒤 보낸다. 취소하면 보내지 않는다.
+  // 플롯 전송: 고정값 n = sc(n)(BCDice 시크릿 계산), 가변 = S1D6(시크릿 1D6). sc(1D6) 은 BCDice Insane 에서 굴려지지 않는 명령이라(unsupported command) 글자로만 나갔다.
+  function plotCommand(value) {
+    const v = String(value || "");
+    return v === "1D6" ? "S1D6" : /^[1-6]$/.test(v) ? `sc(${v})` : "";
+  }
+  function sendPlot(sheet) {
+    const command = plotCommand(sheet?.plot);
+    if (!command) return status("플롯을 먼저 고르세요");
+    return writeChat(command);
+  }
   function sendCommand(command) {
     let text = String(command || "");
     if (/>=\?/.test(text)) {

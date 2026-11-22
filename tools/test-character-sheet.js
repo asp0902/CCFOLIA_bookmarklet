@@ -82,8 +82,9 @@ assert.doesNotMatch(footerMarkup, /title=/);
 assert.match(source, /data-command-select aria-label="특기표"/);
 assert.match(source, /data-command="2D6>=\? \[회피\]"/);
 assert.match(source, /data-plot-select aria-label="플롯"/);
-assert.match(source, /<option value="1D6">가변<\/option>/);
-assert.match(source, /writeChat\(`sc\(\$\{value\}\)`\)/);
+assert.match(source, /\[\["1D6", "가변"\]/); // 0.5.52: 가변 option (sent as S1D6 by the plot button)
+assert.match(source, /v === "1D6" \? "S1D6"/);
+assert.match(source, /`sc\(\$\{v\}\)`/); // a number n -> sc(n)
 assert.match(source, /backIcon\(\)\}<\/button>\$\{playerLinkField\(sheet\.player\)\}/);
 assert.doesNotMatch(source, /data-action="panel-settings" aria-label="설정"/);
 assert.match(source, /data-ability-roll="\$\{index\}"/);

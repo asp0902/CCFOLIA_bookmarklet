@@ -125,6 +125,18 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     assert.deepEqual(r.sent, ['2D6+1>=7 [회피]'], 'the ? is filled from the small prompt and sent at once'); await reopen();
     r = await roll(() => page.locator(R + ' footer [data-command="2D6>=? [회피]"][data-secret="1"]').click());
     assert.deepEqual(r.sent, ['S2D6+1>=7 [회피]']); await reopen();
+    // 0.5.52 plot: choosing only stores the value (nothing is sent), the dice button next to it sends it; 가변 = S1D6 (sc(1D6) is not a BCDice Insane command), n = sc(n)
+    const plot = page.locator(R + ' footer [data-plot-select]'), plotSend = page.locator(R + ' footer [data-action="plot-send"]');
+    assert.equal(await plotSend.isDisabled(), true, 'nothing chosen: the button is off');
+    r = await roll(() => plot.selectOption('1D6'));
+    assert.deepEqual(r.sent, [], 'choosing sends nothing');
+    r = await roll(() => plotSend.click());
+    assert.deepEqual(r.sent, ['S1D6'], '가변 -> S1D6'); await reopen();
+    assert.equal(await page.locator(R + ' footer [data-plot-select]').inputValue(), '1D6', 'kept after reopening');
+    r = await roll(() => page.locator(R + ' footer [data-plot-select]').selectOption('4'));
+    assert.deepEqual(r.sent, []);
+    r = await roll(() => page.locator(R + ' footer [data-action="plot-send"]').click());
+    assert.deepEqual(r.sent, ['sc(4)'], 'a number -> sc(n)'); await reopen();
     // without a modifier everything is as before
     await mod.fill('0'); await page.waitForTimeout(150);
     assert.equal(await page.locator(R + ' .ccf-cs-modifier-note').isHidden(), true, 'no note without a modifier');
