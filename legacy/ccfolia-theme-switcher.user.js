@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.53
+// @version      0.2.54
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.53"),
+    version: getUserscriptVersion("0.2.54"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1890,7 +1890,7 @@
         position: relative; display: block !important; box-sizing: border-box;
         width: 100%; margin: 6px 0; padding: 21px 16px;
         border: 1px solid #999; border-radius: 0; background: #fff !important;
-        color: #333 !important; font-size: 15px !important; line-height: 1.4 !important;
+        color: #333 !important; font-size: 14px !important; line-height: 1.4 !important;
         font-weight: bold; font-style: normal; text-align: center;
         white-space: normal; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: 0;
       }
@@ -1907,15 +1907,15 @@
       }
       ${scope} .ccf-roll20-emotion-card > small {
         display: block; margin-bottom: 5px; color: #999 !important;
-        font-size: 11px; line-height: 1.4; font-weight: normal;
+        font-size: 10px; line-height: 1.4; font-weight: normal;
       }
       /* 판정 카드: Roll20 캡처(docs/img/insane-roll-roll20.png)에서 잰 값 — 결과 띠는 카드 폭 36% 지점부터 오른쪽 끝까지, 목표치는 숫자만 굵게 */
       ${scope} .ccf-roll20-check-card { padding: 20px 0 22px; }
-      ${scope} .ccf-roll20-check-card > small { font-size: 13px; margin-bottom: 8px; }
+      ${scope} .ccf-roll20-check-card > small { font-size: 12px; margin-bottom: 8px; }
       /* 장면표 결과: 감정표와 같은 꺾쇠 상자 안에 작은 회색 이름 / 굵은 표 이름 / 결과 문장 (위 장식·제목은 Roll20 매크로 사용자가 따로 넣는 이미지라 만들지 않는다) */
       ${scope} .ccf-roll20-scene-card { font-weight: normal; }
-      ${scope} .ccf-roll20-scene-name { display: block; margin-bottom: 8px; color: #333 !important; font-size: 16px; line-height: 1.4; font-weight: bold; }
-      ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 13px; line-height: 1.5; font-weight: normal; white-space: pre-line; }
+      ${scope} .ccf-roll20-scene-name { display: block; margin-bottom: 8px; color: #333 !important; font-size: 15px; line-height: 1.4; font-weight: bold; }
+      ${scope} .ccf-roll20-scene-text { display: block; color: #333 !important; font-size: 12px; line-height: 1.5; font-weight: normal; white-space: pre-line; }
       ${scope} .ccf-roll20-check-body {
         display: grid; grid-template-columns: 36% minmax(0,1fr); align-items: center; gap: 0;
       }
@@ -1923,45 +1923,38 @@
       ${scope} .ccf-roll20-check-dice > span:last-child { display: flex; gap: 8px; }
       ${scope} .ccf-roll20-die {
         position: relative; display: inline-grid; place-items: center;
-        width: 22px; height: 24px; font-size: 13px; font-weight: normal; line-height: 1;
+        width: 21px; height: 23px; font-size: 12px; font-weight: normal; line-height: 1;
       }
-      ${scope} .ccf-roll20-die.is-total { width: 66px; height: 72px; font-size: 32px; font-weight: bold; }
+      ${scope} .ccf-roll20-die.is-total { width: 64px; height: 70px; font-size: 31px; font-weight: bold; }
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
-      ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
+      ${scope} .ccf-roll20-die b { position: absolute; left: 0; right: 0; top: 50%; height: 1em; margin-top: -0.5em; display: block; line-height: 1; text-align: center; font-weight: inherit; font-variant-numeric: tabular-nums; }
+      ${scope} .ccf-roll20-check-mod { position: absolute; left: 100%; top: 58%; margin-left: 1px; color: #fff; font-size: 13px; font-weight: 800; line-height: 1; white-space: nowrap; -webkit-text-stroke: 2.5px #333; paint-order: stroke fill; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
       ${scope} .ccf-roll20-ability-rule { display: block; height: 0; margin: 12px 24px; border-top: 1px solid rgba(0,0,0,.18); }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-skill { font-weight: 700 !important; font-size: 16px; }
-      /* 0.2.53 어빌리티 카드 안 글자만 1px 작게(일반 판정·아이템·특기표 카드는 그대로, 주사위 숫자도 그대로) */
-      ${scope} .ccf-roll20-ability-card > small { font-size: 10px; }
-      ${scope} .ccf-roll20-ability-card.ccf-roll20-check-card > small { font-size: 12px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-label { font-size: 15px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-name { font-size: 18px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-text { font-size: 13px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-result { font-size: 13px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-target { font-size: 12px; }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-note { font-size: 11px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-skill { font-weight: 700 !important; }
+      /* 0.2.54 인세인 카드 글자는 공통 값에서 한 번씩 1px 작게(어빌리티 카드 전용 크기 없음) */
       ${scope} .ccf-roll20-ability-card .ccf-roll20-check-body { margin-top: 0; }
       ${scope} .ccf-roll20-ability-text { text-align: center; white-space: pre-line; }
-      ${scope} .ccf-roll20-check-note { display: block; margin: 10px 16px 0; font-size: 12px; line-height: 1.5; font-weight: normal; text-align: center; opacity: .85; }
-      ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 17px; font-weight: bold; line-height: 1.3; }
-      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 14px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
+      ${scope} .ccf-roll20-check-note { display: block; margin: 10px 16px 0; font-size: 11px; line-height: 1.5; font-weight: normal; text-align: center; opacity: .85; }
+      ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 16px; font-weight: bold; line-height: 1.3; }
+      ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 13px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
       /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 분홍(사용자 결정), 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
       ${scope} .ccf-roll20-check-card[data-result="failure"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(202,130,144,0),#ca8290 75%); } /* 실패: 사용자 결정으로 분홍 유지 */
       ${scope} .ccf-roll20-check-card[data-result="fumble"] .ccf-roll20-check-result { background: linear-gradient(to right,rgba(210,31,31,0),rgb(210,31,31) 75%); }
       ${scope} .ccf-roll20-item-card { font-weight: normal; }
-      ${scope} .ccf-roll20-item-label { display: block; color: rgb(255,77,85) !important; font-size: 16px; line-height: 1.4; }
-      ${scope} .ccf-roll20-item-name { display: block; margin-bottom: 10px; color: #333 !important; font-size: 19px; line-height: 1.4; font-weight: bold; }
-      ${scope} .ccf-roll20-item-text { display: block; color: #333 !important; font-size: 14px; line-height: 1.6; white-space: pre-line; }
-      ${scope} .ccf-roll20-table-card { display: flex !important; justify-content: space-between; align-items: center; padding: 16px 40px; font-size: 15px !important; }
+      ${scope} .ccf-roll20-item-label { display: block; color: rgb(255,77,85) !important; font-size: 15px; line-height: 1.4; }
+      ${scope} .ccf-roll20-item-name { display: block; margin-bottom: 10px; color: #333 !important; font-size: 18px; line-height: 1.4; font-weight: bold; }
+      ${scope} .ccf-roll20-item-text { display: block; color: #333 !important; font-size: 13px; line-height: 1.6; white-space: pre-line; }
+      ${scope} .ccf-roll20-table-card { display: flex !important; justify-content: space-between; align-items: center; padding: 16px 40px; font-size: 14px !important; }
       ${scope} .ccf-roll20-table-side { display: inline-flex; align-items: center; gap: 8px; }
-      ${scope} .ccf-roll20-badge { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; box-sizing: border-box; border-radius: 6px; color: #fff; font-size: 14px; }
+      ${scope} .ccf-roll20-badge { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; box-sizing: border-box; border-radius: 6px; color: #fff; font-size: 13px; }
       ${scope} .ccf-roll20-badge.is-field { background: #000; }
       ${scope} .ccf-roll20-badge.is-skill { background: #999; }
       ${scope} .ccf-roll20-die.is-six { color: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-six svg { stroke: rgb(209,187,31); }
       ${scope} .ccf-roll20-die.is-one { color: rgb(255,0,12); }
       ${scope} .ccf-roll20-die.is-one svg { stroke: rgb(255,0,12); }
-      ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 13px; font-weight: normal; }
+      ${scope} .ccf-roll20-check-target { display: block; margin: 10px 16px 0 0; font-size: 12px; font-weight: normal; }
       ${scope} .ccf-roll20-check-target b { font-weight: bold; }
     `;
   }
@@ -5434,7 +5427,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
   function parseInsaneRoll20Check(text) {
     const normalized = text.replace(/＞/g, '>').replace(/（/g, '(').replace(/）/g, ')')
       .replace(/［/g, '[').replace(/］/g, ']');
-    const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)(?:\s*\(([^()]*)\))?\s*$/i);
+    const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*(\d+)\[([1-6]),\s*([1-6])\](?:\s*([+-])\s*(\d+))?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)(?:\s*\(([^()]*)\))?\s*$/i);
     if (!match) return null;
     const raw = match[1].replace(/^S?2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim();
     const parts = raw.replace(/^\[(.*)\]$/, '$1').split('/').map(part => part.trim()).filter(Boolean);
@@ -5443,7 +5436,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const evade = parts[0] === '회피';
     const skillText = evade ? (table ? `회피 : ${table.skill}` : '회피') : fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
     return { skill: skillText || '판정', table,
-      target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6], note: (match[7] || '').trim() };
+      target: match[2], dice: [match[4], match[5]], sum: match[3], mod: match[6] && Number(match[7]) ? `${match[6]}${match[7]}` : '', total: match[8], result: match[9], note: (match[10] || '').trim() };
   }
 
   // 인세인 특기표(사이코로픽션 시트와 같은 표): 분야 1~6, 특기 번호 2~12. 시트의 특기 판정 글("… [특기]")에서 특기명을 찾아 분야·번호 카드를 판정 카드 위에 붙인다.
@@ -5509,7 +5502,10 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
       const number = document.createElement('b'); number.textContent = value; die.appendChild(number);
       return die;
     };
-    dice.appendChild(makeDie(check.total, true));
+    // 0.2.54 Roll20 처럼 d20 안에는 눈의 합(보정 전), 보정이 있으면 d20 바로 오른쪽에 "+m"/"-m"
+    const totalDie = makeDie(check.sum || check.total, true);
+    if (check.mod) { const mod = document.createElement('span'); mod.className = 'ccf-roll20-check-mod'; mod.textContent = check.mod; totalDie.appendChild(mod); }
+    dice.appendChild(totalDie);
     const faces = document.createElement('span');
     check.dice.forEach(value => faces.appendChild(makeDie(value)));
     dice.appendChild(faces);
