@@ -28,6 +28,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     const entry = { page, uid, gm, subs: new Map() }; pages.push(entry);
     await page.exposeFunction('__nget', (p) => {
       const parts = p.split('/'); const col = parts[2];
+      if (col === 'sheets' && !gm && store.has(p) && store.get(p).ownerUid !== uid) throw denyError(); // rules 2026-11-18: read = GM or the owner
       if (col === 'sheetSecrets') { const sheet = store.get(`rooms/test/sheets/${parts[3]}`); if (!(gm || (sheet && sheet.ownerUid === uid))) throw denyError(); }
       return store.has(p) ? store.get(p) : null;
     });
@@ -116,6 +117,12 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     // A (no longer the owner) does not write it back
     await A.waitForTimeout(1500);
     assert.equal(store.get('rooms/test/sheets/s1').ownerUid, 'uB', 'A does not take it back');
+    // 0.5.50 (duplicates bug): after a reload A still has the sheet in its browser but its query no longer returns it -> it must not upload it as "my sheet not shared yet"
+    // (the published rules refuse that write and the whole sharing switched off; the unpublished ones let A take the sheet, the owner lost it and made a new one)
+    await A.reload(); await A.addScriptTag({ content: source });
+    await A.waitForFunction(() => window.__CCF_CHARACTER_SHEET_DEBUG__?.shared().ready || window.__CCF_CHARACTER_SHEET_DEBUG__?.shared().denied, null, { timeout: 12000 }); await A.waitForTimeout(2500);
+    assert.equal(store.get('rooms/test/sheets/s1').ownerUid, 'uB', 'A does not take it back after a reload');
+    assert.equal((await A.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.shared())).denied, false, 'A keeps sharing');
     // room settings (scene tables / view permissions / scene counter) are the room's: the GM shares them (meta/sheetRoom), everybody receives them, a player cannot write them
     const roomSettings = { permissions: { 시크릿: { view: true, secret: false, edit: true } }, scene: { cycle: 2, number: 3 }, sceneTables: [{ macroName: '/거리', tableName: '거리 장면표', body: '/roll-table\n거리 장면표\n1:a' }], design: { font: 'serif', size: 18, color: '#eeeeee', accent: '#ff5252', bg: 60 } }; // 0.5.43: the sheet design is a room setting too
     await wait(G, () => !!localStorage.getItem('ccf-character-sheet:test'));
