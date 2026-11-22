@@ -177,6 +177,13 @@ const key = 'ccf-theme-switcher-settings-v1';
     // theme 0.2.56: an ability roll without the envelope (old sender) shows only the skill, not '기본공격/파괴'
     await setCheck('2D6+1>=5 [기본공격/파괴] (2D6+1>=5) ＞ 8[3,5]+1 ＞ 9 ＞ 성공');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '파괴', null, { timeout: 4000 });
+    // theme 0.2.57: plot card (sheet plot mark '[플롯]'): variable -> '플롯 1d6 / 속도 n', fixed -> '플롯 n / 속도 n'; a hidden secret (no result) and a typed S1D6 stay plain
+    const plotCard = async (text) => { await setCheck(text); await page.waitForTimeout(400); return page.evaluate(() => { const c = document.querySelector('.ccf-roll20-plot-card'); return c ? [...c.querySelectorAll('b')].map((b) => b.textContent).join(' ') : null; }); };
+    assert.equal(await plotCard('S1D6 [플롯] (1D6) ＞ 3'), '플롯 1d6 속도 3');
+    if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-plot-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-plot-card.png') });
+    assert.equal(await plotCard('sc(4) [플롯] c(4) ＞ 4'), '플롯 4 속도 4');
+    assert.equal(await plotCard('S1D6 [플롯]'), null, 'no result shown: no card');
+    assert.equal(await plotCard('S1D6 (1D6) ＞ 3'), null, 'a typed S1D6: no card');
     // an ability without a check: the top and the description only
     await setCheck('[어빌리티:서포트] 응급처치\n아군 1명의 생명력을 1점 회복한다.');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-ability-card .ccf-roll20-item-name')?.textContent === '응급처치');

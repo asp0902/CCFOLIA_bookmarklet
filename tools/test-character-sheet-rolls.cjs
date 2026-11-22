@@ -155,12 +155,12 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     r = await roll(() => plot.selectOption('1D6'));
     assert.deepEqual(r.sent, [], 'choosing sends nothing');
     r = await roll(() => plotSend.click());
-    assert.deepEqual(r.sent, ['S1D6'], '가변 -> S1D6'); await reopen();
+    assert.deepEqual(r.sent, ['S1D6 [플롯]'], '가변 -> S1D6 + plot mark (0.5.61)'); await reopen();
     assert.equal(await page.locator(R + ' footer [data-plot-select]').inputValue(), '1D6', 'kept after reopening');
     r = await roll(() => page.locator(R + ' footer [data-plot-select]').selectOption('4'));
     assert.deepEqual(r.sent, []);
     r = await roll(() => page.locator(R + ' footer [data-action="plot-send"]').click());
-    assert.deepEqual(r.sent, ['sc(4)'], 'a number -> sc(n)'); await reopen();
+    assert.deepEqual(r.sent, ['sc(4) [플롯]'], 'a number -> sc(n) + plot mark'); await reopen();
     // without a modifier everything is as before
     await mod.fill('0'); await page.waitForTimeout(150);
     assert.equal(await page.locator(R + ' .ccf-cs-modifier-note').isHidden(), true, 'no note without a modifier');
