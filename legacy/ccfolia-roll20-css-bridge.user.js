@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.111
+// @version      0.3.112
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.111"),
+    version: getUserscriptVersion("0.3.112"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5805,7 +5805,9 @@
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { padding-bottom: 5px !important; }`,
       // 연속 묶음 내부 선만 숨기고 마지막 행의 네이티브 하단선은 보존한다.
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
-      `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { display: none !important; }`,
+      // 2026-11-22: 지우지(display:none) 않고 투명하게만 — 코코포리아 가상 목록(TanStack)은 줄 높이를 정수로 반올림해 더한다(70.66 → 71).
+      // 순정의 "마지막 줄 아래 여백"은 줄마다 구분선 0.67px 때문에 생기는 이 반올림 차이(줄당 0.34px)가 쌓인 것이라, 구분선을 없애면 여백도 사라졌다.
+      `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { border-color: transparent !important; background: transparent !important; }`,
       // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
       `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) .MuiListItemText-root { margin: 0 !important; }`,
       `.MuiListItem-root[${CONT_ATTR}="1"][${LAST}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
@@ -6264,7 +6266,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.111",
+    version: "0.3.112",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
