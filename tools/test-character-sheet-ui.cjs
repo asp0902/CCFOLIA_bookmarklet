@@ -66,6 +66,18 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await hdr().dblclick({ position: { x: 100, y: 32 } });
     assert((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).height > 300, 'unfolded');
     assert.equal((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).width, wide, 'the original width back');
+    // 0.5.63 fold -> drag the bar to the top / the bottom of the screen -> unfold: the header stays on screen and the window fits (it grows down from the bar, pulled up only as needed)
+    const dlg = () => page.evaluate(() => { const d = document.querySelector('#ccf-character-sheet-root .ccf-cs-dialog'), r = d.getBoundingClientRect(), h = d.querySelector('header').getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), head: Math.round(h.top) }; });
+    for (const toY of [20, 900 - 80]) {
+      await hdr().dblclick({ position: { x: 100, y: 32 } }); await page.waitForTimeout(100);
+      const bar = await hdr().boundingBox();
+      await page.mouse.move(bar.x + 100, bar.y + 32); await page.mouse.down(); await page.mouse.move(bar.x + 100, toY + 32, { steps: 6 }); await page.mouse.up();
+      const folded = await dlg();
+      await hdr().dblclick({ position: { x: 100, y: 32 } }); await page.waitForTimeout(100);
+      const open = await dlg();
+      assert(open.head >= 0 && open.top >= 0 && open.bottom <= 900, 'unfolded window on screen ' + JSON.stringify({ toY, folded, open }));
+      if (toY === 20) assert(Math.abs(open.head - folded.head) <= 1, 'near the top: the header stays where the bar was ' + JSON.stringify({ folded, open }));
+    }
     await page.locator('#ccf-character-sheet-root [data-action="back-list"]').dblclick(); await page.waitForTimeout(150);
     assert.equal(await page.locator('#ccf-character-sheet-root .ccf-cs-dialog.is-collapsed').count(), 0, 'a double-click on a button does not fold');
     await page.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();

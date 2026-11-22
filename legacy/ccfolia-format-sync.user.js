@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.138
+// @version      0.1.139
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.138"),
+    version: getUserscriptVersion("0.1.139"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4267,7 +4267,8 @@
       .ccf-inline-toolbar [data-inline-group="deco"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; }
       /* 0.1.138 Aa·⋯ 는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치는 placeInlineGroupsInDiceRow) — 높이는 주사위 줄 단추에 맞추고 글자 크기는 그대로 */
       .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) { position: fixed !important; z-index: 1300; display: inline-flex; align-items: center; margin: 0 !important; }
-      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; }
+      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; width: 24px !important; min-width: 24px !important; padding: 0 !important; }
+      /* 0.1.139 폭 24px: D100 과 전송 사이(실측 57px, 오리지널·추가 패널 같음)에 Aa·⋯ 가 겹치지 않고 들어간다 */
       .ccf-inline-row-break {
         flex: 0 0 100%;
         width: 100%;
@@ -5638,7 +5639,7 @@
     const composer = toolbar?.__ccfComposer;
     const scope = composer instanceof HTMLElement ? (composer.closest("form") || composer) : null;
     if (!scope || toolbar.closest('[data-ccf-edit-dialog="1"], [role="dialog"]')) return null;
-    return [...scope.querySelectorAll('button[type="submit"]')].find((button) => button.getBoundingClientRect().width > 0 && !toolbar.contains(button)) || null;
+    return [...scope.querySelectorAll('button[type="submit"], button.ccf-scp-send')].find((button) => button.getBoundingClientRect().width > 0 && !toolbar.contains(button)) || null;
   }
   function placeInlineGroupsInDiceRow(toolbar) {
     if (!(toolbar instanceof HTMLElement)) return;
@@ -6245,6 +6246,27 @@
     }
 
     if (["bold", "italic", "underline", "strike"].includes(command)) {
+      // 0.1.139 선택 구간이 있으면 그 구간의 실제 서식만 보고 이 한 가지만 바꾼다: 전부 걸려 있으면 해제, 아니면(일부만·없음) 전체 적용.
+      // '다음 입력에 적용' 대기 상태(.active)는 켜지 않는다 — 예전에는 대기 상태가 켜진 채 남아 다른 곳을 선택해 누르면 '해제'로 동작했다.
+      const text = stripInvisibleEnvelope(getEditorText(editor));
+      const range = normalizeSelectionRange(getInlineToolbarSelection(toolbar), text.length);
+      if (range && range.start !== range.end) {
+        const state = ensureEditorState(editor);
+        const value = getSharedStyleValueForSelection(state.runs || [], range, command, text.length);
+        const allOn = !!value && value !== "false";
+        state.runs = patchStyleRuns(state.runs, range, { [command]: !allOn }, text.length);
+        state.text = text;
+        state.roll20Source = null;
+        commandButton.classList.remove("active");
+        commandButton.setAttribute("aria-pressed", "false");
+        if (state.parentheticalGray) applyParentheticalGrayToEditor(editor);
+        renderPreview(editor);
+        refreshComposerBadge(activeComposer, editor);
+        syncEditorVisualPreview(editor);
+        restoreRoomSelectionSoon(editor, range);
+        scheduleInlineToolbarCurrentSync();
+        return;
+      }
       const nextActive = !commandButton.classList.contains("active");
       commandButton.classList.toggle("active", nextActive);
       commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
@@ -6712,12 +6734,7 @@
     event.stopImmediatePropagation?.();
 
     rememberInlineToolbarSelection(editor);
-    const nextActive = !commandButton.classList.contains("active");
-    commandButton.classList.toggle("active", nextActive);
-    commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
-    applyInlineToolbarStyle(toolbar, {
-      selectionOverride: getInlineToolbarSelection(toolbar)
-    });
+    handleInlineToolbarCommand(toolbar, commandButton); // 0.1.139 단축키(Ctrl+B 등)도 단추와 같은 규칙
     return true;
   }
 

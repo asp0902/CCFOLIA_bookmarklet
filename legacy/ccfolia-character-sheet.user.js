@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.62
+// @version      0.5.63
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.62";
+  const VERSION = "0.5.63";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -91,11 +91,15 @@
   }
 
   // 0.5.44: 시트 창 머리줄(제목·닫기)이 화면 밖으로 나가 있으면 안쪽으로 되돌린다(판정 뒤 창이 위로 올라가 머리줄이 안 보이던 제보). 다시 그릴 때·판정 뒤·창 크기 바뀔 때.
-  function keepDialogInView(dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`)) {
+  // 0.5.63 화면 안 맞춤 하나로: 접기/펼치기·판정 뒤·다시 그리기·창 크기 변화 모두 이 함수. headTop 을 주면 머리줄을 그 화면 위치에 둔다(접힌 막대 자리에서 아래로 펼침).
+  // 그다음 아래 끝이 화면을 넘으면 위로 당기고, 위 끝은 여백(8px) 아래로 — 창 높이는 CSS 로 화면 높이 이하라 둘 다 지켜진다.
+  // (펼친 창은 화면 가운데 기준이라, 화면 위쪽으로 끌어 둔 접힌 막대를 펼치면 늘어난 높이의 절반만큼 위로 자라 머리줄이 화면 위로 나갔다)
+  function keepDialogInView(dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`), headTop = null) {
     if (!dialog || state.embedded || !dialog.isConnected) return;
     const r = dialog.getBoundingClientRect(), head = dialog.querySelector("header")?.getBoundingClientRect() || r;
-    let dx = 0, dy = 0;
-    if (head.top < 0) dy = 8 - head.top; else if (head.top > innerHeight - 48) dy = innerHeight - 48 - head.top;
+    let dx = 0, dy = Number.isFinite(headTop) ? headTop - head.top : 0;
+    if (r.bottom + dy > innerHeight - 8) dy = innerHeight - 8 - r.bottom;
+    if (r.top + dy < 8) dy = 8 - r.top;
     if (r.right < 80) dx = 80 - r.right; else if (r.left > innerWidth - 80) dx = innerWidth - 80 - r.left;
     if (!dx && !dy) return;
     state.dialogPosition = { x: state.dialogPosition.x + dx, y: state.dialogPosition.y + dy };
@@ -1216,8 +1220,10 @@
     // 탑바 더블클릭: 접기/펼치기(핸드아웃 창과 같음). 버튼·입력 위 더블클릭은 무시. 접힘 상태는 창이 열려 있는 동안 유지.
     handle.addEventListener("dblclick", (event) => {
       if (event.target.closest("button,input,select,textarea,a,label")) return;
+      const headTop = handle.getBoundingClientRect().top;
       state.collapsed = !state.collapsed;
       dialog.classList.toggle("is-collapsed", state.collapsed);
+      keepDialogInView(dialog, headTop);
     }, { signal });
     handle.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.target.closest("button,input,select,textarea,a")) return;
