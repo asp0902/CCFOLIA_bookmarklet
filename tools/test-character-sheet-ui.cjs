@@ -60,6 +60,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await hdr().dblclick({ position: { x: 150, y: 32 } });
     assert.equal(await page.evaluate(() => Math.round(document.querySelector('#ccf-character-sheet-root .ccf-cs-dialog').getBoundingClientRect().height)), 64, 'folded to the bar');
     assert.equal(Math.round((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).width), 250, '0.5.47: folded narrow (250px, as the handout view window)');
+    // 0.5.62 folded bar: the name and the close button only (no back arrow, no link field)
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-dialog header > *')].filter((el) => el.getBoundingClientRect().width > 0).map((el) => el.tagName === 'H2' ? 'name' : el.getAttribute('data-action') || el.className)), ['name', 'close'], 'folded: name + close only');
     if (process.env.SCREENSHOT_DIR) await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'sheet-folded.png') });
     await hdr().dblclick({ position: { x: 100, y: 32 } });
     assert((await page.locator('#ccf-character-sheet-root .ccf-cs-dialog').boundingBox()).height > 300, 'unfolded');
