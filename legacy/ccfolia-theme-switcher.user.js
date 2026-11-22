@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.48
+// @version      0.2.49
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.48"),
+    version: getUserscriptVersion("0.2.49"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1929,6 +1929,7 @@
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
+      ${scope} .ccf-roll20-check-note { display: block; margin: 10px 16px 0; font-size: 12px; line-height: 1.5; font-weight: normal; text-align: center; opacity: .85; }
       ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 17px; font-weight: bold; line-height: 1.3; }
       ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 14px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
       /* 색은 Roll20 캡처(docs/img/insane-r20-*.png)에서 뽑은 값: 성공·스페셜 청록, 실패 분홍(사용자 결정), 펌블 빨강. 작은 주사위 눈 6 은 금색, 1 은 빨강 */
@@ -5404,7 +5405,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
   function parseInsaneRoll20Check(text) {
     const normalized = text.replace(/＞/g, '>').replace(/（/g, '(').replace(/）/g, ')')
       .replace(/［/g, '[').replace(/］/g, ']');
-    const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)\s*$/i);
+    const match = normalized.match(/^\s*(.*?)\s*\(2D6(?:[+-]\d+)?\s*>=\s*(\d+)\)\s*>\s*\d+\[([1-6]),\s*([1-6])\](?:\s*[+-]\s*\d+)?\s*>\s*(-?\d+)\s*>\s*(성공|실패|스페셜|펌블)(?:\s*\(([^()]*)\))?\s*$/i);
     if (!match) return null;
     const raw = match[1].replace(/^S?2D6(?:[+-]\d+)?\s*>=\s*\d+\s*/i, '').trim();
     const parts = raw.replace(/^\[(.*)\]$/, '$1').split('/').map(part => part.trim()).filter(Boolean);
@@ -5412,7 +5413,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const table = parts.map(insaneSkillPlace).find(Boolean) || null;
     const skillText = fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
     return { skill: skillText || '판정', table,
-      target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6] };
+      target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6], note: (match[7] || '').trim() };
   }
 
   // 인세인 특기표(사이코로픽션 시트와 같은 표): 분야 1~6, 특기 번호 2~12. 시트의 특기 판정 글("… [특기]")에서 특기명을 찾아 분야·번호 카드를 판정 카드 위에 붙인다.
@@ -5463,6 +5464,8 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     }
     body.append(dice, detail);
     card.appendChild(body);
+    // BCDice Insane 실제 출력은 펌블·스페셜 뒤에 괄호 설명이 붙는다(예: 펌블(판정실패。 덱에서 【광기】를 1장 획득)) — 띠는 '펌블'/'스페셜', 설명은 카드 아래 작은 한 줄.
+    if (check.note) { const note = document.createElement('span'); note.className = 'ccf-roll20-check-note'; note.textContent = check.note; card.appendChild(note); }
   }
 
   // React-safe 카드 부착: host(p.MuiTypography-*)의 원본 children 은 손대지 않고
