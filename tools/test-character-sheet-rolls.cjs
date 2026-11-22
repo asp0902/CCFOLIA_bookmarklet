@@ -106,6 +106,9 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     const envAbility = (t) => { const m = t.match(/⁣{3}([\s\S]*?)⁢{3}/); if (!m) return null; const map = ['​', '‌', '‍', '⁠']; let bits = ''; for (const ch of m[1]) bits += map.indexOf(ch).toString(2).padStart(2, '0'); let b = ''; for (let i = 0; i + 8 <= bits.length; i += 8) b += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2)); return JSON.parse(Buffer.from(b, 'base64').toString('utf8')).ability; };
     assert.deepEqual(r.sent.map(plainRoll), ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged');
     assert.equal(envAbility(r.sent[0])?.name, '기습', 'the ability rides in the envelope without format-sync'); await reopen();
+    // 0.5.64 the receiving side can look an ability up in this browser's sheet (speaker = sheet name / linked character); only type/name/text come back
+    const look = await page.evaluate(() => { const sh = window.__CCF_CHARACTER_SHEET_DEBUG__.data().sheets.find((x) => (x.abilities || []).some((a) => a.name === '기습')); return { hit: window.__CCF_SHEET_ABILITY_LOOKUP__(sh.name, '기습', '소각'), other: window.__CCF_SHEET_ABILITY_LOOKUP__('없는 사람', '기습', '소각'), none: window.__CCF_SHEET_ABILITY_LOOKUP__(sh.name, '없는 어빌리티', '소각') }; });
+    assert.deepEqual(Object.keys(look.hit || {}).sort(), ['name', 'text', 'type']); assert.equal(look.hit.name, '기습'); assert.equal(look.other, null); assert.equal(look.none, null);
     assert.equal(await page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').count(), 0, 'no secret ability roll button any more');
     // 0.5.54: an ability without a designated skill sends the ability card text instead of an error
     await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('');
