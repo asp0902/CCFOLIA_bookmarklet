@@ -10,7 +10,8 @@ const sheet = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character-
 const INVIS_MAP = ['​', '‌', '‍', '⁠'];
 const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf('⁢⁢⁢', a + 3); if (a < 0 || b < 0) return null; let bits = ''; for (const ch of text.slice(a + 3, b)) { const i = INVIS_MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, '0'); } let b64 = ''; for (let i = 0; i + 8 <= bits.length; i += 8) b64 += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2)); return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')); };
 (async () => {
-  assert.match(sheet, /editor\.setAttribute\("data-ccf-sheet-command", "1"\);\s*try \{ submitButton\?\.click\(\); \} finally \{ editor\.removeAttribute\("data-ccf-sheet-command"\); \}/, 'the sheet marks the box while it clicks send');
+  assert.match(sheet, /editor\.setAttribute\("data-ccf-sheet-command", "1"\);[\s\S]{0,300}try \{ submitButton\?\.click\(\); \} finally \{ editor\.removeAttribute\("data-ccf-sheet-command"\);/, 'the sheet marks the box while it clicks send');
+  assert.match(sheet, /state\.sheetExtra = \{ ability: info \};/, 'an ability roll carries the ability (type / name / description) - character-sheet 0.5.54');
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
@@ -41,6 +42,11 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     await page.waitForTimeout(600);
     const shown = await page.evaluate(() => { const p = document.querySelector('#chatlist p'); const o = p.querySelector('.ccf-render-overlay'); return { overlay: o ? o.textContent.replace(/\s+/g, ' ').trim() : null, visible: p.innerText.replace(/\s+/g, ' ').trim() }; });
     assert.equal(shown.overlay, '2D6>=5 [회피] (2D6>=5) ＞ 8 ＞ 성공', 'command and result drawn: ' + JSON.stringify(shown));
+    // format-sync 0.1.137: a sheet command with an ability: the envelope is added even with narration and kept format off (it still rolls: after a space)
+    await page.evaluate(() => localStorage.setItem('ccf-format-narrators-v1:test', '[]'));
+    sent = await page.evaluate(() => { window.__sent.length = 0; const ta = document.querySelector('#composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, '2D6>=5 [기본공격/웃음]'); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.setAttribute('data-ccf-sheet-command', '1'); ta.setAttribute('data-ccf-sheet-extra', JSON.stringify({ ability: { type: '공격', name: '기본공격', text: '설명' } })); try { document.querySelector('#composer button[type=submit]').click(); } finally { ta.removeAttribute('data-ccf-sheet-command'); ta.removeAttribute('data-ccf-sheet-extra'); } return window.__sent.slice(); });
+    assert(sent[0].startsWith('2D6>=5 [기본공격/웃음] ⁣'), 'command, space, envelope ' + JSON.stringify(sent[0].slice(0, 20)));
+    assert.deepEqual(decode(sent[0]).ability, { type: '공격', name: '기본공격', text: '설명' });
     assert.deepEqual(errors, []);
     console.log('sheet command format PASS');
   } finally { await browser.close(); }

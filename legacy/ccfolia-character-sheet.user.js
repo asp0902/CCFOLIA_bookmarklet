@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.53
+// @version      0.5.54
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.53";
+  const VERSION = "0.5.54";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1910,7 +1910,11 @@
     if (button.dataset.abilityRoll !== undefined) {
       const ability = currentSheet().abilities[Number(button.dataset.abilityRoll)];
       const skill = findSkillId(ability?.target);
-      return skill ? inputSkillRoll(skill, ability?.name, true, button.dataset.secret === "1") : status("지정특기를 먼저 선택");
+      // 0.5.54 어빌리티 사용 카드: 종류·이름·설명을 싣는다. 판정이 있으면 명령 뒤 봉투(굴림은 그대로)에, 지정 특기가 없으면 아이템처럼 글로.
+      const info = { type: cleanText(ability?.type, 40), name: cleanText(ability?.name, 100), text: String(ability?.memo || ability?.effect || "").trim().slice(0, 600) };
+      if (!skill) return info.name ? writeChat(`[어빌리티${info.type ? `:${info.type}` : ""}] ${info.name}${info.text ? `\n${info.text}` : ""}`) : status("지정특기를 먼저 선택");
+      state.sheetExtra = { ability: info };
+      return inputSkillRoll(skill, ability?.name, true, button.dataset.secret === "1");
     }
     if (button.dataset.action === "fear-roll") {
       const fear = currentSheet().fear;
@@ -2056,7 +2060,9 @@
       const submitButton = findSubmitScope(editor)?.querySelector('button[type="submit"]');
       // 서식 바(format-sync)에게 "시트가 보낸 판정"임을 알린다: 유지 서식·나레이션을 굴림이 깨지지 않는 자리(공백 뒤)에 붙인다
       editor.setAttribute("data-ccf-sheet-command", "1");
-      try { submitButton?.click(); } finally { editor.removeAttribute("data-ccf-sheet-command"); }
+      const extra = state.sheetExtra; state.sheetExtra = null;
+      if (extra) editor.setAttribute("data-ccf-sheet-extra", JSON.stringify(extra)); // 서식 바가 봉투에 싣는다(어빌리티 카드)
+      try { submitButton?.click(); } finally { editor.removeAttribute("data-ccf-sheet-command"); editor.removeAttribute("data-ccf-sheet-extra"); }
       // 보내면 코코포리아가 입력칸을 비운다 → 원복. 끝까지 안 비워지면(전송 실패) 원복하고 안내.
       const started = Date.now();
       const watch = () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.50
+// @version      0.2.51
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.50"),
+    version: getUserscriptVersion("0.2.51"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1929,6 +1929,10 @@
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
+      ${scope} .ccf-roll20-ability-rule { display: block; height: 0; margin: 12px 24px; border-top: 1px solid rgba(0,0,0,.18); }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-skill { font-weight: 700 !important; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-body { margin-top: 0; }
+      ${scope} .ccf-roll20-ability-text { text-align: center; white-space: pre-line; }
       ${scope} .ccf-roll20-check-note { display: block; margin: 10px 16px 0; font-size: 12px; line-height: 1.5; font-weight: normal; text-align: center; opacity: .85; }
       ${scope} .ccf-roll20-check-skill { display: block; margin: 0 16px 8px 0; font-size: 17px; font-weight: bold; line-height: 1.3; }
       ${scope} .ccf-roll20-check-result { display: block; padding: 5px 16px 5px 0; color: white; font-size: 14px; font-weight: bold; line-height: 20px; background: linear-gradient(to right,rgba(142,203,213,0),rgb(142,203,213) 75%); }
@@ -5266,11 +5270,27 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
       if (!host.closest('.MuiListItem-root')) return;
       const existing = host.querySelector(':scope > .ccf-roll20-emotion-card');
       // 원문만: 서식 바(format-sync)가 그린 오버레이(명령+결과 사본)와 보이지 않는 서식 봉투 글자는 뺀다 — 섞이면 판정이 두 번 이어 붙은 글로 읽혀 특기명 자리에 원문 전체가 들어갔다.
-      const original = Array.from(host.childNodes).filter(node => node !== existing && !(node instanceof Element && (node.classList.contains('ccf-render-overlay') || node.classList.contains('ccf-roll20-emotion-card'))))
-        .map(node => node.textContent || '').join('').replace(/\u2063{3}[\s\S]*?\u2062{3}/g, '').replace(/[\u200B-\u200D\u2060-\u2064\uFEFF]/g, '');
+      const rawText = Array.from(host.childNodes).filter(node => node !== existing && !(node instanceof Element && (node.classList.contains('ccf-render-overlay') || node.classList.contains('ccf-roll20-emotion-card'))))
+        .map(node => node.textContent || '').join('');
+      const original = rawText.replace(/\u2063{3}[\s\S]*?\u2062{3}/g, '').replace(/[\u200B-\u200D\u2060-\u2064\uFEFF]/g, '');
       const match = original.match(/^\s*(.*?)\s*감정표\s*[（(][1-6][)）]\s*[＞>→]\s*(.+?[（(]\s*플러스\s*[)）])\s*[／/]\s*(.+?[（(]\s*마이너스\s*[)）])\s*$/u);
       const check = parseInsaneRoll20Check(original);
       const item = !check ? original.match(/^\s*\[아이템\]\s*([^\n]+?)\s*(?:\n([\s\S]*?))?\s*$/) : null;
+      // 0.2.51 어빌리티 사용 카드: 판정이 있으면 시트가 봉투에 실은 ability(종류·이름·설명), 없으면 "[어빌리티:종류] 이름\n설명" 글
+      const abilityEnv = check ? decodeInsaneEnvelope(rawText)?.ability : null;
+      const abilityText = !check && !item ? original.match(/^\s*\[어빌리티(?::([^\]]*))?\]\s*([^\n]+?)\s*(?:\n([\s\S]*?))?\s*$/) : null;
+      const ability = abilityEnv && typeof abilityEnv === 'object' ? { type: String(abilityEnv.type || ''), name: String(abilityEnv.name || ''), text: String(abilityEnv.text || '') }
+        : abilityText ? { type: (abilityText[1] || '').trim(), name: abilityText[2].trim(), text: (abilityText[3] || '').trim() } : null;
+      if (ability && ability.name) {
+        const signatureAbility = JSON.stringify([original, 'ability', ability]);
+        if (existing && host.getAttribute('data-ccf-roll20-emotion') === signatureAbility) return;
+        host.querySelectorAll(':scope > .ccf-roll20-emotion-card').forEach(node => node.remove());
+        const heading = host.parentElement.querySelector('.MuiListItemText-primary');
+        const speaker = heading ? Array.from(heading.childNodes).filter(node => !(node instanceof Element && node.matches('.MuiTypography-caption'))).map(node => node.textContent || '').join('').trim() : '';
+        host.setAttribute('data-ccf-roll20-emotion', signatureAbility);
+        host.appendChild(makeInsaneAbilityCard(speaker, ability, check));
+        return;
+      }
       const scene = !match && !check ? parseInsaneRoll20Scene(original) : null;
       // 0.2.40: 분야·특기 표 카드는 특기표 굴림(RTT·TVT/TET/TPT/TST/TKT/TMT: "… 특기 …표(…) ＞ 《특기／분야N》")에만. 일반 특기 판정에는 안 붙인다.
       const skillRoll = !check && !item ? original.match(/특기[^＞>]*[＞>]\s*《([^／/》]+)[／/][^》]*》\s*$/u) : null;
@@ -5437,6 +5457,33 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     card.className = 'ccf-roll20-emotion-card ccf-roll20-table-card';
     card.innerHTML = `<span class="ccf-roll20-table-side"><b class="ccf-roll20-badge is-field">${table.field}</b><b>${table.field}.${table.fieldName}</b></span><span class="ccf-roll20-table-side"><b>${table.skill}</b><b class="ccf-roll20-badge is-skill">${table.number}</b></span>`;
     return card;
+  }
+  // 어빌리티 사용 카드(Roll20 인세인 시트의 어빌리티 결과 모양): 위(캐릭터 이름·종류·어빌리티명) / 선 / 판정(있으면, 판정 카드와 같은 부품) / 선 / 설명(가운데)
+  function makeInsaneAbilityCard(speaker, ability, check) {
+    const card = document.createElement('span');
+    card.className = 'ccf-roll20-emotion-card ccf-roll20-item-card ccf-roll20-ability-card';
+    const part = (tag, cls, text) => { const el = document.createElement(tag); el.className = cls; el.textContent = text; card.appendChild(el); return el; };
+    if (speaker) part('small', '', speaker);
+    if (ability.type) part('span', 'ccf-roll20-item-label', ability.type);
+    part('span', 'ccf-roll20-item-name', ability.name);
+    if (check) {
+      part('span', 'ccf-roll20-ability-rule', '');
+      appendInsaneRoll20Check(card, { ...check, skill: check.table?.skill || String(check.skill || '').split('/').pop() || check.skill });
+      card.classList.add('ccf-roll20-item-card');
+    }
+    if (ability.text) { part('span', 'ccf-roll20-ability-rule', ''); part('span', 'ccf-roll20-item-text ccf-roll20-ability-text', ability.text); }
+    return card;
+  }
+  // 서식 봉투(보이지 않는 글자, format-sync 와 같은 부호)를 읽는다 — 시트가 판정 명령 뒤에 실은 어빌리티 정보용
+  function decodeInsaneEnvelope(text) {
+    const a = text.indexOf('\u2063\u2063\u2063'), b = text.indexOf('\u2062\u2062\u2062', a + 3);
+    if (a < 0 || b < 0) return null;
+    const MAP = ['\u200B', '\u200C', '\u200D', '\u2060'];
+    let bits = '';
+    for (const ch of text.slice(a + 3, b)) { const i = MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, '0'); }
+    let b64 = '';
+    for (let i = 0; i + 8 <= bits.length; i += 8) b64 += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2));
+    try { return JSON.parse(decodeURIComponent(escape(atob(b64)))); } catch (_) { return null; }
   }
   function appendInsaneRoll20Check(card, check) {
     card.classList.add('ccf-roll20-check-card');
