@@ -1,6 +1,6 @@
 // format-sync 0.1.126: Rb/Tip/Bl/</> live in the "Aa▾" menu and Nr/구분선/유지/Sv in the "⋯" menu (the #548 floating MUI menu). The items are the real buttons:
 // same handlers and state; an item that is on is checked, the group button looks active when any item inside is on; a click on an item closes the menu;
-// windows opened from an item (ruby / Sv) sit under the group button; outside click / Esc close; the first row fits one line at a narrow width.
+// windows opened from an item (ruby / Sv) sit under the group button; outside click / Esc close; order B I U S / align / colors / size / 가▾ / Aa▾ / ⋯, one line from 420px, never overflowing.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -23,9 +23,14 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     const group = (name) => bar.locator(`[data-inline-group="${name}"]`);
     const isOpen = (name) => group(name).evaluate((g) => g.getAttribute('data-open') === '1' && getComputedStyle(g.querySelector('.ccf-inline-group-menu')).display !== 'none');
     // closed: the items are not shown; the first row (B I U S Aa▾ ⋯) is one line at 300px
-    assert.equal(await bar.locator('[data-inline-command="ruby"]').isVisible(), false);
-    const tops = await bar.evaluate((t) => ['bold', 'italic', 'underline', 'strike'].map((c) => t.querySelector(`[data-inline-command="${c}"]`)).concat([...t.querySelectorAll('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]')]).map((b) => Math.round(b.getBoundingClientRect().top)));
-    assert.equal(new Set(tops).size, 1, 'first row on one line: ' + tops);
+    // 0.1.132 order: B I U S / align ×3 / colors / size / 가▾ / Aa▾ / ⋯ ; natural wrap: one line from 420px, two lines below, never overflowing
+    const order = await bar.evaluate((t) => [...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => c.getAttribute('data-inline-command') || c.getAttribute('data-inline-group') || (c.matches('[data-inline-size]') ? 'size' : c.matches('.ccf-color-tool') ? 'color' : c.className)));
+    assert.deepEqual(order, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font', 'deco', 'extra'], 'order');
+    const lines = async (w) => { await page.evaluate((w) => { document.getElementById('composer').style.width = w + 'px'; }, w); await page.waitForTimeout(50); return bar.evaluate((t) => ({ rows: new Set([...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => Math.round(c.getBoundingClientRect().top))).size, overflow: t.scrollWidth > t.clientWidth + 1 })); };
+    for (const w of [280, 340, 376, 410]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
+    for (const w of [420, 560]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
+    await lines(300);
+
     assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa▾', '⋯']);
     // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes
     await group('deco').locator('[data-inline-group-toggle]').click();
