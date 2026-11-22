@@ -101,7 +101,11 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     const reopen = async () => { if (!(await page.locator(R + ' .ccf-cs-dialog.is-editor').count())) { await page.locator('#row1 [data-ccf-character-sheet-row-button]').click(); await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor'); } };
     page.on('dialog', (d) => d.accept('7')); // 목표치(숫자) prompt for the commands that still have a ?
     let r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
-    assert.deepEqual(r.sent, ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged'); await reopen();
+    // 0.5.60 without format-sync (this page) the sheet itself adds the envelope after a space: the roll text is unchanged, the ability rides along
+    const plainRoll = (t) => t.replace(/ ⁣{3}[\s\S]*?⁢{3}$/, '');
+    const envAbility = (t) => { const m = t.match(/⁣{3}([\s\S]*?)⁢{3}/); if (!m) return null; const map = ['​', '‌', '‍', '⁠']; let bits = ''; for (const ch of m[1]) bits += map.indexOf(ch).toString(2).padStart(2, '0'); let b = ''; for (let i = 0; i + 8 <= bits.length; i += 8) b += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2)); return JSON.parse(Buffer.from(b, 'base64').toString('utf8')).ability; };
+    assert.deepEqual(r.sent.map(plainRoll), ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged');
+    assert.equal(envAbility(r.sent[0])?.name, '기습', 'the ability rides in the envelope without format-sync'); await reopen();
     assert.equal(await page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').count(), 0, 'no secret ability roll button any more');
     // 0.5.54: an ability without a designated skill sends the ability card text instead of an error
     await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('');
@@ -125,7 +129,7 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6+1>=5 [소각]'); await reopen();
     r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
-    assert.deepEqual(r.sent, ['2D6+1>=5 [기습/소각]']); await reopen();
+    assert.deepEqual(r.sent.map(plainRoll), ['2D6+1>=5 [기습/소각]']); await reopen();
     await page.locator(R + ' [data-field="fear"]').selectOption('0:0');
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6-1>=5 [소각/공포심]', 'fear -2 and the modifier +1 are merged'); await reopen();

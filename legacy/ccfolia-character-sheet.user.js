@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.59
+// @version      0.5.60
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.59";
+  const VERSION = "0.5.60";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -2158,12 +2158,24 @@
       if (failed) status("전송되지 않았습니다");
     };
   }
+  // format-sync 와 같은 보이지 않는 봉투(START ⁣×3, END ⁢×3, 2비트씩 4글자, base64 JSON)
+  function sheetEnvelope(obj) {
+    const map = ["\u200B", "\u200C", "\u200D", "\u2060"];
+    let out = "\u2063\u2063\u2063";
+    for (const ch of btoa(unescape(encodeURIComponent(JSON.stringify(obj))))) { const code = ch.charCodeAt(0); for (let i = 6; i >= 0; i -= 2) out += map[(code >> i) & 3]; }
+    return `${out}\u2062\u2062\u2062`;
+  }
   function writeChat(command, submit = true) {
     const editors = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')];
     const editor = editors.find((node) => !node.closest(`#${ROOT_ID}, [role="dialog"], .MuiDialog-root`) && isVisible(node) && findSubmitScope(node));
     if (!editor) return status("채팅 입력창을 찾지 못함");
     // 글을 넣기 전에 먼저 고정한다: 넣는 순간 MUI 자동 높이가 입력칸을 키우므로, 그 뒤에 재면 이미 커진 높이가 "원래" 값이 된다.
     const restore = submit ? hideEditorWhileSending(editor) : null;
+    // 0.5.60 서식 바(format-sync)가 꺼진 사람(플레이어 등)도 어빌리티 카드가 되게: 시트가 직접 "명령 + 공백 + 봉투"를 만든다(공백 뒤는 BCDice 설명이라 굴림은 그대로).
+    // 서식 바가 켜져 있으면 지금처럼 서식 바가 data-ccf-sheet-extra 를 읽어 유지 서식과 함께 싣는다.
+    const extra = submit ? state.sheetExtra : null; state.sheetExtra = null;
+    const selfEnvelope = !!(extra?.ability && !window.__CCF_FORMAT_SYNC_RUNTIME__);
+    if (selfEnvelope) command = `${command} ${sheetEnvelope({ v: 1, text: command, formatRuns: [], alignRuns: [], blockStyle: {}, command: true, ability: extra.ability })}`;
     if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
       const setter = Object.getOwnPropertyDescriptor(editor.constructor.prototype, "value")?.set;
       if (setter) setter.call(editor, command); else editor.value = command;
@@ -2174,8 +2186,7 @@
       const submitButton = findSubmitScope(editor)?.querySelector('button[type="submit"]');
       // 서식 바(format-sync)에게 "시트가 보낸 판정"임을 알린다: 유지 서식·나레이션을 굴림이 깨지지 않는 자리(공백 뒤)에 붙인다
       editor.setAttribute("data-ccf-sheet-command", "1");
-      const extra = state.sheetExtra; state.sheetExtra = null;
-      if (extra) editor.setAttribute("data-ccf-sheet-extra", JSON.stringify(extra)); // 서식 바가 봉투에 싣는다(어빌리티 카드)
+      if (extra && !selfEnvelope) editor.setAttribute("data-ccf-sheet-extra", JSON.stringify(extra)); // 서식 바가 봉투에 싣는다(어빌리티 카드)
       try { submitButton?.click(); } finally { editor.removeAttribute("data-ccf-sheet-command"); editor.removeAttribute("data-ccf-sheet-extra"); }
       // 보내면 코코포리아가 입력칸을 비운다 → 원복. 끝까지 안 비워지면(전송 실패) 원복하고 안내.
       const started = Date.now();

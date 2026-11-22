@@ -174,6 +174,9 @@ const key = 'ccf-theme-switcher-settings-v1';
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '회피 : 웃음', null, { timeout: 4000 });
     await setCheck('2D6+1>=6 [회피/속도2/특기] (2D6+1>=6) ＞ 8[3,5]+1 ＞ 9 ＞ 성공');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '회피 : 속도2', null, { timeout: 4000 });
+    // theme 0.2.56: an ability roll without the envelope (old sender) shows only the skill, not '기본공격/파괴'
+    await setCheck('2D6+1>=5 [기본공격/파괴] (2D6+1>=5) ＞ 8[3,5]+1 ＞ 9 ＞ 성공');
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '파괴', null, { timeout: 4000 });
     // an ability without a check: the top and the description only
     await setCheck('[어빌리티:서포트] 응급처치\n아군 1명의 생명력을 1점 회복한다.');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-ability-card .ccf-roll20-item-name')?.textContent === '응급처치');
