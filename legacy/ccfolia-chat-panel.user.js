@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.53
+// @version      0.5.54
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.53";
+  const VERSION = "0.5.54";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1256,13 +1256,13 @@
 .ccf-hide-host { position: relative; }
 .ccf-hide-btn { display: none; position: absolute; top: 4px; right: 84px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
 background: transparent; color: inherit; cursor: pointer; opacity: .7; align-items: center; justify-content: center; z-index: 3; }
-.ccf-hide-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
+.ccf-hide-btn:hover { opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent); }
 .ccf-hide-host:hover > .ccf-hide-btn, .ccf-hide-btn:focus-visible { display: inline-flex; }
 .ccf-hide-btn.ccf-hide-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
 /* 구분선 단추(GM): 눈 단추 왼쪽. 누를 때마다 그 메시지 위 구분선을 넣고 뺀다(메시지 봉투의 breakBefore). */
 .ccf-break-btn { display: none; position: absolute; top: 4px; right: 114px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
 background: transparent; color: inherit; cursor: pointer; opacity: .7; align-items: center; justify-content: center; z-index: 3; }
-.ccf-break-btn:hover { opacity: 1; background: rgba(255,255,255,.12); }
+.ccf-break-btn:hover { opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent); }
 .ccf-hide-host:hover > .ccf-break-btn, .ccf-break-btn:focus-visible { display: inline-flex; }
 .ccf-break-btn.ccf-break-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
 .ccf-break-btn[data-on="1"] { color: #f50057; }
@@ -1275,8 +1275,25 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"][data-ccf-unfolded] :is(p.MuiList
 .ccf-hidden-fold { display: none; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold { all: unset; display: block; cursor: pointer; font-size: 12px; line-height: 20px; color: rgba(255,255,255,.5); }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: rgba(255,255,255,.8); text-decoration: underline; }
+/* 0.5.54 호버 음영(오리지널 줄·추가 패널 줄 같은 값): 줄 배경만 아주 살짝(글자색 4% — 어두운 테마는 밝게, 밝은 테마는 어둡게), 줄 높이·배치는 그대로.
+   아이콘 묶음 뒤에는 그 줄 바탕색(--ccf-row-base, 처음 올릴 때 잰다)에 글자색 12%를 섞은 둥근 바탕 → 글자·컷인 그림·카드 위에서도 아이콘이 보인다. 평소 흐린(0.35) 아이콘은 줄에 올리면 또렷하게. */
+.MuiListItem-root:has(> .MuiListItemText-root > p.MuiListItemText-secondary), .ccf-scp-panel [data-ccf-msg-id] { transition: background-color .1s; }
+.MuiListItem-root:has(> .MuiListItemText-root > p.MuiListItemText-secondary):hover, .ccf-scp-panel [data-ccf-msg-id]:hover { background-color: color-mix(in srgb, currentColor 4%, transparent); }
+.MuiListItem-root:hover > div:has(> button.MuiIconButton-root),
+.ccf-hide-host:hover > :is(.ccf-hide-btn:not(.ccf-hide-inline), .ccf-break-btn:not(.ccf-break-inline)) { background: color-mix(in srgb, var(--ccf-row-base, #2a2a2a) 88%, currentColor 12%); border-radius: 16px; }
+.MuiListItem-root:hover > div:has(> button.MuiIconButton-root) > button, .ccf-hide-host:hover > :is(.ccf-hide-btn, .ccf-break-btn) { opacity: .9 !important; }
+.MuiListItem-root:hover > div:has(> button.MuiIconButton-root) > button:hover { opacity: 1 !important; background: color-mix(in srgb, currentColor 16%, transparent); }
     `;
     (document.head || document.documentElement).appendChild(style);
+    // 0.5.54 호버 음영의 아이콘 바탕: 그 줄 뒤의 실제(불투명에 가까운) 바탕색을 한 번 재서 줄에 둔다(줄마다 처음 올릴 때 한 번)
+    document.addEventListener("mouseover", (event) => {
+      const row = event.target instanceof Element ? event.target.closest(".MuiListItem-root, .ccf-scp-panel [data-ccf-msg-id]") : null;
+      if (!(row instanceof HTMLElement) || row.style.getPropertyValue("--ccf-row-base")) return;
+      for (let node = row; node; node = node.parentElement) {
+        const m = getComputedStyle(node).backgroundColor.match(/[\d.]+/g);
+        if (m && (m.length < 4 || Number(m[3]) >= 0.85)) { row.style.setProperty("--ccf-row-base", `rgb(${m[0]}, ${m[1]}, ${m[2]})`); break; }
+      }
+    }, true);
     // 눈 버튼 위치: 줄에 마우스를 올리면 나오는 네이티브 호버 버튼(답장·수정) 묶음의 바로 왼쪽, 같은 세로 가운데에 붙인다(그 묶음의 실제 위치를 읽는다). 못 읽으면 CSS 기본 위치.
     document.addEventListener("mouseover", (event) => {
       const li = event.target instanceof Element ? event.target.closest(".ccf-hide-host") : null;
