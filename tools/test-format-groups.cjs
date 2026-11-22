@@ -11,7 +11,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
   try {
     const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-    await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b;color:#fff;font:14px sans-serif"><div id="root"></div><ul id="chatlist" style="width:500px"></ul><form id="composer" style="position:fixed;left:20px;bottom:20px;width:300px"><input name="name" value="서술자"><textarea name="text" rows="3" style="width:100%"></textarea><button type="submit">전송</button></form></body>' }));
+    await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b;color:#fff;font:14px sans-serif"><div id="root"></div><ul id="chatlist" style="width:500px"></ul><form id="composer" style="position:fixed;left:20px;bottom:20px;width:300px"><input name="name" value="서술자"><div style="display:flex;align-items:center"><button type="button" aria-label="D4" style="width:36px;height:36px">D4</button><button type="submit" style="margin-left:auto;height:31px">전송</button></div><textarea name="text" rows="3" style="width:100%"></textarea></form></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
       const state = { app: { state: { roomId: 'test' } }, entities: { roomEffects: { ids: [], entities: {} } } };
@@ -25,11 +25,18 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     // closed: the items are not shown; the first row (B I U S Aa▾ ⋯) is one line at 300px
     // 0.1.132 order: B I U S / align ×3 / colors / size / 가▾ / Aa▾ / ⋯ ; natural wrap: one line from 420px, two lines below, never overflowing
     const order = await bar.evaluate((t) => [...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => c.getAttribute('data-inline-command') || c.getAttribute('data-inline-group') || (c.matches('[data-inline-size]') ? 'size' : c.matches('.ccf-color-tool') ? 'color' : c.className)));
-    assert.deepEqual(order, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font', 'deco', 'extra'], 'order');
+    // 0.1.138 Aa·⋯ left the bar (fixed next to the send button of the dice row): the bar is B I U S / align ×3 / colors / size / 가▾
+    assert.deepEqual(order, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font'], 'order');
     const lines = async (w) => { await page.evaluate((w) => { document.getElementById('composer').style.width = w + 'px'; }, w); await page.waitForTimeout(50); return bar.evaluate((t) => ({ rows: new Set([...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => Math.round(c.getBoundingClientRect().top))).size, overflow: t.scrollWidth > t.clientWidth + 1 })); };
-    for (const w of [280, 340, 376, 407]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
-    for (const w of [408, 560]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
+    const rowsAt = {}; for (const w of [280, 300, 320, 340, 360, 376, 408]) rowsAt[w] = (await lines(w)).rows;
+    console.log('rows by width', JSON.stringify(rowsAt));
+    for (const w of [360, 376, 408]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
+    for (const w of [280, 340]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
     await lines(300);
+    // Aa ⋯ [전송]: right of ⋯ = send left - 4, Aa right before ⋯, same vertical centre as the send button
+    const slot = await page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const s = r(document.querySelector('#composer button[type="submit"]')), e = r(document.querySelector('[data-inline-group="extra"]')), d = r(document.querySelector('[data-inline-group="deco"]')); return { send: [s.left, s.top + s.height / 2], extra: [e.left, e.right, e.top + e.height / 2], deco: [d.left, d.right, d.top + d.height / 2] }; });
+    assert(Math.abs(slot.extra[1] - (slot.send[0] - 4)) <= 1 && Math.abs(slot.deco[1] - (slot.extra[0] - 2)) <= 1, 'Aa ⋯ right before the send button ' + JSON.stringify(slot));
+    assert(Math.abs(slot.extra[2] - slot.send[1]) <= 1 && Math.abs(slot.deco[2] - slot.send[1]) <= 1, 'same vertical centre ' + JSON.stringify(slot));
 
     assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa', '⋯']);
     // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes

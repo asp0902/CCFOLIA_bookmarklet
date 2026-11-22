@@ -14,7 +14,7 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     const dialogs = []; page.on('dialog', (d) => { dialogs.push(d.type() + ':' + d.message()); d.accept(); });
-    await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b;color:#fff;font:14px sans-serif"><div id="root"></div><form id="composer" style="position:fixed;left:20px;bottom:20px;width:420px"><textarea name="text" rows="2" style="width:100%"></textarea><button type="submit">전송</button></form></body>' }));
+    await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b;color:#fff;font:14px sans-serif"><div id="root"></div><form id="composer" style="position:fixed;left:20px;bottom:20px;width:420px"><div style="display:flex;align-items:center"><button type="button" aria-label="D4" style="width:36px;height:36px">D4</button><button type="submit" style="margin-left:auto">전송</button></div><textarea name="text" rows="2" style="width:100%"></textarea></form></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
       window.__sent = []; document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); window.__sent.push(document.querySelector('#composer textarea').value); });
