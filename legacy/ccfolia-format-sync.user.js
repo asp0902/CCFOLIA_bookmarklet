@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.133
+// @version      0.1.134
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.133"),
+    version: getUserscriptVersion("0.1.134"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4241,6 +4241,8 @@
       .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
       .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
+      /* 0.1.134 꾸미기 묶음 단추는 "Aa" 만 — B·I·U·S 와 같은 30×30 */
+      .ccf-inline-toolbar [data-inline-group="deco"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; }
       .ccf-inline-row-break {
         flex: 0 0 100%;
         width: 100%;
@@ -5673,7 +5675,7 @@
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${[["", ""], ...Object.entries(window.__CCF_MESSAGE_FONTS__ || {})].map(([id, family]) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` style="font-family:'${family}', sans-serif"` : ""}>${family || "기본"}</button>`).join("")}</span></span>
       <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
-      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa▾</button><span class="ccf-inline-group-menu" role="menu">
+      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa</button><span class="ccf-inline-group-menu" role="menu">
       <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
       <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip"><span class="ccf-gi-key">Tip</span><span class="ccf-gi-label">툴팁</span></button>
       <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="blur" title="Blur" aria-label="Blur"><span class="ccf-gi-key">Bl</span><span class="ccf-gi-label">블러</span></button>

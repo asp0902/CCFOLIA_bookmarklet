@@ -27,11 +27,11 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     const order = await bar.evaluate((t) => [...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => c.getAttribute('data-inline-command') || c.getAttribute('data-inline-group') || (c.matches('[data-inline-size]') ? 'size' : c.matches('.ccf-color-tool') ? 'color' : c.className)));
     assert.deepEqual(order, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font', 'deco', 'extra'], 'order');
     const lines = async (w) => { await page.evaluate((w) => { document.getElementById('composer').style.width = w + 'px'; }, w); await page.waitForTimeout(50); return bar.evaluate((t) => ({ rows: new Set([...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => Math.round(c.getBoundingClientRect().top))).size, overflow: t.scrollWidth > t.clientWidth + 1 })); };
-    for (const w of [280, 340, 376, 410]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
-    for (const w of [420, 560]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
+    for (const w of [280, 340, 376, 407]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
+    for (const w of [408, 560]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
     await lines(300);
 
-    assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa▾', '⋯']);
+    assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa', '⋯']);
     // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes
     await group('deco').locator('[data-inline-group-toggle]').click();
     assert.equal(await isOpen('deco'), true);
