@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.139
+// @version      0.1.140
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.139"),
+    version: getUserscriptVersion("0.1.140"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -5641,6 +5641,16 @@
     if (!scope || toolbar.closest('[data-ccf-edit-dialog="1"], [role="dialog"]')) return null;
     return [...scope.querySelectorAll('button[type="submit"], button.ccf-scp-send')].find((button) => button.getBoundingClientRect().width > 0 && !toolbar.contains(button)) || null;
   }
+  function fixedOrigin(el) {
+    for (let node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+      const c = getComputedStyle(node);
+      if (c.transform !== "none" || c.filter !== "none" || (c.backdropFilter && c.backdropFilter !== "none") || c.perspective !== "none" || /paint|layout|strict|content/.test(c.contain || "") || /transform|filter/.test(c.willChange || "")) {
+        const r = node.getBoundingClientRect();
+        return { left: r.left + node.clientLeft, top: r.top + node.clientTop };
+      }
+    }
+    return { left: 0, top: 0 };
+  }
   function placeInlineGroupsInDiceRow(toolbar) {
     if (!(toolbar instanceof HTMLElement)) return;
     if (!placeInlineGroupsInDiceRow.bound) {
@@ -5650,6 +5660,8 @@
       window.addEventListener("resize", again);
       window.addEventListener("scroll", again, true);
       new MutationObserver(again).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+      document.addEventListener("transitionend", again, true); // 패널이 미끄러져 열리는 등 움직임이 끝난 뒤 한 번 더
+      document.addEventListener("animationend", again, true);
     }
     const groups = ["extra", "deco"].map((name) => toolbar.querySelector(`:scope > [data-inline-group="${name}"]`)).filter(Boolean);
     const submit = findDiceRowSubmit(toolbar);
@@ -5668,10 +5680,10 @@
     for (const group of groups) {
       const w = group.getBoundingClientRect().width || 30;
       const left = right - w, top = s.top + (s.height - height) / 2;
-      // 고정 배치의 기준이 화면이 아닐 수 있다(변형된 조상) → 지금 값과 실제 위치의 차이(기준 어긋남)를 빼서 쓴다. 값이 같으면 쓰지 않는다(관찰자 되먹임 방지).
-      const r = group.getBoundingClientRect(), curL = parseFloat(group.style.left), curT = parseFloat(group.style.top);
-      const offL = Number.isFinite(curL) ? r.left - curL : 0, offT = Number.isFinite(curT) ? r.top - curT : 0;
-      const nextL = left - offL, nextT = top - offT;
+      // 0.1.140 고정 배치의 기준 요소(변형·필터 등이 걸린 조상, 없으면 화면)를 직접 찾아 그 위치를 뺀다 — 이전 값에 기대지 않아 열리는 중(움직이는 패널)에 재도 굳지 않는다.
+      // 값이 같으면 쓰지 않는다(관찰자 되먹임 방지).
+      const origin = fixedOrigin(group), curL = parseFloat(group.style.left), curT = parseFloat(group.style.top);
+      const nextL = left - origin.left, nextT = top - origin.top;
       if (!Number.isFinite(curL) || Math.abs(nextL - curL) > 0.5) group.style.left = `${nextL}px`;
       if (!Number.isFinite(curT) || Math.abs(nextT - curT) > 0.5) group.style.top = `${nextT}px`;
       right = left - 2;
