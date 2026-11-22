@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.131
+// @version      0.1.132
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.131"),
+    version: getUserscriptVersion("0.1.132"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -5650,20 +5650,6 @@
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
-      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa▾</button><span class="ccf-inline-group-menu" role="menu">
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip"><span class="ccf-gi-key">Tip</span><span class="ccf-gi-label">툴팁</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="blur" title="Blur" aria-label="Blur"><span class="ccf-gi-key">Bl</span><span class="ccf-gi-label">블러</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="code" title="Code block" aria-label="Code block"><span class="ccf-gi-key">&lt;/&gt;</span><span class="ccf-gi-label">코드</span></button>
-      </span></span>
-      <span class="ccf-inline-group" data-inline-group="extra"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="나레이션·구분선·서식 유지·서식 저장" aria-label="더 보기" aria-haspopup="menu" aria-expanded="false">⋯</button><span class="ccf-inline-group-menu" role="menu">
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false"><span class="ccf-gi-key">Nr</span><span class="ccf-gi-label">나레이션</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><span class="ccf-gi-key"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></span><span class="ccf-gi-label">구분선</span></button>
-      <button type="button" class="ccf-toggle ccf-keep-toggle" role="menuitem" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false"><span class="ccf-gi-key">유지</span><span class="ccf-gi-label">서식 유지</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장"><span class="ccf-gi-key">Sv</span><span class="ccf-gi-label">서식 저장</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="paren-gray" title="괄호 안 글자를 회색으로" aria-label="Parentheses gray" aria-pressed="false"><span class="ccf-gi-key">()</span><span class="ccf-gi-label">괄호 회색</span></button>
-      </span></span>
-      <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg>
       </button>
@@ -5683,6 +5669,19 @@
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${[["", ""], ...Object.entries(window.__CCF_MESSAGE_FONTS__ || {})].map(([id, family]) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` style="font-family:'${family}', sans-serif"` : ""}>${family || "기본"}</button>`).join("")}</span></span>
       <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
+      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa▾</button><span class="ccf-inline-group-menu" role="menu">
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip"><span class="ccf-gi-key">Tip</span><span class="ccf-gi-label">툴팁</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="blur" title="Blur" aria-label="Blur"><span class="ccf-gi-key">Bl</span><span class="ccf-gi-label">블러</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="code" title="Code block" aria-label="Code block"><span class="ccf-gi-key">&lt;/&gt;</span><span class="ccf-gi-label">코드</span></button>
+      </span></span>
+      <span class="ccf-inline-group" data-inline-group="extra"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="나레이션·구분선·서식 유지·서식 저장" aria-label="더 보기" aria-haspopup="menu" aria-expanded="false">⋯</button><span class="ccf-inline-group-menu" role="menu">
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false"><span class="ccf-gi-key">Nr</span><span class="ccf-gi-label">나레이션</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><span class="ccf-gi-key"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></span><span class="ccf-gi-label">구분선</span></button>
+      <button type="button" class="ccf-toggle ccf-keep-toggle" role="menuitem" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false"><span class="ccf-gi-key">유지</span><span class="ccf-gi-label">서식 유지</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장"><span class="ccf-gi-key">Sv</span><span class="ccf-gi-label">서식 저장</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="paren-gray" title="괄호 안 글자를 회색으로" aria-label="Parentheses gray" aria-pressed="false"><span class="ccf-gi-key">()</span><span class="ccf-gi-label">괄호 회색</span></button>
+      </span></span>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
