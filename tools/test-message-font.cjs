@@ -38,7 +38,15 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     assert.equal(await items.first().evaluate((b) => b.closest('.ccf-inline-group').getAttribute('data-open')), '1', 'menu open');
     assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font-pick="nanum-myeongjo"]').first().evaluate((b) => getComputedStyle(b).fontFamily.includes('Nanum Myeongjo')), true, 'item in its own font');
     assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font-pick=""]').first().getAttribute('aria-checked'), 'true', 'default checked at first');
-    assert((await page.evaluate(() => window.__fontsAsked)).includes('Nanum Myeongjo'), 'fonts loaded for the preview');
+    // 0.1.136: 38 Korean families in groups with Korean names; previews are loaded for the items in view, not all at once
+    await page.waitForTimeout(300);
+    const menuInfo = await page.evaluate(() => { const m = document.querySelector('.ccf-inline-toolbar [data-inline-group="font"] .ccf-inline-group-menu'); return { items: m.querySelectorAll('[data-inline-font-pick]').length, groups: [...m.querySelectorAll('.ccf-font-group-title')].map((g) => g.textContent), myeongjo: m.querySelector('[data-inline-font-pick="nanum-myeongjo"]').textContent, newOne: m.querySelector('[data-inline-font-pick="gamja-flower"]')?.textContent, asked: window.__fontsAsked.length }; });
+    assert.equal(menuInfo.items, 39, 'default + 38 fonts');
+    assert.deepEqual(menuInfo.groups, ['고딕', '명조', '손글씨·장식']);
+    assert.equal(menuInfo.myeongjo, '나눔명조'); assert.equal(menuInfo.newOne, '감자꽃', 'Korean names');
+    assert(menuInfo.asked > 0 && menuInfo.asked < 38, 'only the items in view are loaded: ' + menuInfo.asked);
+    await page.locator('.ccf-inline-toolbar [data-inline-font-pick="moirai-one"]').first().scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => window.__fontsAsked.includes('Moirai One'), null, { timeout: 3000 });
     await page.locator('.ccf-inline-toolbar [data-inline-font-pick="nanum-myeongjo"]').first().click();
     assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font]').first().inputValue(), 'nanum-myeongjo');
     assert.equal(await items.first().evaluate((b) => b.closest('.ccf-inline-group').getAttribute('data-open')), null, 'menu closed');
@@ -53,10 +61,12 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     const msg = (text, runs) => text + enc({ v: 1, text, formatRuns: runs, alignRuns: [], blockStyle: {} });
     await page.evaluate(([a, b]) => { for (const [id, t] of [['f1', a], ['f2', b]]) { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">누군가</h6><p class="MuiListItemText-secondary" id="' + id + '"></p></div>'; li.querySelector('p').append(document.createTextNode(t)); document.getElementById('chatlist').appendChild(li); } },
       [msg('명조 글자', [{ start: 0, end: 2, style: { fontId: 'nanum-myeongjo' } }]), msg('이상한 글자', [{ start: 0, end: 2, style: { fontId: 'http://evil/x.woff' } }])]);
+    await page.evaluate((t) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">누군가</h6><p class="MuiListItemText-secondary" id="f3"></p></div>'; li.querySelector('p').append(document.createTextNode(t)); document.getElementById('chatlist').appendChild(li); }, msg('감자 글자', [{ start: 0, end: 2, style: { fontId: 'gamja-flower' } }]));
     await page.waitForTimeout(700);
     const fam = (id) => page.evaluate((id) => [...document.querySelectorAll(`#${id} .ccf-render-overlay *`)].map((e) => e.style.fontFamily).filter(Boolean), id);
     assert.deepEqual(await fam('f1'), ['"Nanum Myeongjo", sans-serif']);
     assert.deepEqual(await fam('f2'), [], 'unknown id: default font');
+    assert.deepEqual(await fam('f3'), ['"Gamja Flower", sans-serif'], 'a new id draws its font');
     assert((await page.evaluate(() => window.__fontsAsked)).includes('Nanum Myeongjo'), 'the font is loaded');
     assert.deepEqual(errors, []);
     console.log('message font PASS');

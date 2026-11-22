@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.135
+// @version      0.1.136
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.135"),
+    version: getUserscriptVersion("0.1.136"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -262,10 +262,31 @@
 
   // 0.1.124 메시지 글꼴: 봉투에는 글꼴 이름이 아니라 이 목록의 id(style.fontId)를 싣는다. 받는 쪽은 목록에서 찾아 Google Fonts 로 불러오고, 모르는 id 는 기본 글꼴.
   // (다른 사용자가 보낸 값이라 임의 이름·주소는 받지 않는다.) 모두 Google Fonts 의 무료(OFL) 한글 글꼴.
+  // 0.1.136 Google Fonts 의 한글 지원 글꼴 전부(38종, fonts.google.com 메타데이터의 korean 서브셋). 앞의 14개 id 는 이미 보낸 메시지가 쓰므로 바꾸지 않는다.
+  // 봉투에는 id, 그리는 쪽은 family. 표시 이름(한국어)과 묶음은 __CCF_MESSAGE_FONT_INFO__ (로그 패키지·테마 화면 글꼴·웹 공유 화면이 같은 목록을 쓴다).
   window.__CCF_MESSAGE_FONTS__ = window.__CCF_MESSAGE_FONTS__ || Object.freeze({
     "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo",
-    "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans",
-    "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle"
+    "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua",
+    "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody",
+    "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1",
+    "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish",
+    "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia",
+    "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo",
+    "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung",
+    "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture",
+    "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One"
+  });
+  window.__CCF_MESSAGE_FONT_INFO__ = window.__CCF_MESSAGE_FONT_INFO__ || Object.freeze({
+    "noto-sans-kr": ["본고딕", "고딕"], "noto-serif-kr": ["본명조", "명조"], "nanum-gothic": ["나눔고딕", "고딕"], "nanum-myeongjo": ["나눔명조", "명조"],
+    "gowun-dodum": ["고운돋움", "고딕"], "gowun-batang": ["고운바탕", "명조"], "do-hyeon": ["도현", "고딕"], "jua": ["주아", "고딕"],
+    "black-han-sans": ["검은고딕", "고딕"], "nanum-pen-script": ["나눔손글씨 펜", "손글씨·장식"], "gaegu": ["개구", "손글씨·장식"], "hi-melody": ["하이멜로디", "손글씨·장식"],
+    "song-myung": ["송명", "명조"], "dongle": ["동글", "고딕"], "asta-sans": ["아스타 산스", "고딕"], "gothic-a1": ["고딕 A1", "고딕"],
+    "ibm-plex-sans-kr": ["IBM 플렉스 산스", "고딕"], "nanum-gothic-coding": ["나눔고딕코딩", "고딕"], "sunflower": ["선플라워", "고딕"], "stylish": ["스타일리시", "고딕"],
+    "orbit": ["오르빗", "고딕"], "gasoek-one": ["가석", "고딕"], "hahmlet": ["함렛", "명조"], "diphylleia": ["디필레이아", "명조"],
+    "grandiflora-one": ["그랜디플로라", "명조"], "nanum-brush-script": ["나눔손글씨 붓", "손글씨·장식"], "east-sea-dokdo": ["동해독도", "손글씨·장식"], "dokdo": ["독도", "손글씨·장식"],
+    "gamja-flower": ["감자꽃", "손글씨·장식"], "poor-story": ["푸어 스토리", "손글씨·장식"], "single-day": ["싱글데이", "손글씨·장식"], "yeon-sung": ["연성", "손글씨·장식"],
+    "cute-font": ["큐트 폰트", "손글씨·장식"], "gugi": ["구기", "손글씨·장식"], "kirang-haerang": ["기랑해랑", "손글씨·장식"], "black-and-white-picture": ["흑백사진", "손글씨·장식"],
+    "bagel-fat-one": ["베이글 팻 원", "손글씨·장식"], "moirai-one": ["모이라이", "손글씨·장식"]
   });
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
@@ -4238,6 +4259,7 @@
       html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current, .ccf-font-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; font-family: Roboto, sans-serif; }
       html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-font-menu { max-height: min(360px, calc(100vh - 16px)); overflow-y: auto; min-width: 180px; }
       html .ccf-inline-toolbar .ccf-inline-font-menu .ccf-toggle { font-size: 15px !important; }
+      .ccf-inline-toolbar .ccf-font-group-title { display: block; padding: 8px 16px 2px; font: 700 11px/1.4 Roboto, "Noto Sans KR", sans-serif; letter-spacing: .04em; color: rgba(255,255,255,.55); }
       .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
       .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
@@ -5642,6 +5664,19 @@
     }, 2500);
   }
 
+  // 0.1.136 글꼴 메뉴 항목: 기본 + 묶음(고딕/명조/손글씨·장식) 소제목 아래 한국어 이름. 미리보기 글꼴은 항목이 보일 때 받는다(data-font-family).
+  function fontMenuItemsHtml() {
+    const fonts = window.__CCF_MESSAGE_FONTS__ || {}, info = window.__CCF_MESSAGE_FONT_INFO__ || {};
+    const item = (id, family, label) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` data-font-family="${family}" style="font-family:'${family}', sans-serif"` : ""} title="${family || "기본 글꼴"}">${label}</button>`;
+    let html = item("", "", "기본");
+    for (const group of ["고딕", "명조", "손글씨·장식"]) {
+      const ids = Object.keys(fonts).filter((id) => (info[id]?.[1] || "손글씨·장식") === group);
+      if (!ids.length) continue;
+      html += `<span class="ccf-font-group-title" role="presentation">${group}</span>` + ids.map((id) => item(id, fonts[id], info[id]?.[0] || fonts[id])).join("");
+    }
+    return html;
+  }
+
   function createInlineToolbar() {
     warmSelectableNamesOnce();
     const toolbar = document.createElement("div");
@@ -5673,7 +5708,7 @@
         <input type="color" value="#010101" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
-      <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${[["", ""], ...Object.entries(window.__CCF_MESSAGE_FONTS__ || {})].map(([id, family]) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` style="font-family:'${family}', sans-serif"` : ""}>${family || "기본"}</button>`).join("")}</span></span>
+      <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${fontMenuItemsHtml()}</span></span>
       <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
       <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa</button><span class="ccf-inline-group-menu" role="menu">
       <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
@@ -5714,7 +5749,17 @@
     if (wasOpen) return;
     const button = group.querySelector("[data-inline-group-toggle]"), menu = group.querySelector(".ccf-inline-group-menu");
     if (group.getAttribute("data-inline-group") === "font") {
-      Object.values(window.__CCF_MESSAGE_FONTS__ || {}).forEach((family) => window.__CCF_ENSURE_GOOGLE_FONTS__?.(family));
+      // 미리보기 글꼴은 메뉴에서 보이는 항목부터 받는다(한꺼번에 38개를 받지 않음). 스크롤하면 새로 보이는 항목을 받는다.
+      const fontMenu = group.querySelector(".ccf-inline-group-menu");
+      if (fontMenu && !fontMenu.__ccfFontObserver && typeof IntersectionObserver === "function") {
+        fontMenu.__ccfFontObserver = new IntersectionObserver((entries) => entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const family = entry.target.getAttribute("data-font-family");
+          if (family) window.__CCF_ENSURE_GOOGLE_FONTS__?.(family);
+          fontMenu.__ccfFontObserver.unobserve(entry.target);
+        }), { root: fontMenu });
+        fontMenu.querySelectorAll("[data-font-family]").forEach((el) => fontMenu.__ccfFontObserver.observe(el));
+      }
       syncInlineFontButton(group.closest(".ccf-inline-toolbar"));
     }
     group.setAttribute("data-open", "1");

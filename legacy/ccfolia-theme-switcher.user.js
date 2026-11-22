@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.49
+// @version      0.2.50
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.49"),
+    version: getUserscriptVersion("0.2.50"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -2538,7 +2538,7 @@
           </div>
           <div class="ccf-theme-font" role="group" aria-label="글꼴">
             <strong class="ccf-theme-font-title">글꼴</strong>
-            <label class="ccf-theme-field"><span>화면 글꼴</span><input class="ccf-theme-color-code" type="text" list="ccf-screen-font-list" data-screen-font="family" placeholder="기본" aria-label="화면 글꼴"><datalist id="ccf-screen-font-list">${Object.values(screenFontList()).map((name) => `<option value="${escapeHtml(name)}">`).join("")}</datalist></label>
+            <label class="ccf-theme-field"><span>화면 글꼴</span><input class="ccf-theme-color-code" type="text" list="ccf-screen-font-list" data-screen-font="family" placeholder="기본" aria-label="화면 글꼴"><datalist id="ccf-screen-font-list">${Object.entries(screenFontList()).map(([id, name]) => `<option value="${escapeHtml(name)}" label="${escapeHtml((window.__CCF_MESSAGE_FONT_INFO__ || {})[id]?.[0] || name)}">`).join("")}</datalist></label>
             <label class="ccf-theme-field"><span>크기 배율 <b data-screen-font-out="scale"></b></span><input type="range" min="0.8" max="1.3" step="0.05" data-screen-font="scale" aria-label="크기 배율"></label>
             <label class="ccf-theme-field"><span>자간 <b data-screen-font-out="spacing"></b></span><input type="range" min="-1" max="3" step="0.1" data-screen-font="spacing" aria-label="자간"></label>
             <label class="ccf-theme-field"><span>굵기</span><select class="ccf-theme-select" data-screen-font="weight" aria-label="굵기"><option value="">기본</option><option value="300">가늘게</option><option value="400">보통</option><option value="500">중간</option><option value="700">굵게</option><option value="900">아주 굵게</option></select></label>

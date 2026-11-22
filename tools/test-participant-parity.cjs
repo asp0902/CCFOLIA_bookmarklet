@@ -34,9 +34,9 @@ assert.deepEqual(links, ['https://fonts.googleapis.com/css2?family=Nanum+Myeongj
 assert.equal(ctx.messageFont('http://evil/x'), '', 'unknown id ignored');
 // the same allow list as the toolkit
 const fsync = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8');
-const ids = (text) => [...text.matchAll(/"([a-z-]+)": "([A-Z][^"]+)"/g)].map((m) => m[1]).filter((id) => /-|jua|gaegu|dongle/.test(id));
+const ids = (text) => [...text.matchAll(/"([a-z0-9-]+)": "([A-Z][^"]+)"/g)].map((m) => m[1]); // 0.1.136: every id (38)
 const toolkitList = fsync.slice(fsync.indexOf('window.__CCF_MESSAGE_FONTS__ = window.__CCF_MESSAGE_FONTS__ ||'), fsync.indexOf('});', fsync.indexOf('window.__CCF_MESSAGE_FONTS__ = window.__CCF_MESSAGE_FONTS__ ||')));
-assert.deepEqual(ids(take('const MESSAGE_FONTS = ', '\n')), ids(toolkitList), 'same font list as format-sync');
+assert.deepEqual(ids(take('const MESSAGE_FONTS = ', '\n')), ids(toolkitList), 'same font list as format-sync'); assert.equal(ids(toolkitList).length, 38, '38 families');
 assert(/const icon = wrapper\.querySelector\('\[data-cm-slot="icon"\]'\)\?\.getAttribute\("src"\)/.test(src), 'speaker runs split by the standing picture');
 assert(src.includes('const pic = active.find(r => typeof r.style.imageUrl === "string"'), 'pasted pictures drawn (allowed hosts only)');
 console.log('participant parity PASS');
