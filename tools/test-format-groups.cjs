@@ -54,6 +54,18 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     assert.notEqual(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, 'still active (keep)');
     await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="keep"]').click();
     assert.equal(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, 'nothing on: idle');
+    // 0.1.128: () (parentheses gray) is the last item of ⋯; no () button left on the bar; on -> checked + ⋯ active; off -> idle
+    assert.deepEqual(await group('extra').locator('[role=menuitem]').evaluateAll((l) => l.map((b) => b.getAttribute('data-inline-command'))), ['narration', 'break', 'keep', 'style-clipboard', 'paren-gray']);
+    assert.equal(await bar.evaluate((t) => [...t.querySelectorAll('[data-inline-command="paren-gray"]')].filter((b) => !b.closest('.ccf-inline-group-menu')).length), 0, 'no () on the bar');
+    await page.locator('#composer textarea').click();
+    await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="paren-gray"]').click();
+    assert.equal(await isOpen('extra'), false);
+    assert.equal(await bar.locator('[data-inline-command="paren-gray"]').evaluate((b) => b.classList.contains('active') && b.getAttribute('aria-pressed') === 'true'), true, '() on');
+    assert.notEqual(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, '⋯ active with ()');
+    await group('extra').locator('[data-inline-group-toggle]').click();
+    assert.equal(await group('extra').locator('[data-inline-command="paren-gray"]').evaluate((b) => getComputedStyle(b, '::after').content), '"✓"');
+    await group('extra').locator('[data-inline-command="paren-gray"]').click();
+    assert.equal(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, '() off: idle');
     // Sv opens the preset window under the group button
     await page.locator('#composer textarea').click();
     await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="style-clipboard"]').click();
