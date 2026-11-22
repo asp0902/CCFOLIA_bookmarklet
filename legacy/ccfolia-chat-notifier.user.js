@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.46
+// @version      0.3.47
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.46";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.47";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -502,6 +502,12 @@
   const ccfLoopTrace = [];
   // BGM 재생 이상(요청한 곡과 실제 로드된 곡이 다름, 원격 재생·정지 신호 적용)의 최근 30개 기록: __CCF_CHAT_NOTIFIER_DEBUG__.bgmTrace()
   const ccfBgmTrace = [];
+  // 0.3.47 진단: 코코포리아 기본 음원(audio)이 멈춘 순간도 기록한다(누가 멈췄는지 시점 비교용). pause 는 버블링하지 않아 캡처로 듣는다.
+  if (typeof document !== "undefined") document.addEventListener("pause", (event) => {
+    const media = event.target;
+    if (!(media instanceof HTMLMediaElement) || media.ended) return;
+    try { pushCcfBgmTrace({ type: "native-pause", src: String(media.currentSrc || media.src || "").replace(/^https?:\/\/([^/]+).*$/, "$1").slice(0, 40), at: Math.round(media.currentTime || 0), ytActive: ccfBgmActiveSlotKey }); } catch (_) { /* 진단만 */ }
+  }, true);
   function pushCcfBgmTrace(entry) {
     ccfBgmTrace.push({ at: new Date().toISOString(), ...entry });
     if (ccfBgmTrace.length > 30) ccfBgmTrace.shift();
@@ -4023,6 +4029,8 @@
   }
 
   function stopCcfYoutubeBgm(reason = "manual") {
+    // 0.3.47 진단: 어떤 이유로·어느 슬롯 판정으로 유튜브가 멈췄는지(두 슬롯 동시 재생 문제 추적)
+    try { pushCcfBgmTrace({ type: "yt-stop", reason, active: ccfBgmActiveSlotKey, editing: ccfBgmEditingSlotKey, lastDialog: ccfBgmLastDialogSlotKey, nativePlaying: [...document.querySelectorAll("audio, video")].filter((m) => !m.paused).length }); } catch (_) { /* 진단만 */ }
     // 플레이룸(릴레이)에는 어떤 이유로 멈추든 정지를 알린다: 직접 정지만 알렸을 때 다른 BGM으로 바뀜·룸 이동·곡 삭제 뒤에도 서버에 "재생 중"이 남아, 나중에 들어온 참가자에게 옛 곡이 자동재생됐다.
     try { window.dispatchEvent(new CustomEvent("capybara-bgm-signal", { detail: { state: "stopped", videoId: "", title: "", loop: true } })); } catch (_) {}
     // stopVideo() 는 ENDED 를 발생시키는데, 반복재생(loop) ON 이면 onStateChange 가
