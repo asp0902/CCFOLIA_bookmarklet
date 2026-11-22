@@ -20,7 +20,7 @@
   const CCF_SM_SCRIPT_INFO = Object.freeze({
     id: "ccf-slash-macros",
     name: "CCFOLIA Slash Macros",
-    version: "0.1.3",
+    version: "0.1.4",
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-slash-macros"
   });
 
