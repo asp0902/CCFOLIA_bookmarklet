@@ -59,6 +59,16 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     const br = await look('broken');
     assert.equal(br.hideAttr, null, 'load failed: text shows ' + JSON.stringify(br)); assert.notEqual(br.fontSize, '0px'); assert.equal(br.img, false);
     assert.equal(/ccfCutinChatHideText/.test(source), false, 'the switch is gone');
+    // 0.1.131: a name starting with a digit, the message typed with separate jamo (NFD, as a Mac sends it) and full-width / double spaces -> same cut-in
+    await page.evaluate((gif) => { const re = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...re, ids: [...re.ids, 'e5'], entities: { ...re.entities, e5: { name: '@2사이클  시작', imageUrl: gif } } }; }, GIF);
+    await addRow('digit', '@2사이클　시작'.normalize('NFD'));
+    await page.waitForFunction(() => document.getElementById('digit').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 4000 });
+    // the effect list arrives after the row was drawn (room still loading): the drawn row gets its picture without any new message
+    await addRow('late', '@늦은 컷인'); await page.waitForTimeout(400);
+    assert.equal(await imgs('late').count(), 0, 'no cut-in yet');
+    await page.evaluate((gif) => { const re = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...re, ids: [...re.ids, 'e6'], entities: { ...re.entities, e6: { name: '@늦은 컷인', imageUrl: gif } } }; }, GIF);
+    await addRow('poke', '평범'); // any later scan reads the new list
+    await page.waitForFunction(() => document.getElementById('late').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 4000 });
     // the trigger can also be the cut-in's message field
     await addRow('trigger2', '!불꽃');
     await page.waitForSelector('#trigger2 .ccf-cutin-chat-image img');
