@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.129
+// @version      0.1.130
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.129"),
+    version: getUserscriptVersion("0.1.130"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1172,7 +1172,7 @@
   // 저장소(roomEffects)의 컷인 이름·이미지 주소만 읽어, 메시지 글이 컷인 트리거와 같으면 그 행(p) 끝에 평범한 인라인 이미지를 하나 덧붙일 뿐이다
   // (오버레이·타이머·채널 없음, 새 행이 스캔될 때만 일한다). 원본 텍스트·노드는 건드리지 않는다(React-safe).
   // 끄기: localStorage.ccfCutinChatImage = "off". 글 일치 방식: 기본 "exact"(트리거와 글 전체가 같음), localStorage.ccfCutinChatMatch = "contains" 로 포함 일치.
-      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), sizes: new Map(), loading: new Set() }); }
+      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), sizes: new Map(), loading: new Set(), failed: new Set() }); }
 
   function cutinChatEnabled() {
     try { return localStorage.getItem("ccfCutinChatImage") !== "off"; } catch (_) { return true; }
@@ -1268,11 +1268,11 @@
     el.removeAttribute("data-ccf-cutin-hide");
   }
 
-  // 0.1.125: 컷인 이름만 보낸 메시지는 코코포리아 기본처럼 글("@이름")이 그대로 보인다(이미지는 아래에 붙음). 본문 + 컷인 이름은 봉투 렌더가 이름을 뺀다(#546).
-  // 글 숨기기(옛 기본)는 켜야만: localStorage ccfCutinChatHideText = "on" (CSS 로만 숨김 — React 안전).
+  // 0.1.130 한 규칙: 컷인 이름만 보낸 메시지는 그 컷인 그림이 줄에 실제로 그려졌을 때(로드 성공)만 글자("@이름")를 숨기고 그림만 보인다.
+  // 붙일 그림이 없거나(소리만 있는 컷인 등) 로드에 실패하면 글자가 보인다(줄이 비지 않게). '글 @컷인'은 봉투 렌더가 이름을 뺀다(#546). CSS 로만 숨김 — React 안전.
   function syncCutinChatHide(el) {
-    let hide = false;
-    try { hide = localStorage.getItem("ccfCutinChatHideText") === "on"; } catch (_) { hide = false; }
+    const img = el.querySelector(":scope > .ccf-cutin-chat-image img");
+    const hide = !!img && img.complete && img.naturalWidth > 0 && cutinChatMap().has(cutinChatMessageText(el));
     if (hide) { if (el.getAttribute("data-ccf-cutin-hide") !== "1") el.setAttribute("data-ccf-cutin-hide", "1"); }
     else if (el.hasAttribute("data-ccf-cutin-hide")) el.removeAttribute("data-ccf-cutin-hide");
   }
@@ -1293,7 +1293,7 @@
     if (!cutinChatIsMessageText(el)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (!cutinChatEnabled()) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     const url = cutinChatUrlFor(cutinChatMessageText(el));
-    if (!url) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    if (!url || cutinChatS().failed.has(url)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     // 이미 다른 이미지(언성 듀엣 고정 이미지·매크로 GIF 인라인 등)가 이 메시지에 있으면 두 번 보이지 않게 건너뛴다.
     if ([...el.querySelectorAll("img")].some((image) => !image.closest(".ccf-cutin-chat-image"))) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (el.getAttribute("data-ccf-cutin-chat") === url && el.querySelector(`:scope > .ccf-cutin-chat-image`)) { syncCutinChatHide(el); return; }
@@ -1310,6 +1310,8 @@
     const size = cutinChatS().sizes.get(url);
     if (size) { img.width = size.w; img.height = size.h; }
     else img.addEventListener("load", () => { if (img.naturalWidth && img.naturalHeight) cutinChatS().sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight }); }, { once: true });
+    img.addEventListener("load", () => syncCutinChatHide(el), { once: true });
+    img.addEventListener("error", () => { cutinChatS().failed.add(url); removeCutinChatImage(el); }, { once: true });
     img.src = url;
     img.addEventListener("click", () => { try { window.open(url, "_blank", "noopener,noreferrer"); } catch (_) { /* 팝업 차단 */ } });
     wrap.appendChild(img);
