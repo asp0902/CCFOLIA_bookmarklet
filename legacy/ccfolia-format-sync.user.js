@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.137
+// @version      0.1.138
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.137"),
+    version: getUserscriptVersion("0.1.138"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4265,6 +4265,9 @@
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
       /* 0.1.134 꾸미기 묶음 단추는 "Aa" 만 — B·I·U·S 와 같은 30×30 */
       .ccf-inline-toolbar [data-inline-group="deco"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; }
+      /* 0.1.138 Aa·⋯ 는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치는 placeInlineGroupsInDiceRow) — 높이는 주사위 줄 단추에 맞추고 글자 크기는 그대로 */
+      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) { position: fixed !important; z-index: 1300; display: inline-flex; align-items: center; margin: 0 !important; }
+      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; }
       .ccf-inline-row-break {
         flex: 0 0 100%;
         width: 100%;
@@ -5625,7 +5628,53 @@
 
     bindInlineToolbarToEditor(toolbar, editor, composer);
     updateInlineToolbarVisuals(toolbar);
+    placeInlineGroupsInDiceRow(toolbar);
     return toolbar;
+  }
+
+  // 0.1.138 꾸미기(Aa)·더 보기(⋯) 묶음 단추는 주사위 줄의 전송 단추 바로 왼쪽에 둔다(예전 Roll20 단추 자리) — [D4…D100] … [Aa][⋯][전송].
+  // 단추는 서식 바 안에 그대로 두고(이벤트·상태가 그 입력칸의 서식 바에 묶임) 화면 위치만 옮긴다(고정 배치). 주사위 줄(전송 단추)이 없는 곳(메시지 수정 창)은 서식 바 안 그대로.
+  function findDiceRowSubmit(toolbar) {
+    const composer = toolbar?.__ccfComposer;
+    const scope = composer instanceof HTMLElement ? (composer.closest("form") || composer) : null;
+    if (!scope || toolbar.closest('[data-ccf-edit-dialog="1"], [role="dialog"]')) return null;
+    return [...scope.querySelectorAll('button[type="submit"]')].find((button) => button.getBoundingClientRect().width > 0 && !toolbar.contains(button)) || null;
+  }
+  function placeInlineGroupsInDiceRow(toolbar) {
+    if (!(toolbar instanceof HTMLElement)) return;
+    if (!placeInlineGroupsInDiceRow.bound) {
+      placeInlineGroupsInDiceRow.bound = true;
+      let frame = 0;
+      const again = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; document.querySelectorAll(".ccf-inline-toolbar").forEach(placeInlineGroupsInDiceRow); }); };
+      window.addEventListener("resize", again);
+      window.addEventListener("scroll", again, true);
+      new MutationObserver(again).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+    }
+    const groups = ["extra", "deco"].map((name) => toolbar.querySelector(`:scope > [data-inline-group="${name}"]`)).filter(Boolean);
+    const submit = findDiceRowSubmit(toolbar);
+    const toolbarShown = toolbar.getBoundingClientRect().width > 0;
+    if (!submit || !toolbarShown || groups.length < 2) {
+      if (toolbar.classList.contains("ccf-groups-in-dice-row")) { toolbar.classList.remove("ccf-groups-in-dice-row"); groups.forEach((group) => { group.style.left = ""; group.style.top = ""; }); }
+      return;
+    }
+    if (!toolbar.classList.contains("ccf-groups-in-dice-row")) toolbar.classList.add("ccf-groups-in-dice-row");
+    const s = submit.getBoundingClientRect();
+    const row = submit.parentElement;
+    const diceButton = row?.querySelector?.('button[aria-label^="D"]') || [...(row?.children || [])].find((el) => el !== submit && el.tagName === "BUTTON");
+    const height = Math.round(diceButton?.getBoundingClientRect().height || s.height || 32);
+    if (toolbar.style.getPropertyValue("--ccf-dice-btn-h") !== `${height}px`) toolbar.style.setProperty("--ccf-dice-btn-h", `${height}px`);
+    let right = s.left - 4; // 전송 단추와 간격(예전 Roll20 단추와 같은 4px)
+    for (const group of groups) {
+      const w = group.getBoundingClientRect().width || 30;
+      const left = right - w, top = s.top + (s.height - height) / 2;
+      // 고정 배치의 기준이 화면이 아닐 수 있다(변형된 조상) → 지금 값과 실제 위치의 차이(기준 어긋남)를 빼서 쓴다. 값이 같으면 쓰지 않는다(관찰자 되먹임 방지).
+      const r = group.getBoundingClientRect(), curL = parseFloat(group.style.left), curT = parseFloat(group.style.top);
+      const offL = Number.isFinite(curL) ? r.left - curL : 0, offT = Number.isFinite(curT) ? r.top - curT : 0;
+      const nextL = left - offL, nextT = top - offT;
+      if (!Number.isFinite(curL) || Math.abs(nextL - curL) > 0.5) group.style.left = `${nextL}px`;
+      if (!Number.isFinite(curT) || Math.abs(nextT - curT) > 0.5) group.style.top = `${nextT}px`;
+      right = left - 2;
+    }
   }
 
   function getInlineToolbarAnchor(editor) {
@@ -7182,7 +7231,8 @@
     );
     const belowTop = anchorRect.bottom + INLINE_NARRATOR_POPOVER_GAP;
     const aboveTop = anchorRect.top - INLINE_NARRATOR_POPOVER_GAP - height;
-    const fitsBelow = belowTop + height <= window.innerHeight - INLINE_NARRATOR_POPOVER_MARGIN;
+    // 0.1.138 묶음 단추가 주사위 줄(입력칸 위)에 있으면 위로 먼저 연다 — 아래로 열면 입력칸을 덮는다
+    const fitsBelow = belowTop + height <= window.innerHeight - INLINE_NARRATOR_POPOVER_MARGIN && !(toolbar?.classList?.contains("ccf-groups-in-dice-row") && aboveTop >= INLINE_NARRATOR_POPOVER_MARGIN);
     const top = fitsBelow
       ? belowTop
       : Math.max(INLINE_NARRATOR_POPOVER_MARGIN, aboveTop);
@@ -7346,7 +7396,8 @@
       Math.max(MARGIN, anchorRect.right - width)
     );
     const belowTop = anchorRect.bottom + GAP;
-    const fitsBelow = belowTop + height <= window.innerHeight - MARGIN;
+    // 0.1.138 묶음 단추가 주사위 줄(입력칸 위)에 있으면 위로 먼저 연다 — 아래로 열면 입력칸을 덮는다
+    const fitsBelow = belowTop + height <= window.innerHeight - MARGIN && !(toolbar?.classList?.contains("ccf-groups-in-dice-row") && anchorRect.top - GAP - height >= MARGIN);
     const top = fitsBelow
       ? belowTop
       : Math.max(MARGIN, anchorRect.top - GAP - height);
