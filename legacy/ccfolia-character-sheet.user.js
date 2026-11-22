@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.52
+// @version      0.5.53
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.52";
+  const VERSION = "0.5.53";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1088,7 +1088,22 @@
     resizeInlineMemos(dialog);
     decorateFmt(dialog);
     applyDesign(dialog);
+    fitDialogToSkills(dialog);
     renderSheetTab(); // GM 도구 탭의 관리 목록도 같은 데이터(이름·플레이어)로 맞춘다
+  }
+
+  // 0.5.53 시트 창 폭 = 특기표 실제 폭 + 좌우 같은 여백(+ 세로 스크롤바). 특기표는 내용 폭(max-content)이라 디자인의 본문 크기가 바뀌면 같이 바뀐다.
+  // 위쪽 칸·메모·리스펙 줄·명령 줄은 같은 폭 안에서 늘어나 오른쪽 끝이 특기표와 맞는다(리스펙 줄은 넘치면 줄바꿈).
+  function fitDialogToSkills(dialog) {
+    if (!dialog?.classList.contains("is-editor") || state.embedded) return;
+    const main = dialog.querySelector(":scope > main"), skills = main?.querySelector(".ccf-cs-skills");
+    if (!main || !skills) return;
+    const mainStyle = getComputedStyle(main);
+    const padLeft = parseFloat(mainStyle.paddingLeft) || 0, padRight = parseFloat(mainStyle.paddingRight) || 0;
+    const scrollbar = main.offsetWidth - main.clientWidth;
+    const frame = dialog.offsetWidth - main.offsetWidth; // 창 테두리 등 main 바깥
+    const want = Math.ceil(skills.scrollWidth + padLeft + padRight + scrollbar + frame);
+    if (want > 200) dialog.style.width = `min(${want}px, calc(100vw - 64px))`;
   }
 
   function renderPanelTabs() {
@@ -2111,6 +2126,9 @@
       #${ROOT_ID} header,#${ROOT_ID} footer { display:flex;align-items:center;gap:8px;padding:8px 16px;border:0 }
       #${ROOT_ID} .ccf-cs-dialog>header { background:#212121!important;color:#fff }
       #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
+      /* 0.5.53 창 폭이 특기표에 맞춰 좁아졌을 때: 그림 옆 생명력·이성치 칸이 겹치지 않게 최소 폭·간격을 줄인다. 명령 줄은 간격을 줄여 한 줄에. */
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-portrait-stats { grid-template-columns:auto minmax(150px,1fr);gap:16px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor>footer { gap:2px;padding-left:8px;padding-right:8px }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} .ccf-cs-dialog>header { padding:0 16px 0 24px }
       #${ROOT_ID} header h2 { margin:0;font-size:1.25rem;font-weight:bold;line-height:1.6;letter-spacing:.0075em;flex:1 }
