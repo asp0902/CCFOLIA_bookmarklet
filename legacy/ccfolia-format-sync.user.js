@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.140
+// @version      0.1.141
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.140"),
+    version: getUserscriptVersion("0.1.141"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -5656,7 +5656,7 @@
     if (!placeInlineGroupsInDiceRow.bound) {
       placeInlineGroupsInDiceRow.bound = true;
       let frame = 0;
-      const again = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; document.querySelectorAll(".ccf-inline-toolbar").forEach(placeInlineGroupsInDiceRow); }); };
+      const again = () => { if (frame) return; frame = setTimeout(() => { frame = 0; document.querySelectorAll(".ccf-inline-toolbar").forEach(placeInlineGroupsInDiceRow); }, 16); }; // 0.1.141 rAF 는 숨은 탭에서 멈춘다 → 타이머
       window.addEventListener("resize", again);
       window.addEventListener("scroll", again, true);
       new MutationObserver(again).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
