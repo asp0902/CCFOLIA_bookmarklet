@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Toolkit Presence by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-toolkit-presence
-// @version      0.0.23
+// @version      0.0.24
 // @description  카피바라 툴킷 사용자 패널 — 같은 룸의 툴킷 사용자 presence 송수신. ccfolia-suite에서 분리.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
@@ -192,6 +192,14 @@
       #ccf-gm-tools{position:fixed;inset:0;z-index:2147482999;pointer-events:none;font-family:"Roboto","Noto Sans KR","Noto Sans JP",system-ui,sans-serif;color:#fff}
       #ccf-gm-tools .ccf-gt-window,#ccf-gm-tools .ccf-gt-window>*{box-sizing:border-box}
       #ccf-gm-tools .ccf-gt-window{position:absolute;inset:10px;margin:auto;width:min(640px,92vw);height:min(900px,calc(100vh - 64px));pointer-events:auto;display:flex;flex-direction:column;background:rgba(44,44,44,.87);background-image:none;border-radius:4px;box-shadow:0px 11px 15px -7px rgba(0,0,0,.2),0px 24px 38px 3px rgba(0,0,0,.14),0px 9px 46px 8px rgba(0,0,0,.12);overflow:hidden}
+      #ccf-gm-tools .ccf-gt-rz{position:absolute;z-index:5;touch-action:none}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="n"],#ccf-gm-tools .ccf-gt-rz[data-rz="s"]{left:10px;right:10px;height:6px;cursor:ns-resize}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="n"]{top:0}#ccf-gm-tools .ccf-gt-rz[data-rz="s"]{bottom:0}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="e"],#ccf-gm-tools .ccf-gt-rz[data-rz="w"]{top:10px;bottom:10px;width:6px;cursor:ew-resize}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="e"]{right:0}#ccf-gm-tools .ccf-gt-rz[data-rz="w"]{left:0}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="ne"],#ccf-gm-tools .ccf-gt-rz[data-rz="nw"],#ccf-gm-tools .ccf-gt-rz[data-rz="se"],#ccf-gm-tools .ccf-gt-rz[data-rz="sw"]{width:12px;height:12px}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="ne"]{top:0;right:0;cursor:nesw-resize}#ccf-gm-tools .ccf-gt-rz[data-rz="sw"]{bottom:0;left:0;cursor:nesw-resize}
+      #ccf-gm-tools .ccf-gt-rz[data-rz="nw"]{top:0;left:0;cursor:nwse-resize}#ccf-gm-tools .ccf-gt-rz[data-rz="se"]{bottom:0;right:0;cursor:nwse-resize}
       html[data-ccf-theme-scheme="dark"] #ccf-gm-tools .ccf-gt-window{background:var(--ccf-theme-paper)!important;color:var(--ccf-theme-text)} /* 0.0.23: 어두운 테마 색을 따른다 */
       #ccf-gm-tools .ccf-gt-window>header{display:flex;align-items:center;flex:0 0 auto;min-height:54px;padding:0 8px 0 24px;background:#212121;cursor:move;user-select:none;touch-action:none}
       #ccf-gm-tools .ccf-gt-window>header>h2{margin:0;flex:1;font-size:16px;font-weight:700;line-height:25.12px;letter-spacing:.09996px}
@@ -267,6 +275,58 @@
     return true;
   }
 
+  // 0.0.24 창 크기 조절(핸드아웃 보기 창과 같은 방식): 네 가장자리(폭만·높이만) + 네 모서리. 최소 400×320, 최대 92vw×88vh, 화면 밖으로 안 나감.
+  // 창은 가운데 정렬 + transform 이동이라, 끈 쪽 반대편 가장자리가 제자리에 있게 크기 변화의 절반만큼 옮긴다. 크기는 브라우저에 저장, 가장자리 더블클릭 = 기본 크기.
+  const TOOLS_SIZE_KEY = "ccf-gm-tools-size-v1";
+  function bindToolsResize(win) {
+    win.insertAdjacentHTML("beforeend", ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((d) => `<div class="ccf-gt-rz" data-rz="${d}" aria-hidden="true"></div>`).join(""));
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const limits = () => ({ minW: 400, minH: 320, maxW: innerWidth * 0.92, maxH: innerHeight * 0.88 });
+    const place = () => { win.style.transform = `translate3d(${toolsState.pos.x}px,${toolsState.pos.y}px,0)`; };
+    const keepInView = () => {
+      const r = win.getBoundingClientRect();
+      const dx = r.left < 0 ? -r.left : r.right > innerWidth ? innerWidth - r.right : 0, dy = r.top < 0 ? -r.top : r.bottom > innerHeight ? innerHeight - r.bottom : 0;
+      if (dx || dy) { toolsState.pos = { x: toolsState.pos.x + dx, y: toolsState.pos.y + dy }; place(); }
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem(TOOLS_SIZE_KEY) || "null");
+      const { minW, minH, maxW, maxH } = limits();
+      if (saved?.w) win.style.width = `${clamp(saved.w, minW, maxW)}px`;
+      if (saved?.h) win.style.height = `${clamp(saved.h, minH, maxH)}px`;
+    } catch (_) { /* 기본 크기 */ }
+    win.querySelectorAll(".ccf-gt-rz").forEach((grip) => {
+      grip.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault(); event.stopPropagation();
+        const d = grip.dataset.rz, r = win.getBoundingClientRect(), sx = event.clientX, sy = event.clientY, pos0 = { ...toolsState.pos };
+        try { grip.setPointerCapture(event.pointerId); } catch (_) { /* 없음 */ }
+        const move = (ev) => {
+          const { minW, minH, maxW, maxH } = limits();
+          let w = r.width, h = r.height, x = pos0.x, y = pos0.y;
+          if (d.includes("e")) { w = clamp(r.width + ev.clientX - sx, minW, maxW); x = pos0.x + (w - r.width) / 2; }
+          if (d.includes("w")) { w = clamp(r.width - (ev.clientX - sx), minW, maxW); x = pos0.x - (w - r.width) / 2; }
+          if (d.includes("s")) { h = clamp(r.height + ev.clientY - sy, minH, maxH); y = pos0.y + (h - r.height) / 2; }
+          if (d.includes("n")) { h = clamp(r.height - (ev.clientY - sy), minH, maxH); y = pos0.y - (h - r.height) / 2; }
+          if (d.includes("e") || d.includes("w")) win.style.width = `${Math.round(w)}px`;
+          if (d.includes("n") || d.includes("s")) win.style.height = `${Math.round(h)}px`;
+          toolsState.pos = { x, y }; place();
+        };
+        const up = () => {
+          grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
+          keepInView();
+          try { localStorage.setItem(TOOLS_SIZE_KEY, JSON.stringify({ w: parseFloat(win.style.width) || 0, h: parseFloat(win.style.height) || 0 })); } catch (_) { /* 저장 못 함 */ }
+        };
+        grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+      });
+      grip.addEventListener("dblclick", (event) => {
+        event.preventDefault(); event.stopPropagation();
+        win.style.width = ""; win.style.height = "";
+        try { localStorage.removeItem(TOOLS_SIZE_KEY); } catch (_) { /* 없음 */ }
+        keepInView();
+      });
+    });
+  }
+
   function openGmTools(tabId) {
     const tabs = toolTabs();
     if (!tabs.length) return false;
@@ -289,6 +349,7 @@
         const stop = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", stop); document.removeEventListener("pointercancel", stop); };
         document.addEventListener("pointermove", move); document.addEventListener("pointerup", stop); document.addEventListener("pointercancel", stop);
       }, { signal: abort.signal });
+      bindToolsResize(win);
       document.documentElement.appendChild(host);
       toolsState.host = host;
       toolsState.tabsKey = "";
