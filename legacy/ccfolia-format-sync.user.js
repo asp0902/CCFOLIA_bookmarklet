@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.132
+// @version      0.1.133
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.132"),
+    version: getUserscriptVersion("0.1.133"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4725,6 +4725,10 @@
       /* 각 줄은 자기 안의 가장 큰 글자에 맞춰 높이를 잡아 큰 글씨가 잘리지 않게 한다.
          (오버레이 전체에 걸린 고정 px line-height를 줄 단위로 재정의) */
       .ccf-editor-preview-content .ccf-line {
+        line-height: var(--ccf-editor-lh, 1.35);
+      }
+      /* 0.1.133 줄 높이는 입력칸 값(글자 자리가 같게). 크게 만든 글자가 있는 줄만 그 글자에 맞춰 늘어난다. */
+      .ccf-editor-preview-content .ccf-line [style*="font-size"] {
         line-height: 1.35;
       }
 
@@ -14010,6 +14014,7 @@
     }
     sweepOrphanedEditorOverlays(entry.overlay);
 
+    syncEditorWholeAlign(editor, text, alignRuns);
     const computed = getComputedStyle(editor);
     layoutEditorVisualPreview(editor, entry, computed, alignRuns);
     renderStyledText(entry.content, text, runs, alignRuns);
@@ -14020,6 +14025,8 @@
       computed.caretColor && computed.caretColor !== "auto" ? computed.caretColor : computed.color
     );
     if (!editor.classList.contains("ccf-editor-preview-source")) editor.classList.add("ccf-editor-preview-source");
+    // 0.1.133 편집 대화상자는 입력칸 글자색을 인라인 !important 로 박는다 → 원래 글자를 숨기는 것도 인라인 !important 로(커서·선택·맞춤법 밑줄은 남음).
+    if (editor.style.getPropertyValue("-webkit-text-fill-color") !== "transparent") editor.style.setProperty("-webkit-text-fill-color", "transparent", "important");
     if (entry.overlay.style.display !== "block") entry.overlay.style.display = "block";
   }
 
@@ -14032,6 +14039,25 @@
     EDITOR_VISUAL_PREVIEW.delete(editor);
     if (editor.classList.contains("ccf-editor-preview-source")) editor.classList.remove("ccf-editor-preview-source");
     if (editor.style.getPropertyValue("--ccf-editor-caret-color")) editor.style.removeProperty("--ccf-editor-caret-color");
+    releaseEditorPreviewInline(editor);
+  }
+
+  // 0.1.133 겹침층을 내리면 입력칸에 준 인라인 값(글자 숨김·전체 정렬)을 되돌린다.
+  function releaseEditorPreviewInline(editor) {
+    if (editor.style.getPropertyValue("-webkit-text-fill-color")) editor.style.removeProperty("-webkit-text-fill-color");
+    if (editor.hasAttribute("data-ccf-whole-align")) { editor.style.removeProperty("text-align"); editor.removeAttribute("data-ccf-whole-align"); }
+  }
+  // 메시지 전체가 한 정렬(가운데·오른쪽)이면 입력칸 글자도 그 정렬로 둔다 — 커서가 겹침층 글자 자리에 온다. 줄마다 정렬이 다르면 입력칸은 그대로(한계).
+  function syncEditorWholeAlign(editor, text, alignRuns) {
+    if (editor instanceof HTMLInputElement) return;
+    const lines = String(text || "").split("\n").length;
+    const aligns = new Set((alignRuns || []).map((run) => run.align));
+    const covered = (alignRuns || []).reduce((sum, run) => sum + Math.max(0, Math.min(lines, run.end) - Math.max(0, run.start)), 0);
+    const whole = aligns.size === 1 && covered >= lines ? [...aligns][0] : "";
+    if (whole && whole !== "left") {
+      if (editor.style.textAlign !== whole) editor.style.setProperty("text-align", whole, "important");
+      editor.setAttribute("data-ccf-whole-align", "1");
+    } else if (editor.hasAttribute("data-ccf-whole-align")) { editor.style.removeProperty("text-align"); editor.removeAttribute("data-ccf-whole-align"); }
   }
 
   function hideEditorVisualPreview(editor, entry = EDITOR_VISUAL_PREVIEW.get(editor)) {
@@ -14040,14 +14066,28 @@
     // 값이 그대로인 쓰기도 변화 기록을 남겨 다른 스크립트의 observer 를 깨우므로, 바뀔 때만 쓴다.
     if (editor.classList.contains("ccf-editor-preview-source")) editor.classList.remove("ccf-editor-preview-source");
     if (editor.style.getPropertyValue("--ccf-editor-caret-color")) editor.style.removeProperty("--ccf-editor-caret-color");
+    releaseEditorPreviewInline(editor);
   }
 
   function layoutEditorVisualPreview(editor, entry, computed = getComputedStyle(editor), alignRuns = []) {
     const { overlay, content } = entry;
-    overlay.style.left = `${editor.offsetLeft}px`;
-    overlay.style.top = `${editor.offsetTop}px`;
-    overlay.style.width = `${editor.offsetWidth}px`;
-    overlay.style.height = `${editor.offsetHeight}px`;
+    // 0.1.133 테마 '화면 글꼴 크기 배율'은 입력칸에 zoom 을 건다 → 겹침층도 같은 zoom 으로 그리고, 자리는 화면 좌표에서 zoom 으로 나눠 잡는다.
+    const zoom = parseFloat(computed.zoom) || 1;
+    const host = overlay.offsetParent || overlay.parentElement;
+    if (zoom !== 1 && host instanceof HTMLElement) {
+      const er = editor.getBoundingClientRect(), hr = host.getBoundingClientRect(), hs = getComputedStyle(host);
+      overlay.style.zoom = String(zoom);
+      overlay.style.left = `${(er.left - hr.left - (parseFloat(hs.borderLeftWidth) || 0) + host.scrollLeft) / zoom}px`;
+      overlay.style.top = `${(er.top - hr.top - (parseFloat(hs.borderTopWidth) || 0) + host.scrollTop) / zoom}px`;
+      overlay.style.width = `${er.width / zoom}px`;
+      overlay.style.height = `${er.height / zoom}px`;
+    } else {
+      if (overlay.style.zoom) overlay.style.zoom = "";
+      overlay.style.left = `${editor.offsetLeft}px`;
+      overlay.style.top = `${editor.offsetTop}px`;
+      overlay.style.width = `${editor.offsetWidth}px`;
+      overlay.style.height = `${editor.offsetHeight}px`;
+    }
     overlay.style.paddingTop = computed.paddingTop;
     overlay.style.paddingRight = computed.paddingRight;
     overlay.style.paddingBottom = computed.paddingBottom;
@@ -14060,9 +14100,17 @@
     overlay.style.textIndent = computed.textIndent;
     overlay.style.textTransform = computed.textTransform;
     overlay.style.color = resolveEditorPreviewColor(editor, computed, entry);
-    overlay.style.whiteSpace = editor instanceof HTMLInputElement ? "pre" : "pre-wrap";
-    overlay.style.wordBreak = editor instanceof HTMLInputElement ? "normal" : "break-word";
-    overlay.style.overflowWrap = editor instanceof HTMLInputElement ? "normal" : "anywhere";
+    // 0.1.133 글자 자리가 입력칸과 같게: 입력칸의 계산값 그대로(줄바꿈 규칙·자간·커닝 등). 줄 높이는 .ccf-line 이 이 값을 쓴다(큰 글자 줄만 늘어남).
+    overlay.style.whiteSpace = editor instanceof HTMLInputElement ? "pre" : (computed.whiteSpace || "pre-wrap");
+    overlay.style.wordBreak = editor instanceof HTMLInputElement ? "normal" : (computed.wordBreak || "normal");
+    overlay.style.overflowWrap = editor instanceof HTMLInputElement ? "normal" : (computed.overflowWrap || "break-word");
+    overlay.style.wordSpacing = computed.wordSpacing;
+    overlay.style.fontKerning = computed.fontKerning;
+    overlay.style.fontFeatureSettings = computed.fontFeatureSettings;
+    overlay.style.fontVariantLigatures = computed.fontVariantLigatures;
+    overlay.style.textRendering = computed.textRendering;
+    overlay.style.tabSize = computed.tabSize;
+    overlay.style.setProperty("--ccf-editor-lh", computed.lineHeight);
     content.style.minHeight = `calc(100% + ${editor.scrollTop}px)`;
   }
 
