@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.49
+// @version      0.5.50
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.49";
+  const VERSION = "0.5.50";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -303,6 +303,7 @@
     openForCharacter: (name) => openSheetForCharacterName(name),
     data: () => structuredClone(state.data),
     importText: (text) => importTransferText(text),
+    dedupe: () => runDedupe(),
     shared: () => ({ room: shared.room, ready: shared.ready, denied: shared.denied, remote: shared.remote.size, known: shared.known.size, secretOk: [...shared.secretOk] }),
     disable
   };
@@ -471,7 +472,7 @@
   // 시트는 룸마다 이 브라우저(localStorage)에만 있어서 소유권을 가져간 사람·GM·다른 브라우저는 빈 시트를 봤다. 핸드아웃과 같은 Firebase 연결(동의한 룸에서만 열림)이 있으면 rooms/{room}/sheets/{id}(비밀·사명을 뺀 시트)와
   // sheetSecrets/{id}(비밀·사명: GM 과 그 시트의 ownerUid 만 읽음)에도 두고 서로 맞춘다. 규칙이 아직 배포되지 않았거나 연결이 없으면 지금처럼 이 브라우저에만 저장하고(상태 줄에 안내) 아무것도 깨지 않는다.
   // 충돌은 updatedAt 이 최신인 쪽, 지금 고치고 있는 시트는 덮어쓰지 않는다. 지운 시트는 deleted 표시로 전해진다.
-  const shared = { room: "", unsub: null, remote: new Map(), pushed: new Map(), known: new Set(), secretOk: new Set(), ready: false, denied: false, timer: 0, pushing: false };
+  const shared = { room: "", unsub: null, remote: new Map(), pushed: new Map(), known: new Set(), secretOk: new Set(), probe: new Map(), ready: false, denied: false, timer: 0, pushing: false };
   const sheetBody = (sheet) => { const { secret, mission, updatedAt, ...rest } = sheet; return JSON.stringify(rest); };
   const sheetSecret = (sheet) => JSON.stringify({ secret: sheet.secret || "", mission: sheet.mission || "" });
   const sharedFb = () => { const f = window.__CCF_HANDOUT_FB__?.state?.(); return f?.db && f.uid && f.modules?.fs ? f : null; };
@@ -491,7 +492,7 @@
     // 0.5.49: GM 은 시트 전체, 플레이어는 자기 것(ownerUid == 나)만 구독한다(규칙: 읽기 = GM 또는 소유자). GM 판정이 바뀌면 다시 구독.
     const gmNow = sharedIsGm();
     if (shared.room === state.roomKey && shared.unsub && shared.subGm === gmNow) return;
-    shared.unsub?.(); shared.room = state.roomKey; shared.remote.clear(); shared.pushed.clear(); shared.known.clear(); shared.secretOk.clear(); shared.ready = false; shared.subGm = gmNow;
+    shared.unsub?.(); shared.room = state.roomKey; shared.remote.clear(); shared.pushed.clear(); shared.known.clear(); shared.secretOk.clear(); shared.probe.clear(); shared.ready = false; shared.subGm = gmNow;
     const { collection, onSnapshot, query, where } = fb.modules.fs;
     const sheetsRef = collection(fb.db, "rooms", state.roomKey, "sheets");
     shared.unsub = onSnapshot(gmNow || !query || !where ? sheetsRef : query(sheetsRef, where("ownerUid", "==", fb.uid)), (snap) => {
@@ -577,6 +578,14 @@
     if (!mine.length || mine.some((m) => m.uid === current)) return current;
     return mine[0].uid;
   }
+  async function sharedForeign(id, fb, base) {
+    if (!shared.probe.has(id)) {
+      let foreign;
+      try { const snap = await fb.modules.fs.getDoc(base("sheets", id)); foreign = !!snap.exists() && snap.data()?.ownerUid !== fb.uid; } catch (_) { foreign = true; } // 읽기 거절 = 남의 시트
+      shared.probe.set(id, foreign);
+    }
+    return shared.probe.get(id);
+  }
   async function sharedPush() {
     const fb = sharedFb();
     if (!fb || !shared.ready || shared.denied || shared.pushing || state.dataRoom !== state.roomKey || shared.room !== state.roomKey) return;
@@ -588,6 +597,9 @@
         const body = sheetBody(sheet), secret = sheetSecret(sheet), pushed = shared.pushed.get(sheet.id), remote = shared.remote.get(sheet.id);
         // 0.5.49 플레이어는 자기 시트만 쓴다(규칙: 수정 = GM 또는 지금 소유자) — 남의 시트를 쓰려다 거절되면 공유 전체가 꺼지므로 아예 건너뛴다
         if (!gm && remote && remote.ownerUid !== fb.uid) continue;
+        // 0.5.50 시트 중복의 원인: 쿼리 구독(내 것만)에서는 "공유 쪽에 없음"과 "남의 것이라 안 보임"이 같다. 예전(전체 구독) 때 받아 둔 남의 시트를 '아직 안 올린 내 시트'로 보고
+        // ownerUid=나로 덮어써 원래 주인이 자기 시트를 못 받고(→ 캐릭터 버튼이 새 시트를 만듦) 접속마다 반복됐다. 공유 쪽에 이미 있는(또는 읽기가 거절된) 문서는 올리지 않는다.
+        if (!gm && !remote && await sharedForeign(sheet.id, fb, base)) continue;
         const handTo = gm && remote ? desiredOwner(sheet, remote.ownerUid) : "";
         if (pushed && pushed.body === body && pushed.secret === secret && !(handTo && handTo !== remote.ownerUid)) continue;
         if (!pushed && remote && (sheet.updatedAt || 0) <= remote.updatedAt) continue; // 공유 쪽이 더 최신: 위에서 받아 쓴다
@@ -639,7 +651,7 @@
     if (!uid || sharedIsGm()) return sheets;
     let mine = null;
     const myNames = () => mine || (mine = (() => { try { return new Set(Object.values(findCharacterStore()?.getState()?.entities?.roomCharacters?.entities || {}).filter((c) => c && String(c.owner) === uid).map((c) => String(c.name || "").trim())); } catch (_) { return new Set(); } })());
-    return sheets.filter((sheet) => { const remote = shared.remote.get(sheet.id); return !remote || remote.ownerUid === uid || (!!sheet.player && myNames().has(String(sheet.player).trim())); });
+    return sheets.filter((sheet) => { const remote = shared.remote.get(sheet.id); return (!remote && shared.probe.get(sheet.id) !== true) || remote?.ownerUid === uid || (!!sheet.player && myNames().has(String(sheet.player).trim())); });
   }
 
   // 사이코로픽션 툴바 아이콘은 펭귄 메뉴(toolkit-presence 가 그린다)의 항목이다. 인세인 룸 감지일 때만 보인다.
@@ -822,13 +834,13 @@
     if (!container?.isConnected) return;
     const sheets = visibleSheets();
     const button = "all:unset;box-sizing:border-box;cursor:pointer;display:inline-grid;place-items:center;border-radius:50%;width:34px;height:34px;color:rgba(255,255,255,.7)";
-    const signature = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name, sheet.player, sheetImageUrl(sheet)]));
+    const signature = JSON.stringify([sharedIsGm(), sheets.map((sheet) => [sheet.id, sheet.name, sheet.player, sheetImageUrl(sheet)])]);
     // 줄 앞 그림: 시트 이미지 → 연결된 코코포리아 캐릭터 아이콘 → 없으면(또는 깨지면) 회색 칸 위 이름 첫 글자(핸드아웃 PL 아바타와 같은 방식)
     const avatar = (sheet) => { const url = sheetImageUrl(sheet); const initial = Array.from(String(sheet.name || sheet.player || "").trim())[0] || ""; return `<span data-tab-avatar style="position:relative;flex:0 0 36px;width:36px;height:36px;border-radius:4px;overflow:hidden;background:#616161;display:grid;place-items:center;color:#fff;font-size:16px;font-weight:700;line-height:1">${escapeHtml(initial)}${url ? `<img src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ""}</span>`; };
     if (container.__sig === signature && container.querySelector("#" + TAB_ID)) return;
     container.__sig = signature;
     const rows = sheets.map((sheet) => `<div style="display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(255,255,255,.08)"><button type="button" data-tab-open="${escapeHtml(sheet.id)}" style="all:unset;box-sizing:border-box;flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:12px;padding:8px">${avatar(sheet)}<strong style="font-size:15px;font-weight:700">${escapeHtml(sheet.name || "이름 없음")}</strong><span style="color:rgba(255,255,255,.6);font-size:13px">${escapeHtml(sheet.player || "플레이어 미설정")}</span></button><button type="button" data-tab-delete="${escapeHtml(sheet.id)}" aria-label="${escapeHtml(sheet.name || "이름 없음")} 삭제" title="삭제" style="${button}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button></div>`).join("");
-    container.innerHTML = `<div id="${TAB_ID}" style="position:absolute;inset:0;overflow:auto;padding:0 24px 24px;font-family:Roboto,'Noto Sans KR',sans-serif;color:#fff"><div style="display:flex;align-items:center;justify-content:flex-end;min-height:48px"><button type="button" data-tab-add aria-label="시트 추가" title="시트 추가" style="${button}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button></div>${rows || '<p style="color:rgba(255,255,255,.6)">시트가 없습니다. ＋로 추가하세요.</p>'}</div>`;
+    container.innerHTML = `<div id="${TAB_ID}" style="position:absolute;inset:0;overflow:auto;padding:0 24px 24px;font-family:Roboto,'Noto Sans KR',sans-serif;color:#fff"><div style="display:flex;align-items:center;justify-content:flex-end;min-height:48px">${sheetDuplicates().length && sharedIsGm() ? `<button type="button" data-tab-dedupe title="같은 캐릭터의 중복 시트 정리" style="all:unset;box-sizing:border-box;cursor:pointer;margin-right:8px;padding:4px 10px;border-radius:4px;font-size:13px;color:#90caf9;border:1px solid rgba(144,202,249,.5)">중복 정리</button>` : ""}<button type="button" data-tab-add aria-label="시트 추가" title="시트 추가" style="${button}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button></div>${rows || '<p style="color:rgba(255,255,255,.6)">시트가 없습니다. ＋로 추가하세요.</p>'}</div>`;
     container.querySelectorAll("[data-tab-avatar] img").forEach((img) => img.addEventListener("error", () => img.remove(), { once: true })); // 깨진 그림은 첫 글자로
   }
 
@@ -842,7 +854,59 @@
     return true;
   }
 
+  // 0.5.50 중복 정리(GM): 같은 캐릭터(연결 캐릭터, 없으면 이름)의 시트 묶음. 내용(아이디·수정 시각 제외)이 같은 것끼리만 가장 최근 수정본 하나를 남기고 나머지는 지운다
+  // (공유 쪽에는 deleted 표시로 전해짐 — 문서를 없애지 않는다). 비밀·사명이 남기는 쪽에 없고 지우는 쪽에만 있으면 옮겨 붙이고, 서로 다르면 그 시트는 지우지 않는다. 내용이 다른 시트는 목록만 보여 준다.
+  function sheetDuplicates() {
+    const groups = new Map();
+    for (const sheet of state.data?.sheets || []) {
+      const key = normalizedText(sheet.player || sheet.name);
+      if (!key) continue;
+      groups.set(key, [...(groups.get(key) || []), sheet]);
+    }
+    return [...groups.values()].filter((list) => list.length > 1);
+  }
+  function planDedupe() {
+    const content = (sheet) => { const { id, ...rest } = JSON.parse(sheetBody(sheet)); return JSON.stringify(rest); };
+    const remove = [], moveSecret = [], differ = [];
+    for (const list of sheetDuplicates()) {
+      const byContent = new Map();
+      for (const sheet of list) byContent.set(content(sheet), [...(byContent.get(content(sheet)) || []), sheet]);
+      for (const same of byContent.values()) {
+        if (same.length < 2) continue;
+        const keep = [...same].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+        let secret = { secret: keep.secret || "", mission: keep.mission || "" };
+        for (const sheet of same) {
+          if (sheet === keep) continue;
+          const other = { secret: sheet.secret || "", mission: sheet.mission || "" };
+          const clash = (secret.secret && other.secret && secret.secret !== other.secret) || (secret.mission && other.mission && secret.mission !== other.mission);
+          if (clash) continue; // 비밀·사명이 서로 다르면 남긴다
+          secret = { secret: secret.secret || other.secret, mission: secret.mission || other.mission };
+          remove.push({ sheet, keep });
+        }
+        if (secret.secret !== (keep.secret || "") || secret.mission !== (keep.mission || "")) moveSecret.push({ keep, secret });
+      }
+      if (byContent.size > 1) differ.push(list);
+    }
+    return { remove, moveSecret, differ };
+  }
+  function runDedupe() {
+    const plan = planDedupe();
+    const when = (sheet) => (sheet.updatedAt ? new Date(sheet.updatedAt).toLocaleString() : "시각 없음");
+    const kept = [...new Set(plan.remove.map((item) => item.keep))];
+    const lines = kept.map((keep) => `· 남김: '${keep.name || "이름 없음"}' (${when(keep)}) — 같은 내용 ${plan.remove.filter((item) => item.keep === keep).length}개 지움`);
+    const differLines = plan.differ.map((list) => `· '${list[0].player || list[0].name}': 내용이 다른 시트 ${list.length}개 — 그대로 둠(직접 확인)`);
+    if (!plan.remove.length) { alert(["지울 수 있는 같은 내용의 중복이 없습니다.", ...differLines].join("\n")); return; }
+    if (!confirm(["같은 캐릭터·같은 내용의 중복 시트를 정리할까요? (지운 시트는 공유 쪽에 삭제 표시로 남습니다)", ...lines, ...differLines].join("\n"))) return;
+    const gone = new Set(plan.remove.map((item) => item.sheet.id));
+    for (const { keep, secret } of plan.moveSecret) { keep.secret = secret.secret; keep.mission = secret.mission; }
+    state.data.sheets = state.data.sheets.filter((sheet) => !gone.has(sheet.id));
+    if (gone.has(state.data.selectedId)) state.data.selectedId = state.data.sheets[0]?.id || "";
+    if (state.open) render();
+    renderSheetTab(); saveSoon();
+  }
+
   function onSheetTabClick(event) {
+    if (event.target.closest("[data-tab-dedupe]")) { runDedupe(); return; }
     const open = event.target.closest("[data-tab-open]");
     if (open) { openSheetWindow(open.dataset.tabOpen); return; }
     const del = event.target.closest("[data-tab-delete]");
