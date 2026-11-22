@@ -30,7 +30,20 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     // type, select a word, pick a font
     await page.evaluate(() => { const ta = document.querySelector('#composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, '명조 글자'); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); ta.setSelectionRange(0, 2); document.dispatchEvent(new Event('selectionchange')); });
     await page.locator('.ccf-inline-toolbar').first().dispatchEvent('pointerdown');
-    await page.locator('.ccf-inline-toolbar [data-inline-font]').first().selectOption('nanum-myeongjo');
+    // 0.1.127: a narrow button opens a floating menu; items are drawn in their own font, the current one is checked
+    const fontBtn = page.locator('.ccf-inline-toolbar [data-inline-font-btn]').first();
+    assert((await fontBtn.boundingBox()).width <= 40, 'narrow font button');
+    await fontBtn.click();
+    const items = page.locator('.ccf-inline-toolbar [data-inline-group="font"] [data-inline-font-pick]');
+    assert.equal(await items.first().evaluate((b) => b.closest('.ccf-inline-group').getAttribute('data-open')), '1', 'menu open');
+    assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font-pick="nanum-myeongjo"]').first().evaluate((b) => getComputedStyle(b).fontFamily.includes('Nanum Myeongjo')), true, 'item in its own font');
+    assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font-pick=""]').first().getAttribute('aria-checked'), 'true', 'default checked at first');
+    assert((await page.evaluate(() => window.__fontsAsked)).includes('Nanum Myeongjo'), 'fonts loaded for the preview');
+    await page.locator('.ccf-inline-toolbar [data-inline-font-pick="nanum-myeongjo"]').first().click();
+    assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font]').first().inputValue(), 'nanum-myeongjo');
+    assert.equal(await items.first().evaluate((b) => b.closest('.ccf-inline-group').getAttribute('data-open')), null, 'menu closed');
+    assert.equal(await page.locator('.ccf-inline-toolbar [data-inline-font-pick="nanum-myeongjo"]').first().getAttribute('aria-checked'), 'true', 'current checked');
+    assert.equal(await fontBtn.evaluate((b) => b.style.fontFamily.includes('Nanum Myeongjo')), true, 'button in the current font');
     await page.waitForTimeout(200);
     const sent = await send('명조 글자', false);
     const env = decode(sent[0]);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.126
+// @version      0.1.127
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.126"),
+    version: getUserscriptVersion("0.1.127"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4228,8 +4228,10 @@
       html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-group-menu { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; min-width: 150px; padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
       html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex !important; align-items: center; gap: 10px; width: 100% !important; min-width: 0 !important; height: auto !important; flex: none !important; padding: 6px 16px !important; font-size: 14px !important; line-height: 1.5; font-weight: 400 !important; font-family: Roboto, "Noto Sans KR", sans-serif; color: #fff !important; background: transparent !important; border: 0 !important; white-space: nowrap; }
       html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:hover, html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:focus-visible { background: rgba(255,255,255,.08) !important; }
-      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current) { background: rgba(144,202,249,.16) !important; }
-      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current, .ccf-font-current) { background: rgba(144,202,249,.16) !important; }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current, .ccf-font-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; font-family: Roboto, sans-serif; }
+      html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-font-menu { max-height: min(360px, calc(100vh - 16px)); overflow-y: auto; min-width: 180px; }
+      html .ccf-inline-toolbar .ccf-inline-font-menu .ccf-toggle { font-size: 15px !important; }
       .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
       .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
@@ -5672,7 +5674,8 @@
         <input type="color" value="#010101" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
-      <select class="ccf-inline-font" data-inline-font aria-label="글꼴" title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
+      <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${[["", ""], ...Object.entries(window.__CCF_MESSAGE_FONTS__ || {})].map(([id, family]) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` style="font-family:'${family}', sans-serif"` : ""}>${family || "기본"}</button>`).join("")}</span></span>
+      <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
       <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
@@ -5699,6 +5702,10 @@
     closeInlineGroups();
     if (wasOpen) return;
     const button = group.querySelector("[data-inline-group-toggle]"), menu = group.querySelector(".ccf-inline-group-menu");
+    if (group.getAttribute("data-inline-group") === "font") {
+      Object.values(window.__CCF_MESSAGE_FONTS__ || {}).forEach((family) => window.__CCF_ENSURE_GOOGLE_FONTS__?.(family));
+      syncInlineFontButton(group.closest(".ccf-inline-toolbar"));
+    }
     group.setAttribute("data-open", "1");
     button?.setAttribute("aria-expanded", "true");
     const r = button.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
@@ -5711,6 +5718,20 @@
       document.addEventListener("keydown", (event) => { if (event.key === "Escape" && document.querySelector('.ccf-inline-group[data-open="1"]')) { event.preventDefault(); event.stopPropagation(); closeInlineGroups(); } }, true);
     }
   }
+  // 0.1.127 글꼴 메뉴: 지금 글꼴에 체크, 단추 글자 "가"는 그 글꼴로. 글꼴이 정해져 있으면 단추가 켜진 모양(.active).
+  function syncInlineFontButton(toolbar) {
+    const value = toolbar?.querySelector?.("[data-inline-font]")?.value || "";
+    toolbar?.querySelectorAll?.("[data-inline-font-pick]").forEach((item) => {
+      const on = (item.getAttribute("data-inline-font-pick") || "") === value;
+      item.classList.toggle("ccf-font-current", on);
+      item.classList.toggle("active", on && !!value);
+      item.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const button = toolbar?.querySelector?.("[data-inline-font-btn]");
+    const family = (window.__CCF_MESSAGE_FONTS__ || {})[value] || "";
+    if (button) { button.style.fontFamily = family ? `"${family}", sans-serif` : ""; button.title = family ? `글꼴: ${family}` : "글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"; }
+  }
+
   // 메뉴 안 단추가 기준인 창(루비·툴팁·코드·나레이션·Sv)은 메뉴가 닫혀 있으면 묶음 단추 아래에 띄운다.
   function inlineAnchor(button) {
     const group = button?.closest?.(".ccf-inline-group");
@@ -5942,6 +5963,17 @@
         } else {
           closeInlinePopover(toolbar);
         }
+        return;
+      }
+
+      const fontPick = target.closest("[data-inline-font-pick]");
+      if (fontPick && toolbar.contains(fontPick)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const select = toolbar.querySelector("[data-inline-font]");
+        if (select instanceof HTMLSelectElement) { select.value = fontPick.getAttribute("data-inline-font-pick") || ""; select.dispatchEvent(new Event("change", { bubbles: true })); }
+        syncInlineFontButton(toolbar);
+        closeInlineGroups();
         return;
       }
 
@@ -6649,7 +6681,7 @@
     }
 
     const fontSelect = toolbar.querySelector("[data-inline-font]");
-    if (fontSelect instanceof HTMLSelectElement) fontSelect.value = "";
+    if (fontSelect instanceof HTMLSelectElement) { fontSelect.value = ""; syncInlineFontButton(toolbar); }
     const sizeInput = toolbar.querySelector("[data-inline-size]");
     if (sizeInput instanceof HTMLInputElement) {
       sizeInput.value = "";

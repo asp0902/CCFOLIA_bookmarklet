@@ -24,9 +24,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     const isOpen = (name) => group(name).evaluate((g) => g.getAttribute('data-open') === '1' && getComputedStyle(g.querySelector('.ccf-inline-group-menu')).display !== 'none');
     // closed: the items are not shown; the first row (B I U S Aa▾ ⋯) is one line at 300px
     assert.equal(await bar.locator('[data-inline-command="ruby"]').isVisible(), false);
-    const tops = await bar.evaluate((t) => ['bold', 'italic', 'underline', 'strike'].map((c) => t.querySelector(`[data-inline-command="${c}"]`)).concat([...t.querySelectorAll('[data-inline-group-toggle]')]).map((b) => Math.round(b.getBoundingClientRect().top)));
+    const tops = await bar.evaluate((t) => ['bold', 'italic', 'underline', 'strike'].map((c) => t.querySelector(`[data-inline-command="${c}"]`)).concat([...t.querySelectorAll('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]')]).map((b) => Math.round(b.getBoundingClientRect().top)));
     assert.equal(new Set(tops).size, 1, 'first row on one line: ' + tops);
-    assert.deepEqual(await bar.locator('[data-inline-group-toggle]').allTextContents(), ['Aa▾', '⋯']);
+    assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa▾', '⋯']);
     // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes
     await group('deco').locator('[data-inline-group-toggle]').click();
     assert.equal(await isOpen('deco'), true);
