@@ -20,7 +20,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       const state = { app: { state: { roomId: 'r1' }, user: { uid: 'me' } }, entities: { roomMessages: { entities, ids: ['m1', 'm2'], idsGroupBy: { main: ['m1', 'm2'] } }, roomCharacters: { entities: {} }, rooms: { entities: { r1: { owner: 'me' } } } } };
       const root = document.getElementById('root');
       root['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
-      const row = (id, name, text) => `<li class="MuiListItem-root" id="${id}" style="position:relative;padding:12px 16px;list-style:none"><div class="MuiListItemAvatar-root"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary">${name}<span class="MuiTypography-caption"> - 오늘</span></h6><p class="MuiListItemText-secondary">${text}</p></div><div class="hover-group" style="position:absolute;top:12px;right:16px;display:flex"><button class="MuiIconButton-root native" aria-label="reply-to">x</button></div></li>`;
+      const row = (id, name, text) => `<li class="MuiListItem-root" id="${id}" style="position:relative;padding:12px 16px;list-style:none"><div class="MuiListItemAvatar-root"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary">${name}<span class="MuiTypography-caption"> - 오늘</span></h6><p class="MuiListItemText-secondary">${text}</p></div></li>`; // CCFOLIA draws its hover buttons only while hovered (React state), so the template has none
       const ul = document.createElement('ul'); ul.innerHTML = row('own', '나', '내 말') + row('theirs', '남', '남의 말');
       root.appendChild(ul);
     });
@@ -45,6 +45,15 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     assert(counts.panel.length >= 2, 'panel rows drawn: ' + JSON.stringify(counts));
     for (const c of counts.panel) assert(c[0] <= 1 && c[1] <= 1, 'panel row: at most one toolkit button set ' + JSON.stringify(counts.panel));
     assert(counts.panel.some((c) => c[0] === 1), 'panel rows have their own eye');
+    // 0.5.52: in a panel row the eye / divider sit at the right end of the row (16px like the original rows), not where the native buttons would be; also after resizing the panel
+    const gaps = async () => { const row = page.locator('.ccf-scp-panel .ccf-hide-host').first(); await row.hover(); await page.waitForTimeout(150); return row.evaluate((li) => { const r = li.getBoundingClientRect(), eye = li.querySelector('.ccf-hide-btn').getBoundingClientRect(), brk = li.querySelector('.ccf-break-btn').getBoundingClientRect(), cap = li.querySelector('.MuiTypography-caption')?.getBoundingClientRect(); return { eye: Math.round(r.right - eye.right), brk: Math.round(eye.left - brk.right), clear: !cap || brk.left >= cap.right }; }); };
+    for (const width of [null, 380]) {
+      if (width) await page.evaluate((w) => { const p = document.querySelector('.ccf-scp-panel'); p.style.width = w + 'px'; }, width);
+      const g = await gaps();
+      assert(Math.abs(g.eye - 16) <= 2, 'eye at the right end (16px): ' + JSON.stringify(g));
+      assert(g.brk >= -1 && g.brk <= 2, 'divider just left of the eye: ' + JSON.stringify(g));
+      assert(g.clear, 'not over the time text: ' + JSON.stringify(g));
+    }
     assert.deepEqual(errors, []);
     console.log('chat panel single hover set PASS');
   } finally { await browser.close(); }

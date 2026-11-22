@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.51
+// @version      0.5.52
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -1266,6 +1266,9 @@ background: transparent; color: inherit; cursor: pointer; opacity: .7; align-ite
 .ccf-hide-host:hover > .ccf-break-btn, .ccf-break-btn:focus-visible { display: inline-flex; }
 .ccf-break-btn.ccf-break-inline { position: static; display: inline-flex; top: auto; right: auto; opacity: 1; }
 .ccf-break-btn[data-on="1"] { color: #f50057; }
+/* 0.5.52 추가 패널 줄에는 네이티브 호버 단추(답장·수정)가 없다(코코포리아는 호버할 때만 그려서 본보기에 안 들어감) → 비워 둔 자리 없이 줄 오른쪽 끝(오리지널 줄과 같은 16px)에 붙인다. */
+.ccf-scp-panel .ccf-hide-btn:not(.ccf-hide-inline) { right: 16px; }
+.ccf-scp-panel .ccf-break-btn:not(.ccf-break-inline) { right: 46px; }
 /* 숨긴 메시지(GM 화면): 이름·시각 줄 + "숨긴 메시지 · 펼치기" 한 줄로 접는다. 펼치면 흐리게 전체를 보인다(이 페이지 동안 기억). */
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"]:not([data-ccf-unfolded]) :is(p.MuiListItemText-secondary, .ccf-scp-text) { display: none !important; }
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"][data-ccf-unfolded] :is(p.MuiListItemText-secondary, .ccf-scp-text) { opacity: .38; }
