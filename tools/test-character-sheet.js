@@ -80,7 +80,7 @@ const footerMarkup = source.match(/<footer>\$\{TABLE_COMMANDS[\s\S]*?<\/footer>/
 assert.ok(footerMarkup);
 assert.doesNotMatch(footerMarkup, /title=/);
 assert.match(source, /data-command-select aria-label="특기표"/);
-assert.match(source, /data-command="2D6>=\? \[회피\]"/);
+assert.match(source, /data-action="evade"/); // 0.5.56 evasion form
 assert.match(source, /data-plot-select aria-label="플롯"/);
 assert.match(source, /\[\["1D6", "가변"\]/); // 0.5.52: 가변 option (sent as S1D6 by the plot button)
 assert.match(source, /v === "1D6" \? "S1D6"/);

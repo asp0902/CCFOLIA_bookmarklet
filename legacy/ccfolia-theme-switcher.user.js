@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.51
+// @version      0.2.52
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.51"),
+    version: getUserscriptVersion("0.2.52"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5431,7 +5431,8 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const parts = raw.replace(/^\[(.*)\]$/, '$1').split('/').map(part => part.trim()).filter(Boolean);
     const fear = parts.includes('공포심');
     const table = parts.map(insaneSkillPlace).find(Boolean) || null;
-    const skillText = fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
+    const evade = parts[0] === '회피';
+    const skillText = evade ? (table ? `회피 : ${table.skill}` : '회피') : fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
     return { skill: skillText || '판정', table,
       target: match[2], dice: [match[3], match[4]], total: match[5], result: match[6], note: (match[7] || '').trim() };
   }

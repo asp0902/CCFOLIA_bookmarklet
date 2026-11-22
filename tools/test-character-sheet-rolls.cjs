@@ -127,10 +127,11 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     assert.equal(r.box, '2D6-1>=5 [소각/공포심]'); await reopen();
     r = await roll(() => page.locator(R + ' footer [data-action="fear-roll"][data-secret="1"]').click());
     assert.equal(r.box, 'S2D6-1>=5 [소각/공포심]'); await reopen();
-    r = await roll(() => page.locator(R + ' footer [data-command="2D6>=? [회피]"]:not([data-secret])').click());
-    assert.deepEqual(r.sent, ['2D6+1>=7 [회피]'], 'the ? is filled from the small prompt and sent at once'); await reopen();
-    r = await roll(() => page.locator(R + ' footer [data-command="2D6>=? [회피]"][data-secret="1"]').click());
-    assert.deepEqual(r.sent, ['S2D6+1>=7 [회피]']); await reopen();
+    // 0.5.56 evasion: a small form (skill -> its target from the sheet, fear auto, target editable, extra modifier) then [굴림]; the last values are kept
+    r = await roll(async () => { await page.locator(R + ' footer [data-action="evade"]:not([data-secret])').click(); const f = page.locator(R + ' .ccf-cs-evade-form'); await f.locator('input[name="target"]').fill('7'); assert.equal(await f.locator('.ccf-cs-evade-preview').textContent(), '2D6+1>=7 [회피]', 'preview'); await f.locator('button[type="submit"]').click(); });
+    assert.deepEqual(r.sent, ['2D6+1>=7 [회피]'], 'no skill: the target typed, the sheet modifier'); await reopen();
+    r = await roll(async () => { await page.locator(R + ' footer [data-action="evade"][data-secret="1"]').click(); const f = page.locator(R + ' .ccf-cs-evade-form'); assert.equal(await f.locator('input[name="target"]').inputValue(), '7', 'last value kept'); await f.locator('select[name="skill"]').selectOption('0:0'); assert.equal(await f.locator('input[name="fear"]').isChecked(), true, 'the fear skill: fear checked'); await f.locator('button[type="submit"]').click(); });
+    assert.deepEqual(r.sent, ['S2D6-1>=5 [회피/소각/공포심]'], 'a skill: its target, fear -2, secret'); await reopen();
     // 0.5.52 plot: choosing only stores the value (nothing is sent), the dice button next to it sends it; 가변 = S1D6 (sc(1D6) is not a BCDice Insane command), n = sc(n)
     const plot = page.locator(R + ' footer [data-plot-select]'), plotSend = page.locator(R + ' footer [data-action="plot-send"]');
     assert.equal(await plotSend.isDisabled(), true, 'nothing chosen: the button is off');
