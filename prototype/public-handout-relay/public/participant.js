@@ -802,13 +802,13 @@ const applyExtraCss = (span, extra) => {
   }
 };
 // 메시지 글꼴: 봉투의 글꼴 id → 허용 목록의 Google 무료 한글 글꼴(툴킷 format-sync 의 window.__CCF_MESSAGE_FONTS__ 와 같은 목록). 모르는 id 는 기본 글꼴.
-const MESSAGE_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle" });
+const MESSAGE_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1", "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish", "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia", "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo", "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung", "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture", "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One" });
 const loadedFonts = new Set();
 function messageFont(id) {
   const family = Object.prototype.hasOwnProperty.call(MESSAGE_FONTS, id) ? MESSAGE_FONTS[id] : "";
   if (family && !loadedFonts.has(family)) {
     loadedFonts.add(family);
-    const link = document.createElement("link"); link.rel = "stylesheet"; link.href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}&display=swap`;
+    const link = document.createElement("link"); link.rel = "stylesheet"; link.href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}${family === "Sunflower" ? ":wght@500" : ""}&display=swap`; // Sunflower 는 400 굵기가 없어 굵기 지정이 필요
     document.head.append(link);
   }
   return family;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.52
+// @version      0.0.53
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.52"),
+  version: getUserscriptVersion("0.0.53"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -4871,7 +4871,7 @@
   // 0.0.52: 메시지 글꼴(format-sync 0.1.124 의 style.fontId) — 같은 허용 목록에서만. 쓰인 글꼴은 내보낸 HTML 머리에 Google Fonts 링크로 넣는다.
   function logMessageFonts() { return window.__CCF_MESSAGE_FONTS__ || { "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle" }; }
   function logFontsUsed() { return logFontsUsed.set || (logFontsUsed.set = new Set()); }
-  function logFontLinksHtml() { return [...logFontsUsed()].map((family) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}&display=swap">`).join(""); }
+  function logFontLinksHtml() { return [...logFontsUsed()].map((family) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}${family === "Sunflower" ? ":wght@500" : ""}&display=swap">`).join(""); }
   function cleanupStyle(style) {
     const out = {};
     if (typeof style.fontId === "string" && Object.prototype.hasOwnProperty.call(logMessageFonts(), style.fontId)) out.fontId = style.fontId;
