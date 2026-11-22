@@ -122,6 +122,27 @@ const key = 'ccf-theme-switcher-settings-v1';
       assert.equal(await page.locator('.ccf-roll20-check-card').count(), 1);
       assert.equal(await page.locator('.ccf-roll20-die.is-total').textContent(), '5');
     }
+    // theme-switcher 0.2.49: the real BCDice Insane:Korean output (bcdice.onlinesession.app, 2026-11-22) - fumble / special carry a note in parentheses
+    for (const [text, result, note, dice] of [
+      ['2D6>=6 [제육감] (2D6>=6) ＞ 2[1,1] ＞ 2 ＞ 펌블(판정실패。 덱에서 【광기】를 1장 획득)', '펌블', '판정실패。 덱에서 【광기】를 1장 획득', ['1', '1']],
+      ['2D6>=6 [제육감] (2D6>=6) ＞ 12[6,6] ＞ 12 ＞ 스페셜(판정성공。 【생명력】 1점이나 【이성치】 1점 회복)', '스페셜', '판정성공。 【생명력】 1점이나 【이성치】 1점 회복', ['6', '6']],
+      ['2D6>=6 [제육감] (2D6>=6) ＞ 4[1,3] ＞ 4 ＞ 실패', '실패', '', ['1', '3']],
+      ['2D6>=6 [제육감] (2D6>=6) ＞ 8[3,5] ＞ 8 ＞ 성공', '성공', '', ['3', '5']]
+    ]) {
+      await setCheck(text);
+      await page.waitForFunction(([result, dice]) => document.querySelector('.ccf-roll20-check-result')?.textContent === result && [...document.querySelectorAll('.ccf-roll20-die:not(.is-total) b')].map((b) => b.textContent).join() === dice.join(), [result, dice]);
+      assert.equal(await page.locator('.ccf-roll20-check-card').count(), 1, text);
+      assert.deepEqual(await page.locator('.ccf-roll20-die:not(.is-total) b').allTextContents(), dice);
+      assert.equal(await page.locator('.ccf-roll20-check-note').count(), note ? 1 : 0);
+      if (note) assert.equal(await page.locator('.ccf-roll20-check-note').textContent(), note, 'the note is kept under the card');
+      if (result === '펌블') {
+        assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'fumble');
+        assert.equal(await page.locator('.ccf-roll20-die.is-one').count(), 2, 'both 1s red');
+        if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-check-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-fumble-card.png') });
+      }
+    }
+    await setCheck('2D6+1>=7 긴 특기 이름 (2D6+1>=7) > 4[2,2]+1 > 5 > 펌블'); // back to the text the next step expects
+    await page.waitForFunction(() => [...document.querySelectorAll('.ccf-roll20-die:not(.is-total) b')].map((b) => b.textContent).join() === '2,2');
     await select('none');
     assert.equal(await page.locator('.ccf-roll20-check-card').count(), 0);
     assert((await page.locator('#check').textContent()).includes('4[2,2]+1 > 5 > 펌블'));
