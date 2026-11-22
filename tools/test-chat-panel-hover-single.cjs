@@ -73,6 +73,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     assert(/\/ 0\.04\)$/.test(pAfter[0]) && /\/ 0\.04\)$/.test(after.bg), 'panel row: the same 4% shade of its text colour as the original row ' + JSON.stringify([pBefore, pAfter, after.bg]));
     assert.equal(pAfter[1], pBefore[1], 'panel row height unchanged');
     if (process.env.SCREENSHOT_DIR) await page.locator('#root #theirs').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'chat-hover-shade.png') });
+    // 0.5.55 one vertical line between the panels: no inner bright line on the panel (the original's left border is the only one)
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.ccf-scp-panel'), '::after').content), 'none', 'no panel ::after line');
     assert.deepEqual(errors, []);
     console.log('chat panel single hover set PASS');
   } finally { await browser.close(); }

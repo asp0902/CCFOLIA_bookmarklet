@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.54
+// @version      0.5.55
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.54";
+  const VERSION = "0.5.55";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -2453,9 +2453,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         line-height: 1.5;
       }
       #${PANEL_ID} * { box-sizing: border-box; }
-      /* 두 패널 사이 세로선: 추가 패널 오른쪽 바깥에 1px 을 얹어 오리지널의 흐린 왼쪽 선(0.667px)을 덮는다(겹쳐 2줄이 되지 않게). */
-      #${PANEL_ID}::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
-        background: rgba(255,255,255,.3); pointer-events: none; z-index: 3; }
+      /* 0.5.55 두 패널 사이 세로선은 오리지널의 왼쪽 선(0.667px) 하나만: 패널 오른쪽 끝을 그 선의 시작에 소수점까지 맞춘다(layoutPanel).
+         예전 패널 안쪽 1px 밝은 선(::after)은 반올림 틈(0.33px)과 함께 선 두 줄처럼 보였고, 서식 바 줄에서만 덮여 줄마다 모양이 달랐다. */
       /* 아래 색들은 밝은 테마에서도 깨지지 않도록 글자색(currentColor) 기준으로만 만든다. */
       /* 헤더는 불투명하게 — 뒤에 있는 네이티브 접기(|<) 버튼이 딱 이 위치(패널 맨 위)에
          걸린다. 여기만 막으면 아래 메시지 영역은 반투명 질감을 그대로 유지한다.
@@ -2488,7 +2487,6 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       .ccf-scp-menu-item:hover { background: rgba(255,255,255,.08); }
       /* 떠 있는 창: 그림자와 테두리로 떠 있음을 보이고, 가장자리·모서리 손잡이로 크기를 바꾼다. */
       #${PANEL_ID}.is-floating { border: 1px solid rgba(255,255,255,.2); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
-      #${PANEL_ID}.is-floating::after { display: none; }
       #${PANEL_ID}.is-floating .ccf-scp-bar { cursor: move; }
       /* 크기 조절 손잡이: 가장자리 10px(바깥 4px + 안쪽 6px), 모서리 16px. 포인터를 잡아(setPointerCapture) 끌어서 목록·iframe 위에서도 끊기지 않는다. 마우스를 올리면 그 가장자리가 옅게 보인다. */
       .ccf-scp-rz { position: absolute; display: none; z-index: 30; touch-action: none; user-select: none; }
@@ -4624,8 +4622,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
           height: `${Math.round(base.height)}px`,
           bottom: "",
           right: "",
-          left: `${Math.round(edge - width * (rank + 1))}px`,
-          width: `${Math.round(width)}px`
+          left: `${base.left - width * (rank + 1)}px`, // 0.5.55 반올림 없이: 오른쪽 끝 = 오리지널 왼쪽 선 시작(틈 0)
+          width: `${width}px`
         });
         return;
       }
@@ -4658,8 +4656,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       height: `${Math.max(120, bottom - top)}px`,
       bottom: "",
       right: "",
-      left: `${Math.round(left)}px`,
-      width: `${Math.min(Math.round(width), maxWidth)}px`
+      left: `${left}px`,
+      width: `${Math.min(width, maxWidth)}px`
     });
   }
 
