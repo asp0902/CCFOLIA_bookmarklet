@@ -151,6 +151,9 @@ const key = 'ccf-theme-switcher-settings-v1';
     assert.deepEqual([ab.label, ab.name, ab.rules, ab.skill, ab.result, ab.align], ['공격', '기본공격', 2, '웃음', '성공', 'center'], 'three parts with a check ' + JSON.stringify(ab));
     assert(ab.lines >= 3, 'the description keeps its lines ' + JSON.stringify(ab));
     if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-ability-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-ability-card.png') });
+    // theme 0.2.52: an evasion check from the sheet form shows "회피 : 특기"
+    await setCheck('2D6>=5 [회피/웃음] (2D6>=5) ＞ 8[3,5] ＞ 8 ＞ 성공');
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '회피 : 웃음', null, { timeout: 4000 });
     // an ability without a check: the top and the description only
     await setCheck('[어빌리티:서포트] 응급처치\n아군 1명의 생명력을 1점 회복한다.');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-ability-card .ccf-roll20-item-name')?.textContent === '응급처치');

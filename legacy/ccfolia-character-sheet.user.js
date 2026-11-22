@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.55
+// @version      0.5.56
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.55";
+  const VERSION = "0.5.56";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1122,7 +1122,7 @@
       <section class="ccf-cs-dialog${editor ? " is-editor" : " is-panel"}${state.collapsed ? " is-collapsed" : ""}" role="dialog" aria-modal="false" aria-labelledby="ccf-cs-title">
         <header><h2 id="ccf-cs-title">${editor ? escapeHtml(sheet.name || "이름 없음") : "사이코로픽션"}</h2>${editor ? `<button class="ccf-cs-icon" data-action="back-list" aria-label="캐릭터 시트 목록" title="목록">${backIcon()}</button>${playerLinkField(sheet.player)}` : ""}<button class="ccf-cs-icon" data-action="close" aria-label="닫기" title="닫기">${closeIcon()}</button></header>
         ${editor ? `<main>${renderSections(sheet)}</main>
-        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-command="2D6>=? [회피]">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-command="2D6>=? [회피]" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option>${[["1D6", "가변"], ...[1, 2, 3, 4, 5, 6].map((value) => [String(value), String(value)])].map(([value, label]) => `<option value="${value}"${String(sheet.plot || "") === value ? " selected" : ""}>${label}</option>`).join("")}</select><button data-action="plot-send" aria-label="플롯 보내기"${sheet.plot ? "" : " disabled"}>${d20Icon()}</button></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
+        <footer>${TABLE_COMMANDS.map(([label, command]) => command === "ST" ? `<span class="ccf-cs-menu-host"><button data-action="scene-menu" aria-haspopup="menu" aria-expanded="false">${d20Icon()}${label}</button></span>` : `<button data-command="${command}">${d20Icon()}${label}</button>`).join("")}<button data-action="fear-roll">${d20Icon()}공포판정</button><button class="ccf-cs-footer-secret" data-action="fear-roll" data-secret="1" aria-label="공포판정(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-command-select aria-label="특기표"><option value="">특기표</option>${SKILL_TABLE_COMMANDS.map(([label, command]) => `<option value="${command}">${label}</option>`).join("")}</select><button data-action="evade">${d20Icon()}회피</button><button class="ccf-cs-footer-secret" data-action="evade" data-secret="1" aria-label="회피(비공개)">${d20Icon()}</button><select class="ccf-cs-table-select" data-plot-select aria-label="플롯"><option value="">플롯</option>${[["1D6", "가변"], ...[1, 2, 3, 4, 5, 6].map((value) => [String(value), String(value)])].map(([value, label]) => `<option value="${value}"${String(sheet.plot || "") === value ? " selected" : ""}>${label}</option>`).join("")}</select><button data-action="plot-send" aria-label="플롯 보내기"${sheet.plot ? "" : " disabled"}>${d20Icon()}</button></footer>` : `${renderPanelTabs()}<main class="ccf-cs-panel-main">${state.view === "settings" ? renderSettings() : renderSheetList()}</main>`}
       </section>${state.linkPicker ? renderLinkPicker() : state.tablePicker ? renderTablePicker() : ""}`;
     checkD20Font();
     const dialog = root.querySelector(".ccf-cs-dialog");
@@ -1389,6 +1389,56 @@
     });
     dialog.appendChild(form);
     form.querySelector('input[name="detail"]')?.focus();
+  }
+
+  // 0.5.56 회피 입력 창: 사용할 특기(고르면 그 특기의 목표치를 시트 습득 특기에서 계산, 공포심이면 공포심 체크), 목표치(직접 고칠 수 있음),
+  // 추가 수정치(시트 전체 수정치와 더함), 공포심(-2, 시트의 다른 판정과 같은 규칙) → "2D6±n>=목표치 [회피/특기(/공포심)]". 마지막 값은 시트에 기억.
+  function evadeCommand(sheet, values, secret) {
+    const skillName = values.skill ? (() => { const [c, r] = values.skill.split(":").map(Number); return CATEGORIES[c]?.[r + 1] || ""; })() : "";
+    const total = (values.fear ? -2 : 0) + clampModifier(sheet?.modifier) + (Math.round(Number(values.extra)) || 0);
+    const mod = total > 0 ? `+${total}` : total < 0 ? String(total) : "";
+    return `${rollCommandPrefix(secret)}2D6${mod}>=${values.target} [회피${skillName ? `/${skillName}` : ""}${values.fear ? "/공포심" : ""}]`;
+  }
+  function openEvadeForm(secret) {
+    closeSceneUi();
+    const dialog = document.querySelector(`#${ROOT_ID} .ccf-cs-dialog`);
+    const sheet = currentSheet();
+    if (!dialog || !sheet) return;
+    const last = sheet.evade && typeof sheet.evade === "object" ? sheet.evade : {};
+    const skillOptions = CATEGORIES.map((column, c) => `<optgroup label="${column[0]}">${column.slice(1).map((name, r) => `<option value="${c}:${r}"${last.skill === `${c}:${r}` ? " selected" : ""}>${name}</option>`).join("")}</optgroup>`).join("");
+    const form = document.createElement("form");
+    form.className = "ccf-cs-scene-form ccf-cs-evade-form";
+    form.setAttribute("role", "dialog");
+    form.setAttribute("aria-label", "회피 판정");
+    form.innerHTML = `<h3>회피 판정${secret ? " (비공개)" : ""}</h3>`
+      + `<label>사용할 특기<select name="skill"><option value="">특기 없이</option>${skillOptions}</select></label>`
+      + `<div class="ccf-cs-scene-numbers"><label>목표치<input type="number" min="2" max="12" name="target" value="${Number(last.target) || 5}"></label><label>추가 수정치<input type="number" min="-9" max="9" name="extra" value="${Math.round(Number(last.extra)) || 0}"></label></div>`
+      + `<label class="ccf-cs-evade-fear"><input type="checkbox" name="fear"${last.fear ? " checked" : ""}> 공포심(-2)</label>`
+      + `<p class="ccf-cs-evade-preview" aria-live="polite"></p>`
+      + `<div class="ccf-cs-scene-actions"><button type="button" data-action="scene-cancel">취소</button><button type="submit">굴림</button></div>`;
+    const read = () => { const d = new FormData(form); return { skill: String(d.get("skill") || ""), target: Math.max(2, Math.min(12, Math.round(Number(d.get("target"))) || 5)), extra: Math.round(Number(d.get("extra"))) || 0, fear: d.get("fear") === "on" }; };
+    const preview = () => { form.querySelector(".ccf-cs-evade-preview").textContent = evadeCommand(sheet, read(), secret); };
+    form.querySelector('select[name="skill"]').addEventListener("change", (event) => {
+      const id = event.target.value;
+      if (id) {
+        const target = getSkillTarget(sheet.skills, id, sheet.removedGaps);
+        if (target) form.querySelector('input[name="target"]').value = String(target);
+        form.querySelector('input[name="fear"]').checked = sheet.fear === id;
+      }
+      preview();
+    });
+    form.addEventListener("input", preview);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const values = read();
+      sheet.evade = values;
+      saveSoon();
+      form.remove();
+      writeChat(evadeCommand(sheet, values, secret), true);
+    });
+    dialog.appendChild(form);
+    preview();
+    form.querySelector('select[name="skill"]')?.focus();
   }
 
   // ---- 판정: 공개(회색) / 비공개(빨강, 명령 앞 S) 20면체+눈 아이콘, 전체 수정치 ----
@@ -1906,6 +1956,7 @@
     if (!button) return;
     if (button.dataset.action === "close") return closeSheet();
     if (button.dataset.action === "plot-send") return sendPlot(currentSheet());
+    if (button.dataset.action === "evade") return openEvadeForm(button.dataset.secret === "1");
     if (button.dataset.action === "link-pick") return openLinkPicker();
     if (button.dataset.action === "link-close") return closeLinkPicker();
     if (button.dataset.action === "link-choose") return chooseLinkedCharacter(button.dataset.name || "");
@@ -2266,6 +2317,9 @@
       #${ROOT_ID} .ccf-cs-menu button:hover,#${ROOT_ID} .ccf-cs-menu button:focus-visible { background:rgba(255,255,255,.1);outline:none }
       #${ROOT_ID} .ccf-cs-scene-form { position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;gap:12px;width:min(360px,calc(100% - 32px));padding:20px;background:#303030;border:1px solid rgba(255,255,255,.16);box-shadow:0 11px 15px -7px rgba(0,0,0,.4),0 24px 38px 3px rgba(0,0,0,.28) }
       #${ROOT_ID} .ccf-cs-scene-form h3 { margin:0;font-size:16px }
+      #${ROOT_ID} .ccf-cs-evade-form select { width:100%;min-height:36px }
+      #${ROOT_ID} .ccf-cs-evade-fear { display:flex;align-items:center;gap:8px }
+      #${ROOT_ID} .ccf-cs-evade-preview { margin:0;font:13px/1.4 monospace;color:rgba(255,255,255,.7);word-break:break-all }
       #${ROOT_ID} .ccf-cs-scene-numbers { display:grid;grid-template-columns:1fr 1fr;gap:12px }
       #${ROOT_ID} .ccf-cs-scene-actions { display:flex;justify-content:flex-end;gap:8px }
       #${ROOT_ID} .ccf-cs-scene-actions button { min-width:72px;min-height:36px;border:0;border-radius:0;background:transparent;color:#fff;cursor:pointer }
