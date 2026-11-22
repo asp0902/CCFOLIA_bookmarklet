@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.182";
-  const BUILD_ID = "2026-11-22-insane-cards-353";
+  const VERSION = "0.3.183";
+  const BUILD_ID = "2026-11-22-evade-plot-354";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
