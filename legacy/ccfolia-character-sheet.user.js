@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.56
+// @version      0.5.57
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.56";
+  const VERSION = "0.5.57";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1149,6 +1149,19 @@
     const frame = dialog.offsetWidth - main.offsetWidth; // 창 테두리 등 main 바깥
     const want = Math.ceil(skills.scrollWidth + padLeft + padRight + scrollbar + frame);
     if (want > 200) dialog.style.width = `min(${want}px, calc(100vw - 64px))`;
+    equalizeTopFields(dialog);
+  }
+  // 0.5.57 위쪽 칸: 그림 오른쪽 남은 폭을 같은 너비 4칸(같은 간격 16px)으로 — 세 줄의 칸 세로선이 맞는다(생명력 현재/최대·아이템 두 칸)
+  function equalizeTopFields(dialog) {
+    const top = dialog.querySelector(".ccf-cs-stats-items"), pair = top?.querySelector(":scope > .ccf-cs-portrait-stats"), portrait = pair?.querySelector(".ccf-cs-portrait");
+    if (!top || !pair || !portrait) return;
+    top.style.removeProperty("grid-template-columns");
+    const gap = 16, inner = parseFloat(getComputedStyle(pair).columnGap) || 16;
+    const P = portrait.getBoundingClientRect().width, W = top.clientWidth;
+    const c = (W - P - inner - 3 * gap) / 4;
+    if (!(c > 60)) return;
+    top.style.columnGap = `${gap}px`;
+    top.style.gridTemplateColumns = `${P + inner + 2 * c + gap}px ${2 * c + gap}px`;
   }
 
   function renderPanelTabs() {
@@ -1679,7 +1692,9 @@
       const noteOpen = state.openNotes.has(noteKey);
       const itemName = item.name || `${index + 1}번 항목`;
       const memo = item.memo || (key === "abilities" ? item.effect : "") || (key === "people" ? item.detail : "");
-      return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : ""}<button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button><div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
+      const noteButton = `<button class="ccf-cs-note-toggle${noteOpen || memo ? " is-active" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}"></button>`;
+      // 0.5.57 어빌리티 줄의 메모 단추는 삭제(×) 단추 바로 왼쪽(탭 순서도 그 자리)
+      return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : noteButton}<div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div>${key === "abilities" ? noteButton : ""}<button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
 
@@ -2230,6 +2245,7 @@
       #${ROOT_ID} .ccf-cs-dialog>footer { background:#212121 }
       /* 0.5.53 창 폭이 특기표에 맞춰 좁아졌을 때: 그림 옆 생명력·이성치 칸이 겹치지 않게 최소 폭·간격을 줄인다. 명령 줄은 간격을 줄여 한 줄에. */
       #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-portrait-stats { grid-template-columns:auto minmax(150px,1fr);gap:16px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-stats,#${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-item-fields,#${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-vital>span:last-child { column-gap:16px }
       #${ROOT_ID} .ccf-cs-dialog.is-editor>footer { gap:2px;padding-left:8px;padding-right:8px }
       #${ROOT_ID} header { cursor:move;touch-action:none;user-select:none }
       #${ROOT_ID} .ccf-cs-dialog>header { padding:0 16px 0 24px }
@@ -2372,6 +2388,15 @@
       #${ROOT_ID} .ccf-cs-respect-roll { margin-left:auto;flex:0 0 36px;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#e0e0e0;display:grid;place-items:center;cursor:pointer }
       #${ROOT_ID} .ccf-cs-respect-roll:hover { background:rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-respect-roll svg { width:24px;height:24px }
+      /* 0.5.57 시트 창(특기표 폭)에서 리스펙 줄 한 줄: 간격·토글·숫자 칸·글자를 조금씩 줄인다(누르기 어렵지 않은 크기 유지). 본문 크기를 키우면 그대로 두 줄로 */
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect { gap:4px 6px;padding-right:2px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect strong { padding:0 9px;font-size:13px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect label { gap:3px;font-size:12px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect-toggle i { flex-basis:32px;width:32px;height:18px;border-radius:9px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect-toggle i::after { width:14px;height:14px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect-toggle input:checked+i::after { transform:translateX(14px) }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect-number input { width:30px!important;font-size:14px }
+      #${ROOT_ID} .ccf-cs-dialog.is-editor .ccf-cs-respect-roll { flex-basis:30px;width:30px;height:30px }
       #${ROOT_ID} .ccf-cs-basic-section { padding-top:22px }
       #${ROOT_ID} .ccf-cs-profile-memo { grid-column:1/-1;display:block;padding:12px 16px 0;background:rgba(255,255,255,.1);color:#bdbdbd }
       #${ROOT_ID} .ccf-cs-profile-memo span { display:block;margin-bottom:2px }
@@ -2406,10 +2431,12 @@
       #${ROOT_ID} .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
       #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border:0 }
       #${ROOT_ID} .ccf-cs-abilities { gap:4px }
-      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:32px 32px minmax(0,1fr) 32px }
-      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:3 }
-      #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px 32px minmax(0,1fr) 32px;padding-bottom:4px }
-      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-inline-memo { grid-column:3/4 }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:32px minmax(0,1fr) 32px 32px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
+      #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px minmax(0,1fr) 32px 32px;padding-bottom:4px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-inline-memo { grid-column:2/3 }
+      /* 0.5.57 타입 칸: 가장 긴 값 '서포트'(한글 3글자) + 좌우 여백 — 본문 크기(em)를 따른다. 남는 폭은 어빌리티·지정특기 칸으로 */
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1fr) calc(3em + 20px) minmax(0,1fr) }
       #${ROOT_ID} .ccf-cs-ability-roll { width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border:0;border-radius:0;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-ability-roll svg { width:20px;height:20px;fill:none;stroke:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-note-toggle { align-self:center;justify-self:center;width:13px;min-width:13px;height:13px;min-height:13px;padding:0;background:rgba(255,255,255,.7);border:0;border-radius:0;cursor:pointer }

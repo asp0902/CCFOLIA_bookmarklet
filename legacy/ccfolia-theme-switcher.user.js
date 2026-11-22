@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.52
+// @version      0.2.53
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.52"),
+    version: getUserscriptVersion("0.2.53"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1930,7 +1930,16 @@
       ${scope} .ccf-roll20-die b { position: relative; font-weight: inherit; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
       ${scope} .ccf-roll20-ability-rule { display: block; height: 0; margin: 12px 24px; border-top: 1px solid rgba(0,0,0,.18); }
-      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-skill { font-weight: 700 !important; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-skill { font-weight: 700 !important; font-size: 16px; }
+      /* 0.2.53 어빌리티 카드 안 글자만 1px 작게(일반 판정·아이템·특기표 카드는 그대로, 주사위 숫자도 그대로) */
+      ${scope} .ccf-roll20-ability-card > small { font-size: 10px; }
+      ${scope} .ccf-roll20-ability-card.ccf-roll20-check-card > small { font-size: 12px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-label { font-size: 15px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-name { font-size: 18px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-item-text { font-size: 13px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-result { font-size: 13px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-target { font-size: 12px; }
+      ${scope} .ccf-roll20-ability-card .ccf-roll20-check-note { font-size: 11px; }
       ${scope} .ccf-roll20-ability-card .ccf-roll20-check-body { margin-top: 0; }
       ${scope} .ccf-roll20-ability-text { text-align: center; white-space: pre-line; }
       ${scope} .ccf-roll20-check-note { display: block; margin: 10px 16px 0; font-size: 12px; line-height: 1.5; font-weight: normal; text-align: center; opacity: .85; }

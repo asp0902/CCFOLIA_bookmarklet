@@ -89,6 +89,12 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     await page.locator(R + ' [data-add="abilities"]').click();
     await page.locator(R + ' .ccf-cs-abilities [data-prop="name"]').first().fill('기습');
     await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('소각');
+    // 0.5.57: the type box fits '서포트' (3 Korean letters + padding), the memo button sits right before the remove button
+    await page.locator(R + ' .ccf-cs-abilities [data-prop="type"]').first().fill('서포트');
+    const typeBox = await page.locator(R + ' .ccf-cs-abilities section [data-prop="type"]').first().evaluate((i) => ({ w: Math.round(i.getBoundingClientRect().width), fits: i.scrollWidth <= i.clientWidth, em: parseFloat(getComputedStyle(i).fontSize) }));
+    assert(typeBox.fits && typeBox.w <= typeBox.em * 3 + 30, 'type box ~3 letters and 서포트 fits ' + JSON.stringify(typeBox));
+    assert.equal(await page.locator(R + ' .ccf-cs-abilities section').first().evaluate((sec) => sec.querySelector('.ccf-cs-remove').previousElementSibling?.classList.contains('ccf-cs-note-toggle')), true, 'memo button right before ×');
+    await page.locator(R + ' .ccf-cs-abilities [data-prop="type"]').first().fill('');
     const pair = await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-abilities .ccf-cs-roll-pair button')].map((b) => ({ color: getComputedStyle(b).color, secret: b.dataset.secret || '', svg: !!b.querySelector('svg circle'), size: [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height)] })));
     assert.deepEqual(pair.map((b) => [b.color, b.secret]), [['rgb(255, 255, 255)', '']], 'abilities have only the public roll button, white');
     const roll = async (action) => { await page.evaluate(() => { window.__sent.length = 0; document.getElementById('chatbox').value = ''; }); await action(); await page.waitForTimeout(250); return { sent: await page.evaluate(() => window.__sent.slice()), box: await page.locator('#chatbox').inputValue() }; };
