@@ -97,7 +97,7 @@ assert.match(source, /ccf-cs-table-select \{[^}]*font-size:14px/);
 assert.match(source, /closeButton\.parentElement\.insertBefore\(button, closeButton\)/);
 assert.doesNotMatch(source, /title\.insertAdjacentElement\("afterend", button\)/);
 assert.doesNotMatch(source, /actions\.appendChild\(button\)/);
-assert.match(source, /function openSheetFromCharacterDialog\(dialog\) \{[\s\S]+findLinkedSheet\(state\.data\.sheets, dialog\.querySelector\('input\[name="name"\]'\)\?\.value\)[\s\S]+selectSheet\(linkedSheet\.id\)[\s\S]+state\.view = "list";/);
+assert.match(source, /function openSheetFromCharacterDialog\(dialog\) \{[\s\S]+linkedSheetFor\(dialog\.querySelector\('input\[name="name"\]'\)\?\.value\)[\s\S]+selectSheet\(linkedSheet\.id\)[\s\S]+state\.view = "list";/);
 assert.match(source, /function selectSheet\(sheetId\) \{[\s\S]+state\.nativeCharacterDialog\?\.isConnected[\s\S]+syncSheetFromNativeDialog\(state\.nativeCharacterDialog\)[\s\S]+state\.view = "sheet";/);
 assert.match(source, /dataset\.action === "open-sheet"\) return selectSheet\(button\.dataset\.sheetId\)/);
 assert.match(source, /state\.data\.sheets\.push\(sheet\); selectSheet\(sheet\.id\)/);
