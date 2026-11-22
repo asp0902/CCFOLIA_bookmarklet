@@ -23,6 +23,7 @@ const themeSource = fs.readFileSync(root + 'ccfolia-theme-switcher.user.js', 'ut
       await page.waitForTimeout(700);
       if (theme) await page.evaluate(() => document.documentElement.setAttribute('data-ccf-theme-active', '1'));
       await page.evaluate(() => { const t = document.querySelector('textarea[name=text]'); t.value = '문장'; t.focus(); });
+      await page.locator('[data-inline-group="extra"] [data-inline-group-toggle]').first().click(); // 0.1.126: Sv is in the ⋯ menu
       await page.locator('[data-inline-command="style-clipboard"]').first().click();
       await page.waitForSelector('.ccf-style-builder-row');
       await page.waitForTimeout(300);

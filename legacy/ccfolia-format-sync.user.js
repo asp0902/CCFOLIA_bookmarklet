@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.125
+// @version      0.1.126
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.125"),
+    version: getUserscriptVersion("0.1.126"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3594,7 +3594,8 @@
       }
 
       .ccf-toggle.active,
-      .ccf-toggle.ccf-fmt-current {
+      .ccf-toggle.ccf-fmt-current,
+      .ccf-inline-group:has(> .ccf-inline-group-menu :is(.active, .ccf-fmt-current)) > .ccf-inline-group-btn {
         background: #383838;
         border-color: #fafafa;
       }
@@ -4221,6 +4222,17 @@
         background: rgba(255, 255, 255, 0.16);
       }
 
+      /* 0.1.126 버튼 묶음: Aa▾(루비·툴팁·블러·코드), ⋯(나레이션·구분선·유지·Sv). 메뉴 항목은 원래 버튼 그대로(동작·단축키·저장 같음), 모양만 #548 떠 있는 메뉴. */
+      .ccf-inline-group { display: inline-flex; position: relative; }
+      .ccf-inline-group-menu { display: none; }
+      html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-group-menu { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; min-width: 150px; padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex !important; align-items: center; gap: 10px; width: 100% !important; min-width: 0 !important; height: auto !important; flex: none !important; padding: 6px 16px !important; font-size: 14px !important; line-height: 1.5; font-weight: 400 !important; font-family: Roboto, "Noto Sans KR", sans-serif; color: #fff !important; background: transparent !important; border: 0 !important; white-space: nowrap; }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:hover, html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:focus-visible { background: rgba(255,255,255,.08) !important; }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current) { background: rgba(144,202,249,.16) !important; }
+      html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; }
+      .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
+      .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
+      .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
       .ccf-inline-row-break {
         flex: 0 0 100%;
         width: 100%;
@@ -4576,6 +4588,7 @@
 
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle.active,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-toggle.ccf-fmt-current,
+      html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-inline-group:has(> .ccf-inline-group-menu :is(.active, .ccf-fmt-current)) > .ccf-inline-group-btn,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-size-option.active,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-btn.primary,
       html[data-ccf-theme-active="1"] .ccf-inline-toolbar .ccf-style-builder-row .ccf-toggle[data-active="1"],
@@ -5255,7 +5268,8 @@
         box-shadow: none !important;
       }
       html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.active,
-      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.ccf-fmt-current {
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-toggle.ccf-fmt-current,
+      html [data-ccf-edit-dialog="1"] [${INLINE_TOOLBAR_ATTR}="1"] .ccf-inline-group:has(> .ccf-inline-group-menu :is(.active, .ccf-fmt-current)) > .ccf-inline-group-btn {
         background-color: rgba(255, 255, 255, 0.12) !important;
       }
     `;
@@ -5628,12 +5642,18 @@
       <button type="button" class="ccf-toggle" data-inline-command="underline" title="Underline" aria-label="Underline"><u>U</u></button>
       <button type="button" class="ccf-toggle" data-inline-command="strike" title="Strike" aria-label="Strike"><s>S</s></button>
       <span class="ccf-inline-divider" aria-hidden="true"></span>
-      <button type="button" class="ccf-toggle" data-inline-command="ruby" title="Ruby" aria-label="Ruby">Rb</button>
-      <button type="button" class="ccf-toggle" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip">Tip</button>
-      <button type="button" class="ccf-toggle" data-inline-command="blur" title="Blur" aria-label="Blur">Bl</button>
-      <button type="button" class="ccf-toggle" data-inline-command="code" title="Code block" aria-label="Code block">&lt;/&gt;</button>
-      <button type="button" class="ccf-toggle" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false">Nr</button>
-      <button type="button" class="ccf-toggle" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></button>
+      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa▾</button><span class="ccf-inline-group-menu" role="menu">
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="tooltip" title="Tooltip" aria-label="Tooltip"><span class="ccf-gi-key">Tip</span><span class="ccf-gi-label">툴팁</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="blur" title="Blur" aria-label="Blur"><span class="ccf-gi-key">Bl</span><span class="ccf-gi-label">블러</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="code" title="Code block" aria-label="Code block"><span class="ccf-gi-key">&lt;/&gt;</span><span class="ccf-gi-label">코드</span></button>
+      </span></span>
+      <span class="ccf-inline-group" data-inline-group="extra"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="나레이션·구분선·서식 유지·서식 저장" aria-label="더 보기" aria-haspopup="menu" aria-expanded="false">⋯</button><span class="ccf-inline-group-menu" role="menu">
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="narration" title="Narration" aria-label="Narration" aria-pressed="false"><span class="ccf-gi-key">Nr</span><span class="ccf-gi-label">나레이션</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><span class="ccf-gi-key"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></span><span class="ccf-gi-label">구분선</span></button>
+      <button type="button" class="ccf-toggle ccf-keep-toggle" role="menuitem" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false"><span class="ccf-gi-key">유지</span><span class="ccf-gi-label">서식 유지</span></button>
+      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장"><span class="ccf-gi-key">Sv</span><span class="ccf-gi-label">서식 저장</span></button>
+      </span></span>
       <span class="ccf-inline-row-break" aria-hidden="true"></span>
       <button type="button" class="ccf-toggle ccf-align-toggle active" data-inline-command="align" data-align="left" title="Align left" aria-label="Align left">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg>
@@ -5653,8 +5673,6 @@
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
       <select class="ccf-inline-font" data-inline-font aria-label="글꼴" title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
-      <button type="button" class="ccf-toggle ccf-keep-toggle" data-inline-command="keep" title="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-label="\uC774\uC804 \uC11C\uC2DD \uC720\uC9C0" aria-pressed="false">\uC720\uC9C0</button>
-      <button type="button" class="ccf-toggle" data-inline-command="style-clipboard" title="\uC11C\uC2DD \uC800\uC7A5" aria-label="\uC11C\uC2DD \uC800\uC7A5">Sv</button>
       <button type="button" class="ccf-toggle" data-inline-command="paren-gray" title="Parentheses gray" aria-label="Parentheses gray" aria-pressed="false">()</button>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
@@ -5666,6 +5684,37 @@
       console.error("[ccf-format-sync] refreshInlineNarrationButton (init) failed", error);
     }
     return toolbar;
+  }
+
+  // 0.1.126 버튼 묶음 메뉴: 단추 아래(자리가 없으면 위)에 띄운다. 바깥을 누르거나 Esc 면 닫는다.
+  function closeInlineGroups() {
+    document.querySelectorAll('.ccf-inline-group[data-open="1"]').forEach((group) => {
+      group.removeAttribute("data-open");
+      group.querySelector("[data-inline-group-toggle]")?.setAttribute("aria-expanded", "false");
+    });
+  }
+  function toggleInlineGroup(group) {
+    if (!(group instanceof HTMLElement)) return;
+    const wasOpen = group.getAttribute("data-open") === "1";
+    closeInlineGroups();
+    if (wasOpen) return;
+    const button = group.querySelector("[data-inline-group-toggle]"), menu = group.querySelector(".ccf-inline-group-menu");
+    group.setAttribute("data-open", "1");
+    button?.setAttribute("aria-expanded", "true");
+    const r = button.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+    const below = r.bottom + 4;
+    menu.style.top = `${Math.round(below + h <= window.innerHeight - 4 ? below : Math.max(4, r.top - 4 - h))}px`;
+    menu.style.left = `${Math.round(Math.max(4, Math.min(window.innerWidth - w - 4, r.left)))}px`;
+    if (!closeInlineGroups.bound) {
+      closeInlineGroups.bound = true;
+      document.addEventListener("pointerdown", (event) => { if (!(event.target instanceof Element) || !event.target.closest('.ccf-inline-group[data-open="1"]')) closeInlineGroups(); }, true);
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape" && document.querySelector('.ccf-inline-group[data-open="1"]')) { event.preventDefault(); event.stopPropagation(); closeInlineGroups(); } }, true);
+    }
+  }
+  // 메뉴 안 단추가 기준인 창(루비·툴팁·코드·나레이션·Sv)은 메뉴가 닫혀 있으면 묶음 단추 아래에 띄운다.
+  function inlineAnchor(button) {
+    const group = button?.closest?.(".ccf-inline-group");
+    return group && group.getAttribute("data-open") !== "1" ? group.querySelector("[data-inline-group-toggle]") || button : button;
   }
 
   function bindInlineToolbarEvents(toolbar) {
@@ -5896,12 +5945,21 @@
         return;
       }
 
+      const groupToggle = target.closest("[data-inline-group-toggle]");
+      if (groupToggle && toolbar.contains(groupToggle)) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleInlineGroup(groupToggle.closest(".ccf-inline-group"));
+        return;
+      }
+
       const commandButton = target.closest("[data-inline-command]");
       if (!commandButton || !toolbar.contains(commandButton)) return;
 
       event.preventDefault();
       event.stopPropagation();
       handleInlineToolbarCommand(toolbar, commandButton);
+      if (commandButton.closest(".ccf-inline-group-menu")) closeInlineGroups(); // 메뉴 항목을 누르면 메뉴는 닫는다(창을 여는 항목은 창이 묶음 단추 아래에 뜬다)
     }, true);
 
     toolbar.addEventListener("input", (event) => {
@@ -7020,7 +7078,7 @@
   function positionInlineNarratorPopover(toolbar) {
     const state = getInlineNarratorPopoverState(toolbar);
     const popover = state?.popover;
-    const anchor = toolbar?.querySelector?.('[data-inline-command="narration"]');
+    const anchor = inlineAnchor(toolbar?.querySelector?.('[data-inline-command="narration"]'));
     if (!(popover instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !popover.classList.contains("open")) {
       return;
     }
@@ -7185,7 +7243,7 @@
 
   // Sv 버튼 기준으로 fixed 팝업 위치 계산 — 아래 공간 부족하면 위로.
   function positionStylePresetPopover(toolbar, popover, command = "style-clipboard") {
-    const anchor = toolbar?.querySelector?.(`[data-inline-command="${command}"]`);
+    const anchor = inlineAnchor(toolbar?.querySelector?.(`[data-inline-command="${command}"]`));
     if (!(popover instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !popover.classList.contains("open")) {
       return;
     }

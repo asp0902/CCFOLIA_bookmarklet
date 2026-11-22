@@ -14,7 +14,7 @@ const BODY = '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b
     const page = await context.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     const load = async (room) => { await page.goto(`https://ccfolia.com/rooms/${room}`); await page.addScriptTag({ content: source }); await page.locator('.ccf-inline-toolbar [data-inline-command="style-clipboard"]').first().waitFor({ state: 'attached', timeout: 8000 }); await page.waitForTimeout(300); };
-    const sv = () => page.evaluate(() => { const b = document.querySelector('.ccf-inline-toolbar [data-inline-command="style-clipboard"]'); const active = document.querySelector('.ccf-inline-toolbar [data-inline-command="bold"]'); return { on: b.classList.contains('active'), bg: getComputedStyle(b).backgroundColor }; });
+    const sv = () => page.evaluate(() => { const b = document.querySelector('.ccf-inline-toolbar [data-inline-command="style-clipboard"]'); const active = document.querySelector('.ccf-inline-toolbar [data-inline-command="bold"]'); return { on: b.classList.contains('active'), bg: getComputedStyle(b.closest('.ccf-inline-group').querySelector('[data-inline-group-toggle]')).backgroundColor }; }); // 0.1.126: Sv is in the ⋯ menu, the group button shows it
     await page.goto('https://ccfolia.com/rooms/r1');
     await page.evaluate(() => {
       localStorage.setItem('ccf-format-style-presets-shared-migrated-1117', '1'); /* format-sync 0.1.123: seeded as room-only presets (no merge into the shared list) */ localStorage.setItem('ccf-format-style-presets-v1:r1', JSON.stringify([{ name: '빨강', style: { color: '#ff0000' }, auto: false, savedAt: 1 }, { name: '굵게', style: { bold: true }, auto: false, savedAt: 2 }]));
@@ -29,7 +29,7 @@ const BODY = '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b
     await page.locator('.ccf-inline-popover.open [data-inline-style-action="auto"]').first().dispatchEvent('click');
     const on = await sv();
     assert.equal(on.on, true, 'one preset on: Sv active');
-    // the active look is the one of the other active format buttons
+    // the active look (of the ⋯ group button) is the one of the other active format buttons
     const ref = await page.evaluate(() => { const b = document.querySelector('.ccf-inline-toolbar [data-inline-command="bold"]'); b.classList.add('active'); const bg = getComputedStyle(b).backgroundColor; b.classList.remove('active'); return bg; });
     assert.equal(on.bg, ref, 'same look as an active format button');
     // reload: still active
