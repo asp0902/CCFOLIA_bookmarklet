@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.136
+// @version      0.1.137
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.136"),
+    version: getUserscriptVersion("0.1.137"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -14541,8 +14541,12 @@
         const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
         const kept = keepOn && state.lastStyle ? cleanupStyle(state.lastStyle) : {};
         const runs = Object.keys(kept).length ? [{ start: 0, end: rawText.length, style: kept }] : [];
-        if (runs.length || blockStyle.narration === true) {
-          const envelope = { v: 1, text: rawText, formatRuns: runs, alignRuns: getEffectiveAlignRuns(rawText, [], blockStyle), blockStyle, command: true };
+        // 0.1.137 시트가 실은 덧붙임(어빌리티 카드: 종류·이름·설명) — 있으면 서식이 없어도 봉투를 붙인다(공백 뒤라 굴림은 그대로)
+        let extra = null;
+        try { extra = JSON.parse(editor.getAttribute?.("data-ccf-sheet-extra") || "null"); } catch (_) { extra = null; }
+        const ability = extra?.ability && typeof extra.ability === "object" ? { type: String(extra.ability.type || "").slice(0, 40), name: String(extra.ability.name || "").slice(0, 100), text: String(extra.ability.text || "").slice(0, 600) } : null;
+        if (runs.length || blockStyle.narration === true || ability) {
+          const envelope = { v: 1, text: rawText, formatRuns: runs, alignRuns: getEffectiveAlignRuns(rawText, [], blockStyle), blockStyle, command: true, ...(ability ? { ability } : {}) };
           const outgoing = `${rawText} ${encodeEnvelopeToInvisible(envelope)}`;
           if (currentText !== outgoing) setEditorText(editor, outgoing);
           return true;

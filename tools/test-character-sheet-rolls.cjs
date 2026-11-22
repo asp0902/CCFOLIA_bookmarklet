@@ -97,6 +97,12 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     let r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
     assert.deepEqual(r.sent, ['2D6>=5 [기습/소각]'], 'public ability roll is unchanged'); await reopen();
     assert.equal(await page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-secret').count(), 0, 'no secret ability roll button any more');
+    // 0.5.54: an ability without a designated skill sends the ability card text instead of an error
+    await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('');
+    await page.locator(R + ' .ccf-cs-abilities [data-prop="type"]').first().fill('서포트');
+    r = await roll(() => page.locator(R + ' .ccf-cs-abilities .ccf-cs-roll-public').first().click());
+    assert.deepEqual(r.sent, ['[어빌리티:서포트] 기습'], 'no skill: the ability card text'); await reopen();
+    await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('소각');
     // a skill: click = public (typed into the chat box), Shift+click / right click = secret
     r = await roll(() => page.locator(R + ' [data-roll="0:0"]').click());
     assert.equal(r.box, '2D6>=5 [소각]'); assert.deepEqual(r.sent, ['2D6>=5 [소각]'], 'a skill click is sent at once'); assert.equal(await page.locator(R + ' .ccf-cs-dialog.is-editor').count(), 1, 'the sheet stays open after a roll'); assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'chatbox', 'the chat box does not take the focus'); await reopen();

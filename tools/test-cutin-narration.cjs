@@ -9,7 +9,7 @@ const sheet = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character-
 const INVIS_MAP = ['​', '‌', '‍', '⁠'];
 const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf('⁢⁢⁢', a + 3); if (a < 0 || b < 0) return null; let bits = ''; for (const ch of text.slice(a + 3, b)) { const i = INVIS_MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, '0'); } let b64 = ''; for (let i = 0; i + 8 <= bits.length; i += 8) b64 += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2)); return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')); };
 (async () => {
-  assert.match(sheet, /editor\.setAttribute\("data-ccf-sheet-command", "1"\);\s*try \{ submitButton\?\.click\(\); \} finally \{ editor\.removeAttribute\("data-ccf-sheet-command"\); \}/, 'the sheet marks the box while it clicks send');
+  assert.match(sheet, /editor\.setAttribute\("data-ccf-sheet-command", "1"\);[\s\S]{0,300}try \{ submitButton\?\.click\(\); \} finally \{ editor\.removeAttribute\("data-ccf-sheet-command"\);/, 'the sheet marks the box while it clicks send');
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });

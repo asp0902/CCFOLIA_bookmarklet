@@ -141,6 +141,22 @@ const key = 'ccf-theme-switcher-settings-v1';
         if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-check-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-fumble-card.png') });
       }
     }
+    // theme-switcher 0.2.51: ability use card (Roll20 insane sheet look): name / type / ability name, rule, the check part, rule, the description centred
+    const INVIS_MAP = ['​', '‌', '‍', '⁠'];
+    const enc = (v) => { const b64 = Buffer.from(JSON.stringify(v), 'utf8').toString('base64'); let bits = ''; for (const ch of b64) bits += ch.charCodeAt(0).toString(2).padStart(8, '0'); let out = '⁣⁣⁣'; for (let i = 0; i < bits.length; i += 2) out += INVIS_MAP[parseInt(bits.slice(i, i + 2).padEnd(2, '0'), 2)]; return out + '⁢⁢⁢'; };
+    const desc = '목표 1명을 선택해서 명중판정을 한다.\n명중판정이 성공하고, 목표가 회피판정에\n실패하면 1D6점 대미지.';
+    await setCheck('2D6>=5 [기본공격/웃음] ' + enc({ v: 1, text: '2D6>=5 [기본공격/웃음]', formatRuns: [], alignRuns: [], blockStyle: {}, command: true, ability: { type: '공격', name: '기본공격', text: desc } }) + ' (2D6>=5) ＞ 10[4,6] ＞ 10 ＞ 성공');
+    await page.waitForSelector('.ccf-roll20-ability-card .ccf-roll20-check-body');
+    const ab = await page.evaluate(() => { const c = document.querySelector('.ccf-roll20-ability-card'); return { label: c.querySelector('.ccf-roll20-item-label')?.textContent, name: c.querySelector('.ccf-roll20-item-name')?.textContent, rules: c.querySelectorAll('.ccf-roll20-ability-rule').length, skill: c.querySelector('.ccf-roll20-check-skill')?.textContent, result: c.querySelector('.ccf-roll20-check-result')?.textContent, text: c.querySelector('.ccf-roll20-ability-text')?.textContent, align: getComputedStyle(c.querySelector('.ccf-roll20-ability-text')).textAlign, lines: Math.round(c.querySelector('.ccf-roll20-ability-text').getBoundingClientRect().height / parseFloat(getComputedStyle(c.querySelector('.ccf-roll20-ability-text')).lineHeight)) }; });
+    assert.deepEqual([ab.label, ab.name, ab.rules, ab.skill, ab.result, ab.align], ['공격', '기본공격', 2, '웃음', '성공', 'center'], 'three parts with a check ' + JSON.stringify(ab));
+    assert(ab.lines >= 3, 'the description keeps its lines ' + JSON.stringify(ab));
+    if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-ability-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-ability-card.png') });
+    // an ability without a check: the top and the description only
+    await setCheck('[어빌리티:서포트] 응급처치\n아군 1명의 생명력을 1점 회복한다.');
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-ability-card .ccf-roll20-item-name')?.textContent === '응급처치');
+    const ab2 = await page.evaluate(() => { const c = document.querySelector('.ccf-roll20-ability-card'); return { label: c.querySelector('.ccf-roll20-item-label')?.textContent, check: !!c.querySelector('.ccf-roll20-check-body'), rules: c.querySelectorAll('.ccf-roll20-ability-rule').length, text: c.querySelector('.ccf-roll20-ability-text')?.textContent }; });
+    assert.deepEqual(ab2, { label: '서포트', check: false, rules: 1, text: '아군 1명의 생명력을 1점 회복한다.' }, 'two parts without a check');
+    if (process.env.SCREENSHOT_DIR) await page.locator('.ccf-roll20-ability-card').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'insane-ability-card-nocheck.png') });
     await setCheck('2D6+1>=7 긴 특기 이름 (2D6+1>=7) > 4[2,2]+1 > 5 > 펌블'); // back to the text the next step expects
     await page.waitForFunction(() => [...document.querySelectorAll('.ccf-roll20-die:not(.is-total) b')].map((b) => b.textContent).join() === '2,2');
     await select('none');
