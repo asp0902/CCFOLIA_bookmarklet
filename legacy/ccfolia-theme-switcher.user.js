@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.55
+// @version      0.2.56
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.55"),
+    version: getUserscriptVersion("0.2.56"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5435,7 +5435,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const table = parts.map(insaneSkillPlace).find(Boolean) || null;
     const evade = parts[0] === '회피';
     const speed = evade ? parts.find(part => /^속도[1-6]$/.test(part)) : null; // 0.2.55 시트 회피 창: [회피/속도N(/특기)(/공포심)]
-    const skillText = evade ? (speed ? `회피 : ${speed}` : table ? `회피 : ${table.skill}` : '회피') : fear && table ? `공포판정 : ${table.skill}` : parts.filter(part => part !== '공포심').join('/');
+    const skillText = evade ? (speed ? `회피 : ${speed}` : table ? `회피 : ${table.skill}` : '회피') : fear && table ? `공포판정 : ${table.skill}` : table && parts.length > 1 && !insaneSkillPlace(parts[0]) ? table.skill : parts.filter(part => part !== '공포심').join('/'); // 0.2.56 봉투 없는 "[어빌리티명/특기]"는 특기만
     return { skill: skillText || '판정', table,
       target: match[2], dice: [match[4], match[5]], sum: match[3], mod: match[6] && Number(match[7]) ? `${match[6]}${match[7]}` : '', total: match[8], result: match[9], note: (match[10] || '').trim() };
   }
