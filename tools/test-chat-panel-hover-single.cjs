@@ -54,6 +54,25 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
       assert(g.brk >= -1 && g.brk <= 2, 'divider just left of the eye: ' + JSON.stringify(g));
       assert(g.clear, 'not over the time text: ' + JSON.stringify(g));
     }
+    // 0.5.54 hover shading: the row background changes a little, the icon group gets a rounded backing, dimmed icons get clear; the row height does not change
+    await page.mouse.move(5, 5); await page.waitForTimeout(200);
+    await page.evaluate(() => { const li = document.querySelector('#root #theirs'); const g = document.createElement('div'); g.style.cssText = 'position:absolute;right:16px;top:4px'; g.innerHTML = '<button class="MuiButtonBase-root MuiIconButton-root" style="opacity:.35">↩</button>'; li.appendChild(g); });
+    const look = (sel) => page.evaluate((sel) => { const li = document.querySelector(sel); const g = li.querySelector(':scope > div:has(> button.MuiIconButton-root)'); return { bg: getComputedStyle(li).backgroundColor, h: li.getBoundingClientRect().height, group: g ? getComputedStyle(g).backgroundColor : null, icon: g ? getComputedStyle(g.querySelector('button.MuiIconButton-root')).opacity : null }; }, sel);
+    const before = await look('#root #theirs');
+    await page.locator('#root #theirs').hover(); await page.waitForTimeout(250);
+    const after = await look('#root #theirs');
+    assert.equal(before.bg, 'rgba(0, 0, 0, 0)', 'no shade before');
+    assert.notEqual(after.bg, before.bg, 'row shaded on hover ' + JSON.stringify(after));
+    assert.notEqual(after.group, 'rgba(0, 0, 0, 0)', 'icon group backing ' + JSON.stringify(after));
+    assert.equal(before.icon, '0.35'); assert.equal(after.icon, '0.9', 'icons clear on hover');
+    assert.equal(after.h, before.h, 'row height unchanged');
+    const prow = '.ccf-scp-panel [data-ccf-msg-id]';
+    const pBefore = await page.evaluate((s) => { const li = document.querySelector(s); return [getComputedStyle(li).backgroundColor, li.getBoundingClientRect().height]; }, prow);
+    await page.locator(prow).first().hover(); await page.waitForTimeout(250);
+    const pAfter = await page.evaluate((s) => { const li = document.querySelector(s); return [getComputedStyle(li).backgroundColor, li.getBoundingClientRect().height]; }, prow);
+    assert(/\/ 0\.04\)$/.test(pAfter[0]) && /\/ 0\.04\)$/.test(after.bg), 'panel row: the same 4% shade of its text colour as the original row ' + JSON.stringify([pBefore, pAfter, after.bg]));
+    assert.equal(pAfter[1], pBefore[1], 'panel row height unchanged');
+    if (process.env.SCREENSHOT_DIR) await page.locator('#root #theirs').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'chat-hover-shade.png') });
     assert.deepEqual(errors, []);
     console.log('chat panel single hover set PASS');
   } finally { await browser.close(); }
