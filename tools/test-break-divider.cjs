@@ -16,7 +16,7 @@ for (const part of parts) {
   assert.equal(fn({ narration: true, breakBefore: true, align: 'center' }).align, 'center');
 }
 // the original toolbar: the button after Nr, the toggle, the reset after a send
-assert.match(sync, /data-inline-command="narration"[^\n]*Nr<\/button>\n\s+<button type="button" class="ccf-toggle" data-inline-command="break"/);
+assert.match(sync, /data-inline-command="narration"[^\n]*Nr<\/span>[^\n]*<\/button>\n\s+<button type="button" class="ccf-toggle" role="menuitem" data-inline-command="break"/); // 0.1.126: inside the ⋯ menu
 assert.match(sync, /if \(command === "break"\) \{[\s\S]*?breakBefore: true/);
 assert.match(sync, /\[data-inline-command="break"\]'\)\.forEach\(\(btn\) => \{ btn\.classList\.remove\("active"\)/);
 assert.match(sync, /!blockStyle\.narration && !blockStyle\.breakBefore && sendText === rawText\) return true;/);
