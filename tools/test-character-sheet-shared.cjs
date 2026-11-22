@@ -140,7 +140,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character
     await G.waitForSelector('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root .ccf-cs-dialog.is-editor', { timeout: 6000 });
     assert(await G.locator('#ccf-character-sheet-root .ccf-cs-sheet-row, #ccf-character-sheet-root .ccf-cs-dialog.is-editor').count() >= 1, 'the GM sees it');
     // rules not deployed: nothing breaks, the sheet stays in the browser, the status line says so
-    const D = await open({ uid: 'uD', denied: true, seed: { version: 1, selectedId: 's9', sheets: [{ ...original, id: 's9', name: '로컬만' }], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });
+    const D = await open({ uid: 'uD', denied: true, seed: { version: 1, selectedId: 's9', sheets: [{ ...original, id: 's9', name: '로컬만', player: '로컬만' }], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] } });
     await D.evaluate(() => window.__CCF_CHARACTER_SHEET_DEBUG__.open());
     await D.waitForSelector('#ccf-character-sheet-root', { timeout: 6000 });
     if (await D.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').count()) await D.locator('#ccf-character-sheet-root .ccf-cs-sheet-row').first().click();
