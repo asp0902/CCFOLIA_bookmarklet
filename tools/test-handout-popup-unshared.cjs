@@ -58,6 +58,16 @@ const H = (id, title, permissions, gmNotes) => ({ id, title, description: '<p>ê³
     assert.equal(await viewHead('h3'), false, 'tags / nbsp / empty lines only: no secret box');
     assert.equal(await viewHead('h4'), true, 'a picture: the secret box shows');
     assert.equal(await viewHead('h1'), true, 'text: the secret box shows');
+    // 0.1.145 the view window folded and moved near the bottom, then unfolded: pulled up so it stays on screen (top >= 8)
+    const fit = await page.evaluate(async () => {
+      const host = document.querySelector('[data-ccf-handout-show="1"]'); const head = host.shadowRoot.querySelector('.show-head');
+      const dbl = () => head.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      dbl(); await new Promise((r) => setTimeout(r, 50));
+      host.style.top = `${innerHeight - 60}px`;
+      dbl(); await new Promise((r) => setTimeout(r, 50));
+      const r = host.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight };
+    });
+    assert(fit.top >= 8 && fit.bottom <= fit.vh, 'unfolded view window on screen ' + JSON.stringify(fit));
     // list rows: bottom padding 10px (was 12); the scope bar indent = the rows' text start
     await page.evaluate(() => document.querySelectorAll('[data-ccf-handout-show="1"]').forEach((n) => n.remove()));
     const geo = await page.evaluate(() => { const s = document.querySelector('#ccfolia-handout-root').shadowRoot; const card = s.querySelector('.card'), bar = s.querySelector('.scope-bar'), btn = bar?.querySelector('.scope-btn'); return { pad: getComputedStyle(card).paddingBottom, barLeft: btn ? Math.round(btn.getBoundingClientRect().left) : null, rowLeft: Math.round(card.getBoundingClientRect().left + parseFloat(getComputedStyle(card).paddingLeft)) }; });
