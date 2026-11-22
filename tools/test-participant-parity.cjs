@@ -19,6 +19,9 @@ const enc = (v) => { const b64 = Buffer.from(JSON.stringify(v), 'utf8').toString
 // cut-in: text + envelope + name
 let d = ctx.decodeEnvelope('글 ' + enc({ v: 1, text: '글 ', formatRuns: [], alignRuns: [], blockStyle: { narration: true } }) + '@컷인');
 assert.equal(d.text, '글 '); assert.equal(d.env?.blockStyle?.narration, true, 'narration kept'); assert(!/@컷인/.test(d.visible), 'the cut-in name is not shown');
+// format-sync 0.1.135: a cut-in name alone with narration = envelope + name (the envelope's text is the name) -> narration kept, the name shows
+d = ctx.decodeEnvelope(enc({ v: 1, text: '@컷인', formatRuns: [], alignRuns: [], blockStyle: { narration: true } }) + '@컷인');
+assert.equal(d.env?.blockStyle?.narration, true, 'narration kept (name only)'); assert.equal(d.visible.trim(), '@컷인');
 // an ordinary envelope at the end still works; an edited message (text differs) is plain
 d = ctx.decodeEnvelope('굵게' + enc({ v: 1, text: '굵게', formatRuns: [{ start: 0, end: 2, style: { bold: true } }] }));
 assert.equal(d.env?.formatRuns?.length, 1);

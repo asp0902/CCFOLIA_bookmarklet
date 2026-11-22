@@ -50,8 +50,8 @@ const TABLE = '/roll-table\n괴담 장면표\n1D3\n1 첫째\n2 둘째\n3 셋째'
       assert.deepEqual(await page.evaluate(() => window.__sent.slice()), [text], label + ' with an envelope in the box: sent without it');
     }
     // a cut-in trigger (the message ends with the cut-in's name): format-sync 0.1.119 keeps the narration with the envelope BEFORE the name (text + envelope + name), so CCFOLIA still plays it;
-    // the cut-in name alone goes out raw; a name in the middle is ordinary text
-    for (const [label, text, raw] of [['ends with the cut-in name', '쾅! 폭발', false], ['only the cut-in name', '폭발', true], ['name in the middle', '폭발 직전이다', false]]) {
+    // the cut-in name alone (narration on) also carries the envelope before the name (0.1.135); a name in the middle is ordinary text
+    for (const [label, text, raw] of [['ends with the cut-in name', '쾅! 폭발', false], ['only the cut-in name (0.1.135: narration envelope too)', '폭발', false], ['name in the middle', '폭발 직전이다', false]]) {
       await page.evaluate(() => { window.__sent.length = 0; });
       await setText(text);
       await page.locator('#composer button[type=submit]').dispatchEvent('click');
