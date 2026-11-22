@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.124
+// @version      0.1.125
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.124"),
+    version: getUserscriptVersion("0.1.125"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1268,11 +1268,11 @@
     el.removeAttribute("data-ccf-cutin-hide");
   }
 
-  // 컷인 트리거 글은 숨기고 이미지만 보인다(원본 글 노드는 그대로 두고 CSS 로만 숨김 — React 안전). 코코포리아 컷인 재생은 글을 그대로 보내므로 영향 없음.
-  // 끄기: localStorage ccfCutinChatHideText = "off" (글도 같이 보기).
+  // 0.1.125: 컷인 이름만 보낸 메시지는 코코포리아 기본처럼 글("@이름")이 그대로 보인다(이미지는 아래에 붙음). 본문 + 컷인 이름은 봉투 렌더가 이름을 뺀다(#546).
+  // 글 숨기기(옛 기본)는 켜야만: localStorage ccfCutinChatHideText = "on" (CSS 로만 숨김 — React 안전).
   function syncCutinChatHide(el) {
-    let hide = true;
-    try { hide = localStorage.getItem("ccfCutinChatHideText") !== "off"; } catch (_) { hide = true; }
+    let hide = false;
+    try { hide = localStorage.getItem("ccfCutinChatHideText") === "on"; } catch (_) { hide = false; }
     if (hide) { if (el.getAttribute("data-ccf-cutin-hide") !== "1") el.setAttribute("data-ccf-cutin-hide", "1"); }
     else if (el.hasAttribute("data-ccf-cutin-hide")) el.removeAttribute("data-ccf-cutin-hide");
   }
