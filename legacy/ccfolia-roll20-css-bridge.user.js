@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.113
+// @version      0.3.114
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -50,6 +50,7 @@
   const MACRO_BACKGROUND_ATTR = "data-ccr20-macro-background";
   const OPEN_BTN_SIZE = 32;
   const OPEN_BTN_GAP = 4;
+  const FOOTER_BTN_GAP = 4; // 0.3.114 하단 줄: Roll20 단추와 테마 팔레트 사이
 
   const MESSAGE_SCOPE_SELECTOR = '[role="log"], [aria-live="polite"], [aria-live="assertive"], .MuiDrawer-paper, ul.MuiList-root';
   const FOREIGN_RENDER_SELECTOR = ".ccf-render-root[data-ccf-rendered='1']";
@@ -68,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.113"),
+    version: getUserscriptVersion("0.3.114"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -533,6 +534,18 @@
         transition: background-color 0.14s ease, transform 0.14s ease;
         overflow: hidden !important;
         contain: size layout paint;
+      }
+
+      /* 0.3.114 하단 줄(테마 팔레트 왼쪽): 팔레트와 같은 24px, 화면 기준 고정 배치 */
+      .ccr20-open-btn.is-footer {
+        position: fixed !important;
+        z-index: 2147482600 !important;
+        width: 24px !important; height: 24px !important; min-width: 24px !important; max-width: 24px !important;
+        min-height: 24px !important; max-height: 24px !important; flex-basis: 24px !important;
+      }
+      .ccr20-open-btn.is-footer .ccr20-logo {
+        width: 20px !important; height: 20px !important; min-width: 20px !important; max-width: 20px !important;
+        min-height: 20px !important; max-height: 20px !important; flex-basis: 20px !important;
       }
 
       .ccr20-open-btn:hover {
@@ -1502,6 +1515,7 @@
     });
   }
 
+  window.addEventListener("ccf-theme-toggle-moved", () => scheduleOpenButtonLayout()); // 0.3.114 팔레트가 움직이면 옆의 Roll20 단추도
   function scheduleOpenButtonLayout() {
     if (openButtonLayoutFrame) return;
     openButtonLayoutFrame = window.requestAnimationFrame(() => {
@@ -1811,6 +1825,26 @@
       : findFormatSyncButton(composer) || findSubmitButtonInComposer(composer) || findPreferredDiceButton(composer) || composer;
 
     if (!(target instanceof HTMLElement)) return false;
+
+    // 0.3.114 룸 채팅 입력칸의 Roll20 단추는 주사위 줄이 아니라 하단 줄(Dicebot engine 줄)의 테마 팔레트 단추 바로 왼쪽에 — 같은 크기(24px)·같은 세로 가운데.
+    // 팔레트는 하단 줄이 입력중 표시로 바뀌어도 그 줄에 붙어 있으므로(theme 0.2.58) 이 단추도 같이 보인다. 팔레트가 없으면(테마 기능 꺼짐 등) 예전 자리.
+    const palette = document.getElementById("ccf-theme-switcher-toggle");
+    const form = composer.closest("form");
+    if (palette instanceof HTMLElement && !palette.hidden && form?.querySelector('[data-ccf-theme-switcher-anchor="1"]')) {
+      const p = palette.getBoundingClientRect();
+      if (p.width > 0 && p.height > 0) {
+        btn.classList.add("is-footer");
+        const wantLeft = p.left - p.width - FOOTER_BTN_GAP, wantTop = p.top;
+        btn.style.left = `${wantLeft}px`; btn.style.top = `${wantTop}px`;
+        // 고정 배치의 기준이 화면이 아닐 때(변형된 조상 — 추가 패널이 오리지널을 밀 때) 실제 위치 차이만큼 보정
+        const r = btn.getBoundingClientRect();
+        if (Math.abs(r.left - wantLeft) > 0.5 || Math.abs(r.top - wantTop) > 0.5) {
+          btn.style.left = `${2 * wantLeft - r.left}px`; btn.style.top = `${2 * wantTop - r.top}px`;
+        }
+        return true;
+      }
+    }
+    btn.classList.remove("is-footer");
 
     const hostRect = composer.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
@@ -6267,7 +6301,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.113",
+    version: "0.3.114",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

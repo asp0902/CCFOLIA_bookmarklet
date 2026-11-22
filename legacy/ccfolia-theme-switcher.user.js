@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.57
+// @version      0.2.58
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.57"),
+    version: getUserscriptVersion("0.2.58"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -6222,11 +6222,27 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     return anchor instanceof HTMLElement && anchor !== document.body && document.documentElement?.contains(anchor);
   }
 
+  // 0.2.58 채팅 하단 줄(입력 form 의 마지막 줄): 누가 입력 중이면 코코포리아가 이 줄 내용(Dicebot 링크 ↔ "○○ 입력중…")을 갈아 끼워
+  // Dicebot 글자로는 못 찾는다 → 바뀌지 않는 줄 자체를 기준으로 삼아 아이콘이 사라지지 않게 한다.
+  function findChatFooterRow() {
+    const form = document.querySelector('textarea[name="text"]')?.closest("form");
+    const row = form?.lastElementChild;
+    if (!(row instanceof HTMLElement) || row.querySelector("textarea, button[type='submit']")) return null;
+    const rect = row.getBoundingClientRect();
+    return rect.height > 0 && rect.height < 80 ? row : null;
+  }
+
   function resolveDicebotAnchor(toggle = null) {
     const detectedAnchor = findDicebotAnchor();
     if (isDicebotAnchorUsable(detectedAnchor)) {
       lastDicebotAnchor = detectedAnchor;
       return detectedAnchor;
+    }
+
+    const footerRow = findChatFooterRow();
+    if (isDicebotAnchorUsable(footerRow)) {
+      lastDicebotAnchor = footerRow;
+      return footerRow;
     }
 
     const currentAnchor = toggle instanceof HTMLElement ? toggle.parentElement : null;
@@ -6316,8 +6332,10 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const left = clamp(rect.right - TOGGLE_SIZE - TOGGLE_ANCHOR_INSET, 0, maxLeft);
     const top = clamp(rect.top + ((rect.height - TOGGLE_SIZE) / 2), 0, maxTop);
 
+    const moved = toggle.style.left !== `${Math.round(left)}px` || toggle.style.top !== `${Math.round(top)}px`;
     toggle.style.left = `${Math.round(left)}px`;
     toggle.style.top = `${Math.round(top)}px`;
+    if (moved) window.dispatchEvent(new Event("ccf-theme-toggle-moved")); // 0.2.58 옆에 붙는 Roll20 단추(roll20-css-bridge)가 따라온다
     return true;
   }
 
