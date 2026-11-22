@@ -177,6 +177,11 @@ const key = 'ccf-theme-switcher-settings-v1';
     // theme 0.2.56: an ability roll without the envelope (old sender) shows only the skill, not '기본공격/파괴'
     await setCheck('2D6+1>=5 [기본공격/파괴] (2D6+1>=5) ＞ 8[3,5]+1 ＞ 9 ＞ 성공');
     await page.waitForFunction(() => document.querySelector('.ccf-roll20-check-skill')?.textContent === '파괴', null, { timeout: 4000 });
+    // theme 0.2.59: no envelope but the viewer's sheet knows the speaker's ability (character-sheet lookup) -> the ability card
+    await page.evaluate(() => { window.__CCF_SHEET_ABILITY_LOOKUP__ = (who, name, skill) => (who === '브릿지' && name === '기본공격' && skill === '파괴' ? { type: '공격', name: '기본공격', text: '시트에서 찾은 설명' } : null); });
+    await setCheck('2D6>=5 [기본공격/파괴] (2D6>=5) ＞ 9[4,5] ＞ 9 ＞ 성공');
+    await page.waitForFunction(() => document.querySelector('.ccf-roll20-ability-card .ccf-roll20-item-name')?.textContent === '기본공격' && document.querySelector('.ccf-roll20-ability-card .ccf-roll20-ability-text')?.textContent === '시트에서 찾은 설명', null, { timeout: 4000 });
+    await page.evaluate(() => { delete window.__CCF_SHEET_ABILITY_LOOKUP__; });
     // theme 0.2.57: plot card (sheet plot mark '[플롯]'): variable -> '플롯 1d6 / 속도 n', fixed -> '플롯 n / 속도 n'; a hidden secret (no result) and a typed S1D6 stay plain
     const plotCard = async (text) => { await setCheck(text); await page.waitForTimeout(400); return page.evaluate(() => { const c = document.querySelector('.ccf-roll20-plot-card'); return c ? [...c.querySelectorAll('b')].map((b) => b.textContent).join(' ') : null; }); };
     assert.equal(await plotCard('S1D6 [플롯] (1D6) ＞ 3'), '플롯 1d6 속도 3');

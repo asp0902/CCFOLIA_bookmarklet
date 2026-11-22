@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.58
+// @version      0.2.59
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.58"),
+    version: getUserscriptVersion("0.2.59"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -5280,7 +5280,16 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
       const check = parseInsaneRoll20Check(original);
       const item = !check ? original.match(/^\s*\[아이템\]\s*([^\n]+?)\s*(?:\n([\s\S]*?))?\s*$/) : null;
       // 0.2.51 어빌리티 사용 카드: 판정이 있으면 시트가 봉투에 실은 ability(종류·이름·설명), 없으면 "[어빌리티:종류] 이름\n설명" 글
-      const abilityEnv = check ? decodeInsaneEnvelope(rawText)?.ability : null;
+      let abilityEnv = check ? decodeInsaneEnvelope(rawText)?.ability : null;
+      // 0.2.59 봉투가 없는 "[어빌리티명/특기]" 판정: 보는 사람의 시트(character-sheet 조회)에서 그 화자의 어빌리티를 찾아 카드로
+      if (check && !abilityEnv && check.table && typeof window.__CCF_SHEET_ABILITY_LOOKUP__ === 'function') {
+        const parts = (original.match(/\[([^\]]+)\]/) || [])[1]?.split('/').map(part => part.trim()).filter(Boolean) || [];
+        if (parts.length > 1 && !insaneSkillPlace(parts[0]) && parts[0] !== '회피') {
+          const heading = host.parentElement.querySelector('.MuiListItemText-primary');
+          const who = heading ? Array.from(heading.childNodes).filter(node => !(node instanceof Element && node.matches('.MuiTypography-caption'))).map(node => node.textContent || '').join('').trim() : '';
+          try { abilityEnv = window.__CCF_SHEET_ABILITY_LOOKUP__(who, parts[0], check.table.skill) || null; } catch (_) { abilityEnv = null; }
+        }
+      }
       const abilityText = !check && !item ? original.match(/^\s*\[어빌리티(?::([^\]]*))?\]\s*([^\n]+?)\s*(?:\n([\s\S]*?))?\s*$/) : null;
       const ability = abilityEnv && typeof abilityEnv === 'object' ? { type: String(abilityEnv.type || ''), name: String(abilityEnv.name || ''), text: String(abilityEnv.text || '') }
         : abilityText ? { type: (abilityText[1] || '').trim(), name: abilityText[2].trim(), text: (abilityText[3] || '').trim() } : null;

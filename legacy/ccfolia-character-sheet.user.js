@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.63
+// @version      0.5.64
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.63";
+  const VERSION = "0.5.64";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -298,6 +298,21 @@
   document.addEventListener("paste", handleTransferPaste, { capture: true, signal });
   window.addEventListener("capybara-toolkit:route-change", scheduleRefresh, { signal });
   window.addEventListener("popstate", scheduleRefresh, { signal });
+  // 0.5.64 받는 쪽 어빌리티 카드(theme): 봉투 없는 "[어빌리티명/특기]" 판정을 보는 사람의 시트에서 찾아 종류·이름·설명만 돌려준다(다른 시트 내용은 안 나감).
+  // 화자 = 메시지 머리글 이름 → 그 캐릭터에 연결된 시트(player) 또는 같은 이름의 시트. 같은 이름 어빌리티가 여럿이면 지정특기가 맞는 것.
+  window.__CCF_SHEET_ABILITY_LOOKUP__ = (speaker, abilityName, skillName) => {
+    const who = normalizedText(speaker), want = normalizedText(abilityName);
+    if (!who || !want) return null;
+    const skill = findSkillId(skillName);
+    const sheets = visibleSheets().filter((sheet) => normalizedText(sheet?.player) === who || normalizedText(sheet?.name) === who)
+      .sort((a, b) => (normalizedText(b?.player) === who) - (normalizedText(a?.player) === who));
+    for (const sheet of sheets) {
+      const hits = (sheet.abilities || []).filter((ability) => normalizedText(ability?.name) === want);
+      const ability = hits.find((item) => skill && findSkillId(item?.target) === skill) || hits[0];
+      if (ability) return { type: cleanText(ability.type, 40), name: cleanText(ability.name, 100), text: String(ability.memo || ability.effect || "").trim().slice(0, 600) };
+    }
+    return null;
+  };
   window[DEBUG_KEY] = {
     __owner: signal,
     version: VERSION,
@@ -350,7 +365,7 @@
     document.querySelectorAll(`[${ICON_ATTR}], [${DIALOG_BUTTON_ATTR}], [${ROW_BUTTON_ATTR}]`).forEach((node) => node.remove());
     window.__CCF_TOOLKIT_MENU__?.items?.delete("saikoro");
     window.__CCF_TOOLKIT_MENU__?.sync?.();
-    if (window[DEBUG_KEY]?.__owner === signal) delete window[DEBUG_KEY];
+    if (window[DEBUG_KEY]?.__owner === signal) { delete window[DEBUG_KEY]; delete window.__CCF_SHEET_ABILITY_LOOKUP__; }
     return true;
   }
 
