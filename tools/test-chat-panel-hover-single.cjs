@@ -1,0 +1,51 @@
+// 2026-11-22 (chat-panel 0.5.51): a panel row clones an original row as its template; the original row carries the toolkit hover buttons (eye / break, always on since #556).
+// They must not be cloned: after opening/closing the panel several times every panel row and every original row has exactly one eye and one break button.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-panel.user.js'), 'utf8');
+(async () => {
+  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
+    const page = await context.newPage();
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+    await context.route('https://ccfolia.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<body style="background:#222;color:#fff"><div id="root"></div></body>' }));
+    await context.route('https://firestore.googleapis.com/**', (route) => route.fulfill({ contentType: 'application/json', body: '[]' }));
+    await page.goto('https://ccfolia.test/rooms/test');
+    await page.evaluate(() => {
+      const now = Math.floor(Date.now() / 1000);
+      const entities = { m1: { name: '나', text: '내 말', from: 'me', channel: 'main', createdAt: { seconds: now - 20, nanoseconds: 0 } }, m2: { name: '남', text: '남의 말', from: 'other', channel: 'main', createdAt: { seconds: now - 10, nanoseconds: 0 } } };
+      const state = { app: { state: { roomId: 'r1' }, user: { uid: 'me' } }, entities: { roomMessages: { entities, ids: ['m1', 'm2'], idsGroupBy: { main: ['m1', 'm2'] } }, roomCharacters: { entities: {} }, rooms: { entities: { r1: { owner: 'me' } } } } };
+      const root = document.getElementById('root');
+      root['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
+      const row = (id, name, text) => `<li class="MuiListItem-root" id="${id}" style="position:relative;padding:12px 16px;list-style:none"><div class="MuiListItemAvatar-root"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></div><div class="MuiListItemText-root"><h6 class="MuiTypography-root MuiListItemText-primary">${name}<span class="MuiTypography-caption"> - 오늘</span></h6><p class="MuiListItemText-secondary">${text}</p></div><div class="hover-group" style="position:absolute;top:12px;right:16px;display:flex"><button class="MuiIconButton-root native" aria-label="reply-to">x</button></div></li>`;
+      const ul = document.createElement('ul'); ul.innerHTML = row('own', '나', '내 말') + row('theirs', '남', '남의 말');
+      root.appendChild(ul);
+    });
+    await page.addScriptTag({ content: source });
+    await page.waitForTimeout(300);
+    const api = () => page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__);
+    await api();
+    for (let i = 0; i < 3; i += 1) {
+      await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.open());
+      await page.waitForTimeout(2300);
+      await page.locator('#own').hover(); await page.waitForTimeout(150); // the eye moves into the original hover group
+      await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.close());
+      await page.waitForTimeout(300);
+    }
+    await page.evaluate(() => window.__CCF_SECOND_CHAT_PANEL__.open());
+    await page.waitForTimeout(2300);
+    const counts = await page.evaluate(() => ({
+      native: ['own', 'theirs'].map((id) => { const li = document.getElementById(id); return [li.querySelectorAll('.ccf-hide-btn').length, li.querySelectorAll('.ccf-break-btn').length]; }),
+      panel: [...document.querySelectorAll('.ccf-scp-panel .MuiListItem-root, .ccf-scp-panel .ccf-scp-row')].filter((li) => li.querySelector('.MuiListItemText-secondary, .ccf-scp-text')).map((li) => [li.querySelectorAll('.ccf-hide-btn').length, li.querySelectorAll('.ccf-break-btn').length])
+    }));
+    assert.deepEqual(counts.native, [[1, 1], [1, 1]], 'original rows: one eye, one break');
+    assert(counts.panel.length >= 2, 'panel rows drawn: ' + JSON.stringify(counts));
+    for (const c of counts.panel) assert(c[0] <= 1 && c[1] <= 1, 'panel row: at most one toolkit button set ' + JSON.stringify(counts.panel));
+    assert(counts.panel.some((c) => c[0] === 1), 'panel rows have their own eye');
+    assert.deepEqual(errors, []);
+    console.log('chat panel single hover set PASS');
+  } finally { await browser.close(); }
+})().catch((error) => { console.error(error); process.exit(1); });
