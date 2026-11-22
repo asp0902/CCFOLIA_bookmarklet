@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.50
+// @version      0.5.51
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -949,7 +949,8 @@
     };
     strip(template);
     template.querySelectorAll("*").forEach((el) => {
-      if (el.classList.contains("ccf-render-overlay") || el.classList.contains("ccf-original-hidden")) {
+      // 0.5.51: 오리지널 줄에 붙은 툴킷 호버 버튼(눈·구분선·접기)은 복제하지 않는다 — 패널 줄은 자기 것을 단다(안 지우면 두 벌이 겹침).
+      if (el.matches(".ccf-render-overlay, .ccf-original-hidden, .ccf-hide-btn, .ccf-break-btn, .ccf-hidden-fold")) {
         el.remove();
         return;
       }
