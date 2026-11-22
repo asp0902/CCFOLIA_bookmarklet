@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.130
+// @version      0.1.131
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.130"),
+    version: getUserscriptVersion("0.1.131"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1211,6 +1211,8 @@
   }
 
   // 컷인 목록은 저장소의 roomEffects 조각이 바뀔 때만 다시 읽는다(불변 객체라 참조 비교). 트리거 글(message 또는 name) → 이미지 주소.
+  // 0.1.131: 컷인 이름과 메시지 글을 같은 꼴로 맞춰 비교한다 — 한글 NFC(맥에서 친 이름은 자모가 나뉘어 온다), 공백류(전각·nbsp 포함)는 한 칸.
+  function cutinChatKey(text) { return String(text || "").normalize("NFC").replace(/[\s\u3000\u00a0]+/g, " ").trim(); } // \ud568\uc218 \uc120\uc5b8(\ud638\uc774\uc2a4\ud305)
   function cutinChatMap() {
     const store = cutinChatFindStore();
     if (!store) return cutinChatS().map;
@@ -1225,12 +1227,14 @@
       const url = [effect.imageUrl, effect.image, effect.url].find((value) => typeof value === "string" && /^(?:https?:\/\/|data:image\/)/i.test(value.trim()));
       if (!url) continue;
       for (const trigger of [effect.message, effect.name]) {
-        const text = typeof trigger === "string" ? trigger.trim() : "";
+        const text = typeof trigger === "string" ? cutinChatKey(trigger) : "";
         if (text && !map.has(text)) map.set(text, url.trim());
       }
       cutinChatPreload(url.trim());
     }
+    const grew = map.size > cutinChatS().map.size;
     cutinChatS().map = map;
+    if (grew) setTimeout(() => document.querySelectorAll(MESSAGE_TEXT_SELECTOR).forEach((el) => { if (!el.classList.contains("ccf-original-hidden") && !el.classList.contains("ccf-render-overlay") && !el.closest("textarea, input, [contenteditable]")) applyCutinChatImage(el); }), 0);
     return map;
   }
 
@@ -1238,7 +1242,7 @@
     let text = el.getAttribute(CCF_RAW_ATTR) || el.textContent || "";
     const decoded = extractEnvelope(text);
     if (decoded) text = typeof decoded.envelope?.text === "string" ? decoded.envelope.text : (decoded.visibleText || "");
-    return text.trim();
+    return cutinChatKey(text);
   }
 
   function cutinChatUrlFor(text) {
