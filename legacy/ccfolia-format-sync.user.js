@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.141
+// @version      0.1.142
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.141"),
+    version: getUserscriptVersion("0.1.142"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1131,6 +1131,7 @@
     if (!hidden) return false;
     const raw = hidden.textContent || "";
     if (raw.includes(INVIS_START) && raw.includes(INVIS_END)) return false; // 여전히 엔벨롭 메시지 → 정상 재렌더
+    if (String(el.getAttribute("data-ccf-preset-plain") || "").endsWith(`:${raw}`)) { tryRenderPlainPresetMessage(el); return false; } // 0.1.142 받은 메시지 자동 프리셋 줄(글이 그대로면 유지)
     el.querySelectorAll(":scope > .ccf-render-overlay").forEach((overlay) => overlay.remove());
     while (hidden.firstChild) el.insertBefore(hidden.firstChild, hidden);
     hidden.remove();
@@ -1139,8 +1140,77 @@
     el.removeAttribute(CCF_RAW_ATTR);
     el.removeAttribute("data-ccf-break");
     el.removeAttribute("data-ccf-hidden");
+    el.removeAttribute("data-ccf-preset-plain");
+    el.removeAttribute("data-ccf-preset-v");
     applyNarrationMessageLayout(el, false);
+    tryRenderPlainPresetMessage(el); // 재사용된 줄의 새 글에도 자동 프리셋
     return true;
+  }
+
+  // 0.1.142 받은 메시지 자동 프리셋: 보는 사람의 자동 적용 프리셋을 그릴 때만 입힌다(저장된 메시지는 그대로, 보는 사람마다 자기 프리셋).
+  // 발신자 서식이 있는 구간은 건드리지 않는다. 함수 속성에 캐시(초기화 순서와 무관): 프리셋 목록은 0.5초마다만 읽고, 바뀌면 v 가 올라 다시 그린다.
+  // (이 파일은 렌더 쪽과 서식 바 쪽이 서로 다른 함수 범위다 — 프리셋·커맨드 판별은 서식 바 쪽이 __CCF_FS_PRESET_BRIDGE__ 로 내준다)
+  window.__CCF_FS_PRESET_REFRESH__ = () => receivedPresetState(true);
+  function receivedPresetState(force = false) {
+    let c = receivedPresetState.c;
+    if (!c) {
+      c = receivedPresetState.c = { at: 0, key: null, v: 0, list: [] };
+      [300, 2000].forEach((ms) => setTimeout(() => receivedPresetState(true), ms)); // 첫 호출은 스크립트 초기화 중일 수 있다(프리셋 상수 준비 전) → 곧 다시 읽고, 바뀌었으면 다시 그린다
+    }
+    const now = Date.now();
+    if (!force && now - c.at < 500) return c;
+    c.at = now;
+    let list = [];
+    try { list = window.__CCF_FS_PRESET_BRIDGE__?.list?.() || []; } catch (_) { list = []; }
+    const key = JSON.stringify(list);
+    if (key !== c.key) {
+      const first = c.key === null;
+      c.key = key; c.list = list; c.v += 1;
+      if (!first) setTimeout(() => { try { scanAndRenderAll(); } catch (_) {} }, 0);
+    }
+    return c;
+  }
+  function receivedPresetRuns(text, existingRuns = []) {
+    const out = [], taken = [...existingRuns];
+    for (const preset of receivedPresetState().list) {
+      for (let at = text.indexOf(preset.name); at !== -1; at = text.indexOf(preset.name, at + preset.name.length)) {
+        const end = at + preset.name.length;
+        if (taken.some((run) => run.start < end && run.end > at)) continue;
+        const run = { start: at, end, style: { ...preset.style } };
+        out.push(run); taken.push(run);
+      }
+    }
+    return out;
+  }
+  function isCutinMessageText(text) {
+    try { return !!window.__CCF_FS_PRESET_BRIDGE__?.endsWithCutin?.(text) || !!cutinChatUrlFor(cutinChatKey(text)); } catch (_) { return false; }
+  }
+  // 봉투가 없는 메시지(받은 글·서식 도구 없이 보낸 내 글). 주사위·커맨드·카드·컷인 줄은 제외.
+  function tryRenderPlainPresetMessage(el) {
+    if (!(el instanceof HTMLElement) || !el.matches("p.MuiListItemText-secondary, .ccf-scp-text")) return;
+    const marked = el.getAttribute("data-ccf-preset-plain");
+    const hidden = el.querySelector(":scope > .ccf-original-hidden");
+    if (hidden && marked === null) return; // 봉투 렌더가 맡은 줄
+    const preset = receivedPresetState();
+    if (!preset.list.length && marked === null) return;
+    const nodes = [...(hidden || el).childNodes].filter((node) => !isToolkitRowAddon(node));
+    const source = nodes.every((node) => node.nodeType === 3) ? nodes.map((node) => node.nodeValue).join("") : "";
+    const row = el.closest(".MuiListItem-root, .ccf-scp-row");
+    const eligible = !!source && !!row?.querySelector("h6.MuiListItemText-primary, .ccf-scp-name")
+      && !el.closest('form, [role="dialog"]') && !el.querySelector(toolkitRowAddonSelector())
+      && !source.includes(INVIS_START) && !window.__CCF_FS_PRESET_BRIDGE__?.isCommand?.(source) && !/^\s*\[(?:아이템|어빌리티)/.test(source) && !isCutinMessageText(source);
+    const runs = eligible ? receivedPresetRuns(source) : [];
+    if (!runs.length) {
+      if (marked !== null) { removeRenderOverlay(el); el.removeAttribute("data-ccf-preset-plain"); }
+      return;
+    }
+    const signature = `${preset.v}:${source}`;
+    if (marked === signature) return;
+    const bottom = marked === null ? captureBottomAnchoredMessageScroller(el) : null;
+    const overlay = ensureRenderOverlay(el);
+    renderStyledText(overlay, source, normalizeRuns(runs, source.length), []);
+    el.setAttribute("data-ccf-preset-plain", signature);
+    if (bottom) preserveBottomScrollAfterRender(bottom);
   }
 
   function shouldPauseChatRenderForHistoryLoad(mutations) {
@@ -1383,6 +1453,8 @@
     for (const el of targets) {
       if (isLikelyMessageTextElement(el)) {
         tryRenderEncodedMessage(el);
+      } else {
+        tryRenderPlainPresetMessage(el);
       }
     }
 
@@ -1605,9 +1677,12 @@
     // 원본 raw text(envelope 포함)가 지난 렌더와 동일하면 재작업 불필요.
     // 오버레이 방식에서는 원본 text node를 지우지 않으므로 매 스캔마다 INVIS 마커가
     // 계속 감지되는데, 이 게이트가 없으면 mutation → scanWithin → 재렌더 → mutation... 무한 루프.
-    if (el.getAttribute(CCF_RENDERED_ATTR) === "1" && el.getAttribute(CCF_RAW_ATTR) === text) {
+    const presetVersion = String(receivedPresetState().v);
+    if (el.getAttribute(CCF_RENDERED_ATTR) === "1" && el.getAttribute(CCF_RAW_ATTR) === text && el.getAttribute("data-ccf-preset-v") === presetVersion) {
       return;
     }
+    el.setAttribute("data-ccf-preset-v", presetVersion);
+    el.removeAttribute("data-ccf-preset-plain");
 
     // 가상화 리스트가 이 노드를 다른 메시지로 재사용해 raw text가 바뀐 재렌더인지,
     // 아니면 진짜 처음 렌더인지 구분. 재렌더에서까지 스크롤을 바닥으로 강제하면
@@ -1621,9 +1696,12 @@
     const sourceText = envelope.command === true ? (() => { const copy = el.cloneNode(true); copy.querySelectorAll(`.ccf-render-overlay, ${toolkitRowAddonSelector()}`).forEach((node) => node.remove()); return copy.textContent || ""; })() : "";
     const commandTail = envelope.command === true ? sourceText.slice(sourceText.indexOf(INVIS_END, sourceText.indexOf(INVIS_START) + INVIS_START.length) + INVIS_END.length) : "";
     const renderText = (envelope.text || visibleText || "") + commandTail;
-    const runs = normalizeRuns(commandTail ? (envelope.formatRuns || []).map((run) => (Number(run.end) >= String(envelope.text || "").length ? { ...run, end: renderText.length } : run)) : envelope.formatRuns, renderText.length);
+    const sentRuns = normalizeRuns(commandTail ? (envelope.formatRuns || []).map((run) => (Number(run.end) >= String(envelope.text || "").length ? { ...run, end: renderText.length } : run)) : envelope.formatRuns, renderText.length);
     // 나레이션 상태에서도 Roll20 CSS 매크로가 우선한다: 가운데 정렬·이탤릭을 강제하지 않고 매크로의 서식을 쓴다.
     const macro = envelope.roll20Macro === true;
+    // 0.1.142 발신자 서식이 없는 구간에만 보는 사람의 자동 프리셋(커맨드·Roll20 매크로·컷인 글 제외)
+    const presetRuns = envelope.command === true || macro || envelope.source === "ccr20-roll20-desc" || isCutinMessageText(renderText) ? [] : receivedPresetRuns(renderText, sentRuns);
+    const runs = presetRuns.length ? normalizeRuns([...sentRuns, ...presetRuns], renderText.length) : sentRuns;
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
     const breakBefore = cleanupBlockStyle(envelope.blockStyle).breakBefore === true;
@@ -7347,6 +7425,7 @@
         <div class="ccf-inline-popover-title">서식 프리셋</div>
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add-menu" title="추가" aria-label="추가" aria-haspopup="menu" aria-expanded="false">+</button>
       </div>
+      <label class="ccf-style-received-toggle" title="다른 사람 글이나 서식 없이 보낸 글에도 내 화면에서만 자동 적용 프리셋을 입힙니다(저장된 메시지는 바뀌지 않음)" style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:12px;cursor:pointer"><input type="checkbox" data-style-received${isReceivedPresetEnabled() ? " checked" : ""}> 받은 메시지에도 자동 적용</label>
       <div class="ccf-style-note" data-style-preset-note style="display:none;" role="status"></div>
       <div data-style-add-menu-host></div>
       <div data-style-preset-list>${listMarkup}</div>
@@ -7391,6 +7470,10 @@
       });
     });
     bindStylePresetFolderInputs(popover, toolbar);
+    popover.querySelector("[data-style-received]")?.addEventListener("change", (event) => {
+      try { localStorage.setItem("ccf-format-style-presets-received-v1", event.target.checked ? "1" : "0"); } catch (_) {}
+      window.__CCF_FS_PRESET_REFRESH__?.();
+    });
     // 레이아웃에 끼지 않는 부유 팝업(fixed) — 스크롤바 생성 방지 (#70)
     popover.classList.add("ccf-inline-float-popover", "open");
     popover.setAttribute("aria-hidden", "false");
@@ -12126,6 +12209,7 @@
       localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(list.filter((p) => !p.room)));
       localStorage.setItem(roomKey, JSON.stringify(list.filter((p) => p.room)));
       try { document.querySelectorAll(INLINE_TOOLBAR_SELECTOR).forEach(refreshInlineSvButton); } catch (_) { /* 표시만 */ }
+      setTimeout(() => window.__CCF_FS_PRESET_REFRESH__?.(), 0); // 0.1.142 받은 메시지의 자동 프리셋도 바로 갱신
       return true;
     } catch (error) {
       console.error("[ccf-format-sync] writeStylePresets failed", error);
@@ -12383,6 +12467,20 @@
       return value !== "0";
     } catch (_) { return true; }
   }
+
+  // 0.1.142 받은 메시지 자동 프리셋: 렌더 쪽에 내주는 것(켜진 프리셋 목록·커맨드/컷인 판별)
+  function isReceivedPresetEnabled() {
+    try { return localStorage.getItem("ccf-format-style-presets-received-v1") !== "0"; } catch (_) { return true; }
+  }
+  window.__CCF_FS_PRESET_BRIDGE__ = {
+    list: () => (isReceivedPresetEnabled() && isPresetAutoEnabled() ? readStylePresets() : [])
+      .filter((preset) => preset.auto !== false && preset.name)
+      .map((preset) => ({ name: String(preset.name), style: cleanupStyle(preset.style || {}) }))
+      .filter((preset) => Object.keys(preset.style).length)
+      .sort((a, b) => b.name.length - a.name.length), // 긴 이름 먼저(겹치면 긴 쪽)
+    isCommand: (text) => isChatCommandText(text),
+    endsWithCutin: (text) => endsWithCutinTrigger(text)
+  };
 
   function setPresetAutoEnabled(on) {
     const roomId = stylePresetRoomId();
