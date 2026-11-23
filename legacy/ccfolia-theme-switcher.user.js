@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.59
+// @version      0.2.60
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.59"),
+    version: getUserscriptVersion("0.2.60"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1927,6 +1927,9 @@
       }
       ${scope} .ccf-roll20-die.is-total { width: 64px; height: 70px; font-size: 31px; font-weight: bold; }
       ${scope} .ccf-roll20-die svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #ccc; stroke-width: 1.2; }
+      /* 0.2.60 작은 주사위 선: 도형을 줄이면 선도 같이 얇아져(0.42px) 옅었다 → 크기와 무관한 선 두께 + Roll20 캡처와 맞춘 색 */
+      ${scope} .ccf-roll20-die:not(.is-total) svg path { vector-effect: non-scaling-stroke; stroke-width: 0.8px; }
+      ${scope} .ccf-roll20-die:not(.is-total):not(.is-six):not(.is-one) svg { stroke: #bbb; }
       ${scope} .ccf-roll20-die b { position: absolute; left: 0; right: 0; top: 50%; height: 1em; margin-top: -0.5em; display: block; line-height: 1; text-align: center; font-weight: inherit; font-variant-numeric: tabular-nums; }
       ${scope} .ccf-roll20-check-mod { position: absolute; left: 100%; top: 58%; margin-left: 1px; color: #fff; font-size: 13px; font-weight: 800; line-height: 1; white-space: nowrap; -webkit-text-stroke: 2.5px #333; paint-order: stroke fill; }
       ${scope} .ccf-roll20-check-detail { min-width: 0; text-align: right; }
