@@ -53,6 +53,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await page.evaluate(() => { const f = document.getElementById('composer'); f.style.transition = ''; f.style.transform = ''; }); await page.waitForTimeout(200);
 
     assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa', '⋯']);
+    assert.deepEqual(await bar.locator('[data-inline-group="font"] > [data-inline-group-toggle]').evaluate((b) => [b.textContent, Math.round(b.getBoundingClientRect().width)]), ['가', 30], '0.1.144: the font button is 가 alone, as wide as its neighbours');
     // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes
     await group('deco').locator('[data-inline-group-toggle]').click();
     assert.equal(await isOpen('deco'), true);

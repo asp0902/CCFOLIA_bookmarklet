@@ -42,7 +42,8 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     await page.waitForTimeout(300);
     const menuInfo = await page.evaluate(() => { const m = document.querySelector('.ccf-inline-toolbar [data-inline-group="font"] .ccf-inline-group-menu'); return { items: m.querySelectorAll('[data-inline-font-pick]').length, groups: [...m.querySelectorAll('.ccf-font-group-title')].map((g) => g.textContent), myeongjo: m.querySelector('[data-inline-font-pick="nanum-myeongjo"]').textContent, newOne: m.querySelector('[data-inline-font-pick="gamja-flower"]')?.textContent, asked: window.__fontsAsked.length }; });
     assert.equal(menuInfo.items, 39, 'default + 38 fonts');
-    assert.deepEqual(menuInfo.groups, ['고딕', '명조', '손글씨·장식']);
+    assert.deepEqual(menuInfo.groups, [], '0.1.144: one list, no group headers');
+    { const names = await page.locator('.ccf-inline-toolbar [data-inline-group="font"] [data-inline-font-pick]').evaluateAll((l) => l.map((b) => b.textContent.trim())); const fonts = names.slice(1), ko = fonts.filter((n) => /^[가-힣]/.test(n)), en = fonts.filter((n) => !/^[가-힣]/.test(n)); assert.equal(names[0], '기본'); assert.deepEqual(fonts, [...[...ko].sort((a, b) => a.localeCompare(b, 'ko')), ...[...en].sort((a, b) => a.localeCompare(b, 'ko'))], 'Korean names in order, then Latin'); }
     assert.equal(menuInfo.myeongjo, '나눔명조'); assert.equal(menuInfo.newOne, '감자꽃', 'Korean names');
     assert(menuInfo.asked > 0 && menuInfo.asked < 38, 'only the items in view are loaded: ' + menuInfo.asked);
     await page.locator('.ccf-inline-toolbar [data-inline-font-pick="moirai-one"]').first().scrollIntoViewIfNeeded();

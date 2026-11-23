@@ -42,6 +42,7 @@ const decode = (text) => { const a = text.indexOf(START), b = text.indexOf(END, 
     await ta.click(); await page.keyboard.type('안녕하세요 테스트');
     await open();
     assert.equal(await page.locator('text=이 룸의 서식 프리셋').count(), 0, '2: the room caption is gone');
+    { const look = await pop.evaluate((n) => { const c = getComputedStyle(n); return [c.borderTopWidth, c.boxShadow !== 'none']; }); assert.deepEqual(look, ['0px', true], '0.1.144: Sv window has no outline, a shadow only'); }
     await pop.locator('.ccf-style-preset-apply', { hasText: '빨강' }).click();
     assert.match(await pop.locator('[data-style-preset-note]').textContent(), /먼저 선택/, 'no selection: a note inside the popover'); assert.equal(dialogs.length, 0, 'no alert');
     assert.equal(await page.locator('.ccf-inline-popover.open').count(), 1, 'the popover stays');

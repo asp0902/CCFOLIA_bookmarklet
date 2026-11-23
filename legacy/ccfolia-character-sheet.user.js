@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.66
+// @version      0.5.67
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.66";
+  const VERSION = "0.5.67";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1234,6 +1234,8 @@
   function designFontOptions() {
     const fonts = window.__CCF_MESSAGE_FONTS__, info = window.__CCF_MESSAGE_FONT_INFO__ || {};
     const list = fonts ? Object.entries(fonts).map(([id, family]) => [family, info[id]?.[0] || family]) : [["Noto Sans KR", "본고딕"], ["Noto Serif KR", "본명조"], ["Nanum Gothic", "나눔고딕"], ["Nanum Myeongjo", "나눔명조"]];
+    const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
+    list.sort(byName);
     return [...list, ["serif", "명조 계열"], ["monospace", "고정폭"]].map(([value, label]) => `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}">`).join("");
   }
 
