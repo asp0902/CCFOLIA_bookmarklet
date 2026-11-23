@@ -23,11 +23,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const f = document.querySelector('#scene-field > div'), cs = getComputedStyle(f), r = f.getBoundingClientRect(), stage = document.getElementById('scene-field').getBoundingClientRect();
     return { unit: view.unit, left: Math.round((r.left - stage.left - stage.width / 2) * 100) / 100, top: Math.round((r.top - stage.top - stage.height / 2) * 100) / 100, w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100,
       z: cs.zIndex, bgImage: cs.backgroundImage.slice(0, 40), outline: cs.outlineStyle + ' ' + cs.outlineWidth, imgs: [...f.querySelectorAll('img')].map(i => i.getAttribute('src') + '|' + i.style.objectFit), kids: f.children.length,
-      grid: f.querySelector('div') ? f.querySelector('div').style.backgroundSize : '' };
+      grid: f.querySelector('div') ? f.querySelector('div').style.backgroundSize : '', layer: f.querySelector('div') ? f.querySelector('div').style.backgroundImage : '' };
   }, scene);
   // no image: default grid + outline; an odd size starts trunc(size/2) cells from the centre, not half a cell
   const empty = await field({ fieldWidth: 25, fieldHeight: 15 });
-  assert(empty.bgImage.startsWith('linear-gradient'), 'default grid'); assert.equal(empty.outline, 'solid 4px'); assert.equal(empty.kids, 0);
+  assert(empty.layer.startsWith('linear-gradient'), 'default grid, in a layer scaled as in CCFOLIA'); assert.equal(empty.bgImage, 'none'); assert.equal(empty.outline, 'solid 4px'); assert.equal(empty.kids, 1);
   const near = (x, y) => assert(Math.abs(x - y) < 0.05, `${x} vs ${y}`);
   near(empty.left, -12 * empty.unit); near(empty.top, -7 * empty.unit); near(empty.w, 25 * empty.unit);
   // background then foreground inside the field, no default grid, no outline
@@ -38,7 +38,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.deepEqual((await field({ fieldWidth: 20, fieldHeight: 10, foregroundUrl: img('fg') })).imgs, [img('fg') + '|fill']);
   // display grid: an overlay every gridSize cells; the default grid is not drawn on the field itself
   const grid = await field({ fieldWidth: 20, fieldHeight: 10, displayGrid: true, gridSize: 2 });
-  assert.equal(grid.bgImage, 'none'); assert.equal(grid.kids, 1); assert.equal(grid.grid, `${grid.unit * 2}px ${grid.unit * 2}px`);
+  assert.equal(grid.bgImage, 'none'); assert.equal(grid.kids, 1); assert.equal(grid.grid, '48px 48px');
   // a character carries its name under the token (centred, 8 native px above the token's bottom edge), a marker or item does not
   const label = await page.evaluate(img => {
     renderScene({ fieldWidth: 20, fieldHeight: 10, items: [{ id: 'i', x: 0, y: 0, z: 1, angle: 0, width: 2, height: 2, imageUrl: img }], markers: [], characters: [{ id: 'c', name: '드와이프', x: 48, y: 24, z: 0, angle: 0, width: 4, height: 4, iconUrl: img, status: [] }] });

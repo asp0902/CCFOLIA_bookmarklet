@@ -5,7 +5,13 @@ const inviteToken = params.get("token") || "";
 // "다른 창으로 보기": CCFOLIA opens the chat alone at its own address; here the same page with chat=1 (same login cookie). The main window keeps the sound and the popups.
 const chatOnly = params.get("chat") === "1";
 if (chatOnly) document.documentElement.classList.add("chat-only");
-const openChatWindow = () => window.open(`${location.pathname}#room=${encodeURIComponent(roomId)}&chat=1`, `capybara-chat-${roomId}`, "popup,width=580,height=1050")?.focus();
+// As CCFOLIA 1.37.6: a 380x640 window in the middle of this one, and the chat panel here closes (the > button brings it back).
+const openChatWindow = () => {
+  const win = window.open(`${location.pathname}#room=${encodeURIComponent(roomId)}&chat=1`, `capybara-chat-${roomId}`, `resizable,scrollbars,status,width=380,height=640,left=${innerWidth * 0.5 - 190},top=${innerHeight * 0.5 - 320}`);
+  if (!win) return;
+  win.focus();
+  document.getElementById("chat-close").click();
+};
 const consent = document.getElementById("consent");
 // Remember the display name on this browser so a returning participant does not retype it.
 const NAME_KEY = "capybara-display-name";
@@ -353,21 +359,20 @@ function renderScene(scene) {
   // (line width 1 / 1.8 / 2.6px by zoom, alpha .25, every gridSize cells). Pieces are drawn above it.
   {
     const hasImage = !!(s.backgroundUrl || s.foregroundUrl), scale = unit / 24, lineWidth = scale < 0.3 ? 2.6 : scale < 0.6 ? 1.8 : 1;
-    // CCFOLIA draws these at scale 1 inside a container scaled by the zoom, so on screen every length is multiplied by it; this page draws in screen pixels
-    const lines = (alpha, width) => `linear-gradient(rgba(255, 255, 255, ${alpha}) ${width * scale}px, transparent ${scale}px), linear-gradient(90deg, rgba(255, 255, 255, ${alpha}) ${width * scale}px, transparent ${scale}px)`;
+    // CCFOLIA draws the grid at scale 1 inside a container scaled by the zoom. The same colours drawn directly in screen pixels come out sharper, so the layer is scaled the same way.
+    const lines = (alpha, width) => `linear-gradient(rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px)`;
+    const gridLayer = (alpha, width, cells, edge) => { const layer = document.createElement("div"); layer.style.cssText = `position:absolute;left:${-edge * scale}px;top:${-edge * scale}px;width:${s.fieldWidth * 24 + edge}px;height:${s.fieldHeight * 24 + edge}px;box-sizing:border-box;transform:scale(${scale});transform-origin:0 0;pointer-events:none;background-image:${lines(alpha, width)};background-size:${24 * cells}px ${24 * cells}px`; return layer; };
     const field = document.createElement("div");
     place(field, -Math.trunc(s.fieldWidth / 2), -Math.trunc(s.fieldHeight / 2), s.fieldWidth, s.fieldHeight, 0, -9);
-    field.style.boxSizing = "border-box"; field.style.backgroundSize = `${unit}px ${unit}px`;
-    if (!hasImage && !s.displayGrid) field.style.backgroundImage = lines(0.1, 1);
+    // placed by transform as in CCFOLIA: left/top would snap the lines to whole device pixels
+    field.style.transform = `translate(${field.style.left}, ${field.style.top})`; field.style.left = field.style.top = "0";
+    field.style.boxSizing = "border-box";
+    if (!hasImage && !s.displayGrid) field.append(gridLayer(0.1, 1, 1, 0));
     if (!hasImage) field.style.outline = `${4 * scale}px solid rgba(0, 0, 0, 0.2)`;
     const layer = url => { const img = document.createElement("img"); img.src = url; img.alt = ""; img.referrerPolicy = "no-referrer"; img.draggable = false; img.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;object-fit:${s.fieldObjectFit}`; field.append(img); };
     if (s.backgroundUrl) layer(s.backgroundUrl);
     if (s.foregroundUrl) layer(s.foregroundUrl);
-    if (s.displayGrid) {
-      const grid = document.createElement("div"), step = unit * (s.gridSize || 1);
-      grid.style.cssText = `position:absolute;left:${-scale}px;top:${-scale}px;width:${s.fieldWidth * unit + scale}px;height:${s.fieldHeight * unit + scale}px;box-sizing:border-box;background-image:${lines(hasImage ? 0.25 : 0.1, lineWidth)};background-size:${step}px ${step}px`;
-      field.append(grid);
-    }
+    if (s.displayGrid) field.append(gridLayer(hasImage ? 0.25 : 0.1, lineWidth, s.gridSize || 1, 1));
     nodes.push(field);
   }
   // Layers measured on ccfolia.com (GM tab): panels z-index = their z (1), decks 1 (the deck's zIndex field, not its z), characters 100 + z, dice symbols 10000 (above everything).
