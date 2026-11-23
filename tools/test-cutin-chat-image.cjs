@@ -77,6 +77,20 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     await addRow('plain', '평범한 말'); await addRow('contains', '번개가 친다'); await addRow('noimg', '이미지 없음');
     await page.waitForTimeout(500);
     for (const id of ['plain', 'contains', 'noimg']) assert.equal(await imgs(id).count(), 0, `${id}: no image`);
+    // 0.1.146: CCFOLIA's rule is "the text ends with the name", with or without our envelope (a panel's click action, someone without the toolkit)
+    await addRow('bodyName', '도와줘 번개');
+    await page.waitForSelector('#bodyName .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    assert.equal(await imgs('bodyName').getAttribute('src'), GIF); await page.waitForTimeout(150);
+    assert.equal((await look('bodyName')).hideAttr, null, 'text + name: the text stays');
+    await page.evaluate((png) => { const re = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...re, ids: [...re.ids, 'e7'], entities: { ...re.entities, e7: { name: '큰 번개', imageUrl: png } } }; }, PNG);
+    await addRow('poke2', '평범'); await addRow('longest', '아주 큰 번개');
+    await page.waitForSelector('#longest .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    assert.equal(await imgs('longest').getAttribute('src'), PNG, 'the longest name wins');
+    const envelope = (data) => { const bytes = Buffer.from(Buffer.from(JSON.stringify(data), 'utf8').toString('base64'), 'latin1'), map = ['\u200B', '\u200C', '\u200D', '\u2060']; let out = '\u2063\u2063\u2063'; for (const b of bytes) for (const shift of [6, 4, 2, 0]) out += map[(b >> shift) & 3]; return out + '\u2062\u2062\u2062'; };
+    await addRow('envBody', `글 ${envelope({ v: 1, text: '글 ' })}번개`);
+    await page.waitForSelector('#envBody .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    await addRow('envOnly', `${envelope({ v: 1, text: '번개' })}번개`);
+    await page.waitForFunction(() => document.getElementById('envOnly').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 3000 });
     // no duplicates on re-scan / text change back and forth
     await page.evaluate(() => { const p = document.getElementById('trigger'); p.firstChild.nodeValue = '번개'; p.appendChild(document.createElement('b')).remove(); });
     await page.waitForTimeout(400);
