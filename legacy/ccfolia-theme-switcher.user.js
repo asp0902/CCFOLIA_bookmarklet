@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.60
+// @version      0.2.61
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -237,7 +237,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.60"),
+    version: getUserscriptVersion("0.2.61"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1499,9 +1499,10 @@
           width: 238px;
           padding: 12px;
           box-sizing: border-box;
-          border: 1px solid var(--ccf-theme-panel-border, rgba(127, 127, 127, 0.32));
+          border: 0;
+          border-radius: 4px;
           background: var(--ccf-theme-panel-glass-bg, rgba(28, 28, 30, 0.92));
-          box-shadow: 0 18px 36px var(--ccf-theme-shadow, rgba(0, 0, 0, 0.24));
+          box-shadow: 0 5px 5px -3px rgba(0, 0, 0, 0.2), 0 8px 10px 1px rgba(0, 0, 0, 0.14), 0 3px 14px 2px rgba(0, 0, 0, 0.12); /* 0.2.61 코코포리아 팝오버 그림자만(외곽선 없음) */
           z-index: 2147483600;
           display: none;
           backdrop-filter: blur(12px);
@@ -3157,9 +3158,10 @@
     }
 
     if (proxy instanceof HTMLInputElement) {
+      const modeChanged = proxy.getAttribute("data-ccf-character-color-mode") !== mode;
       proxy.setAttribute("data-ccf-character-color-mode", mode);
       proxy.placeholder = getCharacterColorInputPlaceholder(mode);
-      proxy.value = formatCharacterColorInputForMode(getCharacterColorInputValue(container), mode);
+      if (modeChanged || document.activeElement !== proxy) proxy.value = formatCharacterColorInputForMode(getCharacterColorInputValue(container), mode); // 0.2.61 치는 중에는 덮어쓰지 않는다
     }
   }
 
@@ -3586,6 +3588,8 @@
       </div>
     `;
     document.body.appendChild(popover);
+    // 0.2.61 코코포리아 대화상자의 포커스 가두기(document 의 focusin)가 대화상자 밖인 이 창의 입력칸에서 포커스를 빼앗아 코드를 칠 수 없었다 → 이 창 안의 focusin 은 밖으로 보내지 않는다
+    popover.addEventListener("focusin", (event) => event.stopPropagation());
 
     const sv = popover.querySelector(".ccf-character-color-popover-sv");
     const hue = popover.querySelector(".ccf-character-color-popover-hue");
@@ -3631,6 +3635,8 @@
         event.preventDefault();
         closeCharacterColorPopover(true);
       });
+
+      hex.addEventListener("blur", () => syncCharacterColorPopoverUi()); // 치던 값(3자리 등)은 나갈 때 정식 표기로
     }
 
     if (modeButton instanceof HTMLButtonElement) {
@@ -3859,7 +3865,11 @@
     }
 
     if (hex instanceof HTMLInputElement) {
-      hex.value = formatCharacterColorInputForMode(currentHex, characterColorPopoverInputMode);
+      // 0.2.61 치는 중에는 덮어쓰지 않는다("abc" 가 곧바로 AABBCC 가 되어 6자리를 칠 수 없었다). 입력 방식을 바꾸면 새 표기로.
+      if (document.activeElement !== hex || hex.dataset.mode !== characterColorPopoverInputMode) {
+        hex.value = formatCharacterColorInputForMode(currentHex, characterColorPopoverInputMode);
+        hex.dataset.mode = characterColorPopoverInputMode;
+      }
       hex.placeholder = getCharacterColorInputPlaceholder(characterColorPopoverInputMode);
       hex.setAttribute("aria-label", `${characterColorPopoverInputMode.toUpperCase()} color`);
     }
