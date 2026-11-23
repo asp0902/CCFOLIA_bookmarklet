@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         CCFOLIA GIF Compress by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-gif-compress
-// @version      0.1.0
-// @description  Re-encodes animated GIFs over 5MB in the browser (keeping the animation) before CCFOLIA's upload handler sees them.
-// @description:ko 5MB를 넘는 움직이는 GIF를 업로드하기 전에 브라우저 안에서 움직임을 유지한 채 다시 인코딩해 5MB 아래로 줄입니다.
+// @version      0.1.1
+// @description  Re-encodes animated GIFs and WEBPs over 5MB in the browser (keeping the animation) before CCFOLIA's upload handler sees them.
+// @description:ko 5MB를 넘는 움직이는 GIF·WEBP를 업로드하기 전에 브라우저 안에서 움직임을 유지한 채 5MB 아래 GIF로 다시 인코딩합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
 // @match        https://ccfolia.com/*
 // @match        https://*.ccfolia.com/*
@@ -865,8 +865,9 @@ var src_default = GIFEncoder;
 // until the file is under the target. Timing (frame durations, total length) and the loop count are kept; transparency is kept.
 async function ccfGifCompressCore(buffer, opts, post, cancelled, yieldFn, G) {
   const target = opts.target;
-  const decoder = new ImageDecoder({ data: buffer, type: 'image/gif' });
+  const decoder = new ImageDecoder({ data: buffer, type: opts.type || 'image/gif' });
   await decoder.tracks.ready;
+  await decoder.completed;
   const track = decoder.tracks.selectedTrack;
   const frameCount = track.frameCount;
   if (!track.animated || frameCount < 2) { decoder.close(); return { skip: 'static' }; }
@@ -966,7 +967,10 @@ function ccfGifWorkerSource() {
   const TARGET = Math.floor(4.8 * 1024 * 1024);
   const enabled = () => { try { return localStorage.getItem("ccfGifCompress") !== "off"; } catch (_) { return true; } };
   const isGifName = (file) => file.type === "image/gif" || /\.gif$/i.test(file.name || "");
-  const needsWork = (file) => file instanceof File && isGifName(file) && file.size > LIMIT;
+  // CCFOLIA's own compression (over 5,242,880 bytes, after a confirm) keeps only the first frame of a WEBP. A browser cannot encode an animated WEBP, so it becomes a GIF with the bundled encoder.
+  const isWebpName = (file) => file.type === "image/webp" || /\.webp$/i.test(file.name || "");
+  const needsWork = (file) => file instanceof File && (isGifName(file) || isWebpName(file)) && file.size > LIMIT;
+  const workName = (file) => (isWebpName(file) ? "WEBP→GIF 변환" : "GIF 압축");
   const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
   const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -994,13 +998,13 @@ function ccfGifWorkerSource() {
   async function compress(file) {
     if (typeof ImageDecoder !== "function" || typeof OffscreenCanvas !== "function") return { skip: "unsupported" };
     const buffer = await file.arrayBuffer();
-    const opts = { target: TARGET, originalSize: file.size };
+    const opts = { target: TARGET, originalSize: file.size, type: isWebpName(file) ? "image/webp" : "image/gif" }, work = workName(file);
     let cancelled = false;
     const onProgress = (message) => {
       if (message.type !== "progress") return;
-      showToast(`GIF 압축 중… ${Math.round(message.frac * 100)}% (${message.width}×${message.height}${message.step > 1 ? `, 프레임 ${message.step}개 중 1개` : ""}${message.colors < 256 ? `, ${message.colors}색` : ""})`, { cancel: () => { cancelled = true; worker?.postMessage({ type: "cancel" }); } });
+      showToast(`${work} 중… ${Math.round(message.frac * 100)}% (${message.width}×${message.height}${message.step > 1 ? `, 프레임 ${message.step}개 중 1개` : ""}${message.colors < 256 ? `, ${message.colors}색` : ""})`, { cancel: () => { cancelled = true; worker?.postMessage({ type: "cancel" }); } });
     };
-    showToast("GIF 압축 준비 중…", { cancel: () => { cancelled = true; worker?.postMessage({ type: "cancel" }); } });
+    showToast(`${work} 준비 중…`, { cancel: () => { cancelled = true; worker?.postMessage({ type: "cancel" }); } });
     let worker = null;
     try {
       const url = URL.createObjectURL(new Blob([ccfGifWorkerSource()], { type: "text/javascript" }));
@@ -1026,19 +1030,19 @@ function ccfGifWorkerSource() {
 
   // The File that replaces the original, or null (keep the original; CCFOLIA shows its own warning).
   async function processFile(file) {
-    const started = performance.now();
+    const started = performance.now(), work = workName(file), kind = isWebpName(file) ? "WEBP" : "GIF";
     try {
       const result = await compress(file);
-      if (result.skip === "unsupported") { showToast("이 브라우저는 GIF 압축(ImageDecoder)을 지원하지 않습니다. 원본 그대로 올립니다.", { ms: 6000, error: true }); return null; }
+      if (result.skip === "unsupported") { showToast(`이 브라우저는 ${work}(ImageDecoder)을 지원하지 않습니다. 원본 그대로 올립니다.`, { ms: 6000, error: true }); return null; }
       if (result.skip === "static") { hideToast(); return null; }
-      if (result.cancelled) { showToast("GIF 압축을 취소했습니다. 원본 그대로 올립니다.", { ms: 4000 }); return null; }
-      if (result.failed) { showToast(`GIF를 5MB 아래로 줄이지 못했습니다(최소 ${mb(result.size)}). 원본 그대로 올립니다.`, { ms: 7000, error: true }); return null; }
-      const out = new File([result.bytes], file.name, { type: "image/gif", lastModified: Date.now() });
-      showToast(`GIF 압축 완료: ${mb(file.size)} → ${mb(out.size)} (${result.width}×${result.height}, 프레임 ${result.originalFrames}→${result.frames})`, { ms: 6000 });
+      if (result.cancelled) { showToast(`${work}을 취소했습니다. 원본 그대로 올립니다.`, { ms: 4000 }); return null; }
+      if (result.failed) { showToast(`${kind}를 5MB 아래로 줄이지 못했습니다(최소 ${mb(result.size)}). 원본 그대로 올립니다.`, { ms: 7000, error: true }); return null; }
+      const out = new File([result.bytes], isWebpName(file) ? String(file.name || "image").replace(/\.webp$/i, "") + ".gif" : file.name, { type: "image/gif", lastModified: Date.now() });
+      showToast(`${work} 완료: ${mb(file.size)} → ${mb(out.size)} (GIF, ${result.width}×${result.height}, 프레임 ${result.originalFrames}→${result.frames})`, { ms: 6000 });
       window.__CCF_GIF_COMPRESS__.last = { from: file.size, to: out.size, width: result.width, height: result.height, frames: result.frames, originalFrames: result.originalFrames, attempts: result.attempts, ms: Math.round(performance.now() - started) };
       return out;
     } catch (error) {
-      showToast(`GIF 압축 실패: ${error.message}. 원본 그대로 올립니다.`, { ms: 7000, error: true });
+      showToast(`${work} 실패: ${error.message}. 원본 그대로 올립니다.`, { ms: 7000, error: true });
       return null;
     }
   }
@@ -1084,5 +1088,5 @@ function ccfGifWorkerSource() {
     });
   }, true);
 
-  window.__CCF_GIF_COMPRESS__ = { version: "0.1.0", limit: LIMIT, target: TARGET, enabled, compress, process: processFile, gifenc: ccfGifencModule };
+  window.__CCF_GIF_COMPRESS__ = { version: "0.1.1", limit: LIMIT, target: TARGET, enabled, compress, process: processFile, gifenc: ccfGifencModule };
 })();
