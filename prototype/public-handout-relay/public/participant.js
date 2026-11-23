@@ -112,9 +112,19 @@ let ytPlaying = false;
 const roomAudio = { media: { el: null, url: "", cfg: null }, sound: { el: null, url: "", cfg: null } };
 const halted = new Set();
 const roomAudioOn = () => Object.values(roomAudio).some(slot => slot.url);
+// A file that is a track: playing, and looping or at least 8 s (a short sound alone is not one, the same rule as the GM page).
+const playingFile = () => [roomAudio.media, roomAudio.sound].find(slot => slot.url && slot.el && !slot.el.paused && !slot.el.ended && (slot.el.loop || slot.el.duration >= 8))?.el || null;
+function syncFileProgress() {
+  refreshBgmBar();
+  const file = bgmKey ? null : playingFile();
+  if (!file) return;
+  const dur = Number.isFinite(file.duration) ? file.duration : 0, seek = document.getElementById("bgm-seek");
+  document.getElementById("bgm-cur").textContent = fmtTime(file.currentTime); document.getElementById("bgm-dur").textContent = fmtTime(dur);
+  if (!seek.dataset.dragging) { seek.value = dur ? String(Math.round((file.currentTime / dur) * 1000)) : "0"; seek.style.setProperty("--p", `${dur ? (file.currentTime / dur) * 100 : 0}%`); }
+}
 function refreshBgmBar() {
-  // the bar is always there (name "BGM", volume and mute work), like CCFOLIA's; its second line (progress) only while a YouTube BGM plays (the bar is absolutely placed: the first line does not move when the second appears)
-  bgmRow2.hidden = !bgmKey;
+  // the bar is always there (name "BGM", volume and mute work), like CCFOLIA's; its second line (progress) only while a BGM really plays, YouTube or file (the bar is absolutely placed: the first line does not move when the second appears)
+  bgmRow2.hidden = !bgmKey && !playingFile();
   if (!ytPlaying) document.getElementById("bgm-name").textContent = roomAudio.media.cfg?.name || roomAudio.sound.cfg?.name || "BGM";
   // two slots like CCFOLIA's bar: BGM01 = the BGM (YouTube or file), BGM02 = the second sound; the one playing is blue, its name is the tooltip
   const slot1 = document.getElementById("bgm-slot1"), slot2 = document.getElementById("bgm-slot2");
@@ -136,7 +146,7 @@ function syncRoomAudio(scene) {
       if (slot.el) { slot.el.pause(); slot.el.removeAttribute("src"); }
       slot.url = ""; slot.cfg = null; continue;
     }
-    slot.cfg = cfg; slot.el ||= new Audio(); slot.el.loop = cfg.repeat; applyRoomAudioVolume();
+    slot.cfg = cfg; if (!slot.el) { slot.el = new Audio(); slot.el.onplay = slot.el.onpause = slot.el.onended = slot.el.ondurationchange = slot.el.ontimeupdate = syncFileProgress; } slot.el.loop = cfg.repeat; applyRoomAudioVolume();
     if (slot.url !== cfg.url) {
       slot.url = cfg.url; slot.el.src = cfg.url; slot.el.currentTime = 0;
       slot.el.play().catch(() => { blockedAudio = true; }); // autoplay blocked: the next click or key starts it
@@ -182,7 +192,7 @@ function playCutins(scene) {
 const seekInput = document.getElementById("bgm-seek");
 seekInput.addEventListener("pointerdown", () => { seekInput.dataset.dragging = "1"; });
 seekInput.addEventListener("input", () => { seekInput.style.setProperty("--p", `${seekInput.value / 10}%`); });
-seekInput.addEventListener("change", () => { delete seekInput.dataset.dragging; try { const dur = ytPlayer?.getDuration?.() || 0; ytPlayer?.seekTo((seekInput.value / 1000) * dur, true); } catch (_) {} });
+seekInput.addEventListener("change", () => { delete seekInput.dataset.dragging; const file = bgmKey ? null : playingFile(); if (file) { if (Number.isFinite(file.duration)) file.currentTime = (seekInput.value / 1000) * file.duration; return; } try { const dur = ytPlayer?.getDuration?.() || 0; ytPlayer?.seekTo((seekInput.value / 1000) * dur, true); } catch (_) {} });
 seekInput.addEventListener("pointerup", () => { delete seekInput.dataset.dragging; });
 // Handout popup: when the GM shares (or updates) a handout it pops up over the page like a CCFOLIA dialog; "핸드아웃" in the header reopens it.
 const handoutEl = document.getElementById("handout");

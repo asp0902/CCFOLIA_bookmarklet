@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.47
+// @version      0.3.48
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.47";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.48";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -6514,6 +6514,9 @@
     const range = ccfBgmProgressRoot.querySelector(".ccf-bgm-progress-input");
     const current = ccfBgmProgressRoot.querySelector(".ccf-bgm-current");
     const duration = ccfBgmProgressRoot.querySelector(".ccf-bgm-duration");
+    // 기억해 둔 요소가 옛것이어도 지금 재생 중인 곡의 시간을 읽는다.
+    const playingMedia = findPlayingCcfBgmTrackMedia();
+    if (playingMedia) ccfBgmLastNativeMedia = playingMedia;
     const playback = readCcfBgmPlaybackTime();
     let ratio = playback.total > 0 ? Math.max(0, Math.min(1, playback.now / playback.total)) : 0;
     let displayNow = playback.now;
@@ -6582,9 +6585,11 @@
 
     // 0.3.46: 진행바(둘째 줄)는 실제로 곡이 걸려 있을 때만 보인다 — 유튜브 BGM 이 재생·일시정지·버퍼링 중이거나 반복 재시작 대기, 또는 네이티브 오디오가 지금 재생 중.
     // 끝난 곡·정지·룸 이동·삭제 뒤, 룸 입장 때 잠깐 울리고 끝난 소리(00:02/00:02 로 남던 것)는 숨긴다. 매 주기 같은 판정을 탄다.
-    const nativeMedia = ccfBgmLastNativeMedia;
+    // 0.3.48: 코코포리아는 BGM 을 DOM 에 붙이지 않은 new Audio 로 재생하므로 isConnected 로 거르면 안 된다. 8초 미만의 반복 없는 소리(입장음)는 곡이 아니다.
+    const webAudio = ccfBgmLastWebAudio;
     const hasTrack = (!!ccfBgmActiveSlotKey && (playerState === 1 || playerState === 2 || playerState === 3 || shouldRestartEndedCcfBgm(playerState)))
-      || (!!nativeMedia && !nativeMedia.paused && !nativeMedia.ended && nativeMedia.isConnected !== false);
+      || !!playingMedia
+      || (!!webAudio && !webAudio.stopped && (webAudio.loop || webAudio.total >= BGM_WEB_AUDIO_MIN_DURATION));
     const idleWant = hasTrack ? "0" : "1";
     if (ccfBgmProgressRoot.getAttribute("data-ccf-bgm-idle") !== idleWant) ccfBgmProgressRoot.setAttribute("data-ccf-bgm-idle", idleWant);
 
@@ -6691,6 +6696,12 @@
     }
 
     return null;
+  }
+
+  function findPlayingCcfBgmTrackMedia() {
+    return getCcfNativeMediaCandidates()
+      .filter((media) => media instanceof HTMLMediaElement && isPotentialNativeBgmMedia(media) && !media.paused && !media.ended && (media.loop || media.duration >= BGM_WEB_AUDIO_MIN_DURATION))
+      .sort((a, b) => getNativeMediaScore(b) - getNativeMediaScore(a))[0] || null;
   }
 
   function findActiveNativeBgmMedia() {
