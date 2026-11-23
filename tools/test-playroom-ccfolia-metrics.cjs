@@ -37,6 +37,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const x = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; };
     out.toolkit = { pal: x('#pal-btn')[0], color: x('#color-btn')[0], help: x('#help-btn')[0], aa: x('.fmt-group[data-group="deco"] .fmt-group-btn'), more: x('.fmt-group[data-group="extra"] .fmt-group-btn'), send: x('.dice-row button[type=submit]'), bold: x('.fmt-row button[aria-label="Bold"]'), size: x('.fmt-size'), font: Math.round(document.querySelector('.fmt-group[data-group="font"] .fmt-group-btn').getBoundingClientRect().left) };
     { const img = document.getElementById('speaker-img'), icon = document.querySelector('#speaker-btn svg'); out.noFaceHidden = getComputedStyle(img).display === 'none'; img.hidden = false; icon.style.display = 'none'; out.face2 = x('#speaker-img'); out.faceH = Math.round(img.getBoundingClientRect().height); img.hidden = true; icon.style.display = ''; }
+    { const b = document.getElementById('speaker-btn'), i = b.querySelector('svg').getBoundingClientRect(), c = getComputedStyle(b), hint = getComputedStyle(document.getElementById('chat-input'), '::placeholder'), nameHint = getComputedStyle(document.getElementById('chat-name'), '::placeholder'); out.speaker = { box: x('#speaker-btn'), icon: [Math.round(i.left), Math.round(i.width)], edge: c.boxShadow, gapToName: x('#chat-name')[0] - (x('#speaker-btn')[0] + x('#speaker-btn')[1]) }; out.hints = { msg: [hint.fontSize, hint.lineHeight, hint.color, hint.opacity], name: [nameHint.fontSize, nameHint.color, nameHint.opacity] }; }
     const line = getComputedStyle(document.querySelector('.dice-footer')); out.footLine = [line.borderTopStyle, line.borderTopColor];
     const pal = cs('#pal-btn'); out.pal = [Math.round(pal.r.width), Math.round(pal.r.height), pal.s.borderRadius];
     const face = cs('#speaker-btn'); out.face = [Math.round(face.r.width), Math.round(face.r.height)];
@@ -54,6 +55,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // CCFOLIA with the toolkit on, measured at 1440x900
   assert.deepEqual(m.toolkit, { pal: 1326, color: 1360, help: 1398, aa: [1314, 38], more: [1354, 38], send: [1394, 38], bold: [1071, 30], size: [1341, 32], font: 1373 }, 'toolkit input area');
   assert.deepEqual([m.noFaceHidden, m.face2, m.faceH], [true, [1073, 40], 40], 'speaker picture: 40x40 square filling the row');
+  assert.deepEqual(m.speaker, { box: [1073, 40], icon: [1081, 24], edge: 'rgba(0, 0, 0, 0.12) 0px 0px 0px 0.667px inset', gapToName: 0 }, 'speaker box against the name box');
+  assert.deepEqual(m.hints, { msg: ['14px', '23px', 'rgb(255, 255, 255)', '0.5'], name: ['16px', 'rgb(255, 255, 255)', '0.5'] }, 'placeholders');
   assert.deepEqual(m.footLine, ['solid', 'rgba(255, 255, 255, 0.12)']);
   assert.deepEqual(m.d4, [1077, 30, '3px'], 'dice row start'); assert.equal(m.scroll, 'scroll'); assert.equal(m.footLs, '0.39996px');
   assert(Math.abs(m.footY - 874) <= 1, 'Dicebot line y ' + m.footY);

@@ -679,7 +679,8 @@ function fillMirrorRow(row, message) {
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; tail().append(edited); }
   }
 }
-const isSameSpeakerRun = (previousName, message) => previousName !== null && previousName === (message.author || "noname");
+const speakerRunKey = message => `${message.author || "noname"}\0${message.icon || ""}`; // the same name with another standing picture is a new group (data values, no waiting for the picture to load)
+const isSameSpeakerRun = (previousKey, message) => previousKey !== null && previousKey === speakerRunKey(message);
 const renderState = data => {
   showHealth(data.health);
   renderTabs(data);
@@ -710,7 +711,7 @@ const renderState = data => {
     const item = document.createElement("li");
     // Measured on ccfolia.com: a message from the same speaker as the one right above (same name, any time gap) drops the avatar, the header and the top padding.
     if (isSameSpeakerRun(previousName, message)) item.classList.add("merged");
-    previousName = message.author || "noname";
+    previousName = speakerRunKey(message);
     for (const [flag, on] of Object.entries(message.roll || {})) if (on === true) item.classList.add(`roll-${flag}`);
     const name = message.author || "noname";
     const avatar = document.createElement("div"); avatar.className = "avatar";
