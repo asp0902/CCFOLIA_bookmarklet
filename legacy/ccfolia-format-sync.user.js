@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.142
+// @version      0.1.143
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.142"),
+    version: getUserscriptVersion("0.1.143"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4345,8 +4345,9 @@
       .ccf-inline-toolbar [data-inline-group="deco"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; }
       /* 0.1.138 Aa·⋯ 는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치는 placeInlineGroupsInDiceRow) — 높이는 주사위 줄 단추에 맞추고 글자 크기는 그대로 */
       .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) { position: fixed !important; z-index: 1300; display: inline-flex; align-items: center; margin: 0 !important; }
-      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; width: 24px !important; min-width: 24px !important; padding: 0 !important; }
-      /* 0.1.139 폭 24px: D100 과 전송 사이(실측 57px, 오리지널·추가 패널 같음)에 Aa·⋯ 가 겹치지 않고 들어간다 */
+      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; width: var(--ccf-dice-btn-w, 38px) !important; min-width: var(--ccf-dice-btn-w, 38px) !important; padding: 0 !important; }
+      /* 0.1.143 [Aa][⋯][전송] 같은 폭(폭은 placeInlineGroupsInDiceRow 가 재서 정함) */
+      html button[data-ccf-dice-send="1"] { flex: 0 0 var(--ccf-dice-btn-w, 38px) !important; width: var(--ccf-dice-btn-w, 38px) !important; min-width: var(--ccf-dice-btn-w, 38px) !important; max-width: var(--ccf-dice-btn-w, 38px) !important; padding-left: 0 !important; padding-right: 0 !important; font-size: var(--ccf-dice-send-font, 13px) !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; }
       .ccf-inline-row-break {
         flex: 0 0 100%;
         width: 100%;
@@ -5745,16 +5746,29 @@
     const submit = findDiceRowSubmit(toolbar);
     const toolbarShown = toolbar.getBoundingClientRect().width > 0;
     if (!submit || !toolbarShown || groups.length < 2) {
-      if (toolbar.classList.contains("ccf-groups-in-dice-row")) { toolbar.classList.remove("ccf-groups-in-dice-row"); groups.forEach((group) => { group.style.left = ""; group.style.top = ""; }); }
+      if (toolbar.classList.contains("ccf-groups-in-dice-row")) {
+        toolbar.classList.remove("ccf-groups-in-dice-row"); groups.forEach((group) => { group.style.left = ""; group.style.top = ""; });
+        const marked = toolbar.__ccfDiceSend; if (marked) { marked.removeAttribute("data-ccf-dice-send"); marked.style.removeProperty("--ccf-dice-btn-w"); marked.style.removeProperty("--ccf-dice-send-font"); toolbar.__ccfDiceSend = null; }
+      }
       return;
     }
     if (!toolbar.classList.contains("ccf-groups-in-dice-row")) toolbar.classList.add("ccf-groups-in-dice-row");
-    const s = submit.getBoundingClientRect();
+    // 0.1.143 [Aa][⋯][전송]을 같은 폭으로: 묶음 전체는 지금과 같은 118px(38 + 2 + 38 + 2 + 38), 좁아서 주사위와 닿으면 셋이 같이 줄인다(최소 24px).
     const row = submit.parentElement;
-    const diceButton = row?.querySelector?.('button[aria-label^="D"]') || [...(row?.children || [])].find((el) => el !== submit && el.tagName === "BUTTON");
-    const height = Math.round(diceButton?.getBoundingClientRect().height || s.height || 32);
+    if (toolbar.__ccfDiceSend !== submit) { toolbar.__ccfDiceSend?.removeAttribute("data-ccf-dice-send"); toolbar.__ccfDiceSend = submit; }
+    if (submit.getAttribute("data-ccf-dice-send") !== "1") submit.setAttribute("data-ccf-dice-send", "1");
+    const sendRight = submit.getBoundingClientRect().right;
+    const diceRight = Math.max(0, ...[...(row?.querySelectorAll?.('button[aria-label^="D"], .ccf-scp-die') || [])].map((die) => die.getBoundingClientRect()).filter((rect) => rect.width > 0).map((rect) => rect.right));
+    const room = diceRight ? Math.min(118, sendRight - diceRight - 3) : 118;
+    const unit = Math.max(24, Math.min(38, Math.floor((room - 4) / 3)));
+    if (submit.style.getPropertyValue("--ccf-dice-btn-w") !== `${unit}px`) submit.style.setProperty("--ccf-dice-btn-w", `${unit}px`);
+    const sendFont = unit < 34 ? "11px" : "13px"; // 좁을 때 'Send' 같은 글자도 칸 안에
+    if (submit.style.getPropertyValue("--ccf-dice-send-font") !== sendFont) submit.style.setProperty("--ccf-dice-send-font", sendFont);
+    if (toolbar.style.getPropertyValue("--ccf-dice-btn-w") !== `${unit}px`) toolbar.style.setProperty("--ccf-dice-btn-w", `${unit}px`);
+    const s = submit.getBoundingClientRect();
+    const height = Math.round(s.height * 100) / 100 || 31; // 전송 단추와 같은 높이·위
     if (toolbar.style.getPropertyValue("--ccf-dice-btn-h") !== `${height}px`) toolbar.style.setProperty("--ccf-dice-btn-h", `${height}px`);
-    let right = s.left - 4; // 전송 단추와 간격(예전 Roll20 단추와 같은 4px)
+    let right = s.left - 2;
     for (const group of groups) {
       const w = group.getBoundingClientRect().width || 30;
       const left = right - w, top = s.top + (s.height - height) / 2;

@@ -35,13 +35,21 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await lines(300);
     // Aa ⋯ [전송]: right of ⋯ = send left - 4, Aa right before ⋯, same vertical centre as the send button
     const slot = await page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const s = r(document.querySelector('#composer button[type="submit"]')), e = r(document.querySelector('[data-inline-group="extra"]')), d = r(document.querySelector('[data-inline-group="deco"]')); return { send: [s.left, s.top + s.height / 2], extra: [e.left, e.right, e.top + e.height / 2], deco: [d.left, d.right, d.top + d.height / 2] }; });
-    assert(Math.abs(slot.extra[1] - (slot.send[0] - 4)) <= 1 && Math.abs(slot.deco[1] - (slot.extra[0] - 2)) <= 1, 'Aa ⋯ right before the send button ' + JSON.stringify(slot));
+    assert(Math.abs(slot.extra[1] - (slot.send[0] - 2)) <= 1 && Math.abs(slot.deco[1] - (slot.extra[0] - 2)) <= 1, 'Aa ⋯ right before the send button ' + JSON.stringify(slot));
+    // 0.1.143 [Aa][⋯][전송] are equal (≤1px), same height; a narrow row shrinks them together, never over the dice, also with a long send label
+    const three = () => page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const send = document.querySelector('#composer button[type="submit"]'), list = [r(document.querySelector('[data-inline-group="deco"] > button')), r(document.querySelector('[data-inline-group="extra"] > button')), r(send)], die = r(document.querySelector('#composer button[aria-label="D4"]')); return { w: list.map((x) => x.width), h: list.map((x) => x.height), top: list.map((x) => x.top), clearOfDice: list[0].left >= die.right, oneLine: send.scrollWidth <= send.clientWidth + 1 }; });
+    const equal = (v) => Math.max(...v) - Math.min(...v) <= 1;
+    await page.waitForTimeout(80); let t3 = await three();
+    assert(equal(t3.w) && equal(t3.h) && equal(t3.top) && t3.clearOfDice, 'equal buttons ' + JSON.stringify(t3));
+    await page.evaluate(() => { document.querySelector('#composer button[type="submit"]').textContent = 'Send'; document.getElementById('composer').style.width = '150px'; }); await page.waitForTimeout(120); t3 = await three();
+    assert(equal(t3.w) && t3.w[0] >= 24 && t3.clearOfDice && t3.oneLine, 'narrow row, Send label ' + JSON.stringify(t3));
+    await page.evaluate(() => { document.querySelector('#composer button[type="submit"]').textContent = '전송'; document.getElementById('composer').style.width = '300px'; }); await page.waitForTimeout(120);
     assert(Math.abs(slot.extra[2] - slot.send[1]) <= 1 && Math.abs(slot.deco[2] - slot.send[1]) <= 1, 'same vertical centre ' + JSON.stringify(slot));
     // 0.1.140 inside a moved (transformed) container — like the extra panel sliding in — the buttons still end up next to the send button, also after the move ends
     await page.evaluate(() => { const f = document.getElementById('composer'); f.style.transition = 'transform .2s'; f.style.transform = 'translateX(60px)'; });
     await page.waitForTimeout(500);
     const slot2 = await page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const s = r(document.querySelector('#composer button[type="submit"]')), e = r(document.querySelector('[data-inline-group="extra"]')); return { send: s.left, extra: e.right }; });
-    assert(Math.abs(slot2.extra - (slot2.send - 4)) <= 1, 'still next to the send button after a transform move ' + JSON.stringify(slot2));
+    assert(Math.abs(slot2.extra - (slot2.send - 2)) <= 1, 'still next to the send button after a transform move ' + JSON.stringify(slot2));
     await page.evaluate(() => { const f = document.getElementById('composer'); f.style.transition = ''; f.style.transform = ''; }); await page.waitForTimeout(200);
 
     assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa', '⋯']);

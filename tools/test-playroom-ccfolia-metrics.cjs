@@ -52,14 +52,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // measured on ccfolia.com 1.37.6, 1440x900 (docs/playroom-vs-ccfolia-1123.md)
   assert.deepEqual(m.name, { x: 1113, w: 205, h: 40, bg: 'rgba(0, 0, 0, 0.2)', bb: '0px', lh: '23px', ls: '0.15008px', family: 'Roboto' }, 'name: filled 205x40 box, no underline');
   // CCFOLIA with the toolkit on, measured at 1440x900
-  assert.deepEqual(m.toolkit, { pal: 1326, color: 1360, help: 1398, aa: [1314, 24], more: [1340, 24], send: [1368, 64], bold: [1071, 30], size: [1341, 32], font: 1373 }, 'toolkit input area');
+  assert.deepEqual(m.toolkit, { pal: 1326, color: 1360, help: 1398, aa: [1314, 38], more: [1354, 38], send: [1394, 38], bold: [1071, 30], size: [1341, 32], font: 1373 }, 'toolkit input area');
   assert.deepEqual([m.noFaceHidden, m.face2, m.faceH], [true, [1073, 40], 40], 'speaker picture: 40x40 square filling the row');
   assert.deepEqual(m.footLine, ['solid', 'rgba(255, 255, 255, 0.12)']);
   assert.deepEqual(m.d4, [1077, 30, '3px'], 'dice row start'); assert.equal(m.scroll, 'scroll'); assert.equal(m.footLs, '0.39996px');
   assert(Math.abs(m.footY - 874) <= 1, 'Dicebot line y ' + m.footY);
   assert.deepEqual(m.slots, [['BGM01', 929, 64], ['BGM02', 993, 64]], 'BGM slots'); assert.equal(m.vol, 781, 'volume slider');
   assert.deepEqual(m.pal, [34, 34, '50%'], 'icon button 34x34 round'); assert.deepEqual(m.face, [40, 40]);
-  assert.deepEqual(m.send, { size: [64, 31], font: 'Roboto', px: '13px', weight: '700', pad: '4px 5px', radius: '4px' }, 'send button');
+  assert.deepEqual(m.send, { size: [38, 31], font: 'Roboto', px: '13px', weight: '700', pad: '0px', radius: '4px' }, 'send button: one of the three equal buttons');
   assert.deepEqual(m.input, { h: 92, font: 'Roboto', px: '16px' }, 'message box 92px'); assert.deepEqual(m.foot, { font: 'Roboto', px: '12px', color: 'rgb(100, 100, 100)' });
   assert.deepEqual(m.avatar, [40, 40, '0px']); assert.deepEqual(m.time, { px: '12px', color: 'rgb(117, 117, 117)' }); assert.deepEqual(m.body, { px: '14px', lh: '20.02px' }); assert.equal(m.row.font, 'Roboto');
   // narrow window: the chat covers the screen, the input and send stay on screen; >| folds it back to the map
