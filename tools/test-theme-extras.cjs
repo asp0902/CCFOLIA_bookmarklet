@@ -18,6 +18,9 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-theme-swi
     const load = async () => { await page.goto('https://ccfolia.com/rooms/theme-test'); await page.addScriptTag({ content: source }); await page.waitForSelector('#ccf-theme-switcher-mode option[value="preset:0"]', { state: 'attached' }); };
     await load();
     const css = (sel, prop) => page.locator(sel).first().evaluate((el, p) => getComputedStyle(el)[p], prop);
+    // 0.2.64 compact window: no note under the title, 34px rows, 1px less between them, the two button rows 8px apart, a close button without its own colour
+    assert.equal(await page.locator('#ccf-theme-switcher-panel .ccf-theme-title span').count(), 0);
+    assert.deepEqual([await css('#ccf-theme-switcher-mode', 'height'), await css('#ccf-theme-switcher-panel .ccf-theme-color-code', 'height'), await css('#ccf-theme-switcher-panel .ccf-theme-card', 'rowGap'), await css('#ccf-theme-switcher-panel .ccf-theme-grid', 'rowGap'), await css('#ccf-theme-switcher-panel .ccf-theme-actions + .ccf-theme-actions', 'marginTop'), await css('#ccf-theme-switcher-panel .ccf-theme-close', 'backgroundColor')], ['34px', '34px', '13px', '9px', '-5px', 'rgba(0, 0, 0, 0)']);
     const attrs = () => page.evaluate(() => ['active', 'accent', 'uitext', 'scrollbar', 'blur'].map((n) => document.documentElement.getAttribute('data-ccf-theme-' + n)));
     // presets: 7 of ours, one click = custom theme with that accent
     // 0.2.62: the seven colours are options of the '종류' dropdown (one 라이트: the existing mode); no preset buttons
