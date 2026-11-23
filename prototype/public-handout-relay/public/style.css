@@ -459,7 +459,8 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 }
 
 /* ===== Input area = CCFOLIA with the toolkit on, measured 2026-11-23 (format-sync bar values) ===== */
-#chat-form .name-row .face-btn img{display:block;width:40px;height:40px;border-radius:0;object-fit:cover}
+#chat-form .name-row .face-btn img{display:block;flex:none;width:40px;height:40px;border-radius:0;object-fit:cover}
+#chat-form .name-row .face-btn img[hidden]{display:none}
 #chat-form .name-row #pal-btn{margin-left:0}
 #chat-form .name-row #help-btn{margin-left:4px}
 #chat-form .fmt-row button,#chat-form .fmt-group-btn{font-family:Arial,sans-serif;font-size:12px;font-weight:400}
