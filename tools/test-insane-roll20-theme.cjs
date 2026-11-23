@@ -217,6 +217,7 @@ const key = 'ccf-theme-switcher-settings-v1';
     // 0.2.40: a skill check gets no field / skill table card (only the check card); 1px smaller texts (skill 17, result 14, target 13)
     assert.deepEqual(await page.locator('#check > .ccf-roll20-emotion-card').evaluateAll((cards) => cards.map((c) => c.className.includes('ccf-roll20-table-card') ? 'table' : 'check')), ['check'], 'no table card on a skill check');
     assert.deepEqual(await page.evaluate(() => ['.ccf-roll20-check-skill', '.ccf-roll20-check-result', '.ccf-roll20-check-target'].map((q) => getComputedStyle(document.querySelector(q)).fontSize)), ['16px', '13px', '12px'] /* 0.2.54 -1px */);
+    assert.deepEqual(await page.evaluate(() => { const svg = document.querySelector('.ccf-roll20-die:not(.is-total) svg'), path = svg.querySelector('path'); return [getComputedStyle(svg).stroke, getComputedStyle(path).strokeWidth, getComputedStyle(path).vectorEffect]; }), ['rgb(187, 187, 187)', '0.8px', 'non-scaling-stroke'], 'theme 0.2.60: small dice line matches the Roll20 capture');
     assert.deepEqual(await page.locator('.ccf-roll20-die b').allTextContents(), ['5', '2', '3'], 'dice of the formatted check: the d20 shows the dice sum (0.2.54)'); assert.equal(await page.locator('.ccf-roll20-check-mod').textContent(), '-2');
     assert.equal(await page.locator('.ccf-roll20-check-target').textContent(), '목표치 10');
     assert.equal(await page.locator('.ccf-roll20-check-card').getAttribute('data-result'), 'failure');

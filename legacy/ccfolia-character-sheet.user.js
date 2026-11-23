@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.64
+// @version      0.5.65
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.64";
+  const VERSION = "0.5.65";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1450,7 +1450,7 @@
       + `<label class="ccf-cs-evade-fear"><input type="checkbox" name="skill"${last.skill === true ? " checked" : ""}> 특기(+1, 명중판정과 같은 특기 습득)</label>`
       + `<label class="ccf-cs-evade-fear"><input type="checkbox" name="fear"${last.fear ? " checked" : ""}> 공포심(-2)</label>`
       + `<p class="ccf-cs-evade-preview" aria-live="polite"></p>`
-      + `<div class="ccf-cs-scene-actions"><button type="button" data-action="scene-cancel">취소</button><button type="submit">굴림</button></div>`;
+      + `<div class="ccf-cs-scene-actions"><button type="submit">굴림</button><button type="button" data-action="scene-cancel">취소</button></div>`; // 0.5.65 굴림이 왼쪽
     const read = () => { const d = new FormData(form); return { plot: String(d.get("plot") || ""), target: Math.max(2, Math.min(12, Math.round(Number(d.get("target"))) || 5)), extra: Math.round(Number(d.get("extra"))) || 0, skill: d.get("skill") === "on", fear: d.get("fear") === "on" }; };
     const preview = () => { form.querySelector(".ccf-cs-evade-preview").textContent = evadeCommand(sheet, read(), secret); };
     form.querySelector('select[name="plot"]').addEventListener("change", (event) => {
@@ -2381,7 +2381,7 @@
       [${ROW_BUTTON_ATTR}] { display:inline-grid;place-items:center;color:inherit }
       [${ROW_BUTTON_ATTR}] svg { width:24px;height:24px;pointer-events:none }
       #${ROOT_ID} .ccf-cs-roll-pair { display:flex;align-items:center;gap:0 }
-      #${ROOT_ID} .ccf-cs-roll-pair .ccf-cs-ability-roll { width:32px;min-width:32px }
+      #${ROOT_ID} .ccf-cs-roll-pair .ccf-cs-ability-roll { width:24px;min-width:24px }
       #${ROOT_ID} .ccf-cs-roll-public,#${ROOT_ID} .ccf-cs-footer-public { color:#fff }
       #${ROOT_ID} .ccf-cs-roll-secret,#${ROOT_ID} .ccf-cs-footer-secret { color:rgb(255,0,12) }
       textarea[data-ccf-sheet-sending] { color:transparent!important;caret-color:transparent!important;height:var(--ccf-sheet-h)!important;min-height:var(--ccf-sheet-h)!important;max-height:var(--ccf-sheet-h)!important;overflow:hidden!important;resize:none!important }
@@ -2469,12 +2469,12 @@
       #${ROOT_ID} .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
       #${ROOT_ID} .ccf-cs-repeaters section { display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:start;padding-bottom:12px;border:0 }
       #${ROOT_ID} .ccf-cs-abilities { gap:4px }
-      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:32px minmax(0,1fr) 32px 32px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:24px minmax(0,1fr) 32px 32px } /* 0.5.65 다이스 칸 24px: 아이콘 왼쪽 여백 6→2px */
       #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:2 }
-      #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px minmax(0,1fr) 32px 32px;padding-bottom:4px }
+      #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:24px minmax(0,1fr) 32px 32px;padding-bottom:4px }
       #${ROOT_ID} .ccf-cs-abilities .ccf-cs-inline-memo { grid-column:2/3 }
       /* 0.5.57 타입 칸: 가장 긴 값 '서포트'(한글 3글자) + 좌우 여백 — 본문 크기(em)를 따른다. 남는 폭은 어빌리티·지정특기 칸으로 */
-      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1fr) calc(3em + 20px) minmax(0,1fr) }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1fr) calc(3em + 20px) calc(4em * 16 / 14 + 4px) } /* 0.5.65 지정특기 = 입력 글자(16px, 묶음은 14px) 4em + 안쪽 여백 4px, 남는 폭은 어빌리티 이름 */
       #${ROOT_ID} .ccf-cs-ability-roll { width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border:0;border-radius:0;display:grid;place-items:center }
       #${ROOT_ID} .ccf-cs-ability-roll svg { width:20px;height:20px;fill:none;stroke:currentColor;pointer-events:none }
       #${ROOT_ID} .ccf-cs-note-toggle { align-self:center;justify-self:center;display:inline-flex;align-items:center;justify-content:center;width:13px;min-width:13px;height:13px;min-height:13px;padding:0;color:rgba(255,255,255,.7);background:none;border:0;border-radius:0;cursor:pointer }
@@ -2502,7 +2502,7 @@
       #${ROOT_ID} .ccf-cs-perm-cell span { display:none }
       @media (max-width:700px) {
         #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
-        #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:32px 32px minmax(0,1fr) 32px }
+        #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:24px minmax(0,1fr) 32px 32px }
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
         #${ROOT_ID} #ccf-cs-status { display:none }
