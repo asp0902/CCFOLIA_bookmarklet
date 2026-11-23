@@ -432,7 +432,8 @@ export class RoomRelay {
       if (checked.error) return json({ error: checked.error }, 400);
       const meta = await this.state.storage.get("mirror:meta") || {};
       if (checked.css !== null) { await this.state.storage.put("mirror:css", checked.css); meta.cssHash = mirrorHash(checked.css); }
-      if (checked.templates) { await this.state.storage.put("mirror:tpl", checked.templates); meta.tplHash = mirrorHash(JSON.stringify(checked.templates)); }
+      // A page sends only the parts it has on screen (a chat-only window has no top bar or zoom bar): the others keep their last shape.
+      if (checked.templates) { const merged = { ...(await this.state.storage.get("mirror:tpl") || {}), ...checked.templates }; await this.state.storage.put("mirror:tpl", merged); meta.tplHash = mirrorHash(JSON.stringify(merged)); }
       if (checked.help) { await this.state.storage.put("mirror:help", checked.help); meta.helpHash = mirrorHash(JSON.stringify(checked.help)); }
       if (checked.assets) { await this.state.storage.put("mirror:assets", checked.assets); meta.assetsHash = mirrorHash(JSON.stringify(checked.assets)); }
       meta.fontLinks = checked.fontLinks;

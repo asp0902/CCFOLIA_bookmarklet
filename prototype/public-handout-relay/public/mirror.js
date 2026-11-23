@@ -46,6 +46,7 @@ const cmMirror = (() => {
       insert(host);
       entry = { host, root }; hosts.set(id, entry);
     }
+    if (!entry.host.isConnected) insert(entry.host); // taken off while its template was missing
     return entry;
   };
   // Replaces what a shadow root shows (the style sheets are adopted, so the content is all there is).
