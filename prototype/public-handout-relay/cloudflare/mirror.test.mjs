@@ -1,5 +1,6 @@
 // Native mirroring on the Worker side: the GM posts CSS and templates, they are re-checked and stored, participants get them by hash.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { RoomRelay } from "./worker.mjs";
 const storage = new Map();
 const relay = new RoomRelay({ storage: { get: async key => storage.get(key) ?? null, put: async (key, value) => { storage.set(key, value); } }, getWebSockets: () => [] });
@@ -31,6 +32,13 @@ assert.deepEqual(state.mirror.fontLinks, ["https://fonts.googleapis.com/css2?fam
 // a template-only update keeps the stored CSS
 await post({ templates: { row: "<div></div>" } });
 assert.equal((await call(`/api/rooms/${room}/mirror.css`, { cookie })).text, " .a{background:none}");
+// a chat-only window sends only its chat parts: the top bar and zoom bar stay
+await post({ templates: { topBar: "<div>bar</div>", zoomBar: "<div>zoom</div>", row: "<div>old</div>" } });
+await post({ templates: { row: "<div>new</div>" } });
+const kept = (await call(`/api/rooms/${room}/mirror.json`, { cookie })).json.templates;
+assert.deepEqual([kept.topBar, kept.zoomBar, kept.row], ["<div>bar</div>", "<div>zoom</div>", "<div>new</div>"]);
+// and CCFOLIA's /chat window does not send its CSS either: it holds only the rules of what it shows
+assert.match(readFileSync(new URL("../../../extension/personal/relay-page.js", import.meta.url), "utf8"), /relayMirror !== "function" \|\| \/\\\/chat\\\/\?\$\/\.test\(location\.pathname\)/);
 // pictures of CCFOLIA's own site (card backs, dice faces): stored as a table, announced by a hash in /state, served with mirror.json
 const png = "data:image/png;base64,iVBORw0KGgo=";
 assert.equal((await post({ assets: { "/images/trump/z01.png": png, "/images/6_dice/6_dice[1].png": png, "/evil.png": png } })).response.status, 200);

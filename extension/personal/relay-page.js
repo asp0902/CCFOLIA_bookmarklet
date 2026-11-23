@@ -47,7 +47,7 @@
   const sendMirror = async () => {
     if (!roomId) return;
     const api = window.__CCF_SECOND_CHAT_PANEL__;
-    if (typeof api?.relayMirror !== "function") return;
+    if (typeof api?.relayMirror !== "function" || /\/chat\/?$/.test(location.pathname)) return; // CCFOLIA's chat-only window has no top bar or zoom bar, and its CSS lacks their rules
     try {
       const resend = mirrorRoom !== roomId || Date.now() - mirrorAt > 300000;
       try { await api.relayAssetLoad?.(); await api.relayHelpProbe?.(); } catch (_) {}
