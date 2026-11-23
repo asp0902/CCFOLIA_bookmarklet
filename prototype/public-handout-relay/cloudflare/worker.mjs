@@ -75,6 +75,13 @@ const cleanSceneEffects = list => list.slice(0, 5).map(item => {
   const volume = Number(item?.volume);
   return { id: String(item?.id ?? "").slice(0, 60), name: String(item?.name ?? "").slice(0, 100), imageUrl: cdn(item?.imageUrl), soundUrl: cdn(item?.soundUrl), volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0.2, playTime: Number(item?.playTime) };
 }).filter(item => item.id && Number.isSafeInteger(item.playTime) && item.playTime > 0);
+// A panel's or marker's tooltip text and click action (CCFOLIA has two: send a message, open an http(s) link).
+const cleanPieceInfo = item => {
+  const memo = String(item?.memo ?? "").slice(0, 1000), action = item?.action;
+  const clean = action?.type === "message" && action.text ? { type: "message", text: String(action.text).slice(0, 2000) }
+    : action?.type === "link" && /^https?:\/\/[^\s<>"]{1,490}$/i.test(String(action.url || "")) ? { type: "link", url: String(action.url) } : null;
+  return { ...(memo ? { memo } : {}), ...(clean ? { action: clean } : {}) };
+};
 export class RoomRelay {
   constructor(state) {
     this.state = state;
@@ -346,9 +353,9 @@ export class RoomRelay {
         media: audio(body.media), sound: audio(body.sound),
         ...(Array.isArray(body.effects) ? { effects: cleanSceneEffects(body.effects) } : {}),
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
-          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+          .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
         markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))
-          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl) })),
+          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
         // Card decks: only the back and the number of cards left (the faces of the cards inside never reach the relay). Dice symbols: position, size, faces, and the value unless it is hidden.
         decks: (Array.isArray(body.decks) ? body.decks : []).slice(0, 50).filter(item => cdn(item?.coverUrl) || staticCover(item?.coverUrl))
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), layer: Math.max(0, Math.min(1000, Math.round(num(item.layer, 1)))), width: num(item.width, 1), height: num(item.height, 1), count: Math.max(0, Math.min(9999, Math.round(num(item.count)))), coverUrl: cdn(item.coverUrl) || staticCover(item.coverUrl) })),
@@ -363,6 +370,11 @@ export class RoomRelay {
               .map(st => ({ label: text(st.label, 20), value: num(st.value), max: num(st.max) })) })),
       };
       // The whole room is one stored value (128 KiB cap): keep the memos within a shared budget.
+      let pieceBudget = 20_000;
+      for (const piece of [...room.scene.items, ...room.scene.markers]) {
+        const size = (piece.memo?.length || 0) + (piece.action ? JSON.stringify(piece.action).length : 0);
+        if (size > pieceBudget) { delete piece.memo; delete piece.action; } else pieceBudget -= size;
+      }
       let memoBudget = 40_000;
       for (const character of room.scene.characters) {
         if (character.memo.length > memoBudget) character.memo = ""; memoBudget -= character.memo.length;

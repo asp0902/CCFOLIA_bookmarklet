@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.59
+// @version      0.5.60
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.59";
+  const VERSION = "0.5.60";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -469,12 +469,18 @@
 
   // 참여자에게 내보내는 스크린 패널(아이템). 뒤집힌 카드(closed)는 뒷면(coverImageUrl)만 내보내고 앞면 주소는 절대 보내지 않는다. 뒷면이 없으면 제외.
   // 실측(ccfolia 1.37.5): 뒤집힌 카드는 화면에 뒷면 이미지만 그려진다. url·num 은 relayScene 의 검사 함수(CDN 주소만 통과 / 숫자 정리).
+  // 패널·마커의 클릭 액션(실측 1.37.6: link / message 두 종류). 링크는 http(s)만.
+  function relayClickAction(action) {
+    if (action?.type === "message" && action.text) return { type: "message", text: String(action.text).slice(0, 2000) };
+    if (action?.type === "link" && /^https?:\/\//i.test(String(action.url || ""))) return { type: "link", url: String(action.url).slice(0, 500) };
+    return null;
+  }
   function relayItemView(item, url, num) {
     // 숨긴 패널은 보내지 않는다. 실측(ccfolia 1.37.5): 필드에 그려지는 패널은 active 가 true 인 것뿐이고(10개 중 active true 2개만 그려짐), active 가 false 인 것은 visible 이 true 여도 그려지지 않는다.
     if (!item || item.visible === false || item.active === false) return null;
     const image = item.closed ? url(item.coverImageUrl) : url(item.imageUrl);
     if (!image) return null;
-    return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image };
+    return { id: String(item._id || ""), locked: !!(item.locked || item.freezed || item.closed), closed: !!item.closed, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: image, ...(item.closed ? {} : { memo: String(item.memo || "").slice(0, 1000), action: relayClickAction(item.clickAction) }) }; // 뒤집힌 카드의 메모·액션은 내보내지 않는다(코코포리아도 가림)
   }
   // 카드 덱(entities.roomDecks: x,y,z,width,height,coverImageUrl,items = 덱 안 카드 맵). 덱 안 카드(앞면 주소 imageUrl)는 절대 보내지 않고 뒷면과 남은 장수만. 뽑혀서 필드에 놓인 카드는 아이템(deckId)이라 relayItemView 가 다룬다.
   // CCFOLIA's default card back is a path on its own site (/images/trump/z01.png): the path is sent, the picture itself comes as an asset (relayAssetLoad)
@@ -514,7 +520,7 @@
     return Object.entries(markers && typeof markers === "object" ? markers : {})
       .filter(([, marker]) => marker && url(marker.imageUrl))
       .slice(0, 100)
-      .map(([id, marker]) => ({ id: String(id).slice(0, 60), x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl) }));
+      .map(([id, marker]) => ({ id: String(id).slice(0, 60), x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl), memo: String(marker.text || "").slice(0, 1000), action: relayClickAction(marker.clickAction) }));
   }
 
   // 참여자에게 보내는 이미지 주소: 코코포리아 CDN 만. 코코포리아 자신이 하는 변환(실측: 앱 번들의 주소 함수)을 따라, 예전에 올린 이미지의 firebasestorage 주소는 CDN 주소로 바꿔 쓴다.
