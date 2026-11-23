@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.145
+// @version      0.1.146
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.145"),
+    version: getUserscriptVersion("0.1.146"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1342,7 +1342,14 @@
   function cutinChatMessageText(el) {
     let text = el.getAttribute(CCF_RAW_ATTR) || el.textContent || "";
     const decoded = extractEnvelope(text);
-    if (decoded) text = typeof decoded.envelope?.text === "string" ? decoded.envelope.text : (decoded.visibleText || "");
+    if (decoded) {
+      // 봉투 뒤에 붙은 컷인 이름(글+봉투+이름, #546)까지 합쳐야 코코포리아가 본 글과 같다. 이름만 보낸 줄은 봉투 글이 이미 그 이름이다(#594).
+      text = typeof decoded.envelope?.text === "string" ? decoded.envelope.text : (decoded.visibleText || "");
+      if (cutinChatMap().has(cutinChatKey(text))) return cutinChatKey(text);
+      const raw = el.querySelector(":scope > .ccf-original-hidden")?.textContent || el.getAttribute(CCF_RAW_ATTR) || el.textContent || ""; // 렌더된 줄의 raw 속성·textContent 에는 겹친 글도 섞일 수 있어 숨긴 원문을 먼저 본다
+      const tail = cutinChatKey(raw.slice(raw.indexOf(INVIS_END, raw.indexOf(INVIS_START)) + INVIS_END.length));
+      if (tail && !cutinChatKey(text).endsWith(tail)) text += tail;
+    }
     return cutinChatKey(text);
   }
 
@@ -1350,6 +1357,10 @@
     const map = cutinChatMap();
     if (!map.size || !text) return "";
     if (map.has(text)) return map.get(text);
+    // 0.1.146: 코코포리아 규칙대로 글이 컷인 이름으로 끝나면 재생된 컷인이다(봉투·보낸 경로 무관, 긴 이름 우선). 글자 숨김은 이름만 보낸 줄만(syncCutinChatHide).
+    let longest = "";
+    for (const trigger of map.keys()) if (trigger.length > longest.length && text.endsWith(trigger)) longest = trigger;
+    if (longest) return map.get(longest);
     let mode = "exact";
     try { mode = localStorage.getItem("ccfCutinChatMatch") === "contains" ? "contains" : "exact"; } catch (_) { mode = "exact"; }
     if (mode === "contains") for (const [trigger, url] of map) if (text.includes(trigger)) return url;

@@ -38,6 +38,7 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     assert(only[0].startsWith('⁣') && only[0].endsWith('@컷인') && only[0] !== '@컷인', 'envelope then the name: ' + JSON.stringify(only[0].slice(-4)));
     assert.deepEqual([decode(only[0]).text, decode(only[0]).blockStyle.narration], ['@컷인', true]);
     const onlyPic = await send('@그림컷인', false);
+    const bodyPic = await send('본문 @그림컷인', false);
     // a dice command is still raw
     assert.deepEqual(await send('2D6>=5', false), ['2D6>=5']);
     // the message as shown: narration look, the @name not shown
@@ -48,11 +49,15 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     assert.equal(shown.overlay, '글'); assert(!/@컷인/.test(shown.visible), 'the @name is hidden: ' + JSON.stringify(shown));
     // rows of a cut-in name alone: narration look; no picture -> "@컷인" shows; a picture -> the picture only (text hidden), inside the narration row
     const addRow = (id, text) => page.evaluate(([id, text]) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = `<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">서술자<span class="MuiTypography-caption"> - 오늘</span></h6><p id="${id}" class="MuiListItemText-secondary"></p></div>`; li.querySelector('p').append(document.createTextNode(text)); document.getElementById('chatlist').appendChild(li); }, [id, text]);
-    await addRow('only', only[0]); await addRow('onlypic', onlyPic[0]);
+    await addRow('only', only[0]); await addRow('onlypic', onlyPic[0]); await addRow('bodypic', bodyPic[0]);
     await page.waitForFunction(() => document.getElementById('onlypic').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 4000 });
     const rows = await page.evaluate(() => ['only', 'onlypic'].map((id) => { const p = document.getElementById(id); return { narration: p.getAttribute('data-ccf-narration'), visible: p.innerText.trim(), hide: p.getAttribute('data-ccf-cutin-hide'), img: !!p.querySelector('.ccf-cutin-chat-image img') }; }));
     assert.deepEqual(rows[0], { narration: '1', visible: '@컷인', hide: null, img: false }, 'no picture: the name shows in a narration row ' + JSON.stringify(rows));
     assert.equal(rows[1].narration, '1'); assert.equal(rows[1].hide, '1'); assert.equal(rows[1].img, true);
+    // text + envelope + name in a drawn narration row: the picture is added, the text stays, the @name stays hidden
+    await page.waitForSelector('#bodypic .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    const body = await page.evaluate(() => { const p = document.getElementById('bodypic'); return { hide: p.getAttribute('data-ccf-cutin-hide'), visible: p.innerText.trim() }; });
+    assert.deepEqual(body, { hide: null, visible: '본문' });
     // narration off and nothing else: raw as before
     await page.evaluate(() => localStorage.setItem('ccf-format-narrators-v1:test', '[]'));
     assert.deepEqual(await send('@컷인', false), ['@컷인']);
