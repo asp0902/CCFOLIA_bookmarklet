@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.55
+// @version      0.5.56
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.55";
+  const VERSION = "0.5.56";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1277,12 +1277,13 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold { all: unset; d
 html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: rgba(255,255,255,.8); text-decoration: underline; }
 /* 0.5.54 호버 음영(오리지널 줄·추가 패널 줄 같은 값): 줄 배경만 아주 살짝(글자색 4% — 어두운 테마는 밝게, 밝은 테마는 어둡게), 줄 높이·배치는 그대로.
    아이콘 묶음 뒤에는 그 줄 바탕색(--ccf-row-base, 처음 올릴 때 잰다)에 글자색 12%를 섞은 둥근 바탕 → 글자·컷인 그림·카드 위에서도 아이콘이 보인다. 평소 흐린(0.35) 아이콘은 줄에 올리면 또렷하게. */
-.MuiListItem-root:has(> .MuiListItemText-root > p.MuiListItemText-secondary), .ccf-scp-panel [data-ccf-msg-id] { transition: background-color .1s; }
-.MuiListItem-root:has(> .MuiListItemText-root > p.MuiListItemText-secondary):hover, .ccf-scp-panel [data-ccf-msg-id]:hover { background-color: color-mix(in srgb, currentColor 4%, transparent); }
-.MuiListItem-root:hover > div:has(> button.MuiIconButton-root),
+/* 0.5.56 채팅 줄(이름 h6)만: 사운드 목록 등 코코포리아 기본 목록·팝업의 아이콘 버튼은 기본 모양 그대로 */
+.MuiListItem-root:has(> .MuiListItemText-root > h6.MuiListItemText-primary):not(.MuiDialog-root *, .MuiPopover-root *, .MuiModal-root *), .ccf-scp-panel [data-ccf-msg-id] { transition: background-color .1s; }
+.MuiListItem-root:has(> .MuiListItemText-root > h6.MuiListItemText-primary):not(.MuiDialog-root *, .MuiPopover-root *, .MuiModal-root *):hover, .ccf-scp-panel [data-ccf-msg-id]:hover { background-color: color-mix(in srgb, currentColor 4%, transparent); }
+.MuiListItem-root:has(> .MuiListItemText-root > h6.MuiListItemText-primary):not(.MuiDialog-root *, .MuiPopover-root *, .MuiModal-root *):hover > div:has(> button.MuiIconButton-root),
 .ccf-hide-host:hover > :is(.ccf-hide-btn:not(.ccf-hide-inline), .ccf-break-btn:not(.ccf-break-inline)) { background: color-mix(in srgb, var(--ccf-row-base, #2a2a2a) 88%, currentColor 12%); border-radius: 16px; }
-.MuiListItem-root:hover > div:has(> button.MuiIconButton-root) > button, .ccf-hide-host:hover > :is(.ccf-hide-btn, .ccf-break-btn) { opacity: .9 !important; }
-.MuiListItem-root:hover > div:has(> button.MuiIconButton-root) > button:hover { opacity: 1 !important; background: color-mix(in srgb, currentColor 16%, transparent); }
+.MuiListItem-root:has(> .MuiListItemText-root > h6.MuiListItemText-primary):not(.MuiDialog-root *, .MuiPopover-root *, .MuiModal-root *):hover > div:has(> button.MuiIconButton-root) > button, .ccf-hide-host:hover > :is(.ccf-hide-btn, .ccf-break-btn) { opacity: .9 !important; }
+.MuiListItem-root:has(> .MuiListItemText-root > h6.MuiListItemText-primary):not(.MuiDialog-root *, .MuiPopover-root *, .MuiModal-root *):hover > div:has(> button.MuiIconButton-root) > button:hover { opacity: 1 !important; background: color-mix(in srgb, currentColor 16%, transparent); }
     `;
     (document.head || document.documentElement).appendChild(style);
     // 0.5.54 호버 음영의 아이콘 바탕: 그 줄 뒤의 실제(불투명에 가까운) 바탕색을 한 번 재서 줄에 둔다(줄마다 처음 올릴 때 한 번)
