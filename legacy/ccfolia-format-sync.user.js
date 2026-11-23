@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.144
+// @version      0.1.145
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.144"),
+    version: getUserscriptVersion("0.1.145"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1160,12 +1160,12 @@
     const now = Date.now();
     if (!force && now - c.at < 500) return c;
     c.at = now;
-    let list = [];
-    try { list = window.__CCF_FS_PRESET_BRIDGE__?.list?.() || []; } catch (_) { list = []; }
-    const key = JSON.stringify(list);
+    let list = [], fonts = null;
+    try { list = window.__CCF_FS_PRESET_BRIDGE__?.list?.() || []; fonts = window.__CCF_FS_PRESET_BRIDGE__?.speakerFonts?.() || null; } catch (_) { list = []; fonts = null; }
+    const key = JSON.stringify([list, fonts]);
     if (key !== c.key) {
       const first = c.key === null;
-      c.key = key; c.list = list; c.v += 1;
+      c.key = key; c.list = list; c.fonts = fonts; c.v += 1;
       if (!first) setTimeout(() => { try { scanAndRenderAll(); } catch (_) {} }, 0);
     }
     return c;
@@ -1182,6 +1182,14 @@
     }
     return out;
   }
+  // 0.1.145 이 줄의 화자에게 정해 둔 글꼴(나레이션 먼저, 없으면 캐릭터 줄). 표가 비었거나 스위치가 꺼지면 "".
+  function speakerFontForRow(el, narration) {
+    const fonts = receivedPresetState().fonts;
+    if (!fonts) return "";
+    const node = el.closest(".MuiListItem-root, .ccf-scp-row")?.querySelector("h6.MuiListItemText-primary, .ccf-scp-name");
+    const name = node ? ([...node.childNodes].find((child) => child.nodeType === 3 && child.textContent.trim())?.textContent || "").replace(/[ \t\n\r\f\v]+/g, " ").trim() : "";
+    return ((narration || fonts.narrators.includes(name)) && fonts.narration) || fonts.chars[name] || "";
+  }
   function isCutinMessageText(text) {
     try { return !!window.__CCF_FS_PRESET_BRIDGE__?.endsWithCutin?.(text) || !!cutinChatUrlFor(cutinChatKey(text)); } catch (_) { return false; }
   }
@@ -1192,19 +1200,21 @@
     const hidden = el.querySelector(":scope > .ccf-original-hidden");
     if (hidden && marked === null) return; // 봉투 렌더가 맡은 줄
     const preset = receivedPresetState();
-    if (!preset.list.length && marked === null) return;
+    if (!preset.list.length && !preset.fonts && marked === null) return;
     const nodes = [...(hidden || el).childNodes].filter((node) => !isToolkitRowAddon(node));
     const source = nodes.every((node) => node.nodeType === 3) ? nodes.map((node) => node.nodeValue).join("") : "";
     const row = el.closest(".MuiListItem-root, .ccf-scp-row");
     const eligible = !!source && !!row?.querySelector("h6.MuiListItemText-primary, .ccf-scp-name")
       && !el.closest('form, [role="dialog"]') && !el.querySelector(toolkitRowAddonSelector())
       && !source.includes(INVIS_START) && !window.__CCF_FS_PRESET_BRIDGE__?.isCommand?.(source) && !/^\s*\[(?:아이템|어빌리티)/.test(source) && !isCutinMessageText(source);
-    const runs = eligible ? receivedPresetRuns(source) : [];
+    const nameRuns = eligible ? receivedPresetRuns(source) : [];
+    const speakerFont = eligible ? speakerFontForRow(el, false) : "";
+    const runs = speakerFont ? [...nameRuns, ...window.__CCF_FS_PRESET_BRIDGE__.fontGaps(source.length, nameRuns, speakerFont)] : nameRuns;
     if (!runs.length) {
       if (marked !== null) { removeRenderOverlay(el); el.removeAttribute("data-ccf-preset-plain"); }
       return;
     }
-    const signature = `${preset.v}:${source}`;
+    const signature = `${preset.v}:${speakerFont}:${source}`; // 재사용된 줄: 글이 같아도 화자가 다르면 다시 그린다
     if (marked === signature) return;
     const bottom = marked === null ? captureBottomAnchoredMessageScroller(el) : null;
     const overlay = ensureRenderOverlay(el);
@@ -1677,7 +1687,8 @@
     // 원본 raw text(envelope 포함)가 지난 렌더와 동일하면 재작업 불필요.
     // 오버레이 방식에서는 원본 text node를 지우지 않으므로 매 스캔마다 INVIS 마커가
     // 계속 감지되는데, 이 게이트가 없으면 mutation → scanWithin → 재렌더 → mutation... 무한 루프.
-    const presetVersion = String(receivedPresetState().v);
+    const speakerFont = envelope.command === true || envelope.roll20Macro === true || envelope.source === "ccr20-roll20-desc" ? "" : speakerFontForRow(el, cleanupBlockStyle(envelope.blockStyle).narration === true);
+    const presetVersion = `${receivedPresetState().v}:${speakerFont}`;
     if (el.getAttribute(CCF_RENDERED_ATTR) === "1" && el.getAttribute(CCF_RAW_ATTR) === text && el.getAttribute("data-ccf-preset-v") === presetVersion) {
       return;
     }
@@ -1701,7 +1712,9 @@
     const macro = envelope.roll20Macro === true;
     // 0.1.142 발신자 서식이 없는 구간에만 보는 사람의 자동 프리셋(커맨드·Roll20 매크로·컷인 글 제외)
     const presetRuns = envelope.command === true || macro || envelope.source === "ccr20-roll20-desc" || isCutinMessageText(renderText) ? [] : receivedPresetRuns(renderText, sentRuns);
-    const runs = presetRuns.length ? normalizeRuns([...sentRuns, ...presetRuns], renderText.length) : sentRuns;
+    // 0.1.145 글꼴이 없는 구간에만 내 표의 화자 글꼴(컷인·카드 글 제외)
+    const fontRuns = speakerFont && !isCutinMessageText(renderText) && !/^\s*\[(?:아이템|어빌리티)/.test(renderText) ? window.__CCF_FS_PRESET_BRIDGE__.fontGaps(renderText.length, [...sentRuns, ...presetRuns], speakerFont) : [];
+    const runs = presetRuns.length || fontRuns.length ? normalizeRuns([...sentRuns, ...presetRuns, ...fontRuns], renderText.length) : sentRuns;
     const alignRuns = getEffectiveAlignRuns(renderText, envelope.alignRuns, macro ? null : envelope.blockStyle);
     const narration = cleanupBlockStyle(envelope.blockStyle).narration === true;
     const breakBefore = cleanupBlockStyle(envelope.blockStyle).breakBefore === true;
@@ -4410,8 +4423,8 @@
       .ccf-style-folder-empty { color: rgba(255, 255, 255, 0.45); font-size: 11px; padding: 3px 6px; }
       .ccf-style-root-drop { color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 3px 6px; text-align: center; }
       /* 0.1.121: + 를 누르면 코코포리아 메뉴(MUI Menu) 모양으로 단추 옆에 뜬다 — 모달 내용은 밀리지 않는다 */
-      .ccf-style-preset-scope { all: unset; box-sizing: border-box; cursor: pointer; flex: 0 0 auto; padding: 0 5px; height: 18px; line-height: 18px; border-radius: 9px; font-size: 10px; color: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.18); }
-      .ccf-style-preset-scope.is-room { color: #fff; background: rgba(33,150,243,.85); border-color: transparent; }
+      .ccf-style-preset-scope, .ccf-speaker-font-scope { all: unset; box-sizing: border-box; cursor: pointer; flex: 0 0 auto; padding: 0 5px; height: 18px; line-height: 18px; border-radius: 9px; font-size: 10px; color: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.18); }
+      .ccf-style-preset-scope.is-room, .ccf-speaker-font-scope.is-room { color: #fff; background: rgba(33,150,243,.85); border-color: transparent; }
       .ccf-style-add-menu { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; min-width: 128px; padding: 8px 0; background: #424242; color: #fff; border-radius: 4px; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
       .ccf-style-add-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #fff; white-space: nowrap; }
       .ccf-style-add-menu button:hover, .ccf-style-add-menu button:focus-visible { background: rgba(255, 255, 255, 0.08); }
@@ -7439,6 +7452,7 @@
         <button type="button" class="ccf-style-preset-remove" data-inline-style-action="add-menu" title="추가" aria-label="추가" aria-haspopup="menu" aria-expanded="false">+</button>
       </div>
       <label class="ccf-style-received-toggle" title="다른 사람 글이나 서식 없이 보낸 글에도 내 화면에서만 자동 적용 프리셋을 입힙니다(저장된 메시지는 바뀌지 않음)" style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:12px;cursor:pointer"><input type="checkbox" data-style-received${isReceivedPresetEnabled() ? " checked" : ""}> 받은 메시지에도 자동 적용</label>
+      ${buildSpeakerFontMarkup()}
       <div class="ccf-style-note" data-style-preset-note style="display:none;" role="status"></div>
       <div data-style-add-menu-host></div>
       <div data-style-preset-list>${listMarkup}</div>
@@ -7483,6 +7497,7 @@
       });
     });
     bindStylePresetFolderInputs(popover, toolbar);
+    bindSpeakerFontSection(popover);
     popover.querySelector("[data-style-received]")?.addEventListener("change", (event) => {
       try { localStorage.setItem("ccf-format-style-presets-received-v1", event.target.checked ? "1" : "0"); } catch (_) {}
       window.__CCF_FS_PRESET_REFRESH__?.();
@@ -12485,7 +12500,106 @@
   function isReceivedPresetEnabled() {
     try { return localStorage.getItem("ccf-format-style-presets-received-v1") !== "0"; } catch (_) { return true; }
   }
+  // 0.1.145 화자별 글꼴: 나레이션(이름 "") / 캐릭터 이름 → 글꼴 id. 공용 + 이 룸 전용(같은 이름이면 룸 쪽). 보낼 때 글꼴이 없는 구간에 싣고, 받은 글은 렌더 때만 입힌다.
+  const SPEAKER_FONTS_KEY = "ccf-format-speaker-fonts-v1";
+  function readSpeakerFontRows() {
+    const roomKey = stylePresetRoomId() ? `${SPEAKER_FONTS_KEY}:${stylePresetRoomId()}` : "";
+    const fonts = window.__CCF_MESSAGE_FONTS__ || {}, rows = new Map();
+    const add = (key, room) => { let list = []; try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) {} for (const row of Array.isArray(list) ? list : []) if (typeof row?.name === "string" && Object.prototype.hasOwnProperty.call(fonts, row.fontId)) rows.set(row.name, { name: row.name, fontId: row.fontId, room }); };
+    add(SPEAKER_FONTS_KEY, false);
+    if (roomKey) add(roomKey, true);
+    return [...rows.values()];
+  }
+  function writeSpeakerFontRows(rows) {
+    const roomId = stylePresetRoomId();
+    if (!roomId) return;
+    const plain = (list) => JSON.stringify(list.map(({ name, fontId }) => ({ name, fontId })));
+    try {
+      localStorage.setItem(SPEAKER_FONTS_KEY, plain(rows.filter((row) => !row.room)));
+      localStorage.setItem(`${SPEAKER_FONTS_KEY}:${roomId}`, plain(rows.filter((row) => row.room)));
+    } catch (error) { console.error("[ccf-format-sync] writeSpeakerFontRows failed", error); }
+    setTimeout(() => window.__CCF_FS_PRESET_REFRESH__?.(), 0);
+  }
+  // 이미 글꼴이 있는 구간을 뺀 나머지에 글꼴만 담은 구간(겹친 서식은 렌더가 합친다)
+  function speakerFontGaps(length, runs, fontId) {
+    const out = [];
+    let at = 0;
+    for (const run of runs.filter((r) => r.style?.fontId).sort((a, b) => a.start - b.start)) {
+      if (run.start > at) out.push({ start: at, end: run.start, style: { fontId } });
+      at = Math.max(at, run.end);
+    }
+    if (at < length) out.push({ start: at, end: length, style: { fontId } });
+    return out;
+  }
+  function speakerFontForSend(blockStyle) {
+    const rows = readSpeakerFontRows();
+    if (!rows.length) return "";
+    const fontOf = (name) => rows.find((row) => row.name === name)?.fontId || "";
+    return (blockStyle?.narration === true && fontOf("")) || fontOf(getCurrentSpeakerName() || "\u0000");
+  }
+  function speakerFontOptionsHtml(selected) {
+    const fonts = window.__CCF_MESSAGE_FONTS__ || {}, info = window.__CCF_MESSAGE_FONT_INFO__ || {};
+    const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
+    return `<option value="">없음</option>${Object.keys(fonts).map((id) => [id, info[id]?.[0] || fonts[id]]).sort(byName).map(([id, label]) => `<option value="${escapeHtml(id)}"${id === selected ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}`;
+  }
+  function speakerFontRowHtml(row) {
+    const narration = row.name === "" && row.narration === true;
+    return `<div data-speaker-font-row${narration ? ' data-narration="1"' : ""} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:4px;align-items:center;margin-top:4px">
+      ${narration ? '<span style="font-size:12px;padding-left:4px">나레이션</span>' : `<input type="text" class="ccf-inline-popover-field" data-speaker-font-name list="ccf-speaker-font-names" value="${escapeHtml(row.name)}" placeholder="캐릭터 이름" spellcheck="false" aria-label="캐릭터 이름">`}
+      <select class="ccf-inline-popover-field" data-speaker-font-id aria-label="글꼴">${speakerFontOptionsHtml(row.fontId)}</select>
+      <button type="button" class="ccf-speaker-font-scope${row.room ? " is-room" : ""}" data-speaker-font-scope aria-pressed="${row.room ? "true" : "false"}" title="공용(모든 룸) / 이 룸 전용" aria-label="이 룸 전용">룸</button>
+      ${narration ? "<span></span>" : '<button type="button" class="ccf-style-preset-remove" data-speaker-font-remove title="삭제" aria-label="삭제">×</button>'}
+    </div>`;
+  }
+  function buildSpeakerFontMarkup() {
+    const rows = readSpeakerFontRows();
+    const narration = rows.find((row) => row.name === "") || { name: "", fontId: "", room: false };
+    let names = [];
+    try { names = uniqueCharacterNames([...readCachedMyCharacterNames(), ...ccfCachedSelectableNames]); } catch (_) {}
+    return `<details data-speaker-fonts${buildSpeakerFontMarkup.open ? " open" : ""} style="margin:0 0 6px;font-size:12px"><summary style="cursor:pointer">화자별 글꼴</summary>
+      <datalist id="ccf-speaker-font-names">${names.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("")}</datalist>
+      <div data-speaker-font-rows>${speakerFontRowHtml({ ...narration, narration: true })}${rows.filter((row) => row.name !== "").map(speakerFontRowHtml).join("")}</div>
+      <button type="button" class="ccf-btn" data-speaker-font-add style="margin-top:4px">+ 캐릭터</button>
+    </details>`;
+  }
+  function bindSpeakerFontSection(popover) {
+    const box = popover.querySelector("[data-speaker-fonts]"), host = box?.querySelector("[data-speaker-font-rows]");
+    if (!host) return;
+    const save = () => {
+      const rows = new Map();
+      for (const line of host.querySelectorAll("[data-speaker-font-row]")) {
+        const narration = line.hasAttribute("data-narration");
+        const name = narration ? "" : normalizeMyCharacterName(line.querySelector("[data-speaker-font-name]")?.value || "");
+        const fontId = line.querySelector("[data-speaker-font-id]").value;
+        if (fontId && (narration || name)) rows.set(name, { name, fontId, room: line.querySelector("[data-speaker-font-scope]").getAttribute("aria-pressed") === "true" });
+      }
+      writeSpeakerFontRows([...rows.values()]);
+    };
+    box.addEventListener("toggle", () => { buildSpeakerFontMarkup.open = box.open; });
+    box.addEventListener("change", save);
+    box.addEventListener("keydown", (event) => { if (event.key === "Enter" && event.target.matches("input")) { event.preventDefault(); event.stopPropagation(); event.target.blur(); } });
+    box.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-speaker-font-add]")) {
+        host.insertAdjacentHTML("beforeend", speakerFontRowHtml({ name: "", fontId: "", room: false }));
+        host.lastElementChild.querySelector("input")?.focus({ preventScroll: true });
+      } else if (target?.closest("[data-speaker-font-remove]")) {
+        target.closest("[data-speaker-font-row]").remove(); save();
+      } else if (target?.closest("[data-speaker-font-scope]")) {
+        const btn = target.closest("[data-speaker-font-scope]"), on = btn.getAttribute("aria-pressed") !== "true";
+        btn.setAttribute("aria-pressed", on ? "true" : "false"); btn.classList.toggle("is-room", on); save();
+      }
+    });
+  }
+
   window.__CCF_FS_PRESET_BRIDGE__ = {
+    speakerFonts: () => {
+      if (!isReceivedPresetEnabled()) return null;
+      const rows = readSpeakerFontRows();
+      if (!rows.length) return null;
+      return { narration: rows.find((row) => row.name === "")?.fontId || "", chars: Object.fromEntries(rows.filter((row) => row.name).map((row) => [row.name, row.fontId])), narrators: [...readNarratorNameSet()] };
+    },
+    fontGaps: speakerFontGaps,
     list: () => (isReceivedPresetEnabled() && isPresetAutoEnabled() ? readStylePresets() : [])
       .filter((preset) => preset.auto !== false && preset.name)
       .map((preset) => ({ name: String(preset.name), style: cleanupStyle(preset.style || {}) }))
@@ -14791,9 +14905,12 @@
     // 서식 프리셋 자동 적용 (#70) — 메시지 안에 프리셋 이름과 같은 텍스트가 있으면
     // 그 구간에 프리셋 서식을 입혀 전송. 기존 수동 서식이 우선.
     const presetNameRuns = buildPresetNameRuns(sendText);
-    const outgoingRuns = presetNameRuns.length
+    const namedRuns = presetNameRuns.length
       ? [...presetNameRuns, ...baseRuns]
       : baseRuns;
+    // 0.1.145 화자별 글꼴: 글꼴을 직접 고르지 않은 구간에만(커맨드·컷인은 위에서 이미 빠졌다; 카드·Roll20 매크로 제외)
+    const speakerFont = !state.roll20Source && !/^\s*\[(?:아이템|어빌리티)/.test(sendText) ? speakerFontForSend(blockStyle) : "";
+    const outgoingRuns = speakerFont ? [...namedRuns, ...speakerFontGaps(sendText.length, namedRuns, speakerFont)] : namedRuns;
     const preparedRuns = prepareRunsForTransport(outgoingRuns, sendText.length);
     if (preparedRuns.failed) {
       alert("클립보드나 로컬 이미지를 저장하지 못해 전송을 중단했습니다. 이미지 링크를 사용하거나 이미지를 더 작게 만들어주세요.");
