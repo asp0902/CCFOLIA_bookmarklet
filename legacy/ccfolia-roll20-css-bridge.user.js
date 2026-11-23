@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.114
+// @version      0.3.115
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.114"),
+    version: getUserscriptVersion("0.3.115"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1830,9 +1830,10 @@
     // 팔레트는 하단 줄이 입력중 표시로 바뀌어도 그 줄에 붙어 있으므로(theme 0.2.58) 이 단추도 같이 보인다. 팔레트가 없으면(테마 기능 꺼짐 등) 예전 자리.
     const palette = document.getElementById("ccf-theme-switcher-toggle");
     const form = composer.closest("form");
-    if (palette instanceof HTMLElement && !palette.hidden && form?.querySelector('[data-ccf-theme-switcher-anchor="1"]')) {
-      const p = palette.getBoundingClientRect();
-      if (p.width > 0 && p.height > 0) {
+    if (palette instanceof HTMLElement && !palette.hidden && form) {
+      const p = palette.getBoundingClientRect(), box = form.getBoundingClientRect();
+      // 0.3.115 팔레트가 이 입력 form 의 하단 줄에 있는지는 실제 위치로 본다(하단 줄 요소가 입력중 표시로 새로 그려지면 테마의 표식이 잠깐 없어 예전 자리로 돌아가던 경쟁 상태)
+      if (p.width > 0 && p.height > 0 && p.left >= box.left - 1 && p.right <= box.right + 1 && p.top >= box.top - 1 && p.bottom <= box.bottom + 1) {
         btn.classList.add("is-footer");
         const wantLeft = p.left - p.width - FOOTER_BTN_GAP, wantTop = p.top;
         btn.style.left = `${wantLeft}px`; btn.style.top = `${wantTop}px`;
@@ -6301,7 +6302,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.114",
+    version: "0.3.115",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
