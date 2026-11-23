@@ -470,10 +470,9 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 #chat-form .dice-row .fmt-menu button{width:100%;height:36px;padding:0 16px;border-radius:0}
 .fmt-color::before{box-shadow:inset 0 0 0 1px rgb(128,128,128)}
 .fmt-size{padding:0 2px;font-family:system-ui,-apple-system,sans-serif}
-#chat-form .fmt-row .fmt-group-btn{width:auto;min-width:30px;height:30px;padding:0 6px;white-space:nowrap;background:rgb(40,40,40)}
+#chat-form .fmt-row .fmt-group-btn{width:30px;min-width:30px;height:30px;padding:0;white-space:nowrap;background:rgb(40,40,40)}
 #chat-form .fmt-row .fmt-group-btn:hover{background:#383838}
 .fmt-font-menu{max-height:min(360px,calc(100vh - 16px));min-width:180px;overflow-y:auto}
-.fmt-font-title{display:block;padding:8px 16px 2px;font:700 11px/1.4 Roboto,"Noto Sans KR",sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.55)}
 #chat-form .fmt-row .fmt-menu button{flex:none;width:100%;height:36px;padding:0 16px;background:none;font-family:inherit;font-size:15px;text-align:left}
 #chat-form .fmt-row .fmt-menu button:hover{background:rgba(255,255,255,.08)}
 /* bottom line: CCFOLIA's 0.67px divider above the same background */

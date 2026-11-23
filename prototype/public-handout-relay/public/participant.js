@@ -1220,15 +1220,11 @@ refreshSpeakerUi();
   };
   const deco = group("deco", "Aa", "꾸미기", [[mk("", "Ruby", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "Tooltip", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "Blur", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "Code block", () => wrapSelection("`", "`")), "</>", "코드"]]);
   const extra = group("extra", "⋯", "더 보기", [[toggle("", "Narration", "narration"), "Nr", "나레이션"], [toggle("", "Parentheses gray", "parenGray"), "()", "괄호 회색"]]);
-  // font menu (가▾): the toolkit's list by group; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
-  const fontBox = group("font", "가▾", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
+  // font menu (가): one list, Korean names in 가나다 order, then Latin names; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
+  const fontBox = group("font", "가", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
   fontMenu.classList.add("fmt-font-menu");
-  for (const title of ["고딕", "명조", "손글씨·장식"]) {
-    const ids = Object.keys(MESSAGE_FONTS).filter(id => (MESSAGE_FONT_INFO[id]?.[1] || "손글씨·장식") === title);
-    if (!ids.length) continue;
-    const head = document.createElement("span"); head.className = "fmt-font-title"; head.textContent = title; fontMenu.append(head);
-    for (const id of ids) { const item = mk(MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id], `글꼴: ${MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id]}`, () => wrapSelection(`{f:${id}|`, "|}")); item.setAttribute("role", "menuitem"); item.dataset.fontId = id; fontMenu.append(item); }
-  }
+  const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
+  for (const [id, label] of Object.keys(MESSAGE_FONTS).map(id => [id, MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id]]).sort(byName)) { const item = mk(label, `글꼴: ${label}`, () => wrapSelection(`{f:${id}|`, "|}")); item.setAttribute("role", "menuitem"); item.dataset.fontId = id; fontMenu.append(item); }
   fontBox.querySelector(".fmt-group-btn").addEventListener("click", () => {
     if (fontMenu.__seen || typeof IntersectionObserver !== "function") return;
     fontMenu.__seen = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; const family = messageFont(entry.target.dataset.fontId); if (family) entry.target.style.fontFamily = `"${family}", sans-serif`; fontMenu.__seen.unobserve(entry.target); }), { root: fontMenu });

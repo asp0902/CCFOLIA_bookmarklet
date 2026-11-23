@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.143
+// @version      0.1.144
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.143"),
+    version: getUserscriptVersion("0.1.144"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -4337,12 +4337,11 @@
       html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current, .ccf-font-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; font-family: Roboto, sans-serif; }
       html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-font-menu { max-height: min(360px, calc(100vh - 16px)); overflow-y: auto; min-width: 180px; }
       html .ccf-inline-toolbar .ccf-inline-font-menu .ccf-toggle { font-size: 15px !important; }
-      .ccf-inline-toolbar .ccf-font-group-title { display: block; padding: 8px 16px 2px; font: 700 11px/1.4 Roboto, "Noto Sans KR", sans-serif; letter-spacing: .04em; color: rgba(255,255,255,.55); }
       .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
       .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
       /* 0.1.134 꾸미기 묶음 단추는 "Aa" 만 — B·I·U·S 와 같은 30×30 */
-      .ccf-inline-toolbar [data-inline-group="deco"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; }
+      .ccf-inline-toolbar :is([data-inline-group="deco"], [data-inline-group="font"]) > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; } /* 0.1.144 글꼴 단추도 '가' 한 글자, 옆 서식 단추와 같은 폭 */
       /* 0.1.138 Aa·⋯ 는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치는 placeInlineGroupsInDiceRow) — 높이는 주사위 줄 단추에 맞추고 글자 크기는 그대로 */
       .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) { position: fixed !important; z-index: 1300; display: inline-flex; align-items: center; margin: 0 !important; }
       .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; width: var(--ccf-dice-btn-w, 38px) !important; min-width: var(--ccf-dice-btn-w, 38px) !important; padding: 0 !important; }
@@ -4391,6 +4390,8 @@
       .ccf-style-preset-auto-dot[data-on="1"]::after { transform: translateX(14px); background: #2196f3; }
       .ccf-style-preset-auto-dot:focus-visible { outline: 2px solid #64b5f6; outline-offset: 2px; }
       .ccf-inline-popover.ccf-inline-float-popover { border-radius: 0; width: min(380px, calc(100vw - 24px)); }
+      /* 0.1.144 서식 프리셋(Sv) 창: 외곽선 없이 코코포리아 팝오버 그림자만(안쪽 구분선·입력칸은 그대로) */
+      html .ccf-inline-popover.ccf-inline-float-popover:not(.is-text-popover) { border: 0 !important; outline: 0 !important; box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12) !important; }
       .ccf-inline-popover.ccf-inline-float-popover.is-text-popover { box-sizing: border-box; width: min(300px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: hidden; }
       .ccf-inline-popover.is-text-popover textarea.ccf-inline-popover-field { height: 56px; min-height: 0; resize: none; }
       .ccf-style-preset-title-row {
@@ -5823,11 +5824,9 @@
     const fonts = window.__CCF_MESSAGE_FONTS__ || {}, info = window.__CCF_MESSAGE_FONT_INFO__ || {};
     const item = (id, family, label) => `<button type="button" class="ccf-toggle" role="menuitemradio" aria-checked="false" data-inline-font-pick="${id}"${family ? ` data-font-family="${family}" style="font-family:'${family}', sans-serif"` : ""} title="${family || "기본 글꼴"}">${label}</button>`;
     let html = item("", "", "기본");
-    for (const group of ["고딕", "명조", "손글씨·장식"]) {
-      const ids = Object.keys(fonts).filter((id) => (info[id]?.[1] || "손글씨·장식") === group);
-      if (!ids.length) continue;
-      html += `<span class="ccf-font-group-title" role="presentation">${group}</span>` + ids.map((id) => item(id, fonts[id], info[id]?.[0] || fonts[id])).join("");
-    }
+    // 0.1.144 묶음 머리글 없이 한 목록: 한글 이름 가나다순, 그 뒤 영문 이름 알파벳순('기본'은 맨 위)
+    const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
+    html += Object.keys(fonts).map((id) => [id, info[id]?.[0] || fonts[id]]).sort(byName).map(([id, label]) => item(id, fonts[id], label)).join("");
     return html;
   }
 
@@ -5862,7 +5861,7 @@
         <input type="color" value="#010101" data-inline-color="backgroundColor" aria-label="Background color">
       </label>
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="Font size" title="Font size">
-      <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가▾</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${fontMenuItemsHtml()}</span></span>
+      <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${fontMenuItemsHtml()}</span></span>
       <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
       <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa</button><span class="ccf-inline-group-menu" role="menu">
       <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="Ruby" aria-label="Ruby"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
