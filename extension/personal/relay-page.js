@@ -94,7 +94,7 @@
         }
       }
     } catch (_) { /* a failed check must never stop the chat relay */ }
-    emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), present, health });
+    emit({ action: "snapshot", messages, channels, dicebot: readDicebot(), systemName: String(document.querySelector?.("header h6 span")?.textContent || "").trim().slice(0, 40), present, health });
   };
 
   // A failed Roll20 line used to vanish silently: log it and show one short toast per distinct reason.

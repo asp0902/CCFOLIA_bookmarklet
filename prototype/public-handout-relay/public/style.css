@@ -385,3 +385,74 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 #messages h6,#messages strong{font-size:14px;font-weight:700;line-height:1.57}
 #messages .msg-time{font-size:12px;font-weight:400;line-height:1.66;color:rgb(117,117,117)}
 #messages p{font-size:14px;line-height:1.43}
+
+/* ===== Playroom vs CCFOLIA 1.37.6, measured 2026-11-23 at 1440x900 and 471x863 (docs/playroom-vs-ccfolia-1123.md) ===== */
+:root,.dialog,#chat-form,#chat-form button,#chat-form input,#chat-form textarea,#messages{font-family:Roboto,Helvetica,Arial,"Noto Sans KR","Noto Sans JP",sans-serif}
+.chat{position:relative;grid-template-columns:minmax(0,1fr)}
+.chat h2{font-size:14px;font-weight:700;letter-spacing:.09996px}
+.rm-system{margin-left:4px;font-size:12px;font-weight:400;letter-spacing:.39996px;color:#eee;white-space:nowrap}
+.rm-system[hidden]{display:none}
+/* name row: filled 205x40 box, no underline */
+#chat-form .name-row{padding:8px;gap:0}
+#chat-form .name-row .face-btn{height:40px}
+#chat-form #chat-name,#chat-form #chat-name:hover,#chat-form #chat-name:focus{flex:1;min-width:0;height:40px;margin-right:8px;padding:8px 4px 9px;border:0;border-radius:0;outline:0;background:rgba(0,0,0,.2);color:#fff;font-size:16px;line-height:23px;letter-spacing:.15008px}
+#chat-form .name-row .mini-btn{margin-left:0}
+#chat-form .name-row #pal-btn{margin-left:4px}
+#chat-form .name-row #help-btn[hidden]{display:flex!important;visibility:hidden} /* keeps CCFOLIA's three-icon width before the help text arrives */
+/* dice row: padding 0 8px 8px, 30x30 buttons (padding 3px) 4px apart, send last; Aa and ⋯ right before it */
+#chat-form .dice-row{align-items:center;gap:0;padding:0 8px 8px}
+#chat-form .dice-row button[aria-label^="D"]{flex:none;width:30px;height:30px;margin-left:4px;padding:3px}
+#chat-form .dice-row button[type=submit]{margin-left:4px;letter-spacing:.37141px}
+#chat-form .dice-row .fmt-group[data-group="deco"]{margin-left:auto}
+#chat-form .dice-row .fmt-group[data-group="extra"]{margin-left:2px}
+.fmt-group{position:relative;display:inline-flex;flex:none}
+#chat-form .fmt-group-btn{align-self:auto;display:flex;align-items:center;justify-content:center;min-width:0;width:24px;height:30px;padding:0;border:0;border-radius:0;background:rgb(40,40,40);box-shadow:none;color:#fff;font-size:12px;font-weight:400;line-height:1}
+#chat-form .fmt-group-btn:hover,.fmt-group:has([aria-pressed="true"]) .fmt-group-btn{background:#383838!important}
+.fmt-menu{position:fixed;z-index:100000;display:flex;flex-direction:column;min-width:150px;padding:8px 0;border-radius:4px;background:#424242;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
+.fmt-menu[hidden]{display:none}
+#chat-form .fmt-menu button{align-self:stretch;display:flex;align-items:center;gap:10px;width:100%;min-width:0;height:36px;padding:0 16px;border:0;border-radius:0;background:none;box-shadow:none;color:#fff;font-size:14px;font-weight:400;line-height:1.5;text-align:left}
+#chat-form .fmt-menu button:hover{background:rgba(255,255,255,.08)}
+#chat-form .fmt-menu button[aria-pressed="true"]{background:rgba(144,202,249,.16)}
+#chat-form .fmt-menu button[aria-pressed="true"]::after{content:"✓";margin-left:auto}
+.fmt-key{display:inline-flex;justify-content:center;min-width:28px;font-size:12px;opacity:.75}
+/* format bar: the toolkit's flat 30x30 row on rgb(40,40,40) */
+#chat-form .fmt-row{display:flex;flex-wrap:wrap;align-items:center;gap:0;padding:6px;border-top:.667px solid rgba(255,255,255,.12);background:rgb(40,40,40)}
+#chat-form .fmt-row button,#chat-form .fmt-row .fmt-color,#chat-form .fmt-row .fmt-size{border:0;box-sizing:border-box}
+#chat-form .fmt-row button{width:30px;height:30px;padding:0;border-radius:0;background:rgb(40,40,40);box-shadow:none;color:#fff;font-size:12px;font-weight:400}
+#chat-form .fmt-row button:hover,#chat-form .fmt-row button[aria-pressed="true"]{background:#383838;color:#fff}
+.fmt-color{position:relative;display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin:0;background:rgb(40,40,40)}
+.fmt-color::before{content:"";width:16px;height:16px;background:var(--chip,#fff)}
+.fmt-color input{position:absolute;inset:0;width:30px;height:30px;opacity:0}
+.fmt-size{width:32px;height:30px;padding:0;border-radius:0;background:#424242;color:#fff;font-size:12px;text-align:center}
+/* message box: 100px well, 92px text area, no underline */
+.ta-wrap{height:100px;margin-top:0;padding:4px 8px;background:rgba(0,0,0,.2)}
+#chat-input,#chat-input:focus{display:block;width:100%;height:92px;min-height:92px;padding:0;border:0;outline:0;background:transparent;font-size:16px;line-height:23px;letter-spacing:.15008px;resize:none}
+/* bottom line: 37px, 12px/19.92px; the send status floats in it instead of adding height */
+.dice-footer{min-height:37.25px;padding:11.4px 16px 0;line-height:19.92px;letter-spacing:.39996px}
+.dice-footer span{line-height:19.92px;letter-spacing:.39996px}
+#send-status{position:absolute;right:16px;bottom:8px;margin:0;padding:0;background:none;line-height:19.92px;pointer-events:none}
+/* chat list: the browser's own scrollbar track is always there, like CCFOLIA's */
+#messages{overflow-y:scroll}
+#messages h6,#messages strong{line-height:21.98px;letter-spacing:.09996px}
+#messages .msg-time{line-height:19.92px;letter-spacing:.39996px}
+#messages p{line-height:20.02px;letter-spacing:.14994px}
+/* a full row: 8 + text margin 6 + name 21.98 + body 20.02 + 6 + 8, avatar 8px lower than the row padding, a 0.67px divider */
+#messages li:not(.merged){padding:8px 0}
+#messages li:not(.merged) .avatar{margin-top:8px}
+#messages li:not(.merged) .msg-text{margin:6px 0}
+#messages li:not(.merged) p{margin:0}
+#messages li{border-bottom-width:.667px}
+/* BGM bar: slider, mute, stop and the BGM01 / BGM02 slots, right-aligned 8px from the chat */
+.bgm-row1{justify-content:flex-end;gap:0;padding:0 7px 0 0}
+#bgm-bar #bgm-vol{margin-right:8px}
+#bgm-bar .bgm-row1 button{width:30px;height:30px}
+.bgm-slot{display:flex;align-items:center;justify-content:center;flex:none;width:64px;height:31px;color:#eee;font-size:13px;font-weight:700;letter-spacing:.37141px}
+.bgm-slot.is-on{color:#2196f3}
+/* narrow window: the chat covers the screen like CCFOLIA's drawer; >| folds it back to the map */
+@media(max-width:720px){
+  body:not(.pip) #room:not(.chat-collapsed) .chat{position:fixed;inset:0;z-index:200;display:grid;grid-template-rows:56px minmax(0,1fr) auto;width:100%;height:100vh;height:100dvh;min-height:0;border-left:0;overflow:hidden}
+  body:not(.pip) .chat h2{height:56px;line-height:56px}
+  body:not(.pip) #messages{min-height:0;max-height:none}
+  body:not(.pip) #room:has(#handout:not([hidden])) .chat{display:none!important} /* an open handout stays reachable */
+  body:not(.pip) #room:not(.chat-collapsed):not(:has(#handout:not([hidden]))) :is(.stage,.stage *){visibility:hidden} /* the map and its buttons do not show through the chat */
+}

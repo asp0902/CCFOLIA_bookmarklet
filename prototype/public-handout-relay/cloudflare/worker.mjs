@@ -381,8 +381,10 @@ export class RoomRelay {
       if (!channels.length && !dicebot) return json({ error: "탭 목록이 필요합니다." }, 400);
       if (channels.length) room.channels = channels;
       if (dicebot) room.dicebot = dicebot;
+      const systemName = text(body.systemName, 40).trim();
+      if (systemName) room.systemName = systemName;
       await this.save(room);
-      this.push("p", { type: "channels", channels: room.channels || [], dicebot: room.dicebot || "" });
+      this.push("p", { type: "channels", channels: room.channels || [], dicebot: room.dicebot || "", systemName: room.systemName || "" });
       return json({ accepted: true });
     }
     // The GM's YouTube BGM: only the video id and play/stop state are relayed; participants play it in their own browser.
@@ -535,6 +537,7 @@ export class RoomRelay {
       bgm: room.bgm || { state: "stopped" },
       channels: room.channels || [],
       dicebot: room.dicebot || "",
+      systemName: room.systemName || "",
       health: room.health ? { ok: room.health.ok } : null,
       mirror: await (async () => { const meta = await this.state.storage.get("mirror:meta"); return meta ? { cssHash: meta.cssHash || "", tplHash: meta.tplHash || "", helpHash: meta.helpHash || "", assetsHash: meta.assetsHash || "", fontLinks: meta.fontLinks || [] } : null; })(),
       scene: room.scene || null,

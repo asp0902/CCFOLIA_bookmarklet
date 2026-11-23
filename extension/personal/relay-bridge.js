@@ -288,10 +288,11 @@
         const messages = Array.isArray(request.messages) ? request.messages : [];
         const channels = Array.isArray(request.channels) ? request.channels.slice(0, 12).map(item => ({ id: clean(item.id, 100), label: clean(item.label, 20) })).filter(item => item.id) : [];
         const dicebot = /^BCDice@[\w.\-]+$/.test(clean(request.dicebot, 40)) ? clean(request.dicebot, 40) : "";
-        const channelKey = JSON.stringify({ channels, dicebot });
+        const systemName = clean(request.systemName, 40);
+        const channelKey = JSON.stringify({ channels, dicebot, systemName });
         if ((channels.length || dicebot) && channelKey !== lastChannelKey) {
           lastChannelKey = channelKey;
-          post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels, dicebot }).catch(() => { lastChannelKey = ""; });
+          post(`/api/admin/rooms/${encodeURIComponent(roomId)}/channels`, { channels, dicebot, ...(systemName ? { systemName } : {}) }).catch(() => { lastChannelKey = ""; });
         }
         // The structure check result: sent to the relay (participants see a notice) and kept for the share settings window.
         if (request.health && typeof request.health === "object") {
