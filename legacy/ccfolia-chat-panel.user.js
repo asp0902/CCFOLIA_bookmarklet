@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.57
+// @version      0.5.58
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.57";
+  const VERSION = "0.5.58";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -450,6 +450,8 @@
         for (const [key, types] of Object.entries(spec[kind])) {
           const label = `${kind}.${key}`;
           if (!sample || !(key in sample)) { if (!missing.includes(label)) missing.push(label); }
+          // 실측(1.37.6): 방금 보낸 메시지는 서버 시각이 확정될 때까지(약 70ms) createdAt 이 null 이다 — 구조 변경이 아니므로 형태는 다른 메시지로 판정한다
+          else if (kind === "message" && key === "createdAt" && sample[key] === null) continue;
           else if (!types.includes(shapeType(sample[key])) && !missing.includes(`${label}(${shapeType(sample[key])})`)) missing.push(`${label}(${shapeType(sample[key])})`);
         }
       }
