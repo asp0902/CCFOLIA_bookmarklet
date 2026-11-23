@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.56
+// @version      0.5.57
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.56";
+  const VERSION = "0.5.57";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1897,7 +1897,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
           i += image[0].length;
           continue;
         }
-        const head = /^\{([cbsan]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
+        const head = /^\{([cbsanf]):([^|{}\n]{1,24})\|/.exec(input.slice(i, i + 40));
         if (head) { spans.push({ key: head[1], value: head[2], start: text.length }); i += head[0].length; continue; }
       }
       if (spans.length && input.startsWith("|}", i)) {
@@ -1907,6 +1907,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
           else if (span.key === "b" && /^#[0-9a-f]{3,8}$/i.test(span.value)) runs.push({ start: span.start, end: text.length, style: { backgroundColor: span.value } });
           else if (span.key === "s" && /^\d{1,2}$/.test(span.value)) runs.push({ start: span.start, end: text.length, style: { fontSize: Math.max(8, Math.min(72, Number(span.value))) } });
           else if (span.key === "a" && ["left", "center", "right"].includes(span.value)) alignSpans.push({ start: span.start, end: text.length, align: span.value });
+          else if (span.key === "f" && /^[a-z0-9-]{1,24}$/.test(span.value)) runs.push({ start: span.start, end: text.length, style: { fontId: span.value } }); // 0.5.57 {f:글꼴id|글|}: 플레이룸의 글꼴 메뉴
           else if (span.key === "n") narration = true; // {n:1|글|} : 나레이션 메시지(참여자 웹의 Nr 단추)
         }
         i += 2;

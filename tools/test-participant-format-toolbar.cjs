@@ -29,6 +29,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   // alignment buttons act as one group (left active first), like the toolkit toolbar
   const pressed = async () => page.evaluate(() => [...document.querySelectorAll('.fmt-row button[aria-label^="Align"]')].map(b => b.getAttribute('aria-pressed')).join());
   assert.equal(await pressed(), 'true,false,false'); await page.click('.fmt-row button[aria-label="Align center"]'); assert.equal(await pressed(), 'false,true,false');
+  // 2026-11-23: the letters show their format, the colour chips have the toolkit's 1px edge, the font menu wraps a selection in {f:id|..|}
+  assert.deepEqual(await page.evaluate(() => ['Bold', 'Italic', 'Underline', 'Strike'].map((n) => { const b = document.querySelector(`.fmt-row button[aria-label="${n}"]`).firstElementChild, c = getComputedStyle(b); return [b.tagName, c.fontWeight, c.fontStyle, c.textDecorationLine]; })), [['B', '700', 'normal', 'none'], ['I', '400', 'italic', 'none'], ['U', '400', 'normal', 'underline'], ['S', '400', 'normal', 'line-through']]);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.fmt-color'), '::before').boxShadow), 'rgb(128, 128, 128) 0px 0px 0px 1px inset');
+  await page.fill('#chat-input', '글꼴 글자'); await page.evaluate(() => document.getElementById('chat-input').setSelectionRange(0, 2));
+  await page.click('.fmt-group[data-group="font"] .fmt-group-btn');
+  assert.equal(await page.locator('.fmt-font-menu [data-font-id]').count(), 38, 'the toolkit font list');
+  await page.click('.fmt-font-menu [data-font-id="gowun-batang"]');
+  assert.equal(await page.inputValue('#chat-input'), '{f:gowun-batang|글꼴|} 글자'); assert.equal(await page.locator('.fmt-font-menu').isVisible(), false);
+  await page.fill('#chat-input', '');
   // a status bar without a maximum has no fill (CCFOLIA shows only the dim track for HP 0/0)
   const fill = await page.evaluate(() => { renderScene({ fieldWidth: 20, fieldHeight: 10, items: [], markers: [], characters: [{ id: 'c', name: 'A', x: 0, y: 0, z: 0, angle: 0, width: 4, height: 4, iconUrl: 'https://storage.ccfolia-cdn.net/a.png', status: [{ label: 'HP', value: 0, max: 0 }, { label: 'MP', value: 5, max: 10 }] }] }); return [...document.querySelectorAll('.st-fill')].map(f => f.style.width).join(); });
   assert.equal(fill, '0%,50%');

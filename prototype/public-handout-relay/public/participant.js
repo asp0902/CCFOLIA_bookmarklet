@@ -810,6 +810,8 @@ const applyExtraCss = (span, extra) => {
 };
 // 메시지 글꼴: 봉투의 글꼴 id → 허용 목록의 Google 무료 한글 글꼴(툴킷 format-sync 의 window.__CCF_MESSAGE_FONTS__ 와 같은 목록). 모르는 id 는 기본 글꼴.
 const MESSAGE_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1", "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish", "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia", "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo", "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung", "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture", "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One" });
+// id -> [Korean name, group], the same list as the toolkit font menu (format-sync __CCF_MESSAGE_FONT_INFO__)
+const MESSAGE_FONT_INFO = Object.freeze({ "noto-sans-kr": ["본고딕", "고딕"], "noto-serif-kr": ["본명조", "명조"], "nanum-gothic": ["나눔고딕", "고딕"], "nanum-myeongjo": ["나눔명조", "명조"], "gowun-dodum": ["고운돋움", "고딕"], "gowun-batang": ["고운바탕", "명조"], "do-hyeon": ["도현", "고딕"], "jua": ["주아", "고딕"], "black-han-sans": ["검은고딕", "고딕"], "nanum-pen-script": ["나눔손글씨 펜", "손글씨·장식"], "gaegu": ["개구", "손글씨·장식"], "hi-melody": ["하이멜로디", "손글씨·장식"], "song-myung": ["송명", "명조"], "dongle": ["동글", "고딕"], "asta-sans": ["아스타 산스", "고딕"], "gothic-a1": ["고딕 A1", "고딕"], "ibm-plex-sans-kr": ["IBM 플렉스 산스", "고딕"], "nanum-gothic-coding": ["나눔고딕코딩", "고딕"], "sunflower": ["선플라워", "고딕"], "stylish": ["스타일리시", "고딕"], "orbit": ["오르빗", "고딕"], "gasoek-one": ["가석", "고딕"], "hahmlet": ["함렛", "명조"], "diphylleia": ["디필레이아", "명조"], "grandiflora-one": ["그랜디플로라", "명조"], "nanum-brush-script": ["나눔손글씨 붓", "손글씨·장식"], "east-sea-dokdo": ["동해독도", "손글씨·장식"], "dokdo": ["독도", "손글씨·장식"], "gamja-flower": ["감자꽃", "손글씨·장식"], "poor-story": ["푸어 스토리", "손글씨·장식"], "single-day": ["싱글데이", "손글씨·장식"], "yeon-sung": ["연성", "손글씨·장식"], "cute-font": ["큐트 폰트", "손글씨·장식"], "gugi": ["구기", "손글씨·장식"], "kirang-haerang": ["기랑해랑", "손글씨·장식"], "black-and-white-picture": ["흑백사진", "손글씨·장식"], "bagel-fat-one": ["베이글 팻 원", "손글씨·장식"], "moirai-one": ["모이라이", "손글씨·장식"] });
 const loadedFonts = new Set();
 function messageFont(id) {
   const family = Object.prototype.hasOwnProperty.call(MESSAGE_FONTS, id) ? MESSAGE_FONTS[id] : "";
@@ -1142,7 +1144,7 @@ function refreshSpeakerUi() {
   speakerImg.hidden = !c; speakerBtn.querySelector("svg").style.display = c ? "none" : "";
   if (c) speakerImg.src = c.iconUrl;
   palBtn.disabled = !(c && String(c.commands || "").trim());
-  colorBtn.style.color = (c && /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "") || nameColor || "#cce5df"; // the palette icon takes the speaker's colour, like CCFOLIA's
+  colorBtn.style.color = (c && /^#[0-9a-f]{3,8}$/i.test(c.color || "") ? c.color : "") || nameColor || "#fff"; // the palette icon takes the speaker's colour, white otherwise, like CCFOLIA's
 }
 function openSpeakerMenu() {
   const items = [{ label: "내 이름", current: !speaker.value, run: () => useSpeaker("") }, ...(sceneData?.characters || []).map(c => ({ label: c.name || "(이름 없음)", current: c.id === speaker.value, run: () => useSpeaker(c.id) }))];
@@ -1183,7 +1185,8 @@ refreshSpeakerUi();
   // The toolkit's current bar: B I U S / align x3 / colours / size on one flat row; Aa (Rb, Tip, Bl, code) and ⋯ (Nr, "()") sit next to the send button of the dice row.
   const toggle = (label, title, key) => { const b = mk(label, title, () => { fmtState[key] = !fmtState[key]; b.setAttribute("aria-pressed", String(fmtState[key])); }); b.setAttribute("aria-pressed", "false"); return b; };
   const row = document.createElement("div"); row.className = "fmt-row";
-  row.append(mk("B", "Bold", () => wrapSelection("**", "**")), mk("I", "Italic", () => wrapSelection("*", "*")), mk("U", "Underline", () => wrapSelection("__", "__")), mk("S", "Strike", () => wrapSelection("~~", "~~")));
+  const styled = (button, tag) => { const inner = document.createElement(tag); inner.textContent = button.textContent; button.replaceChildren(inner); return button; }; // the letters show their own format, like the toolkit's bar
+  row.append(styled(mk("B", "Bold", () => wrapSelection("**", "**")), "b"), styled(mk("I", "Italic", () => wrapSelection("*", "*")), "i"), styled(mk("U", "Underline", () => wrapSelection("__", "__")), "u"), styled(mk("S", "Strike", () => wrapSelection("~~", "~~")), "s"));
   const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); svg.setAttribute("aria-hidden", "true"); const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); b.append(svg); return b; };
   const aligns = [align("left", "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"), align("center", "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"), align("right", "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z")];
   // alignment buttons: one is active, like the toolkit's toolbar (left by default)
@@ -1216,6 +1219,21 @@ refreshSpeakerUi();
   };
   const deco = group("deco", "Aa", "꾸미기", [[mk("", "Ruby", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "Tooltip", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "Blur", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "Code block", () => wrapSelection("`", "`")), "</>", "코드"]]);
   const extra = group("extra", "⋯", "더 보기", [[toggle("", "Narration", "narration"), "Nr", "나레이션"], [toggle("", "Parentheses gray", "parenGray"), "()", "괄호 회색"]]);
+  // font menu (가▾): the toolkit's list by group; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
+  const fontBox = group("font", "가▾", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
+  fontMenu.classList.add("fmt-font-menu");
+  for (const title of ["고딕", "명조", "손글씨·장식"]) {
+    const ids = Object.keys(MESSAGE_FONTS).filter(id => (MESSAGE_FONT_INFO[id]?.[1] || "손글씨·장식") === title);
+    if (!ids.length) continue;
+    const head = document.createElement("span"); head.className = "fmt-font-title"; head.textContent = title; fontMenu.append(head);
+    for (const id of ids) { const item = mk(MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id], `글꼴: ${MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id]}`, () => wrapSelection(`{f:${id}|`, "|}")); item.setAttribute("role", "menuitem"); item.dataset.fontId = id; fontMenu.append(item); }
+  }
+  fontBox.querySelector(".fmt-group-btn").addEventListener("click", () => {
+    if (fontMenu.__seen || typeof IntersectionObserver !== "function") return;
+    fontMenu.__seen = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; const family = messageFont(entry.target.dataset.fontId); if (family) entry.target.style.fontFamily = `"${family}", sans-serif`; fontMenu.__seen.unobserve(entry.target); }), { root: fontMenu });
+    fontMenu.querySelectorAll("[data-font-id]").forEach(node => fontMenu.__seen.observe(node));
+  });
+  row.append(fontBox);
   document.addEventListener("pointerdown", event => { if (!event.target.closest?.(".fmt-group")) closeGroups(); });
   document.addEventListener("keydown", event => { if (event.key === "Escape") closeGroups(); });
   const diceRow = document.querySelector("#chat-form .dice-row");
