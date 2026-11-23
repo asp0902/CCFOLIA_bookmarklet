@@ -2,6 +2,10 @@
 const params = new URLSearchParams(location.hash.slice(1));
 const roomId = params.get("room") || "";
 const inviteToken = params.get("token") || "";
+// "다른 창으로 보기": CCFOLIA opens the chat alone at its own address; here the same page with chat=1 (same login cookie). The main window keeps the sound and the popups.
+const chatOnly = params.get("chat") === "1";
+if (chatOnly) document.documentElement.classList.add("chat-only");
+const openChatWindow = () => window.open(`${location.pathname}#room=${encodeURIComponent(roomId)}&chat=1`, `capybara-chat-${roomId}`, "popup,width=580,height=1050")?.focus();
 const consent = document.getElementById("consent");
 // Remember the display name on this browser so a returning participant does not retype it.
 const NAME_KEY = "capybara-display-name";
@@ -47,6 +51,7 @@ function ensureYouTubeApi() {
   const script = document.createElement("script"); script.src = "https://www.youtube.com/iframe_api"; document.head.append(script);
 }
 function startPlayer(id) {
+  if (chatOnly) return;
   if (!ytReady) return;
   const loop = bgmLast?.loop !== false;
   if (ytPlayer) { try { ytPlayer.destroy(); } catch (_) {} ytPlayer = null; }
@@ -124,6 +129,7 @@ function applyRoomAudioVolume() {
   for (const slot of Object.values(roomAudio)) if (slot.el && slot.cfg) { slot.el.volume = Math.max(0, Math.min(1, slot.cfg.volume * (bgmVolume / 100))); slot.el.muted = bgmMuted; }
 }
 function syncRoomAudio(scene) {
+  if (chatOnly) return;
   for (const kind of ["media", "sound"]) {
     const slot = roomAudio[kind], cfg = scene?.[kind] || null;
     if (!cfg || halted.has(cfg.url)) {
@@ -164,6 +170,7 @@ function showCutin(effect) {
   }
 }
 function playCutins(scene) {
+  if (chatOnly) return;
   const list = scene?.effects;
   if (!Array.isArray(list)) return;
   const newest = Math.max(0, ...list.map(effect => Number(effect.playTime) || 0));
@@ -282,22 +289,6 @@ async function loadMyHandouts(announce = false) {
     const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/my-handouts`);
     if (response.ok) applyMyHandouts((await response.json()).items, announce);
   } catch (_) { /* the legacy single handout keeps working */ }
-}
-// Floating window: Document Picture-in-Picture (Chrome/Edge 116+) keeps the chat panel in an always-on-top window next to CCFOLIA, no install needed.
-{
-  const button = document.getElementById("pip-open");
-  if ("documentPictureInPicture" in window) {
-    button.hidden = false;
-    button.addEventListener("click", async () => {
-      if (window.documentPictureInPicture.window) { window.documentPictureInPicture.window.close(); return; }
-      const chat = document.querySelector(".chat"), parent = chat.parentElement, next = chat.nextSibling;
-      const pip = await window.documentPictureInPicture.requestWindow({ width: 380, height: 640 });
-      for (const link of document.querySelectorAll('link[rel="stylesheet"]')) pip.document.head.append(link.cloneNode(true));
-      pip.document.documentElement.className = "pip"; pip.document.body.className = "pip"; pip.document.body.append(chat);
-      button.textContent = "플로팅 창 닫기";
-      pip.addEventListener("pagehide", () => { parent.insertBefore(chat, next); button.textContent = "플로팅 창"; });
-    });
-  }
 }
 // Chat tabs mirror the GM's CCFOLIA tabs (메인 / 정보 / 잡담 / custom); each shows only its own messages and sends into itself.
 // The room as the GM sees it: blurred background, field image, pieces and characters. One unit = 24px at zoom 1 (measured on ccfolia.com);
@@ -1641,7 +1632,7 @@ function openCharacterEditor(id) {
 }
 function openRoomMenu(anchor) {
   const items = [{ label: "코코포리아에서 열기", run: () => window.open(`https://ccfolia.com/rooms/${encodeURIComponent(roomId)}`, "_blank", "noopener") }];
-  if ("documentPictureInPicture" in window) items.push({ label: document.getElementById("pip-open").textContent || "플로팅 창", run: () => document.getElementById("pip-open").click() });
+  if (!chatOnly) items.push({ label: "다른 창으로 보기(beta)", run: openChatWindow });
   items.push({ label: "룸에서 나가기", run: () => stop("룸에서 나갔습니다.") });
   openMenu(anchor, items);
 }
@@ -1650,9 +1641,9 @@ document.getElementById("room-menu-btn").addEventListener("click", event => open
 // "다른 창으로 보기" uses the floating chat window (same page: no second login or connection); a browser without it shows the entry disabled.
 const WIDE_KEY = "capybara-chat-wide";
 const setChatWide = on => { document.getElementById("room").classList.toggle("chat-wide", on); try { localStorage.setItem(WIDE_KEY, on ? "1" : "0"); } catch (_) {} renderScene(); };
-try { if (localStorage.getItem(WIDE_KEY) === "1") document.getElementById("room").classList.add("chat-wide"); } catch (_) {}
+try { if (!chatOnly && localStorage.getItem(WIDE_KEY) === "1") document.getElementById("room").classList.add("chat-wide"); } catch (_) {}
 const openChatMenu = anchor => openMenu(anchor, [
-  "documentPictureInPicture" in window ? { label: "다른 창으로 보기(beta)", run: () => document.getElementById("pip-open").click() } : { label: "다른 창으로 보기(beta)", disabled: true },
+  chatOnly ? { label: "다른 창으로 보기(beta)", disabled: true } : { label: "다른 창으로 보기(beta)", run: openChatWindow },
   { label: "와이드 모드 전환", run: () => setChatWide(!document.getElementById("room").classList.contains("chat-wide")) },
   { divider: true },
   { label: "로그 출력", run: () => downloadLog("html") },
@@ -1810,6 +1801,7 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
 {
   const COLLAPSE_KEY = "capybara-chat-collapsed";
   const set = on => {
+    if (chatOnly) { window.close(); return; }
     document.getElementById("room").classList.toggle("chat-collapsed", on);
     document.getElementById("chat-open").hidden = !on;
     try { localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (_) {}
@@ -1818,7 +1810,7 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
   document.getElementById("chat-close").addEventListener("click", () => set(true));
   document.getElementById("chat-open").addEventListener("click", () => set(false));
   let saved = "0"; try { saved = localStorage.getItem(COLLAPSE_KEY) || "0"; } catch (_) {}
-  if (saved === "1") { document.getElementById("room").classList.add("chat-collapsed"); document.getElementById("chat-open").hidden = false; }
+  if (saved === "1" && !chatOnly) { document.getElementById("room").classList.add("chat-collapsed"); document.getElementById("chat-open").hidden = false; }
 }
 
 // Theme window (the palette at the right end of the bottom line, like the toolkit's): this participant's browser only. Same fields, colour presets and export file as the toolkit's theme-switcher.
