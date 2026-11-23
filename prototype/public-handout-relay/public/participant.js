@@ -299,6 +299,23 @@ const moved = new Map(); // id -> { x, y, at }: a piece the participant just dro
 const SCALE_KEY = "capybara-screen-scale";
 const savedScale = (() => { try { const value = Number(localStorage.getItem(SCALE_KEY)); return value >= 0.2 && value <= 2 ? value : 1; } catch (_) { return 1; } })();
 const view = { zoom: savedScale, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
+// A panel's or marker's memo as CCFOLIA's tooltip (under it), its click action as CCFOLIA runs it: a message goes out from the current speaker and tab, a link asks first.
+const pieceTip = document.createElement("div"); pieceTip.className = "piece-tip"; pieceTip.hidden = true; document.body.append(pieceTip);
+function hidePieceTip() { pieceTip.hidden = true; }
+function showPieceTip(node) {
+  pieceTip.textContent = node.dataset.tip; pieceTip.hidden = false;
+  const r = node.getBoundingClientRect(), w = pieceTip.offsetWidth;
+  pieceTip.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, r.left + r.width / 2 - w / 2))}px`;
+  pieceTip.style.top = `${Math.min(innerHeight - pieceTip.offsetHeight - 4, r.bottom + 14)}px`;
+}
+let pieceActionAt = 0;
+function runPieceAction(node) {
+  const list = sceneData?.[node.dataset.kind === "marker" ? "markers" : "items"] || [], action = list.find(item => item.id === node.dataset.id)?.action;
+  if (!action || Date.now() - pieceActionAt < 350) return;
+  pieceActionAt = Date.now();
+  if (action.type === "link") { if (/^https?:\/\//i.test(action.url) && confirm(`아래 주소를 열려고 합니다. 정말 여시겠습니까?\n${action.url}`)) window.open(action.url, "_blank", "noopener"); return; }
+  if (action.type === "message") postChat(crypto.randomUUID(), action.text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
+}
 function renderScene(scene) {
   if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); playCutins(scene); }
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
@@ -326,18 +343,19 @@ function renderScene(scene) {
   // (line width 1 / 1.8 / 2.6px by zoom, alpha .25, every gridSize cells). Pieces are drawn above it.
   {
     const hasImage = !!(s.backgroundUrl || s.foregroundUrl), scale = unit / 24, lineWidth = scale < 0.3 ? 2.6 : scale < 0.6 ? 1.8 : 1;
-    const lines = (alpha, width) => `linear-gradient(rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, ${alpha}) ${width}px, transparent 1px)`;
+    // CCFOLIA draws these at scale 1 inside a container scaled by the zoom, so on screen every length is multiplied by it; this page draws in screen pixels
+    const lines = (alpha, width) => `linear-gradient(rgba(255, 255, 255, ${alpha}) ${width * scale}px, transparent ${scale}px), linear-gradient(90deg, rgba(255, 255, 255, ${alpha}) ${width * scale}px, transparent ${scale}px)`;
     const field = document.createElement("div");
     place(field, -Math.trunc(s.fieldWidth / 2), -Math.trunc(s.fieldHeight / 2), s.fieldWidth, s.fieldHeight, 0, -9);
     field.style.boxSizing = "border-box"; field.style.backgroundSize = `${unit}px ${unit}px`;
     if (!hasImage && !s.displayGrid) field.style.backgroundImage = lines(0.1, 1);
-    if (!hasImage) field.style.outline = "4px solid rgba(0, 0, 0, 0.2)";
+    if (!hasImage) field.style.outline = `${4 * scale}px solid rgba(0, 0, 0, 0.2)`;
     const layer = url => { const img = document.createElement("img"); img.src = url; img.alt = ""; img.referrerPolicy = "no-referrer"; img.draggable = false; img.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;object-fit:${s.fieldObjectFit}`; field.append(img); };
     if (s.backgroundUrl) layer(s.backgroundUrl);
     if (s.foregroundUrl) layer(s.foregroundUrl);
     if (s.displayGrid) {
       const grid = document.createElement("div"), step = unit * (s.gridSize || 1);
-      grid.style.cssText = `position:absolute;left:-1px;top:-1px;width:${s.fieldWidth * unit + 1}px;height:${s.fieldHeight * unit + 1}px;box-sizing:border-box;background-image:${lines(hasImage ? 0.25 : 0.1, lineWidth)};background-size:${step}px ${step}px`;
+      grid.style.cssText = `position:absolute;left:${-scale}px;top:${-scale}px;width:${s.fieldWidth * unit + scale}px;height:${s.fieldHeight * unit + scale}px;box-sizing:border-box;background-image:${lines(hasImage ? 0.25 : 0.1, lineWidth)};background-size:${step}px ${step}px`;
       field.append(grid);
     }
     nodes.push(field);
@@ -369,7 +387,7 @@ function renderScene(scene) {
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
     if (item.kind === "deck") img.dataset.kind = "deck"; // a deck is not a piece the participant moves: no id, so a press on it pans like on the background
-    else if (item.id && item.kind !== "marker") { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked) img.dataset.locked = "1"; if (window.__selectedDie === item.id) img.classList.add("selected"); }
+    else if (item.id && (item.kind !== "marker" || item.memo || item.action)) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked || item.kind === "marker") img.dataset.locked = "1"; if (item.memo) img.dataset.tip = item.memo; if (item.action) img.style.cursor = "pointer"; if (window.__selectedDie === item.id) img.classList.add("selected"); }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
     if (item.kind === "deck") {
@@ -386,6 +404,7 @@ function renderScene(scene) {
       label.dataset.label = item.id; nodes.push(label);
     }
   }
+  hidePieceTip();
   field.replaceChildren(...nodes);
   renderStatusPanel(s.characters || []);
   renderSpeakers(s.characters || []);
@@ -473,7 +492,7 @@ window.addEventListener("resize", () => renderScene());
   });
   const dropPiece = async () => {
     const { el, dx, dy } = piece; piece = null;
-    if (Math.abs(dx) + Math.abs(dy) < 4 || el.dataset.locked === "1") { el.style.translate = ""; if (el.dataset.kind === "character") openSheet(el.dataset.id); return; } // a click (or a locked piece): the character sheet
+    if (Math.abs(dx) + Math.abs(dy) < 4 || el.dataset.locked === "1") { el.style.translate = ""; if (el.dataset.kind === "character") openSheet(el.dataset.id); else if (Math.abs(dx) + Math.abs(dy) < 4) runPieceAction(el); return; } // a click (or a locked piece): the character sheet
     const { kind, id } = el.dataset, isChar = kind === "character";
     const k = (isChar ? 24 : 1) / view.unit; // screen px -> the piece's own unit (characters: px at zoom 1, items: grid cells)
     const round = v => isChar ? Math.round(v) : Math.round(v * 100) / 100;
@@ -489,6 +508,9 @@ window.addEventListener("resize", () => renderScene());
     } catch (error) { moved.delete(id); showSendStatus(error.message || "옮기지 못했습니다.", 6000); renderScene(); }
   };
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
+  stage.addEventListener("pointerover", event => { if (event.buttons === 0 && event.target.dataset?.tip) showPieceTip(event.target); });
+  stage.addEventListener("pointerout", event => { if (event.target.dataset?.tip) hidePieceTip(); });
+  stage.addEventListener("pointerdown", hidePieceTip, true);
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
   // Own dice symbols (a CCFOLIA player moves, rolls and deletes only the ones they made): a click or right click selects (blue outline) and the right click opens the menu.
   // optimistic delete: the piece leaves the screen at once; if the request fails it comes back
@@ -1277,6 +1299,7 @@ const showSendStatus = (message, ms = 0) => {
   sendStatus.textContent = message;
   if (ms) sendStatusTimer = setTimeout(() => { sendStatus.textContent = ""; }, ms);
 };
+const postChat = (clientMessageId, text) => fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text, channel: activeChannel, characterId: speaker.value, name: chatName.value.trim(), color: nameColor }) });
 chatForm.addEventListener("submit", async event => {
   event.preventDefault();
   const text = chatInput.value.trim();
@@ -1284,7 +1307,7 @@ chatForm.addEventListener("submit", async event => {
   chatInput.value = ""; // clear right away so a quick second Enter cannot send the same text twice
   const clientMessageId = crypto.randomUUID();
   try {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientMessageId, text: outgoingText(text), channel: activeChannel, characterId: speaker.value, name: chatName.value.trim(), color: nameColor }) });
+    const response = await postChat(clientMessageId, outgoingText(text));
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패");
     showSendStatus("GM 브리지 전달 대기", 2500);
   } catch (error) {
