@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.58
+// @version      0.5.59
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.58";
+  const VERSION = "0.5.59";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -484,6 +484,14 @@
       .filter((deck) => deck && (url(deck.coverImageUrl) || staticCover(deck.coverImageUrl)))
       .slice(0, 50)
       .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), layer: num(deck.zIndex, 1), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) || staticCover(deck.coverImageUrl) }));
+  }
+  // 컷인(entities.roomEffects). 실측(1.37.6 번들): 글이 컷인 이름으로 끝나면 보낸 쪽이 playTime 을 지금 시각으로 쓰고, 각 화면은 playTime 이 늘어나면 재생한다.
+  // 한 번도 재생되지 않은 컷인(만들 때 playTime = createdAt)의 그림·소리 주소는 내보내지 않는다. 최근 재생 5개만.
+  function relayEffectViews(effects, url, num) {
+    return Object.values(effects && typeof effects === "object" ? effects : {})
+      .filter((effect) => effect && effect._id && num(effect.playTime) - num(effect.createdAt) > 2000)
+      .sort((a, b) => num(b.playTime) - num(a.playTime)).slice(0, 5)
+      .map((effect) => ({ id: String(effect._id).slice(0, 60), name: String(effect.name || "").slice(0, 100), imageUrl: url(effect.imageUrl), soundUrl: url(effect.soundUrl), volume: Math.max(0, Math.min(1, num(effect.soundVolume, 0.2))), playTime: num(effect.playTime) }));
   }
   // 다이스 심볼(entities.roomDices: x,y,width,height,faces,value,closed,name,owner,changeCount). closed(가려진 값)이면 값은 보내지 않는다. 좌표·크기는 아이템과 같은 칸 단위.
   function relayDiceViews(dices, num) {
@@ -2229,6 +2237,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       const detail = await response.text().catch(() => "");
       throw new Error(`전송 실패 (${response.status}) ${detail.slice(0, 120)}`);
     }
+    if (isCommand) triggerRoomEffects(ctx, cleanText); // 이 경로는 코코포리아 입력창을 거치지 않아 컷인 재생을 직접 알린다
     if (sendTiming) {
       // 쓴 메시지가 코코포리아 저장소(그리고 우리 목록)에 나타날 때까지의 시간
       const timing = sendTiming;
@@ -2242,6 +2251,14 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         };
         poll();
       }).catch(() => finishTiming(timing));
+    }
+  }
+  function triggerRoomEffects(ctx, body) {
+    const names = ["playTime", "updatedAt"].map((name) => `updateMask.fieldPaths=${name}`).join("&"), now = String(Date.now());
+    for (const effect of Object.values(findStore()?.getState()?.entities?.roomEffects?.entities || {})) {
+      const name = typeof effect?.name === "string" ? effect.name : "";
+      if (!effect?._id || !name || name.length > body.length || body.lastIndexOf(name) + name.length !== body.length) continue;
+      fetch(`${FIRESTORE_BASE}/rooms/${encodeURIComponent(ctx.roomId)}/effects/${encodeURIComponent(effect._id)}?${names}`, { method: "PATCH", headers: { Authorization: `Bearer ${ctx.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields: { playTime: { integerValue: now }, updatedAt: { integerValue: now } } }) }).catch(() => {});
     }
   }
   function finishTiming(timing) {
@@ -5135,7 +5152,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
             screen: (() => { const app = findStore()?.getState()?.app?.state || {}; return { scale: Math.max(0.2, Math.min(2, num(app.roomScreenScale, 1))), x: Math.round(num(app.roomScreenPosition?.x)), y: Math.round(num(app.roomScreenPosition?.y)) }; })(),
             characterDocs: relayCharacterDocs(ent.roomCharacters?.entities), items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
-            media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat)
+            media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat),
+            effects: relayEffectViews(ent.roomEffects?.entities, url, num)
           };
         } catch (error) { return null; }
       },
@@ -5145,7 +5163,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         let last = null;
         return store.subscribe(() => {
           const ent = store.getState()?.entities;
-          const sig = [ent?.rooms, ent?.roomItems, ent?.roomCharacters, ent?.roomDecks, ent?.roomDices]; // a new die or deck is sent at once (they were missing here, so a created die waited for the next unrelated change)
+          const sig = [ent?.rooms, ent?.roomItems, ent?.roomCharacters, ent?.roomDecks, ent?.roomDices, ent?.roomEffects]; // a new die or deck is sent at once (they were missing here, so a created die waited for the next unrelated change)
           if (last && sig.every((value, index) => value === last[index])) return;
           last = sig;
           try { callback(); } catch (error) { /* 구독자 오류가 코코포리아 저장소를 막지 않게 한다 */ }

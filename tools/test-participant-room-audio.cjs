@@ -46,11 +46,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.click('#bgm-stop'); st = await state(); assert.deepEqual([st[1].src, st[1].paused], ['', true]);
   await page.evaluate(([A, S]) => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [], characters: [], media: { url: A, name: 'n', volume: 1, repeat: true }, sound: { url: S, name: '바람', volume: 1, repeat: false } }), [A, S]);
   st = await state(); assert.equal(st[0].src, A, 'a new file plays'); assert.equal(st[1].src, '', 'the stopped sound stays stopped');
-  // autoplay blocked -> one play button
+  // autoplay blocked -> the first click on the page starts it
   await page.evaluate(() => { window.__block = true; });
   await page.evaluate(([B]) => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [], characters: [], media: { url: B, name: 'n', volume: 1, repeat: true }, sound: null }), [B]);
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('#bgm-play').isVisible(), true, 'blocked autoplay shows a play button');
+  assert.equal(await page.locator('#bgm-play').count(), 0, 'no play button (CCFOLIA has none)');
+  const plays = () => page.evaluate(() => window.__audios[0].plays);
+  const before = await plays();
+  await page.evaluate(() => { window.__block = false; });
+  await page.mouse.click(5, 5); await page.waitForTimeout(50);
+  assert.equal(await plays(), before + 1, 'the first click starts the blocked sound');
+  await page.mouse.click(5, 5); await page.waitForTimeout(50);
+  assert.equal(await plays(), before + 1, 'later clicks do not restart it');
   await browser.close();
   console.log('participant room audio PASS');
 })().catch(error => { console.error(error); process.exit(1); });
