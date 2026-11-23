@@ -455,4 +455,5 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
   body:not(.pip) #messages{min-height:0;max-height:none}
   body:not(.pip) #room:has(#handout:not([hidden])) .chat{display:none!important} /* an open handout stays reachable */
   body:not(.pip) #room:not(.chat-collapsed):not(:has(#handout:not([hidden]))) :is(.stage,.stage *){visibility:hidden} /* the map and its buttons do not show through the chat */
+  body:not(.pip) #room:not(.chat-collapsed):not(:has(#handout:not([hidden]))) :is(#room>header,#top-host){display:none!important} /* its top bar (ours or the mirrored CCFOLIA one, a shadow host) comes back when the chat is folded */
 }
