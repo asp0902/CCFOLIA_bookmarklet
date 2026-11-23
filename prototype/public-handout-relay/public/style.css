@@ -536,5 +536,5 @@ html.chat-only .chat h2{height:56px;line-height:56px}
 html.chat-only #messages{min-height:0;max-height:none}
 
 /* Panel memo: CCFOLIA's tooltip (MUI, placed under the panel) */
-.piece-tip{position:fixed;z-index:299000;max-width:300px;padding:4px 8px;border-radius:4px;background:rgba(97,97,97,.92);color:#fff;font:500 11px/1.4 Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;white-space:pre-wrap;word-wrap:break-word;pointer-events:none}
+.piece-tip{position:fixed;z-index:299000;max-width:300px;padding:4px 8px;border-radius:4px;background:rgba(22,22,22,1);box-shadow:0 1px 3px 0 rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 2px 1px -1px rgba(0,0,0,.12);color:#fff;font:500 12px/1.4 Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;white-space:pre-wrap;word-wrap:break-word;pointer-events:none}
 .piece-tip[hidden]{display:none}
