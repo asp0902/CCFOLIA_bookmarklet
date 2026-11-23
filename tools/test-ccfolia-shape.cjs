@@ -51,4 +51,13 @@ const noDeckKey = state(); delete noDeckKey.entities.roomDecks.entities.d.coverI
 assert.deepEqual(check(noDeckKey), ['deck.coverImageUrl'], 'a removed deck key is named');
 const noDice = state(); noDice.entities.roomDices.entities.x.value = '3';
 assert.deepEqual(check(noDice), ['dice.value(string)']);
+// a message waiting for its server time (createdAt null, measured on 1.37.6) is not a structure change
+const pending = state(); pending.entities.roomMessages.entities = { p: { ...make(fixture.message), createdAt: null }, m: make(fixture.message) };
+assert.deepEqual(check(pending), [], 'one pending + a normal message');
+const onlyPending = state(); onlyPending.entities.roomMessages.entities.m.createdAt = null;
+assert.deepEqual(check(onlyPending), [], 'all pending: held, not a failure');
+const pendingWrong = state(); pendingWrong.entities.roomMessages.entities = { p: { ...make(fixture.message), createdAt: null }, m: { ...make(fixture.message), createdAt: 'x' } };
+assert.deepEqual(check(pendingWrong), ['message.createdAt(string)'], 'a really changed type still warns');
+const noCreated = state(); delete noCreated.entities.roomMessages.entities.m.createdAt;
+assert.deepEqual(check(noCreated), ['message.createdAt'], 'a removed key still warns');
 console.log('ccfolia shape check PASS');
