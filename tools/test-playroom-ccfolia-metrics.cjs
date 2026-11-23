@@ -34,6 +34,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     out.scroll = cs('#messages').s.overflowY;
     out.slots = [...document.querySelectorAll('.bgm-slot')].map((n) => [n.textContent, Math.round(n.getBoundingClientRect().left), Math.round(n.getBoundingClientRect().width)]);
     out.vol = Math.round(cs('#bgm-vol').r.left);
+    const x = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; };
+    out.toolkit = { pal: x('#pal-btn')[0], color: x('#color-btn')[0], help: x('#help-btn')[0], aa: x('.fmt-group[data-group="deco"] .fmt-group-btn'), more: x('.fmt-group[data-group="extra"] .fmt-group-btn'), send: x('.dice-row button[type=submit]'), bold: x('.fmt-row button[aria-label="Bold"]'), size: x('.fmt-size'), font: Math.round(document.querySelector('.fmt-group[data-group="font"] .fmt-group-btn').getBoundingClientRect().left) };
+    const line = getComputedStyle(document.querySelector('.dice-footer')); out.footLine = [line.borderTopStyle, line.borderTopColor];
     const pal = cs('#pal-btn'); out.pal = [Math.round(pal.r.width), Math.round(pal.r.height), pal.s.borderRadius];
     const face = cs('#speaker-btn'); out.face = [Math.round(face.r.width), Math.round(face.r.height)];
     const send = cs('.dice-row button[type=submit]'); out.send = { size: [Math.round(send.r.width), Math.round(send.r.height)], font: send.s.fontFamily.split(',')[0], px: send.s.fontSize, weight: send.s.fontWeight, pad: send.s.padding, radius: send.s.borderRadius };
@@ -47,6 +50,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   });
   // measured on ccfolia.com 1.37.6, 1440x900 (docs/playroom-vs-ccfolia-1123.md)
   assert.deepEqual(m.name, { x: 1113, w: 205, h: 40, bg: 'rgba(0, 0, 0, 0.2)', bb: '0px', lh: '23px', ls: '0.15008px', family: 'Roboto' }, 'name: filled 205x40 box, no underline');
+  // CCFOLIA with the toolkit on, measured at 1440x900
+  assert.deepEqual(m.toolkit, { pal: 1326, color: 1360, help: 1398, aa: [1314, 24], more: [1340, 24], send: [1368, 64], bold: [1071, 30], size: [1341, 32], font: 1373 }, 'toolkit input area');
+  assert.deepEqual(m.footLine, ['solid', 'rgba(255, 255, 255, 0.12)']);
   assert.deepEqual(m.d4, [1077, 30, '3px'], 'dice row start'); assert.equal(m.scroll, 'scroll'); assert.equal(m.footLs, '0.39996px');
   assert(Math.abs(m.footY - 874) <= 1, 'Dicebot line y ' + m.footY);
   assert.deepEqual(m.slots, [['BGM01', 929, 64], ['BGM02', 993, 64]], 'BGM slots'); assert.equal(m.vol, 781, 'volume slider');

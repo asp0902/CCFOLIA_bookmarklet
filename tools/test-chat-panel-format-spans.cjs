@@ -9,4 +9,5 @@ assert.deepEqual(r.alignRuns,[{start:1,end:2,align:'center'}]);
 assert(r.runs.some(x=>x.style.color==='#ff0000'&&x.start===2&&x.end===7));
 assert(r.runs.some(x=>x.style.fontSize===30));assert(r.runs.some(x=>x.style.backgroundColor==='#00ff00'));
 const n=parseFormatMarkers('{n:1|조용한 장면|}');assert.equal(n.text,'조용한 장면');assert.equal(n.narration,true);assert.equal(parseFormatMarkers('평범').narration,false);
+const f=parseFormatMarkers('앞 {f:gowun-batang|글꼴|} 뒤');assert.equal(f.text,'앞 글꼴 뒤');assert(f.runs.some(x=>x.style.fontId==='gowun-batang'&&x.start===2&&x.end===4));assert.equal(parseFormatMarkers('{f:Bad Id!|글|}').runs.some(x=>x.style.fontId),false);
 console.log('chat panel format spans (colour, background, size, align) parse PASS');
