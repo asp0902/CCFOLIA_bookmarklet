@@ -5,11 +5,11 @@
 const cmMirror = (() => {
   let clean = null, cssHash = "", tplHash = "", helpHash = "", assetsHash = "", token = 0, toolkitCss = false;
   const templates = new Map(), hosts = new Map(), fontLinks = new Set();
-  const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet();
+  const sheet = new CSSStyleSheet(), base = new CSSStyleSheet(), fontSheet = new CSSStyleSheet(), themeSheet = new CSSStyleSheet();
   // Same-speaker grouping: the toolkit's rules (roll20-css-bridge prose mode) are part of this page, so a row is grouped in the frame it is drawn, even when the GM's CSS snapshot was taken before they existed.
   const SPEAKER_RUN_CSS = `.MuiListItem-root[data-ccf-prose-cont="1"] .MuiListItemAvatar-root { display: none !important; }.MuiListItem-root[data-ccf-prose-cont="1"] h6.MuiListItemText-primary { display: none !important; }.MuiListItem-root[data-ccf-prose-cont="1"] { padding-top: 0 !important; padding-left: 16px !important; padding-right: 16px !important; margin: 0 !important; min-height: 0 !important; }.MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) { padding-bottom: 5px !important; }.MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) { border-bottom: 0 !important; }.MuiListItem-root[data-ccf-prose-cont-leader="1"] + .MuiDivider-root, .MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) + .MuiDivider-root { border-color: transparent !important; background: transparent !important; }.MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) .MuiListItemText-root { margin: 0 !important; }.MuiListItem-root[data-ccf-prose-cont="1"][data-ccf-prose-cont-last="1"] .MuiListItemText-root { margin-top: 0 !important; }.MuiListItem-root[data-ccf-prose-cont="1"][data-ccf-prose-cont-last="1"]:has(.ccf-render-root[data-ccf-narration="1"]) .MuiListItemText-root { margin-bottom: 0 !important; }.MuiListItem-root[data-ccf-prose-cont="1"] .MuiListItemText-root { padding-left: 56px !important; }.MuiListItem-root[data-ccf-prose-cont="1"] p.MuiListItemText-secondary { margin: 0 !important; }.MuiListItem-root[data-ccf-prose-cont-leader="1"] { padding-bottom: 5px !important; border-bottom: 0 !important; }.MuiListItem-root[data-ccf-prose-cont-leader="1"] .MuiListItemText-root { margin-bottom: 0 !important; }.MuiListItem-root[data-ccf-prose-cont-leader="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }[data-ccf-prose-cont-leader-wrap="1"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }[data-ccf-prose-cont-wrap="1"] { padding-top: 0 !important; margin-top: 0 !important; min-height: 0 !important; }[data-ccf-prose-cont-wrap="1"]:not([data-ccf-prose-cont-wrap-last="1"]) { padding-bottom: 0 !important; margin-bottom: 0 !important; }`;
   base.replaceSync(SPEAKER_RUN_CSS + "[hidden]{display:none !important}ul{height:100%;box-sizing:border-box}:host{color:#fff;font-family:Roboto,'Noto Sans KR','Helvetica Neue',Arial,sans-serif}.roll-result{color:rgba(255,255,255,.7)}.msg-edited{font-size:12px;font-weight:400;color:#757575}.MuiAppBar-positionFixed{position:relative !important}[role=tab][aria-selected=true]{position:relative}[role=tab][aria-selected=true]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:#f50057}");
-  document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet, themeSheet];
   const FONT = /^https:\/\/fonts\.googleapis\.com\//;
   const api = { onChange: () => {}, help: null, assets: {} }; // help: the text of CCFOLIA's chat-command dialog (plain data, see cleanHelp)
 
@@ -26,6 +26,8 @@ const cmMirror = (() => {
   }
   // true when the GM's page had the format toolkit switched on: its rules (.ccf-render-root ...) are in the CSS. Without it the GM shows message text plain, so the mirrored rows do too.
   api.toolkit = () => toolkitCss;
+  // The participant's own theme (their browser only): one sheet shared by this page and every mirrored part.
+  api.setTheme = css => themeSheet.replaceSync(css);
   api.has = name => templates.has(name) && !!cssHash;
   api.make = name => {
     const template = templates.get(name);
@@ -40,7 +42,7 @@ const cmMirror = (() => {
     if (!entry) {
       const host = document.createElement("div"); host.id = id;
       const root = host.attachShadow({ mode: "open" });
-      root.adoptedStyleSheets = [base, sheet];
+      root.adoptedStyleSheets = [base, sheet, themeSheet];
       insert(host);
       entry = { host, root }; hosts.set(id, entry);
     }

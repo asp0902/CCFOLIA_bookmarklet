@@ -1788,3 +1788,115 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
   let saved = "0"; try { saved = localStorage.getItem(COLLAPSE_KEY) || "0"; } catch (_) {}
   if (saved === "1") { document.getElementById("room").classList.add("chat-collapsed"); document.getElementById("chat-open").hidden = false; }
 }
+
+// Theme window (the palette at the right end of the bottom line, like the toolkit's): this participant's browser only. Same fields, colour presets and export file as the toolkit's theme-switcher.
+// First stage: kind, six colours, accent, screen font, import / export. Opacity, blur, the chat switches and sheet themes are not here yet.
+{
+  const KEY = "capybara-playroom-theme-v1";
+  const FIELDS = [["bg", "배경"], ["appbar", "상하단 바"], ["paper", "패널"], ["border", "테두리"], ["text", "텍스트"], ["inputBg", "입력창"], ["accent", "강조색"]];
+  const LIGHT = { bg: "#f1f1f1", appbar: "#dddddd", paper: "#fbfbfb", border: "#b9b9b9", text: "#2f2f2f", inputBg: "#ffffff", accent: "" };
+  const CUSTOM_START = { bg: "#151414", appbar: "#22201f", paper: "#1d1c1e", border: "#413d3a", text: "#f4f0eb", inputBg: "#1a191b", accent: "" };
+  const NATIVE = { bg: "#202020", appbar: "#212121", paper: "#2a2a2a", border: "#444444", text: "#ffffff", inputBg: "#202020", accent: "" };
+  const PRESETS = [ { name: "심해", theme: { bg: "#0b1a26", appbar: "#0f2433", paper: "#112a3b", border: "#1f4a63", text: "#d6ecf7", inputBg: "#0d2231", accent: "#4fc3f7" } }, { name: "벚꽃", theme: { bg: "#fbeff3", appbar: "#f4d7e1", paper: "#fff7fa", border: "#e3b3c4", text: "#5a3341", inputBg: "#ffffff", accent: "#e0608a" } }, { name: "숲", theme: { bg: "#132018", appbar: "#1a2b20", paper: "#1d3124", border: "#35523f", text: "#e3eee5", inputBg: "#172619", accent: "#7cc48a" } }, { name: "밤", theme: { bg: "#12121f", appbar: "#1a1a2e", paper: "#1e1e33", border: "#38385a", text: "#e6e6f5", inputBg: "#16162a", accent: "#9d8cff" } }, { name: "양피지", theme: { bg: "#efe3c8", appbar: "#e0cfa8", paper: "#f6ecd6", border: "#c4ab7a", text: "#3e2f1c", inputBg: "#fbf5e6", accent: "#9c5b24" } }, { name: "다크", theme: { bg: "#121212", appbar: "#1e1e1e", paper: "#1c1c1c", border: "#3a3a3a", text: "#eeeeee", inputBg: "#181818", accent: "#90caf9" } } ];
+  const hex = value => (/^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "");
+  const cleanTheme = (theme, base = CUSTOM_START) => Object.fromEntries(FIELDS.map(([key]) => [key, hex(theme?.[key]) || (key === "accent" ? "" : base[key])]));
+  const fontNames = Object.values(MESSAGE_FONTS);
+  const read = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY) || "{}");
+      const mode = v.mode === "light" || v.mode === "custom" || (/^preset:\d+$/.test(v.mode || "") && PRESETS[Number(v.mode.slice(7))]) ? v.mode : "default";
+      return { mode, custom: cleanTheme(v.custom), font: fontNames.includes(v.font) ? v.font : "" };
+    } catch (_) { return { mode: "default", custom: cleanTheme(), font: "" }; }
+  };
+  let state = read(), panel = null;
+  const activeTheme = () => state.mode === "light" ? LIGHT : state.mode === "custom" ? state.custom : state.mode.startsWith("preset:") ? cleanTheme(PRESETS[Number(state.mode.slice(7))].theme) : null;
+  const themeCss = (t, font) => {
+    let css = "";
+    if (t) {
+      const accent = t.accent || "#f50057";
+      css += `html,body,main,.stage{background-color:${t.bg}!important}
+#room>header,.chat h2,.chat-tabs,.MuiAppBar-root,.MuiToolbar-root,.MuiTabs-root{background-color:${t.appbar}!important;color:${t.text}!important}
+.chat,#chat-form,.fmt-row,.fmt-color,#chat-form .fmt-row button,#chat-form .fmt-group-btn,.menu-paper,.fmt-menu,.dlg,#pr-theme,.MuiPaper-root:not(.MuiAppBar-root){background-color:${t.paper}!important;color:${t.text}!important;background-image:none!important}
+#chat-form .fmt-row button:hover,#chat-form .fmt-row button[aria-pressed="true"],#chat-form .fmt-group-btn:hover,.fmt-group:has([aria-pressed="true"]) .fmt-group-btn{background-color:color-mix(in srgb,${t.text} 14%,${t.paper})!important}
+.ta-wrap,#chat-form #chat-name,.fmt-size,.MuiInputBase-root,#pr-theme select,#pr-theme input[type=text]{background-color:${t.inputBg}!important;color:${t.text}!important}
+#chat-input{color:${t.text}!important}#chat-input::placeholder,#chat-form #chat-name::placeholder{color:${t.text}!important}
+#chat-form button,#chat-form .mini-btn,#chat-form .face-btn,.theme-open,.menu-item,.menu-caption,.chat-tab,.MuiTab-root,.MuiIconButton-root,.MuiListItemText-secondary,#messages p{color:${t.text}}
+.MuiDivider-root,#messages li,.dice-footer,.fmt-row,.chat,.menu-divider{border-color:${t.border}!important}.menu-divider{background-color:${t.border}!important}
+.dice-footer,.dice-footer a,.msg-time,.MuiTypography-caption{color:color-mix(in srgb,${t.text} 55%,transparent)!important}
+.chat-tab::after,.MuiTabs-indicator{background-color:${accent}!important}.bgm-slot.is-on{color:${accent}!important}
+`;
+    }
+    if (font) css += `body,.chat,#chat-form,#chat-form button,#chat-form input,#chat-form textarea,#messages,.menu-paper,.MuiTypography-root,.MuiListItemText-root{font-family:"${font}",Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif!important}\n`;
+    return css;
+  };
+  const refresh = () => {
+    if (!panel) return;
+    panel.querySelector("[data-kind]").value = state.mode; panel.querySelector("[data-font]").value = state.font;
+    const shown = activeTheme() || NATIVE;
+    for (const [key] of FIELDS) {
+      const value = shown[key] || "", code = panel.querySelector(`input[type=text][data-key="${key}"]`);
+      panel.querySelector(`input[type=color][data-key="${key}"]`).value = value || "#000000";
+      if (document.activeElement !== code) code.value = value.toUpperCase();
+    }
+  };
+  const apply = (save = true) => {
+    if (state.font) { const id = Object.keys(MESSAGE_FONTS).find(key => MESSAGE_FONTS[key] === state.font); if (id) messageFont(id); }
+    cmMirror.setTheme(themeCss(activeTheme(), state.font));
+    if (save) try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) {}
+    refresh();
+  };
+  const setColor = (key, value) => { state = { ...state, mode: "custom", custom: { ...cleanTheme(activeTheme() || NATIVE), [key]: value } }; apply(); };
+  const close = () => { panel?.remove(); panel = null; };
+  const build = button => {
+    panel = el("div"); panel.id = "pr-theme"; panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "테마");
+    const head = el("div", "prt-head"), x = el("button", "prt-x", "×"); x.type = "button"; x.setAttribute("aria-label", "테마 창 닫기"); x.addEventListener("click", close);
+    head.append(el("strong", "", "테마"), x); panel.append(head);
+    const row = (label, control) => { const line = el("label", "prt-row"); line.append(el("span", "", label), control); panel.append(line); };
+    const kind = el("select"); kind.dataset.kind = "1"; kind.setAttribute("aria-label", "종류");
+    for (const [value, label] of [["default", "기본값"], ["light", "라이트"], ...PRESETS.map((preset, index) => [`preset:${index}`, preset.name]), ["custom", "커스텀"]]) { const option = el("option", "", label); option.value = value; kind.append(option); }
+    kind.addEventListener("change", () => { state = { ...state, custom: kind.value === "custom" ? cleanTheme(activeTheme() || NATIVE) : state.custom, mode: kind.value }; apply(); });
+    row("종류", kind);
+    for (const [key, label] of FIELDS) {
+      const box = el("span", "prt-color"), color = el("input"), code = el("input");
+      color.type = "color"; color.dataset.key = key; color.setAttribute("aria-label", `${label} 색상`);
+      code.type = "text"; code.dataset.key = key; code.spellcheck = false; code.placeholder = key === "accent" ? "자동" : ""; code.setAttribute("aria-label", `${label} 코드`);
+      color.addEventListener("input", () => setColor(key, color.value));
+      code.addEventListener("input", () => { const raw = code.value.trim(), value = hex(raw.startsWith("#") ? raw : `#${raw}`); if (value) setColor(key, value); else if (!raw && key === "accent") setColor(key, ""); });
+      code.addEventListener("blur", refresh);
+      box.append(color, code); row(label, box);
+    }
+    const font = el("select"); font.dataset.font = "1"; font.setAttribute("aria-label", "화면 글꼴");
+    const none = el("option", "", "기본"); none.value = ""; font.append(none);
+    for (const [family, label] of Object.keys(MESSAGE_FONTS).map(id => [MESSAGE_FONTS[id], MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id]]).sort((a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko"))) { const option = el("option", "", label); option.value = family; font.append(option); }
+    font.addEventListener("change", () => { state = { ...state, font: font.value }; apply(); });
+    row("화면 글꼴", font);
+    const actions = el("div", "prt-actions"), load = el("button", "", "가져오기"), save = el("button", "", "내보내기"), file = el("input");
+    load.type = save.type = "button"; file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
+    load.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const chosen = file.files?.[0]; file.value = ""; if (!chosen) return;
+      try {
+        const data = JSON.parse(await chosen.text()), theme = data?.theme && typeof data.theme === "object" ? data.theme : data;
+        if (!FIELDS.slice(0, 6).every(([key]) => hex(theme?.[key]))) throw new Error("not a theme");
+        state = { ...state, mode: "custom", custom: cleanTheme(theme) }; apply();
+      } catch (_) { alert("가져올 수 있는 테마 파일이 아닙니다."); }
+    });
+    save.addEventListener("click", () => {
+      const name = kind.selectedOptions[0]?.textContent || "테마";
+      const payload = { type: "ccf-theme-switcher-theme", version: 1, name, theme: { ...cleanTheme(activeTheme() || NATIVE), uiText: "", scrollbar: "", alpha: 100, blur: 0 }, exportedAt: new Date().toISOString() };
+      const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: "application/json" })); link.download = `${name.replace(/[\\/:*?"<>|]/g, "_")}.ccf-theme.json`;
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    });
+    actions.append(load, save, file); panel.append(actions);
+    document.body.append(panel); refresh();
+    const r = button.getBoundingClientRect();
+    panel.style.right = `${Math.max(8, innerWidth - r.right)}px`; panel.style.bottom = `${Math.max(8, innerHeight - r.top + 6)}px`;
+  };
+  const open = el("button", "theme-open"); open.type = "button"; open.id = "theme-open"; open.title = "테마"; open.setAttribute("aria-label", "테마 설정");
+  open.innerHTML = "<svg viewBox=\"2 3 20 18\" aria-hidden=\"true\" fill=\"none\"> <path d=\"M12 4.75c-4.832 0-8.75 3.19-8.75 7.125C3.25 15.809 6.531 19 10.579 19h.43c.571 0 1.034-.445 1.034-.994 0-.252-.103-.492-.286-.672a1.557 1.557 0 0 1-.472-1.108c0-.878.74-1.589 1.651-1.589h1.236c3.047 0 5.578-2.266 5.578-5.072 0-2.972-3.432-4.815-7.75-4.815Z\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /> <circle cx=\"7.45\" cy=\"11.1\" r=\"1.05\" fill=\"currentColor\" /> <circle cx=\"10.1\" cy=\"8.1\" r=\"1.05\" fill=\"currentColor\" /> <circle cx=\"13.55\" cy=\"8\" r=\"1.05\" fill=\"currentColor\" /> <circle cx=\"16.15\" cy=\"10.75\" r=\"1.05\" fill=\"currentColor\" /> </svg>";
+  open.addEventListener("click", () => { if (panel) close(); else build(open); });
+  document.querySelector(".dice-footer").append(open);
+  document.addEventListener("pointerdown", event => { const path = event.composedPath(); if (panel && !path.includes(panel) && !path.includes(open)) close(); }, true);
+  document.addEventListener("keydown", event => { if (event.key === "Escape") close(); });
+  apply(false);
+}
