@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.63
+// @version      0.2.64
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -132,6 +132,9 @@
   });
   const TOGGLE_ID = "ccf-theme-switcher-toggle";
   const PANEL_ID = "ccf-theme-switcher-panel";
+  // 시작 직후 ensureUi 가 패널을 만들 때 읽으므로 시작 코드보다 위에 둔다(0.2.64: 아래에 있으면 첫 초기화가 TDZ 오류로 실패했다)
+  const SCREEN_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1", "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish", "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia", "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo", "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung", "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture", "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One" });
+  const SCREEN_FONT_INFO = Object.freeze({ "noto-sans-kr": ["본고딕", "고딕"], "noto-serif-kr": ["본명조", "명조"], "nanum-gothic": ["나눔고딕", "고딕"], "nanum-myeongjo": ["나눔명조", "명조"], "gowun-dodum": ["고운돋움", "고딕"], "gowun-batang": ["고운바탕", "명조"], "do-hyeon": ["도현", "고딕"], "jua": ["주아", "고딕"], "black-han-sans": ["검은고딕", "고딕"], "nanum-pen-script": ["나눔손글씨 펜", "손글씨·장식"], "gaegu": ["개구", "손글씨·장식"], "hi-melody": ["하이멜로디", "손글씨·장식"], "song-myung": ["송명", "명조"], "dongle": ["동글", "고딕"], "asta-sans": ["아스타 산스", "고딕"], "gothic-a1": ["고딕 A1", "고딕"], "ibm-plex-sans-kr": ["IBM 플렉스 산스", "고딕"], "nanum-gothic-coding": ["나눔고딕코딩", "고딕"], "sunflower": ["선플라워", "고딕"], "stylish": ["스타일리시", "고딕"], "orbit": ["오르빗", "고딕"], "gasoek-one": ["가석", "고딕"], "hahmlet": ["함렛", "명조"], "diphylleia": ["디필레이아", "명조"], "grandiflora-one": ["그랜디플로라", "명조"], "nanum-brush-script": ["나눔손글씨 붓", "손글씨·장식"], "east-sea-dokdo": ["동해독도", "손글씨·장식"], "dokdo": ["독도", "손글씨·장식"], "gamja-flower": ["감자꽃", "손글씨·장식"], "poor-story": ["푸어 스토리", "손글씨·장식"], "single-day": ["싱글데이", "손글씨·장식"], "yeon-sung": ["연성", "손글씨·장식"], "cute-font": ["큐트 폰트", "손글씨·장식"], "gugi": ["구기", "손글씨·장식"], "kirang-haerang": ["기랑해랑", "손글씨·장식"], "black-and-white-picture": ["흑백사진", "손글씨·장식"], "bagel-fat-one": ["베이글 팻 원", "손글씨·장식"], "moirai-one": ["모이라이", "손글씨·장식"] });
   const PANEL_POSITION_KEY = "ccf-theme-switcher-panel-position-v1";
   const TOGGLE_SIZE = 24;
   const TOGGLE_ANCHOR_INSET = 8;
@@ -236,7 +239,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.63"),
+    version: getUserscriptVersion("0.2.64"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1003,7 +1006,7 @@
         #${PANEL_ID} .ccf-theme-card {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 13px;
           padding: 16px;
         }
 
@@ -1052,6 +1055,7 @@
           width: 34px;
           height: 34px;
           flex: 0 0 auto;
+          background: transparent; /* 0.2.64 닫기에 별도 색 없음 */
         }
 
         #${PANEL_ID} .ccf-theme-btn {
@@ -1088,7 +1092,7 @@
         #${PANEL_ID} .ccf-theme-select {
           width: 100%;
           min-width: 0;
-          height: 38px;
+          height: 34px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
           /* 우측 패딩 30px = 쉐브론(10px) + 우측 여백(12px) + 텍스트와 쉐브론 사이(8px) */
@@ -1112,7 +1116,7 @@
 
         #${PANEL_ID} .ccf-theme-grid {
           display: grid;
-          gap: 10px;
+          gap: 9px;
         }
 
         #${PANEL_ID} .ccf-theme-color-control {
@@ -1126,7 +1130,7 @@
         #${PANEL_ID} .ccf-theme-color {
           width: 32px;
           min-width: 32px;
-          height: 32px;
+          height: 30px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
           background: transparent;
@@ -1154,7 +1158,7 @@
         #${PANEL_ID} .ccf-theme-color-code {
           width: 100%;
           min-width: 0;
-          height: 38px;
+          height: 34px;
           border: 1px solid var(--ccf-theme-border, rgba(255, 255, 255, 0.16));
           border-radius: 0;
           padding: 0 12px;
@@ -1176,7 +1180,7 @@
         /* 0.2.62 시트 줄: 이름 · 드롭다운 · ON/OFF */
         #${PANEL_ID} [data-screen-font-custom][hidden] { display: none; }
         #${PANEL_ID} .ccf-theme-row.ccf-theme-sheet-row { grid-template-columns: minmax(88px, auto) minmax(0, 1fr) auto; }
-        #${PANEL_ID} .ccf-theme-sheet-row .ccf-theme-btn { min-width: 56px; height: 38px; padding: 0 10px; }
+        #${PANEL_ID} .ccf-theme-sheet-row .ccf-theme-btn { min-width: 56px; min-height: 34px; height: 34px; padding: 0 10px; }
         #${PANEL_ID} .ccf-theme-actions {
           display: flex;
           flex-wrap: nowrap;
@@ -1194,7 +1198,7 @@
         }
 
         #${PANEL_ID} .ccf-theme-actions + .ccf-theme-actions {
-          margin-top: 8px;
+          margin-top: -5px; /* 0.2.64 카드 간격 13px 과 합쳐 줄 사이 8px: 버튼 사이 간격과 같게 */
         }
 
         #${SAVE_DIALOG_ID} {
@@ -2493,7 +2497,6 @@
           <div class="ccf-theme-head">
             <div class="ccf-theme-title">
               <strong>테마</strong>
-              <span>메인 포맷 스크립트와 분리된 독립 테마입니다.</span>
             </div>
             <button type="button" class="ccf-theme-close" data-action="close" aria-label="테마 패널 닫기">×</button>
           </div>
@@ -7015,13 +7018,11 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
 
   // 함수 안 값(호이스팅된 함수만 씀): 시작 직후 ensureUi 가 패널을 만들 때 불린다 — 바깥 const 였을 때 format-sync 가 아직 없으면 TDZ 로 초기화가 한 번 실패했다
   // 0.2.62 메시지 글꼴 38종과 같은 목록·한국어 이름(서식 도구가 꺼져 있어도 고를 수 있게 테마가 직접 가진다)
-  const SCREEN_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1", "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish", "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia", "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo", "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung", "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture", "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One" });
   // 0.2.63 한 목록: 한글 이름 가나다순, 그 뒤 영문 이름 알파벳순('기본'은 맨 위)
   function screenFontOptions() {
     const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
     return Object.entries(SCREEN_FONTS).map(([id, family]) => [family, SCREEN_FONT_INFO[id]?.[0] || family]).sort(byName).map(([family, label]) => `<option value="${escapeHtml(family)}">${escapeHtml(label)}</option>`).join("");
   }
-  const SCREEN_FONT_INFO = Object.freeze({ "noto-sans-kr": ["본고딕", "고딕"], "noto-serif-kr": ["본명조", "명조"], "nanum-gothic": ["나눔고딕", "고딕"], "nanum-myeongjo": ["나눔명조", "명조"], "gowun-dodum": ["고운돋움", "고딕"], "gowun-batang": ["고운바탕", "명조"], "do-hyeon": ["도현", "고딕"], "jua": ["주아", "고딕"], "black-han-sans": ["검은고딕", "고딕"], "nanum-pen-script": ["나눔손글씨 펜", "손글씨·장식"], "gaegu": ["개구", "손글씨·장식"], "hi-melody": ["하이멜로디", "손글씨·장식"], "song-myung": ["송명", "명조"], "dongle": ["동글", "고딕"], "asta-sans": ["아스타 산스", "고딕"], "gothic-a1": ["고딕 A1", "고딕"], "ibm-plex-sans-kr": ["IBM 플렉스 산스", "고딕"], "nanum-gothic-coding": ["나눔고딕코딩", "고딕"], "sunflower": ["선플라워", "고딕"], "stylish": ["스타일리시", "고딕"], "orbit": ["오르빗", "고딕"], "gasoek-one": ["가석", "고딕"], "hahmlet": ["함렛", "명조"], "diphylleia": ["디필레이아", "명조"], "grandiflora-one": ["그랜디플로라", "명조"], "nanum-brush-script": ["나눔손글씨 붓", "손글씨·장식"], "east-sea-dokdo": ["동해독도", "손글씨·장식"], "dokdo": ["독도", "손글씨·장식"], "gamja-flower": ["감자꽃", "손글씨·장식"], "poor-story": ["푸어 스토리", "손글씨·장식"], "single-day": ["싱글데이", "손글씨·장식"], "yeon-sung": ["연성", "손글씨·장식"], "cute-font": ["큐트 폰트", "손글씨·장식"], "gugi": ["구기", "손글씨·장식"], "kirang-haerang": ["기랑해랑", "손글씨·장식"], "black-and-white-picture": ["흑백사진", "손글씨·장식"], "bagel-fat-one": ["베이글 팻 원", "손글씨·장식"], "moirai-one": ["모이라이", "손글씨·장식"] });
   function normalizeScreenFont(value) {
     const v = value && typeof value === "object" ? value : {};
     const num = (n, lo, hi, d) => { const x = Number(n); return n === "" || n == null || !Number.isFinite(x) ? d : Math.max(lo, Math.min(hi, Math.round(x * 100) / 100)); };
