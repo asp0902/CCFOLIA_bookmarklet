@@ -59,10 +59,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await drag('.scene-die:not(.mine)', unit, unit); await page.waitForTimeout(200);
   assert.equal(sent.length, diceBefore + 1, "somebody else's die pans the scene instead of moving");
   // layers as CCFOLIA has them (measured): a locked panel as big as the field (z 1) must not cover a token (100 + z) or a die symbol (10000) - the click lands on the piece
-  await page.setViewportSize({ width: 629, height: 1270 });
+  await page.setViewportSize({ width: 629, height: 1270 }); await page.evaluate(() => document.getElementById('room').classList.add('chat-collapsed')); // narrow: the chat covers the map until folded
   const cover = await page.evaluate(() => { view.zoom = 0.6; ownedIds = new Set(['dd1']); renderScene({ fieldWidth: 50, fieldHeight: 30, items: [{ id: 'big', locked: true, x: -25, y: -15, z: 1, angle: 0, width: 50, height: 30, imageUrl: 'https://storage.ccfolia.com/x' }].map(i => ({ ...i, imageUrl: 'https://storage.ccfolia-cdn.net/big.png' })), markers: [], characters: [{ id: 'ch1', name: 'A', x: 24, y: 24, z: 0, angle: 0, width: 4, height: 4, iconUrl: 'https://storage.ccfolia-cdn.net/a.png', status: [] }], diceSymbols: [{ id: 'dd1', x: -1, y: -1, width: 2, height: 2, faces: 6, value: 1, closed: false }], decks: [{ id: 'dk', x: 5, y: 5, z: 99, layer: 1, width: 4, height: 6, count: 3, coverUrl: 'https://storage.ccfolia-cdn.net/back.png' }] }); const topOf = sel => { const r = document.querySelector(sel).getBoundingClientRect(); const e = document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2)[0]; return e.dataset.id || e.className || e.tagName; }; return { die: topOf('.scene-die[data-id="dd1"]'), token: topOf('img[data-id="ch1"]') }; });
   assert.deepEqual(cover, { die: 'dd1', token: 'ch1' }, 'the die and the token are on top of a big locked panel');
-  await page.setViewportSize({ width: 1000, height: 700 });
+  await page.evaluate(() => document.getElementById('room').classList.remove('chat-collapsed')); await page.setViewportSize({ width: 1000, height: 700 });
   await page.waitForTimeout(400); // a resize redraws the scene from the page's own data: let that settle before a scene of the test is drawn
   // markers and flipped cards are drawn and cannot be moved
   await page.evaluate(img => renderScene({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill',

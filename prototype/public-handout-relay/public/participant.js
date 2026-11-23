@@ -111,6 +111,10 @@ function refreshBgmBar() {
   // the bar is always there (name "BGM", volume and mute work), like CCFOLIA's; its second line (progress) only while a YouTube BGM plays (the bar is absolutely placed: the first line does not move when the second appears)
   bgmRow2.hidden = !bgmKey;
   if (!ytPlaying) document.getElementById("bgm-name").textContent = roomAudio.media.cfg?.name || roomAudio.sound.cfg?.name || "BGM";
+  // two slots like CCFOLIA's bar: BGM01 = the BGM (YouTube or file), BGM02 = the second sound; the one playing is blue, its name is the tooltip
+  const slot1 = document.getElementById("bgm-slot1"), slot2 = document.getElementById("bgm-slot2");
+  slot1.classList.toggle("is-on", !!(bgmKey || roomAudio.media.url)); slot1.title = (ytPlaying ? bgmLast?.title : roomAudio.media.cfg?.name) || "";
+  slot2.classList.toggle("is-on", !!roomAudio.sound.url); slot2.title = roomAudio.sound.cfg?.name || "";
   playBtn.hidden = !blockedAudio;
 }
 let blockedAudio = false;
@@ -681,6 +685,7 @@ const renderState = data => {
   renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
   document.getElementById("room-title").textContent = data.roomTitle || "플레이룸";
+  { const system = document.getElementById("room-system"); system.textContent = data.systemName || ""; system.hidden = !data.systemName; } // CCFOLIA's small game-system name next to the room title
   const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
   document.getElementById("status").textContent = data.gmOnline ? "동기화 중" : "새 메시지 전송을 기다리는 중";
   // Native mirroring: when the GM's CCFOLIA shapes and CSS have arrived, the list is drawn from them (mirror.js); otherwise the built-in rows below are used.
@@ -1019,7 +1024,7 @@ function onPush(event) {
     renderScene(message.scene);
     if (document.getElementById("char-window") || ownedIds.size || !mineLoaded) { clearTimeout(window.__mineTimer); window.__mineTimer = setTimeout(() => refreshMyCharacters(), 800); } // the GM page reports the characters with the scene
   } else if (message.type === "channels") {
-    current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot };
+    current = { ...current, channels: message.channels || [], dicebot: message.dicebot || current.dicebot, systemName: message.systemName || current.systemName };
     renderState(current);
   } else if (message.type === "bgm") {
     playBgm(message.bgm);
@@ -1175,29 +1180,47 @@ refreshSpeakerUi();
 // Format rows: the same markers the GM panel understands (**bold**, *italic*, __underline__, ~~strike~~, ||blur||, `code`, [base|ruby], [base^tooltip], {a:center|text|}).
 {
   const mk = (label, title, run) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title; b.setAttribute("aria-label", title); b.addEventListener("click", run); return b; };
-  const row1 = document.createElement("div"); row1.className = "fmt-row";
-  row1.append(mk("B", "Bold", () => wrapSelection("**", "**")), mk("I", "Italic", () => wrapSelection("*", "*")), mk("U", "Underline", () => wrapSelection("__", "__")), mk("S", "Strike", () => wrapSelection("~~", "~~")),
-    mk("Rb", "Ruby", () => wrapSelection("[", "|]")), mk("Tip", "Tooltip", () => wrapSelection("[", "^]")), mk("Bl", "Blur", () => wrapSelection("||", "||")), mk("</>", "Code block", () => wrapSelection("`", "`")));
-  // The toolkit's own toolbar also has Nr (narration for the whole message), text / background colour, a size box and "()" (grey parentheses). The GM side understands {n:1|..|}, {c:#hex|..|}, {b:#hex|..|},
-  // {s:N|..|}; Nr and "()" are toggles applied when the message is sent.
+  // The toolkit's current bar: B I U S / align x3 / colours / size on one flat row; Aa (Rb, Tip, Bl, code) and ⋯ (Nr, "()") sit next to the send button of the dice row.
   const toggle = (label, title, key) => { const b = mk(label, title, () => { fmtState[key] = !fmtState[key]; b.setAttribute("aria-pressed", String(fmtState[key])); }); b.setAttribute("aria-pressed", "false"); return b; };
-  row1.append(toggle("Nr", "Narration", "narration"));
-  const row2 = document.createElement("div"); row2.className = "fmt-row";
-  const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); p.setAttribute("fill", "currentColor"); svg.append(p); b.append(svg); return b; };
-  row2.append(align("left", "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"), align("center", "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"), align("right", "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"));
+  const row = document.createElement("div"); row.className = "fmt-row";
+  row.append(mk("B", "Bold", () => wrapSelection("**", "**")), mk("I", "Italic", () => wrapSelection("*", "*")), mk("U", "Underline", () => wrapSelection("__", "__")), mk("S", "Strike", () => wrapSelection("~~", "~~")));
+  const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); svg.setAttribute("aria-hidden", "true"); const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); b.append(svg); return b; };
+  const aligns = [align("left", "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"), align("center", "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"), align("right", "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z")];
   // alignment buttons: one is active, like the toolkit's toolbar (left by default)
-  const aligns = [...row2.querySelectorAll("button")].slice(0, 3);
   aligns.forEach((button, index) => { button.setAttribute("aria-pressed", String(index === 0)); button.addEventListener("click", () => aligns.forEach(other => other.setAttribute("aria-pressed", String(other === button)))); });
   const colorTool = (title, initial, marker) => {
-    const label = document.createElement("label"); label.className = "fmt-color"; label.title = title;
+    const label = document.createElement("label"); label.className = "fmt-color"; label.title = title; label.style.setProperty("--chip", initial);
     const input = document.createElement("input"); input.type = "color"; input.value = initial; input.setAttribute("aria-label", title);
-    input.addEventListener("change", () => wrapSelection(`{${marker}:${input.value}|`, "|}"));
+    input.addEventListener("input", () => label.style.setProperty("--chip", input.value));
+    input.addEventListener("change", () => { label.style.setProperty("--chip", input.value); wrapSelection(`{${marker}:${input.value}|`, "|}"); });
     label.append(input); return label;
   };
   const size = document.createElement("input"); size.className = "fmt-size"; size.type = "text"; size.inputMode = "numeric"; size.placeholder = "16"; size.title = "Font size"; size.setAttribute("aria-label", "Font size");
   size.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); const n = Math.round(Number(size.value)); if (n >= 8 && n <= 72) wrapSelection(`{s:${n}|`, "|}"); } });
-  row2.append(colorTool("Text color", "#ffffff", "c"), colorTool("Background color", "#010101", "b"), size, toggle("()", "Parentheses gray", "parenGray"));
-  document.querySelector("#chat-form .dice-row").after(row1, row2);
+  row.append(...aligns, colorTool("Text color", "#ffffff", "c"), colorTool("Background color", "#010101", "b"), size);
+  const closeGroups = () => document.querySelectorAll(".fmt-group").forEach(group => { group.querySelector(".fmt-menu").hidden = true; group.querySelector(".fmt-group-btn").setAttribute("aria-expanded", "false"); });
+  const group = (name, label, title, items) => {
+    const box = document.createElement("span"); box.className = "fmt-group"; box.dataset.group = name;
+    const button = document.createElement("button"); button.type = "button"; button.className = "fmt-group-btn"; button.textContent = label; button.title = title; button.setAttribute("aria-label", title); button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false");
+    const menu = document.createElement("span"); menu.className = "fmt-menu"; menu.setAttribute("role", "menu"); menu.hidden = true;
+    for (const [item, key, text] of items) { item.textContent = ""; item.setAttribute("role", "menuitem"); const k = document.createElement("span"); k.className = "fmt-key"; k.textContent = key; const t = document.createElement("span"); t.textContent = text; item.append(k, t); menu.append(item); }
+    menu.addEventListener("click", closeGroups);
+    button.addEventListener("click", () => {
+      const open = !menu.hidden; closeGroups(); if (open) return;
+      menu.hidden = false; button.setAttribute("aria-expanded", "true");
+      const r = button.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
+      menu.style.top = `${Math.round(r.top - 4 - h >= 4 ? r.top - 4 - h : Math.min(r.bottom + 4, innerHeight - h - 4))}px`; // upward first: below is the message box
+      menu.style.left = `${Math.round(Math.max(4, Math.min(innerWidth - w - 4, r.left)))}px`;
+    });
+    box.append(button, menu); return box;
+  };
+  const deco = group("deco", "Aa", "꾸미기", [[mk("", "Ruby", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "Tooltip", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "Blur", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "Code block", () => wrapSelection("`", "`")), "</>", "코드"]]);
+  const extra = group("extra", "⋯", "더 보기", [[toggle("", "Narration", "narration"), "Nr", "나레이션"], [toggle("", "Parentheses gray", "parenGray"), "()", "괄호 회색"]]);
+  document.addEventListener("pointerdown", event => { if (!event.target.closest?.(".fmt-group")) closeGroups(); });
+  document.addEventListener("keydown", event => { if (event.key === "Escape") closeGroups(); });
+  const diceRow = document.querySelector("#chat-form .dice-row");
+  diceRow.insertBefore(deco, diceRow.querySelector("button[type=submit]")); diceRow.insertBefore(extra, diceRow.querySelector("button[type=submit]"));
+  diceRow.after(row);
 }
 // What the toggles do to a message when it is sent (the GM side turns the markers into the format envelope).
 const fmtState = { narration: false, parenGray: false };

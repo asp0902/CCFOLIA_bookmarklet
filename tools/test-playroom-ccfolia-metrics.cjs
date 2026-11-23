@@ -28,7 +28,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const m = await page.evaluate(() => {
     const cs = (sel) => { const el = document.querySelector(sel); if (!el) return null; const s = getComputedStyle(el), r = el.getBoundingClientRect(); return { s, r }; };
     const out = {};
-    const name = cs('#chat-name'); out.name = { h: Math.round(name.r.height), bg: name.s.backgroundColor, bb: name.s.borderBottomWidth, family: name.s.fontFamily.split(',')[0] };
+    const name = cs('#chat-name'); out.name = { x: Math.round(name.r.left), w: Math.round(name.r.width), h: Math.round(name.r.height), bg: name.s.backgroundColor, bb: name.s.borderBottomWidth, lh: name.s.lineHeight, ls: name.s.letterSpacing, family: name.s.fontFamily.split(',')[0] };
+    const d4 = cs('.dice-row button[aria-label="D4"]'); out.d4 = [Math.round(d4.r.left), Math.round(d4.r.width), d4.s.padding];
+    const footText = cs('.dice-footer span'); out.footY = Math.round(footText.r.top); out.footLs = footText.s.letterSpacing;
+    out.scroll = cs('#messages').s.overflowY;
+    out.slots = [...document.querySelectorAll('.bgm-slot')].map((n) => [n.textContent, Math.round(n.getBoundingClientRect().left), Math.round(n.getBoundingClientRect().width)]);
+    out.vol = Math.round(cs('#bgm-vol').r.left);
     const pal = cs('#pal-btn'); out.pal = [Math.round(pal.r.width), Math.round(pal.r.height), pal.s.borderRadius];
     const face = cs('#speaker-btn'); out.face = [Math.round(face.r.width), Math.round(face.r.height)];
     const send = cs('.dice-row button[type=submit]'); out.send = { size: [Math.round(send.r.width), Math.round(send.r.height)], font: send.s.fontFamily.split(',')[0], px: send.s.fontSize, weight: send.s.fontWeight, pad: send.s.padding, radius: send.s.borderRadius };
@@ -40,11 +45,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const li = cs('#messages li'); out.row = { font: li.s.fontFamily.split(',')[0] };
     return out;
   });
-  assert.deepEqual(m.name, { h: 32, bg: 'rgba(0, 0, 0, 0)', bb: '1px', family: 'Roboto' }, 'name input: 32px, no filled box, underline, Roboto');
-  assert.deepEqual(m.pal, [34, 34, '50%'], 'icon button 34x34 round'); assert.deepEqual(m.face, [40, 32]);
+  // measured on ccfolia.com 1.37.6, 1440x900 (docs/playroom-vs-ccfolia-1123.md)
+  assert.deepEqual(m.name, { x: 1113, w: 205, h: 40, bg: 'rgba(0, 0, 0, 0.2)', bb: '0px', lh: '23px', ls: '0.15008px', family: 'Roboto' }, 'name: filled 205x40 box, no underline');
+  assert.deepEqual(m.d4, [1077, 30, '3px'], 'dice row start'); assert.equal(m.scroll, 'scroll'); assert.equal(m.footLs, '0.39996px');
+  assert(Math.abs(m.footY - 874) <= 1, 'Dicebot line y ' + m.footY);
+  assert.deepEqual(m.slots, [['BGM01', 929, 64], ['BGM02', 993, 64]], 'BGM slots'); assert.equal(m.vol, 781, 'volume slider');
+  assert.deepEqual(m.pal, [34, 34, '50%'], 'icon button 34x34 round'); assert.deepEqual(m.face, [40, 40]);
   assert.deepEqual(m.send, { size: [64, 31], font: 'Roboto', px: '13px', weight: '700', pad: '4px 5px', radius: '4px' }, 'send button');
   assert.deepEqual(m.input, { h: 92, font: 'Roboto', px: '16px' }, 'message box 92px'); assert.deepEqual(m.foot, { font: 'Roboto', px: '12px', color: 'rgb(100, 100, 100)' });
   assert.deepEqual(m.avatar, [40, 40, '0px']); assert.deepEqual(m.time, { px: '12px', color: 'rgb(117, 117, 117)' }); assert.deepEqual(m.body, { px: '14px', lh: '20.02px' }); assert.equal(m.row.font, 'Roboto');
+  // narrow window: the chat covers the screen, the input and send stay on screen; >| folds it back to the map
+  await page.setViewportSize({ width: 471, height: 863 }); await page.waitForTimeout(200);
+  const narrow = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); const c = r('.chat'), i = r('#chat-input'), s = r('.dice-row button[type=submit]'); return { chat: [Math.round(c.left), Math.round(c.top), Math.round(c.width), Math.round(c.height)], head: Math.round(r('.chat h2').height), inputBottom: Math.round(i.bottom), sendRight: Math.round(s.right), list: Math.round(r('#messages').height) }; });
+  assert.deepEqual(narrow.chat, [0, 0, 471, 863]); assert.equal(narrow.head, 56); assert(narrow.inputBottom <= 863 - 30 && narrow.sendRight <= 471 && narrow.list > 300, 'narrow ' + JSON.stringify(narrow));
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#bgm-bar')).visibility), 'hidden', 'nothing of the map shows through the chat');
+  await page.click('#chat-close'); assert.equal(await page.locator('.chat').isVisible(), false); assert.equal(await page.locator('#scene').isVisible(), true);
+  await page.click('#chat-open'); assert.equal(await page.locator('.chat').isVisible(), true);
   console.log('playroom metrics PASS', JSON.stringify(m));
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
