@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.48
+// @version      0.3.49
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.48";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.49";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -530,6 +530,7 @@
   // "새로고침 전 곡 복원"은 페이지당 한 번뿐. 이후의 패널 재렌더(컷인 등)로는
   // 다시 재생되지 않게 한다.
   let ccfBgmRestoreConsumed = false;
+  let ccfBgmRestoreWaits = 0; // 룸 정보가 아직 없을 때 복원을 미룬 횟수
   // 로컬에서 곡을 고른 직후, 그 전에 출발했던 폴링 응답(= 낡은 원격 신호)이 도착해
   // 다른 곡으로 갈아치우는 경쟁 상태를 막는다 (#A를 골랐는데 B가 재생되는 문제).
   let ccfBgmLocalIntentSeq = 0;      // 로컬 재생/정지 조작마다 증가
@@ -1923,6 +1924,7 @@
 
       const entry = library[persisted.entryKey];
       if (!entry?.videoId) return;
+      if (ccfBgmRoomSlotHasFile(persisted.slotKey) === null) return; // 룸 정보가 오기 전에는 복원하지 않는다(보통 흐름이 이어받음)
 
       if (shouldSkipCcfYoutubeRestoreForNativeBgm(persisted.slotKey, "fast-path")) {
         return;
@@ -1978,12 +1980,57 @@
     });
   }
 
+  // 코코포리아의 재생기 목록(1.37.6: 모듈 안의 클래스, static players). 곡이 툴킷보다 먼저 시작되면 DOM 밖 Audio 라 훅으로도 문서 검색으로도 못 찾는다.
+  // ponytail: 번들 내부에 기대므로 클래스가 바뀌면 빈 목록이 되고, 그때는 툴킷 로드 뒤 시작한 곡만 잡힌다.
+  function ccfBgmCcfoliaPlayers() {
+    const self = ccfBgmCcfoliaPlayers;
+    if (self.owner === undefined) {
+      let req = null;
+      try { window.webpackChunkccfolia?.push([[Symbol("ccf-bgm-players")], {}, (r) => { req = r; }]); } catch (_) { /* 아직 번들이 없음 */ }
+      if (!req?.m) return [];
+      self.owner = null;
+      try {
+        const id = Object.keys(req.m).find((key) => Function.prototype.toString.call(req.m[key]).includes("audioSourceNodePool"));
+        if (id) self.owner = Object.values(req(id)).find((value) => typeof value === "function" && typeof value.unlockAudio === "function") || null;
+      } catch (_) { /* 찾지 못하면 훅만 쓴다 */ }
+    }
+    return self.owner?.players || [];
+  }
+
+  // 그 칸(BGM01 = media, BGM02 = sound)에 지금 룸이 올린 파일이 걸려 있는가. 룸 정보가 아직 없으면 null.
+  function ccfBgmRoomSlotHasFile(slotKey) {
+    const room = ccfBgmRoomNow();
+    if (!room) return null;
+    const url = slotKey === "BGM01" ? room.mediaUrl : slotKey === "BGM02" ? room.soundUrl : "";
+    return !!url && !extractCcfYoutubeUrl(url);
+  }
+
+  function ccfBgmRoomNow() {
+    const self = ccfBgmRoomNow;
+    if (!self.store) {
+      const root = document.getElementById("root");
+      const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+      const seen = new WeakSet();
+      const walk = (node, depth = 0) => {
+        if (self.store || !node || depth > 60) return;
+        for (const value of [node.memoizedProps?.store, node.memoizedProps?.value, node.memoizedProps]) {
+          if (self.store || !value || typeof value !== "object" || seen.has(value)) continue;
+          seen.add(value);
+          if (typeof value.getState === "function" && typeof value.dispatch === "function") self.store = value;
+        }
+        walk(node.child, depth + 1); walk(node.sibling, depth + 1);
+      };
+      try { walk(key ? root[key]?.stateNode?.current : null); } catch (_) { /* 아직 마운트 전 */ }
+    }
+    try { return self.store?.getState()?.entities?.rooms?.entities?.[ccfBgmRoomIdNow()] || null; } catch (_) { return null; }
+  }
+
   function scanExistingNativeBgmMedia() {
     // 페이지에 이미 존재하는 audio/video 요소를 훑어, 재생 중이거나 진행 중인 미디어를
     // 현재 활성 네이티브 BGM으로 등록한다. handleCcfNativeMediaActivity가 알아서
     // 진행바 갱신·이벤트 리스너 부착 등을 해준다.
     // 코코포리아가 미디어 요소를 늦게 mount하는 경우가 있어 여러 시점에 재시도한다.
-    const allMedia = [...document.querySelectorAll("audio, video")];
+    const allMedia = getCcfNativeMediaCandidates();
     let qualifying = 0;
     let registered = 0;
     for (const media of allMedia) {
@@ -2013,7 +2060,9 @@
       const slotRoot = slotButton?.closest?.(".MuiListItem-root");
       const slotHasNativeStop = !!slotRoot?.querySelector?.('[data-testid="StopIcon"]');
       const playingNativeMedia = findPlayingCcfNativeBgmMediaForRestore();
-      const shouldSkipRestore = slotHasNativeStop || (!slotButton && !!playingNativeMedia);
+      // 같은 칸이 파일 음원으로 바뀌었으면 기억해 둔 유튜브 곡을 되살리지 않는다(파일이 아직 재생 전이어도).
+      const slotHasFile = ccfBgmRoomSlotHasFile(normalizedSlotKey) === true;
+      const shouldSkipRestore = slotHasFile || slotHasNativeStop || (!slotButton && !!playingNativeMedia);
 
       if (!shouldSkipRestore) {
         return false;
@@ -2023,6 +2072,7 @@
         ccfBgmNativeLoadedSlots.add(normalizedSlotKey);
       }
       updateCcfBgmPersistedState("stopped");
+      try { window.dispatchEvent(new CustomEvent("capybara-bgm-signal", { detail: { state: "stopped", videoId: "", title: "", loop: true } })); } catch (_) {}
       startCcfBgmProgressLoop();
       updateCcfBgmProgressBar();
       markCcfYoutubeBgmSlotButtons();
@@ -3454,6 +3504,12 @@
     // 재생 중에도 마지막 유튜브 곡이 갑자기 시작되는 문제). 이후 호출은 cue 만 한다.
     if (persisted?.state === "playing" && ccfBgmRestoreConsumed) {
       cueCcfYoutubeBgmSlot(targetSlotKey, hit[1], hit[0]);
+      return;
+    }
+
+    if (persisted?.state === "playing" && ccfBgmRoomSlotHasFile(targetSlotKey) === null && ccfBgmRestoreWaits < 10) {
+      ccfBgmRestoreWaits += 1;
+      window.setTimeout(() => { if (chatNotifierLifecycle.isActive()) prepareCcfYoutubeBgmPlayerFromEntries(entries); }, 300);
       return;
     }
 
@@ -6730,6 +6786,9 @@
       } else {
         ccfBgmKnownNativeMedia.delete(media);
       }
+    });
+    ccfBgmCcfoliaPlayers().forEach((player) => {
+      if (player?.audioElement instanceof HTMLMediaElement) mediaSet.add(player.audioElement);
     });
     return [...mediaSet];
   }
