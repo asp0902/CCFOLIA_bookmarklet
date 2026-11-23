@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.65
+// @version      0.5.66
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.65";
+  const VERSION = "0.5.66";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1210,6 +1210,7 @@
   function applyDesign(dialog) {
     if (!dialog) return;
     const d = normalizeDesign(state.data.design);
+    if (d.font) try { window.__CCF_ENSURE_GOOGLE_FONTS__?.(d.font); } catch (_) { /* 글꼴을 못 받아도 시트는 그대로 */ }
     dialog.style.fontFamily = d.font ? `${d.font}, Roboto, 'Noto Sans KR', sans-serif` : "";
     dialog.style.color = d.color === DESIGN_DEFAULT.color ? "" : d.color;
     dialog.style.setProperty("--ccf-cs-text", d.color);
@@ -1221,12 +1222,19 @@
     const d = normalizeDesign(state.data.design);
     const row = (label, control) => `<label class="ccf-cs-design-row"><span>${label}</span>${control}</label>`;
     return `<section class="ccf-cs-panel-section ccf-cs-settings ccf-cs-design"><h3>시트 디자인</h3><p>이 룸의 모든 캐릭터 시트 창에 적용됩니다(GM 이 정하면 룸 전원).</p>`
-      + row("글꼴", `<input data-design="font" list="ccf-cs-font-list" placeholder="기본" value="${escapeHtml(d.font)}"><datalist id="ccf-cs-font-list">${["Noto Sans KR", "Noto Serif KR", "Nanum Gothic", "Nanum Myeongjo", "serif", "monospace"].map((f) => `<option value="${f}">`).join("")}</datalist>`)
+      + row("글꼴", `<input data-design="font" list="ccf-cs-font-list" placeholder="기본" value="${escapeHtml(d.font)}"><datalist id="ccf-cs-font-list">${designFontOptions()}</datalist>`)
       + row("본문 크기", `<input data-design="size" type="number" min="10" max="28" value="${d.size}">`)
       + row("글자색", `<input data-design="color" type="color" value="${d.color}">`)
       + row("강조색", `<input data-design="accent" type="color" value="${d.accent}">`)
       + row("창 배경 불투명도", `<input data-design="bg" type="range" min="20" max="100" value="${d.bg}">`)
       + `<button type="button" class="ccf-cs-design-reset" data-action="design-reset">기본값으로</button></section>`;
+  }
+
+  // 0.5.66 디자인 글꼴 목록: 서식 도구가 켜져 있으면 메시지 글꼴 38종 + 한국어 이름표, 꺼져 있으면 기본 몇 개
+  function designFontOptions() {
+    const fonts = window.__CCF_MESSAGE_FONTS__, info = window.__CCF_MESSAGE_FONT_INFO__ || {};
+    const list = fonts ? Object.entries(fonts).map(([id, family]) => [family, info[id]?.[0] || family]) : [["Noto Sans KR", "본고딕"], ["Noto Serif KR", "본명조"], ["Nanum Gothic", "나눔고딕"], ["Nanum Myeongjo", "나눔명조"]];
+    return [...list, ["serif", "명조 계열"], ["monospace", "고정폭"]].map(([value, label]) => `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}">`).join("");
   }
 
   function enableDialogDrag(dialog) {

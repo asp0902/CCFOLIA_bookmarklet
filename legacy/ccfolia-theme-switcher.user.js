@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.61
+// @version      0.2.62
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -209,9 +209,8 @@
     { name: "숲", theme: { bg: "#132018", appbar: "#1a2b20", paper: "#1d3124", border: "#35523f", text: "#e3eee5", inputBg: "#172619", accent: "#7cc48a" } },
     { name: "밤", theme: { bg: "#12121f", appbar: "#1a1a2e", paper: "#1e1e33", border: "#38385a", text: "#e6e6f5", inputBg: "#16162a", accent: "#9d8cff" } },
     { name: "양피지", theme: { bg: "#efe3c8", appbar: "#e0cfa8", paper: "#f6ecd6", border: "#c4ab7a", text: "#3e2f1c", inputBg: "#fbf5e6", accent: "#9c5b24" } },
-    { name: "다크", theme: { bg: "#121212", appbar: "#1e1e1e", paper: "#1c1c1c", border: "#3a3a3a", text: "#eeeeee", inputBg: "#181818", accent: "#90caf9" } },
-    { name: "라이트", theme: { bg: "#f5f5f5", appbar: "#e8e8e8", paper: "#ffffff", border: "#cfcfcf", text: "#222222", inputBg: "#ffffff", accent: "#1976d2" } }
-  ]);
+    { name: "다크", theme: { bg: "#121212", appbar: "#1e1e1e", paper: "#1c1c1c", border: "#3a3a3a", text: "#eeeeee", inputBg: "#181818", accent: "#90caf9" } }
+  ]); // 0.2.62 '라이트'는 종류 목록의 기존 라이트 모드 하나로 합침
 
   const DEFAULT_MODE_FALLBACK_THEME = Object.freeze({
     bg: "#202020",
@@ -237,7 +236,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.61"),
+    version: getUserscriptVersion("0.2.62"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1174,8 +1173,10 @@
         #${PANEL_ID} .ccf-theme-font-title { font-size: 13px; }
         #${PANEL_ID} .ccf-theme-check { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
         #${PANEL_ID} .ccf-theme-hint { font-size: 11px; opacity: .65; line-height: 1.4; }
-        #${PANEL_ID} .ccf-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-        #${PANEL_ID} .ccf-theme-preset { border: 1px solid; border-radius: 4px; }
+        /* 0.2.62 시트 줄: 이름 · 드롭다운 · ON/OFF */
+        #${PANEL_ID} [data-screen-font-custom][hidden] { display: none; }
+        #${PANEL_ID} .ccf-theme-row.ccf-theme-sheet-row { grid-template-columns: minmax(88px, auto) minmax(0, 1fr) auto; }
+        #${PANEL_ID} .ccf-theme-sheet-row .ccf-theme-btn { min-width: 56px; height: 38px; padding: 0 10px; }
         #${PANEL_ID} .ccf-theme-actions {
           display: flex;
           flex-wrap: nowrap;
@@ -2497,8 +2498,8 @@
             <button type="button" class="ccf-theme-close" data-action="close" aria-label="테마 패널 닫기">×</button>
           </div>
           <label class="ccf-theme-row">
-            <span>테마 모드</span>
-            <select id="${MODE_SELECT_ID}" class="ccf-theme-select" aria-label="테마 모드">
+            <span>종류</span>
+            <select id="${MODE_SELECT_ID}" class="ccf-theme-select" aria-label="종류">
               <option value="${MODE_DEFAULT}">기본값</option>
               <option value="${MODE_LIGHT}">라이트</option>
               <option value="${MODE_CUSTOM}">커스텀</option>
@@ -2544,12 +2545,10 @@
             <label class="ccf-theme-field"><span>바·패널 불투명도 <b data-extra-out="alpha"></b></span><input type="range" min="0" max="100" step="1" data-extra="alpha" aria-label="바·패널 불투명도"></label>
             <label class="ccf-theme-field"><span>뒤 흐림 <b data-extra-out="blur"></b></span><input type="range" min="0" max="12" step="1" data-extra="blur" aria-label="뒤 흐림"></label>
           </div>
-          <div class="ccf-theme-presets" role="group" aria-label="색 프리셋">
-            ${THEME_COLOR_PRESETS.map((preset, index) => `<button type="button" class="ccf-theme-btn ccf-theme-preset" data-action="color-preset" data-preset="${index}" title="${escapeHtml(preset.name)}" style="background:${preset.theme.paper};color:${preset.theme.text};border-color:${preset.theme.accent}">${escapeHtml(preset.name)}</button>`).join("")}
-          </div>
           <div class="ccf-theme-font" role="group" aria-label="글꼴">
             <strong class="ccf-theme-font-title">글꼴</strong>
-            <label class="ccf-theme-field"><span>화면 글꼴</span><input class="ccf-theme-color-code" type="text" list="ccf-screen-font-list" data-screen-font="family" placeholder="기본" aria-label="화면 글꼴"><datalist id="ccf-screen-font-list">${Object.entries(screenFontList()).map(([id, name]) => `<option value="${escapeHtml(name)}" label="${escapeHtml((window.__CCF_MESSAGE_FONT_INFO__ || {})[id]?.[0] || name)}">`).join("")}</datalist></label>
+            <label class="ccf-theme-field"><span>화면 글꼴</span><select class="ccf-theme-select" data-screen-font-pick aria-label="화면 글꼴"><option value="">기본</option>${["고딕", "명조", "손글씨·장식"].map((group) => `<optgroup label="${group}">${Object.entries(SCREEN_FONTS).filter(([id]) => (SCREEN_FONT_INFO[id]?.[1] || "손글씨·장식") === group).map(([id, family]) => `<option value="${escapeHtml(family)}">${escapeHtml(SCREEN_FONT_INFO[id]?.[0] || family)}</option>`).join("")}</optgroup>`).join("")}<option value="__custom">직접 입력…</option></select></label>
+            <label class="ccf-theme-field" data-screen-font-custom hidden><span>글꼴 이름</span><input class="ccf-theme-color-code" type="text" data-screen-font="family" placeholder="글꼴 이름" aria-label="글꼴 이름 직접 입력"></label>
             <label class="ccf-theme-field"><span>크기 배율 <b data-screen-font-out="scale"></b></span><input type="range" min="0.8" max="1.3" step="0.05" data-screen-font="scale" aria-label="크기 배율"></label>
             <label class="ccf-theme-field"><span>자간 <b data-screen-font-out="spacing"></b></span><input type="range" min="-1" max="3" step="0.1" data-screen-font="spacing" aria-label="자간"></label>
             <label class="ccf-theme-field"><span>굵기</span><select class="ccf-theme-select" data-screen-font="weight" aria-label="굵기"><option value="">기본</option><option value="300">가늘게</option><option value="400">보통</option><option value="500">중간</option><option value="700">굵게</option><option value="900">아주 굵게</option></select></label>
@@ -2571,22 +2570,20 @@
             <button type="button" class="ccf-theme-btn" data-action="export-theme">내보내기</button>
             <button type="button" class="ccf-theme-btn" data-action="delete-theme">테마 삭제</button>
           </div>
-          <label class="ccf-theme-row">
-            <span>커스텀 시트 테마</span>
-            <select id="${SHEET_THEME_SELECT_PANEL_ID}" class="ccf-theme-select" aria-label="커스텀 시트 테마 선택">
+          <div class="ccf-theme-row ccf-theme-sheet-row">
+            <span>시트</span>
+            <select id="${SHEET_THEME_SELECT_PANEL_ID}" class="ccf-theme-select" aria-label="시트 테마 선택">
               ${SHEET_THEMES.map((theme) => `
                 <option value="${escapeHtml(theme.id)}">${escapeHtml(theme.name)}</option>
               `).join("")}
             </select>
-          </label>
-          <div class="ccf-theme-actions">
             <button
               type="button"
               class="ccf-theme-btn"
               id="${UNSUNG_DUET_TOGGLE_ID}"
               data-action="toggle-unsung-duet"
               aria-pressed="true"
-            >선택 테마: ON</button>
+            >ON</button>
           </div>
           <input id="${IMPORT_INPUT_ID}" type="file" accept=".json,application/json" hidden>
         </div>
@@ -2630,16 +2627,6 @@
         if (action === "screen-font-reset") {
           settings = { ...settings, screenFont: normalizeScreenFont({}) };
           persistSettings(); applyTheme(settings);
-          return;
-        }
-
-        if (action === "color-preset") {
-          const preset = THEME_COLOR_PRESETS[Number(target.dataset.preset)];
-          if (!preset) return;
-          settings = { ...settings, mode: MODE_CUSTOM, customTheme: normalizeTheme(preset.theme) };
-          persistSettings();
-          applyTheme(settings);
-          setStatus(`'${preset.name}' 색을 적용했습니다.`, "success");
           return;
         }
 
@@ -2734,6 +2721,12 @@
         persistSettings(); applyTheme(settings, { syncUi: target.tagName === "SELECT" });
         syncScreenFontUi();
       };
+      // 0.2.62 글꼴 드롭다운(한국어 이름): 값은 글꼴 이름, '직접 입력'이면 이름 칸을 연다
+      panel.querySelector("[data-screen-font-pick]")?.addEventListener("change", (event) => {
+        const custom = panel.querySelector("[data-screen-font-custom]"), input = panel.querySelector('[data-screen-font="family"]');
+        if (event.target.value === "__custom") { custom.hidden = false; input.focus(); return; }
+        custom.hidden = true; input.value = event.target.value; input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
       panel.addEventListener("input", onScreenFont);
       panel.addEventListener("change", onScreenFont);
       panel.addEventListener("input", (event) => {
@@ -2790,6 +2783,17 @@
       });
 
       panel.querySelector(`#${MODE_SELECT_ID}`)?.addEventListener("change", (event) => {
+        // 0.2.62 색 프리셋을 고르면 그 색의 커스텀 테마(예전 프리셋 버튼과 같은 동작)
+        const presetMatch = /^preset:(\d+)$/.exec(event.currentTarget.value);
+        if (presetMatch) {
+          const preset = THEME_COLOR_PRESETS[Number(presetMatch[1])];
+          if (!preset) return;
+          settings = { ...settings, mode: MODE_CUSTOM, customTheme: normalizeTheme(preset.theme) };
+          persistSettings();
+          applyTheme(settings);
+          setStatus(`'${preset.name}' 색을 적용했습니다.`, "success");
+          return;
+        }
         const previousThemePreview = getDisplayedThemeFromPanel() || getThemePreviewForTransition();
         const nextMode = normalizeMode(event.currentTarget.value);
         if (nextMode === MODE_CUSTOM) {
@@ -4396,7 +4400,6 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const modeSelect = panel.querySelector(`#${MODE_SELECT_ID}`);
     if (modeSelect instanceof HTMLSelectElement) {
       renderModeOptions(modeSelect);
-      modeSelect.value = settings.mode;
     }
 
     const themeForInputs = normalizeOptionalTheme(previewOverride) || getUiThemePreview();
@@ -4436,6 +4439,12 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     panel.querySelectorAll("[data-layout-pref]").forEach((box) => { let v = null; try { v = localStorage.getItem(box.dataset.layoutPref); } catch (_) {} box.checked = v === "on"; });
     const f = normalizeScreenFont(settings.screenFont);
     panel.querySelectorAll("[data-screen-font]").forEach((input) => { if (document.activeElement !== input) input.value = String(f[input.dataset.screenFont] ?? ""); });
+    const pick = panel.querySelector("[data-screen-font-pick]"), customRow = panel.querySelector("[data-screen-font-custom]");
+    if (pick && customRow) {
+      const listed = !f.family || Object.values(SCREEN_FONTS).includes(f.family);
+      const typing = document.activeElement === panel.querySelector('[data-screen-font="family"]');
+      if (!typing && !(pick.value === "__custom" && !f.family)) { pick.value = listed ? f.family : "__custom"; customRow.hidden = listed; }
+    }
     panel.querySelectorAll("[data-screen-font-out]").forEach((out) => { const k = out.getAttribute("data-screen-font-out"); out.textContent = k === "scale" ? `${f.scale}배` : `${f.spacing}px`; });
   }
 
@@ -4501,6 +4510,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const options = [
       { value: MODE_DEFAULT, label: "기본값" },
       { value: MODE_LIGHT, label: "라이트" },
+      ...THEME_COLOR_PRESETS.map((preset, index) => ({ value: `preset:${index}`, label: preset.name })),
       ...settings.savedThemes.map((theme) => ({
         value: makeSavedMode(theme.id),
         label: theme.name
@@ -4512,8 +4522,17 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
       .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
       .join("");
 
-    const normalizedMode = normalizeMode(settings.mode, settings.savedThemes);
-    modeSelect.value = options.some((option) => option.value === normalizedMode) ? normalizedMode : MODE_DEFAULT;
+    const kind = currentKindValue();
+    modeSelect.value = options.some((option) => option.value === kind) ? kind : MODE_DEFAULT;
+  }
+
+  // 0.2.62 종류 드롭다운에 보일 값: 커스텀 색이 어떤 프리셋과 똑같으면 그 프리셋, 색을 고치면 '커스텀'
+  function currentKindValue() {
+    const mode = normalizeMode(settings.mode, settings.savedThemes);
+    if (mode !== MODE_CUSTOM) return mode;
+    const custom = normalizeTheme(settings.customTheme);
+    const index = THEME_COLOR_PRESETS.findIndex((preset) => { const theme = normalizeTheme(preset.theme); return Object.keys(preset.theme).every((key) => String(theme[key] || "").toLowerCase() === String(custom[key] || "").toLowerCase()); });
+    return index >= 0 ? `preset:${index}` : mode;
   }
 
   function syncThemeNameInput() {
@@ -4581,7 +4600,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
 
     const modeSelect = panel.querySelector(`#${MODE_SELECT_ID}`);
     if (modeSelect instanceof HTMLSelectElement) {
-      modeSelect.value = settings.mode;
+      modeSelect.value = currentKindValue();
     }
 
     const codeInput = panel.querySelector(`input[data-role="color-code"][data-key="${key}"]`);
@@ -5233,7 +5252,8 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
     const themeName = SHEET_THEMES.find((t) => t.id === selectedId)?.name || "";
     const button = document.getElementById(UNSUNG_DUET_TOGGLE_ID);
     if (button instanceof HTMLButtonElement) {
-      button.textContent = enabled ? `${themeName} 테마: ON` : `${themeName} 테마: OFF`;
+      button.textContent = enabled ? "ON" : "OFF";
+      button.setAttribute("aria-label", `${themeName} 시트 테마 ${enabled ? "켜짐" : "꺼짐"}`);
       button.setAttribute("aria-pressed", enabled ? "true" : "false");
     }
     const panelSelect = document.getElementById(SHEET_THEME_SELECT_PANEL_ID);
@@ -6994,7 +7014,9 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
   // 테마 모드(기본값/라이트/커스텀)와 따로 켜진다.
 
   // 함수 안 값(호이스팅된 함수만 씀): 시작 직후 ensureUi 가 패널을 만들 때 불린다 — 바깥 const 였을 때 format-sync 가 아직 없으면 TDZ 로 초기화가 한 번 실패했다
-  function screenFontList() { return window.__CCF_MESSAGE_FONTS__ || { "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang" }; }
+  // 0.2.62 메시지 글꼴 38종과 같은 목록·한국어 이름(서식 도구가 꺼져 있어도 고를 수 있게 테마가 직접 가진다)
+  const SCREEN_FONTS = Object.freeze({ "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo", "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua", "black-han-sans": "Black Han Sans", "nanum-pen-script": "Nanum Pen Script", "gaegu": "Gaegu", "hi-melody": "Hi Melody", "song-myung": "Song Myung", "dongle": "Dongle", "asta-sans": "Asta Sans", "gothic-a1": "Gothic A1", "ibm-plex-sans-kr": "IBM Plex Sans KR", "nanum-gothic-coding": "Nanum Gothic Coding", "sunflower": "Sunflower", "stylish": "Stylish", "orbit": "Orbit", "gasoek-one": "Gasoek One", "hahmlet": "Hahmlet", "diphylleia": "Diphylleia", "grandiflora-one": "Grandiflora One", "nanum-brush-script": "Nanum Brush Script", "east-sea-dokdo": "East Sea Dokdo", "dokdo": "Dokdo", "gamja-flower": "Gamja Flower", "poor-story": "Poor Story", "single-day": "Single Day", "yeon-sung": "Yeon Sung", "cute-font": "Cute Font", "gugi": "Gugi", "kirang-haerang": "Kirang Haerang", "black-and-white-picture": "Black And White Picture", "bagel-fat-one": "Bagel Fat One", "moirai-one": "Moirai One" });
+  const SCREEN_FONT_INFO = Object.freeze({ "noto-sans-kr": ["본고딕", "고딕"], "noto-serif-kr": ["본명조", "명조"], "nanum-gothic": ["나눔고딕", "고딕"], "nanum-myeongjo": ["나눔명조", "명조"], "gowun-dodum": ["고운돋움", "고딕"], "gowun-batang": ["고운바탕", "명조"], "do-hyeon": ["도현", "고딕"], "jua": ["주아", "고딕"], "black-han-sans": ["검은고딕", "고딕"], "nanum-pen-script": ["나눔손글씨 펜", "손글씨·장식"], "gaegu": ["개구", "손글씨·장식"], "hi-melody": ["하이멜로디", "손글씨·장식"], "song-myung": ["송명", "명조"], "dongle": ["동글", "고딕"], "asta-sans": ["아스타 산스", "고딕"], "gothic-a1": ["고딕 A1", "고딕"], "ibm-plex-sans-kr": ["IBM 플렉스 산스", "고딕"], "nanum-gothic-coding": ["나눔고딕코딩", "고딕"], "sunflower": ["선플라워", "고딕"], "stylish": ["스타일리시", "고딕"], "orbit": ["오르빗", "고딕"], "gasoek-one": ["가석", "고딕"], "hahmlet": ["함렛", "명조"], "diphylleia": ["디필레이아", "명조"], "grandiflora-one": ["그랜디플로라", "명조"], "nanum-brush-script": ["나눔손글씨 붓", "손글씨·장식"], "east-sea-dokdo": ["동해독도", "손글씨·장식"], "dokdo": ["독도", "손글씨·장식"], "gamja-flower": ["감자꽃", "손글씨·장식"], "poor-story": ["푸어 스토리", "손글씨·장식"], "single-day": ["싱글데이", "손글씨·장식"], "yeon-sung": ["연성", "손글씨·장식"], "cute-font": ["큐트 폰트", "손글씨·장식"], "gugi": ["구기", "손글씨·장식"], "kirang-haerang": ["기랑해랑", "손글씨·장식"], "black-and-white-picture": ["흑백사진", "손글씨·장식"], "bagel-fat-one": ["베이글 팻 원", "손글씨·장식"], "moirai-one": ["모이라이", "손글씨·장식"] });
   function normalizeScreenFont(value) {
     const v = value && typeof value === "object" ? value : {};
     const num = (n, lo, hi, d) => { const x = Number(n); return n === "" || n == null || !Number.isFinite(x) ? d : Math.max(lo, Math.min(hi, Math.round(x * 100) / 100)); };
