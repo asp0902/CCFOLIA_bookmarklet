@@ -80,7 +80,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.deepEqual(chrome.tabs, ['tab on:메인']);
   // the menu button of the mirrored header opens the log menu; the close button closes the chat
   await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.mn').click());
-  assert.equal(await page.locator('.menu-item').count(), 2, 'chat menu opened from the mirrored button');
+  assert.equal(await page.locator('.menu-item').count(), 10, 'chat menu opened from the mirrored button');
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.getElementById('chat-head-host').shadowRoot.querySelector('.cl').click());
   assert.equal(await page.evaluate(() => document.getElementById('room').classList.contains('chat-collapsed')), true, 'close button works');
