@@ -115,13 +115,11 @@ function refreshBgmBar() {
   const slot1 = document.getElementById("bgm-slot1"), slot2 = document.getElementById("bgm-slot2");
   slot1.classList.toggle("is-on", !!(bgmKey || roomAudio.media.url)); slot1.title = (ytPlaying ? bgmLast?.title : roomAudio.media.cfg?.name) || "";
   slot2.classList.toggle("is-on", !!roomAudio.sound.url); slot2.title = roomAudio.sound.cfg?.name || "";
-  playBtn.hidden = !blockedAudio;
 }
 let blockedAudio = false;
-const playBtn = document.createElement("button"); playBtn.type = "button"; playBtn.id = "bgm-play"; playBtn.hidden = true; playBtn.setAttribute("aria-label", "BGM 재생"); playBtn.title = "BGM 재생";
-playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
-document.querySelector("#bgm-bar .bgm-row1").append(playBtn);
-playBtn.addEventListener("click", () => { blockedAudio = false; refreshBgmBar(); for (const slot of Object.values(roomAudio)) slot.el?.play().catch(() => { blockedAudio = true; refreshBgmBar(); }); });
+// Autoplay blocked (a reload has no click yet): no button as in CCFOLIA's bar, the first click or key on the page starts the sound.
+const unlockAudio = () => { if (!blockedAudio) return; blockedAudio = false; for (const slot of Object.values(roomAudio)) if (slot.url) slot.el?.play().catch(() => { blockedAudio = true; }); };
+for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, unlockAudio, true);
 function applyRoomAudioVolume() {
   for (const slot of Object.values(roomAudio)) if (slot.el && slot.cfg) { slot.el.volume = Math.max(0, Math.min(1, slot.cfg.volume * (bgmVolume / 100))); slot.el.muted = bgmMuted; }
 }
@@ -135,10 +133,44 @@ function syncRoomAudio(scene) {
     slot.cfg = cfg; slot.el ||= new Audio(); slot.el.loop = cfg.repeat; applyRoomAudioVolume();
     if (slot.url !== cfg.url) {
       slot.url = cfg.url; slot.el.src = cfg.url; slot.el.currentTime = 0;
-      slot.el.play().catch(() => { blockedAudio = true; refreshBgmBar(); }); // autoplay blocked: the bar shows one play button
+      slot.el.play().catch(() => { blockedAudio = true; }); // autoplay blocked: the next click or key starts it
     }
   }
   refreshBgmBar();
+}
+// Cut-ins as CCFOLIA plays them (1.37.6): a raised playTime shows the picture over a 40% dark layer (16% inset, at most 480px) until a click or the end of its sound; without a picture, the name at the top right.
+// The first scene only sets the mark, so what was played before this page opened does not play again.
+let cutinMark = null;
+const openCutins = new Map();
+function closeCutin(id) { const open = openCutins.get(id); if (!open) return; openCutins.delete(id); open.audio?.pause(); open.node.remove(); }
+function showCutin(effect) {
+  closeCutin(effect.id);
+  let node;
+  if (effect.imageUrl) {
+    node = el("div", "cutin-layer"); const box = el("div", "cutin-box"), img = document.createElement("img");
+    img.src = effect.imageUrl; img.alt = ""; img.draggable = false; box.append(img); node.append(box);
+    node.addEventListener("click", () => closeCutin(effect.id));
+  } else {
+    node = el("div", "cutin-snack"); const x = el("button", "", "×"); x.type = "button"; x.setAttribute("aria-label", "닫기");
+    x.addEventListener("click", () => closeCutin(effect.id)); node.append(el("span", "", effect.name), x);
+  }
+  document.body.append(node);
+  const open = { node, audio: null }; openCutins.set(effect.id, open);
+  if (effect.soundUrl) {
+    const audio = open.audio = new Audio(effect.soundUrl);
+    audio.volume = Math.max(0, Math.min(1, effect.volume * (bgmVolume / 100))); audio.muted = bgmMuted;
+    audio.onended = () => { if (openCutins.get(effect.id) === open) closeCutin(effect.id); };
+    audio.play().catch(() => { blockedAudio = true; });
+  }
+}
+function playCutins(scene) {
+  const list = scene?.effects;
+  if (!Array.isArray(list)) return;
+  const newest = Math.max(0, ...list.map(effect => Number(effect.playTime) || 0));
+  if (cutinMark === null) { cutinMark = newest; return; }
+  const fresh = list.filter(effect => effect.playTime > cutinMark);
+  cutinMark = Math.max(cutinMark, newest);
+  fresh.forEach(showCutin);
 }
 const seekInput = document.getElementById("bgm-seek");
 seekInput.addEventListener("pointerdown", () => { seekInput.dataset.dragging = "1"; });
@@ -277,7 +309,7 @@ const SCALE_KEY = "capybara-screen-scale";
 const savedScale = (() => { try { const value = Number(localStorage.getItem(SCALE_KEY)); return value >= 0.2 && value <= 2 ? value : 1; } catch (_) { return 1; } })();
 const view = { zoom: savedScale, x: 0, y: 0, unit: 24 }; // camera: zoom multiplier on the fitted size, pan in px — each viewer has their own, like CCFOLIA
 function renderScene(scene) {
-  if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); }
+  if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); playCutins(scene); }
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
   const stage = box.parentElement;
   if (!sceneData) { box.hidden = true; return; }

@@ -520,3 +520,11 @@ body.pip .theme-open{display:none}
 .prt-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
 #pr-theme .prt-actions button{height:34px;padding:0 8px;border-radius:0;background:rgba(255,255,255,.1);color:inherit;font-size:13px;font-weight:400}
 #pr-theme .prt-actions button:hover{background:rgba(255,255,255,.18)}
+
+/* Cut-in, measured from CCFOLIA 1.37.6 */
+.cutin-layer{position:fixed;inset:0;z-index:300000;overflow:hidden;background:rgba(0,0,0,.4)}
+.cutin-box{position:absolute;inset:16%;margin:auto;max-width:480px;max-height:480px;outline:none}
+.cutin-box img{display:block;width:100%;height:100%;object-fit:contain}
+.cutin-snack{position:fixed;top:24px;right:24px;z-index:300000;display:flex;align-items:center;gap:8px;min-width:200px;padding:6px 8px 6px 16px;border-radius:4px;background:#222;color:#ccc;font:14px Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;box-shadow:0 3px 5px -1px rgba(0,0,0,.2),0 6px 10px rgba(0,0,0,.14)}
+.cutin-snack span{flex:1}
+.cutin-snack button{width:36px;height:36px;padding:0;border:0;border-radius:50%;background:none;color:inherit;font-size:20px;cursor:pointer}
