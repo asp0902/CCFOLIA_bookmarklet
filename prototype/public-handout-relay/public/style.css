@@ -501,3 +501,22 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
   #room.chat-wide:not(.chat-collapsed) .play-layout{grid-template-columns:minmax(0,1fr) min(601px,calc(100vw - 120px))}
   #room.chat-wide:not(.chat-collapsed)>header{width:calc(100% - min(601px,calc(100vw - 120px)))}
 }
+
+/* Theme palette in the bottom line (same place and size as the toolkit's: 24px, 8px from the right) and its window */
+.dice-footer{position:relative}
+#chat-form .theme-open{position:absolute;right:8px;top:calc(50% - 12px);display:grid;place-items:center;width:24px;min-width:24px;height:24px;margin:0;padding:0;border:0;border-radius:8px;background:none;box-shadow:none;color:#fff;opacity:.82;line-height:0;align-self:auto}
+#chat-form .theme-open:hover{background:rgba(255,255,255,.08);opacity:1}
+.theme-open svg{display:block;width:20px;height:18px}
+body.pip .theme-open{display:none}
+#send-status{right:40px}
+#pr-theme{position:fixed;z-index:310000;display:flex;flex-direction:column;gap:8px;width:min(320px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow-y:auto;box-sizing:border-box;padding:16px;border-radius:4px;background:rgb(44,44,44);color:#fff;font-family:Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;font-size:14px;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
+.prt-head{display:flex;align-items:center;justify-content:space-between;font-size:16px}
+#pr-theme .prt-x{width:32px;height:32px;padding:0;border-radius:50%;background:none;color:inherit;font-size:20px;font-weight:400}
+#pr-theme .prt-x:hover{background:rgba(255,255,255,.08)}
+#pr-theme .prt-row{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:center;gap:10px;margin:0;font-size:12px;font-weight:400}
+#pr-theme select,#pr-theme input[type=text]{width:100%;min-width:0;height:34px;padding:0 8px;border:1px solid rgba(255,255,255,.16);border-radius:0;background:rgb(32,32,32);color:#fff;font:inherit;font-size:14px}
+.prt-color{display:grid;grid-template-columns:34px minmax(0,1fr);gap:6px}
+#pr-theme input[type=color]{width:34px;height:34px;padding:0;border:1px solid rgba(255,255,255,.16);border-radius:0;background:none;cursor:pointer}
+.prt-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+#pr-theme .prt-actions button{height:34px;padding:0 8px;border-radius:0;background:rgba(255,255,255,.1);color:inherit;font-size:13px;font-weight:400}
+#pr-theme .prt-actions button:hover{background:rgba(255,255,255,.18)}
