@@ -121,6 +121,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(top.legacyHidden, true); assert.equal(top.position, 'relative', 'a fixed AppBar is laid out in flow inside the page');
   assert.equal(top.title, 't'); assert.deepEqual(top.buttons, ['mn', 'ch', 'ch(hidden)', 'ac', 'co'], 'handout copy added after the characters button, hidden without a handout; chat-open follows the built-in state (the chat was closed by the test above, so it shows)');
   assert.equal(top.hasImg, false, 'the participant avatar is a letter');
+  // 2026-11-23: the mirrored top bar shows the game-system name after the room title (empty: nothing)
+  await page.evaluate(() => renderState({ ...current, systemName: '크툴루의 부름 7판' }));
+  await page.waitForFunction(() => { const sub = document.getElementById('top-host').shadowRoot.querySelector('[data-cm-slot="subtitle"]'); return sub.textContent === '크툴루의 부름 7판' && getComputedStyle(sub).display !== 'none'; }, null, { timeout: 2500 });
   await page.evaluate(() => document.getElementById('top-host').shadowRoot.querySelector('.ch').click());
   assert.equal(await page.locator('#char-window').count(), 1, 'the character list button opens the movable window');
   assert.equal(await page.locator('#char-window .cw-btn[disabled]').count(), 0, 'the + of the window makes a character');

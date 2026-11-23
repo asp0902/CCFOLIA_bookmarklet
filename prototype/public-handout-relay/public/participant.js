@@ -1727,15 +1727,16 @@ function renderMirroredTopBar() {
   for (const button of bar.querySelectorAll("button[aria-label]")) { const label = button.getAttribute("aria-label"); if (/^\s*\[GM\]/.test(label) || label === "메뉴") { button.title = label; button.disabled = true; button.classList.add("Mui-disabled"); } }
   const dot = document.createElement("i"); dot.style.cssText = "position:absolute;right:3px;bottom:3px;width:12px;height:12px;border-radius:50%;border:2px solid #202020;font-size:0;background:#9e9e9e";
   account.style.position = "relative"; account.append(dot);
-  const subtitle = slot("subtitle"); if (subtitle) subtitle.style.display = "none";
-  topBar = { title: slot("title"), letter, dot, handout, chatOpen };
+  const subtitle = slot("subtitle"); // CCFOLIA's small game-system name after the room title (filled by syncTopBar)
+  topBar = { title: slot("title"), subtitle, letter, dot, handout, chatOpen };
   cmMirror.show("top-host", [bar]);
   syncTopBar();
 }
 function syncTopBar() {
   if (!topBar) return;
-  const { title, letter, dot, handout, chatOpen } = topBar;
+  const { title, subtitle, letter, dot, handout, chatOpen } = topBar;
   title.firstChild?.nodeType === Node.TEXT_NODE ? title.firstChild.nodeValue = document.getElementById("room-title").textContent : title.insertBefore(document.createTextNode(document.getElementById("room-title").textContent), title.firstChild);
+  if (subtitle) { const system = document.getElementById("room-system").textContent; if (subtitle.textContent !== system) subtitle.textContent = system; subtitle.style.display = system ? "" : "none"; subtitle.style.marginLeft = "4px"; }
   letter.textContent = document.getElementById("account-av").textContent;
   dot.style.background = document.getElementById("gm-state").dataset.online === "1" ? "#4caf50" : "#9e9e9e";
   handout.hidden = document.getElementById("handout-open").hidden;
