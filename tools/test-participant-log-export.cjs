@@ -51,7 +51,17 @@ const encode = obj => {
     const [download] = await Promise.all([page.waitForEvent('download'), page.click(`.menu-item:has-text("${label}")`)]);
     return { name: download.suggestedFilename(), body: fs.readFileSync(await download.path(), 'utf8') };
   };
-  const htmlFile = await downloadOf('로그 내보내기 (HTML)');
+  // 2026-11-23: the gear menu = CCFOLIA's player menu (same entries and order, the room master's six disabled), our text export last
+  await page.click('#chat-gear');
+  const menu = await page.evaluate(() => [...document.querySelector('.chat-gear-menu').children].map((n) => n.tagName === 'HR' ? '-' : n.classList.contains('menu-caption') ? `[${n.textContent}]` : `${n.textContent}${n.disabled ? ' (off)' : ''}`));
+  assert.deepEqual(menu.map((x) => x.replace('다른 창으로 보기(beta) (off)', '다른 창으로 보기(beta)')), ['다른 창으로 보기(beta)', '와이드 모드 전환', '-', '로그 출력', '-', '[ルームマスター専用]', 'HTML出力 (off)', 'JSON出力 (off)', '全ログ出力（旧） (off)', '탭 편집 (off)', '현재 탭 삭제 (off)', '룸 로그 삭제 (off)', '-', '로그 내보내기 (텍스트)']);
+  const place = await page.evaluate(() => { const m = document.querySelector('.chat-gear-menu').getBoundingClientRect(), g = document.getElementById('chat-gear').getBoundingClientRect(), row = document.querySelector('.chat-gear-menu .menu-item').getBoundingClientRect(); return { top: Math.round(m.top - g.bottom), right: Math.round(g.right - m.right), row: Math.round(row.height) }; });
+  assert.deepEqual(place, { top: 0, right: 4, row: 36 }, 'right under the gear');
+  const chatWidth = () => page.evaluate(() => Math.round(document.querySelector('.chat').getBoundingClientRect().width));
+  const normalWidth = await chatWidth();
+  await page.click('.menu-item:has-text("와이드 모드 전환")'); assert.equal(await chatWidth(), 601, 'wide mode = 601px');
+  await page.click('#chat-gear'); await page.click('.menu-item:has-text("와이드 모드 전환")'); assert.equal(await chatWidth(), normalWidth, 'back');
+  const htmlFile = await downloadOf('로그 출력');
   assert.match(htmlFile.name, /^테스트_룸-log-\d{8}-\d{4}\.html$/, 'file name: room title (unsafe characters replaced), date and time');
   assert(htmlFile.body.includes('<h2>메인</h2>'));
   const txtFile = await downloadOf('로그 내보내기 (텍스트)');

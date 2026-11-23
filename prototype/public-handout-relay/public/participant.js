@@ -1291,6 +1291,7 @@ function openMenu(anchor, items, extraClass = "") {
   for (const item of items) {
     if (item.header) { paper.append(Object.assign(el("div", "menu-head"), { textContent: item.header })); continue; }
     if (item.divider) { paper.append(el("hr", "menu-divider")); continue; }
+    if (item.caption) { paper.append(el("div", "menu-caption", item.caption)); continue; }
     if (item.node) { paper.append(item.node); continue; }
     // the account menu's top row as CCFOLIA draws it (measured): 40px round avatar, name 16px/24px and a 14px 70% line under it, 72px high, then a divider
     if (item.profile) {
@@ -1322,6 +1323,7 @@ function openMenu(anchor, items, extraClass = "") {
   const r = anchor.getBoundingClientRect();
   paper.style.top = `${r.bottom + 4}px`;
   if (r.left + paper.offsetWidth > innerWidth - 8) paper.style.left = `${Math.max(8, r.right - paper.offsetWidth)}px`; else paper.style.left = `${r.left}px`;
+  if (extraClass.includes("chat-gear-menu")) { paper.style.top = `${r.bottom}px`; paper.style.left = `${Math.max(8, r.right - 4 - paper.offsetWidth)}px`; } // measured: right under the gear, right edge 4px inside it
 }
 document.addEventListener("pointerdown", event => { if (menuEl && !event.composedPath().includes(menuEl) && !event.composedPath().includes(menuEl.anchor)) closeMenu(); }, true);
 document.addEventListener("keydown", event => { if (event.key === "Escape") { const anchor = menuEl?.anchor; closeMenu(); anchor?.focus?.(); } });
@@ -1612,8 +1614,22 @@ function openRoomMenu(anchor) {
   openMenu(anchor, items);
 }
 document.getElementById("room-menu-btn").addEventListener("click", event => openRoomMenu(event.currentTarget));
-// CCFOLIA keeps log output in the gear menu of the chat panel header (not in the room menu); the GM-only entries (tab edit, log deletion) are left out.
-const openChatMenu = anchor => openMenu(anchor, [{ label: "로그 내보내기 (HTML)", run: () => downloadLog("html") }, { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }]);
+// The chat header's gear menu as a CCFOLIA player sees it (measured on 1.37.6): same entries and order; the room master's entries are shown disabled. Our own text export stays last.
+// "다른 창으로 보기" uses the floating chat window (same page: no second login or connection); a browser without it shows the entry disabled.
+const WIDE_KEY = "capybara-chat-wide";
+const setChatWide = on => { document.getElementById("room").classList.toggle("chat-wide", on); try { localStorage.setItem(WIDE_KEY, on ? "1" : "0"); } catch (_) {} renderScene(); };
+try { if (localStorage.getItem(WIDE_KEY) === "1") document.getElementById("room").classList.add("chat-wide"); } catch (_) {}
+const openChatMenu = anchor => openMenu(anchor, [
+  "documentPictureInPicture" in window ? { label: "다른 창으로 보기(beta)", run: () => document.getElementById("pip-open").click() } : { label: "다른 창으로 보기(beta)", disabled: true },
+  { label: "와이드 모드 전환", run: () => setChatWide(!document.getElementById("room").classList.contains("chat-wide")) },
+  { divider: true },
+  { label: "로그 출력", run: () => downloadLog("html") },
+  { divider: true },
+  { caption: "ルームマスター専用" },
+  ...["HTML出力", "JSON出力", "全ログ出力（旧）", "탭 편집", "현재 탭 삭제", "룸 로그 삭제"].map(label => ({ label, disabled: true })),
+  { divider: true },
+  { label: "로그 내보내기 (텍스트)", run: () => downloadLog("txt") }
+], "chat-gear-menu");
 document.getElementById("chat-gear").addEventListener("click", event => openChatMenu(event.currentTarget));
 // Native mirroring: the panel header is CCFOLIA's own (title + close + chat menu buttons); its two buttons do what the built-in ones do.
 function renderMirroredHeader() {

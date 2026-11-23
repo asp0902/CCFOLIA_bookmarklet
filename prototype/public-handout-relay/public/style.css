@@ -490,3 +490,14 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 #chat-form .name-row .face-btn svg{flex:none;width:24px;height:24px}
 #chat-input::placeholder{font-size:14px;line-height:23px;letter-spacing:.15008px;color:#fff;opacity:.5}
 #chat-form #chat-name::placeholder{font-size:16px;color:#fff;opacity:.5}
+
+/* Chat gear menu, measured on ccfolia.com 1.37.6: 36px rows 16px/24px, 0.67px dividers, a 14px 500 caption at 70% */
+.menu-paper.chat-gear-menu{width:max-content;min-width:0;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto}
+.chat-gear-menu .menu-item{padding:6px 16px;font-family:Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;font-size:16px;line-height:24px;letter-spacing:.15008px;white-space:nowrap}
+.chat-gear-menu .menu-divider{height:.667px;margin:8px 0}
+.menu-caption{padding:6px 16px;color:rgba(255,255,255,.7);font-family:Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif;font-size:14px;font-weight:500;line-height:24px;white-space:nowrap}
+/* wide mode: the chat is 601px wide (CCFOLIA's drawer in wide mode) */
+@media(min-width:721px){
+  #room.chat-wide:not(.chat-collapsed) .play-layout{grid-template-columns:minmax(0,1fr) min(601px,calc(100vw - 120px))}
+  #room.chat-wide:not(.chat-collapsed)>header{width:calc(100% - min(601px,calc(100vw - 120px)))}
+}
