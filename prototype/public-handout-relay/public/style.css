@@ -485,3 +485,9 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 #chat-form .dice-row .fmt-group-btn{width:100%;min-width:0;height:31px}
 #chat-form .dice-row button[type=submit]{flex:0 1 38px;width:38px;min-width:24px;margin-left:2px;padding:0;letter-spacing:0;white-space:nowrap;overflow:hidden}
 #chat-form .dice-row button[aria-label^="D"]{flex-shrink:0}
+
+/* Speaker row and placeholders, measured on ccfolia.com 1.37.6: 40x40 box with a faint edge right against the name box, 24px icon; the message hint is 14px */
+#chat-form .name-row .face-btn{width:40px;height:40px;padding:0;border:0;border-radius:0;background:none;box-shadow:inset 0 0 0 .667px rgba(0,0,0,.12)}
+#chat-form .name-row .face-btn svg{flex:none;width:24px;height:24px}
+#chat-input::placeholder{font-size:14px;line-height:23px;letter-spacing:.15008px;color:#fff;opacity:.5}
+#chat-form #chat-name::placeholder{font-size:16px;color:#fff;opacity:.5}
