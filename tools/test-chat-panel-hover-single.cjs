@@ -73,6 +73,16 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-pane
     assert(/\/ 0\.04\)$/.test(pAfter[0]) && /\/ 0\.04\)$/.test(after.bg), 'panel row: the same 4% shade of its text colour as the original row ' + JSON.stringify([pBefore, pAfter, after.bg]));
     assert.equal(pAfter[1], pBefore[1], 'panel row height unchanged');
     if (process.env.SCREENSHOT_DIR) await page.locator('#root #theirs').screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'chat-hover-shade.png') });
+    // 0.5.56 a native list in a popup (sound list: row + secondary action icon) keeps its look: no row shade, no backing behind the icon, the icon's own hover only
+    for (const [wrap, primary] of [['MuiDialog-root', 'h6'], ['plain-list', 'span']]) {
+      await page.evaluate(([wrap, primary]) => { document.getElementById('native-list')?.remove(); const d = document.createElement('div'); d.id = 'native-list'; d.className = wrap; d.style.cssText = 'position:fixed;left:20px;top:20px;width:300px;z-index:99999;background:#333;color:#fff'; d.innerHTML = `<div class="MuiListItem-root" style="position:relative;height:60px"><div class="MuiListItemText-root"><${primary} class="MuiListItemText-primary">효과음.mp3</${primary}><p class="MuiListItemText-secondary">설명</p></div><div id="native-action" style="position:absolute;right:8px;top:8px"><button class="MuiIconButton-root" style="opacity:.8;background:transparent;width:40px;height:40px">✎</button></div></div>`; document.body.appendChild(d); }, [wrap, primary]);
+      await page.locator('#native-list .MuiListItem-root').hover({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
+      const n = await page.evaluate(() => { const li = document.querySelector('#native-list .MuiListItem-root'), g = document.getElementById('native-action'), b = g.querySelector('button'); return [getComputedStyle(li).backgroundColor, getComputedStyle(g).backgroundColor, getComputedStyle(g).borderTopLeftRadius, getComputedStyle(b).opacity]; });
+      assert.deepEqual(n, ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)', '0px', '0.8'], wrap + ': native row hover');
+      await page.locator('#native-action button').hover(); await page.waitForTimeout(200);
+      assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#native-action button')).backgroundColor), 'rgba(0, 0, 0, 0)', wrap + ': no toolkit shade on the icon');
+    }
+    await page.evaluate(() => document.getElementById('native-list').remove());
     // 0.5.55 one vertical line between the panels: no inner bright line on the panel (the original's left border is the only one)
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.ccf-scp-panel'), '::after').content), 'none', 'no panel ::after line');
     assert.deepEqual(errors, []);
