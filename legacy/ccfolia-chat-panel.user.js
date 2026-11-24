@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.73
+// @version      0.5.74
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.73";
+  const VERSION = "0.5.74";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1632,24 +1632,23 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       if (!(row instanceof HTMLElement)) return;
       const next = rows[i + 1];
       const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
-      if (nextIsCont) {
-        row.setAttribute("data-ccf-prose-cont-leader", "1");
-        row.style.removeProperty("border-bottom");
-        row.style.removeProperty("background-image");
-      } else {
-        row.removeAttribute("data-ccf-prose-cont-leader");
-        // 오리지널의 구분선은 좌우로 16px 들여 있다(실측). 줄 자신의 아래 테두리는 투명으로 두어 높이(1px)를 지키고, 그 자리에 들여쓴 선을 배경으로 그린다.
+      // 0.5.74: 오리지널(roll20 bridge 0.3.119)과 같은 거리. 모든 줄 아래에 1px 자리(오리지널 구분선 hr 자리)를 둔다.
+      // 묶음 안: 안쪽 값(일반 5, 나레이션 6) + 1px. 묶음 끝 뒤에 줄이 있으면: 일반 14·나레이션 16 + 선(오리지널은 같은 거리를 다음 묶음 첫 줄 위에 두지만
+      // 패널은 가상 목록이 아니라 다음 줄에 따라 바뀌어도 흔들리지 않는다). 맨 끝 줄: 안쪽 값 + 1px, 선 없음(오리지널도 마지막 줄 선을 감춤).
+      const end = !!next && !nextIsCont;
+      row.toggleAttribute("data-ccf-prose-cont-leader", nextIsCont);
+      row.toggleAttribute("data-ccf-scp-end", end);
+      row.style.setProperty("border-bottom", "1px solid transparent", "important");
+      row.style.removeProperty("padding-bottom");
+      if (end) {
+        // 오리지널의 구분선은 좌우로 16px 들여 있다(실측). 줄 자신의 아래 테두리(투명 1px) 자리에 들여쓴 선을 배경으로 그린다.
         const lineColor = divider.replace(/^\S+\s+\S+\s+/, "");
-        row.style.setProperty("border-bottom", "1px solid transparent", "important");
         row.style.setProperty("background-image", `linear-gradient(${lineColor}, ${lineColor})`, "important");
         row.style.setProperty("background-size", "calc(100% - 32px) 1px", "important");
         row.style.setProperty("background-position", "16px 100%", "important");
         row.style.setProperty("background-repeat", "no-repeat", "important");
-        // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
-        // 0.5.72: 아래 패딩은 줄에 직접 넣지 않고 목록의 CSS 변수로(아래 규칙이 나레이션 줄은 빼고 건다). 줄에 강제하면 나레이션 묶음 가장자리 16px 규칙을 덮어
-        // 마지막 나레이션 줄 아래가 8px 로 좁았다(오리지널 16px, 실측). 나레이션 표시는 줄을 그린 뒤에 붙어서 여기서 판정할 수 없다.
-        row.style.removeProperty("padding-bottom");
-        panelEl?.style.setProperty("--scp-row-pad-b", `${ccfScpRowPadBottom + panelRowExtra}px`);
+      } else {
+        row.style.removeProperty("background-image");
       }
     });
   }
@@ -2792,11 +2791,14 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       /* 오리지널 서식 바의 팝업(나레이션 캐릭터·서식 저장 등, .ccf-inline-popover)은 네이티브 패널 안에 있어 z-index 가 아무리 높아도 이 패널(body 직속, 1200)보다 위로 못 올라온다. 열려 있는 동안은 패널을 뒤로 보낸다. */
       body:has(.ccf-inline-popover.open) #${PANEL_ID} { z-index: 1; }
       /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
-      #${PANEL_ID} .ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }
-      #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
-      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id]:not([data-ccf-prose-cont-leader="1"]):not(:has(.ccf-render-root[data-ccf-narration="1"])) { padding-bottom: var(--scp-row-pad-b, 8px) !important; }
-      /* 나레이션 묶음의 마지막 줄: 오리지널처럼 아래 16px(서식 규칙의 'prose-cont-last' 를 패널에서는 다음 줄로 판정) */
-      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id][data-ccf-prose-cont="1"]:not(:has(+ [data-ccf-prose-cont="1"])):has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
+      /* 0.5.74: 줄 아래 여백은 오리지널(roll20 bridge 0.3.119)과 같은 고정값 — 목록 끝 패딩 없음(오리지널도 마지막 줄 아래 안쪽 값만), 밴드 그림자만 예외. */
+      #${PANEL_ID} .ccf-scp-list { padding: 0 !important; }
+      #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id] { padding-bottom: 5px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id]:has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 6px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id][data-ccf-scp-end] { padding-bottom: 14px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id][data-ccf-scp-end]:has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id] .MuiListItemText-root, #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id] p.MuiListItemText-secondary { margin-bottom: 0 !important; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
