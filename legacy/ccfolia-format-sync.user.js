@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.155
+// @version      0.1.156
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -78,6 +78,7 @@
     '[data-index] span.MuiTypography-root',
     'li p'
   ].join(", ");
+  let dividerColorAt = 0; // 0.1.156: 첫 훑기(초기화 중)가 이 값을 쓴다 — 아래(refreshDividerColor 옆)에 두면 TDZ 로 서식 줄 렌더가 실패했다
   const HISTORY_RENDER_BOTTOM_THRESHOLD_PX = 160;
   const CHAT_RENDER_PAUSE_AFTER_SCROLL_UP_MS = 1200;
   const CHAT_HISTORY_LOAD_PAUSE_MS = 6000;
@@ -99,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.155"),
+    version: getUserscriptVersion("0.1.156"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2198,7 +2199,6 @@
   }
 
   // 오리지널 메시지 사이 구분선의 실제 색: 구분선 줄(border-bottom)이나 MuiDivider 에서 읽어 --ccf-divider-color 로 둔다(구분선 줄의 선이 같은 색이 되게). 못 읽으면 CSS 기본값.
-  let dividerColorAt = 0;
   function refreshDividerColor() {
     const now = Date.now();
     if (now - dividerColorAt < 5000) return;

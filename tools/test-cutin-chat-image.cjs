@@ -22,8 +22,13 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
       window.__state = state;
       document.getElementById('root')['__reactContainer$test'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
     }, [GIF, PNG]);
+    // 0.1.156: a formatted (envelope) row already on the page when the script starts is drawn by the first scan without an error (it hit a variable declared further down)
+    const envelope0 = (data) => { const bytes = Buffer.from(Buffer.from(JSON.stringify(data), 'utf8').toString('base64'), 'latin1'), map = ['​', '‌', '‍', '⁠']; let out = '⁣⁣⁣'; for (const b of bytes) for (const shift of [6, 4, 2, 0]) out += map[(b >> shift) & 3]; return out + '⁢⁢⁢'; };
+    await page.evaluate((text) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">캐릭터</h6><p id="early" class="MuiTypography-root MuiTypography-body2 MuiListItemText-secondary"></p></div>'; li.querySelector('p').textContent = text; document.getElementById('list').append(li); }, `굵은 글${envelope0({ v: 1, text: '굵은 글', formatRuns: [{ start: 0, end: 4, style: { bold: true } }] })}`);
     await page.addScriptTag({ content: source });
     await page.waitForTimeout(400);
+    assert.deepEqual(await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.cutinChatDiag().scanErrors), [], 'the first scan draws without errors');
+    assert.equal(await page.evaluate(() => !!document.querySelector('#early .ccf-render-overlay, #early.ccf-render-root, #early .ccf-render-root')), true, 'the early formatted row is drawn');
     const addRow = (id, text) => page.evaluate(([i, t]) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = `<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">캐릭터</h6><p id="${i}" class="MuiTypography-root MuiTypography-body2 MuiListItemText-secondary"></p></div>`; li.querySelector('p').textContent = t; document.getElementById('list').append(li); }, [id, text]);
     const imgs = (id) => page.locator(`#${id} .ccf-cutin-chat-image img`);
     // an earlier message makes the script read the cut-in list and preload its images (as at the first scan of a real room)
