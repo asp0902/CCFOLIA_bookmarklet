@@ -1,6 +1,6 @@
-// format-sync 0.1.126: Rb/Tip/Bl/</> live in the "Aa▾" menu and Nr/구분선/유지/Sv in the "⋯" menu (the #548 floating MUI menu). The items are the real buttons:
-// same handlers and state; an item that is on is checked, the group button looks active when any item inside is on; a click on an item closes the menu;
-// windows opened from an item (ruby / Sv) sit under the group button; outside click / Esc close; order B I U S / align / colors / size / 가▾ / Aa▾ / ⋯, one line from 420px, never overflowing.
+// format-sync 0.1.150: the Aa / ⋯ menus are gone: their nine buttons are a second row of the bar (same order, same handlers and state); the font menu (가) stays.
+// Two quick cut-in buttons take their place next to the send button ([button][warning][send], equal width): each sends the text chosen for it from the current speaker and tab,
+// keeps what was typed, and opens its chooser (room cut-ins + free text, saved per room) when nothing is chosen or on right-click.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,100 +14,61 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await page.route('https://ccfolia.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8><body style="background:#2b2b2b;color:#fff;font:14px sans-serif"><div id="root"></div><ul id="chatlist" style="width:500px"></ul><form id="composer" style="position:fixed;left:20px;bottom:20px;width:300px"><input name="name" value="서술자"><div style="display:flex;align-items:center"><button type="button" aria-label="D4" style="width:36px;height:36px">D4</button><button type="submit" style="margin-left:auto;height:31px">전송</button></div><textarea name="text" rows="3" style="width:100%"></textarea></form></body>' }));
     await page.goto('https://ccfolia.com/rooms/test');
     await page.evaluate(() => {
-      const state = { app: { state: { roomId: 'test' } }, entities: { roomEffects: { ids: [], entities: {} } } };
+      window.__sent = [];
+      document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); const t = document.querySelector('#composer textarea'); window.__sent.push(t.value); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ''); });
+      const state = { app: { state: { roomId: 'test' } }, entities: { roomEffects: { ids: ['e1', 'e2'], entities: { e1: { name: '@버튼' }, e2: { name: '경보' } } } } };
+      window.__state = state;
       document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: { getState: () => state, dispatch() {}, subscribe: () => () => {} } } } } };
     });
     await page.addScriptTag({ content: source });
     const bar = page.locator('.ccf-inline-toolbar').first();
     await bar.waitFor({ state: 'attached', timeout: 8000 });
-    const group = (name) => bar.locator(`[data-inline-group="${name}"]`);
-    const isOpen = (name) => group(name).evaluate((g) => g.getAttribute('data-open') === '1' && getComputedStyle(g.querySelector('.ccf-inline-group-menu')).display !== 'none');
-    // closed: the items are not shown; the first row (B I U S Aa▾ ⋯) is one line at 300px
-    // 0.1.132 order: B I U S / align ×3 / colors / size / 가▾ / Aa▾ / ⋯ ; natural wrap: one line from 420px, two lines below, never overflowing
-    const order = await bar.evaluate((t) => [...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => c.getAttribute('data-inline-command') || c.getAttribute('data-inline-group') || (c.matches('[data-inline-size]') ? 'size' : c.matches('.ccf-color-tool') ? 'color' : c.className)));
-    // 0.1.138 Aa·⋯ left the bar (fixed next to the send button of the dice row): the bar is B I U S / align ×3 / colors / size / 가▾
-    assert.deepEqual(order, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font'], 'order');
-    const lines = async (w) => { await page.evaluate((w) => { document.getElementById('composer').style.width = w + 'px'; }, w); await page.waitForTimeout(50); return bar.evaluate((t) => ({ rows: new Set([...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0).map((c) => Math.round(c.getBoundingClientRect().top))).size, overflow: t.scrollWidth > t.clientWidth + 1 })); };
-    const rowsAt = {}; for (const w of [280, 300, 320, 340, 360, 376, 408]) rowsAt[w] = (await lines(w)).rows;
-    console.log('rows by width', JSON.stringify(rowsAt));
-    for (const w of [360, 376, 408]) assert.deepEqual(await lines(w), { rows: 1, overflow: false }, 'one line at ' + w);
-    for (const w of [280, 340]) assert.deepEqual(await lines(w), { rows: 2, overflow: false }, 'two lines at ' + w);
-    await lines(300);
-    // Aa ⋯ [전송]: right of ⋯ = send left - 4, Aa right before ⋯, same vertical centre as the send button
-    const slot = await page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const s = r(document.querySelector('#composer button[type="submit"]')), e = r(document.querySelector('[data-inline-group="extra"]')), d = r(document.querySelector('[data-inline-group="deco"]')); return { send: [s.left, s.top + s.height / 2], extra: [e.left, e.right, e.top + e.height / 2], deco: [d.left, d.right, d.top + d.height / 2] }; });
-    assert(Math.abs(slot.extra[1] - (slot.send[0] - 2)) <= 1 && Math.abs(slot.deco[1] - (slot.extra[0] - 2)) <= 1, 'Aa ⋯ right before the send button ' + JSON.stringify(slot));
-    // 0.1.143 [Aa][⋯][전송] are equal (≤1px), same height; a narrow row shrinks them together, never over the dice, also with a long send label
-    const three = () => page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const send = document.querySelector('#composer button[type="submit"]'), list = [r(document.querySelector('[data-inline-group="deco"] > button')), r(document.querySelector('[data-inline-group="extra"] > button')), r(send)], die = r(document.querySelector('#composer button[aria-label="D4"]')); return { w: list.map((x) => x.width), h: list.map((x) => x.height), top: list.map((x) => x.top), clearOfDice: list[0].left >= die.right, oneLine: send.scrollWidth <= send.clientWidth + 1 }; });
-    const equal = (v) => Math.max(...v) - Math.min(...v) <= 1;
-    await page.waitForTimeout(80); let t3 = await three();
-    assert(equal(t3.w) && equal(t3.h) && equal(t3.top) && t3.clearOfDice, 'equal buttons ' + JSON.stringify(t3));
-    await page.evaluate(() => { document.querySelector('#composer button[type="submit"]').textContent = 'Send'; document.getElementById('composer').style.width = '150px'; }); await page.waitForTimeout(120); t3 = await three();
-    assert(equal(t3.w) && t3.w[0] >= 24 && t3.clearOfDice && t3.oneLine, 'narrow row, Send label ' + JSON.stringify(t3));
-    await page.evaluate(() => { document.querySelector('#composer button[type="submit"]').textContent = '전송'; document.getElementById('composer').style.width = '300px'; }); await page.waitForTimeout(120);
-    assert(Math.abs(slot.extra[2] - slot.send[1]) <= 1 && Math.abs(slot.deco[2] - slot.send[1]) <= 1, 'same vertical centre ' + JSON.stringify(slot));
-    // 0.1.140 inside a moved (transformed) container — like the extra panel sliding in — the buttons still end up next to the send button, also after the move ends
-    await page.evaluate(() => { const f = document.getElementById('composer'); f.style.transition = 'transform .2s'; f.style.transform = 'translateX(60px)'; });
-    await page.waitForTimeout(500);
-    const slot2 = await page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const s = r(document.querySelector('#composer button[type="submit"]')), e = r(document.querySelector('[data-inline-group="extra"]')); return { send: s.left, extra: e.right }; });
-    assert(Math.abs(slot2.extra - (slot2.send - 2)) <= 1, 'still next to the send button after a transform move ' + JSON.stringify(slot2));
-    await page.evaluate(() => { const f = document.getElementById('composer'); f.style.transition = ''; f.style.transform = ''; }); await page.waitForTimeout(200);
-
-    assert.deepEqual(await bar.locator('[data-inline-group="deco"] > [data-inline-group-toggle], [data-inline-group="extra"] > [data-inline-group-toggle]').allTextContents(), ['Aa', '⋯']);
-    assert.deepEqual(await bar.locator('[data-inline-group="font"] > [data-inline-group-toggle]').evaluate((b) => [b.textContent, Math.round(b.getBoundingClientRect().width)]), ['가', 30], '0.1.144: the font button is 가 alone, as wide as its neighbours');
-    // open Aa▾: the four items, inside the viewport; outside click closes; Esc closes
-    await group('deco').locator('[data-inline-group-toggle]').click();
-    assert.equal(await isOpen('deco'), true);
-    assert.deepEqual(await group('deco').locator('[role=menuitem]').evaluateAll((l) => l.map((b) => b.getAttribute('data-inline-command'))), ['ruby', 'tooltip', 'blur', 'code']);
-    const box = await group('deco').locator('.ccf-inline-group-menu').boundingBox();
-    assert(box.y >= 0 && box.y + box.height <= 700 && box.x >= 0 && box.x + box.width <= 900, 'menu inside the viewport ' + JSON.stringify(box));
-    await page.mouse.click(700, 100);
-    assert.equal(await isOpen('deco'), false, 'outside click closes');
-    await group('deco').locator('[data-inline-group-toggle]').click(); await page.keyboard.press('Escape');
-    assert.equal(await isOpen('deco'), false, 'Esc closes');
-    // ⋯ → 구분선: toggles on, the menu closes, the group button looks active, the item is checked
-    const idleBg = await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor);
-    await group('extra').locator('[data-inline-group-toggle]').click();
-    await group('extra').locator('[data-inline-command="break"]').click();
-    assert.equal(await isOpen('extra'), false, 'an item click closes the menu');
+    // the bar: first row as before, the nine former menu items on the second row, in the menus' order; no Aa / ⋯
+    const rows = await bar.evaluate((t) => { const shown = [...t.children].filter((c) => c.offsetParent && c.getBoundingClientRect().width > 0 && !c.classList.contains('ccf-quick-cutins') && !c.classList.contains('ccf-inline-row-break')); const tops = [...new Set(shown.map((c) => Math.round(c.getBoundingClientRect().top)))].sort((a, b) => a - b); return tops.map((top) => shown.filter((c) => Math.round(c.getBoundingClientRect().top) === top).map((c) => c.getAttribute('data-inline-command') || c.getAttribute('data-inline-group') || (c.matches('[data-inline-size]') ? 'size' : c.matches('.ccf-color-tool') ? 'color' : c.className))); });
+    const flat = rows.flat();
+    assert.deepEqual(flat, ['bold', 'italic', 'underline', 'strike', 'align', 'align', 'align', 'color', 'color', 'size', 'font', 'ruby', 'tooltip', 'blur', 'code', 'narration', 'break', 'keep', 'style-clipboard', 'paren-gray'], 'order');
+    assert(flat.indexOf('ruby') > 0 && rows.findIndex((r) => r.includes('ruby')) > rows.findIndex((r) => r.includes('font')), 'the former menu items start a new row ' + JSON.stringify(rows));
+    assert.equal(await page.locator('[data-inline-group="deco"], [data-inline-group="extra"]').count(), 0, 'no Aa / ⋯');
+    assert.equal(/placeInlineGroupsInDiceRow|ccf-groups-in-dice-row|ccf-gi-key/.test(source), false, 'the group placement code is gone');
+    for (const w of [340, 300, 280]) { await page.evaluate((w) => { document.getElementById('composer').style.width = w + 'px'; }, w); await page.waitForTimeout(60); assert.equal(await bar.evaluate((t) => t.scrollWidth <= t.clientWidth + 1), true, 'no sideways overflow at ' + w); }
+    await page.evaluate(() => { document.getElementById('composer').style.width = '300px'; }); await page.waitForTimeout(120);
+    // the second-row buttons work as the menu items did
+    await bar.locator('[data-inline-command="break"]').click();
     assert.equal(await bar.locator('[data-inline-command="break"]').evaluate((b) => b.classList.contains('active')), true, 'break on');
-    assert.notEqual(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, 'group button active');
-    await group('extra').locator('[data-inline-group-toggle]').click();
-    assert.equal(await group('extra').locator('[data-inline-command="break"]').evaluate((b) => getComputedStyle(b, '::after').content), '"✓"', 'checked item');
-    // 유지 through the menu: same state as before (keep on)
-    await group('extra').locator('[data-inline-command="keep"]').click();
-    assert.equal(await bar.locator('[data-inline-command="keep"]').evaluate((b) => b.classList.contains('active') && b.getAttribute('aria-pressed') === 'true'), true, 'keep on');
-    // 구분선 off again; keep still makes the group active
-    await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="break"]').click();
-    assert.notEqual(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, 'still active (keep)');
-    await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="keep"]').click();
-    assert.equal(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, 'nothing on: idle');
-    // 0.1.128: () (parentheses gray) is the last item of ⋯; no () button left on the bar; on -> checked + ⋯ active; off -> idle
-    assert.deepEqual(await group('extra').locator('[role=menuitem]').evaluateAll((l) => l.map((b) => b.getAttribute('data-inline-command'))), ['narration', 'break', 'keep', 'style-clipboard', 'paren-gray']);
-    assert.equal(await bar.evaluate((t) => [...t.querySelectorAll('[data-inline-command="paren-gray"]')].filter((b) => !b.closest('.ccf-inline-group-menu')).length), 0, 'no () on the bar');
-    await page.locator('#composer textarea').click();
-    await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="paren-gray"]').click();
-    assert.equal(await isOpen('extra'), false);
+    await bar.locator('[data-inline-command="break"]').click();
+    await page.locator('#composer textarea').click(); await bar.locator('[data-inline-command="paren-gray"]').click();
     assert.equal(await bar.locator('[data-inline-command="paren-gray"]').evaluate((b) => b.classList.contains('active') && b.getAttribute('aria-pressed') === 'true'), true, '() on');
-    assert.notEqual(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, '⋯ active with ()');
-    await group('extra').locator('[data-inline-group-toggle]').click();
-    assert.equal(await group('extra').locator('[data-inline-command="paren-gray"]').evaluate((b) => getComputedStyle(b, '::after').content), '"✓"');
-    await group('extra').locator('[data-inline-command="paren-gray"]').click();
-    assert.equal(await group('extra').locator('[data-inline-group-toggle]').evaluate((b) => getComputedStyle(b).backgroundColor), idleBg, '() off: idle');
-    // Sv opens the preset window under the group button
-    await page.locator('#composer textarea').click();
-    await group('extra').locator('[data-inline-group-toggle]').click(); await group('extra').locator('[data-inline-command="style-clipboard"]').click();
-    await page.waitForTimeout(200);
-    const anchor = await group('extra').locator('[data-inline-group-toggle]').boundingBox();
-    const sv = await bar.locator('.ccf-inline-popover.open').boundingBox();
-    assert(sv && sv.width > 0, 'Sv window open');
-    assert(Math.abs(sv.y - (anchor.y + anchor.height + 6)) <= 2 || Math.abs(sv.y + sv.height - (anchor.y - 6)) <= 2, 'Sv window next to the group button ' + JSON.stringify({ sv, anchor }));
-    await page.keyboard.press('Escape'); await page.mouse.click(700, 100);
-    // Rb opens the ruby box (not at the top-left corner)
-    await page.locator('#composer textarea').fill('글자'); await page.locator('#composer textarea').evaluate((t) => t.setSelectionRange(0, 2));
-    await group('deco').locator('[data-inline-group-toggle]').click(); await group('deco').locator('[data-inline-command="ruby"]').click();
-    await page.waitForTimeout(200);
-    const rb = await bar.locator('.ccf-inline-popover.open').boundingBox();
-    assert(rb && rb.y > 100, 'ruby box positioned by the group button ' + JSON.stringify(rb));
+    await bar.locator('[data-inline-command="paren-gray"]').click();
+    await page.locator('#composer textarea').click(); await bar.locator('[data-inline-command="style-clipboard"]').click(); await page.waitForTimeout(200);
+    assert((await bar.locator('.ccf-inline-popover.open').boundingBox())?.width > 0, 'Sv window opens'); await page.keyboard.press('Escape'); await page.mouse.click(700, 100);
+    // [button][warning][send]: equal (≤1px), right before send, same height, clear of the dice
+    const three = () => page.evaluate(() => { const r = (el) => el.getBoundingClientRect(); const q = [...document.querySelectorAll('.ccf-quick-cutin')].map(r), s = r(document.querySelector('#composer button[type="submit"]')), die = r(document.querySelector('#composer button[aria-label="D4"]')); return { w: [...q.map((x) => x.width), s.width], h: [...q.map((x) => x.height), s.height], gaps: [Math.round(s.left - q[1].right), Math.round(q[1].left - q[0].right)], clear: q[0].left >= die.right }; });
+    const equal = (v) => Math.max(...v) - Math.min(...v) <= 1;
+    await page.waitForTimeout(80); const t3 = await three();
+    assert(equal(t3.w) && equal(t3.h) && t3.gaps.every((g) => g === 2) && t3.clear, 'equal buttons next to send ' + JSON.stringify(t3));
+    // nothing chosen: a click opens the chooser (room cut-ins + free text); choose "@버튼"
+    const quick = page.locator('.ccf-quick-cutin[data-quick="0"]');
+    assert.match(await quick.getAttribute('data-ccf-tip'), /정해지지 않음/);
+    await quick.click();
+    assert.deepEqual(await page.locator('.ccf-quick-menu [role=menuitem]').allTextContents(), ['@버튼', '경보']);
+    await page.locator('.ccf-quick-menu [role=menuitem]', { hasText: '@버튼' }).click();
+    assert.equal(await page.locator('.ccf-quick-menu').count(), 0, 'the chooser closes');
+    assert.match(await quick.getAttribute('data-ccf-tip'), /버튼 컷인: @버튼/);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('ccf-quick-cutin-v1:test'))[0]), { text: '@버튼', fromList: true }, 'saved for this room');
+    // a click sends it once; what was typed stays
+    await page.locator('#composer textarea').fill('쓰던 글');
+    await quick.click(); await page.waitForTimeout(400);
+    assert.deepEqual(await page.evaluate(() => window.__sent), ['@버튼']);
+    assert.equal(await page.locator('#composer textarea').inputValue(), '쓰던 글', 'the typed text is kept');
+    // right-click on the warning button: free text
+    await page.locator('.ccf-quick-cutin[data-quick="1"]').click({ button: 'right' });
+    await page.locator('.ccf-quick-menu input').fill('주의하세요'); await page.locator('.ccf-quick-menu input').press('Enter');
+    assert.match(await page.locator('.ccf-quick-cutin[data-quick="1"]').getAttribute('data-ccf-tip'), /경고 컷인: 주의하세요/);
+    // a chosen cut-in removed from the room: dimmed, a click opens the chooser instead of sending
+    await page.evaluate(() => { const fx = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ids: ['e2'], entities: { e2: fx.entities.e2 } }; });
+    await quick.click(); await page.waitForTimeout(150);
+    assert.equal(await quick.evaluate((b) => b.classList.contains('ccf-quick-gone')), true, 'dimmed');
+    assert.equal(await page.locator('.ccf-quick-menu').count(), 1, 'chooser instead of sending'); assert.deepEqual(await page.evaluate(() => window.__sent), ['@버튼']);
     assert.deepEqual(errors, []);
     console.log('format groups PASS');
   } finally { await browser.close(); }

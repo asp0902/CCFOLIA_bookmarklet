@@ -24,7 +24,7 @@ const GLOBAL_KEY = 'ccf-format-style-presets-v1';
     };
     const current = (page, command) => page.locator(`[data-inline-command="${command}"]`).first().evaluate((b) => ({ current: b.classList.contains('ccf-fmt-current'), active: b.classList.contains('active'), bg: getComputedStyle(b).backgroundColor }));
     const caret = async (page, start, end = start) => { await page.evaluate(([s, e]) => { const t = document.querySelector('textarea[name=text]'); t.focus(); t.setSelectionRange(s, e); t.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true })); }, [start, end]); await page.waitForTimeout(120); };
-    const presetRows = async (page) => { await page.locator('[data-inline-group="extra"] [data-inline-group-toggle]').first().click(); await page.locator('[data-inline-command="style-clipboard"]').first().click(); await page.waitForSelector('.ccf-inline-popover.open'); await page.waitForTimeout(100); return page.locator('.ccf-style-preset-apply').allTextContents(); };
+    const presetRows = async (page) => { await page.locator('[data-inline-command="style-clipboard"]').first().click(); await page.waitForSelector('.ccf-inline-popover.open'); await page.waitForTimeout(100); return page.locator('.ccf-style-preset-apply').allTextContents(); };
 
     // ---- 2) presets: shared by every room (global key) + this room's own (room key) - format-sync 0.1.123
     await context.addInitScript(() => {});

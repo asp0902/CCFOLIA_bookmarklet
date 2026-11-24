@@ -324,6 +324,7 @@ const TIP_LABELS = { "채팅 설정": "채팅 메뉴", "이름 색": "캐릭터 
 const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마", "GM 도구"]);
 const bgmSlotTip = cfg => `${cfg?.name || "NOTITLE"}\nvol:${cfg?.volume ?? 0} loop:${!cfg || cfg.repeat ? "on" : "off"}`;
 function buttonTip(button) {
+  if (button.classList.contains("quick-cutin")) return { text: button.dataset.tipText, above: true };
   if (button.closest(".fmt-row, .fmt-group")) { // the format bar: its own titles in this box
     const text = button.getAttribute("title") || button.dataset.fmtTip;
     if (!text) return null;
@@ -1371,8 +1372,9 @@ refreshSpeakerUi();
     });
     box.append(button, menu); return box;
   };
-  const deco = group("deco", "Aa", "꾸미기", [[mk("", "루비", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "툴팁", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "블러", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "코드", () => wrapSelection("`", "`")), "</>", "코드"]]);
-  const extra = group("extra", "⋯", "더 보기", [[toggle("", "나레이션", "narration"), "Nr", "나레이션"], [toggle("", "괄호 회색", "parenGray"), "()", "괄호 회색"]]);
+  // the toolkit's second row (what were the Aa and ⋯ menus): Rb Tip Bl </> Nr ()
+  const row2 = document.createElement("div"); row2.className = "fmt-row fmt-row2";
+  row2.append(mk("Rb", "루비", () => wrapSelection("[", "|]")), mk("Tip", "툴팁", () => wrapSelection("[", "^]")), mk("Bl", "블러", () => wrapSelection("||", "||")), mk("</>", "코드", () => wrapSelection("`", "`")), toggle("Nr", "나레이션", "narration"), toggle("()", "괄호 회색", "parenGray"));
   // font menu (가): one list, Korean names in 가나다 order, then Latin names; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
   const fontBox = group("font", "가", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
   fontMenu.classList.add("fmt-font-menu");
@@ -1387,8 +1389,35 @@ refreshSpeakerUi();
   document.addEventListener("pointerdown", event => { if (!event.target.closest?.(".fmt-group")) closeGroups(); });
   document.addEventListener("keydown", event => { if (event.key === "Escape") closeGroups(); });
   const diceRow = document.querySelector("#chat-form .dice-row");
-  diceRow.insertBefore(deco, diceRow.querySelector("button[type=submit]")); diceRow.insertBefore(extra, diceRow.querySelector("button[type=submit]"));
-  diceRow.after(row);
+  // two quick cut-in buttons where the toolkit has them: a name of this room's cut-ins (or any text) sent from the current speaker and tab; right-click / long press chooses it
+  const QUICK_KEY = `capybara-quick-cutin-v1:${roomId}`, QUICK_NAMES = ["버튼", "경고"];
+  const QUICK_ICONS = ['<ellipse cx="12" cy="15" rx="8" ry="3"/><path d="M4 15v2.5c0 1.66 3.58 3 8 3s8-1.34 8-3V15"/><path d="M7.5 14V9.5C7.5 8.12 9.51 7 12 7s4.5 1.12 4.5 2.5V14"/><ellipse cx="12" cy="9.5" rx="4.5" ry="2.5"/>', '<path d="M12 3.5 2.8 19.5h18.4L12 3.5z"/><path d="M12 9.5v5"/><path d="M12 17.2v.1"/>'];
+  const readQuick = () => { try { const all = JSON.parse(localStorage.getItem(QUICK_KEY) || "[]"); return [0, 1].map(i => (typeof all[i]?.text === "string" && all[i].text ? all[i] : null)); } catch (_) { return [null, null]; } };
+  const knownCutins = () => [...new Set([...(sceneData?.cutinNames || []), ...(sceneData?.cutinPictures || []).map(item => item.name), ...(sceneData?.effects || []).map(item => item.name)].filter(Boolean))];
+  const quickButtons = QUICK_NAMES.map((what, index) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "quick-cutin"; b.dataset.quick = String(index);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "22"); svg.setAttribute("height", "22"); svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "1.6"); svg.setAttribute("stroke-linejoin", "round"); svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("aria-hidden", "true");
+    svg.innerHTML = QUICK_ICONS[index]; b.append(svg); return b;
+  });
+  const refreshQuick = () => quickButtons.forEach((b, index) => { const value = readQuick()[index], what = QUICK_NAMES[index]; b.dataset.tipText = value ? `${what} 컷인: ${value.text}\n우클릭으로 바꾸기` : `${what} 컷인: 정해지지 않음\n눌러서 정하기`; b.setAttribute("aria-label", value ? `${what} 컷인 보내기: ${value.text}` : `${what} 컷인 정하기`); });
+  const writeQuick = (index, value) => { const all = readQuick(); all[index] = value; try { localStorage.setItem(QUICK_KEY, JSON.stringify(all)); } catch (_) {} refreshQuick(); };
+  const chooseQuick = (button, index) => openMenu(button, [...knownCutins().map(name => ({ label: name, run: () => writeQuick(index, { text: name }) })), ...(knownCutins().length ? [{ divider: true }] : []), { label: "직접 입력…", run: () => { const text = (prompt(`${QUICK_NAMES[index]} 컷인으로 보낼 글`, readQuick()[index]?.text || "") || "").trim(); if (text) writeQuick(index, { text }); } }, ...(readQuick()[index] ? [{ label: "정한 것 지우기", run: () => writeQuick(index, null) }] : [])]);
+  quickButtons.forEach((b, index) => {
+    let press = 0, opened = false;
+    b.addEventListener("contextmenu", event => { event.preventDefault(); chooseQuick(b, index); });
+    b.addEventListener("pointerdown", event => { opened = false; if (event.pointerType !== "mouse") press = setTimeout(() => { opened = true; chooseQuick(b, index); }, 500); });
+    for (const type of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(type, () => clearTimeout(press));
+    b.addEventListener("click", () => {
+      if (opened) { opened = false; return; }
+      const value = readQuick()[index];
+      if (!value) { chooseQuick(b, index); return; }
+      postChat(crypto.randomUUID(), value.text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
+    });
+  });
+  refreshQuick();
+  const send = diceRow.querySelector("button[type=submit]");
+  quickButtons.forEach(b => diceRow.insertBefore(b, send));
+  diceRow.after(row); row.after(row2);
 }
 // What the toggles do to a message when it is sent (the GM side turns the markers into the format envelope).
 const fmtState = { narration: false, parenGray: false };
