@@ -31,6 +31,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     assert.equal(await pop().locator('.pv').count(), 0, 'no right preview');
     const sq = await pop().locator('.cur').evaluate((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
     assert.equal(sq[0], sq[1], 'left box square ' + sq);
+    assert.equal(await pop().evaluate((e) => [...e.querySelectorAll('*')].every((c) => c.getBoundingClientRect().right <= e.getBoundingClientRect().right + 0.5)), true, 'nothing sticks out on the right (OK button, eyedropper)');
     // the colour area and hue bar: dragging changes the preview only
     const sv = await pop().locator('.sv').boundingBox();
     await page.mouse.move(sv.x + sv.width - 2, sv.y + 2); await page.mouse.down(); await page.mouse.move(sv.x + sv.width * 0.5, sv.y + sv.height * 0.5); await page.mouse.up();

@@ -14416,10 +14416,10 @@
     closeColorPick();
     if (!document.getElementById("ccf-color-pick-style")) {
       const st = document.createElement("style"); st.id = "ccf-color-pick-style";
-      st.textContent = `#ccf-color-pick{position:fixed;z-index:2147483647;display:grid;gap:8px;width:220px;padding:10px;background:#424242;color:#fff;border-radius:4px;font:13px/1.4 "Noto Sans KR",Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
+      st.textContent = `#ccf-color-pick{position:fixed;z-index:2147483647;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;width:220px;padding:10px;background:#424242;color:#fff;border-radius:4px;font:13px/1.4 "Noto Sans KR",Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
 #ccf-color-pick .row{display:flex;gap:6px;align-items:center}#ccf-color-pick .end{justify-content:flex-end}
 #ccf-color-pick .cur{flex:none;width:28px;height:28px;box-sizing:border-box;border-radius:2px;border:1px solid rgba(255,255,255,.3)}
-#ccf-color-pick .hex{flex:1;min-width:0;height:28px;box-sizing:border-box;padding:0 6px;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:2px;font:inherit}
+#ccf-color-pick .hex{flex:1;width:0;min-width:0;height:28px;box-sizing:border-box;padding:0 6px;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:2px;font:inherit}
 #ccf-color-pick .eye{flex:none;width:28px;height:28px;padding:0;display:grid;place-items:center;color:#fff}
 #ccf-color-pick .sv{position:relative;height:120px;border-radius:2px;cursor:crosshair;touch-action:none;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent)}
 #ccf-color-pick .hue{position:relative;height:12px;border-radius:6px;cursor:pointer;touch-action:none;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
