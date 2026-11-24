@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.50
+// @version      0.3.51
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.50";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.51";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4050,8 +4050,15 @@
     }
   }
 
-  // 지금 재생 중인 플레이어를 1.5초 동안 줄인 뒤 stopVideo 한다. 페이드를 시작했으면 true.
-  function fadeOutAndStopCcfYoutubePlayer(player) {
+  // 0.3.51: 룸의 크로스페이드 길이(코코포리아 1.37.6 enableCrossfade·crossfadeDuration 초). 꺼져 있거나 못 읽으면 정지 페이드 길이(1.5초).
+  function ccfBgmRoomCrossfadeMs() {
+    const room = ccfBgmRoomNow();
+    const seconds = Number(room?.crossfadeDuration);
+    return room?.enableCrossfade === true && seconds > 0 ? Math.min(10000, Math.round(seconds * 1000)) : CCF_BGM_XFADE_MS;
+  }
+
+  // 지금 재생 중인 플레이어를 ms(기본 1.5초) 동안 줄인 뒤 stopVideo 한다. 페이드를 시작했으면 true.
+  function fadeOutAndStopCcfYoutubePlayer(player, ms = CCF_BGM_XFADE_MS) {
     if (!ccfBgmStopFadeEnabled || !player || typeof player.setVolume !== "function" || typeof player.getVolume !== "function") return false;
     let playing = false;
     let volume = 0;
@@ -4060,7 +4067,7 @@
 
     cancelCcfBgmStopFade();
     ccfBgmStopFadeRestore = { player, volume };
-    const steps = Math.max(1, Math.round(CCF_BGM_XFADE_MS / CCF_BGM_XFADE_STEP_MS));
+    const steps = Math.max(1, Math.round(ms / CCF_BGM_XFADE_STEP_MS));
     let step = 0;
     ccfBgmStopFadeTimer = window.setInterval(() => {
       step += 1;
@@ -4123,8 +4130,10 @@
     }
 
     try {
-      // 사용자가 정지 버튼으로 끈 경우와 다른 화면에서 온 정지 신호(참여자 화면 포함)는 페이드 아웃으로 끈다. 다른 곡이 시작돼서 자동 정지하는 경우는 즉시.
-      if ((MANUAL_STOP_REASONS.has(reason) || reason === "remote-stop") && fadeOutAndStopCcfYoutubePlayer(ccfBgmPlayer)) {
+      // 사용자가 정지 버튼으로 끈 경우와 다른 화면에서 온 정지 신호(참여자 화면 포함)는 페이드 아웃으로 끈다.
+      // 0.3.51: 같은 칸에서 파일 음원을 고른 경우(유튜브 → 파일)도 룸의 크로스페이드 길이로 줄여 끈다 — 즉시 끊겨 바뀌었다(실측). 파일은 코코포리아가 올린다.
+      const fadeMs = reason === "native-library-selected" ? ccfBgmRoomCrossfadeMs() : CCF_BGM_XFADE_MS;
+      if ((MANUAL_STOP_REASONS.has(reason) || reason === "remote-stop" || reason === "native-library-selected") && fadeOutAndStopCcfYoutubePlayer(ccfBgmPlayer, fadeMs)) {
         debugLog("bgm-youtube-stop-fading", { reason });
       } else {
         cancelCcfBgmStopFade();
