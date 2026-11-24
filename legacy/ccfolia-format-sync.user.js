@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.152
+// @version      0.1.153
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.152"),
+    version: getUserscriptVersion("0.1.153"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -293,6 +293,15 @@
     version: CCF_FORMAT_SYNC_SCRIPT_INFO.version,
     // 구분선 줄이 안 먹을 때: 표식이 붙은 줄마다 줄 요소·조상·계산된 여백·첫 글자까지의 거리와, 규칙이 든 style 이 있는지.
     cutinChatDiag() { return cutinChatDiag(); },
+    // 줄마다 그림이 안 붙는 이유: 채팅 줄로 보는지, 글 끝(뒤 6자), 맞은 그림이 있는지, 다른 그림이 있어 건너뛰는지(본문 글은 담지 않는다)
+    cutinChatProbe(limit = 55) {
+      return [...document.querySelectorAll(MESSAGE_TEXT_SELECTOR)].filter((el) => !el.classList.contains("ccf-original-hidden") && !el.classList.contains("ccf-render-overlay") && !el.closest("textarea, input, [contenteditable]")).slice(-limit).map((el) => {
+        let key = "", url = "";
+        try { key = cutinChatMessageText(el); url = cutinChatUrlFor(key); } catch (error) { key = `오류:${error.message}`; }
+        const blocked = el.closest('.MuiDialog-root, .MuiPopover-root, .MuiMenu-root, .MuiModal-root, [role="dialog"], [role="menu"], [role="listbox"], [data-ccf-safe-markup="1"]');
+        return { end: key.slice(-6), inChat: cutinChatIsMessageText(el), log: !!el.closest('[role="log"]'), panel: !!el.closest(".ccf-scp-panel"), blockedBy: blocked ? (blocked.getAttribute("role") || String(blocked.className).split(" ")[0]).slice(0, 24) : "", matched: !!url, otherImg: [...el.querySelectorAll("img")].filter((img) => !img.closest(".ccf-cutin-chat-image")).length, attached: !!el.querySelector(".ccf-cutin-chat-image"), tag: el.tagName.toLowerCase() + "." + String(el.className).split(" ").filter((c) => !c.startsWith("css-")).slice(0, 2).join(".") };
+      }).filter((row) => row.matched || /[＞@]|CHA/.test(row.end));
+    },
     breakDiag() {
       const brief = (el) => el instanceof Element ? { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 80), data: [...el.attributes].filter((a) => /^data-/.test(a.name)).map((a) => `${a.name}=${String(a.value).slice(0, 12)}`) } : null;
       const rows = [...document.querySelectorAll('.ccf-render-root[data-ccf-break="1"]')].slice(-5).map((root) => {
