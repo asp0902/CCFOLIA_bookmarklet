@@ -42,3 +42,20 @@ assert.match(source, /if \(ccfBgmStopFadeTimer\) return;/);
 assert.match(source, /ccfBgmLastWebAudio = null;\n    cancelCcfBgmStopFade\(\);/);
 assert.match(source, /setStopFade\(on\)/);
 console.log('bgm stop fadeout PASS');
+// YouTube -> file: the new CCFOLIA player (created a little after the pick) is raised from 0 over the same length with CCFOLIA's own fadeIn
+{
+  assert.match(source, /stopCcfYoutubeBgm\("native-library-selected"\);\n\s*fadeInNextCcfoliaPlayer\(ccfBgmRoomCrossfadeMs\(\)\);/);
+  const c = source.indexOf('  function fadeInNextCcfoliaPlayer('), d = source.indexOf('\n  }\n', c) + 4;
+  let list = [{ audioElement: { paused: false } }];
+  let ticks = [], fadedWith = null;
+  const win = { setInterval: (fn) => { ticks.push(fn); return ticks.length; }, clearInterval: (id) => { ticks[id - 1] = null; } };
+  const cx = vm.createContext({ window: win, Set, ccfBgmCcfoliaPlayers: () => list });
+  vm.runInContext(source.slice(c, d) + '\nthis.f = fadeInNextCcfoliaPlayer;', cx);
+  cx.f(2000);
+  const tick = () => ticks.forEach((fn) => fn && fn());
+  tick(); assert.equal(fadedWith, null, 'the old player is not touched');
+  list = [...list, { audioElement: { paused: false }, fadeIn(sec) { fadedWith = sec; } }];
+  tick(); assert.equal(fadedWith, 2, 'new player faded in over 2 s');
+  assert.equal(ticks.filter(Boolean).length, 0, 'stops looking');
+}
+console.log('bgm yt->file fade PASS');

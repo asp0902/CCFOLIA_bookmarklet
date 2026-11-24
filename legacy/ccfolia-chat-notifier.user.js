@@ -1997,6 +1997,19 @@
     return self.owner?.players || [];
   }
 
+  // 0.3.51: 유튜브 → 파일 전환에서 새로 생긴 코코포리아 재생기를 ms 동안 0에서 올린다(코코포리아 자체 fadeIn: 게인 0 → 설정 볼륨).
+  // 코코포리아는 크로스페이드를 자기 재생기끼리만 하므로(앞선 파일이 있을 때) 유튜브 다음 파일은 바로 최대 볼륨으로 시작했다.
+  function fadeInNextCcfoliaPlayer(ms) {
+    const before = new Set(ccfBgmCcfoliaPlayers());
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const fresh = [...ccfBgmCcfoliaPlayers()].find((player) => !before.has(player) && player?.audioElement && !player.audioElement.paused);
+      if (!fresh && ++tries < 100) return; // 새 재생기는 상태가 바뀐 뒤 조금 늦게 생긴다(최대 3초 기다림)
+      window.clearInterval(timer);
+      try { fresh?.fadeIn?.(ms / 1000); } catch (_) { /* 페이드 못 하면 그대로 재생 */ }
+    }, 30);
+  }
+
   // 그 칸(BGM01 = media, BGM02 = sound)에 지금 룸이 올린 파일이 걸려 있는가. 룸 정보가 아직 없으면 null.
   function ccfBgmRoomSlotHasFile(slotKey) {
     const room = ccfBgmRoomNow();
@@ -2695,6 +2708,7 @@
           const targetSlotKey = ccfBgmEditingSlotKey || ccfBgmLastDialogSlotKey;
           if (ccfBgmActiveSlotKey && targetSlotKey === ccfBgmActiveSlotKey) {
             stopCcfYoutubeBgm("native-library-selected");
+            fadeInNextCcfoliaPlayer(ccfBgmRoomCrossfadeMs()); // 0.3.51: 새 파일도 같은 길이로 올라오게(코코포리아는 앞선 자기 재생기가 없으면 페이드 없이 바로 튼다 — 실측)
             ccfBgmNativeLoadedSlots.add(targetSlotKey);
             markCcfYoutubeBgmSlotButtons();
             window.setTimeout(markCcfYoutubeBgmSlotButtons, 150);
