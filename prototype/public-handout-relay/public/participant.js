@@ -1323,6 +1323,61 @@ function insertAtCursor(text, cursorBack = 0) {
   const at = a + text.length - cursorBack; input.setSelectionRange(at, at);
 }
 // Wrap the selection in a format marker (the GM side turns the markers into a format envelope when it sends); nothing selected: insert the pair and stand between.
+// The format bar's colour boxes open the same picker as the GM page (format-sync 0.1.164) instead of the browser's chooser (it has no OK button):
+// a colour area (saturation/brightness), a hue bar, an eyedropper where supported, square boxes, recent colours; choosing only previews, [확인] applies, Esc / outside cancels.
+const RECENT_COLORS_KEY = "capybara-recent-colors-v1";
+const isHex6 = c => /^#[0-9a-f]{6}$/i.test(String(c || ""));
+const readRecentColors = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_COLORS_KEY) || "[]"); return Array.isArray(v) ? v.filter(isHex6).slice(0, 12) : []; } catch (_) { return []; } };
+const writeRecentColors = list => { try { localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(list.slice(0, 12))); } catch (_) {} };
+const closeColorPick = () => document.getElementById("color-pick")?.remove();
+const EYE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.12-3.12a1 1 0 0 0 .01-1.42zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>';
+function openColorPick(target) {
+  closeColorPick();
+  let value = isHex6(target.value) ? target.value.toLowerCase() : "#ffffff";
+  const pop = document.createElement("div"); pop.id = "color-pick"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "색 고르기");
+  const eye = typeof window.EyeDropper === "function" ? `<button type="button" class="cp-eye" data-eye title="화면에서 색 집기" aria-label="화면에서 색 집기">${EYE_SVG}</button>` : "";
+  pop.innerHTML = `<div class="cp-row"><span class="cp-cur" aria-hidden="true"></span><input class="cp-hex" maxlength="7" aria-label="색 코드">${eye}</div><div class="cp-sv"><span class="cp-knob"></span></div><div class="cp-hue"><span class="cp-knob"></span></div><div class="cp-recent"></div><div class="cp-row cp-end"><button type="button" data-ok>확인</button></div>`;
+  const hex = pop.querySelector(".cp-hex"), cur = pop.querySelector(".cp-cur"), recent = pop.querySelector(".cp-recent"), svBox = pop.querySelector(".cp-sv"), hueBar = pop.querySelector(".cp-hue");
+  const toHsv = c => { const n = parseInt(c.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b); let h = 0; if (d) { h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360; } return [h, mx ? d / mx : 0, mx]; };
+  const toHex = (h, sat, v) => "#" + [5, 3, 1].map(n => { const k = (n + h / 60) % 6; return Math.round((v - v * sat * Math.max(0, Math.min(k, 4 - k, 1))) * 255).toString(16).padStart(2, "0"); }).join("");
+  let hsv = toHsv(value);
+  const sync = from => {
+    if (from !== "area") hsv = toHsv(value);
+    if (from !== hex) hex.value = value;
+    cur.style.background = value; svBox.style.backgroundColor = toHex(hsv[0], 1, 1);
+    svBox.firstChild.style.left = `${hsv[1] * 100}%`; svBox.firstChild.style.top = `${(1 - hsv[2]) * 100}%`; hueBar.firstChild.style.left = `${hsv[0] / 3.6}%`;
+  };
+  const drag = (box, apply) => box.addEventListener("pointerdown", e => {
+    e.preventDefault(); box.setPointerCapture?.(e.pointerId);
+    const move = ev => { const r = box.getBoundingClientRect(); apply(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); value = toHex(...hsv); sync("area"); };
+    move(e); box.addEventListener("pointermove", move); box.addEventListener("pointerup", () => box.removeEventListener("pointermove", move), { once: true });
+  });
+  drag(svBox, (x, y) => { hsv = [hsv[0], x, 1 - y]; });
+  drag(hueBar, x => { hsv = [Math.min(359.9, x * 360), hsv[1], hsv[2]]; });
+  const drawRecent = () => {
+    const list = readRecentColors();
+    recent.replaceChildren(...(list.length ? list.map(c => { const sw = document.createElement("span"); sw.className = "cp-sw"; sw.dataset.c = c; sw.style.background = c; sw.title = `${c} (우클릭: 삭제)`; return sw; }) : [Object.assign(document.createElement("small"), { textContent: "확인으로 적용한 색이 여기에 쌓입니다" })]));
+  };
+  sync(); drawRecent();
+  hex.addEventListener("input", () => { const v = hex.value.trim().replace(/^(?!#)/, "#"); if (isHex6(v)) { value = v.toLowerCase(); sync(hex); } });
+  pop.addEventListener("mousedown", e => { if (!e.target.closest("input")) e.preventDefault(); }); // keep the chat box's selection
+  pop.addEventListener("contextmenu", e => { const sw = e.target.closest(".cp-sw"); if (sw) { e.preventDefault(); writeRecentColors(readRecentColors().filter(x => x !== sw.dataset.c)); drawRecent(); } });
+  pop.addEventListener("click", e => {
+    const sw = e.target.closest(".cp-sw"); if (sw) { value = sw.dataset.c; sync(); return; }
+    if (e.target.closest("[data-eye]")) { new window.EyeDropper().open().then(res => { if (isHex6(res?.sRGBHex)) { value = res.sRGBHex.toLowerCase(); sync(); } }).catch(() => {}); return; }
+    if (!e.target.closest("[data-ok]")) return;
+    writeRecentColors([value, ...readRecentColors().filter(c => c !== value)]);
+    closeColorPick(); target.value = value;
+    target.dispatchEvent(new Event("input", { bubbles: true })); target.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  document.body.append(pop);
+  const r = target.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, r.left))}px`;
+  pop.style.top = `${r.top - h - 4 >= 4 ? r.top - h - 4 : Math.min(innerHeight - h - 4, r.bottom + 4)}px`; // above the box first (the chat box is below)
+}
+document.addEventListener("click", e => { const t = e.target; if (!(t instanceof HTMLInputElement) || t.type !== "color" || !t.closest(".fmt-color")) return; e.preventDefault(); openColorPick(t); }, true);
+document.addEventListener("pointerdown", e => { const pop = document.getElementById("color-pick"); if (pop && !e.composedPath().includes(pop)) closeColorPick(); }, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("color-pick")) { e.stopPropagation(); closeColorPick(); } }, true);
 function wrapSelection(open, close) {
   const input = document.getElementById("chat-input"); const a = input.selectionStart ?? 0, z = input.selectionEnd ?? a;
   const middle = input.value.slice(a, z);
