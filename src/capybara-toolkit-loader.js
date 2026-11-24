@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.249";
-  const BUILD_ID = "2026-11-24-tab-switch-index-css-420";
+  const VERSION = "0.3.250";
+  const BUILD_ID = "2026-11-24-launcher-like-ccfolia-fab-421";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -543,13 +543,15 @@
         :host { all: initial; color: #171717; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         * { box-sizing: border-box; }
         button { font: inherit; }
+        /* 0.3.250: 코코포리아 판 메뉴 버튼(연필, MUI Fab large)과 같은 크기·모양·그림자 — 크기는 그 버튼을 읽어 --capybara-fab-size 로(없으면 실측 56px). 아이콘은 예전 비율(48 안 4px 여백). */
         .fab {
-          width: 48px; height: 48px; border: 0; border-radius: 999px;
+          width: var(--capybara-fab-size, 56px); height: var(--capybara-fab-size, 56px); border: 0; border-radius: 50%;
           background: #fff; color: #111; cursor: pointer; display: grid; place-items: center;
-          box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 4px; overflow: hidden;
+          box-shadow: rgba(0, 0, 0, 0.2) 0px 3px 5px -1px, rgba(0, 0, 0, 0.14) 0px 6px 10px 0px, rgba(0, 0, 0, 0.12) 0px 1px 18px 0px;
+          padding: calc(var(--capybara-fab-size, 56px) / 12); overflow: hidden;
           touch-action: none; user-select: none; position: relative; z-index: 2;
         }
-        .fab:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgba(0,0,0,.25); }
+        .fab:hover { transform: translateY(-1px); }
         .fab:active { transform: translateY(0); }
         .fab-icon { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .panel {
@@ -557,10 +559,10 @@
           display: none; flex-direction: column; overflow: hidden;
           background: #fff; border: 1px solid #d7d7d7; border-radius: 0;
           box-shadow: 0 18px 60px rgba(0,0,0,.24);
-          position: absolute; bottom: 58px; right: 0; z-index: 1;
+          position: absolute; bottom: calc(var(--capybara-fab-size, 56px) + 10px); right: 0; z-index: 1;
         }
-        :host([data-pos-y="top"]) .panel { top: 58px; bottom: auto; }
-        :host([data-pos-y="bottom"]) .panel { bottom: 58px; top: auto; }
+        :host([data-pos-y="top"]) .panel { top: calc(var(--capybara-fab-size, 56px) + 10px); bottom: auto; }
+        :host([data-pos-y="bottom"]) .panel { bottom: calc(var(--capybara-fab-size, 56px) + 10px); top: auto; }
         :host([data-pos-x="left"]) .panel { left: 0; right: auto; }
         :host([data-pos-x="right"]) .panel { right: 0; left: auto; }
         .panel[data-open="1"] { display: flex; }
@@ -1036,6 +1038,7 @@
     state.launcherDrag = null;
 
     if (drag.moved) {
+      state.launcherSaved = true; // 끌어 옮긴 뒤로는 저장 위치가 우선(연필 버튼을 따라가지 않는다)
       state.suppressNextToggle = true;
       const rect = state.root.getBoundingClientRect();
       setSetting("launcher-position", {
@@ -1050,17 +1053,61 @@
     }
   }
 
+  // 0.3.250: 코코포리아 판 메뉴 버튼(연필 아이콘의 MUI Fab large, 맵 오른쪽 아래). 크기·첫 위치를 여기에 맞춘다.
+  function findCcfoliaFab() {
+    const fabs = [...document.querySelectorAll(".MuiFab-root")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("#capybara-toolkit-root")); // 고정 위치 버튼은 offsetParent 가 null 이라 크기로 본다
+    return fabs.find((el) => el.querySelector('path[d^="M3 17.25"]')) || fabs.find((el) => el.classList.contains("MuiFab-sizeLarge")) || null;
+  }
+  function launcherSize(fab = findCcfoliaFab()) {
+    const size = fab ? Math.round(fab.getBoundingClientRect().width) : 0;
+    return size >= 32 && size <= 96 ? size : 56; // 못 찾으면 실측값(실제 방, 1300·1920 폭 모두 56×56). 상수로 두면 버튼을 만드는 시점에 아직 초기화 전이다(TDZ).
+  }
+  function setLauncherSize(size) {
+    if (state.root && state.root.style.getPropertyValue("--capybara-fab-size") !== `${size}px`) state.root.style.setProperty("--capybara-fab-size", `${size}px`);
+  }
+
   async function restoreLauncherPosition() {
+    setLauncherSize(launcherSize());
     const saved = await getSetting("launcher-position", null);
-    if (!saved || typeof saved.x !== "number" || typeof saved.y !== "number") return;
-    applyLauncherPosition(saved);
+    if (saved && typeof saved.x === "number" && typeof saved.y === "number") {
+      state.launcherSaved = true;
+      applyLauncherPosition(saved); // 커진 크기로도 화면 안에 들어오게 보정된다
+      return;
+    }
+    followCcfoliaFab();
+  }
+
+  // 저장 위치가 없으면 연필 버튼 옆(중심 높이 같게, 16px 간격): 오른쪽에 채팅 드로어 전까지 자리가 있으면 오른쪽, 없으면 왼쪽
+  // (실측: 연필 버튼 오른쪽은 드로어를 펼치면 15px, 접으면 화면 끝까지 16px 뿐이라 보통 왼쪽). 드로어를 여닫으면 연필 버튼이 움직이므로 저장 전까지 따라간다.
+  // 연필 버튼이 5초 안에 나타나지 않으면(홈 화면 등) 예전 기본 위치(오른쪽 아래 16px).
+  function followCcfoliaFab() {
+    const startedAt = Date.now();
+    const tick = () => {
+      state.fabFollowTimer = 0;
+      if (!state.root || state.launcherSaved) return;
+      const fab = findCcfoliaFab();
+      if (fab && !state.launcherDrag) placeBesideFab(fab);
+      if (fab || Date.now() - startedAt < 5000) state.fabFollowTimer = window.setTimeout(tick, fab ? 500 : 200);
+    };
+    tick();
+  }
+  function placeBesideFab(fab) {
+    const r = fab.getBoundingClientRect();
+    const size = launcherSize(fab);
+    setLauncherSize(size);
+    const drawers = [...document.querySelectorAll(".MuiDrawer-paper")].map((d) => d.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0 && q.left > r.left);
+    const limit = Math.min(window.innerWidth, ...drawers.map((q) => q.left));
+    const gap = 16; // 연필 버튼과의 간격(그 버튼의 화면 아래 여백과 같은 값)
+    const rightX = r.right + gap;
+    const x = rightX + size + 8 <= limit ? rightX : r.left - gap - size;
+    applyLauncherPosition({ x, y: r.top + (r.height - size) / 2 });
   }
 
   function applyLauncherPosition(position) {
     if (!state.root) return;
     const margin = 8;
-    const width = 48;
-    const height = 48;
+    const width = launcherSize();
+    const height = width;
     const x = clamp(Number(position.x) || margin, margin, Math.max(margin, window.innerWidth - width - margin));
     const y = clamp(Number(position.y) || margin, margin, Math.max(margin, window.innerHeight - height - margin));
 
