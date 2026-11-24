@@ -1632,10 +1632,6 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       if (!(row instanceof HTMLElement)) return;
       const next = rows[i + 1];
       const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
-      // 0.5.72: 나레이션 줄의 위아래 여백은 서식 CSS(묶음 가장자리 16px·안쪽 6px)에 맡긴다 — 아래 패딩을 일반 줄 값(8px)으로 강제해 마지막 나레이션 줄 아래가 좁았다(오리지널 16px, 실측).
-      const narrationRow = row.matches('[data-ccf-narration="1"]') || !!row.querySelector('.ccf-render-root[data-ccf-narration="1"]');
-      if (narrationRow && !nextIsCont && row.getAttribute("data-ccf-prose-cont") === "1") row.setAttribute("data-ccf-prose-cont-last", "1");
-      else row.removeAttribute("data-ccf-prose-cont-last");
       if (nextIsCont) {
         row.setAttribute("data-ccf-prose-cont-leader", "1");
         row.style.removeProperty("border-bottom");
@@ -1650,8 +1646,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         row.style.setProperty("background-position", "16px 100%", "important");
         row.style.setProperty("background-repeat", "no-repeat", "important");
         // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
-        if (narrationRow) row.style.removeProperty("padding-bottom");
-        else row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
+        // 0.5.72: 아래 패딩은 줄에 직접 넣지 않고 목록의 CSS 변수로(아래 규칙이 나레이션 줄은 빼고 건다). 줄에 강제하면 나레이션 묶음 가장자리 16px 규칙을 덮어
+        // 마지막 나레이션 줄 아래가 8px 로 좁았다(오리지널 16px, 실측). 나레이션 표시는 줄을 그린 뒤에 붙어서 여기서 판정할 수 없다.
+        row.style.removeProperty("padding-bottom");
+        panelEl?.style.setProperty("--scp-row-pad-b", `${ccfScpRowPadBottom + panelRowExtra}px`);
       }
     });
   }
@@ -2796,6 +2794,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
       #${PANEL_ID} .ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }
       #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
+      #${PANEL_ID} .ccf-scp-list > .MuiListItem-root:not([data-ccf-prose-cont-leader="1"]):not(:has(.ccf-render-root[data-ccf-narration="1"])) { padding-bottom: var(--scp-row-pad-b, 8px) !important; }
+      /* 나레이션 묶음의 마지막 줄: 오리지널처럼 아래 16px(서식 규칙의 'prose-cont-last' 를 패널에서는 다음 줄로 판정) */
+      #${PANEL_ID} .ccf-scp-list > .MuiListItem-root[data-ccf-prose-cont="1"]:not(:has(+ [data-ccf-prose-cont="1"])):has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
