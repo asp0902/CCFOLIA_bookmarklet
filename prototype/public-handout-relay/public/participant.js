@@ -924,7 +924,9 @@ async function verifyAccess() {
 // Messages written with the toolkit's format tools carry an invisible envelope (formatRuns / alignRuns / blockStyle) after the visible text.
 // This decodes it and renders bold/italic/underline/strike, colour, background, size, blur, code, ruby, tooltip, alignment and narration.
 const INVIS_START = "\u2063\u2063\u2063", INVIS_END = "\u2062\u2062\u2062", INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
+let cutinText = "";
 function decodeEnvelope(full) {
+  cutinText = "";
   const a = full.indexOf(INVIS_START);
   if (a < 0) return { text: full, env: null, visible: full };
   const b = full.indexOf(INVIS_END, a + INVIS_START.length);
@@ -938,6 +940,7 @@ function decodeEnvelope(full) {
     // The visible text is what is outside the envelope (it may stand before or after it, e.g. Roll20 header rows start with the envelope). The envelope's own text is what its runs
     // refer to; if it is not the visible text (the message was edited afterwards) the formatting is stale and the visible text is shown plain.
     const visible = full.slice(0, a) + full.slice(b + INVIS_END.length);
+    cutinText = env && typeof env.text === "string" ? env.text + (typeof env.cutin === "string" ? env.cutin : "") : ""; // the @cut-in CCFOLIA cut from the stored text, carried in the envelope
     // 컷인 이름으로 끝나는 글(format-sync 0.1.119: 글 + 봉투 + 컷인 이름): 봉투의 글은 봉투 앞까지 — 컷인 이름은 그리지 않는다(GM 화면과 같음)
     const before = full.slice(0, a);
     if (env && typeof env.text === "string" && a > 0 && full.length > b + INVIS_END.length && env.text.trim() === before.trim()) return { text: before, env, visible: before };
@@ -1091,9 +1094,12 @@ function preloadCutinPicture(item) {
 }
 function addCutinPicture(body, full) {
   const start = full.indexOf(INVIS_START), end = full.indexOf(INVIS_END, start);
-  const key = cutinKey(start >= 0 && end > start ? full.slice(0, start) + full.slice(end + INVIS_END.length) : full); // what CCFOLIA saw: text + name, without the envelope
-  if (!key || body.querySelector("img")) return;
-  const hit = (sceneData?.cutinPictures || []).filter(item => key.endsWith(cutinKey(item.name))).sort((a, b) => cutinKey(b.name).length - cutinKey(a.name).length)[0];
+  const outside = cutinKey(start >= 0 && end > start ? full.slice(0, start) + full.slice(end + INVIS_END.length) : full); // what CCFOLIA saw: text + name, without the envelope
+  decodeEnvelope(full);
+  const carried = cutinKey(cutinText); // an @cut-in CCFOLIA cut off (format-sync 0.1.159 / chat-panel 0.5.68 put it in the envelope)
+  if ((!outside && !carried) || body.querySelector("img")) return;
+  const pick = key => (sceneData?.cutinPictures || []).filter(item => key && key.endsWith(cutinKey(item.name))).sort((a, b) => cutinKey(b.name).length - cutinKey(a.name).length)[0];
+  const hit = pick(outside) || pick(carried), key = pick(outside) ? outside : carried;
   if (!hit) return;
   const wrap = document.createElement("span"), img = document.createElement("img"), size = cutinPictureSizes.get(hit.url);
   wrap.className = "ccf-cutin-chat-image"; wrap.style.cssText = "display:block;margin:6px 0 2px;max-width:100%;line-height:0";

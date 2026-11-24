@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.67
+// @version      0.5.68
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.67";
+  const VERSION = "0.5.68";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -2220,6 +2220,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
       outText = cleanText + encodeEnvelopeToInvisible(payload);
     }
+    // 0.5.68: 코코포리아 입력칸처럼 글 끝의 "@컷인 이름"(공백 없는 낱말)은 기록에 남기지 않고 재생만 한다(번들 Ne: text.replace(/@\S+$/, "")).
+    // 그림 있는 컷인이면 이름을 봉투에 실어(이름만이면 봉투의 글, 글이 있으면 cutin) 줄에 그림이 남게, 남는 글이 없고 그림도 없으면 쓰지 않는다.
+    const cutinTail = meta?.source ? "" : cutinAtTail(outText);
+    if (cutinTail) {
+      const rest = outText.slice(0, outText.length - cutinTail.length), plainRest = stripEnvelopes(rest);
+      if (cutinHasPicture(cutinTail)) outText = rest.includes(CCF_INVIS_START) ? rest : rest + encodeEnvelopeToInvisible({ v: 1, text: rest || cutinTail, formatRuns: [], alignRuns: [], blockStyle: {}, ...(rest ? { cutin: cutinTail } : {}) });
+      else if (!plainRest.trim()) { triggerRoomEffects(ctx, cutinTail); return; }
+      else outText = rest;
+    }
     fields.text = { stringValue: outText };
     fields.channel = { stringValue: channel };
     // 진단용: 이 패널이 마지막으로 보낸 1건의 서식 경로(formatDiag 가 읽는다).
@@ -2259,7 +2268,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       const detail = await response.text().catch(() => "");
       throw new Error(`전송 실패 (${response.status}) ${detail.slice(0, 120)}`);
     }
-    if (isCommand) triggerRoomEffects(ctx, cleanText); // 이 경로는 코코포리아 입력창을 거치지 않아 컷인 재생을 직접 알린다
+    if (isCommand || cutinTail) triggerRoomEffects(ctx, cutinTail || cleanText); // 이 경로는 코코포리아 입력창을 거치지 않아 컷인 재생을 직접 알린다
     if (sendTiming) {
       // 쓴 메시지가 코코포리아 저장소(그리고 우리 목록)에 나타날 때까지의 시간
       const timing = sendTiming;
@@ -2274,6 +2283,15 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         poll();
       }).catch(() => finishTiming(timing));
     }
+  }
+  // 글 끝의 "@낱말"이 룸 컷인 이름이면 그 이름(코코포리아가 저장 전에 잘라 내는 부분)
+  function cutinAtTail(text) {
+    const tail = (String(text || "").match(/@\S+$/) || [""])[0];
+    if (!tail) return "";
+    return Object.values(findStore()?.getState()?.entities?.roomEffects?.entities || {}).some((effect) => effect?.name === tail) ? tail : "";
+  }
+  function cutinHasPicture(name) {
+    return Object.values(findStore()?.getState()?.entities?.roomEffects?.entities || {}).some((effect) => effect?.name === name && typeof effect.imageUrl === "string" && /^https?:\/\//i.test(effect.imageUrl.trim()));
   }
   function triggerRoomEffects(ctx, body) {
     const names = ["playTime", "updatedAt"].map((name) => `updateMask.fieldPaths=${name}`).join("&"), now = String(Date.now());

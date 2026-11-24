@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.158
+// @version      0.1.159
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.158"),
+    version: getUserscriptVersion("0.1.159"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1358,6 +1358,7 @@
     if (decoded) {
       // 봉투 뒤에 붙은 컷인 이름(글+봉투+이름, #546)까지 합쳐야 코코포리아가 본 글과 같다. 이름만 보낸 줄은 봉투 글이 이미 그 이름이다(#594).
       text = typeof decoded.envelope?.text === "string" ? decoded.envelope.text : (decoded.visibleText || "");
+      if (typeof decoded.envelope?.cutin === "string") text += decoded.envelope.cutin; // 0.1.159: 코코포리아가 잘라 낸 끝의 @컷인 이름(봉투에 실어 보냄)
       if (cutinChatMap().has(cutinChatKey(text))) return cutinChatKey(text);
       const raw = el.querySelector(":scope > .ccf-original-hidden")?.textContent || el.getAttribute(CCF_RAW_ATTR) || el.textContent || ""; // 렌더된 줄의 raw 속성·textContent 에는 겹친 글도 섞일 수 있어 숨긴 원문을 먼저 본다
       const tail = cutinChatKey(raw.slice(raw.indexOf(INVIS_END, raw.indexOf(INVIS_START)) + INVIS_END.length));
@@ -11458,6 +11459,15 @@
     } catch (_) { return ""; }
   }
 
+  // 0.1.159: 그림이 있는 컷인인가(룸 컷인 목록에서 이름이 같은 것)
+  function cutinHasPicture(name) {
+    try {
+      endsWithCutinTrigger(name);
+      const entities = endsWithCutinTrigger.store?.getState()?.entities?.roomEffects?.entities;
+      return Object.values(entities || {}).some((effect) => effect?.name === name && [effect.imageUrl, effect.image, effect.url].some((value) => typeof value === "string" && /^(?:https?:\/\/|data:image\/)/i.test(value.trim())));
+    } catch (_) { return false; }
+  }
+
   function looksLikeCcfDiceCommand(text) {
     const raw = String(text || "");
     if (!raw) return false;
@@ -15091,13 +15101,19 @@
       // 0.1.135: 컷인 이름만 보낸 메시지도 나레이션·유지 서식·정렬이 켜져 있으면 봉투를 싣는다 — "봉투 + 컷인 이름"(봉투의 글 = 컷인 이름이라
       // 보이는 글이 그대로 "@이름", 그림이 붙으면 #586 규칙으로 글자 대신 그림). 끝이 컷인 이름이라 재생 규칙은 그대로.
       const onlyName = !cutinBody.trim();
+      // 0.1.159: 코코포리아는 저장 전에 글 끝의 "@낱말"을 잘라 낸다(번들 Ne: text.replace(/@\S+$/, "")) — 이름만이면 아무것도 저장되지 않는다.
+      // 그림 있는 @컷인: 봉투를 늘 싣는다(이름만 → 저장되는 건 글자 없는 봉투, 툴킷이 그림을 그린다 / 글이 있으면 이름을 봉투의 cutin 에 싣는다).
+      // 그림 없는 @컷인을 이름만 보내면 원문 그대로(줄이 남지 않게 — 코코포리아 기본과 같다).
+      const cutAway = /^@\S+$/.test(cutinName) && rawText.endsWith(cutinName);
+      const picture = cutAway && cutinHasPicture(cutinName);
+      if (cutAway && onlyName && !picture) { if (currentText !== rawText) setEditorText(editor, rawText); return true; }
       const bodyText = onlyName ? rawText : cutinBody;
       const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
       const bodyRuns = state.runs.length ? cloneRuns(state.runs, bodyText.length) : (keepOn && state.lastStyle && Object.keys(cleanupStyle(state.lastStyle)).length ? [{ start: 0, end: bodyText.length, style: cleanupStyle(state.lastStyle) }] : []);
       const prepared = prepareRunsForTransport(bodyRuns, bodyText.length);
       const alignRuns = getEffectiveAlignRuns(bodyText, state.alignRuns, blockStyle);
-      if (!prepared.failed && (prepared.runs.length || alignRuns.length || blockStyle.narration === true || blockStyle.breakBefore)) {
-        const envelope = { v: 1, text: bodyText, formatRuns: prepared.runs, alignRuns, blockStyle };
+      if (!prepared.failed && (prepared.runs.length || alignRuns.length || blockStyle.narration === true || blockStyle.breakBefore || picture)) {
+        const envelope = { v: 1, text: bodyText, formatRuns: prepared.runs, alignRuns, blockStyle, ...(picture && !onlyName ? { cutin: cutinName } : {}) };
         const outgoing = onlyName ? `${encodeEnvelopeToInvisible(envelope)}${rawText}` : `${cutinBody}${encodeEnvelopeToInvisible(envelope)}${cutinName}`;
         if (currentText !== outgoing) setEditorText(editor, outgoing);
         return true;
