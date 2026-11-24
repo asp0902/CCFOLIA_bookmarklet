@@ -33,7 +33,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const footText = cs('.dice-footer span'); out.footY = Math.round(footText.r.top); out.footLs = footText.s.letterSpacing;
     out.scroll = cs('#messages').s.overflowY;
     out.slots = [...document.querySelectorAll('.bgm-slot')].map((n) => [n.textContent, Math.round(n.getBoundingClientRect().left), Math.round(n.getBoundingClientRect().width)]);
-    out.vol = Math.round(cs('#bgm-vol').r.left);
+    out.vol = Math.round(cs('#bgm-vol').r.left) + 6; // the 80px rail starts 6px inside the input (room for the thumb past its ends)
     const x = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; };
     out.toolkit = { pal: x('#pal-btn')[0], color: x('#color-btn')[0], help: x('#help-btn')[0], aa: x('.fmt-group[data-group="deco"] .fmt-group-btn'), more: x('.fmt-group[data-group="extra"] .fmt-group-btn'), send: x('.dice-row button[type=submit]'), bold: x('.fmt-row button[aria-label="Bold"]'), size: x('.fmt-size'), font: Math.round(document.querySelector('.fmt-group[data-group="font"] .fmt-group-btn').getBoundingClientRect().left) };
     { const img = document.getElementById('speaker-img'), icon = document.querySelector('#speaker-btn svg'); out.noFaceHidden = getComputedStyle(img).display === 'none'; img.hidden = false; icon.style.display = 'none'; out.face2 = x('#speaker-img'); out.faceH = Math.round(img.getBoundingClientRect().height); img.hidden = true; icon.style.display = ''; }

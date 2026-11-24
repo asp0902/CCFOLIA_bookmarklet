@@ -538,3 +538,14 @@ html.chat-only #messages{min-height:0;max-height:none}
 /* Panel memo: CCFOLIA's tooltip (MUI, placed under the panel) */
 .piece-tip{position:fixed;z-index:299000;max-width:300px;padding:4px 8px;border-radius:4px;background:rgba(22,22,22,1);box-shadow:0 1px 3px 0 rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 2px 1px -1px rgba(0,0,0,.12);color:#fff;font:500 12px/normal Roboto,Helvetica,Arial,sans-serif;white-space:pre-wrap;word-wrap:break-word;pointer-events:none}
 .piece-tip[hidden]{display:none}
+
+/* BGM bar as measured on CCFOLIA + toolkit. Volume: an 80px rail whose 12px thumb is centred on the value (so it passes the rail's ends); the input is 12px wider for that. */
+#bgm-bar #bgm-vol{width:92px;margin-right:2px}
+#bgm-bar #bgm-vol::-webkit-slider-runnable-track{background:linear-gradient(to right,transparent 6px,#2196f3 6px,#2196f3 calc(6px + 80px * var(--f,0)),rgba(33,150,243,.38) calc(6px + 80px * var(--f,0)),rgba(33,150,243,.38) 86px,transparent 86px)}
+/* Progress line: chat-notifier's own values */
+#bgm-bar .bgm-row2{box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:2px;width:284px;height:16px;padding:0 8px;margin:5px 7px 6px 9px;color:rgba(255,255,255,.88);font-size:10px;line-height:16px}
+#bgm-bar .bgm-row2[hidden]{display:none}
+#bgm-bar .bgm-row2 span{min-width:0;overflow:hidden;font-family:"Noto Sans KR",Roboto,Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;opacity:.82;text-align:center;white-space:nowrap}
+#bgm-bar #bgm-seek{width:calc(100% + 2px);height:4px;margin:0 -1px}
+#bgm-bar #bgm-seek::-webkit-slider-runnable-track{height:4px;border-radius:2px}
+#bgm-bar #bgm-seek::-webkit-slider-thumb{width:16px;height:16px;margin-top:-6px}
