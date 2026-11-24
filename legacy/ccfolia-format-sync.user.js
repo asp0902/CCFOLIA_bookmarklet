@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.146
+// @version      0.1.147
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.146"),
+    version: getUserscriptVersion("0.1.147"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1273,7 +1273,7 @@
   // 저장소(roomEffects)의 컷인 이름·이미지 주소만 읽어, 메시지 글이 컷인 트리거와 같으면 그 행(p) 끝에 평범한 인라인 이미지를 하나 덧붙일 뿐이다
   // (오버레이·타이머·채널 없음, 새 행이 스캔될 때만 일한다). 원본 텍스트·노드는 건드리지 않는다(React-safe).
   // 끄기: localStorage.ccfCutinChatImage = "off". 글 일치 방식: 기본 "exact"(트리거와 글 전체가 같음), localStorage.ccfCutinChatMatch = "contains" 로 포함 일치.
-      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), sizes: new Map(), loading: new Set(), failed: new Set() }); }
+      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), atNames: new Set(), sizes: new Map(), loading: new Set(), failed: new Set() }); }
 
   function cutinChatEnabled() {
     try { return localStorage.getItem("ccfCutinChatImage") !== "off"; } catch (_) { return true; }
@@ -1321,10 +1321,12 @@
     try { slice = store.getState()?.entities?.roomEffects; } catch (_) { slice = undefined; }
     if (slice === cutinChatS().slice) return cutinChatS().map;
     cutinChatS().slice = slice;
-    const map = new Map();
+    const map = new Map(), atNames = new Set();
     const entries = slice && typeof slice === "object" ? Object.values(slice.entities && typeof slice.entities === "object" ? slice.entities : slice) : [];
     for (const effect of entries) {
       if (!effect || typeof effect !== "object") continue;
+      const effectName = cutinChatKey(effect.name);
+      if (effectName.startsWith("@")) atNames.add(effectName);
       const url = [effect.imageUrl, effect.image, effect.url].find((value) => typeof value === "string" && /^(?:https?:\/\/|data:image\/)/i.test(value.trim()));
       if (!url) continue;
       for (const trigger of [effect.message, effect.name]) {
@@ -1333,8 +1335,8 @@
       }
       cutinChatPreload(url.trim());
     }
-    const grew = map.size > cutinChatS().map.size;
-    cutinChatS().map = map;
+    const grew = map.size > cutinChatS().map.size || atNames.size > cutinChatS().atNames.size;
+    cutinChatS().map = map; cutinChatS().atNames = atNames;
     if (grew) setTimeout(() => document.querySelectorAll(MESSAGE_TEXT_SELECTOR).forEach((el) => { if (!el.classList.contains("ccf-original-hidden") && !el.classList.contains("ccf-render-overlay") && !el.closest("textarea, input, [contenteditable]")) applyCutinChatImage(el); }), 0);
     return map;
   }
@@ -1374,7 +1376,8 @@
     style.setAttribute(CCF_SAFE_UI_ATTR, "1");
     style.textContent = `.ccf-cutin-chat-image{display:block;margin:6px 0 2px;max-width:100%;line-height:0}`
       + `.ccf-cutin-chat-image img{display:block;margin:0 auto;max-width:100%;max-height:200px;width:auto;height:auto;object-fit:contain;border-radius:4px;cursor:zoom-in}`
-      + `[data-ccf-cutin-hide="1"]{font-size:0!important;line-height:0!important}`;
+      + `[data-ccf-cutin-hide="1"]{font-size:0!important;line-height:0!important}`
+      + `[data-ccf-cutin-at="1"],[data-ccf-cutin-at="1"] *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}`;
     (document.head || document.documentElement).appendChild(style);
   }
 
@@ -1393,6 +1396,14 @@
     else if (el.hasAttribute("data-ccf-cutin-hide")) el.removeAttribute("data-ccf-cutin-hide");
   }
 
+  // 이름이 @ 로 시작하는 컷인만 보낸 줄은 그림이 없어도 글자를 감춘다. 글자색만 투명하게 해서 줄 높이·묶음·호버 버튼은 그대로다(원문 노드도 그대로).
+  function syncCutinAtHide(el, inChat) {
+    cutinChatMap();
+    const on = inChat && cutinChatS().atNames.has(cutinChatMessageText(el));
+    if (on) { ensureCutinChatStyle(); if (el.getAttribute("data-ccf-cutin-at") !== "1") el.setAttribute("data-ccf-cutin-at", "1"); }
+    else if (el.hasAttribute("data-ccf-cutin-at")) el.removeAttribute("data-ccf-cutin-at");
+  }
+
   // 채팅 메시지 행의 본문에만 붙인다(오리지널 채팅 목록·추가 패널). 컷인/이미지/캐릭터 목록 같은 모달·팝오버·메뉴·드로어 목록의 항목 글이
   // 컷인 이름과 같아도 이미지를 붙이지 않는다. role=log 가 없는 구조에 대비해, 메시지 행은 보낸 사람 머리글(h6)에 시각 표시(caption)가 붙는 것도 인정한다.
   function cutinChatIsMessageText(el) {
@@ -1406,7 +1417,9 @@
 
   function applyCutinChatImage(el) {
     if (!(el instanceof HTMLElement)) return;
-    if (!cutinChatIsMessageText(el)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    const inChat = cutinChatIsMessageText(el);
+    syncCutinAtHide(el, inChat);
+    if (!inChat) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (!cutinChatEnabled()) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     const url = cutinChatUrlFor(cutinChatMessageText(el));
     if (!url || cutinChatS().failed.has(url)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }

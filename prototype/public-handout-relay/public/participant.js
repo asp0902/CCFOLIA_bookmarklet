@@ -379,7 +379,7 @@ function runPieceAction(node) {
   if (action.type === "message") postChat(crypto.randomUUID(), action.text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
 }
 function renderScene(scene) {
-  if (scene !== undefined) { sceneData = scene; syncRoomAudio(scene); playCutins(scene); }
+  if (scene !== undefined) { const namesChanged = String(sceneData?.cutinNames || "") !== String(scene?.cutinNames || ""); sceneData = scene; syncRoomAudio(scene); playCutins(scene); if (namesChanged) setTimeout(() => { if (current) { rendered = false; renderState(current); } }, 0); } // a cut-in just played: its @name leaves the rows already drawn
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
   const stage = box.parentElement;
   if (!sceneData) { box.hidden = true; return; }
@@ -774,7 +774,7 @@ function fillMirrorRow(row, message) {
   if (body) {
     let info = { narration: false };
     if (cmMirror.toolkit()) info = renderRich(body, message.text || "", true);
-    else body.textContent = decodeEnvelope(message.text || "").visible;
+    else body.textContent = withoutCutinName(decodeEnvelope(message.text || "").visible);
     if (info.narration) row.querySelector(".MuiListItem-root")?.setAttribute("data-ccf-narration", "1");
     if (info.bubble) row.querySelector(".MuiListItemText-root")?.classList.add("ccr20-roll20-bubble-container");
     const tail = () => body.lastElementChild || body;
@@ -1027,10 +1027,17 @@ function renderRoll20(container, text, env) {
 }
 // toolkit: draw it the way the GM's toolkit scripts do (the same class and attribute names: .ccf-render-root > .ccf-render-overlay > .ccf-line > .ccf-frag, data-ccf-narration / data-ccf-macro),
 // so the toolkit's own CSS that came over in mirror.css lays it out (narration centred without avatar, Roll20 bars, ...). Returns what the row needs to know.
+// A message ending with a played cut-in's @name does not show that name (the longest one wins); a name-alone message keeps an empty line, like the GM's chat.
+function withoutCutinName(text) {
+  const body = String(text).normalize("NFC");
+  const name = (sceneData?.cutinNames || []).map(item => item.normalize("NFC")).filter(item => body.endsWith(item)).sort((a, b) => b.length - a.length)[0];
+  return name ? body.slice(0, -name.length).trimEnd() || "\u00a0" : text;
+}
 function renderRich(container, full, toolkit = false) {
   const { text, env } = decodeEnvelope(full);
   const info = { narration: false, macro: false, bubble: false };
-  if (!env || typeof env !== "object") { container.textContent = text; return info; }
+  if (!env || typeof env !== "object") { container.textContent = withoutCutinName(text); return info; }
+  if (withoutCutinName(text) === "\u00a0") { container.textContent = "\u00a0"; info.narration = env.blockStyle?.narration === true; return info; }
   if (toolkit && env.roll20Macro === true) {
     info.macro = true; info.bubble = true; info.narration = env.blockStyle?.narration === true;
     container.dataset.ccfMacro = "1"; // format-sync marks a Roll20 macro so that its narration look (centred, italic) does not apply to it
