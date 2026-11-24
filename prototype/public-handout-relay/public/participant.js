@@ -318,18 +318,13 @@ const view = { zoom: savedScale, x: 0, y: 0, unit: 24 }; // camera: zoom multipl
 // A panel's or marker's memo as CCFOLIA's tooltip (under it), its click action as CCFOLIA runs it: a message goes out from the current speaker and tab, a link asks first.
 const pieceTip = document.createElement("div"); pieceTip.className = "piece-tip"; pieceTip.hidden = true; document.body.append(pieceTip);
 function hidePieceTip() { pieceTip.hidden = true; }
-function showPieceTip(node) {
-  pieceTip.textContent = node.dataset.tip; pieceTip.hidden = false;
-  const r = node.getBoundingClientRect(), w = pieceTip.offsetWidth;
-  pieceTip.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, r.left + r.width / 2 - w / 2))}px`;
-  pieceTip.style.top = `${Math.min(innerHeight - pieceTip.offsetHeight - 4, r.bottom + 14)}px`;
-}
 // Button tooltips as measured on CCFOLIA 1.37.6 (MUI): the same box as the panel memo, 14px from the button, centred, kept inside the window, under it (dice and range select: above it),
 // after 100ms (at once when another one closed less than 800ms ago). Only the buttons that have one there; no tooltip for touch or a narrow page.
 const TIP_LABELS = { "채팅 설정": "채팅 메뉴", "이름 색": "캐릭터 색상 변경", "BGM 정지": "BGMを停止する" };
 const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마", "GM 도구"]);
 const bgmSlotTip = cfg => `${cfg?.name || "NOTITLE"}\nvol:${cfg?.volume ?? 0} loop:${!cfg || cfg.repeat ? "on" : "off"}`;
 function buttonTip(button) {
+  if (button.dataset.tip) return { text: button.dataset.tip }; // a panel's or marker's memo
   if (button.id === "bgm-slot1") return { text: bgmKey ? bgmLast?.title || "NOTITLE" : bgmSlotTip(roomAudio.media.cfg) };
   if (button.id === "bgm-slot2") return { text: bgmSlotTip(roomAudio.sound.cfg) };
   const label = button.getAttribute("aria-label") || "", text = TIP_LABELS[label] || label;
@@ -337,7 +332,17 @@ function buttonTip(button) {
   return /^\[GM\]/.test(text) || TIP_TEXTS.has(text) ? { text } : null;
 }
 let tipButton = null, tipTimer = 0, tipClosedAt = 0;
-function hideButtonTip() { clearTimeout(tipTimer); if (!tipButton) return; tipButton = null; tipClosedAt = Date.now(); hidePieceTip(); }
+// MUI's Grow on leaving: opacity 200ms, the shrink 133ms after a 67ms delay. The old box fades by itself, so moving to the next panel cross-fades.
+function hideButtonTip() {
+  clearTimeout(tipTimer);
+  if (!tipButton) return;
+  tipButton = null; tipClosedAt = Date.now();
+  if (pieceTip.hidden) return;
+  const out = pieceTip.cloneNode(true); out.className = "piece-tip-fade"; document.body.append(out);
+  out.animate({ opacity: [1, 0] }, { duration: 200, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" }).onfinish = () => out.remove();
+  out.animate({ transform: ["none", "scale(.75, .5625)"] }, { duration: 133, delay: 67, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+  hidePieceTip();
+}
 function showButtonTip(button, tip) {
   pieceTip.textContent = tip.text; pieceTip.hidden = false;
   const r = button.getBoundingClientRect(), w = pieceTip.offsetWidth, h = pieceTip.offsetHeight;
@@ -350,8 +355,10 @@ function showButtonTip(button, tip) {
 }
 document.addEventListener("pointerover", event => {
   if (event.pointerType !== "mouse" || (innerWidth <= 720 && !chatOnly)) return hideButtonTip();
-  const button = event.composedPath().find(node => node instanceof Element && node.matches("button, .bgm-slot")) || null; // mirrored parts are in shadow roots
+  const button = event.composedPath().find(node => node instanceof Element && node.matches("button, .bgm-slot, img[data-tip]")) || null; // mirrored parts are in shadow roots
   if (button === tipButton) return;
+  if (button?.dataset.tip && button.dataset.id === tipButton?.dataset.id) { tipButton = button; return; } // the same panel, redrawn
+  if (event.buttons && button?.dataset.tip) return hideButtonTip(); // not while dragging
   hideButtonTip();
   if (!button) return;
   const tip = buttonTip(button);
@@ -362,6 +369,7 @@ document.addEventListener("pointerover", event => {
 }, true);
 for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, hideButtonTip, true);
 window.addEventListener("blur", hideButtonTip);
+document.documentElement.addEventListener("mouseleave", hideButtonTip);
 let pieceActionAt = 0;
 function runPieceAction(node) {
   const list = sceneData?.[node.dataset.kind === "marker" ? "markers" : "items"] || [], action = list.find(item => item.id === node.dataset.id)?.action;
@@ -440,7 +448,7 @@ function renderScene(scene) {
     const drop = moved.get(item.id);
     if (drop && Date.now() - drop.at < 5000) { item.x = drop.x; item.y = drop.y; } else moved.delete(item.id);
     if (item.kind === "deck") img.dataset.kind = "deck"; // a deck is not a piece the participant moves: no id, so a press on it pans like on the background
-    else if (item.id && (item.kind !== "marker" || item.memo || item.action)) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked || item.kind === "marker") img.dataset.locked = "1"; if (item.memo) img.dataset.tip = item.memo; if (item.action) img.style.cursor = "pointer"; if (window.__selectedDie === item.id) img.classList.add("selected"); }
+    else if (item.id && (item.kind !== "marker" || item.memo || item.action)) { img.dataset.kind = item.kind; img.dataset.id = item.id; img.dataset.x = item.x; img.dataset.y = item.y; if (item.locked || item.kind === "marker") img.dataset.locked = "1"; if (!item.locked) img.dataset.hover = "1"; if (item.memo) img.dataset.tip = item.memo; if (item.action) img.style.cursor = "pointer"; if (window.__selectedDie === item.id) img.classList.add("selected"); }
     place(img, item.unitsXY ? item.x : item.x / 24, item.unitsXY ? item.y : item.y / 24, item.width, item.height, item.angle, layerOf(item));
     img.style.objectFit = "fill"; nodes.push(img);
     if (item.kind === "deck") {
@@ -561,9 +569,6 @@ window.addEventListener("resize", () => renderScene());
     } catch (error) { moved.delete(id); showSendStatus(error.message || "옮기지 못했습니다.", 6000); renderScene(); }
   };
   const endDrag = () => { if (piece) { dropPiece(); return; } drag = null; stage.classList.remove("panning"); };
-  stage.addEventListener("pointerover", event => { if (event.buttons === 0 && event.target.dataset?.tip) showPieceTip(event.target); });
-  stage.addEventListener("pointerout", event => { if (event.target.dataset?.tip) hidePieceTip(); });
-  stage.addEventListener("pointerdown", hidePieceTip, true);
   stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
   // Own dice symbols (a CCFOLIA player moves, rolls and deletes only the ones they made): a click or right click selects (blue outline) and the right click opens the menu.
   // optimistic delete: the piece leaves the screen at once; if the request fails it comes back

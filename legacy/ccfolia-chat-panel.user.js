@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.60
+// @version      0.5.61
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.60";
+  const VERSION = "0.5.61";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -520,7 +520,7 @@
     return Object.entries(markers && typeof markers === "object" ? markers : {})
       .filter(([, marker]) => marker && url(marker.imageUrl))
       .slice(0, 100)
-      .map(([id, marker]) => ({ id: String(id).slice(0, 60), x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl), memo: String(marker.text || "").slice(0, 1000), action: relayClickAction(marker.clickAction) }));
+      .map(([id, marker]) => ({ id: String(id).slice(0, 60), locked: marker.locked === true, x: num(marker.x), y: num(marker.y), z: num(marker.z), angle: num(marker.angle), width: num(marker.width, 1), height: num(marker.height, 1), imageUrl: url(marker.imageUrl), memo: String(marker.text || "").slice(0, 1000), action: relayClickAction(marker.clickAction) }));
   }
 
   // 참여자에게 보내는 이미지 주소: 코코포리아 CDN 만. 코코포리아 자신이 하는 변환(실측: 앱 번들의 주소 함수)을 따라, 예전에 올린 이미지의 firebasestorage 주소는 CDN 주소로 바꿔 쓴다.

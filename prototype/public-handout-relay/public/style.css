@@ -536,7 +536,7 @@ html.chat-only .chat h2{height:56px;line-height:56px}
 html.chat-only #messages{min-height:0;max-height:none}
 
 /* Panel memo: CCFOLIA's tooltip (MUI, placed under the panel) */
-.piece-tip{position:fixed;z-index:299000;max-width:300px;padding:4px 8px;border-radius:4px;background:rgba(22,22,22,1);box-shadow:0 1px 3px 0 rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 2px 1px -1px rgba(0,0,0,.12);color:#fff;font:500 12px/normal Roboto,Helvetica,Arial,sans-serif;white-space:pre-wrap;word-wrap:break-word;pointer-events:none}
+.piece-tip,.piece-tip-fade{position:fixed;z-index:299000;max-width:300px;padding:4px 8px;border-radius:4px;background:rgba(22,22,22,1);box-shadow:0 1px 3px 0 rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 2px 1px -1px rgba(0,0,0,.12);color:#fff;font:500 12px/normal Roboto,Helvetica,Arial,sans-serif;white-space:pre-wrap;word-wrap:break-word;pointer-events:none}
 .piece-tip[hidden]{display:none}
 
 /* BGM bar as measured on CCFOLIA + toolkit. Volume: an 80px rail whose 12px thumb is centred on the value (so it passes the rail's ends); the input is 12px wider for that. */
@@ -562,3 +562,6 @@ html.chat-only #messages{min-height:0;max-height:none}
 .cw-row .char-text b,.cw-row .char-text small{font-size:14px;line-height:20px}
 .cw-row .char-text small{color:rgba(255,255,255,.7)}
 .cw-place{position:absolute;right:22px;top:calc(50% - 17px)}
+
+/* A panel or marker that is not locked gets CCFOLIA's dark ground while hovered (no transition, no scale, no border); a locked one gets nothing */
+#scene-field img[data-hover]:hover{background:rgba(0,0,0,.2)}
