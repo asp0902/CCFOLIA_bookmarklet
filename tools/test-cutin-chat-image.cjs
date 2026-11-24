@@ -97,6 +97,12 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     await page.waitForFunction(() => document.getElementById('atSound').getAttribute('data-ccf-cutin-at') === '1', null, { timeout: 3000 });
     assert.deepEqual(await page.locator('#atSound').evaluate((p) => { const c = getComputedStyle(p); return [c.color, p.firstChild.nodeValue, p.getBoundingClientRect().height > 10]; }), ['rgba(0, 0, 0, 0)', '@소리', true]);
     for (const id of ['atBody', 'plainSound']) assert.equal(await page.locator('#' + id).getAttribute('data-ccf-cutin-at'), null, id);
+    // a picture cut-in whose name starts with @ (and one-letter cut-ins '*' '＊' in the room): name alone -> picture, text hidden; text + @name -> picture
+    await page.evaluate((gif) => { const re = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...re, ids: [...re.ids, 'a1', 'a2', 'a3'], entities: { ...re.entities, a1: { name: '@도움요청', imageUrl: gif }, a2: { name: '*', soundUrl: 'https://example.test/s.mp3' }, a3: { name: '＊', soundUrl: 'https://example.test/s.mp3' } } }; }, GIF);
+    await addRow('poke4', '평범'); await addRow('atPic', '@도움요청'); await addRow('atPicBody', '도와줘 @도움요청');
+    await page.waitForSelector('#atPic .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    await page.waitForSelector('#atPicBody .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
+    await page.waitForFunction(() => document.getElementById('atPic').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 3000 });
     // no duplicates on re-scan / text change back and forth
     await page.evaluate(() => { const p = document.getElementById('trigger'); p.firstChild.nodeValue = '번개'; p.appendChild(document.createElement('b')).remove(); });
     await page.waitForTimeout(400);

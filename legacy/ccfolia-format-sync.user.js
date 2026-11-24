@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.151
+// @version      0.1.152
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.151"),
+    version: getUserscriptVersion("0.1.152"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -290,6 +290,7 @@
   });
   window.__CCF_FORMAT_SYNC_RUNTIME__ = {
     __owner: ccfFsSignal,
+    version: CCF_FORMAT_SYNC_SCRIPT_INFO.version,
     // 구분선 줄이 안 먹을 때: 표식이 붙은 줄마다 줄 요소·조상·계산된 여백·첫 글자까지의 거리와, 규칙이 든 style 이 있는지.
     cutinChatDiag() { return cutinChatDiag(); },
     breakDiag() {
@@ -1460,6 +1461,7 @@
       enabled: cutinChatEnabled(), store: !!store, sliceKeys: slice && typeof slice === "object" ? Object.keys(slice).slice(0, 8) : null,
       sampleKeys: entries.slice(0, 3).map((effect) => (effect && typeof effect === "object" ? Object.keys(effect) : typeof effect)),
       triggers: [...cutinChatMap()].map(([text, url]) => [text.slice(0, 30), url.slice(0, 60)]),
+      scanErrors: (scanStep.errors || []).slice(-5), messageRows: document.querySelectorAll(MESSAGE_TEXT_SELECTOR).length,
       sizes: cutinChatS().sizes.size, images: document.querySelectorAll(`.ccf-cutin-chat-image`).length, failed: [...cutinChatS().failed.keys()].map((u) => u.slice(-24)), atNames: cutinChatS().atNames.size
     };
   }
@@ -1485,16 +1487,13 @@
       collectRenderTargets(scope, targets);
     });
 
+    // 0.1.152: 한 줄·한 단계의 예외가 이 훑기 전체(뒤의 컷인 그림까지)를 멈추지 않게 따로 감싸고, 마지막 오류를 진단에 남긴다.
     for (const el of targets) {
-      if (isLikelyMessageTextElement(el)) {
-        tryRenderEncodedMessage(el);
-      } else {
-        tryRenderPlainPresetMessage(el);
-      }
+      scanStep("render", () => { if (isLikelyMessageTextElement(el)) tryRenderEncodedMessage(el); else tryRenderPlainPresetMessage(el); });
     }
 
-    markNarratorDiceMessages(root);
-    syncNarrationPanelsWithin(root);
+    scanStep("narratorDice", () => markNarratorDiceMessages(root));
+    scanStep("narrationPanels", () => syncNarrationPanelsWithin(root));
 
     // 컷인 트리거 메시지 → 행 안 인라인 이미지(서식 봉투가 없는 평문도 대상이라 위 렌더 대상과 별개로 훑는다)
     const cutinTexts = new Set();
@@ -1502,7 +1501,14 @@
     root.querySelectorAll?.(MESSAGE_TEXT_SELECTOR).forEach((el) => cutinTexts.add(el));
     for (const el of cutinTexts) {
       if (el.classList.contains("ccf-original-hidden") || el.classList.contains("ccf-render-overlay") || el.closest("textarea, input, [contenteditable]")) continue;
-      applyCutinChatImage(el);
+      scanStep("cutinImage", () => applyCutinChatImage(el));
+    }
+  }
+  function scanStep(name, run) {
+    try { run(); } catch (error) {
+      const errors = scanStep.errors || (scanStep.errors = []);
+      if (errors.length < 8 || !errors.some((item) => item.name === name)) { errors.push({ name, at: Date.now(), error: String(error?.stack || error).split("\n").slice(0, 3).join(" | ").slice(0, 300) }); if (errors.length > 8) errors.shift(); }
+      if (!scanStep.warned) { scanStep.warned = true; console.warn("[ccf-format-sync] scan step failed", name, error); }
     }
   }
 

@@ -6,7 +6,10 @@
   const errors = [], pointers = {}, labels = {};
   let tipShown = 0;
   const onError = (event) => errors.push(String(event.message || event.reason || "").slice(0, 120));
+  const lastPaths = [];
   const onOver = (event) => {
+    lastPaths.push(event.composedPath().slice(0, 4).map((n) => (n instanceof Element ? n.tagName.toLowerCase() + (n.id ? "#" + n.id : "") + (n.getAttribute("aria-label") ? `[${String(n.getAttribute("aria-label")).slice(0, 12)}]` : "") : String(n.nodeName || n))).join(" < "));
+    if (lastPaths.length > 20) lastPaths.shift();
     pointers[event.pointerType || "none"] = (pointers[event.pointerType || "none"] || 0) + 1;
     const button = event.composedPath().find((node) => node instanceof Element && node.matches("button, .bgm-slot"));
     if (button) { const key = button.id || (String(button.getAttribute("aria-label") || "").startsWith("[GM]") ? "[GM]" : "other"); labels[key] = (labels[key] || 0) + 1; }
@@ -31,6 +34,11 @@
       fmt: { titlesLeft: document.querySelectorAll("#chat-form .fmt-row [title], #chat-form .fmt-group [title]").length, firstLabelKorean: /[가-힣]/.test(document.querySelector("#chat-form .fmt-row button")?.getAttribute("aria-label") || "") },
       look: row ? (() => { const chain = []; for (let n = row; n && n !== document.body; n = n.parentElement) { const c = getComputedStyle(n); if (c.opacity !== "1" || c.visibility !== "visible" || c.filter !== "none" || c.clipPath !== "none" || c.transform !== "none") chain.push([n.id || n.className, c.opacity, c.visibility, c.filter.slice(0, 30), c.clipPath.slice(0, 30), c.transform.slice(0, 30)]); } const seek = document.getElementById("bgm-seek"); return { chain, curColor: getComputedStyle(document.getElementById("bgm-cur")).color, curText: document.getElementById("bgm-cur").textContent, track: getComputedStyle(seek, "::-webkit-slider-runnable-track").backgroundImage.slice(0, 80), p: seek.style.getPropertyValue("--p") }; })() : null,
       cutinLayers: [...document.querySelectorAll(".cutin-layer, .cutin-snack")].length,
+      cutinAudio: read(() => [...openCutins.values()].map((open) => open.audio ? { paused: open.audio.paused, ended: open.audio.ended, t: Math.round(open.audio.currentTime * 10) / 10, duration: Math.round((open.audio.duration || 0) * 10) / 10, loop: open.audio.loop, error: open.audio.error?.code || 0 } : null)),
+      rowSelf: row ? [row, ...row.children].map((n) => { const c = getComputedStyle(n); return [n.id || n.className, c.display, c.visibility, c.opacity, c.color, c.fontSize, c.transform.slice(0, 24), c.clipPath.slice(0, 24), c.mask?.slice?.(0, 24) || "", c.contentVisibility || "", c.filter.slice(0, 24), Math.round(n.getBoundingClientRect().width), Math.round(n.getBoundingClientRect().height)]; }) : null,
+      overRow: row ? (() => { const r = row.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2, out = []; for (const n of document.querySelectorAll("body *")) { if (n === row || row.contains(n) || n.contains(row)) continue; const b = n.getBoundingClientRect(); if (b.width && b.left <= x && b.right >= x && b.top <= y && b.bottom >= y) { const c = getComputedStyle(n); if (c.position !== "static" || c.zIndex !== "auto") out.push([n.id || String(n.className).slice(0, 30) || n.tagName, c.zIndex, c.pointerEvents, c.backgroundColor, c.backgroundImage.slice(0, 20), c.opacity]); } } return out.slice(-10); })() : null,
+      tipSelfTest: read(() => { const host = document.getElementById("top-host"), button = host?.shadowRoot?.querySelector('button[aria-label^="[GM]"]') || document.getElementById("bgm-stop"), tip = buttonTip(button); showButtonTip(button, tip); const n = document.querySelector(".piece-tip"), r = n.getBoundingClientRect(), out = { label: button.getAttribute("aria-label"), text: n.textContent, hidden: n.hidden, box: [r.x, r.y, r.width, r.height].map(Math.round), top: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === n }; n.hidden = true; return out; }),
+      lastPaths: lastPaths.slice(-7),
       topButtons: [...(document.getElementById("top-host")?.shadowRoot?.querySelectorAll("button") || [])].slice(0, 12).map((b) => [b.getAttribute("aria-label") || "", !!b.title, getComputedStyle(b).pointerEvents]),
       errors: errors.slice(0, 6)
     };
