@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.165
+// @version      0.1.166
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.165"),
+    version: getUserscriptVersion("0.1.166"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -6334,6 +6334,14 @@
           }
           return;
         }
+        if (action === "import-editor") {
+          // 0.1.166: 입력칸에 걸어 둔 서식을 만들기 칸으로(저장은 사용자가 [저장]으로). 이름 칸은 그대로 둔다.
+          const style = editorFormatForPreset(state.editor || getInlineToolbarEditor(toolbar), state.selection);
+          if (!Object.keys(style).length) { showStylePresetNote(state.popover, "입력칸에 가져올 서식이 없습니다."); return; }
+          const nameInput = state.popover?.querySelector("[data-style-preset-name]");
+          loadStylePresetIntoBuilder(state.popover, { name: nameInput?.value || "", style, align: state.popover?.getAttribute("data-ccf-builder-align") || "left" });
+          return;
+        }
         if (action === "add") {
           const popoverEl = state.popover;
           const nameInput = popoverEl?.querySelector("[data-style-preset-name]");
@@ -7736,6 +7744,7 @@
       </div>
       <div class="ccf-style-preset-add-row">
         <input type="text" class="ccf-inline-popover-field" data-style-preset-name placeholder="새 프리셋 이름 (미리보기)" spellcheck="false">
+        <button type="button" class="ccf-btn" data-inline-style-action="import-editor" title="입력칸에 걸어 둔 서식(선택한 글이 있으면 그 글에 공통인 서식, 없으면 커서 자리 서식 + 유지 서식)을 만들기 칸에 채웁니다">입력칸 서식 가져오기</button>
       </div>
       <div class="ccf-inline-popover-actions">
         <button type="button" class="ccf-btn primary" data-inline-style-action="add">저장</button>
@@ -12977,6 +12986,26 @@
 
   // 프리셋 모달을 열 때: 서식 바에서 지금 켜져 있는(커서·선택 영역에 적용 중이거나 켜 둔) 굵게·기울임·밑줄·취소선·블러를 빌더 버튼에도 활성으로 표시한다.
   // (예전에는 빌더가 항상 꺼진 채로 열려서, 서식이 켜져 있는데도 해당 버튼이 활성 표시가 안 됐다.) 프리셋을 눌러 불러오면 그 프리셋 값으로 바뀐다.
+  // 0.1.166: 입력칸의 서식 → 프리셋 서식. 선택한 글이 있으면 그 글 전체에 공통인 것만, 없으면 커서 앞 글자의 서식 + 유지 서식.
+  function editorFormatForPreset(editor, selection = null) {
+    if (!editor) return {};
+    const state = ensureEditorState(editor);
+    const sel = selection || getEditorSelection(editor) || { start: 0, end: 0 };
+    const styleAt = (i) => { const out = {}; for (const run of state.runs || []) if (run.start <= i && i < run.end) Object.assign(out, run.style || {}); return out; };
+    let style = null;
+    if (sel.end > sel.start) {
+      for (let i = sel.start; i < sel.end; i += 1) {
+        const here = styleAt(i);
+        style = style === null ? here : Object.fromEntries(Object.entries(style).filter(([key, value]) => JSON.stringify(here[key]) === JSON.stringify(value)));
+        if (!Object.keys(style).length) break;
+      }
+    } else {
+      const keep = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor)) && state.lastStyle ? state.lastStyle : {};
+      style = { ...(sel.start > 0 ? styleAt(sel.start - 1) : {}), ...keep };
+    }
+    return cleanupStyle(style || {});
+  }
+
   function prefillStyleBuilderFromToolbar(popover, toolbar) {
     if (!(popover instanceof HTMLElement) || !(toolbar instanceof HTMLElement)) return;
     for (const key of ["bold", "italic", "underline", "strike", "blur"]) {
