@@ -134,8 +134,8 @@ function refreshBgmBar() {
   if (!ytPlaying) document.getElementById("bgm-name").textContent = roomAudio.media.cfg?.name || roomAudio.sound.cfg?.name || "BGM";
   // two slots like CCFOLIA's bar: BGM01 = the BGM (YouTube or file), BGM02 = the second sound; the one playing is blue, its name is the tooltip
   const slot1 = document.getElementById("bgm-slot1"), slot2 = document.getElementById("bgm-slot2");
-  slot1.classList.toggle("is-on", !!(bgmKey || roomAudio.media.url)); slot1.title = (ytPlaying ? bgmLast?.title : roomAudio.media.cfg?.name) || "";
-  slot2.classList.toggle("is-on", !!roomAudio.sound.url); slot2.title = roomAudio.sound.cfg?.name || "";
+  slot1.classList.toggle("is-on", !!(bgmKey || roomAudio.media.url)); 
+  slot2.classList.toggle("is-on", !!roomAudio.sound.url); 
 }
 let blockedAudio = false;
 // Autoplay blocked (a reload has no click yet): no button as in CCFOLIA's bar, the first click or key on the page starts the sound.
@@ -324,6 +324,44 @@ function showPieceTip(node) {
   pieceTip.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, r.left + r.width / 2 - w / 2))}px`;
   pieceTip.style.top = `${Math.min(innerHeight - pieceTip.offsetHeight - 4, r.bottom + 14)}px`;
 }
+// Button tooltips as measured on CCFOLIA 1.37.6 (MUI): the same box as the panel memo, 14px from the button, centred, kept inside the window, under it (dice and range select: above it),
+// after 100ms (at once when another one closed less than 800ms ago). Only the buttons that have one there; no tooltip for touch or a narrow page.
+const TIP_LABELS = { "채팅 설정": "채팅 메뉴", "이름 색": "캐릭터 색상 변경", "BGM 정지": "BGMを停止する" };
+const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마"]);
+const bgmSlotTip = cfg => `${cfg?.name || "NOTITLE"}\nvol:${cfg?.volume ?? 0} loop:${!cfg || cfg.repeat ? "on" : "off"}`;
+function buttonTip(button) {
+  if (button.id === "bgm-slot1") return { text: bgmKey ? bgmLast?.title || "NOTITLE" : bgmSlotTip(roomAudio.media.cfg) };
+  if (button.id === "bgm-slot2") return { text: bgmSlotTip(roomAudio.sound.cfg) };
+  const label = button.getAttribute("aria-label") || "", text = TIP_LABELS[label] || label;
+  if (/^D\d+$/.test(label) || button.classList.contains("select-tool")) return { text, above: true };
+  return /^\[GM\]/.test(text) || TIP_TEXTS.has(text) ? { text } : null;
+}
+let tipButton = null, tipTimer = 0, tipClosedAt = 0;
+function hideButtonTip() { clearTimeout(tipTimer); if (!tipButton) return; tipButton = null; tipClosedAt = Date.now(); hidePieceTip(); }
+function showButtonTip(button, tip) {
+  pieceTip.textContent = tip.text; pieceTip.hidden = false;
+  const r = button.getBoundingClientRect(), w = pieceTip.offsetWidth, h = pieceTip.offsetHeight;
+  const above = tip.above ? r.top - 14 - h >= 0 : r.bottom + 14 + h > innerHeight;
+  pieceTip.style.left = `${Math.max(0, Math.min(innerWidth - w, r.left + r.width / 2 - w / 2))}px`;
+  pieceTip.style.top = `${above ? r.top - 14 - h : r.bottom + 14}px`;
+  pieceTip.style.transformOrigin = `center ${above ? "bottom" : "top"}`;
+  pieceTip.animate({ opacity: [0, 1] }, { duration: 200, easing: "cubic-bezier(.4,0,.2,1)" });
+  pieceTip.animate({ transform: ["scale(.75, .5625)", "none"] }, { duration: 133, easing: "cubic-bezier(.4,0,.2,1)" });
+}
+document.addEventListener("pointerover", event => {
+  if (event.pointerType !== "mouse" || (innerWidth <= 720 && !chatOnly)) return hideButtonTip();
+  const button = event.composedPath().find(node => node instanceof Element && node.matches("button, .bgm-slot")) || null; // mirrored parts are in shadow roots
+  if (button === tipButton) return;
+  hideButtonTip();
+  if (!button) return;
+  const tip = buttonTip(button);
+  if (tip || button.matches("#chat-close, #chat-open, .pen-fab, #zoom-ctl button")) button.removeAttribute("title"); // no second, browser-drawn tooltip
+  if (!tip) return;
+  tipButton = button;
+  tipTimer = setTimeout(() => showButtonTip(button, buttonTip(button) || tip), Date.now() - tipClosedAt < 800 ? 0 : 100);
+}, true);
+for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, hideButtonTip, true);
+window.addEventListener("blur", hideButtonTip);
 let pieceActionAt = 0;
 function runPieceAction(node) {
   const list = sceneData?.[node.dataset.kind === "marker" ? "markers" : "items"] || [], action = list.find(item => item.id === node.dataset.id)?.action;
@@ -419,7 +457,7 @@ function renderScene(scene) {
       label.dataset.label = item.id; nodes.push(label);
     }
   }
-  hidePieceTip();
+  if (!tipButton) hidePieceTip(); // a redraw of the map does not close a button tooltip
   field.replaceChildren(...nodes);
   renderStatusPanel(s.characters || []);
   renderSpeakers(s.characters || []);
@@ -1816,7 +1854,7 @@ function renderMirroredTopBar() {
   // CCFOLIA's default account picture (sent by the GM page as a data URI) when it has arrived; otherwise a letter
   if (cmMirror.assets["/ccfolia.png"] && avatar) { avatar.src = cmMirror.assets["/ccfolia.png"]; avatar.alt = ""; letter.hidden = true; avatar.after(letter); } else avatar.replaceWith(letter);
   // buttons a player sees on CCFOLIA (lists of the GM tools, the folded menu): same look and place, disabled like on a player screen (measured: only the character list is active)
-  for (const button of bar.querySelectorAll("button[aria-label]")) { const label = button.getAttribute("aria-label"); if (/^\s*\[GM\]/.test(label) || label === "메뉴") { button.title = label; button.disabled = true; button.classList.add("Mui-disabled"); } }
+  for (const button of bar.querySelectorAll("button[aria-label]")) { const label = button.getAttribute("aria-label"); if (/^\s*\[GM\]/.test(label) || label === "메뉴") { button.disabled = true; button.classList.add("Mui-disabled"); button.style.pointerEvents = "auto"; button.style.cursor = "default"; } }
   const dot = document.createElement("i"); dot.style.cssText = "position:absolute;right:3px;bottom:3px;width:12px;height:12px;border-radius:50%;border:2px solid #202020;font-size:0;background:#9e9e9e";
   account.style.position = "relative"; account.append(dot);
   const subtitle = slot("subtitle"); // CCFOLIA's small game-system name after the room title (filled by syncTopBar)
