@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.157
+// @version      0.1.158
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.157"),
+    version: getUserscriptVersion("0.1.158"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1915,10 +1915,11 @@
     const profiles = item.querySelectorAll(
       ".MuiAvatar-root, .MuiListItemAvatar-root, img:not(.ccf-image)"
     );
+    // 0.1.158: 줄에 붙인 컷인 그림은 아바타가 아니다(아바타로 보고 위로 올라가 본문 전체를 숨겼다)
 
     profiles.forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
-      if (messageEl.contains(node)) return;
+      if (messageEl.contains(node) || node.closest(".ccf-cutin-chat-image")) return;
 
       let target = node;
       let depth = 0;
