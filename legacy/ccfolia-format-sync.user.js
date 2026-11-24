@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.163
+// @version      0.1.164
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.163"),
+    version: getUserscriptVersion("0.1.164"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -14418,11 +14418,15 @@
       const st = document.createElement("style"); st.id = "ccf-color-pick-style";
       st.textContent = `#ccf-color-pick{position:fixed;z-index:2147483647;display:grid;gap:8px;width:220px;padding:10px;background:#424242;color:#fff;border-radius:4px;font:13px/1.4 "Noto Sans KR",Roboto,sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)}
 #ccf-color-pick .row{display:flex;gap:6px;align-items:center}#ccf-color-pick .end{justify-content:flex-end}
-#ccf-color-pick input[type=color]{width:36px;height:28px;padding:0;border:0;background:none;cursor:pointer}
-#ccf-color-pick .hex{width:80px;height:26px;padding:0 6px;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:2px;font:inherit}
-#ccf-color-pick .pv{flex:1;height:26px;border-radius:2px;border:1px solid rgba(255,255,255,.3)}
-#ccf-color-pick .recent{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;min-height:28px}#ccf-color-pick .recent small{grid-column:1/-1;color:rgba(255,255,255,.6)}
-#ccf-color-pick .sw{position:relative;height:28px;border-radius:2px;border:1px solid rgba(255,255,255,.25);cursor:pointer}
+#ccf-color-pick .cur{flex:none;width:28px;height:28px;box-sizing:border-box;border-radius:2px;border:1px solid rgba(255,255,255,.3)}
+#ccf-color-pick .hex{flex:1;min-width:0;height:28px;box-sizing:border-box;padding:0 6px;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:2px;font:inherit}
+#ccf-color-pick .eye{flex:none;width:28px;height:28px;padding:0;display:grid;place-items:center;color:#fff}
+#ccf-color-pick .sv{position:relative;height:120px;border-radius:2px;cursor:crosshair;touch-action:none;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent)}
+#ccf-color-pick .hue{position:relative;height:12px;border-radius:6px;cursor:pointer;touch-action:none;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+#ccf-color-pick .knob{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #fff;border-radius:50%;box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.5);pointer-events:none}
+#ccf-color-pick .hue .knob{top:50%}
+#ccf-color-pick .recent{display:grid;grid-template-columns:repeat(6,28px);gap:6px;min-height:28px}#ccf-color-pick .recent small{grid-column:1/-1;color:rgba(255,255,255,.6)}
+#ccf-color-pick .sw{position:relative;width:28px;height:28px;box-sizing:border-box;border-radius:2px;border:1px solid rgba(255,255,255,.25);cursor:pointer}
 #ccf-color-pick .sw b{position:absolute;top:-6px;right:-6px;display:none;width:14px;height:14px;line-height:13px;text-align:center;font-size:11px;color:#fff;background:#616161;border-radius:50%}#ccf-color-pick .sw:hover b{display:block}
 #ccf-color-pick button{padding:4px 14px;color:#2196f3;background:none;border:0;border-radius:4px;font:inherit;font-weight:700;cursor:pointer}#ccf-color-pick button:hover{background:rgba(33,150,243,.08)}`;
       document.head.appendChild(st);
@@ -14430,19 +14434,38 @@
     let value = isHex6(target.value) ? target.value.toLowerCase() : "#ffffff";
     const pop = document.createElement("div");
     pop.id = "ccf-color-pick"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "색 고르기");
-    pop.innerHTML = `<div class="row"><input type="color" aria-label="색 고르기"><input class="hex" maxlength="7" aria-label="색 코드"><span class="pv"></span></div><div class="recent"></div><div class="row end"><button type="button" data-ok>확인</button></div>`;
-    const [native, hex] = pop.querySelectorAll("input"), pv = pop.querySelector(".pv"), recent = pop.querySelector(".recent");
-    const sync = (from) => { if (from !== native) native.value = value; if (from !== hex) hex.value = value; pv.style.background = value; };
+    // 0.1.164: 브라우저 기본 색 고르기(확인 단추 없이 바깥을 눌러야 닫히는 창)를 열지 않고, 이 창 안의 색 판(채도·명도)·색상 막대·스포이트로 고른 뒤 [확인]. 칸은 모두 정사각형, 미리보기는 왼쪽 칸 하나.
+    pop.innerHTML = `<div class="row"><span class="cur" aria-hidden="true"></span><input class="hex" maxlength="7" aria-label="색 코드">${typeof window.EyeDropper === "function" ? '<button type="button" class="eye" data-eye title="화면에서 색 집기" aria-label="화면에서 색 집기"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.12-3.12a1 1 0 0 0 .01-1.42zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg></button>' : ""}</div><div class="sv" aria-label="채도·명도"><span class="knob"></span></div><div class="hue" aria-label="색상"><span class="knob"></span></div><div class="recent"></div><div class="row end"><button type="button" data-ok>확인</button></div>`;
+    const hex = pop.querySelector(".hex"), cur = pop.querySelector(".cur"), recent = pop.querySelector(".recent"), svBox = pop.querySelector(".sv"), hueBar = pop.querySelector(".hue");
+    const toHsv = (c) => { const n = parseInt(c.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b); let h = 0; if (d) { h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360; } return [h, mx ? d / mx : 0, mx]; };
+    const toHex = (h, s, v) => "#" + [5, 3, 1].map((n) => { const k = (n + h / 60) % 6; return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255).toString(16).padStart(2, "0"); }).join("");
+    let hsv = toHsv(value);
+    const sync = (from) => {
+      if (from !== "area") hsv = toHsv(value);
+      if (from !== hex) hex.value = value;
+      cur.style.background = value;
+      svBox.style.backgroundColor = toHex(hsv[0], 1, 1);
+      svBox.firstChild.style.left = `${hsv[1] * 100}%`; svBox.firstChild.style.top = `${(1 - hsv[2]) * 100}%`;
+      hueBar.firstChild.style.left = `${hsv[0] / 3.6}%`;
+    };
+    const drag = (el, apply) => el.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); el.setPointerCapture?.(e.pointerId);
+      const move = (ev) => { const r = el.getBoundingClientRect(); apply(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); value = toHex(...hsv); sync("area"); };
+      move(e); el.addEventListener("pointermove", move);
+      el.addEventListener("pointerup", () => el.removeEventListener("pointermove", move), { once: true });
+    });
+    drag(svBox, (x, y) => { hsv = [hsv[0], x, 1 - y]; });
+    drag(hueBar, (x) => { hsv = [Math.min(359.9, x * 360), hsv[1], hsv[2]]; });
     const drawRecent = () => { const list = readRecentColors(); recent.innerHTML = list.map((c) => `<span class="sw" data-c="${c}" style="background:${c}" title="${c} (우클릭: 삭제)"><b data-del="${c}" title="삭제">×</b></span>`).join("") || "<small>확인으로 적용한 색이 여기에 쌓입니다</small>"; };
     const remove = (c) => { writeRecentColors(readRecentColors().filter((x) => x !== c)); drawRecent(); };
     sync(); drawRecent();
-    native.addEventListener("input", () => { value = native.value.toLowerCase(); sync(native); });
     hex.addEventListener("input", () => { const v = hex.value.trim().replace(/^(?!#)/, "#"); if (isHex6(v)) { value = v.toLowerCase(); sync(hex); } });
     pop.addEventListener("mousedown", (e) => { if (!e.target.closest("input")) e.preventDefault(); }); // 편집 중인 입력칸의 포커스·선택을 지킨다
     pop.addEventListener("contextmenu", (e) => { const sw = e.target.closest(".sw"); if (sw) { e.preventDefault(); remove(sw.dataset.c); } });
     pop.addEventListener("click", (e) => {
       const del = e.target.closest("[data-del]"); if (del) { remove(del.dataset.del); return; }
       const sw = e.target.closest(".sw"); if (sw) { value = sw.dataset.c; sync(); return; }
+      if (e.target.closest("[data-eye]")) { new window.EyeDropper().open().then((res) => { if (isHex6(res?.sRGBHex)) { value = res.sRGBHex.toLowerCase(); sync(); } }).catch(() => {}); return; }
       if (!e.target.closest("[data-ok]")) return;
       writeRecentColors([value, ...readRecentColors().filter((c) => c !== value)]);
       closeColorPick();
