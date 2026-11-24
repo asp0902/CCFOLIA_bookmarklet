@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.71
+// @version      0.5.72
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.71";
+  const VERSION = "0.5.72";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1632,6 +1632,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       if (!(row instanceof HTMLElement)) return;
       const next = rows[i + 1];
       const nextIsCont = next instanceof HTMLElement && next.getAttribute("data-ccf-prose-cont") === "1";
+      // 0.5.72: 나레이션 줄의 위아래 여백은 서식 CSS(묶음 가장자리 16px·안쪽 6px)에 맡긴다 — 아래 패딩을 일반 줄 값(8px)으로 강제해 마지막 나레이션 줄 아래가 좁았다(오리지널 16px, 실측).
+      const narrationRow = row.matches('[data-ccf-narration="1"]') || !!row.querySelector('.ccf-render-root[data-ccf-narration="1"]');
+      if (narrationRow && !nextIsCont && row.getAttribute("data-ccf-prose-cont") === "1") row.setAttribute("data-ccf-prose-cont-last", "1");
+      else row.removeAttribute("data-ccf-prose-cont-last");
       if (nextIsCont) {
         row.setAttribute("data-ccf-prose-cont-leader", "1");
         row.style.removeProperty("border-bottom");
@@ -1646,7 +1650,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         row.style.setProperty("background-position", "16px 100%", "important");
         row.style.setProperty("background-repeat", "no-repeat", "important");
         // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
-        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
+        if (narrationRow) row.style.removeProperty("padding-bottom");
+        else row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
       }
     });
   }
