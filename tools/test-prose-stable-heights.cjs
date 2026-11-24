@@ -24,10 +24,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
     await page.setContent(html([['가', 'a'], ['가', 'b'], ['나', 'c']]));
     await page.evaluate(() => {
-      const state = { entities: { roomMessages: { ids: [], entities: {} } } };
+      // the store like ccfolia's: the rows of the shown tab are idsGroupBy[app.state.roomChatTab] in order (row index = position)
+      const first = [['m1', '가', 'a'], ['m2', '가', 'b'], ['m3', '나', 'c']].map(([_id, name, text]) => ({ _id, name, text, iconUrl: null, channel: 'main' }));
+      const state = { app: { state: { roomChatTab: 'main' } }, entities: { roomMessages: { ids: first.map((m) => m._id), idsGroupBy: { main: first.map((m) => m._id) }, entities: Object.fromEntries(first.map((m) => [m._id, m])) } } };
       const listeners = [];
       window.__store = { getState: () => state, dispatch() {}, subscribe: (f) => { listeners.push(f); return () => {}; } };
-      window.__add = (msg) => { state.entities = { roomMessages: { ids: [...state.entities.roomMessages.ids, msg._id], entities: { ...state.entities.roomMessages.entities, [msg._id]: msg } } }; listeners.forEach((f) => f()); };
+      window.__notify = () => listeners.forEach((f) => f());
+      window.__add = (msg) => { const r = state.entities.roomMessages; state.entities = { roomMessages: { ids: [...r.ids, msg._id], idsGroupBy: { main: [...r.idsGroupBy.main, msg._id] }, entities: { ...r.entities, [msg._id]: msg } } }; listeners.forEach((f) => f()); };
       document.getElementById('root')['__reactContainer$t'] = { stateNode: { current: { memoizedProps: { store: window.__store } } } };
     });
     await page.addScriptTag({ path: path.join(__dirname, '..', 'legacy', 'ccfolia-roll20-css-bridge.user.js') });
@@ -76,6 +79,23 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(end, 6, `list end space ${end} (native ${nativeEnd})`);
     assert.equal(await page.evaluate(() => getComputedStyle([...document.querySelectorAll('ul[role=log] hr')].pop()).visibility), 'hidden', 'the last row line is hidden');
     assert.equal(await page.evaluate(() => getComputedStyle([...document.querySelectorAll('ul[role=log] hr')].pop()).transform), 'none', 'the last row line is not moved (no overflow below the list)');
+    // 0.3.120 tab switch: the store switches the tab first, then the list draws that tab's rows (index 0..). Every row is final at its first measurement.
+    const firstTab = await page.evaluate(() => {
+      const msgs = [['o1', '라', 'x'], ['o2', '라', 'y'], ['o3', '마', 'z']].map(([_id, name, text]) => ({ _id, name, text, iconUrl: null, channel: 'other' }));
+      const s = window.__store.getState(), r = s.entities.roomMessages;
+      s.entities = { roomMessages: { ...r, ids: [...r.ids, ...msgs.map((m) => m._id)], idsGroupBy: { ...r.idsGroupBy, other: msgs.map((m) => m._id) }, entities: { ...r.entities, ...Object.fromEntries(msgs.map((m) => [m._id, m])) } } };
+      s.app = { state: { roomChatTab: 'other' } };
+      return msgs;
+    });
+    const tabHeights = await page.evaluate((msgs) => {
+      window.__notify(); // the store tells its subscribers (the tab changed) before the list draws the tab
+      const box = document.getElementById('box'); box.textContent = '';
+      for (const [i, m] of msgs.entries()) { const t = document.createElement('template'); t.innerHTML = `<div data-index="${i}"><div class="MuiListItem-root"><div class="MuiListItemAvatar-root"><img src="/blank.gif"></div><div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">${m.name}</h6><p class="MuiListItemText-secondary">${m.text}</p></div></div><hr class="MuiDivider-root MuiDivider-middle"></div>`; box.append(t.content.firstChild); }
+      return [...box.children].map((w) => w.getBoundingClientRect().height);
+    }, firstTab);
+    await page.waitForTimeout(200);
+    assert.deepEqual(await heights(), tabHeights, `tab switch: first measurements ${tabHeights} = final`);
+    assert.deepEqual(await page.evaluate(() => window.__CCF_PROSE_MODE_DEBUG__.prediction().misses), 0, 'no wrong prediction');
     assert.deepEqual(errors, []);
     console.log(`prose stable heights PASS (between groups ${nativeSep}, list end ${end})`);
   } finally { await browser.close(); }
