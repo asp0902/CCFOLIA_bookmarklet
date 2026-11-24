@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.69
+// @version      0.5.70
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.69";
+  const VERSION = "0.5.70";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -2200,10 +2200,18 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     const endsWithCutin = (body) => { try { return Object.values(findStore()?.getState()?.entities?.roomEffects?.entities || {}).some((effect) => { const name = typeof effect?.name === "string" ? effect.name : ""; return !!name && name.length <= body.length && body.lastIndexOf(name) + name.length === body.length; }); } catch (_) { return false; } };
     // 0.5.65: 플레이룸이 서식 표시({f:..|..|}·{n:1|..|})로 감싼 커맨드·컷인도 표시를 벗긴 글로 판정한다(화자별 글꼴·나레이션을 켠 채 주사위를 굴려도 굴려지게).
     const bareText = meta ? "" : parseFormatMarkers(stripEnvelopes(text)).text;
-    const isCommand = !meta && (isChatCommandText(stripEnvelopes(text)) || endsWithCutin(stripEnvelopes(text)) || isChatCommandText(bareText) || endsWithCutin(bareText));
+    // 0.5.70: 본문 + 끝의 @컷인(공백 없는 낱말)은 커맨드가 아니라 본문이다 — 나레이션·서식을 싣고, 끝의 이름은 코코포리아처럼 저장하지 않고 재생만 한다(커맨드로 다뤄 나레이션이 풀렸다).
+    const bodyCutin = (value) => { const body = String(value || "").replace(/[ 	]+$/, ""), tail = cutinAtTail(body); return tail && body !== tail && !isChatCommandText(body) ? tail : ""; };
+    const cutinInBody = meta ? "" : (bodyCutin(stripEnvelopes(text)) || bodyCutin(bareText));
+    const isCommand = !meta && !cutinInBody && (isChatCommandText(stripEnvelopes(text)) || endsWithCutin(stripEnvelopes(text)) || isChatCommandText(bareText) || endsWithCutin(bareText));
     const parsed = meta ? { text: String(text), runs: [], alignRuns: [] }
       : isCommand ? { text: isChatCommandText(stripEnvelopes(text)) || endsWithCutin(stripEnvelopes(text)) ? stripEnvelopes(text) : bareText, runs: [], alignRuns: [], narration: false }
       : parseFormatMarkers(stripEnvelopes(text));
+    if (cutinInBody) { // 끝의 이름을 떼고, 그 뒤로 넘어간 서식 범위는 잘라 낸다
+      const end = parsed.text.replace(/[ 	]+$/, "").length - cutinInBody.length;
+      const clip = (runs) => (runs || []).filter((run) => run.start < end).map((run) => ({ ...run, end: Math.min(run.end, end) }));
+      parsed.text = parsed.text.slice(0, end); parsed.runs = clip(parsed.runs); parsed.alignRuns = clip(parsed.alignRuns);
+    }
     const cleanText = parsed.text;
     const rolled = rollExtend || (meta ? null : evaluateDiceCommand(cleanText));
     let outText = cleanText;
@@ -2218,6 +2226,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         v: 1, text: cleanText,
         formatRuns: [...parsed.runs, ...extra.runs], alignRuns: alignAll,
         blockStyle: { ...(narrate ? { narration: true } : {}), ...(breakHere ? { breakBefore: true } : {}) },
+        ...(cutinInBody && cutinHasPicture(cutinInBody) ? { cutin: cutinInBody } : {}),
         ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {})
       };
       // format-sync 형식: 보이는 텍스트 뒤에 봉투(접미사).
@@ -2225,8 +2234,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     }
     // 0.5.68: 코코포리아 입력칸처럼 글 끝의 "@컷인 이름"(공백 없는 낱말)은 기록에 남기지 않고 재생만 한다(번들 Ne: text.replace(/@\S+$/, "")).
     // 그림 있는 컷인이면 이름을 봉투에 실어(이름만이면 봉투의 글, 글이 있으면 cutin) 줄에 그림이 남게, 남는 글이 없고 그림도 없으면 쓰지 않는다.
-    const cutinTail = meta?.source ? "" : cutinAtTail(outText);
-    if (cutinTail) {
+    const cutinTail = meta?.source ? "" : (cutinInBody || cutinAtTail(outText));
+    if (cutinInBody) { if (cutinHasPicture(cutinInBody) && !outText.includes(CCF_INVIS_START)) outText += encodeEnvelopeToInvisible({ v: 1, text: outText, formatRuns: [], alignRuns: [], blockStyle: {}, cutin: cutinInBody }); }
+    else if (cutinTail) {
       const rest = outText.slice(0, outText.length - cutinTail.length), plainRest = stripEnvelopes(rest);
       if (cutinHasPicture(cutinTail)) outText = rest.includes(CCF_INVIS_START) ? rest : rest + encodeEnvelopeToInvisible({ v: 1, text: rest || cutinTail, formatRuns: [], alignRuns: [], blockStyle: {}, ...(rest ? { cutin: cutinTail } : {}) });
       else if (!plainRest.trim()) { triggerRoomEffects(ctx, cutinTail); return; }

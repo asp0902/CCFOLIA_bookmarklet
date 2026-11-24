@@ -22,6 +22,10 @@ assert.equal(ctx.api.cutinHasPicture('@그림'), true); assert.equal(ctx.api.cut
 assert.match(panel, /const cutinTail = meta\?\.source \? "" : cutinAtTail\(outText\);/);
 assert.match(panel, /else if \(!plainRest\.trim\(\)\) \{ triggerRoomEffects\(ctx, cutinTail\); return; \}/, 'no picture, nothing left: no message, the cut-in still plays');
 assert.match(panel, /if \(isCommand \|\| cutinTail\) triggerRoomEffects\(ctx, cutinTail \|\| cleanText\);/);
+// 0.5.70: text + @cut-in from the panel is body text (narration / format kept), not a command; the name is cut off, the picture name rides as cutin
+assert.match(panel, /const isCommand = !meta && !cutinInBody && \(/, 'a body ending with a cut-in is not a command');
+assert.match(panel, /\.\.\.\(cutinInBody && cutinHasPicture\(cutinInBody\) \? \{ cutin: cutinInBody \} : \{\}\),/);
+assert.match(panel, /const cutinTail = meta\?\.source \? "" : \(cutinInBody \|\| cutinAtTail\(outText\)\);/);
 
 // playroom: the envelope-only row shows no letters and the picture of the played cut-in; text + envelope(cutin) keeps the text and adds the picture
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
