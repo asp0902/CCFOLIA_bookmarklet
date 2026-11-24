@@ -821,6 +821,7 @@ function fillMirrorRow(row, message) {
     let info = { narration: false };
     if (cmMirror.toolkit()) info = renderRich(body, message.text || "", true);
     else body.textContent = withoutCutinName(decodeEnvelope(message.text || "").visible);
+    markParenBody(body, message);
     if (info.narration) row.querySelector(".MuiListItem-root")?.setAttribute("data-ccf-narration", "1");
     if (info.bubble) row.querySelector(".MuiListItemText-root")?.classList.add("ccr20-roll20-bubble-container");
     const tail = () => body.lastElementChild || body;
@@ -873,7 +874,7 @@ const renderState = data => {
     author.style.color = /^#[0-9a-f]{3,8}$/i.test(message.color || "") ? message.color : "#888";
     const time = document.createElement("span"); time.className = "msg-time"; time.textContent = messageTime(message.createdAt);
     head.append(author, " - ", time);
-    const body = document.createElement("p"); renderRich(body, message.text || "");
+    const body = document.createElement("p"); renderRich(body, message.text || ""); markParenBody(body, message);
     // Native rows show the typed text, then the dice result in a dimmer colour (measured: rgba(255,255,255,.7)).
     if (message.roll?.result) ((body.lastElementChild || body)).append(rollResultSpan(message.roll));
     // A message edited in CCFOLIA ends with " [편집 완료]" (measured: inline span, 12px, #757575, the same as the time).
@@ -1378,6 +1379,43 @@ function openColorPick(target) {
 document.addEventListener("click", e => { const t = e.target; if (!(t instanceof HTMLInputElement) || t.type !== "color" || !t.closest(".fmt-color")) return; e.preventDefault(); openColorPick(t); }, true);
 document.addEventListener("pointerdown", e => { const pop = document.getElementById("color-pick"); if (pop && !e.composedPath().includes(pop)) closeColorPick(); }, true);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("color-pick")) { e.stopPropagation(); closeColorPick(); } }, true);
+// (declared before the format bar block below runs, which builds the () button)
+// 회색괄호 (as format-sync 0.1.168): on by default, the choice to turn it off is saved; while on, messages already on screen show their parentheses grey too.
+const PAREN_GRAY_KEY = "capybara-paren-gray-v1", PAREN_GRAY = "#878787";
+const readParenGray = () => { try { return localStorage.getItem(PAREN_GRAY_KEY) !== "0"; } catch (_) { return true; } };
+const fmtState = { narration: false, parenGray: readParenGray() };
+// Grey the (…) / （…） parts of a drawn message body: text inside an element the sender coloured, code, or a dice result is left alone. Marked so it can be undone.
+function greyParens(body) {
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT), nodes = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node);
+  for (const node of nodes) {
+    const host = node.parentElement;
+    if (!host || host.closest(".paren-gray, .roll-result, code, .msg-edited") || (host !== body && host.closest("[style*='color']") && body.contains(host.closest("[style*='color']")))) continue;
+    const text = node.nodeValue, re = /[(（][^()（）\n]*[)）]/g;
+    if (!re.test(text)) continue;
+    re.lastIndex = 0;
+    const frag = document.createDocumentFragment(); let at = 0;
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+      if (m.index > at) frag.append(text.slice(at, m.index));
+      const span = document.createElement("span"); span.className = "paren-gray"; span.style.color = PAREN_GRAY; span.textContent = m[0]; frag.append(span);
+      at = m.index + m[0].length;
+    }
+    if (at < text.length) frag.append(text.slice(at));
+    node.replaceWith(frag);
+  }
+}
+function ungreyParens(body) { body.querySelectorAll(".paren-gray").forEach(span => span.replaceWith(span.textContent)); body.normalize(); }
+// A drawn body: grey now if the switch is on; remembered so a switch change can redo all of them (dice rows are left alone).
+function markParenBody(body, message) { if (message?.roll?.result) return; body.dataset.parenable = "1"; if (fmtState.parenGray) greyParens(body); }
+function parenGrayButton(mk) {
+  const b = mk("()", "회색괄호", () => {
+    fmtState.parenGray = !fmtState.parenGray;
+    try { localStorage.setItem(PAREN_GRAY_KEY, fmtState.parenGray ? "1" : "0"); } catch (_) {}
+    b.setAttribute("aria-pressed", String(fmtState.parenGray));
+    for (const root of [document, ...[...document.querySelectorAll("*")].filter(el => el.shadowRoot).map(el => el.shadowRoot)]) root.querySelectorAll("[data-parenable]").forEach(body => (fmtState.parenGray ? greyParens(body) : ungreyParens(body))); // mirrored rows live in a shadow root
+  });
+  b.setAttribute("aria-label", "회색괄호"); b.setAttribute("aria-pressed", String(fmtState.parenGray)); return b;
+}
 function wrapSelection(open, close) {
   const input = document.getElementById("chat-input"); const a = input.selectionStart ?? 0, z = input.selectionEnd ?? a;
   const middle = input.value.slice(a, z);
@@ -1466,7 +1504,7 @@ refreshSpeakerUi();
   };
   // the toolkit's second row (what were the Aa and ⋯ menus): Rb Tip Bl </> Nr ()
   const row2 = document.createElement("div"); row2.className = "fmt-row fmt-row2";
-  row2.append(mk("Rb", "루비", () => wrapSelection("[", "|]")), mk("Tip", "툴팁", () => wrapSelection("[", "^]")), mk("Bl", "블러", () => wrapSelection("||", "||")), mk("</>", "코드", () => wrapSelection("`", "`")), toggle("Nr", "나레이션", "narration"), toggle("()", "괄호 회색", "parenGray"));
+  row2.append(mk("Rb", "루비", () => wrapSelection("[", "|]")), mk("Tip", "툴팁", () => wrapSelection("[", "^]")), mk("Bl", "블러", () => wrapSelection("||", "||")), mk("</>", "코드", () => wrapSelection("`", "`")), toggle("Nr", "나레이션", "narration"), parenGrayButton(mk));
   // font menu (가): one list, Korean names in 가나다 order, then Latin names; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
   const fontBox = group("font", "가", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
   fontMenu.classList.add("fmt-font-menu");
@@ -1531,7 +1569,6 @@ refreshSpeakerUi();
   diceRow.after(row); row.after(row2);
 }
 // What the toggles do to a message when it is sent (the GM side turns the markers into the format envelope).
-const fmtState = { narration: false, parenGray: false };
 // Fonts per speaker (the toolkit's rule, #637): the narration row while narration is on, else the row of the current name; a font picked by hand wins.
 // Commands stay raw: the GM side drops the markers of a message that is a command.
 const SPEAKER_FONT_KEY = "capybara-speaker-fonts-v1";
@@ -1567,7 +1604,7 @@ function openSpeakerFonts() {
 }
 function outgoingText(text) {
   let out = text;
-  if (fmtState.parenGray) out = out.replace(/([(（][^()（）\n]*[)）])/g, "{c:#9e9e9e|$1|}");
+  if (fmtState.parenGray) out = out.replace(/([(（][^()（）\n]*[)）])/g, `{c:${PAREN_GRAY}|$1|}`);
   const font = speakerFontNow();
   if (font && !/\{f:[a-z0-9-]+\|/.test(out)) out = `{f:${font}|${out}|}`;
   if (fmtState.narration) out = `{n:1|${out}|}`;

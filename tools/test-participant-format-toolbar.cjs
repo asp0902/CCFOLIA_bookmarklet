@@ -22,7 +22,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.goto('http://relay.test/#room=x');
   await page.evaluate(() => { document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none'; renderState({ roomTitle: 'r', gmOnline: true, messages: [], channels: [{ id: 'main', label: '메인' }] }); });
   assert.equal(await page.locator('.fmt-row2 button[aria-label="나레이션"]').count(), 1); // 2026-11-24: the Aa / ⋯ items are a second row
-  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.fmt-row2 button')].map((b) => b.getAttribute('aria-label'))), ['루비', '툴팁', '블러', '코드', '나레이션', '괄호 회색']);
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.fmt-row2 button')].map((b) => b.getAttribute('aria-label'))), ['루비', '툴팁', '블러', '코드', '나레이션', '회색괄호']);
   assert.equal(await page.locator('.fmt-group[data-group="deco"], .fmt-group[data-group="extra"]').count(), 0);
   // 2026-11-24: two quick cut-in buttons sit right before the send button, all three 38px wide
   assert.deepEqual(await page.evaluate(() => [...document.querySelector('.dice-row').children].slice(-3).map((n) => [n.classList.contains('quick-cutin') ? 'quick' : n.type, Math.round(n.getBoundingClientRect().width)])), [['quick', 38], ['quick', 38], ['submit', 38]]);
@@ -52,11 +52,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.fill('.fmt-size', '30'); await page.press('.fmt-size', 'Enter');
   assert.equal(await page.inputValue('#chat-input'), '{s:30|크게|}');
   // toggles are applied when sending
-  await page.click('.fmt-row2 button[aria-label="나레이션"]'); await page.click('.fmt-row2 button[aria-label="괄호 회색"]');
+  await page.click('.fmt-row2 button[aria-label="나레이션"]'); // 회색괄호 is on by default (0.1.168)
   assert.equal(await page.getAttribute('.fmt-row2 button[aria-label="나레이션"]', 'aria-pressed'), 'true');
   await page.fill('#chat-input', '문을 연다 (조용히)'); await page.press('#chat-input', 'Enter'); await page.waitForTimeout(500);
-  assert.equal(sent[0].text, '{n:1|문을 연다 {c:#9e9e9e|(조용히)|}|}');
-  await page.click('.fmt-row2 button[aria-label="나레이션"]'); await page.click('.fmt-row2 button[aria-label="괄호 회색"]');
+  assert.equal(sent[0].text, '{n:1|문을 연다 {c:#878787|(조용히)|}|}');
+  await page.click('.fmt-row2 button[aria-label="나레이션"]');
   // a quick cut-in button: nothing chosen -> the chooser (known cut-ins + free text); chosen -> sent as it is from the current speaker and tab, the typed text stays
   await page.evaluate(() => { sceneData = { ...(sceneData || {}), cutinNames: ['@버튼'] }; });
   await page.click('.quick-cutin[data-quick="0"]');
