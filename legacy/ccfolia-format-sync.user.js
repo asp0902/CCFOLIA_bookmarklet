@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.153
+// @version      0.1.154
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.153"),
+    version: getUserscriptVersion("0.1.154"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -299,7 +299,7 @@
         let key = "", url = "";
         try { key = cutinChatMessageText(el); url = cutinChatUrlFor(key); } catch (error) { key = `오류:${error.message}`; }
         const blocked = el.closest('.MuiDialog-root, .MuiPopover-root, .MuiMenu-root, .MuiModal-root, [role="dialog"], [role="menu"], [role="listbox"], [data-ccf-safe-markup="1"]');
-        return { end: key.slice(-6), inChat: cutinChatIsMessageText(el), log: !!el.closest('[role="log"]'), panel: !!el.closest(".ccf-scp-panel"), blockedBy: blocked ? (blocked.getAttribute("role") || String(blocked.className).split(" ")[0]).slice(0, 24) : "", matched: !!url, otherImg: [...el.querySelectorAll("img")].filter((img) => !img.closest(".ccf-cutin-chat-image")).length, attached: !!el.querySelector(".ccf-cutin-chat-image"), tag: el.tagName.toLowerCase() + "." + String(el.className).split(" ").filter((c) => !c.startsWith("css-")).slice(0, 2).join(".") };
+        return { end: key.slice(-6), inChat: cutinChatIsMessageText(el), log: !!el.closest('[role="log"]'), panel: !!el.closest(".ccf-scp-panel"), blockedBy: blocked ? (blocked.getAttribute("role") || String(blocked.className).split(" ")[0]).slice(0, 24) : "", matched: !!url, otherImg: [...el.querySelectorAll("img")].filter((img) => !img.closest(".ccf-cutin-chat-image")).length, attached: !!el.querySelector(".ccf-cutin-chat-image"), textHidden: el.getAttribute("data-ccf-cutin-hide") === "1" || el.getAttribute("data-ccf-cutin-at") === "1", emptyRow: (el.getAttribute("data-ccf-cutin-hide") === "1" || el.getAttribute("data-ccf-cutin-at") === "1") && !el.querySelector(".ccf-cutin-chat-image img"), tag: el.tagName.toLowerCase() + "." + String(el.className).split(" ").filter((c) => !c.startsWith("css-")).slice(0, 2).join(".") };
       }).filter((row) => row.matched || /[＞@]|CHA/.test(row.end));
     },
     breakDiag() {
