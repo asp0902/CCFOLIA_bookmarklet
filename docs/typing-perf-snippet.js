@@ -1,6 +1,7 @@
 // 입력 지연 진단 (읽기 전용 — 입력칸에 아무것도 쓰지 않음). 룸 화면 콘솔에 붙여 넣고 Enter → 10초 동안 평소처럼 입력칸에 글을 쳐 보세요(보내지 않아도 됨).
 // 결과는 클립보드에 복사됨. 메시지 내용은 싣지 않는다.
 (async () => {
+  const _copy = typeof copy === "function" ? copy : null; // 크롬 콘솔의 copy()는 기다린(await) 뒤에는 동작하지 않아 여기서 잡아 둔다
   const out = { versions: { loader: window.__CAPYBARA_TOOLKIT__?.version || null, formatSync: window.__CCF_FORMAT_SYNC_RUNTIME__?.version || null }, dpr: devicePixelRatio };
   let longN = 0, longMs = 0, keys = 0, muts = 0;
   const tally = {};
@@ -24,5 +25,5 @@
     nodes: document.getElementsByTagName("*").length
   });
   console.warn("[입력 지연 진단]", out);
-  try { copy(JSON.stringify(out, null, 1)); console.warn("결과가 클립보드에 복사되었습니다."); } catch (_) {}
+  { const _t = JSON.stringify(out, null, 1); window.__CCF_DIAG_RESULT__ = _t; try { _copy?.(_t); } catch (_) {} console.warn("끝났습니다. 클립보드에 안 들어갔으면 콘솔에 copy(__CCF_DIAG_RESULT__) 를 입력하고 Enter 하세요."); }
 })();

@@ -1,6 +1,7 @@
 // 사이코로픽션 시트 중복 진단(읽기만 함, 아무것도 쓰지 않음). GM 화면의 코코포리아 룸에서 F12 → Console 에 붙여 넣고 Enter.
 // 결과는 클립보드에 복사됩니다. 본문·비밀·사명은 담지 않습니다(문서 id, 소유자 uid 앞 6자, 수정 시각, 연결 캐릭터 이름, json 길이, 삭제 표시).
 (async () => {
+  const _copy = typeof copy === "function" ? copy : null; // 크롬 콘솔의 copy()는 기다린(await) 뒤에는 동작하지 않아 여기서 잡아 둔다
   const fb = window.__CCF_HANDOUT_FB__?.state?.();
   const room = window.__CCF_HANDOUT_FB__?.roomKey?.() || location.pathname.split("/").pop();
   if (!fb?.db) { console.warn("[시트 진단] 핸드아웃 Firebase 연결이 없습니다(룸 동의 후 다시)."); return; }
@@ -18,5 +19,5 @@
   try { out.local = (window.__CCF_CHARACTER_SHEET_DEBUG__?.data()?.sheets || []).map((s) => ({ id: String(s.id).slice(0, 8), player: String(s.player || "").slice(0, 20), updatedAt: s.updatedAt ? new Date(s.updatedAt).toISOString() : "" })); } catch (_) { /* 시트 스크립트 없음 */ }
   out.docs.sort((a, b) => a.player.localeCompare(b.player) || a.updatedAt.localeCompare(b.updatedAt));
   console.warn("[시트 진단]", out);
-  copy(JSON.stringify(out, null, 1));
+  { const _t = JSON.stringify(out, null, 1); window.__CCF_DIAG_RESULT__ = _t; try { _copy?.(_t); } catch (_) {} console.warn("끝났습니다. 클립보드에 안 들어갔으면 콘솔에 copy(__CCF_DIAG_RESULT__) 를 입력하고 Enter 하세요."); }
 })();
