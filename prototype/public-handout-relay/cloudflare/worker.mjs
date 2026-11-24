@@ -355,7 +355,7 @@ export class RoomRelay {
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
         markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))
-          .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
+          .map(item => ({ locked: item.locked === true, id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
         // Card decks: only the back and the number of cards left (the faces of the cards inside never reach the relay). Dice symbols: position, size, faces, and the value unless it is hidden.
         decks: (Array.isArray(body.decks) ? body.decks : []).slice(0, 50).filter(item => cdn(item?.coverUrl) || staticCover(item?.coverUrl))
           .map(item => ({ id: text(item.id, 60), x: num(item.x), y: num(item.y), z: num(item.z), layer: Math.max(0, Math.min(1000, Math.round(num(item.layer, 1)))), width: num(item.width, 1), height: num(item.height, 1), count: Math.max(0, Math.min(9999, Math.round(num(item.count)))), coverUrl: cdn(item.coverUrl) || staticCover(item.coverUrl) })),
