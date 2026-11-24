@@ -37,6 +37,7 @@ assert.doesNotMatch(source, /stopCcfYoutubeBgm\("remote-switch"\)/, 'remote swit
 // 3) playroom
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const dir = path.join(root, 'prototype', 'public-handout-relay', 'public');
+const sc0 = { fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [], characters: [], sound: null, effects: [], crossfade: 0 };
 const scene = (media, crossfade = 0) => ({ fieldWidth: 40, fieldHeight: 20, fieldObjectFit: 'fill', items: [], characters: [], media, sound: null, effects: [], crossfade });
 const file = (name) => ({ url: `https://storage.ccfolia-cdn.net/${name}.mp3`, name, volume: 1, repeat: true });
 (async () => {
@@ -90,6 +91,17 @@ const file = (name) => ({ url: `https://storage.ccfolia-cdn.net/${name}.mp3`, na
     await page.evaluate((sc) => syncRoomAudio(sc), scene(file('c'), 0));
     await page.evaluate((sc) => { window.__first = roomAudio.media.el; syncRoomAudio(sc); }, scene(file('d'), 0));
     assert.equal(await page.evaluate(() => window.__first === roomAudio.media.el && /d\.mp3$/.test(roomAudio.media.el.src) && roomAudio.media.el.volume === 1), true, 'no crossfade: same element, switched at once');
+    // YouTube -> file (crossfade off in the room too): the YouTube fades out (stop), the new file rises from 0 instead of starting at full volume
+    await page.evaluate((sc) => syncRoomAudio(sc), { ...sc0, media: null });
+    await page.evaluate(() => { playBgm({ state: 'playing', videoId: 'ccccccccccc', startedAt: 9, title: 'C' }); });
+    await page.waitForTimeout(50);
+    await page.evaluate(() => { const p = window.__yts[window.__yts.length - 1]; p.st = 1; playBgm({ state: 'stopped' }); });
+    await page.evaluate((sc) => syncRoomAudio(sc), { ...sc0, media: { url: 'https://storage.ccfolia-cdn.net/e.mp3', name: 'e', volume: 1, repeat: true } });
+    await page.waitForTimeout(600);
+    const rising = await page.evaluate(() => roomAudio.media.el.volume);
+    assert.ok(rising > 0 && rising < 1, `file rises after YouTube ${rising}`);
+    await page.waitForTimeout(1200);
+    assert.equal(await page.evaluate(() => roomAudio.media.el.volume), 1);
     // the GM page sends the room's setting; the Worker keeps it
     assert.match(fs.readFileSync(path.join(root, 'legacy/ccfolia-chat-panel.user.js'), 'utf8'), /crossfade: room\.enableCrossfade === true \? Math\.max\(0\.1, Math\.min\(10, num\(room\.crossfadeDuration, 1\)\)\) : 0/);
     assert.match(fs.readFileSync(path.join(root, 'prototype/public-handout-relay/cloudflare/worker.mjs'), 'utf8'), /crossfade: Math\.max\(0, Math\.min\(10, num\(body\.crossfade\)\)\)/);

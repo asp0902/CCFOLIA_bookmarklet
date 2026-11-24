@@ -179,6 +179,8 @@ function syncRoomAudio(scene) {
       slot.url = ""; slot.cfg = null; continue;
     }
     if (sounding && slot.url !== cfg.url) { fadeOutAudio(slot.el, fadeMs); slot.el = newRoomAudio(); slot.gain = 0; clearInterval(slot.fade); slot.fade = ramp(fadeMs, r => { slot.gain = r; applyRoomAudioVolume(); }); }
+    // YouTube -> file: the YouTube BGM goes down (stop fade), the new file comes up over the same length instead of starting at full volume
+    else if (kind === "media" && slot.url !== cfg.url && (ytOld || ytSounding())) { slot.gain = 0; clearInterval(slot.fade); slot.fade = ramp(fadeMs || YT_FADE_MS, r => { slot.gain = r; applyRoomAudioVolume(); }); }
     slot.cfg = cfg; if (!slot.el) slot.el = newRoomAudio(); slot.el.loop = cfg.repeat; applyRoomAudioVolume();
     if (slot.url !== cfg.url) {
       slot.url = cfg.url; slot.el.src = cfg.url; slot.el.currentTime = 0;
