@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.250";
-  const BUILD_ID = "2026-11-24-launcher-like-ccfolia-fab-421";
+  const VERSION = "0.3.251";
+  const BUILD_ID = "2026-11-24-launcher-left-of-pencil-422";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -1077,8 +1077,8 @@
     followCcfoliaFab();
   }
 
-  // 저장 위치가 없으면 연필 버튼 옆(중심 높이 같게, 16px 간격): 오른쪽에 채팅 드로어 전까지 자리가 있으면 오른쪽, 없으면 왼쪽
-  // (실측: 연필 버튼 오른쪽은 드로어를 펼치면 15px, 접으면 화면 끝까지 16px 뿐이라 보통 왼쪽). 드로어를 여닫으면 연필 버튼이 움직이므로 저장 전까지 따라간다.
+  // 저장 위치가 없으면 연필 버튼 바로 왼쪽(중심 높이 같게). 간격 24px = 코코포리아 버튼끼리의 간격(실측: 축소 버튼 아래 → 연필 버튼 위 24px).
+  // 연필 왼쪽에는 코코포리아 버튼이 없다(확대·축소·슬라이더는 연필 위 세로 줄, 실측). 드로어를 여닫으면 연필 버튼이 움직이므로 저장 전까지 따라간다.
   // 연필 버튼이 5초 안에 나타나지 않으면(홈 화면 등) 예전 기본 위치(오른쪽 아래 16px).
   function followCcfoliaFab() {
     const startedAt = Date.now();
@@ -1095,12 +1095,8 @@
     const r = fab.getBoundingClientRect();
     const size = launcherSize(fab);
     setLauncherSize(size);
-    const drawers = [...document.querySelectorAll(".MuiDrawer-paper")].map((d) => d.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0 && q.left > r.left);
-    const limit = Math.min(window.innerWidth, ...drawers.map((q) => q.left));
-    const gap = 16; // 연필 버튼과의 간격(그 버튼의 화면 아래 여백과 같은 값)
-    const rightX = r.right + gap;
-    const x = rightX + size + 8 <= limit ? rightX : r.left - gap - size;
-    applyLauncherPosition({ x, y: r.top + (r.height - size) / 2 });
+    const gap = 24;
+    applyLauncherPosition({ x: r.left - gap - size, y: r.top + (r.height - size) / 2 });
   }
 
   function applyLauncherPosition(position) {
