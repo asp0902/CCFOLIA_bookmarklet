@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.68
+// @version      0.5.69
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.68";
+  const VERSION = "0.5.69";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -1031,15 +1031,16 @@
 
     const img = row.querySelector(".MuiListItemAvatar-root img");
     if (img) {
-      if (msg.icon) img.src = msg.icon;
-      else img.removeAttribute("src");
+      // 0.5.69: 아이콘 없는 화자는 오리지널처럼 빈 회색 칸(그림 없는 img 가 깨진 그림 표시로 보였다)
+      if (msg.icon) { img.src = msg.icon; img.style.removeProperty("visibility"); }
+      else { img.removeAttribute("src"); img.style.setProperty("visibility", "hidden"); }
     }
 
     const head = row.querySelector("h6.MuiListItemText-primary");
     if (head) {
       const nameNode = [...head.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
-      if (nameNode) nameNode.nodeValue = msg.name;
-      else head.insertBefore(document.createTextNode(msg.name), head.firstChild);
+      if (nameNode) nameNode.nodeValue = shownName(msg);
+      else head.insertBefore(document.createTextNode(shownName(msg)), head.firstChild);
       const caption = head.querySelector("span");
       if (caption) caption.textContent = ` - ${formatTime(msg.at)}`;
       if (msg.color) head.style.color = msg.color;
@@ -1572,6 +1573,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     if (!merge || !msg) return null;
     return split ? `${msg.name} ${msg.icon || ""}` : msg.name;
   }
+  // 이름 없는 화자: 오리지널 채팅은 "noname" 으로 보인다(자료 값 "이름 없음"은 그대로 — 묶음·중계가 쓴다)
+  function shownName(msg) { return msg.name === "이름 없음" ? "noname" : msg.name; }
   function buildRow(msg, prevName) {
     return decorateHideState(buildRowCore(msg, prevName), msg);
   }
@@ -1598,7 +1601,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       head.className = "ccf-scp-head";
       const nameEl = document.createElement("span");
       nameEl.className = "ccf-scp-name";
-      nameEl.textContent = msg.name;
+      nameEl.textContent = shownName(msg);
       if (msg.color) nameEl.style.color = msg.color;
       head.appendChild(nameEl);
       const timeEl = document.createElement("span");
