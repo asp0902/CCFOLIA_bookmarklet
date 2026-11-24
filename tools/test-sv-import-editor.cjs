@@ -18,16 +18,15 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await bar.waitFor({ state: 'attached', timeout: 8000 });
     const ta = page.locator('#composer textarea');
     await ta.click(); await page.keyboard.type('가나다라마');
-    const select = async (a, z) => { await ta.focus(); await page.keyboard.press('Control+Home'); for (let i = 0; i < a; i++) await page.keyboard.press('ArrowRight'); for (let i = a; i < z; i++) await page.keyboard.press('Shift+ArrowRight'); await page.waitForTimeout(80); };
-    // bold + red + 24 on "가나다"
+    const select = async (a, z) => { await ta.evaluate((t, [a, z]) => { t.focus(); t.setSelectionRange(a, z); document.dispatchEvent(new Event('selectionchange')); }, [a, z]); await page.waitForTimeout(200); };
+    // bold + red + 24 on "가나다", in that order (0.1.167: a colour / size no longer drops the bold)
+    await select(0, 3);
+    await bar.locator('[data-inline-command="bold"]').click();
     await select(0, 3);
     await bar.locator('[data-inline-color="color"]').click();
     await page.locator('#ccf-color-pick .hex').fill('#ff0000'); await page.locator('#ccf-color-pick [data-ok]').click();
     await select(0, 3);
     await bar.locator('[data-inline-size]').fill('24'); await bar.locator('[data-inline-size]').press('Enter');
-    // bold last: applying a colour to bold text currently drops the bold (separate existing bug, to fix next)
-    await select(0, 3);
-    await bar.locator('[data-inline-command="bold"]').click();
     // open Sv with "가나다" selected and import
     await select(0, 3);
     await bar.locator('[data-inline-command="style-clipboard"]').click();
