@@ -23,6 +23,13 @@
     lastBgm = { state: d.state === "playing" ? "playing" : "stopped", videoId: clean(d.videoId, 20), title: clean(d.title, 200), loop: d.loop !== false };
     if (roomId) emit({ action: "bgm", bgm: lastBgm });
   });
+  // The room's effective theme from the toolkit's theme-switcher (values only); the bridge re-sends the last one whenever the room (re)connects.
+  let lastTheme = null;
+  window.addEventListener("capybara-theme-signal", event => {
+    const d = event.detail || {};
+    lastTheme = { theme: d.theme && typeof d.theme === "object" ? d.theme : null, sheet: clean(d.sheet, 40) };
+    if (roomId) emit({ action: "theme", theme: lastTheme });
+  });
   // "Dicebot engine : BCDice@x.y.z" in CCFOLIA's chat footer; the participant page shows the same version.
   const readDicebot = () => {
     const link = [...document.querySelectorAll('a[href*="bcdice"]')].find(a => /BCDice@[\w.\-]+/.test(a.textContent));

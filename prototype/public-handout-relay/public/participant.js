@@ -836,6 +836,7 @@ const renderState = data => {
   showHealth(data.health);
   renderTabs(data);
   if (data.bgm) playBgm(data.bgm);
+  window.__prGmTheme = data.theme || null; window.__prSetGmTheme?.(window.__prGmTheme); // the GM's room theme (the theme window's default)
   document.getElementById("room-title").textContent = data.roomTitle || "플레이룸";
   { const system = document.getElementById("room-system"); system.textContent = data.systemName || ""; system.hidden = !data.systemName; } // CCFOLIA's small game-system name next to the room title
   const gm = document.getElementById("gm-state"); gm.dataset.online = data.gmOnline ? "1" : "0"; gm.title = data.gmOnline ? "GM 연결됨" : "GM 연결 지연";
@@ -1223,6 +1224,8 @@ function onPush(event) {
     renderState(current);
   } else if (message.type === "bgm") {
     playBgm(message.bgm);
+  } else if (message.type === "theme") {
+    current.theme = message.theme || null; window.__prGmTheme = current.theme; window.__prSetGmTheme?.(current.theme);
   } else if (message.type === "handout") {
     current.handout = message.handout || {};
     renderState(current);
@@ -2159,7 +2162,9 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
 // Theme window (the palette at the right end of the bottom line, like the toolkit's): this participant's browser only. Same fields, colour presets and export file as the toolkit's theme-switcher.
 // First stage: kind, six colours, accent, screen font, import / export. Opacity, blur, the chat switches and sheet themes are not here yet.
 {
-  const KEY = "capybara-playroom-theme-v1";
+  // v2 (GM theme): the GM's room theme is the default ('GM 테마(기본)'); an earlier personal choice (v1) is set back to it once — the user's intent is
+  // "the GM's room theme as it is" — and from then on a participant's own choice is kept (this browser only). The v1 custom colours stay the custom start.
+  const KEY = "capybara-playroom-theme-v2", OLD_KEY = "capybara-playroom-theme-v1";
   const FIELDS = [["bg", "배경"], ["appbar", "상하단 바"], ["paper", "패널"], ["border", "테두리"], ["text", "텍스트"], ["inputBg", "입력창"], ["accent", "강조색"]];
   const LIGHT = { bg: "#f1f1f1", appbar: "#dddddd", paper: "#fbfbfb", border: "#b9b9b9", text: "#2f2f2f", inputBg: "#ffffff", accent: "" };
   const CUSTOM_START = { bg: "#151414", appbar: "#22201f", paper: "#1d1c1e", border: "#413d3a", text: "#f4f0eb", inputBg: "#1a191b", accent: "" };
@@ -2170,13 +2175,18 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
   const fontNames = Object.values(MESSAGE_FONTS);
   const read = () => {
     try {
-      const v = JSON.parse(localStorage.getItem(KEY) || "{}");
-      const mode = v.mode === "light" || v.mode === "custom" || (/^preset:\d+$/.test(v.mode || "") && PRESETS[Number(v.mode.slice(7))]) ? v.mode : "default";
+      const stored = localStorage.getItem(KEY), v = JSON.parse(stored || localStorage.getItem(OLD_KEY) || "{}");
+      const mode = !stored ? "gm" : v.mode === "gm" || v.mode === "default" || v.mode === "light" || v.mode === "custom" || (/^preset:\d+$/.test(v.mode || "") && PRESETS[Number(v.mode.slice(7))]) ? v.mode : "gm";
       return { mode, custom: cleanTheme(v.custom), font: fontNames.includes(v.font) ? v.font : "" };
-    } catch (_) { return { mode: "default", custom: cleanTheme(), font: "" }; }
+    } catch (_) { return { mode: "gm", custom: cleanTheme(), font: "" }; }
   };
   let state = read(), panel = null;
-  const activeTheme = () => state.mode === "light" ? LIGHT : state.mode === "custom" ? state.custom : state.mode.startsWith("preset:") ? cleanTheme(PRESETS[Number(state.mode.slice(7))].theme) : null;
+  // the GM's theme as the relay passed it (colours checked there); null = the GM uses the default look
+  let gmTheme = null;
+  const takeGmTheme = (value) => { gmTheme = value?.theme && FIELDS.slice(0, 6).every(([key]) => hex(value.theme[key])) ? cleanTheme(value.theme, NATIVE) : null; };
+  takeGmTheme(window.__prGmTheme);
+  window.__prSetGmTheme = (value) => { takeGmTheme(value); if (state.mode === "gm") apply(false); };
+  const activeTheme = () => state.mode === "gm" ? gmTheme : state.mode === "light" ? LIGHT : state.mode === "custom" ? state.custom : state.mode.startsWith("preset:") ? cleanTheme(PRESETS[Number(state.mode.slice(7))].theme) : null;
   const themeCss = (t, font) => {
     let css = "";
     if (t) {
@@ -2220,7 +2230,7 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
     head.append(el("strong", "", "테마"), x); panel.append(head);
     const row = (label, control) => { const line = el("label", "prt-row"); line.append(el("span", "", label), control); panel.append(line); };
     const kind = el("select"); kind.dataset.kind = "1"; kind.setAttribute("aria-label", "종류");
-    for (const [value, label] of [["default", "기본값"], ["light", "라이트"], ...PRESETS.map((preset, index) => [`preset:${index}`, preset.name]), ["custom", "커스텀"]]) { const option = el("option", "", label); option.value = value; kind.append(option); }
+    for (const [value, label] of [["gm", "GM 테마(기본)"], ["default", "기본값"], ["light", "라이트"], ...PRESETS.map((preset, index) => [`preset:${index}`, preset.name]), ["custom", "커스텀"]]) { const option = el("option", "", label); option.value = value; kind.append(option); }
     kind.addEventListener("change", () => { state = { ...state, custom: kind.value === "custom" ? cleanTheme(activeTheme() || NATIVE) : state.custom, mode: kind.value }; apply(); });
     row("종류", kind);
     for (const [key, label] of FIELDS) {

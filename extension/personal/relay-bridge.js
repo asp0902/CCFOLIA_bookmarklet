@@ -13,6 +13,7 @@
   let lastPresentKey = "";
   let lastScene = null; // latest room scene from the page, sent again after (re)connecting
   let lastBgm = null; // latest YouTube BGM signal from the page, sent again after (re)connecting
+  let lastTheme = null; // the room's effective theme (GM's theme-switcher), sent again after (re)connecting; the relay checks the values
   let config = null;
   let pollTimer = 0;
   let socket = null;
@@ -95,6 +96,7 @@
     if (lastScene) post(`/api/admin/rooms/${encodeURIComponent(id)}/scene`, lastScene).catch(() => {});
     // 이 탭에서 받은 신호가 없으면 "정지"로 맞춘다: 서버에 남은 옛 "재생 중"(삭제한 곡 포함)이 참가자에게 자동재생되지 않게.
     post(`/api/admin/rooms/${encodeURIComponent(id)}/bgm`, lastBgm || { state: "stopped" }).catch(() => {});
+    if (lastTheme) post(`/api/admin/rooms/${encodeURIComponent(id)}/theme`, lastTheme).catch(() => {});
     startPolling();
     pollCommands();
     openSocket();
@@ -122,7 +124,7 @@
     clearTimeout(socketRetryTimer); clearInterval(socketPingTimer);
     const old = socket; socket = null; socketOpen = false; socketRetries = 0;
     if (old) { try { old.close(); } catch (_) {} }
-    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastScene = null; lastChannelKey = ""; lastHealthKey = ""; lastPresentKey = ""; snapshotChain = Promise.resolve();
+    inFlight.clear(); sentMessages.clear(); lastBgm = null; lastTheme = null; lastScene = null; lastChannelKey = ""; lastHealthKey = ""; lastPresentKey = ""; snapshotChain = Promise.resolve();
   }
   function dropSocket(own, event) {
     if (socket !== own) return; // replaced or closed on purpose
@@ -278,6 +280,11 @@
           // what was collected, for the share settings window (the structure check of the mirror: a template CCFOLIA's page no longer yields is missing here)
           if (templates) try { Promise.resolve(chrome.storage.local.set({ relayMirror: { roomId, names: Object.keys(templates).slice(0, 60), at: Date.now() } })).catch(() => {}); } catch (_) {}
         }
+      }
+      if (request.action === "theme") {
+        const t = request.theme && typeof request.theme === "object" ? request.theme : {};
+        lastTheme = { theme: t.theme && typeof t.theme === "object" ? Object.fromEntries(Object.entries(t.theme).slice(0, 12).map(([key, value]) => [clean(key, 20), typeof value === "number" ? value : clean(value, 20)])) : null, sheet: clean(t.sheet, 40) };
+        if (pollTimer) await post(`/api/admin/rooms/${encodeURIComponent(roomId)}/theme`, lastTheme);
       }
       if (request.action === "bgm") {
         const bgm = request.bgm || {};
