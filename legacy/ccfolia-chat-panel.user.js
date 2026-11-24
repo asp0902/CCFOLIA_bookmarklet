@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.70
+// @version      0.5.71
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.70";
+  const VERSION = "0.5.71";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -4090,7 +4090,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       window.setTimeout(() => { if (panelEl) subscribeStore(); }, 800);
       return;
     }
-    unsubscribe = scpHost.subscribe(store, () => { if (refreshSelectedChar()) renderSpeakerHook?.(); queueRender(); });
+    // 0.5.71: 저장소의 메시지·캐릭터·룸·참가자·컷인 조각이 바뀔 때만 — 글을 칠 때마다 바뀌는 앱 상태(입력 중 글)에도 캐릭터 전체를 다시 읽고 다시 그리기를 예약해 한 글자에 ~7ms 가 더 들었다(실측)
+    let lastSlices = null;
+    unsubscribe = scpHost.subscribe(store, () => { const ent = store.getState()?.entities || {}; const slices = [ent.roomMessages, ent.roomCharacters, ent.rooms, ent.roomMembers, ent.roomEffects]; if (lastSlices && slices.every((slice, i) => slice === lastSlices[i])) return; lastSlices = slices; if (refreshSelectedChar()) renderSpeakerHook?.(); queueRender(); });
   }
 
   function unsubscribeStore() {
