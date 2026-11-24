@@ -65,7 +65,7 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     await page.evaluate((t) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">누군가</h6><p class="MuiListItemText-secondary" id="f3"></p></div>'; li.querySelector('p').append(document.createTextNode(t)); document.getElementById('chatlist').appendChild(li); }, msg('감자 글자', [{ start: 0, end: 2, style: { fontId: 'gamja-flower' } }]));
     await page.waitForTimeout(700);
     const fam = (id) => page.evaluate((id) => [...document.querySelectorAll(`#${id} .ccf-render-overlay *`)].map((e) => e.style.fontFamily).filter(Boolean), id);
-    assert.deepEqual(await fam('f1'), ['"Nanum Myeongjo", sans-serif']);
+    assert.deepEqual(await fam('f1'), ['NanumMyeongjo, 나눔명조, "Nanum Myeongjo", sans-serif'], 'installed names first (0.1.165), then the web font');
     assert.deepEqual(await fam('f2'), [], 'unknown id: default font');
     assert.deepEqual(await fam('f3'), ['"Gamja Flower", sans-serif'], 'a new id draws its font');
     assert((await page.evaluate(() => window.__fontsAsked)).includes('Nanum Myeongjo'), 'the font is loaded');

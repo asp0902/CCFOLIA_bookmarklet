@@ -925,6 +925,8 @@ async function verifyAccess() {
 }
 // Messages written with the toolkit's format tools carry an invisible envelope (formatRuns / alignRuns / blockStyle) after the visible text.
 // This decodes it and renders bold/italic/underline/strike, colour, background, size, blur, code, ruby, tooltip, alignment and narration.
+// The same font installed on this PC first (crisper small text than the web font; its name differs from the web family), then the web font. Same list as format-sync.
+const fontStack = family => [...({ "Nanum Gothic": ["NanumGothic", "\uB098\uB214\uACE0\uB515"], "Nanum Myeongjo": ["NanumMyeongjo", "\uB098\uB214\uBA85\uC870"], "Nanum Gothic Coding": ["NanumGothicCoding", "\uB098\uB214\uACE0\uB515\uCF54\uB529"], "Noto Sans KR": ["Noto Sans CJK KR"], "Noto Serif KR": ["Noto Serif CJK KR"] }[family] || []), family].map(name => `"${name}"`).join(", ");
 const INVIS_START = "\u2063\u2063\u2063", INVIS_END = "\u2062\u2062\u2062", INVIS_MAP = ["\u200B", "\u200C", "\u200D", "\u2060"];
 let cutinText = "";
 function decodeEnvelope(full) {
@@ -979,7 +981,7 @@ function messageFont(id) {
 }
 function styleSegment(span, style) {
   const family = typeof style.fontId === "string" ? messageFont(style.fontId) : "";
-  if (family) span.style.fontFamily = `"${family}", sans-serif`;
+  if (family) span.style.fontFamily = `${fontStack(family)}, sans-serif`;
   if (style.bold) span.style.fontWeight = "700";
   if (style.italic) span.style.fontStyle = "italic";
   const deco = []; if (style.underline) deco.push("underline"); if (style.strike) deco.push("line-through");
@@ -2099,7 +2101,7 @@ setInterval(() => { document.getElementById("account-av").textContent = [...(cha
 .chat-tab::after,.MuiTabs-indicator{background-color:${accent}!important}.bgm-slot.is-on{color:${accent}!important}
 `;
     }
-    if (font) css += `body,.chat,#chat-form,#chat-form button,#chat-form input,#chat-form textarea,#messages,.menu-paper,.MuiTypography-root,.MuiListItemText-root{font-family:"${font}",Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif!important}\n`;
+    if (font) css += `body,.chat,#chat-form,#chat-form button,#chat-form input,#chat-form textarea,#messages,.menu-paper,.MuiTypography-root,.MuiListItemText-root{font-family:${fontStack(font)},Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif!important}\n`;
     return css;
   };
   const refresh = () => {
