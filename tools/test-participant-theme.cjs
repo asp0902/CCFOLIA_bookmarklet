@@ -29,7 +29,7 @@ const dir = path.join(__dirname, '..', 'prototype', 'public-handout-relay', 'pub
     // a mirrored part (shadow root) gets the same sheet
     assert.equal(await page.evaluate(() => { const { root } = cmMirror.shadow('theme-test-host', (n) => document.body.append(n)); root.innerHTML = '<div class="MuiPaper-root" id="p"></div>'; return getComputedStyle(root.getElementById('p')).backgroundColor; }), 'rgb(17, 42, 59)', 'mirrored parts follow');
     await page.selectOption('#pr-theme [data-font]', 'Nanum Myeongjo');
-    assert.match(await page.locator('#chat-input').evaluate((n) => getComputedStyle(n).fontFamily), /^"?Nanum Myeongjo/);
+    assert.match(await page.locator('#chat-input').evaluate((n) => getComputedStyle(n).fontFamily), /^NanumMyeongjo, 나눔명조, "Nanum Myeongjo"/); // the installed copy first, then the web font (#690)
     // kept across a reload
     await load();
     assert.equal(await bg('#chat-form'), 'rgb(17, 42, 59)', 'kept');
