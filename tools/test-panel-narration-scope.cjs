@@ -36,6 +36,11 @@ const ICON = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAAB
     assert.equal(state.list, null, 'the list itself is never a narration row');
     assert.equal(state.rows[1].narration, '1', 'the narration row is');
     for (const i of [0, 2]) { assert.equal(state.rows[i].narration, null, `plain row ${i}`); assert.equal(state.rows[i].headShown, true, `plain row ${i} keeps its name`); assert.notEqual(state.rows[i].align, 'center', `plain row ${i} not centred`); }
+    // chat-panel 0.5.69: like the original, a speaker without an icon gets an empty avatar box (no broken-image mark) and a nameless one reads "noname"
+    const panel = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-chat-panel.user.js'), 'utf8');
+    assert.match(panel, /else \{ img\.removeAttribute\("src"\); img\.style\.setProperty\("visibility", "hidden"\); \}/);
+    assert.match(panel, /function shownName\(msg\) \{ return msg\.name === "이름 없음" \? "noname" : msg\.name; \}/);
+    assert.equal((panel.match(/shownName\(msg\)/g) || []).length, 4, 'template head (2), built-in head, definition');
     assert.deepEqual(errors, []);
     console.log('panel narration scope PASS');
   } finally { await browser.close(); }
