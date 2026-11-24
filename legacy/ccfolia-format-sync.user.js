@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.162
+// @version      0.1.163
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.162"),
+    version: getUserscriptVersion("0.1.163"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1429,6 +1429,9 @@
 
   function applyCutinChatImage(el) {
     if (!(el instanceof HTMLElement)) return;
+    // 0.1.163: 한 줄에 그림 하나 — 메시지 글 요소가 겹치면(판정 줄: p "명령" 안의 span "(결과) ＞ … ＞ 이름", 둘 다 이름으로 끝남) 바깥 것에만 붙인다(두 장 붙었다)
+    const outer = el.parentElement?.closest(MESSAGE_TEXT_SELECTOR);
+    if (outer && !outer.classList.contains("ccf-render-overlay") && !outer.closest("textarea, input, [contenteditable]")) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     const inChat = cutinChatIsMessageText(el);
     syncCutinAtHide(el, inChat);
     if (!inChat) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
