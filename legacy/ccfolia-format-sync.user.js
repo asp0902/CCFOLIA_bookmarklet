@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.160
+// @version      0.1.161
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.160"),
+    version: getUserscriptVersion("0.1.161"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -5211,6 +5211,7 @@
       }
 
       if (event.key === "Escape") {
+        if (document.getElementById("ccf-color-pick") || event.ccfColorPickClosed) return; // Esc 는 색 픽커만 닫는다(그것을 연 창은 그대로)
         if (isModalOpen() && isRubyPopoverOpen()) {
           event.preventDefault();
           event.stopPropagation();
@@ -5246,6 +5247,8 @@
     }, ccfFsWithSignal(true));
 
     document.addEventListener("mousedown", (event) => {
+      // 0.1.161: 색 픽커(body 에 붙는 창)는 그것을 연 서식 창의 일부다 — 픽커를 누르면 Sv·서식 만들기 창이 "바깥 클릭"으로 닫혔다
+      if (event.target instanceof Element && event.target.closest("#ccf-color-pick")) return;
       handleInlineToolbarDocumentMouseDown(event);
 
       if (!isModalOpen()) return;
@@ -14456,7 +14459,7 @@
     openColorPick(t);
   }, true);
   document.addEventListener("pointerdown", (e) => { const pop = document.getElementById("ccf-color-pick"); if (pop && !e.composedPath().includes(pop)) closeColorPick(); }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.getElementById("ccf-color-pick")) { e.stopPropagation(); closeColorPick(); } }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.getElementById("ccf-color-pick")) { e.stopPropagation(); e.ccfColorPickClosed = true; closeColorPick(); } }, true);
 
   function bindEnterSendForEditors() {
     const editors = document.querySelectorAll(EDITOR_SELECTOR);
