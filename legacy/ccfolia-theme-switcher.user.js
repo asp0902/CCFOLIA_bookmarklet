@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.66
+// @version      0.2.67
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -239,7 +239,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.66"),
+    version: getUserscriptVersion("0.2.67"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1558,6 +1558,9 @@
           min-width: 0;
         }
 
+        #${CHARACTER_COLOR_POPOVER_ID} .ccf-character-color-popover-actions { display: flex; justify-content: flex-end; }
+        #${CHARACTER_COLOR_POPOVER_ID} .ccf-character-color-popover-ok { padding: 4px 14px; color: #2196f3; background: none; border: 0; border-radius: 4px; font: inherit; font-weight: 700; cursor: pointer; }
+        #${CHARACTER_COLOR_POPOVER_ID} .ccf-character-color-popover-ok:hover { background: rgba(33,150,243,.08); }
         #${CHARACTER_COLOR_POPOVER_ID} .ccf-character-color-popover-preview {
           width: 32px;
           height: 32px;
@@ -3593,8 +3596,10 @@
           </svg>
         </button>
       </div>
+      <div class="ccf-character-color-popover-actions"><button type="button" class="ccf-character-color-popover-ok">확인</button></div>
     `;
     document.body.appendChild(popover);
+    popover.querySelector(".ccf-character-color-popover-ok")?.addEventListener("click", () => closeCharacterColorPopover(true));
     // 0.2.61 코코포리아 대화상자의 포커스 가두기(document 의 focusin)가 대화상자 밖인 이 창의 입력칸에서 포커스를 빼앗아 코드를 칠 수 없었다 → 이 창 안의 focusin 은 밖으로 보내지 않는다
     popover.addEventListener("focusin", (event) => event.stopPropagation());
 
@@ -3623,8 +3628,7 @@
     if (hue instanceof HTMLInputElement) {
       hue.addEventListener("input", () => {
         characterColorPopoverState.h = clamp(Number(hue.value) || 0, 0, 360);
-        syncCharacterColorPopoverUi();
-        applyCharacterColorFromPopover(false);
+        syncCharacterColorPopoverUi(); // 0.2.67: 고르는 동안은 미리보기만 — [확인]에서 적용(서식 색 픽커와 같게)
       });
     }
 
@@ -3634,7 +3638,6 @@
         if (!normalized) return;
         syncCharacterColorPopoverStateFromHex(normalized);
         syncCharacterColorPopoverUi();
-        applyCharacterColorFromPopover(false);
       });
 
       hex.addEventListener("keydown", (event) => {
@@ -3681,7 +3684,7 @@
       activeCharacterColorPickerContainer === container &&
       activeCharacterColorPickerTrigger === triggerButton
     ) {
-      closeCharacterColorPopover(true);
+      closeCharacterColorPopover(false); // 색 단추를 다시 누름 = 취소
       return;
     }
 
@@ -3720,7 +3723,6 @@
 
       syncCharacterColorPopoverStateFromHex(color);
       syncCharacterColorPopoverUi();
-      applyCharacterColorFromPopover(true);
     } catch (error) {
       if (error && typeof error === "object" && error.name === "AbortError") {
         return;
@@ -3891,7 +3893,6 @@
     characterColorPopoverState.s = clamp((event.clientX - rect.left) / rect.width, 0, 1);
     characterColorPopoverState.v = clamp(1 - ((event.clientY - rect.top) / rect.height), 0, 1);
     syncCharacterColorPopoverUi();
-    applyCharacterColorFromPopover(false);
   }
 
   function applyCharacterColorFromPopover(commit = false) {
@@ -4170,7 +4171,7 @@
           !popover.contains(target) &&
           !(trigger instanceof HTMLElement && trigger.contains(target))
         ) {
-          closeCharacterColorPopover(true);
+          closeCharacterColorPopover(false); // 0.2.67: 바깥 클릭 = 취소(원래 색 그대로)
         }
       }
 

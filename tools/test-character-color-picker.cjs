@@ -32,7 +32,24 @@ const html = `<!doctype html><meta charset=utf-8><body style="background:#222;co
     assert.equal(await code.evaluate((n) => document.activeElement === n), true, 'focus stays in the code box');
     assert.equal((await code.inputValue()).toLowerCase(), '12ab9f', 'six digits typed one by one are not rewritten');
     assert.equal(await preview(), 'rgb(18, 171, 159)');
-    assert.equal((await native()).toLowerCase().replace('#', ''), '12ab9f', 'the colour reaches CCFOLIA');
+    // 0.2.67: choosing only previews — the character colour changes on [확인] (like the format colour picker)
+    const before = (await native()).toLowerCase();
+    assert.notEqual(before.replace('#', ''), '12ab9f', 'not applied while choosing');
+    const sv = await page.locator(`${P} .ccf-character-color-popover-sv`).boundingBox();
+    await page.mouse.move(sv.x + 5, sv.y + 5); await page.mouse.down(); await page.mouse.move(sv.x + sv.width / 2, sv.y + sv.height / 2); await page.mouse.up();
+    assert.equal((await native()).toLowerCase(), before, 'area drag: character colour unchanged');
+    // Esc = cancel (the original colour), outside click = cancel
+    await page.keyboard.press('Escape'); await page.waitForTimeout(80);
+    assert.equal(await page.locator(`${P}.open`).count(), 0); assert.equal((await native()).toLowerCase(), before, 'Esc keeps the original');
+    await openPicker(); await retype('445566'); await page.mouse.click(5, 5); await page.waitForTimeout(80);
+    assert.equal(await page.locator(`${P}.open`).count(), 0); assert.equal((await native()).toLowerCase(), before, 'outside click keeps the original');
+    // [확인] applies and closes
+    await openPicker(); await retype('12ab9f');
+    assert.equal(await page.locator(`${P} .ccf-character-color-popover-ok`).textContent(), '확인');
+    await page.locator(`${P} .ccf-character-color-popover-ok`).click(); await page.waitForTimeout(80);
+    assert.equal(await page.locator(`${P}.open`).count(), 0, 'OK closes');
+    assert.equal((await native()).toLowerCase().replace('#', ''), '12ab9f', 'OK: the colour reaches CCFOLIA');
+    await openPicker();
     await retype('f80');
     assert.equal(await code.inputValue(), 'f80', 'three digits stay as typed'); assert.equal(await preview(), 'rgb(255, 136, 0)');
     await code.click(); await page.keyboard.press('Control+A');
