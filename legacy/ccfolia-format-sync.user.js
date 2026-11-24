@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.161
+// @version      0.1.162
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.161"),
+    version: getUserscriptVersion("0.1.162"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -15110,7 +15110,8 @@
       // 그림 있는 @컷인: 봉투를 늘 싣는다(이름만 → 저장되는 건 글자 없는 봉투, 툴킷이 그림을 그린다 / 글이 있으면 이름을 봉투의 cutin 에 싣는다).
       // 그림 없는 @컷인을 이름만 보내면 원문 그대로(줄이 남지 않게 — 코코포리아 기본과 같다).
       const cutAway = /^@\S+$/.test(cutinName) && rawText.endsWith(cutinName);
-      const picture = cutAway && cutinHasPicture(cutinName);
+      // 0.1.162: 추가 패널 입력칸은 패널이 직접 싣는다(패널의 Nr·서식과 함께, chat-panel 0.5.70) — 여기서 그림 봉투를 붙이면 패널 나레이션이 빠졌다
+      const picture = cutAway && cutinHasPicture(cutinName) && !editor.closest?.(".ccf-scp-panel");
       if (cutAway && onlyName && !picture) { if (currentText !== rawText) setEditorText(editor, rawText); return true; }
       const bodyText = onlyName ? rawText : cutinBody;
       const keepOn = isInlineFormatKeepEnabled(getInlineToolbarForEditor(editor));
