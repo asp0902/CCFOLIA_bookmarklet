@@ -141,8 +141,15 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     await page.evaluate(() => { const effects = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...effects, entities: { ...effects.entities, e4: { name: '새컷인', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' } } }; });
     await addRow('fresh', '새컷인');
     await page.waitForSelector('#fresh .ccf-cutin-chat-image img');
+    // 0.1.163: one picture per row. A roll row in the original chat is p "command" + span.MuiTypography-body2 "(result) ＞ … ＞ name" (measured on 1.37.6):
+    // both end with the cut-in name, and each got a picture (two SUCCESS cards). Only the outermost message element gets it.
+    await page.evaluate(() => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = '<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">레아 몬트</h6><p id="roll" class="MuiTypography-root MuiTypography-body2 MuiListItemText-secondary">CC&lt;=45 민첩성<span class="MuiTypography-root MuiTypography-body2">&nbsp;(1D100&lt;=45) ＞ 37 ＞ 새컷인</span></p></div>'; document.getElementById('list').append(li); });
+    await page.waitForSelector('#roll .ccf-cutin-chat-image img');
+    await page.waitForTimeout(600);
+    assert.equal(await page.locator('#roll .ccf-cutin-chat-image').count(), 1, 'one picture on a roll row');
+    assert.equal(await page.locator('#roll > .ccf-cutin-chat-image').count(), 1, 'on the message element itself');
     // diagnostics
-    const diag = await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.cutinChatDiag());
+    const diag =await page.evaluate(() => window.__CCF_FORMAT_SYNC_RUNTIME__.cutinChatDiag());
     assert.equal(diag.store, true); assert(diag.triggers.some(([text]) => text === '번개')); assert(diag.sampleKeys[0].includes('imageUrl'));
     // off switch
     await page.evaluate(() => localStorage.setItem('ccfCutinChatImage', 'off'));
