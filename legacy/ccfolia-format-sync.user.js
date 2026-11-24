@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.149
+// @version      0.1.150
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.149"),
+    version: getUserscriptVersion("0.1.150"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3066,6 +3066,10 @@
   const OPEN_BTN_SELECTOR = `.ccf-open-btn[${OPEN_BTN_ATTR}="1"]`;
   const INLINE_TOOLBAR_ATTR = "data-ccf-inline-toolbar";
   const INLINE_TOOLBAR_SELECTOR = `.ccf-inline-toolbar[${INLINE_TOOLBAR_ATTR}="1"]`;
+  // 빠른 컷인 단추(초기화 때 쓰이므로 위에 둔다)
+  const QUICK_CUTIN_KEY = "ccf-quick-cutin-v1";
+  const QUICK_CUTIN_NAMES = ["버튼", "경고"];
+  const quickCutinRoom = () => (location.pathname.match(/^\/rooms\/([^/?#]+)/) || [])[1] || "none";
   // 서식 바의 툴팁: 코코포리아 MUI Tooltip 실측값(toolkit-presence 펭귄과 같은 값). title 은 호버 때 data 로 옮겨 브라우저 툴팁이 겹치지 않게 하고, 코드가 title 을 새로 쓰면 그 글을 쓴다.
   (() => {
     window.__CCF_FMT_TIP_ABORT__?.abort();
@@ -4428,15 +4432,18 @@
       html .ccf-inline-toolbar .ccf-inline-group-menu .ccf-toggle:is(.active, .ccf-fmt-current, .ccf-font-current)::after { content: "✓"; margin-left: auto; padding-left: 12px; font-family: Roboto, sans-serif; }
       html .ccf-inline-toolbar .ccf-inline-group[data-open="1"] > .ccf-inline-font-menu { max-height: min(360px, calc(100vh - 16px)); overflow-y: auto; min-width: 180px; }
       html .ccf-inline-toolbar .ccf-inline-font-menu .ccf-toggle { font-size: 15px !important; }
-      .ccf-inline-group-menu .ccf-gi-key { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-size: 12px; opacity: .75; }
-      .ccf-inline-group-menu .ccf-gi-key svg { display: block; }
       .ccf-inline-toolbar .ccf-inline-group-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
       /* 0.1.134 꾸미기 묶음 단추는 "Aa" 만 — B·I·U·S 와 같은 30×30 */
-      .ccf-inline-toolbar :is([data-inline-group="deco"], [data-inline-group="font"]) > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; } /* 0.1.144 글꼴 단추도 '가' 한 글자, 옆 서식 단추와 같은 폭 */
-      /* 0.1.138 Aa·⋯ 는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치는 placeInlineGroupsInDiceRow) — 높이는 주사위 줄 단추에 맞추고 글자 크기는 그대로 */
-      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) { position: fixed !important; z-index: 1300; display: inline-flex; align-items: center; margin: 0 !important; }
-      .ccf-inline-toolbar.ccf-groups-in-dice-row > :is([data-inline-group="deco"], [data-inline-group="extra"]) > .ccf-inline-group-btn { height: var(--ccf-dice-btn-h, 32px) !important; min-height: var(--ccf-dice-btn-h, 32px) !important; width: var(--ccf-dice-btn-w, 38px) !important; min-width: var(--ccf-dice-btn-w, 38px) !important; padding: 0 !important; }
-      /* 0.1.143 [Aa][⋯][전송] 같은 폭(폭은 placeInlineGroupsInDiceRow 가 재서 정함) */
+      .ccf-inline-toolbar [data-inline-group="font"] > .ccf-inline-group-btn { width: 30px !important; min-width: 30px !important; padding: 0 !important; } /* 0.1.144 글꼴 단추도 '가' 한 글자, 옆 서식 단추와 같은 폭 */
+      /* 0.1.150 둘째 줄(묶음에서 풀린 단추): 글자 단추는 글자만큼 넓게. 빠른 컷인 두 단추는 주사위 줄 전송 단추 왼쪽(고정 배치, 위치·폭은 placeQuickCutins) */
+      .ccf-inline-toolbar .ccf-row2-btn { width: auto !important; min-width: 30px !important; padding: 0 6px !important; white-space: nowrap; }
+      .ccf-inline-toolbar .ccf-row2-btn svg { display: block; width: 16px; height: 16px; }
+      .ccf-quick-cutins { display: none; }
+      .ccf-inline-toolbar.ccf-quick-in-dice-row > .ccf-quick-cutins { display: contents; }
+      .ccf-inline-toolbar.ccf-quick-in-dice-row > .ccf-quick-cutins > .ccf-quick-cutin { all: unset; position: fixed !important; z-index: 1300; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: var(--ccf-dice-btn-w, 38px); height: var(--ccf-dice-btn-h, 32px); border-radius: 4px; color: #fff; cursor: pointer; }
+      .ccf-inline-toolbar.ccf-quick-in-dice-row > .ccf-quick-cutins > .ccf-quick-cutin:hover, .ccf-quick-cutin:focus-visible { background: rgba(255,255,255,.08); }
+      .ccf-quick-cutin.ccf-quick-gone { opacity: .4; }
+      /* 0.1.143 [단추][단추][전송] 같은 폭(폭은 placeQuickCutins 가 재서 정함) */
       html button[data-ccf-dice-send="1"] { flex: 0 0 var(--ccf-dice-btn-w, 38px) !important; width: var(--ccf-dice-btn-w, 38px) !important; min-width: var(--ccf-dice-btn-w, 38px) !important; max-width: var(--ccf-dice-btn-w, 38px) !important; padding-left: 0 !important; padding-right: 0 !important; font-size: var(--ccf-dice-send-font, 13px) !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; }
       .ccf-inline-row-break {
         flex: 0 0 100%;
@@ -5800,12 +5807,12 @@
 
     bindInlineToolbarToEditor(toolbar, editor, composer);
     updateInlineToolbarVisuals(toolbar);
-    placeInlineGroupsInDiceRow(toolbar);
+    placeQuickCutins(toolbar);
     return toolbar;
   }
 
-  // 0.1.138 꾸미기(Aa)·더 보기(⋯) 묶음 단추는 주사위 줄의 전송 단추 바로 왼쪽에 둔다(예전 Roll20 단추 자리) — [D4…D100] … [Aa][⋯][전송].
-  // 단추는 서식 바 안에 그대로 두고(이벤트·상태가 그 입력칸의 서식 바에 묶임) 화면 위치만 옮긴다(고정 배치). 주사위 줄(전송 단추)이 없는 곳(메시지 수정 창)은 서식 바 안 그대로.
+  // 0.1.150 빠른 컷인 단추 두 개는 주사위 줄의 전송 단추 바로 왼쪽(묶음 단추가 있던 자리). 단추는 서식 바 안에 두고(그 입력칸에 묶임) 화면 위치만 옮긴다(고정 배치).
+  // 주사위 줄(전송 단추)이 없는 곳(메시지 수정 창)에는 보이지 않는다.
   function findDiceRowSubmit(toolbar) {
     const composer = toolbar?.__ccfComposer;
     const scope = composer instanceof HTMLElement ? (composer.closest("form") || composer) : null;
@@ -5822,30 +5829,30 @@
     }
     return { left: 0, top: 0 };
   }
-  function placeInlineGroupsInDiceRow(toolbar) {
+  function placeQuickCutins(toolbar) {
     if (!(toolbar instanceof HTMLElement)) return;
-    if (!placeInlineGroupsInDiceRow.bound) {
-      placeInlineGroupsInDiceRow.bound = true;
+    if (!placeQuickCutins.bound) {
+      placeQuickCutins.bound = true;
       let frame = 0;
-      const again = () => { if (frame) return; frame = setTimeout(() => { frame = 0; document.querySelectorAll(".ccf-inline-toolbar").forEach(placeInlineGroupsInDiceRow); }, 16); }; // 0.1.141 rAF 는 숨은 탭에서 멈춘다 → 타이머
+      const again = () => { if (frame) return; frame = setTimeout(() => { frame = 0; document.querySelectorAll(".ccf-inline-toolbar").forEach(placeQuickCutins); }, 16); }; // 0.1.141 rAF 는 숨은 탭에서 멈춘다 → 타이머
       window.addEventListener("resize", again);
       window.addEventListener("scroll", again, true);
       new MutationObserver(again).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
       document.addEventListener("transitionend", again, true); // 패널이 미끄러져 열리는 등 움직임이 끝난 뒤 한 번 더
       document.addEventListener("animationend", again, true);
     }
-    const groups = ["extra", "deco"].map((name) => toolbar.querySelector(`:scope > [data-inline-group="${name}"]`)).filter(Boolean);
+    const groups = [...toolbar.querySelectorAll(":scope > .ccf-quick-cutins > .ccf-quick-cutin")].reverse(); // 오른쪽(경고)부터 놓는다
     const submit = findDiceRowSubmit(toolbar);
     const toolbarShown = toolbar.getBoundingClientRect().width > 0;
     if (!submit || !toolbarShown || groups.length < 2) {
-      if (toolbar.classList.contains("ccf-groups-in-dice-row")) {
-        toolbar.classList.remove("ccf-groups-in-dice-row"); groups.forEach((group) => { group.style.left = ""; group.style.top = ""; });
+      if (toolbar.classList.contains("ccf-quick-in-dice-row")) {
+        toolbar.classList.remove("ccf-quick-in-dice-row"); groups.forEach((group) => { group.style.left = ""; group.style.top = ""; });
         const marked = toolbar.__ccfDiceSend; if (marked) { marked.removeAttribute("data-ccf-dice-send"); marked.style.removeProperty("--ccf-dice-btn-w"); marked.style.removeProperty("--ccf-dice-send-font"); toolbar.__ccfDiceSend = null; }
       }
       return;
     }
-    if (!toolbar.classList.contains("ccf-groups-in-dice-row")) toolbar.classList.add("ccf-groups-in-dice-row");
-    // 0.1.143 [Aa][⋯][전송]을 같은 폭으로: 묶음 전체는 지금과 같은 118px(38 + 2 + 38 + 2 + 38), 좁아서 주사위와 닿으면 셋이 같이 줄인다(최소 24px).
+    if (!toolbar.classList.contains("ccf-quick-in-dice-row")) toolbar.classList.add("ccf-quick-in-dice-row");
+    // 0.1.143 [단추][단추][전송]을 같은 폭으로: 묶음 전체는 지금과 같은 118px(38 + 2 + 38 + 2 + 38), 좁아서 주사위와 닿으면 셋이 같이 줄인다(최소 24px).
     const row = submit.parentElement;
     if (toolbar.__ccfDiceSend !== submit) { toolbar.__ccfDiceSend?.removeAttribute("data-ccf-dice-send"); toolbar.__ccfDiceSend = submit; }
     if (submit.getAttribute("data-ccf-dice-send") !== "1") submit.setAttribute("data-ccf-dice-send", "1");
@@ -5872,6 +5879,88 @@
       if (!Number.isFinite(curT) || Math.abs(nextT - curT) > 0.5) group.style.top = `${nextT}px`;
       right = left - 2;
     }
+  }
+
+  // 0.1.150 빠른 컷인: 단추마다 사용자가 정한 글(룸의 컷인 이름 또는 직접 입력)을 지금 화자·탭으로 보낸다. 입력칸의 쓰던 글은 그대로 둔다.
+  // 정하기: 우클릭·길게 누름(정해지지 않았으면 그냥 누름) → 룸 컷인 목록 + 직접 입력. 브라우저에 룸마다 저장한다.
+  function readQuickCutins() {
+    try { const all = JSON.parse(localStorage.getItem(`${QUICK_CUTIN_KEY}:${quickCutinRoom()}`) || "[]"); return [0, 1].map((i) => (all[i] && typeof all[i].text === "string" && all[i].text ? all[i] : null)); } catch (_) { return [null, null]; }
+  }
+  function writeQuickCutin(index, value) {
+    const all = readQuickCutins(); all[index] = value;
+    try { localStorage.setItem(`${QUICK_CUTIN_KEY}:${quickCutinRoom()}`, JSON.stringify(all)); } catch (_) { /* 저장 못 해도 이번 화면에서는 쓴다 */ }
+    document.querySelectorAll(".ccf-quick-cutin").forEach(refreshQuickCutinButton);
+  }
+  function roomCutinNames() {
+    endsWithCutinTrigger("\u0000"); // 저장소를 찾아 둔다
+    const slice = endsWithCutinTrigger.store?.getState?.()?.entities?.roomEffects;
+    const list = slice?.ids?.map((id) => slice.entities?.[id]) || Object.values(slice?.entities || {});
+    return list.map((effect) => (typeof effect?.name === "string" ? effect.name : "")).filter(Boolean);
+  }
+  function refreshQuickCutinButton(button) {
+    const index = Number(button.dataset.quick), value = readQuickCutins()[index], what = QUICK_CUTIN_NAMES[index];
+    const gone = !!value?.fromList && !roomCutinNames().includes(value.text);
+    button.classList.toggle("ccf-quick-gone", gone);
+    const tip = value ? `${what} 컷인: ${value.text}${gone ? " (룸에 없음)" : ""}\n우클릭으로 바꾸기` : `${what} 컷인: 정해지지 않음\n눌러서 정하기`;
+    button.dataset.ccfTip = tip; button.removeAttribute("title");
+    button.setAttribute("aria-label", value ? `${what} 컷인 보내기: ${value.text}` : `${what} 컷인 정하기`);
+  }
+  async function sendQuickCutin(toolbar, text) {
+    const editor = toolbar.__ccfEditor, submit = findDiceRowSubmit(toolbar);
+    if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) || !submit) return false;
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(editor), "value")?.set;
+    const put = (value) => { setter.call(editor, value); editor.dispatchEvent(new Event("input", { bubbles: true })); };
+    const leftover = editor.value;
+    put(text); submit.click();
+    let sent = false;
+    for (let i = 0; i < 30 && !sent; i += 1) { await new Promise((resolve) => setTimeout(resolve, 50)); sent = editor.value !== text; }
+    if (!sent) { put(leftover); return false; }
+    if (leftover) { await new Promise((resolve) => setTimeout(resolve, 0)); if (!editor.value) put(leftover); }
+    return true;
+  }
+  function closeQuickCutinMenu() { document.querySelector(".ccf-quick-menu")?.remove(); }
+  function openQuickCutinMenu(button) {
+    closeQuickCutinMenu();
+    const index = Number(button.dataset.quick), current = readQuickCutins()[index];
+    const menu = document.createElement("div"); menu.className = "ccf-quick-menu"; menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", `${QUICK_CUTIN_NAMES[index]} 컷인 정하기`);
+    menu.style.cssText = "position:fixed;z-index:2147483646;box-sizing:border-box;min-width:200px;max-width:300px;max-height:min(360px,calc(100vh - 16px));overflow-y:auto;padding:8px 0;border-radius:4px;background:rgba(44,44,44,.97);color:#fff;font:400 14px/1.5 Roboto,'Noto Sans KR',sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)";
+    const item = (label, run, checked = false) => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "menuitem"); b.textContent = label; b.style.cssText = `all:unset;box-sizing:border-box;display:block;width:100%;padding:6px 16px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${checked ? "background:rgba(144,202,249,.16)" : ""}`; b.addEventListener("mouseenter", () => { b.style.background = "rgba(255,255,255,.08)"; }); b.addEventListener("mouseleave", () => { b.style.background = checked ? "rgba(144,202,249,.16)" : ""; }); b.addEventListener("click", () => { run(); closeQuickCutinMenu(); }); menu.append(b); return b; };
+    const head = document.createElement("div"); head.textContent = `${QUICK_CUTIN_NAMES[index]} 컷인`; head.style.cssText = "padding:4px 16px 6px;font-size:12px;color:rgba(255,255,255,.7)"; menu.append(head);
+    const names = roomCutinNames();
+    if (!names.length) { const none = document.createElement("div"); none.textContent = "이 룸에 컷인이 없습니다"; none.style.cssText = "padding:6px 16px;color:rgba(255,255,255,.5)"; menu.append(none); }
+    for (const name of names) item(name, () => writeQuickCutin(index, { text: name, fromList: true }), current?.text === name);
+    const form = document.createElement("form"); form.style.cssText = "display:flex;gap:6px;padding:8px 16px 4px;border-top:1px solid rgba(255,255,255,.12);margin-top:6px";
+    const input = document.createElement("input"); input.type = "text"; input.placeholder = "직접 입력"; input.setAttribute("aria-label", "직접 입력"); input.value = current && !current.fromList ? current.text : ""; input.style.cssText = "flex:1;min-width:0;padding:4px 8px;border:1px solid rgba(255,255,255,.23);border-radius:4px;background:transparent;color:#fff;font:inherit";
+    const ok = document.createElement("button"); ok.type = "submit"; ok.textContent = "정하기"; ok.style.cssText = "all:unset;padding:4px 8px;border-radius:4px;color:#90caf9;cursor:pointer;font-weight:500";
+    form.append(input, ok); menu.append(form);
+    form.addEventListener("submit", (event) => { event.preventDefault(); const text = input.value.trim(); if (text) writeQuickCutin(index, { text, fromList: false }); closeQuickCutinMenu(); });
+    if (current) item("정한 것 지우기", () => writeQuickCutin(index, null));
+    document.documentElement.appendChild(menu);
+    const r = button.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
+    menu.style.top = `${Math.max(8, r.top - 4 - h >= 8 ? r.top - 4 - h : Math.min(innerHeight - h - 8, r.bottom + 4))}px`; // 위로 먼저(아래는 입력칸)
+    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+    const away = (event) => { if (!menu.contains(event.target) && event.target !== button) { closeQuickCutinMenu(); document.removeEventListener("pointerdown", away, true); } };
+    setTimeout(() => document.addEventListener("pointerdown", away, true), 0);
+    menu.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.stopPropagation(); closeQuickCutinMenu(); button.focus(); } });
+  }
+  function bindQuickCutins(toolbar) {
+    toolbar.querySelectorAll(".ccf-quick-cutin").forEach((button) => {
+      refreshQuickCutinButton(button);
+      let longPress = 0, opened = false;
+      button.addEventListener("contextmenu", (event) => { event.preventDefault(); event.stopPropagation(); openQuickCutinMenu(button); });
+      button.addEventListener("pointerdown", (event) => { opened = false; if (event.pointerType !== "mouse") longPress = setTimeout(() => { opened = true; openQuickCutinMenu(button); }, 500); });
+      for (const type of ["pointerup", "pointerleave", "pointercancel"]) button.addEventListener(type, () => clearTimeout(longPress));
+      button.addEventListener("click", async (event) => {
+        event.preventDefault(); event.stopPropagation();
+        if (opened) { opened = false; return; }
+        const value = readQuickCutins()[Number(button.dataset.quick)];
+        refreshQuickCutinButton(button);
+        if (!value || button.classList.contains("ccf-quick-gone")) { openQuickCutinMenu(button); return; }
+        if (button.dataset.sending === "1") return;
+        button.dataset.sending = "1";
+        try { await sendQuickCutin(toolbar, value.text); } finally { delete button.dataset.sending; }
+      });
+    });
   }
 
   function getInlineToolbarAnchor(editor) {
@@ -5954,23 +6043,22 @@
       <input class="ccf-inline-size-input" data-inline-size type="text" inputmode="numeric" pattern="[0-9]*" placeholder="크기" aria-label="글자 크기" title="글자 크기">
       <span class="ccf-inline-group" data-inline-group="font"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle data-inline-font-btn title="글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다" aria-label="글꼴" aria-haspopup="menu" aria-expanded="false">가</button><span class="ccf-inline-group-menu ccf-inline-font-menu" role="menu">${fontMenuItemsHtml()}</span></span>
       <select class="ccf-inline-font" data-inline-font hidden aria-hidden="true" tabindex="-1" aria-label="글꼴"><option value="">글꼴</option>${Object.entries(window.__CCF_MESSAGE_FONTS__ || {}).map(([id, family]) => `<option value="${id}" style="font-family:'${family}'">${family}</option>`).join("")}</select>
-      <span class="ccf-inline-group" data-inline-group="deco"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="꾸미기: 루비·툴팁·블러·코드" aria-label="꾸미기" aria-haspopup="menu" aria-expanded="false">Aa</button><span class="ccf-inline-group-menu" role="menu">
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="ruby" title="루비" aria-label="루비"><span class="ccf-gi-key">Rb</span><span class="ccf-gi-label">루비</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="tooltip" title="툴팁" aria-label="툴팁"><span class="ccf-gi-key">Tip</span><span class="ccf-gi-label">툴팁</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="blur" title="블러" aria-label="블러"><span class="ccf-gi-key">Bl</span><span class="ccf-gi-label">블러</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="code" title="코드" aria-label="코드"><span class="ccf-gi-key">&lt;/&gt;</span><span class="ccf-gi-label">코드</span></button>
-      </span></span>
-      <span class="ccf-inline-group" data-inline-group="extra"><button type="button" class="ccf-toggle ccf-inline-group-btn" data-inline-group-toggle title="나레이션·구분선·서식 유지·서식 저장" aria-label="더 보기" aria-haspopup="menu" aria-expanded="false">⋯</button><span class="ccf-inline-group-menu" role="menu">
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="narration" title="나레이션" aria-label="나레이션" aria-pressed="false"><span class="ccf-gi-key">Nr</span><span class="ccf-gi-label">나레이션</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><span class="ccf-gi-key"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></span><span class="ccf-gi-label">구분선</span></button>
-      <button type="button" class="ccf-toggle ccf-keep-toggle" role="menuitem" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false"><span class="ccf-gi-key">유지</span><span class="ccf-gi-label">서식 유지</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장"><span class="ccf-gi-key">Sv</span><span class="ccf-gi-label">서식 저장</span></button>
-      <button type="button" class="ccf-toggle" role="menuitem" data-inline-command="paren-gray" title="괄호 안 글자를 회색으로" aria-label="괄호 회색" aria-pressed="false"><span class="ccf-gi-key">()</span><span class="ccf-gi-label">괄호 회색</span></button>
-      </span></span>
+      <span class="ccf-inline-row-break" aria-hidden="true"></span>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="ruby" title="루비" aria-label="루비">Rb</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="tooltip" title="툴팁" aria-label="툴팁">Tip</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="blur" title="블러" aria-label="블러">Bl</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="code" title="코드" aria-label="코드">&lt;/&gt;</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="narration" title="나레이션" aria-label="나레이션" aria-pressed="false">Nr</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></button>
+      <button type="button" class="ccf-toggle ccf-keep-toggle ccf-row2-btn" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false">유지</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장">Sv</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="paren-gray" title="괄호 안 글자를 회색으로" aria-label="괄호 회색" aria-pressed="false">()</button>
+      <span class="ccf-quick-cutins" role="group" aria-label="빠른 컷인"><button type="button" class="ccf-quick-cutin" data-quick="0"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="15" rx="8" ry="3"/><path d="M4 15v2.5c0 1.66 3.58 3 8 3s8-1.34 8-3V15"/><path d="M7.5 14V9.5C7.5 8.12 9.51 7 12 7s4.5 1.12 4.5 2.5V14"/><ellipse cx="12" cy="9.5" rx="4.5" ry="2.5"/></svg></button><button type="button" class="ccf-quick-cutin" data-quick="1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5z"/><path d="M12 9.5v5"/><path d="M12 17.2v.1"/></svg></button></span>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
 
     bindInlineToolbarEvents(toolbar);
+    bindQuickCutins(toolbar);
     try {
       refreshInlineNarrationButton(toolbar);
     } catch (error) {
@@ -7443,7 +7531,7 @@
     const belowTop = anchorRect.bottom + INLINE_NARRATOR_POPOVER_GAP;
     const aboveTop = anchorRect.top - INLINE_NARRATOR_POPOVER_GAP - height;
     // 0.1.138 묶음 단추가 주사위 줄(입력칸 위)에 있으면 위로 먼저 연다 — 아래로 열면 입력칸을 덮는다
-    const fitsBelow = belowTop + height <= window.innerHeight - INLINE_NARRATOR_POPOVER_MARGIN && !(toolbar?.classList?.contains("ccf-groups-in-dice-row") && aboveTop >= INLINE_NARRATOR_POPOVER_MARGIN);
+    const fitsBelow = belowTop + height <= window.innerHeight - INLINE_NARRATOR_POPOVER_MARGIN;
     const top = fitsBelow
       ? belowTop
       : Math.max(INLINE_NARRATOR_POPOVER_MARGIN, aboveTop);
@@ -7615,7 +7703,7 @@
     );
     const belowTop = anchorRect.bottom + GAP;
     // 0.1.138 묶음 단추가 주사위 줄(입력칸 위)에 있으면 위로 먼저 연다 — 아래로 열면 입력칸을 덮는다
-    const fitsBelow = belowTop + height <= window.innerHeight - MARGIN && !(toolbar?.classList?.contains("ccf-groups-in-dice-row") && anchorRect.top - GAP - height >= MARGIN);
+    const fitsBelow = belowTop + height <= window.innerHeight - MARGIN;
     const top = fitsBelow
       ? belowTop
       : Math.max(MARGIN, anchorRect.top - GAP - height);

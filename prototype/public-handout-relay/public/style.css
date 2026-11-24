@@ -403,8 +403,6 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 #chat-form .dice-row{align-items:center;gap:0;padding:0 8px 8px}
 #chat-form .dice-row button[aria-label^="D"]{flex:none;width:30px;height:30px;margin-left:4px;padding:3px}
 #chat-form .dice-row button[type=submit]{margin-left:4px;letter-spacing:.37141px}
-#chat-form .dice-row .fmt-group[data-group="deco"]{margin-left:auto}
-#chat-form .dice-row .fmt-group[data-group="extra"]{margin-left:2px}
 .fmt-group{position:relative;display:inline-flex;flex:none}
 #chat-form .fmt-group-btn{align-self:auto;display:flex;align-items:center;justify-content:center;min-width:0;width:24px;height:30px;padding:0;border:0;border-radius:0;background:rgb(40,40,40);box-shadow:none;color:#fff;font-size:12px;font-weight:400;line-height:1}
 #chat-form .fmt-group-btn:hover,.fmt-group:has([aria-pressed="true"]) .fmt-group-btn{background:#383838!important}
@@ -480,7 +478,6 @@ a.menu-item{display:block;box-sizing:border-box;text-decoration:none;color:inher
 
 /* [Aa][⋯][전송] same width: 38 + 2 + 38 + 2 + 38 (the same 118px group); they shrink together before touching the dice */
 #chat-form .dice-row .fmt-group[data-group="deco"],#chat-form .dice-row .fmt-group[data-group="extra"]{flex:0 1 38px;min-width:24px}
-#chat-form .dice-row .fmt-group[data-group="extra"]{margin-left:2px}
 #chat-form .dice-row .fmt-group-btn{width:100%;min-width:0;height:31px}
 #chat-form .dice-row button[type=submit]{flex:0 1 38px;width:38px;min-width:24px;margin-left:2px;padding:0;letter-spacing:0;white-space:nowrap;overflow:hidden}
 #chat-form .dice-row button[aria-label^="D"]{flex-shrink:0}
@@ -565,3 +562,11 @@ html.chat-only #messages{min-height:0;max-height:none}
 
 /* A panel or marker that is not locked gets CCFOLIA's dark ground while hovered (no transition, no scale, no border); a locked one gets nothing */
 #scene-field img[data-hover]:hover{background:rgba(0,0,0,.2)}
+
+/* The toolkit's bar: a second row with what were the Aa and ⋯ menus; two quick cut-in buttons, then send, all three as wide as the toolkit's (38px) */
+#chat-form .fmt-row2{border-top:0;padding-top:0}
+#chat-form .fmt-row2 button{width:auto;min-width:30px;padding:0 6px;font-size:12px}
+#chat-form .dice-row .quick-cutin{flex:none;width:38px;min-width:38px;height:31px;margin-left:2px;padding:0;border:0;border-radius:4px;background:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#chat-form .dice-row .quick-cutin[data-quick="0"]{margin-left:auto}
+#chat-form .dice-row .quick-cutin:hover{background:rgba(255,255,255,.08)}
+#chat-form .dice-row button[type=submit]{width:38px;min-width:38px;margin-left:2px}
