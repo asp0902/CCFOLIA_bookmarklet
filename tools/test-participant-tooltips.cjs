@@ -32,6 +32,7 @@ const STATE = { roomTitle: 'r', gmOnline: true, capabilities: { chatRead: true, 
     await page.evaluate(() => { const b = document.createElement('button'); b.id = 'penguin'; b.setAttribute('aria-label', 'GM 도구'); b.style.cssText = 'position:fixed;left:300px;top:200px;width:40px;height:40px;z-index:9999'; document.body.append(b); });
     await hover('#penguin'); assert.equal(await tip(), 'GM 도구', 'the penguin of the mirrored top bar');
     await page.evaluate(() => document.getElementById('penguin').remove());
+    for (const [selector, text] of [['#chat-form .fmt-row button', 'Bold'], ['#chat-form .fmt-color', 'Text color'], ['#chat-form .fmt-size', 'Font size'], ['#chat-form .fmt-group-btn', '꾸미기']]) { await hover(selector); assert.equal(await tip(), text, selector); assert.equal(await page.locator(selector).first().getAttribute('title'), null, `${selector}: no browser tooltip`); }
     for (const selector of ['#bgm-mute', '#chat-close', '.pen-fab', '#account-btn']) { await hover(selector); assert.equal(await tip(), null, `${selector}: none on CCFOLIA`); }
     assert.deepEqual(await page.evaluate(() => { const c = getComputedStyle(document.querySelector('.piece-tip')); return [c.backgroundColor, c.color, c.fontSize, c.fontWeight, c.lineHeight, c.padding, c.borderRadius, c.whiteSpace, c.maxWidth]; }), ['rgb(22, 22, 22)', 'rgb(255, 255, 255)', '12px', '500', 'normal', '4px 8px', '4px', 'pre-wrap', '300px']);
     // 100ms first, gone on leaving

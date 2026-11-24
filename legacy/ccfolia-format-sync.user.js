@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.147
+// @version      0.1.148
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.147"),
+    version: getUserscriptVersion("0.1.148"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -3066,6 +3066,60 @@
   const OPEN_BTN_SELECTOR = `.ccf-open-btn[${OPEN_BTN_ATTR}="1"]`;
   const INLINE_TOOLBAR_ATTR = "data-ccf-inline-toolbar";
   const INLINE_TOOLBAR_SELECTOR = `.ccf-inline-toolbar[${INLINE_TOOLBAR_ATTR}="1"]`;
+  // 서식 바의 툴팁: 코코포리아 MUI Tooltip 실측값(toolkit-presence 펭귄과 같은 값). title 은 호버 때 data 로 옮겨 브라우저 툴팁이 겹치지 않게 하고, 코드가 title 을 새로 쓰면 그 글을 쓴다.
+  (() => {
+    window.__CCF_FMT_TIP_ABORT__?.abort();
+    const abort = new AbortController(), on = { signal: abort.signal, capture: true };
+    window.__CCF_FMT_TIP_ABORT__ = abort;
+    const EASE = "cubic-bezier(0.4, 0, 0.2, 1)", TARGET = ".ccf-inline-toolbar :is([title], [data-ccf-tip])";
+    let target = null, node = null, timer = 0, closedAt = 0;
+    const close = () => {
+      window.clearTimeout(timer);
+      if (!target) return;
+      target = null; closedAt = Date.now();
+      const leaving = node; node = null;
+      if (!leaving) return;
+      leaving.setAttribute("data-leaving", "1");
+      leaving.animate({ opacity: [1, 0] }, { duration: 200, easing: EASE, fill: "forwards" }).onfinish = () => leaving.remove();
+      leaving.animate({ transform: ["none", "scale(.75, .5625)"] }, { duration: 133, delay: 67, easing: EASE, fill: "forwards" });
+    };
+    const show = (el) => {
+      const text = el.getAttribute("title") || el.dataset.ccfTip;
+      if (el.hasAttribute("title")) { el.dataset.ccfTip = text; el.removeAttribute("title"); if (!el.hasAttribute("aria-label")) el.setAttribute("aria-label", text); }
+      if (!text) return;
+      target = el;
+      timer = window.setTimeout(() => {
+        if (target !== el || !el.isConnected) return;
+        node = document.createElement("div"); node.className = "ccf-fmt-tip"; node.setAttribute("role", "tooltip"); node.textContent = el.dataset.ccfTip || text;
+        node.style.cssText = "position:fixed;z-index:2147483647;box-sizing:border-box;max-width:300px;padding:4px 8px;border-radius:4px;background:rgb(22,22,22);color:#fff;font:500 12px/normal Roboto,Helvetica,Arial,sans-serif;white-space:pre-wrap;overflow-wrap:break-word;pointer-events:none;box-shadow:0 1px 3px 0 rgba(0,0,0,.2),0 1px 1px 0 rgba(0,0,0,.14),0 2px 1px -1px rgba(0,0,0,.12)";
+        document.documentElement.appendChild(node);
+        const r = el.getBoundingClientRect(), w = node.offsetWidth, h = node.offsetHeight, side = /^menuitem/.test(el.getAttribute("role") || ""); // 세로 메뉴 항목은 다음 항목을 가리지 않게 옆에
+        const flip = side ? r.right + 14 + w > innerWidth : r.bottom + 14 + h > innerHeight;
+        node.style.left = `${side ? (flip ? r.left - 14 - w : r.right + 14) : Math.max(0, Math.min(innerWidth - w, r.left + r.width / 2 - w / 2))}px`;
+        node.style.top = `${side ? Math.max(0, Math.min(innerHeight - h, r.top + r.height / 2 - h / 2)) : flip ? r.top - 14 - h : r.bottom + 14}px`;
+        node.style.transformOrigin = side ? `${flip ? "right" : "left"} center` : `center ${flip ? "bottom" : "top"}`;
+        node.animate({ opacity: [0, 1] }, { duration: 200, easing: EASE });
+        node.animate({ transform: ["scale(.75, .5625)", "none"] }, { duration: 133, easing: EASE });
+      }, Date.now() - closedAt < 800 ? 0 : 100);
+    };
+    document.addEventListener("pointerover", (event) => {
+      if (event.pointerType !== "mouse") return;
+      const el = event.target instanceof Element ? event.target.closest(TARGET) : null;
+      if (el === target) return;
+      close();
+      if (el) show(el);
+    }, on);
+    document.addEventListener("focusin", (event) => {
+      const el = event.target instanceof Element && event.target.matches(":focus-visible") ? event.target.closest(TARGET) : null;
+      if (!el || el === target) return;
+      close(); show(el);
+    }, on);
+    document.addEventListener("focusout", (event) => { if (event.target === target) close(); }, on);
+    for (const type of ["pointerdown", "input"]) document.addEventListener(type, close, on);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); }, on);
+    document.documentElement.addEventListener("mouseleave", close, { signal: abort.signal });
+    window.addEventListener("blur", close, { signal: abort.signal });
+  })();
   const MODAL_ID = "ccf-format-modal";
   const BACKDROP_ID = "ccf-format-backdrop";
   const STYLE_ID = "ccf-format-style";
