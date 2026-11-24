@@ -354,7 +354,7 @@ export class RoomRelay {
         displayGrid: body.displayGrid === true, gridSize: Math.max(1, Math.min(50, num(body.gridSize, 1))),
         screen: { scale: Math.max(0.2, Math.min(2, num(body.screen?.scale, 1))), x: Math.round(num(body.screen?.x)), y: Math.round(num(body.screen?.y)) },
         // CCFOLIA's own audio (BGM file and sound effect): CDN address only, volume 0..1.
-        media: audio(body.media), sound: audio(body.sound),
+        media: audio(body.media), sound: audio(body.sound), crossfade: Math.max(0, Math.min(10, num(body.crossfade))),
         ...(Array.isArray(body.effects) ? { effects: cleanSceneEffects(body.effects) } : {}),
         ...(Array.isArray(body.cutinNames) ? { cutinNames: cleanCutinNames(body.cutinNames) } : {}),
         ...(Array.isArray(body.cutinPictures) ? { cutinPictures: cleanCutinPictures(body.cutinPictures) } : {}),
