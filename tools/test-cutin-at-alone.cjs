@@ -51,3 +51,4 @@ const GIF = 'data:image/gif;base64,R0lGODlhAgABAIAAAAAAAP///yH5BAEAAAAALAAAAAACA
     console.log('cutin at alone PASS');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
+assert.match(fs.readFileSync(path.join(root, "legacy/ccfolia-format-sync.user.js"), "utf8"), /const picture = cutAway && cutinHasPicture\(cutinName\) && !editor\.closest\?\.\("\.ccf-scp-panel"\);/, "panel input: the panel puts the picture envelope (with its Nr)");
