@@ -1378,6 +1378,7 @@ refreshSpeakerUi();
   // font menu (가): one list, Korean names in 가나다 order, then Latin names; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
   const fontBox = group("font", "가", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
   fontMenu.classList.add("fmt-font-menu");
+  { const perSpeaker = mk("화자별 글꼴…", "화자별 글꼴", () => openSpeakerFonts()); perSpeaker.setAttribute("role", "menuitem"); perSpeaker.className = "fmt-speaker-fonts"; fontMenu.append(perSpeaker); }
   const byName = (a, b) => (/^[가-힣]/.test(b[1]) - /^[가-힣]/.test(a[1])) || a[1].localeCompare(b[1], "ko");
   for (const [id, label] of Object.keys(MESSAGE_FONTS).map(id => [id, MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id]]).sort(byName)) { const item = mk(label, `글꼴: ${label}`, () => wrapSelection(`{f:${id}|`, "|}")); item.setAttribute("role", "menuitem"); item.dataset.fontId = id; fontMenu.append(item); }
   fontBox.querySelector(".fmt-group-btn").addEventListener("click", () => {
@@ -1421,9 +1422,44 @@ refreshSpeakerUi();
 }
 // What the toggles do to a message when it is sent (the GM side turns the markers into the format envelope).
 const fmtState = { narration: false, parenGray: false };
+// Fonts per speaker (the toolkit's rule, #637): the narration row while narration is on, else the row of the current name; a font picked by hand wins.
+// Commands stay raw: the GM side drops the markers of a message that is a command.
+const SPEAKER_FONT_KEY = "capybara-speaker-fonts-v1";
+function readSpeakerFonts() {
+  try { const rows = JSON.parse(localStorage.getItem(SPEAKER_FONT_KEY) || "[]"); return Array.isArray(rows) ? rows.filter(row => typeof row?.name === "string" && Object.prototype.hasOwnProperty.call(MESSAGE_FONTS, row.fontId)) : []; } catch (_) { return []; }
+}
+function writeSpeakerFonts(rows) { try { localStorage.setItem(SPEAKER_FONT_KEY, JSON.stringify(rows.filter(row => row.fontId).map(({ name, fontId }) => ({ name, fontId })))); } catch (_) {} }
+function speakerFontNow() {
+  const rows = readSpeakerFonts(), fontOf = name => rows.find(row => row.name === name)?.fontId || "";
+  return (fmtState.narration && fontOf("")) || fontOf(chatName.value.trim() || "\u0000");
+}
+function openSpeakerFonts() {
+  openDialog("화자별 글꼴", body => {
+    const draw = () => {
+      const rows = readSpeakerFonts(), names = [...new Set([...myCharacters.map(c => c.name).filter(Boolean), chatName.value.trim(), ...rows.map(row => row.name).filter(Boolean)].filter(Boolean))];
+      const line = (name, label) => {
+        const box = el("label", "sf-row"), select = el("select", "sf-font");
+        select.setAttribute("aria-label", `${label} 글꼴`);
+        select.append(new Option("없음", ""), ...Object.keys(MESSAGE_FONTS).map(id => new Option(MESSAGE_FONT_INFO[id]?.[0] || MESSAGE_FONTS[id], id)));
+        select.value = rows.find(row => row.name === name)?.fontId || "";
+        select.addEventListener("change", () => { writeSpeakerFonts([...readSpeakerFonts().filter(row => row.name !== name), { name, fontId: select.value }]); });
+        box.append(el("span", "sf-name", label), select); return box;
+      };
+      const hint = el("p", "sf-hint", "보낼 때 그 화자의 글꼴이 실립니다. 글꼴(가)로 직접 고른 부분이 우선이고, 주사위·커맨드에는 실리지 않습니다.");
+      const add = el("form", "sf-add"), input = el("input"), ok = el("button", "", "추가");
+      input.placeholder = "이름 추가"; input.setAttribute("aria-label", "이름 추가"); ok.type = "submit";
+      add.append(input, ok);
+      add.addEventListener("submit", event => { event.preventDefault(); const name = input.value.trim(); if (!name) return; if (!readSpeakerFonts().some(row => row.name === name)) writeSpeakerFonts([...readSpeakerFonts(), { name, fontId: "noto-sans-kr" }]); draw(); });
+      body.replaceChildren(hint, line("", "나레이션"), ...names.map(name => line(name, name)), add);
+    };
+    draw();
+  });
+}
 function outgoingText(text) {
   let out = text;
   if (fmtState.parenGray) out = out.replace(/([(（][^()（）\n]*[)）])/g, "{c:#9e9e9e|$1|}");
+  const font = speakerFontNow();
+  if (font && !/\{f:[a-z0-9-]+\|/.test(out)) out = `{f:${font}|${out}|}`;
   if (fmtState.narration) out = `{n:1|${out}|}`;
   return out;
 }
