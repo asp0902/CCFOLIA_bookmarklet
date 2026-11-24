@@ -82,6 +82,8 @@ const cleanPieceInfo = item => {
     : action?.type === "link" && /^https?:\/\/[^\s<>"]{1,490}$/i.test(String(action.url || "")) ? { type: "link", url: String(action.url) } : null;
   return { ...(memo ? { memo } : {}), ...(clean ? { action: clean } : {}) };
 };
+// Names of played cut-ins that start with @: the playroom leaves them out of the chat text.
+const cleanCutinNames = list => list.filter(name => typeof name === "string" && name.startsWith("@") && name.length <= 100).slice(0, 200);
 export class RoomRelay {
   constructor(state) {
     this.state = state;
@@ -352,6 +354,7 @@ export class RoomRelay {
         // CCFOLIA's own audio (BGM file and sound effect): CDN address only, volume 0..1.
         media: audio(body.media), sound: audio(body.sound),
         ...(Array.isArray(body.effects) ? { effects: cleanSceneEffects(body.effects) } : {}),
+        ...(Array.isArray(body.cutinNames) ? { cutinNames: cleanCutinNames(body.cutinNames) } : {}),
         items: (Array.isArray(body.items) ? body.items : []).slice(0, 200).filter(item => cdn(item?.imageUrl))
           .map(item => ({ id: text(item.id, 60), locked: item.locked === true, closed: item.closed === true, x: num(item.x), y: num(item.y), z: num(item.z), angle: num(item.angle), width: num(item.width, 1), height: num(item.height, 1), imageUrl: cdn(item.imageUrl), ...cleanPieceInfo(item) })),
         markers: (Array.isArray(body.markers) ? body.markers : []).slice(0, 100).filter(item => cdn(item?.imageUrl))

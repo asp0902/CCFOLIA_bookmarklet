@@ -91,6 +91,12 @@ const PNG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABA
     await page.waitForSelector('#envBody .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
     await addRow('envOnly', `${envelope({ v: 1, text: '번개' })}번개`);
     await page.waitForFunction(() => document.getElementById('envOnly').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 3000 });
+    // a sound-only cut-in whose name starts with @: a name-alone row keeps its line but shows no text; text + @name and a name without @ are left as they are
+    await page.evaluate(() => { const re = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ...re, ids: [...re.ids, 'e8', 'e9'], entities: { ...re.entities, e8: { name: '@소리', soundUrl: 'https://example.test/s.mp3' }, e9: { name: '소리만', soundUrl: 'https://example.test/s.mp3' } } }; });
+    await addRow('poke3', '평범'); await addRow('atSound', '@소리'); await addRow('atBody', '본문 @소리'); await addRow('plainSound', '소리만');
+    await page.waitForFunction(() => document.getElementById('atSound').getAttribute('data-ccf-cutin-at') === '1', null, { timeout: 3000 });
+    assert.deepEqual(await page.locator('#atSound').evaluate((p) => { const c = getComputedStyle(p); return [c.color, p.firstChild.nodeValue, p.getBoundingClientRect().height > 10]; }), ['rgba(0, 0, 0, 0)', '@소리', true]);
+    for (const id of ['atBody', 'plainSound']) assert.equal(await page.locator('#' + id).getAttribute('data-ccf-cutin-at'), null, id);
     // no duplicates on re-scan / text change back and forth
     await page.evaluate(() => { const p = document.getElementById('trigger'); p.firstChild.nodeValue = '번개'; p.appendChild(document.createElement('b')).remove(); });
     await page.waitForTimeout(400);

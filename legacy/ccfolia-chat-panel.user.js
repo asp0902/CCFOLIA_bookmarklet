@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.61
+// @version      0.5.62
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.61";
+  const VERSION = "0.5.62";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -490,6 +490,12 @@
       .filter((deck) => deck && (url(deck.coverImageUrl) || staticCover(deck.coverImageUrl)))
       .slice(0, 50)
       .map((deck) => ({ id: String(deck._id || "").slice(0, 60), x: num(deck.x), y: num(deck.y), z: num(deck.z), layer: num(deck.zIndex, 1), width: num(deck.width, 1), height: num(deck.height, 1), count: deck.items && typeof deck.items === "object" ? Math.min(9999, Object.keys(deck.items).length) : 0, coverUrl: url(deck.coverImageUrl) || staticCover(deck.coverImageUrl) }));
+  }
+  // 플레이룸 채팅이 감출 @컷인 이름. 재생된 적 있는 것만 보낸다(아직 안 나온 컷인의 이름이 스포일러가 되지 않게).
+  function relayCutinNames(effects, num) {
+    return Object.values(effects && typeof effects === "object" ? effects : {})
+      .filter((effect) => typeof effect?.name === "string" && effect.name.startsWith("@") && effect.name.length <= 100 && num(effect.playTime) - num(effect.createdAt) > 2000)
+      .map((effect) => effect.name).slice(0, 200);
   }
   // 컷인(entities.roomEffects). 실측(1.37.6 번들): 글이 컷인 이름으로 끝나면 보낸 쪽이 playTime 을 지금 시각으로 쓰고, 각 화면은 playTime 이 늘어나면 재생한다.
   // 한 번도 재생되지 않은 컷인(만들 때 playTime = createdAt)의 그림·소리 주소는 내보내지 않는다. 최근 재생 5개만.
@@ -5159,7 +5165,7 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
             characterDocs: relayCharacterDocs(ent.roomCharacters?.entities), items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat),
-            effects: relayEffectViews(ent.roomEffects?.entities, url, num)
+            effects: relayEffectViews(ent.roomEffects?.entities, url, num), cutinNames: relayCutinNames(ent.roomEffects?.entities, num)
           };
         } catch (error) { return null; }
       },
