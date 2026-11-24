@@ -570,3 +570,11 @@ html.chat-only #messages{min-height:0;max-height:none}
 #chat-form .dice-row .quick-cutin[data-quick="0"]{margin-left:auto}
 #chat-form .dice-row .quick-cutin:hover{background:rgba(255,255,255,.08)}
 #chat-form .dice-row button[type=submit]{width:38px;min-width:38px;margin-left:2px}
+
+/* Fonts per speaker (from the 가 menu) */
+.fmt-menu .fmt-speaker-fonts{border-bottom:1px solid rgba(255,255,255,.12)!important;font-weight:700}
+.sf-hint{margin:0 0 12px;color:rgba(255,255,255,.7);font-size:13px}
+.sf-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:8px;align-items:center;margin:6px 0}
+.sf-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sf-font,.sf-add input{min-width:0;padding:4px 6px;border:1px solid rgba(255,255,255,.23);border-radius:4px;background:#202020;color:#fff;font:inherit}
+.sf-add{display:flex;gap:8px;margin-top:12px}.sf-add input{flex:1}
