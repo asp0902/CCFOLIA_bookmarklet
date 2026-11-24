@@ -36,6 +36,17 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
       assert.equal(await svOpen(), true, `field ${i}: Sv stays after OK`);
       assert.equal(await fields.nth(i).inputValue(), code, `field ${i}: colour set`);
     }
+    // the whole preset flow: name -> colours (above) -> + -> 프리셋 추가 -> saved with both colours; reopening the window keeps it
+    await sv.locator('[data-style-preset-name]').fill('색 프리셋');
+    await sv.locator('[data-inline-style-action="add-menu"]').click();
+    await page.locator('.ccf-style-add-menu [data-inline-style-action="add"]').click();
+    await page.waitForTimeout(200);
+    const saved = await page.evaluate(() => { for (const k of Object.keys(localStorage)) { try { const v = JSON.parse(localStorage.getItem(k)); const list = Array.isArray(v) ? v : v?.presets; const hit = Array.isArray(list) && list.find((p) => p?.name === '색 프리셋'); if (hit) return hit.style; } catch (_) {} } return null; });
+    assert.deepEqual(saved && { color: saved.color, bg: saved.backgroundColor }, { color: '#ff3366', bg: '#123456' }, 'preset saved with its colours');
+    await bar.locator('[data-inline-command="style-clipboard"]').click(); await page.waitForTimeout(200);
+    if (!(await svOpen())) await bar.locator('[data-inline-command="style-clipboard"]').click();
+    await sv.waitFor({ timeout: 3000 });
+    assert.equal(await sv.getByText('색 프리셋').count() > 0, true, 'listed after reopening');
     // Esc in the picker closes only the picker
     await fields.nth(0).click(); await pick.waitFor({ timeout: 2000 });
     await pick.locator('.hex').click(); await page.keyboard.press('Escape');
