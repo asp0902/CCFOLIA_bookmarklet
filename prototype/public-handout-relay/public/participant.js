@@ -324,6 +324,13 @@ const TIP_LABELS = { "채팅 설정": "채팅 메뉴", "이름 색": "캐릭터 
 const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마", "GM 도구"]);
 const bgmSlotTip = cfg => `${cfg?.name || "NOTITLE"}\nvol:${cfg?.volume ?? 0} loop:${!cfg || cfg.repeat ? "on" : "off"}`;
 function buttonTip(button) {
+  if (button.closest(".fmt-row, .fmt-group")) { // the format bar: its own titles in this box
+    const text = button.getAttribute("title") || button.dataset.fmtTip;
+    if (!text) return null;
+    button.dataset.fmtTip = text; button.removeAttribute("title");
+    if (!button.hasAttribute("aria-label")) button.setAttribute("aria-label", text);
+    return { text };
+  }
   if (button.dataset.tip) return { text: button.dataset.tip }; // a panel's or marker's memo
   if (button.id === "bgm-slot1") return { text: bgmKey ? bgmLast?.title || "NOTITLE" : bgmSlotTip(roomAudio.media.cfg) };
   if (button.id === "bgm-slot2") return { text: bgmSlotTip(roomAudio.sound.cfg) };
@@ -355,7 +362,7 @@ function showButtonTip(button, tip) {
 }
 document.addEventListener("pointerover", event => {
   if (event.pointerType !== "mouse" || (innerWidth <= 720 && !chatOnly)) return hideButtonTip();
-  const button = event.composedPath().find(node => node instanceof Element && node.matches("button, .bgm-slot, img[data-tip]")) || null; // mirrored parts are in shadow roots
+  const button = event.composedPath().find(node => node instanceof Element && node.matches("button, .bgm-slot, .fmt-color, .fmt-size, img[data-tip]")) || null; // mirrored parts are in shadow roots
   if (button === tipButton) return;
   if (button?.dataset.tip && button.dataset.id === tipButton?.dataset.id) { tipButton = button; return; } // the same panel, redrawn
   if (event.buttons && button?.dataset.tip) return hideButtonTip(); // not while dragging
@@ -368,6 +375,15 @@ document.addEventListener("pointerover", event => {
   tipTimer = setTimeout(() => showButtonTip(button, buttonTip(button) || tip), Date.now() - tipClosedAt < 800 ? 0 : 100);
 }, true);
 for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, hideButtonTip, true);
+document.addEventListener("focusin", event => { // keyboard focus on the format bar shows the same tooltip
+  const node = event.target;
+  if (!(node instanceof Element) || !node.matches(":focus-visible") || !node.closest(".fmt-row, .fmt-group") || node === tipButton) return;
+  hideButtonTip();
+  const tip = buttonTip(node);
+  if (!tip) return;
+  tipButton = node; tipTimer = setTimeout(() => showButtonTip(node, tip), 100);
+}, true);
+document.addEventListener("focusout", event => { if (event.target === tipButton) hideButtonTip(); }, true);
 window.addEventListener("blur", hideButtonTip);
 document.documentElement.addEventListener("mouseleave", hideButtonTip);
 let pieceActionAt = 0;
