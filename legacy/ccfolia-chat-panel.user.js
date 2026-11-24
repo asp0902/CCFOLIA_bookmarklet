@@ -883,9 +883,9 @@
   }
   function applyRowExtra() {
     if (!listEl) return;
-    for (const row of listEl.querySelectorAll("[data-ccf-msg-id]")) {
-      if (row.style.getPropertyValue("border-bottom") && !row.hasAttribute("data-ccf-prose-cont-leader")) row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
-    }
+    // 0.5.72: 줄마다 넣지 않고 목록 CSS 변수로(나레이션 줄은 CSS 규칙이 빼 준다)
+    panelEl?.style.setProperty("--scp-row-pad-b", `${ccfScpRowPadBottom + panelRowExtra}px`);
+    for (const row of listEl.querySelectorAll("[data-ccf-msg-id]")) row.style.removeProperty("padding-bottom");
   }
   function adjustPanelRowGap() {
     if (!listEl) return;
