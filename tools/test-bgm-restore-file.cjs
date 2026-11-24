@@ -26,7 +26,7 @@ assert.equal(sandbox.shouldSkipCcfYoutubeRestoreForNativeBgm('BGM01'), false, 'a
 assert.equal(sandbox.shouldSkipCcfYoutubeRestoreForNativeBgm('BGM02'), true, 'BGM02 is the sound field');
 // the two restore paths wait for the room instead of guessing
 assert.match(between('  function primeAutoplayFastPath(', '  function initCcfBgmEnhancer('), /ccfBgmRoomSlotHasFile\(persisted\.slotKey\) === null\) return;/);
-assert.match(between('  function prepareCcfYoutubeBgmPlayerFromEntries(', '  function cueCcfYoutubeBgmSlot('), /ccfBgmRoomSlotHasFile\(targetSlotKey\) === null && ccfBgmRestoreWaits < 10/);
+assert.match(between('  function prepareCcfYoutubeBgmPlayerFromEntries(', '  function cueCcfYoutubeBgmSlot('), /ccfBgmRoomSlotHasFile\(targetSlotKey\) === null\) \{\n\s*if \(ccfBgmRestoreWaits < 100\)/);
 // CCFOLIA's own players are candidates, found once through its module table
 const player = { audioElement: { id: 'detached' } };
 const factory = function () { return 'audioSourceNodePool'; };
@@ -45,3 +45,7 @@ assert.match(source, /const shouldEmit = MANUAL_STOP_REASONS\.has\(reason\) \|\|
 assert.match(source, /if \(\(Number\(data\.startedAt\) \|\| 0\) < ccfBgmPageOpenedAt\) \{\n\s*const hasFile = ccfBgmRoomSlotHasFile\(normalizeCcfBgmSlotKey\(data\.slotKey\)\);\n\s*if \(hasFile === null\) \{ ccfBgmFirestoreLastPlaybackSignature = ""; return; \}\n\s*if \(shouldSkipCcfYoutubeRestoreForNativeBgm\(data\.slotKey, "remote-restore"\)\) return;\n\s*\}/);
 assert.match(source, /const ccfBgmPageOpenedAt = Math\.round\(\(typeof performance !== "undefined" && performance\.timeOrigin\) \|\| Date\.now\(\)\);/);
 console.log('bgm restore file (remote) PASS');
+// 0.3.54: GM's own reload (local record): no restore while the room data is unknown (waits up to 30 s, then only cues — it used to restore after 3 s)
+assert.match(source, /if \(persisted\?\.state === "playing" && ccfBgmRoomSlotHasFile\(targetSlotKey\) === null\) \{\n\s*if \(ccfBgmRestoreWaits < 100\) \{/);
+assert.match(source, /ccfBgmRestoreConsumed = true;\n\s*cueCcfYoutubeBgmSlot\(targetSlotKey, hit\[1\], hit\[0\]\);\n\s*return;\n\s*\}\n\n\s*if \(persisted\?\.state === "playing"\) \{/);
+console.log('bgm restore file (local wait) PASS');
