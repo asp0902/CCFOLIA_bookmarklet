@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.52
+// @version      0.3.53
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.52";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.53";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -6173,12 +6173,14 @@
       .some((button) => getCcfBgmSlotKeyFromButton(button));
   }
 
+  function setCcfAttrIfChanged(el, name, value) { if (el.getAttribute(name) !== value) el.setAttribute(name, value); }
+
   function ensureCcfBgmProgressBar(panel) {
     if (!(panel instanceof HTMLElement)) {
       return;
     }
 
-    panel.setAttribute("data-ccf-bgm-panel", "1");
+    setCcfAttrIfChanged(panel, "data-ccf-bgm-panel", "1");
     const mountTarget = findCcfBgmProgressMountTarget(panel);
 
     if (ccfBgmProgressRoot) {
@@ -6266,7 +6268,7 @@
     });
 
     if (bgmButtonRow instanceof HTMLElement) {
-      bgmButtonRow.setAttribute("data-ccf-bgm-button-row", "1");
+      setCcfAttrIfChanged(bgmButtonRow, "data-ccf-bgm-button-row", "1");
       return bgmButtonRow;
     }
 
@@ -6277,7 +6279,7 @@
     if (lastBgmButton instanceof HTMLElement) {
       const row = lastBgmButton.parentElement;
       if (row instanceof HTMLElement && row !== panel && panel.contains(row)) {
-        row.setAttribute("data-ccf-bgm-button-row", "1");
+        setCcfAttrIfChanged(row, "data-ccf-bgm-button-row", "1");
         return row;
       }
     }
@@ -6351,14 +6353,11 @@
       return;
     }
 
-    host.setAttribute("data-ccf-bgm-progress-host", "1");
+    setCcfAttrIfChanged(host, "data-ccf-bgm-progress-host", "1");
     try {
       const computed = window.getComputedStyle(host);
       const direction = computed.flexDirection || "";
-      host.setAttribute(
-        "data-ccf-bgm-progress-flow",
-        direction.startsWith("column") ? "column" : "row"
-      );
+      setCcfAttrIfChanged(host, "data-ccf-bgm-progress-flow", direction.startsWith("column") ? "column" : "row");
       if (computed.position === "static") {
         host.style.position = "relative";
       }
@@ -6442,11 +6441,16 @@
     const folded = dock.getAttribute("data-ccf-youtube-bgm-folded") === "1";
     const button = bar.querySelector(".ccf-youtube-bgm-fold-btn");
     // MUI ExpandLess (접기) / ExpandMore (펴기)
-    button.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="' + (folded ? "M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z" : "m12 8-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z") + '"/></svg>';
-    button.setAttribute("aria-label", folded ? "BGM 영상 펴기" : "BGM 영상 접기");
+    // 0.3.53: 바뀐 것만 쓴다 — 같은 값을 매번 다시 쓰면 다른 스크립트의 DOM 관찰자가 계속 깨어났다(유휴 8초에 수백 건, 실측)
+    if (button.dataset.folded !== String(folded)) {
+      button.dataset.folded = String(folded);
+      button.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="' + (folded ? "M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z" : "m12 8-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z") + '"/></svg>';
+      button.setAttribute("aria-label", folded ? "BGM 영상 펴기" : "BGM 영상 접기");
+    }
     let name = "";
     try { name = String(ccfBgmPlayer?.getVideoData?.()?.title || ""); } catch (_) {}
-    bar.querySelector(".ccf-youtube-bgm-fold-title").textContent = name;
+    const titleEl = bar.querySelector(".ccf-youtube-bgm-fold-title");
+    if (titleEl.textContent !== name) titleEl.textContent = name;
   }
 
   // BGM 영역에 보이는 영상은 "지금 소리가 나는" 플레이어의 것이어야 한다. 크로스페이드는 소리를 대기 플레이어로 넘기는데, 두 iframe 이 같은 독에 세로로 쌓이고 독이 한 칸 높이만 보여 주므로
@@ -6678,12 +6682,9 @@
       range.value = String(Math.round(ratio * 1000));
       range.style.setProperty("--ccf-bgm-progress", `${Number(range.value) / 10}%`);
     }
-    if (current) {
-      current.textContent = formatCcfBgmTime(displayNow);
-    }
-    if (duration) {
-      duration.textContent = formatCcfBgmTime(playback.total);
-    }
+    const nowText = formatCcfBgmTime(displayNow), totalText = formatCcfBgmTime(playback.total);
+    if (current && current.textContent !== nowText) current.textContent = nowText;
+    if (duration && duration.textContent !== totalText) duration.textContent = totalText;
   }
 
   function readCcfBgmPlaybackTime() {
