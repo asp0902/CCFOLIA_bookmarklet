@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Capybara Log Launcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-capybara-log
-// @version      0.0.53
+// @version      0.0.54
 // @description  Captures the current CCFOLIA room log and hands it off to the Capybara Log Editor.
 // @description:ko 현재 CCFOLIA 룸의 로그를 캡처하여 카피바라 로그 편집기로 넘깁니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -96,7 +96,7 @@
   const CCF_LOG_PACKAGE_SCRIPT_INFO = Object.freeze({
     id: "ccf-log-package",
     name: "CCF Log Package Exporter",
-  version: getUserscriptVersion("0.0.53"),
+  version: getUserscriptVersion("0.0.54"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-log-package"
   });
   const buttonState = {
@@ -5253,7 +5253,7 @@
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
     if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
-    if (style.fontId) { const family = logMessageFonts()[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; logFontsUsed().add(family); } }
+    if (style.fontId) { const family = logMessageFonts()[style.fontId]; if (family) { el.style.fontFamily = `${(window.__CCF_FONT_STACK__ || ((f) => `"${f}"`))(family)}, sans-serif`; logFontsUsed().add(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;
@@ -10709,7 +10709,7 @@ ${root.outerHTML}
       if (rewritten) el.style.backgroundImage = rewritten;
     }
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
-    if (style.fontId) { const family = logMessageFonts()[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; logFontsUsed().add(family); } }
+    if (style.fontId) { const family = logMessageFonts()[style.fontId]; if (family) { el.style.fontFamily = `${(window.__CCF_FONT_STACK__ || ((f) => `"${f}"`))(family)}, sans-serif`; logFontsUsed().add(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;

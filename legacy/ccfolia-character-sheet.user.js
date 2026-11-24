@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.67
+// @version      0.5.68
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.67";
+  const VERSION = "0.5.68";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -1211,7 +1211,7 @@
     if (!dialog) return;
     const d = normalizeDesign(state.data.design);
     if (d.font) try { window.__CCF_ENSURE_GOOGLE_FONTS__?.(d.font); } catch (_) { /* 글꼴을 못 받아도 시트는 그대로 */ }
-    dialog.style.fontFamily = d.font ? `${d.font}, Roboto, 'Noto Sans KR', sans-serif` : "";
+    dialog.style.fontFamily = d.font ? `${window.__CCF_FONT_STACK__ && !/^(serif|monospace)$/.test(d.font) ? window.__CCF_FONT_STACK__(d.font) : d.font}, Roboto, 'Noto Sans KR', sans-serif` : "";
     dialog.style.color = d.color === DESIGN_DEFAULT.color ? "" : d.color;
     dialog.style.setProperty("--ccf-cs-text", d.color);
     dialog.style.setProperty("--ccf-cs-size", `${d.size}px`);

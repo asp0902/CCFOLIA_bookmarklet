@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.164
+// @version      0.1.165
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.164"),
+    version: getUserscriptVersion("0.1.165"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -265,6 +265,8 @@
   // (다른 사용자가 보낸 값이라 임의 이름·주소는 받지 않는다.) 모두 Google Fonts 의 무료(OFL) 한글 글꼴.
   // 0.1.136 Google Fonts 의 한글 지원 글꼴 전부(38종, fonts.google.com 메타데이터의 korean 서브셋). 앞의 14개 id 는 이미 보낸 메시지가 쓰므로 바꾸지 않는다.
   // 봉투에는 id, 그리는 쪽은 family. 표시 이름(한국어)과 묶음은 __CCF_MESSAGE_FONT_INFO__ (로그 패키지·테마 화면 글꼴·웹 공유 화면이 같은 목록을 쓴다).
+  // 0.1.165: PC에 설치된 같은 글꼴을 웹 글꼴보다 먼저 쓴다(설치본은 작은 글씨가 또렷하다). 설치본 이름이 웹 글꼴 이름과 달라야 앞에 둘 수 있다 — 확실한 것만. 없으면 지금처럼 웹 글꼴.
+  window.__CCF_FONT_STACK__ = window.__CCF_FONT_STACK__ || ((family) => [...({ "Nanum Gothic": ["NanumGothic", "나눔고딕"], "Nanum Myeongjo": ["NanumMyeongjo", "나눔명조"], "Nanum Gothic Coding": ["NanumGothicCoding", "나눔고딕코딩"], "Noto Sans KR": ["Noto Sans CJK KR"], "Noto Serif KR": ["Noto Serif CJK KR"] }[family] || []), family].map((name) => `"${name}"`).join(", "));
   window.__CCF_MESSAGE_FONTS__ = window.__CCF_MESSAGE_FONTS__ || Object.freeze({
     "noto-sans-kr": "Noto Sans KR", "noto-serif-kr": "Noto Serif KR", "nanum-gothic": "Nanum Gothic", "nanum-myeongjo": "Nanum Myeongjo",
     "gowun-dodum": "Gowun Dodum", "gowun-batang": "Gowun Batang", "do-hyeon": "Do Hyeon", "jua": "Jua",
@@ -2897,7 +2899,7 @@
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
     if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
-    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
+    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `${window.__CCF_FONT_STACK__(family)}, sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;
@@ -6195,7 +6197,7 @@
     });
     const button = toolbar?.querySelector?.("[data-inline-font-btn]");
     const family = (window.__CCF_MESSAGE_FONTS__ || {})[value] || "";
-    if (button) { button.style.fontFamily = family ? `"${family}", sans-serif` : ""; button.title = family ? `글꼴: ${family}` : "글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"; }
+    if (button) { button.style.fontFamily = family ? `${window.__CCF_FONT_STACK__(family)}, sans-serif` : ""; button.title = family ? `글꼴: ${family}` : "글꼴 — 툴킷을 쓰는 모든 참가자에게 같은 글꼴로 보입니다"; }
   }
 
   // 메뉴 안 단추가 기준인 창(루비·툴팁·코드·나레이션·Sv)은 메뉴가 닫혀 있으면 묶음 단추 아래에 띄운다.
@@ -16445,7 +16447,7 @@
     if (style.backgroundColor) el.style.backgroundColor = style.backgroundColor;
     if (style.backgroundImage) el.style.backgroundImage = style.backgroundImage;
     if (style.fontSize) el.style.fontSize = `${style.fontSize}px`;
-    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `"${family}", sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
+    if (style.fontId) { const family = (window.__CCF_MESSAGE_FONTS__ || {})[style.fontId]; if (family) { el.style.fontFamily = `${window.__CCF_FONT_STACK__(family)}, sans-serif`; window.__CCF_ENSURE_GOOGLE_FONTS__?.(family); } }
     if (style.display) el.style.display = style.display;
     if (style.padding) el.style.padding = style.padding;
     if (style.margin) el.style.margin = style.margin;
