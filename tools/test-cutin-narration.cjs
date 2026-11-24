@@ -7,6 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8');
 const sheet = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-character-sheet.user.js'), 'utf8');
 const INVIS_MAP = ['​', '‌', '‍', '⁠'];
+const stripLetters = (text) => text.replace(/[​-‍⁠-⁤]/g, '');
 const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf('⁢⁢⁢', a + 3); if (a < 0 || b < 0) return null; let bits = ''; for (const ch of text.slice(a + 3, b)) { const i = INVIS_MAP.indexOf(ch); if (i >= 0) bits += i.toString(2).padStart(2, '0'); } let b64 = ''; for (let i = 0; i + 8 <= bits.length; i += 8) b64 += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2)); return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')); };
 (async () => {
   assert.match(sheet, /editor\.setAttribute\("data-ccf-sheet-command", "1"\);[\s\S]{0,300}try \{ submitButton\?\.click\(\); \} finally \{ editor\.removeAttribute\("data-ccf-sheet-command"\);/, 'the sheet marks the box while it clicks send');
@@ -33,12 +34,16 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     assert.deepEqual([env.text, env.blockStyle.narration], ['글 ', true]);
     // CCFOLIA's rule: the text ends with the name
     assert.equal(sent[0].lastIndexOf('@컷인') + '@컷인'.length, sent[0].length);
-    // 0.1.135: a cut-in name alone with narration on: envelope + the name (the envelope's text is the name), still ending with the name
-    const only = await send('@컷인', false);
-    assert(only[0].startsWith('⁣') && only[0].endsWith('@컷인') && only[0] !== '@컷인', 'envelope then the name: ' + JSON.stringify(only[0].slice(-4)));
-    assert.deepEqual([decode(only[0]).text, decode(only[0]).blockStyle.narration], ['@컷인', true]);
+    // 0.1.159: CCFOLIA drops a trailing "@word" before storing (bundle Ne: text.replace(/@\S+$/, "")). A name alone without a picture goes raw (nothing stored, as in CCFOLIA);
+    // with a picture: envelope + the name (the envelope's text is the name) -> the stored message is the envelope only: no letters, the toolkit draws the picture.
+    assert.deepEqual(await send('@컷인', false), ['@컷인'], 'no picture: raw even with narration on');
     const onlyPic = await send('@그림컷인', false);
+    assert(onlyPic[0].startsWith('⁣') && onlyPic[0].endsWith('@그림컷인'), 'envelope then the name');
+    assert.deepEqual([decode(onlyPic[0]).text, decode(onlyPic[0]).blockStyle.narration], ['@그림컷인', true]);
+    // text + @picture cut-in: the name rides in the envelope (cutin), since CCFOLIA cuts it from the stored text
     const bodyPic = await send('본문 @그림컷인', false);
+    assert.deepEqual([decode(bodyPic[0]).text, decode(bodyPic[0]).cutin], ['본문 ', '@그림컷인']);
+    const stored = (text) => text.replace(/@\S+$/, ''); // what CCFOLIA keeps
     // a dice command is still raw
     assert.deepEqual(await send('2D6>=5', false), ['2D6>=5']);
     // the message as shown: narration look, the @name not shown
@@ -49,18 +54,19 @@ const decode = (text) => { const a = text.indexOf('⁣⁣⁣'), b = text.indexOf
     assert.equal(shown.overlay, '글'); assert(!/@컷인/.test(shown.visible), 'the @name is hidden: ' + JSON.stringify(shown));
     // rows of a cut-in name alone: narration look; no picture -> "@컷인" shows; a picture -> the picture only (text hidden), inside the narration row
     const addRow = (id, text) => page.evaluate(([id, text]) => { const li = document.createElement('li'); li.className = 'MuiListItem-root'; li.innerHTML = `<div class="MuiListItemText-root"><h6 class="MuiListItemText-primary">서술자<span class="MuiTypography-caption"> - 오늘</span></h6><p id="${id}" class="MuiListItemText-secondary"></p></div>`; li.querySelector('p').append(document.createTextNode(text)); document.getElementById('chatlist').appendChild(li); }, [id, text]);
-    await addRow('only', only[0]); await addRow('onlypic', onlyPic[0]); await addRow('bodypic', bodyPic[0]);
+    await addRow('onlypic', stored(onlyPic[0])); await addRow('bodypic', stored(bodyPic[0]));
     await page.waitForFunction(() => document.getElementById('onlypic').getAttribute('data-ccf-cutin-hide') === '1', null, { timeout: 4000 });
-    const rows = await page.evaluate(() => ['only', 'onlypic'].map((id) => { const p = document.getElementById(id); return { narration: p.getAttribute('data-ccf-narration'), visible: p.innerText.trim(), hide: p.getAttribute('data-ccf-cutin-hide'), img: !!p.querySelector('.ccf-cutin-chat-image img') }; }));
-    assert.deepEqual(rows[0], { narration: '1', visible: '@컷인', hide: null, img: false }, 'no picture: the name shows in a narration row ' + JSON.stringify(rows));
-    assert.equal(rows[1].narration, '1'); assert.equal(rows[1].hide, '1'); assert.equal(rows[1].img, true);
+    const rows = await page.evaluate(() => ['onlypic'].map((id) => { const p = document.getElementById(id); return { narration: p.getAttribute('data-ccf-narration'), visible: p.innerText.trim(), hide: p.getAttribute('data-ccf-cutin-hide'), img: !!p.querySelector('.ccf-cutin-chat-image img') }; }));
+    assert.equal(rows[0].narration, '1'); assert.equal(rows[0].hide, '1'); assert.equal(rows[0].img, true); // the letters are hidden by CSS (font-size 0, transparent): innerText still has them
     // text + envelope + name in a drawn narration row: the picture is added, the text stays, the @name stays hidden
     await page.waitForSelector('#bodypic .ccf-cutin-chat-image img', { state: 'attached', timeout: 3000 });
     const body = await page.evaluate(() => { const p = document.getElementById('bodypic'); return { hide: p.getAttribute('data-ccf-cutin-hide'), visible: p.innerText.trim() }; });
     assert.deepEqual(body, { hide: null, visible: '본문' });
-    // narration off and nothing else: raw as before
+    // narration off and nothing else: raw as before; a picture cut-in alone still carries the envelope (else nothing would be stored)
     await page.evaluate(() => localStorage.setItem('ccf-format-narrators-v1:test', '[]'));
     assert.deepEqual(await send('@컷인', false), ['@컷인']);
+    const plainPic = await send('@그림컷인', false);
+    assert.deepEqual([stored(plainPic[0]).length > 0, decode(plainPic[0]).text, stripLetters(stored(plainPic[0]))], [true, '@그림컷인', '']);
     assert.deepEqual(errors, []);
     console.log('cutin narration PASS');
   } finally { await browser.close(); }
