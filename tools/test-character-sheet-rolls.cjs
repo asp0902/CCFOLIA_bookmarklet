@@ -77,13 +77,13 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     const cols = () => page.evaluate(() => { const [a, p] = [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-duo > .ccf-cs-form-section')].map((e) => e.getBoundingClientRect()); return { sideBySide: Math.abs(a.top - p.top) < 4 && a.right <= p.left + 1, stacked: p.top >= a.bottom - 1, widths: [Math.round(a.width), Math.round(p.width)] }; });
     const wide = await cols();
     assert(wide.sideBySide, 'abilities (left) and people (right) sit side by side: ' + JSON.stringify(wide));
-    assert(Math.abs(wide.widths[0] - 2 * wide.widths[1]) <= 2, 'abilities : people = 2 : 1 (' + JSON.stringify(wide.widths) + ')');
+    assert(wide.widths[1] >= 200, 'abilities keep their fixed columns (0.5.69: name = 9 characters), people take the rest (' + JSON.stringify(wide.widths) + ')');
     await page.setViewportSize({ width: 560, height: 900 }); await page.waitForTimeout(300);
     assert((await cols()).stacked, 'a narrow sheet folds them into one column');
     await page.setViewportSize({ width: 1300, height: 900 }); await page.waitForTimeout(300);
     // skill name / value gap: about half of what it was (62px)
     const gap = await page.evaluate(() => { const b = document.querySelector('#ccf-character-sheet-root button[data-roll="0:7"]'); const small = b.querySelector('small').getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(b.firstChild); return Math.round(small.left - range.getBoundingClientRect().right); });
-    assert(gap >= 38 && gap <= 44, `the gap between the longest skill name of a column and its value is about 40px (was 62, then 31), now ${gap}px`);
+    assert(gap >= 26 && gap <= 32, `the gap between the longest skill name of a column and the divider line before its value is about 28px (0.5.69; name → value was 62, 31, then 40), now ${gap}px`);
     // add an ability pointing at 소각 (0:0), and acquire 소각
     await page.locator(R + ' [data-skill="0:0"]').check();
     await page.locator(R + ' [data-add="abilities"]').click();
@@ -101,7 +101,7 @@ const room = (insane) => `<!doctype html><meta charset=utf-8><body style="backgr
     await page.locator(R + ' .ccf-cs-abilities [data-prop="target"]').first().fill('소각');
     await page.locator(R + ' .ccf-cs-abilities [data-prop="type"]').first().fill('');
     const pair = await page.evaluate(() => [...document.querySelectorAll('#ccf-character-sheet-root .ccf-cs-abilities .ccf-cs-roll-pair button')].map((b) => ({ color: getComputedStyle(b).color, secret: b.dataset.secret || '', svg: !!b.querySelector('svg circle'), size: [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height)] })));
-    assert.deepEqual(pair.map((b) => [b.color, b.secret]), [['rgb(255, 255, 255)', '']], 'abilities have only the public roll button, white');
+    assert.deepEqual([...new Set(pair.map((b) => [b.color, b.secret].join('|')))], ['rgb(255, 255, 255)|'], 'abilities have only the public roll button, white (0.5.69: every row — a new sheet has 4 empty rows)');
     const roll = async (action) => { await page.evaluate(() => { window.__sent.length = 0; document.getElementById('chatbox').value = ''; }); await action(); await page.waitForTimeout(250); return { sent: await page.evaluate(() => window.__sent.slice()), box: await page.locator('#chatbox').inputValue() }; };
     const reopen = async () => { if (!(await page.locator(R + ' .ccf-cs-dialog.is-editor').count())) { await page.locator('#row1 [data-ccf-character-sheet-row-button]').click(); await page.waitForSelector(R + ' .ccf-cs-dialog.is-editor'); } };
     page.on('dialog', (d) => d.accept('7')); // 목표치(숫자) prompt for the commands that still have a ?
