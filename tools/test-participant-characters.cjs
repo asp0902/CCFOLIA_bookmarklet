@@ -32,7 +32,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.goto('http://relay.test/#room=x');
   await page.evaluate(() => { document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none'; renderState({ roomTitle: 't', gmOnline: true, messages: [], channels: [], scene: { fieldWidth: 40, fieldHeight: 20, items: [], characters: [] } }); });
   await page.evaluate(() => document.getElementById('char-list-open').click());
-  assert.match(await page.locator('#char-window').innerText(), /아직 만든 캐릭터가 없습니다/);
+  assert.equal((await page.locator('#char-window').innerText()).trim(), '내 캐릭터 목록', 'an empty list writes nothing, as on CCFOLIA');
   // + asks for a character with no fields; when it shows up in the list the editor opens
   await page.click('#char-window .cw-btn[aria-label="캐릭터 만들기"]');
   await page.waitForSelector('.dlg h2:text("캐릭터 편집")', { timeout: 15000 });

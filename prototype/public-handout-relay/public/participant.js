@@ -1567,9 +1567,9 @@ function openCharacterWindow() {
   const old = document.getElementById("char-window"); if (old) { old.remove(); return; }
   const win = el("div", "char-window"); win.id = "char-window"; win.setAttribute("role", "dialog"); win.setAttribute("aria-label", "내 캐릭터 목록");
   const head = el("div", "cw-head"); head.append(el("h6", "", "내 캐릭터 목록"));
-  const add = el("button", "cw-btn", "+"); add.type = "button"; add.title = "캐릭터 만들기"; add.setAttribute("aria-label", "캐릭터 만들기");
+  const add = el("button", "cw-btn"); add.type = "button"; add.setAttribute("aria-label", "캐릭터 만들기"); add.append(svgIcon("M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z", 24));
   add.addEventListener("click", () => createCharacter(win));
-  const x = el("button", "cw-btn", "×"); x.type = "button"; x.setAttribute("aria-label", "닫기"); x.addEventListener("click", () => win.remove());
+  const x = el("button", "cw-btn"); x.type = "button"; x.setAttribute("aria-label", "닫기"); x.append(svgIcon("M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z", 24)); x.addEventListener("click", () => win.remove());
   head.append(add, x);
   const body = el("div", "cw-body");
   const fill = () => {
@@ -1577,7 +1577,8 @@ function openCharacterWindow() {
     // a row as CCFOLIA draws it (measured on a player's screen): avatar circle, name ("NO NAME" while empty), memo line ("NO TEXT" while empty), put-on-the-screen icon on the right
     for (const c of myCharacters) {
       const line = el("div", "cw-row"), row = el("button", "char-row"); row.type = "button";
-      const avatar = el("span", "cw-avatar"); avatar.append(svgIcon("M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z", 24));
+      const avatar = el("span", "cw-avatar"), icon = c.iconUrl || (sceneData?.characters || []).find(item => item.id === c.id)?.iconUrl;
+      if (icon) { const picture = el("img"); picture.src = icon; picture.alt = ""; picture.referrerPolicy = "no-referrer"; avatar.append(picture); } else avatar.append(svgIcon("M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z", 24));
       const text = el("span", "char-text"); text.append(el("b", "", c.name || "NO NAME"), el("small", "", String(c.memo || "").split("\n")[0] || "NO TEXT"));
       row.append(avatar, text); row.addEventListener("click", () => openCharacterEditor(c.id));
       const place = el("button", "cw-place"); place.type = "button"; place.title = c.active ? "화면에 있음" : "화면에 추가"; place.setAttribute("aria-label", place.title); place.disabled = !!c.active;
@@ -1585,7 +1586,6 @@ function openCharacterWindow() {
       place.addEventListener("click", async () => { const result = await characterRequest("place", { id: c.id, x: Number(c.x) || 0, y: Number(c.y) || 0 }); if (!result.ok) showSendStatus(result.error, 6000); else setTimeout(refreshMyCharacters, 900); });
       line.append(row, place); body.append(line);
     }
-    if (!myCharacters.length) body.append(el("p", "", "아직 만든 캐릭터가 없습니다. + 로 만들 수 있습니다."));
   };
   win.addEventListener("cm-refresh", fill);
   fill(); win.append(head, body); document.body.append(win);
