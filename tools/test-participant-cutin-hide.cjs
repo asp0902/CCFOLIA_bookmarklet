@@ -9,7 +9,7 @@ const between = (s, a, b) => { const i = s.indexOf(a), j = s.indexOf(b, i); asse
 const panel = fs.readFileSync(path.join(root, 'legacy/ccfolia-chat-panel.user.js'), 'utf8').replace(/\r\n/g, '\n');
 const names = vm.runInNewContext(`${between(panel, '  function relayCutinNames', '  // 컷인(entities.roomEffects)')}; relayCutinNames`);
 const num = (v) => Number(v) || 0;
-assert.deepEqual([...names({ a: { name: '@버튼', createdAt: 1000, playTime: 9000 }, b: { name: '@비밀', createdAt: 1000, playTime: 1000 }, c: { name: '성공', createdAt: 1000, playTime: 9000 } }, num)], ['@버튼'], 'played @ names only: an unplayed name could be a spoiler');
+assert.deepEqual([...names({ a: { name: '@버튼', createdAt: 1000, playTime: 9000 }, b: { name: '@비밀', createdAt: 1000, playTime: 1000 }, c: { name: '성공', createdAt: 1000, playTime: 9000 }, d: { name: ' @공백 ', createdAt: 1000, playTime: 9000 } }, num)], ['@버튼', '@공백'], 'played @ names only: an unplayed name could be a spoiler');
 const worker = fs.readFileSync(path.join(root, 'prototype/public-handout-relay/cloudflare/worker.mjs'), 'utf8').replace(/\r\n/g, '\n');
 const clean = vm.runInNewContext(`${between(worker, 'const cleanCutinNames', 'export class')}; cleanCutinNames`);
 assert.deepEqual([...clean(['@a', 'b', 7, `@${'x'.repeat(200)}`])], ['@a']);

@@ -1047,8 +1047,8 @@ function renderRoll20(container, text, env) {
 // so the toolkit's own CSS that came over in mirror.css lays it out (narration centred without avatar, Roll20 bars, ...). Returns what the row needs to know.
 // A message ending with a played cut-in's @name does not show that name (the longest one wins); a name-alone message keeps an empty line, like the GM's chat.
 function withoutCutinName(text) {
-  const body = String(text).normalize("NFC");
-  const name = (sceneData?.cutinNames || []).map(item => item.normalize("NFC")).filter(item => body.endsWith(item)).sort((a, b) => b.length - a.length)[0];
+  const body = String(text).normalize("NFC").trimEnd();
+  const name = (sceneData?.cutinNames || []).map(item => item.normalize("NFC").trim()).filter(item => body.endsWith(item)).sort((a, b) => b.length - a.length)[0];
   return name ? body.slice(0, -name.length).trimEnd() || "\u00a0" : text;
 }
 // The picture of a cut-in in its chat row, as the toolkit draws it on the GM's page: the text ends with the name (longest first), at most 200px high, centred, under the text.
@@ -1340,8 +1340,8 @@ refreshSpeakerUi();
   const toggle = (label, title, key) => { const b = mk(label, title, () => { fmtState[key] = !fmtState[key]; b.setAttribute("aria-pressed", String(fmtState[key])); }); b.setAttribute("aria-pressed", "false"); return b; };
   const row = document.createElement("div"); row.className = "fmt-row";
   const styled = (button, tag) => { const inner = document.createElement(tag); inner.textContent = button.textContent; button.replaceChildren(inner); return button; }; // the letters show their own format, like the toolkit's bar
-  row.append(styled(mk("B", "Bold", () => wrapSelection("**", "**")), "b"), styled(mk("I", "Italic", () => wrapSelection("*", "*")), "i"), styled(mk("U", "Underline", () => wrapSelection("__", "__")), "u"), styled(mk("S", "Strike", () => wrapSelection("~~", "~~")), "s"));
-  const align = (name, d) => { const b = mk("", `Align ${name}`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); svg.setAttribute("aria-hidden", "true"); const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); b.append(svg); return b; };
+  row.append(styled(mk("B", "굵게", () => wrapSelection("**", "**")), "b"), styled(mk("I", "기울임", () => wrapSelection("*", "*")), "i"), styled(mk("U", "밑줄", () => wrapSelection("__", "__")), "u"), styled(mk("S", "취소선", () => wrapSelection("~~", "~~")), "s"));
+  const align = (name, d) => { const b = mk("", `${{ left: "왼쪽", center: "가운데", right: "오른쪽" }[name]} 정렬`, () => wrapSelection(`{a:${name}|`, "|}")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); svg.setAttribute("aria-hidden", "true"); const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("fill", "currentColor"); path.setAttribute("d", d); svg.append(path); b.append(svg); return b; };
   const aligns = [align("left", "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"), align("center", "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"), align("right", "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z")];
   // alignment buttons: one is active, like the toolkit's toolbar (left by default)
   aligns.forEach((button, index) => { button.setAttribute("aria-pressed", String(index === 0)); button.addEventListener("click", () => aligns.forEach(other => other.setAttribute("aria-pressed", String(other === button)))); });
@@ -1352,9 +1352,9 @@ refreshSpeakerUi();
     input.addEventListener("change", () => { label.style.setProperty("--chip", input.value); wrapSelection(`{${marker}:${input.value}|`, "|}"); });
     label.append(input); return label;
   };
-  const size = document.createElement("input"); size.className = "fmt-size"; size.type = "text"; size.inputMode = "numeric"; size.placeholder = "16"; size.title = "Font size"; size.setAttribute("aria-label", "Font size");
+  const size = document.createElement("input"); size.className = "fmt-size"; size.type = "text"; size.inputMode = "numeric"; size.placeholder = "16"; size.title = "글자 크기"; size.setAttribute("aria-label", "글자 크기");
   size.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); const n = Math.round(Number(size.value)); if (n >= 8 && n <= 72) wrapSelection(`{s:${n}|`, "|}"); } });
-  row.append(...aligns, colorTool("Text color", "#ffffff", "c"), colorTool("Background color", "#010101", "b"), size);
+  row.append(...aligns, colorTool("글자색", "#ffffff", "c"), colorTool("배경색", "#010101", "b"), size);
   const closeGroups = () => document.querySelectorAll(".fmt-group").forEach(group => { group.querySelector(".fmt-menu").hidden = true; group.querySelector(".fmt-group-btn").setAttribute("aria-expanded", "false"); });
   const group = (name, label, title, items) => {
     const box = document.createElement("span"); box.className = "fmt-group"; box.dataset.group = name;
@@ -1371,8 +1371,8 @@ refreshSpeakerUi();
     });
     box.append(button, menu); return box;
   };
-  const deco = group("deco", "Aa", "꾸미기", [[mk("", "Ruby", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "Tooltip", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "Blur", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "Code block", () => wrapSelection("`", "`")), "</>", "코드"]]);
-  const extra = group("extra", "⋯", "더 보기", [[toggle("", "Narration", "narration"), "Nr", "나레이션"], [toggle("", "Parentheses gray", "parenGray"), "()", "괄호 회색"]]);
+  const deco = group("deco", "Aa", "꾸미기", [[mk("", "루비", () => wrapSelection("[", "|]")), "Rb", "루비"], [mk("", "툴팁", () => wrapSelection("[", "^]")), "Tip", "툴팁"], [mk("", "블러", () => wrapSelection("||", "||")), "Bl", "블러"], [mk("", "코드", () => wrapSelection("`", "`")), "</>", "코드"]]);
+  const extra = group("extra", "⋯", "더 보기", [[toggle("", "나레이션", "narration"), "Nr", "나레이션"], [toggle("", "괄호 회색", "parenGray"), "()", "괄호 회색"]]);
   // font menu (가): one list, Korean names in 가나다 order, then Latin names; a pick wraps the selection in {f:id|..|}. Preview fonts load only for the items that scroll into view.
   const fontBox = group("font", "가", "글꼴", []), fontMenu = fontBox.querySelector(".fmt-menu");
   fontMenu.classList.add("fmt-font-menu");

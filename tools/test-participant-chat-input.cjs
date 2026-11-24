@@ -34,10 +34,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await input.inputValue(), '1d6');
   // format buttons wrap the selection in markers
   await input.fill('abc'); await input.evaluate(e => e.setSelectionRange(0, 3));
-  await page.click('button[aria-label="Bold"]');
+  await page.click('button[aria-label="굵게"]');
   assert.equal(await input.inputValue(), '**abc**');
   await input.fill('x'); await input.evaluate(e => e.setSelectionRange(0, 1));
-  await page.click('button[aria-label="Align center"]');
+  await page.click('button[aria-label="가운데 정렬"]');
   assert.equal(await input.inputValue(), '{a:center|x|}');
   // palette is disabled without a speaker that has commands
   assert.equal(await page.locator('#pal-btn').isDisabled(), true);

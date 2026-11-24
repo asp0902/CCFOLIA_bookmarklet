@@ -21,16 +21,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   page.on('pageerror', e => console.log('pageerror', e.message)); page.on('console', m => { if (m.type() === 'error') console.log('console', m.text().slice(0, 150)); });
   await page.goto('http://relay.test/#room=x');
   await page.evaluate(() => { document.getElementById('room').inert = false; document.getElementById('gate').style.display = 'none'; renderState({ roomTitle: 'r', gmOnline: true, messages: [], channels: [{ id: 'main', label: '메인' }] }); });
-  assert.equal(await page.locator('.fmt-group .fmt-menu button[aria-label="Narration"]').count(), 1);
+  assert.equal(await page.locator('.fmt-group .fmt-menu button[aria-label="나레이션"]').count(), 1);
   // 2026-11-23: Aa and ⋯ sit right before the send button; the bar keeps B I U S / align / colours / size on one line
   assert.deepEqual(await page.evaluate(() => [...document.querySelector('.dice-row').children].slice(-3).map((n) => n.dataset.group || n.type)), ['deco', 'extra', 'submit']);
   assert.equal(await page.evaluate(() => new Set([...document.querySelector('.fmt-row').children].map((c) => Math.round(c.getBoundingClientRect().top))).size), 1);
   assert.equal(await page.locator('.fmt-color input[type=color]').count(), 2);
   // alignment buttons act as one group (left active first), like the toolkit toolbar
-  const pressed = async () => page.evaluate(() => [...document.querySelectorAll('.fmt-row button[aria-label^="Align"]')].map(b => b.getAttribute('aria-pressed')).join());
-  assert.equal(await pressed(), 'true,false,false'); await page.click('.fmt-row button[aria-label="Align center"]'); assert.equal(await pressed(), 'false,true,false');
+  const pressed = async () => page.evaluate(() => [...document.querySelectorAll('.fmt-row button[aria-label$=" 정렬"]')].map(b => b.getAttribute('aria-pressed')).join());
+  assert.equal(await pressed(), 'true,false,false'); await page.click('.fmt-row button[aria-label="가운데 정렬"]'); assert.equal(await pressed(), 'false,true,false');
   // 2026-11-23: the letters show their format, the colour chips have the toolkit's 1px edge, the font menu wraps a selection in {f:id|..|}
-  assert.deepEqual(await page.evaluate(() => ['Bold', 'Italic', 'Underline', 'Strike'].map((n) => { const b = document.querySelector(`.fmt-row button[aria-label="${n}"]`).firstElementChild, c = getComputedStyle(b); return [b.tagName, c.fontWeight, c.fontStyle, c.textDecorationLine]; })), [['B', '700', 'normal', 'none'], ['I', '400', 'italic', 'none'], ['U', '400', 'normal', 'underline'], ['S', '400', 'normal', 'line-through']]);
+  assert.deepEqual(await page.evaluate(() => ['굵게', '기울임', '밑줄', '취소선'].map((n) => { const b = document.querySelector(`.fmt-row button[aria-label="${n}"]`).firstElementChild, c = getComputedStyle(b); return [b.tagName, c.fontWeight, c.fontStyle, c.textDecorationLine]; })), [['B', '700', 'normal', 'none'], ['I', '400', 'italic', 'none'], ['U', '400', 'normal', 'underline'], ['S', '400', 'normal', 'line-through']]);
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.fmt-color'), '::before').boxShadow), 'rgb(128, 128, 128) 0px 0px 0px 1px inset');
   await page.fill('#chat-input', '글꼴 글자'); await page.evaluate(() => document.getElementById('chat-input').setSelectionRange(0, 2));
   await page.click('.fmt-group[data-group="font"] .fmt-group-btn');
@@ -51,9 +51,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.inputValue('#chat-input'), '{s:30|크게|}');
   // toggles are applied when sending
   const more = '.fmt-group[data-group="extra"] .fmt-group-btn';
-  await page.click(more); await page.click('.fmt-menu button[aria-label="Narration"]'); assert.equal(await page.locator('.fmt-group[data-group="extra"] .fmt-menu').isVisible(), false, 'an item closes the menu');
-  await page.click(more); await page.click('.fmt-menu button[aria-label="Parentheses gray"]');
-  assert.equal(await page.getAttribute('.fmt-menu button[aria-label="Narration"]', 'aria-pressed'), 'true');
+  await page.click(more); await page.click('.fmt-menu button[aria-label="나레이션"]'); assert.equal(await page.locator('.fmt-group[data-group="extra"] .fmt-menu').isVisible(), false, 'an item closes the menu');
+  await page.click(more); await page.click('.fmt-menu button[aria-label="괄호 회색"]');
+  assert.equal(await page.getAttribute('.fmt-menu button[aria-label="나레이션"]', 'aria-pressed'), 'true');
   await page.fill('#chat-input', '문을 연다 (조용히)'); await page.press('#chat-input', 'Enter'); await page.waitForTimeout(500);
   assert.equal(sent[0].text, '{n:1|문을 연다 {c:#9e9e9e|(조용히)|}|}');
   await browser.close();
