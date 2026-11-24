@@ -56,16 +56,33 @@ function ensureYouTubeApi() {
   window.onYouTubeIframeAPIReady = () => { ytReady = true; if (ytWantId) startPlayer(ytWantId); };
   const script = document.createElement("script"); script.src = "https://www.youtube.com/iframe_api"; document.head.append(script);
 }
-function startPlayer(id) {
+// Switching tracks crossfades like the GM page (chat-notifier, 1.5 s): the old player keeps playing until the new one really plays, then one goes down as the other comes up.
+// A stop from the GM fades out the same way. Room files follow the room's own crossfade setting (scene.crossfade, seconds; 0 = off).
+const YT_FADE_MS = 1500;
+const ramp = (ms, step, done) => { const t0 = performance.now(); const id = setInterval(() => { const r = Math.min(1, (performance.now() - t0) / ms); step(r); if (r >= 1) { clearInterval(id); done?.(); } }, 50); return id; };
+let ytWrap = null, ytOld = null;
+function dropOldPlayer() { const old = ytOld; ytOld = null; if (!old) return; clearInterval(old.timer); try { old.player.destroy(); } catch (_) {} old.wrap?.remove(); }
+function retirePlayer() { dropOldPlayer(); ytOld = { player: ytPlayer, wrap: ytWrap, timer: 0 }; ytPlayer = null; ytWrap = null; return ytOld; }
+function startPlayer(id, fade = false) {
   if (chatOnly) return;
   if (!ytReady) return;
   const loop = bgmLast?.loop !== false;
+  if (fade && ytPlayer) retirePlayer();
   if (ytPlayer) { try { ytPlayer.destroy(); } catch (_) {} ytPlayer = null; }
-  const host = document.createElement("div"); document.getElementById("bgm-frame").replaceChildren(host);
+  const wrap = document.createElement("div"), host = document.createElement("div"); wrap.append(host);
+  const frame = document.getElementById("bgm-frame"); ytOld ? frame.append(wrap) : frame.replaceChildren(wrap); ytWrap = wrap;
   ytPlayer = new YT.Player(host, {
     width: "200", height: "113", videoId: id,
     playerVars: { autoplay: 1, controls: 0, rel: 0, playsinline: 1, ...(loop ? { loop: 1, playlist: id } : {}) },
-    events: { onReady: event => { event.target.setVolume(bgmVolume); if (bgmMuted) event.target.mute(); event.target.playVideo(); } }
+    events: {
+      onReady: event => { event.target.setVolume(ytOld ? 0 : bgmVolume); if (bgmMuted) event.target.mute(); event.target.playVideo(); },
+      onStateChange: event => {
+        const old = ytOld;
+        if (!old || old.timer || event.data !== 1 || event.target !== ytPlayer) return;
+        const from = bgmVolume;
+        old.timer = ramp(YT_FADE_MS, r => { try { event.target.setVolume(Math.round(bgmVolume * r)); old.player.setVolume(Math.round(from * (1 - r))); } catch (_) {} }, () => { if (ytOld === old) dropOldPlayer(); });
+      }
+    }
   });
   clearInterval(bgmTimer);
   bgmTimer = setInterval(() => {
@@ -78,9 +95,11 @@ function startPlayer(id) {
 }
 function stopPlayer() {
   clearInterval(bgmTimer); bgmTimer = 0;
+  dropOldPlayer();
   if (ytPlayer) { try { ytPlayer.destroy(); } catch (_) {} ytPlayer = null; }
-  document.getElementById("bgm-frame").replaceChildren();
+  document.getElementById("bgm-frame").replaceChildren(); ytWrap = null;
 }
+const ytSounding = () => { try { return ytPlayer?.getPlayerState?.() === 1; } catch (_) { return false; } };
 function playBgm(bgm) {
   bgmLast = bgm || { state: "stopped" };
   const playing = bgmLast.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(bgmLast.videoId || "");
@@ -92,10 +111,12 @@ function playBgm(bgm) {
   if (key === bgmKey) return;
   bgmKey = key;
   refreshBgmBar();
-  stopPlayer();
+  const fade = ytReady && ytSounding();
+  if (!key && fade) { clearInterval(bgmTimer); bgmTimer = 0; const old = retirePlayer(), from = bgmVolume; old.timer = ramp(YT_FADE_MS, r => { try { old.player.setVolume(Math.round(from * (1 - r))); } catch (_) {} }, () => { if (ytOld === old) dropOldPlayer(); }); return; }
+  if (!fade) stopPlayer();
   if (!key) return;
   ytWantId = bgmLast.videoId; ensureYouTubeApi();
-  if (ytReady) startPlayer(ytWantId);
+  if (ytReady) startPlayer(ytWantId, fade);
 }
 const volInput = document.getElementById("bgm-vol");
 const syncVol = () => { volInput.style.setProperty("--p", `${volInput.value}%`); volInput.style.setProperty("--f", String(volInput.value / 100)); };
@@ -142,17 +163,23 @@ let blockedAudio = false;
 const unlockAudio = () => { if (!blockedAudio) return; blockedAudio = false; for (const slot of Object.values(roomAudio)) if (slot.url) slot.el?.play().catch(() => { blockedAudio = true; }); };
 for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, unlockAudio, true);
 function applyRoomAudioVolume() {
-  for (const slot of Object.values(roomAudio)) if (slot.el && slot.cfg) { slot.el.volume = Math.max(0, Math.min(1, slot.cfg.volume * (bgmVolume / 100))); slot.el.muted = bgmMuted; }
+  for (const slot of Object.values(roomAudio)) if (slot.el && slot.cfg) { slot.el.volume = Math.max(0, Math.min(1, slot.cfg.volume * (bgmVolume / 100) * (slot.gain ?? 1))); slot.el.muted = bgmMuted; }
 }
+const newRoomAudio = () => { const a = new Audio(); a.onplay = a.onpause = a.onended = a.ondurationchange = a.ontimeupdate = syncFileProgress; return a; };
+// The playing element goes down to silence and stops (it is no longer the slot's element, so the volume slider leaves it alone).
+const fadeOutAudio = (a, ms) => { const from = a.volume; ramp(ms, r => { a.volume = from * (1 - r); }, () => { a.pause(); a.removeAttribute("src"); }); };
 function syncRoomAudio(scene) {
   if (chatOnly) return;
   for (const kind of ["media", "sound"]) {
-    const slot = roomAudio[kind], cfg = scene?.[kind] || null;
+    const slot = roomAudio[kind], cfg = scene?.[kind] || null, fadeMs = Math.max(0, Number(scene?.crossfade) || 0) * 1000;
+    const sounding = fadeMs && slot.url && slot.el && !slot.el.paused && !slot.el.ended;
     if (!cfg || halted.has(cfg.url)) {
-      if (slot.el) { slot.el.pause(); slot.el.removeAttribute("src"); }
+      if (sounding && cfg?.url !== slot.url) { fadeOutAudio(slot.el, fadeMs); slot.el = null; }
+      else if (slot.el) { slot.el.pause(); slot.el.removeAttribute("src"); }
       slot.url = ""; slot.cfg = null; continue;
     }
-    slot.cfg = cfg; if (!slot.el) { slot.el = new Audio(); slot.el.onplay = slot.el.onpause = slot.el.onended = slot.el.ondurationchange = slot.el.ontimeupdate = syncFileProgress; } slot.el.loop = cfg.repeat; applyRoomAudioVolume();
+    if (sounding && slot.url !== cfg.url) { fadeOutAudio(slot.el, fadeMs); slot.el = newRoomAudio(); slot.gain = 0; clearInterval(slot.fade); slot.fade = ramp(fadeMs, r => { slot.gain = r; applyRoomAudioVolume(); }); }
+    slot.cfg = cfg; if (!slot.el) slot.el = newRoomAudio(); slot.el.loop = cfg.repeat; applyRoomAudioVolume();
     if (slot.url !== cfg.url) {
       slot.url = cfg.url; slot.el.src = cfg.url; slot.el.currentTime = 0;
       slot.el.play().catch(() => { blockedAudio = true; }); // autoplay blocked: the next click or key starts it

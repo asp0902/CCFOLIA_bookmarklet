@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.49
+// @version      0.3.50
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.49";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.50";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -1649,7 +1649,7 @@
       bgmTrace() {
         return ccfBgmTrace.slice();
       },
-      // 유튜브 BGM 크로스페이드 — 아직 검증 전이라 기본 꺼짐. setCrossfade(true) 로 켠다.
+      // 유튜브 BGM 크로스페이드 — 기본 켬. setCrossfade(false) 로 끈다.
       setCrossfade(on) {
         ccfBgmCrossfadeEnabled = on !== false;
         if (!ccfBgmCrossfadeEnabled) {
@@ -10498,10 +10498,8 @@
 
       ccfBgmFirestorePlaybackApplying = true;
       try {
-        // 다른 곡 재생 중이면 일단 정지 (정지 신호는 송신 안 함 — applying 가드).
-        if (ccfBgmActiveSlotKey) {
-          stopCcfYoutubeBgm("remote-switch");
-        }
+        // 다른 곡 재생 중이어도 먼저 멈추지 않는다: 멈추면 크로스페이드가 "재생 중 아님"으로 보고 즉시 교체했다(받는 화면만 뚝 끊김).
+        // 교체·크로스페이드는 playCcfYoutubeBgmSlot 이 한다(직접 고를 때와 같은 길).
         playCcfYoutubeBgmSlot(
           data.slotKey,
           {

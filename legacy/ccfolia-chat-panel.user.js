@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.66
+// @version      0.5.67
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.66";
+  const VERSION = "0.5.67";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -5175,6 +5175,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
             characterDocs: relayCharacterDocs(ent.roomCharacters?.entities), items: items.slice(0, 200), markers: relayMarkerViews(room.markers, url, num), decks: relayDeckViews(ent.roomDecks?.entities, url, num), diceSymbols: relayDiceViews(ent.roomDices?.entities, num), characters: characters.slice(0, 100),
             // 코코포리아 자체 음원: BGM 파일(media*)과 효과음·환경음(sound*). 주소는 코코포리아 CDN 만, 볼륨은 0~1.
             media: roomAudio(room.mediaUrl, room.mediaName, room.mediaVolume, room.mediaRepeat), sound: roomAudio(room.soundUrl, room.soundName, room.soundVolume, room.soundRepeat),
+            // 룸의 크로스페이드 설정(코코포리아 1.37.6 enableCrossfade·crossfadeDuration 초): 참여자 화면도 파일 BGM 을 같은 길이로 겹쳐 바꾼다. 꺼져 있으면 0.
+            crossfade: room.enableCrossfade === true ? Math.max(0.1, Math.min(10, num(room.crossfadeDuration, 1))) : 0,
             effects: relayEffectViews(ent.roomEffects?.entities, url, num), cutinNames: relayCutinNames(ent.roomEffects?.entities, num), cutinPictures: relayCutinPictures(ent.roomEffects?.entities, url, num)
           };
         } catch (error) { return null; }
