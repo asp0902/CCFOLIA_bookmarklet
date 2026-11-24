@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.167
+// @version      0.1.168
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.167"),
+    version: getUserscriptVersion("0.1.168"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1175,10 +1175,12 @@
     c.at = now;
     let list = [], fonts = null;
     try { list = window.__CCF_FS_PRESET_BRIDGE__?.list?.() || []; fonts = window.__CCF_FS_PRESET_BRIDGE__?.speakerFonts?.() || null; } catch (_) { list = []; fonts = null; }
-    const key = JSON.stringify([list, fonts]);
+    let paren = false;
+    try { paren = !!window.__CCF_FS_PAREN__?.on?.(); } catch (_) { paren = false; }
+    const key = JSON.stringify([list, fonts, paren]);
     if (key !== c.key) {
       const first = c.key === null;
-      c.key = key; c.list = list; c.fonts = fonts; c.v += 1;
+      c.key = key; c.list = list; c.fonts = fonts; c.paren = paren; c.v += 1;
       if (!first) setTimeout(() => { try { scanAndRenderAll(); } catch (_) {} }, 0);
     }
     return c;
@@ -1191,6 +1193,14 @@
         if (taken.some((run) => run.start < end && run.end > at)) continue;
         const run = { start: at, end, style: { ...preset.style } };
         out.push(run); taken.push(run);
+      }
+    }
+    // 0.1.168 회색괄호(켜져 있을 때): 괄호 구간 — 발신자가 색이나 코드 서식을 준 구간과 겹치면 그 괄호는 건드리지 않는다(발신자 색 우선)
+    if (receivedPresetState().paren) {
+      const paren = window.__CCF_FS_PAREN__;
+      for (const range of paren.ranges(text)) {
+        if (existingRuns.some((run) => run.start < range.end && run.end > range.start && (run.style?.color || run.style?.codeMode))) continue;
+        out.push({ start: range.start, end: range.end, style: { color: paren.color } });
       }
     }
     return out;
@@ -1213,7 +1223,7 @@
     const hidden = el.querySelector(":scope > .ccf-original-hidden");
     if (hidden && marked === null) return; // 봉투 렌더가 맡은 줄
     const preset = receivedPresetState();
-    if (!preset.list.length && !preset.fonts && marked === null) return;
+    if (!preset.list.length && !preset.fonts && !preset.paren && marked === null) return;
     const nodes = [...(hidden || el).childNodes].filter((node) => !isToolkitRowAddon(node));
     const source = nodes.every((node) => node.nodeType === 3) ? nodes.map((node) => node.nodeValue).join("") : "";
     const row = el.closest(".MuiListItem-root, .ccf-scp-row");
@@ -3173,6 +3183,8 @@
   const FONT_SIZE_MAX = 200;
   const DEFAULT_BLUR_VALUE = "4px";
   const PARENTHETICAL_GRAY_COLOR = "#878787";
+  const PAREN_GRAY_PREF_KEY = "ccf-format-paren-gray-v2";
+  window.__CCF_FS_PAREN__ = { ranges: (text) => getParentheticalRanges(text), color: PARENTHETICAL_GRAY_COLOR, on: () => readParenGrayPref() };
   const LOCAL_IMAGE_TOKEN_PREFIX = "ccf-local://image/";
   const FIRESTORE_IMAGE_TOKEN_PREFIX = "ccf-fs-image://";
   const LOCAL_IMAGE_STORAGE_PREFIX = "ccf-inline-image:";
@@ -6132,7 +6144,7 @@
       <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="break" title="구분선: 다음 메시지 위에 선을 넣습니다(한 번 보내면 꺼짐)" aria-label="구분선" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 7.5h12v1H2z"/></svg></button>
       <button type="button" class="ccf-toggle ccf-keep-toggle ccf-row2-btn" data-inline-command="keep" title="이전 서식 유지" aria-label="이전 서식 유지" aria-pressed="false">유지</button>
       <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="style-clipboard" title="서식 저장" aria-label="서식 저장">Sv</button>
-      <button type="button" class="ccf-toggle ccf-row2-btn" data-inline-command="paren-gray" title="괄호 안 글자를 회색으로" aria-label="괄호 회색" aria-pressed="false">()</button>
+      <button type="button" class="ccf-toggle ccf-row2-btn${readParenGrayPref() ? " active" : ""}" data-inline-command="paren-gray" title="회색괄호" aria-label="회색괄호" aria-pressed="${readParenGrayPref() ? "true" : "false"}">()</button>
       <span class="ccf-quick-cutins" role="group" aria-label="빠른 컷인"><button type="button" class="ccf-quick-cutin" data-quick="0"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="15" rx="8" ry="3"/><path d="M4 15v2.5c0 1.66 3.58 3 8 3s8-1.34 8-3V15"/><path d="M7.5 14V9.5C7.5 8.12 9.51 7 12 7s4.5 1.12 4.5 2.5V14"/><ellipse cx="12" cy="9.5" rx="4.5" ry="2.5"/></svg></button><button type="button" class="ccf-quick-cutin" data-quick="1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5z"/><path d="M12 9.5v5"/><path d="M12 17.2v.1"/></svg></button></span>
       <div class="ccf-inline-popover" data-inline-popover aria-hidden="true"></div>
     `;
@@ -6634,7 +6646,7 @@
         state.roll20Source = null;
         commandButton.classList.remove("active");
         commandButton.setAttribute("aria-pressed", "false");
-        if (state.parentheticalGray) applyParentheticalGrayToEditor(editor);
+        if (readParenGrayPref()) applyParentheticalGrayToEditor(editor);
         renderPreview(editor);
         refreshComposerBadge(activeComposer, editor);
         syncEditorVisualPreview(editor);
@@ -6699,10 +6711,10 @@
     if (command === "paren-gray") {
       const selection = getInlineToolbarSelection(toolbar);
       const state = ensureEditorState(editor);
-      const nextActive = state.parentheticalGray !== true;
+      const nextActive = !readParenGrayPref();
       state.parentheticalGray = nextActive;
-      commandButton.classList.toggle("active", nextActive);
-      commandButton.setAttribute("aria-pressed", nextActive ? "true" : "false");
+      writeParenGrayPref(nextActive); // 0.1.168: 브라우저에 저장, 모든 서식 바·화면 표시가 따른다
+      document.querySelectorAll('[data-inline-command="paren-gray"]').forEach((button) => { button.classList.toggle("active", nextActive); button.setAttribute("aria-pressed", nextActive ? "true" : "false"); });
       if (nextActive) {
         applyParentheticalGrayToEditor(editor, selection);
       }
@@ -7150,7 +7162,7 @@
         state.runs = patchStyleRuns(state.runs, range, patch, text.length);
         state.text = text;
         state.roll20Source = null;
-        if (state.parentheticalGray) applyParentheticalGrayToEditor(editor);
+        if (readParenGrayPref()) applyParentheticalGrayToEditor(editor);
         renderPreview(editor);
         refreshComposerBadge(activeComposer, editor);
         syncEditorVisualPreview(editor);
@@ -7164,7 +7176,7 @@
       styleOverride: getStyleFromInlineToolbar(toolbar),
       selectionOverride: selection
     });
-    if (applied && ensureEditorState(editor).parentheticalGray) {
+    if (applied && readParenGrayPref()) {
       applyParentheticalGrayToEditor(editor);
     }
 
@@ -11356,6 +11368,10 @@
     return ranges.sort((left, right) => left.start - right.start || right.end - left.end);
   }
 
+  // 0.1.168 회색괄호: 기본 켬(새 키 — 예전 값은 일부러 끈 것인지 알 수 없어 한 번 켬으로 맞춘다). 끄면 그 선택을 브라우저에 저장.
+  // 켜져 있으면 보내는 글(봉투)뿐 아니라 화면의 모든 메시지(이전 글·남의 글)도 괄호 구간을 회색으로 그린다(저장 글은 그대로, 받은 프리셋과 같은 그리기 단계).
+  function readParenGrayPref() { try { return localStorage.getItem(PAREN_GRAY_PREF_KEY) !== "0"; } catch (_) { return true; } }
+  function writeParenGrayPref(on) { try { localStorage.setItem(PAREN_GRAY_PREF_KEY, on ? "1" : "0"); } catch (_) {} try { window.__CCF_FS_PRESET_REFRESH__?.(); } catch (_) {} }
   function getParentheticalGrayTargetRanges(text, selection = null) {
     const ranges = getParentheticalRanges(text);
     const selected = normalizeSelectionRange(selection, text.length);
@@ -15002,7 +15018,7 @@
           if (!keepOn) state.lastStyle = null;
           state.blockStyle = {};
         } else {
-          if (state.parentheticalGray) {
+          if (readParenGrayPref()) {
             state.runs = applyParentheticalGrayRuns(state.runs, text);
           }
         }
@@ -15265,7 +15281,7 @@
         }
       }
     }
-    if (state.parentheticalGray) {
+    if (readParenGrayPref()) {
       state.runs = applyParentheticalGrayRuns(state.runs, payloadText);
     }
     // 헤딩 마크다운 (#99) — 줄 시작 #/##/### + 공백 → 마커 제거 + 그 줄 헤딩 크기
@@ -15396,7 +15412,7 @@
         alignRuns: [],
         lastStyle: null,
         blockStyle: {},
-        parentheticalGray: false,
+        parentheticalGray: readParenGrayPref(),
         roll20Source: null
       };
       EDITOR_STATE.set(editor, state);
@@ -17336,7 +17352,7 @@
     }
 
     refreshComposerBadge(activeComposer, roomEditor);
-    setInlineParentheticalGrayToggle(roomEditor, state.parentheticalGray);
+    setInlineParentheticalGrayToggle(roomEditor, readParenGrayPref());
     syncEditorVisualPreview(roomEditor);
     return true;
   }

@@ -37,7 +37,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     assert.equal(await bar.locator('[data-inline-command="break"]').evaluate((b) => b.classList.contains('active')), true, 'break on');
     await bar.locator('[data-inline-command="break"]').click();
     await page.locator('#composer textarea').click(); await bar.locator('[data-inline-command="paren-gray"]').click();
-    assert.equal(await bar.locator('[data-inline-command="paren-gray"]').evaluate((b) => b.classList.contains('active') && b.getAttribute('aria-pressed') === 'true'), true, '() on');
+    // 0.1.168: 회색괄호 is on by default, so the first click turns it off
+    assert.equal(await bar.locator('[data-inline-command="paren-gray"]').evaluate((b) => !b.classList.contains('active') && b.getAttribute('aria-pressed') === 'false'), true, '() off');
     await bar.locator('[data-inline-command="paren-gray"]').click();
     await page.locator('#composer textarea').click(); await bar.locator('[data-inline-command="style-clipboard"]').click(); await page.waitForTimeout(200);
     assert((await bar.locator('.ccf-inline-popover.open').boundingBox())?.width > 0, 'Sv window opens'); await page.keyboard.press('Escape'); await page.mouse.click(700, 100);
