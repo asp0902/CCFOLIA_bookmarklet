@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Saikoro Fiction Character Sheet by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-character-sheet
-// @version      0.5.68
+// @version      0.5.69
 // @description  Detect inSANe rooms and add room-local character sheets with BCDice commands.
 // @description:ko 사이코로픽션 룸을 감지해 룸별 캐릭터 시트와 BCDice 판정 입력 기능을 추가합니다. 현재 인세인을 지원합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -22,7 +22,7 @@
   const ICON_ATTR = "data-ccf-character-sheet-icon";
   const DIALOG_BUTTON_ATTR = "data-ccf-character-sheet-dialog-button";
   const ROW_BUTTON_ATTR = "data-ccf-character-sheet-row-button";
-  const VERSION = "0.5.68";
+  const VERSION = "0.5.69";
   const TRANSFER_KIND = "capybara.insane-sheet";
   const TRANSFER_VERSION = 1;
   const MAX_TRANSFER_BYTES = 500_000;
@@ -420,6 +420,14 @@
     };
   }
 
+  // 0.5.69 연동 없이(아델리 캐릭터 시트 API 를 붙여넣어 가져온 것이 아니라) 새로 만드는 빈 시트: 어빌리티 리스트·관계 목록에 빈 줄 4개.
+  // 가져오기(parseTransferPayload → normalizeTransferSheet)와 저장된 시트 읽기(normalizeData)는 makeSheet 만 써서 받은 줄 수 그대로다.
+  function withBlankRows(sheet) {
+    sheet.abilities = Array.from({ length: 4 }, () => ({ id: makeId() }));
+    sheet.people = Array.from({ length: 4 }, () => ({ id: makeId(), shelter: false }));
+    return sheet;
+  }
+
   function makeData() {
     // 시트는 0개로 시작할 수 있다(＋, 캐릭터 편집창 버튼, 내 캐릭터 목록 버튼으로 만든다).
     return { version: 1, selectedId: "", sheets: [], permissions: {}, scene: { cycle: 1, number: 0 }, sceneTables: [] };
@@ -799,7 +807,7 @@
     if (blockNewSheetFor(dialog.querySelector('input[name="name"]')?.value)) return false;
     // 연결된 시트가 없으면 이 캐릭터용 시트를 새로 만들어 목록을 거치지 않고 곧바로 연다(이름·메모·생명력/이성치는 편집창 값으로 채운다).
     const characterName = String(dialog.querySelector('input[name="name"]')?.value || "").trim();
-    const sheet = makeSheet(characterName || `시트 ${state.data.sheets.length + 1}`);
+    const sheet = withBlankRows(makeSheet(characterName || `시트 ${state.data.sheets.length + 1}`));
     sheet.player = characterName;
     state.data.sheets.push(sheet);
     state.open = true;
@@ -983,7 +991,8 @@
   // (공유 쪽에는 deleted 표시로 전해짐 — 문서를 없애지 않는다). 비밀·사명이 남기는 쪽에 없고 지우는 쪽에만 있으면 옮겨 붙이고, 서로 다르면 그 시트는 지우지 않는다. 내용이 다른 시트는 목록만 보여 준다.
   // 0.5.51 내용 없는 시트: 새로 만든 기본값과 같은 시트(이름·연결 캐릭터·그림·수정 시각 제외)
   function isEmptySheet(sheet) {
-    const strip = (value) => { const { id, name, player, image, updatedAt, secret, mission, ...rest } = value || {}; return JSON.stringify(rest, Object.keys(rest).sort()); };
+    const filled = (row) => Object.entries(row || {}).some(([key, value]) => key !== "id" && value !== "" && value !== false && value != null && !(typeof value === "object" && !Object.keys(value).length));
+    const strip = (value) => { const { id, name, player, image, updatedAt, secret, mission, ...rest } = value || {}; rest.abilities = (rest.abilities || []).filter(filled); rest.people = (rest.people || []).filter(filled); return JSON.stringify(rest, Object.keys(rest).sort()); };
     try { return strip(normalizeData({ sheets: [sheet] }).sheets[0]) === strip(normalizeData({ sheets: [makeSheet("")] }).sheets[0]) && !String(sheet.secret || "").trim() && !String(sheet.mission || "").trim(); } catch (_) { return false; }
   }
   function sheetDuplicates() {
@@ -1066,7 +1075,7 @@
       return;
     }
     if (event.target.closest("[data-tab-add]")) {
-      const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
+      const sheet = withBlankRows(makeSheet(`시트 ${state.data.sheets.length + 1}`));
       state.data.sheets.push(sheet); renderSheetTab(); saveSoon();
       openSheetWindow(sheet.id);
     }
@@ -1168,21 +1177,7 @@
     const frame = dialog.offsetWidth - main.offsetWidth; // 창 테두리 등 main 바깥
     const want = Math.ceil(skills.scrollWidth + padLeft + padRight + scrollbar + frame);
     if (want > 200) dialog.style.width = `min(${want}px, calc(100vw - 64px))`;
-    equalizeTopFields(dialog);
   }
-  // 0.5.57 위쪽 칸: 그림 오른쪽 남은 폭을 같은 너비 4칸(같은 간격 16px)으로 — 세 줄의 칸 세로선이 맞는다(생명력 현재/최대·아이템 두 칸)
-  function equalizeTopFields(dialog) {
-    const top = dialog.querySelector(".ccf-cs-stats-items"), pair = top?.querySelector(":scope > .ccf-cs-portrait-stats"), portrait = pair?.querySelector(".ccf-cs-portrait");
-    if (!top || !pair || !portrait) return;
-    top.style.removeProperty("grid-template-columns");
-    const gap = 16, inner = parseFloat(getComputedStyle(pair).columnGap) || 16;
-    const P = portrait.getBoundingClientRect().width, W = top.clientWidth;
-    const c = (W - P - inner - 3 * gap) / 4;
-    if (!(c > 60)) return;
-    top.style.columnGap = `${gap}px`;
-    top.style.gridTemplateColumns = `${P + inner + 2 * c + gap}px ${2 * c + gap}px`;
-  }
-
   function renderPanelTabs() {
     return `<nav class="ccf-cs-tabs" aria-label="사이코로픽션 메뉴"><button data-action="panel-list" aria-selected="${state.view === "list"}">목록</button><button data-action="panel-settings" aria-selected="${state.view === "settings"}">설정</button>${state.view === "list" ? `<button class="ccf-cs-tab-add" data-action="add-sheet" aria-label="캐릭터 시트 추가" title="캐릭터 시트 추가">＋</button>` : ""}</nav>`;
   }
@@ -1543,7 +1538,7 @@
     const linked = linkedSheetFor(clean);
     if (linked) { selectSheet(linked.id); return openSheet(); }
     if (blockNewSheetFor(clean)) return false;
-    const sheet = makeSheet(clean || `시트 ${state.data.sheets.length + 1}`);
+    const sheet = withBlankRows(makeSheet(clean || `시트 ${state.data.sheets.length + 1}`));
     sheet.player = clean;
     state.data.sheets.push(sheet);
     state.open = true;
@@ -1715,6 +1710,10 @@
     }).join("")}</section>${column < CATEGORIES.length - 1 ? `<i class="ccf-cs-gap${sheet.removedGaps[column] ? " is-active" : ""}" aria-hidden="true"></i>` : ""}`).join("")}</div>`;
   }
 
+  // 0.5.69 삭제(×)도 그림으로: 마름모·주사위와 같은 크기(20px)·같은 선 굵기(1.4px)
+  function removeIcon() {
+    return '<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4.5 4.5 15.5 15.5M15.5 4.5 4.5 15.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>';
+  }
   function noteDiamond() {
     return `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M6 .9 11.1 6 6 11.1.9 6Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter"/></svg>`;
   }
@@ -1728,7 +1727,7 @@
       // 0.5.59 메모(설명) 단추 = 마름모 SVG(Roll20 시트처럼): 비었으면 빈 마름모 ◇, 내용 있으면 채운 마름모 ◆, 펼치면 강조색
       const noteButton = `<button class="ccf-cs-note-toggle${memo ? " is-filled" : ""}${noteOpen ? " is-open" : ""}" data-note="${key}" data-item-id="${escapeHtml(item.id || index)}" data-index="${index}" aria-label="${escapeHtml(itemName)} 메모 ${noteOpen ? "닫기" : "열기"}" aria-expanded="${noteOpen}">${noteDiamond()}</button>`;
       // 0.5.57 어빌리티 줄의 메모 단추는 삭제(×) 단추 바로 왼쪽(탭 순서도 그 자리)
-      return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : noteButton}<div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div>${key === "abilities" ? noteButton : ""}<button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">×</button>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
+      return `<section>${key === "abilities" ? `<span class="ccf-cs-roll-pair"><button class="ccf-cs-ability-roll ccf-cs-roll-public" data-ability-roll="${index}" aria-label="${escapeHtml(itemName)} 판정" title="판정">${d20Icon()}</button></span>` : ""}<div class="ccf-cs-repeater-fields">${fields.map(([fieldName, label]) => fieldName === "shelter" ? `<label class="ccf-cs-respect-toggle ccf-cs-shelter" title="거처(居所)를 앎"><span class="ccf-cs-shelter-label">${label}</span><input type="checkbox" role="switch" data-list="${key}" data-index="${index}" data-prop="shelter" aria-label="${escapeHtml(itemName)} ${label}"${item.shelter ? " checked" : ""}><i aria-hidden="true"></i></label>` : fieldName === "detail" ? `<textarea data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}">${escapeHtml(item[fieldName] || "")}</textarea>` : `<input data-list="${key}" data-index="${index}" data-prop="${fieldName}" aria-label="${escapeHtml(itemName)} ${label}" value="${escapeHtml(item[fieldName] || "")}">`).join("")}</div><span class="ccf-cs-row-actions">${noteButton}<button class="ccf-cs-remove" data-remove="${key}" data-index="${index}" aria-label="삭제" title="삭제">${removeIcon()}</button></span>${noteOpen ? `<textarea class="ccf-cs-inline-memo" data-list="${key}" data-index="${index}" data-prop="memo" placeholder="메모" aria-label="${escapeHtml(itemName)} 메모">${escapeHtml(memo)}</textarea>` : ""}</section>`;
     }).join("")}</div>`;
   }
 
@@ -2038,7 +2037,7 @@
       render(); saveSoon(); return;
     }
     if (button.dataset.action === "add-sheet") {
-      const sheet = makeSheet(`시트 ${state.data.sheets.length + 1}`);
+      const sheet = withBlankRows(makeSheet(`시트 ${state.data.sheets.length + 1}`));
       state.data.sheets.push(sheet); selectSheet(sheet.id); saveSoon(); return;
     }
     if (button.dataset.add) {
@@ -2356,7 +2355,7 @@
       #${ROOT_ID} .ccf-cs-section-add,#${ROOT_ID} .ccf-cs-remove { min-height:32px;padding:0;border:0;border-radius:0;background:transparent }
       #${ROOT_ID} .ccf-cs-section-add { width:32px;font-size:20px }
       #${ROOT_ID} .ccf-cs-section-wide { overflow-x:auto }
-      #${ROOT_ID} label { display:grid;gap:5px;color:#bdbdbd;font-size:13px;transition:color 200ms cubic-bezier(.4,0,.2,1) }
+      #${ROOT_ID} label { display:grid;gap:var(--ccf-cs-label-gap,2px);color:#bdbdbd;font-size:13px;transition:color 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} .ccf-cs-dialog main label:focus-within { color:var(--ccf-cs-accent,#2196f3) }
       #${ROOT_ID} input:not([type="checkbox"]),#${ROOT_ID} select,#${ROOT_ID} textarea { width:100%;min-height:36px;padding:4px 2px 2px;color:var(--ccf-cs-text,#fff);font-size:var(--ccf-cs-size,16px);background-color:transparent;background-image:linear-gradient(var(--ccf-cs-accent,#2196f3),var(--ccf-cs-accent,#2196f3));background-repeat:no-repeat;background-position:center bottom;background-size:0 2px;border:0;border-bottom:1px solid rgba(255,255,255,.55);border-radius:0;outline:0;transition:border-color 200ms cubic-bezier(.4,0,.2,1),border-width 150ms cubic-bezier(.4,0,.2,1),background-size 200ms cubic-bezier(.4,0,.2,1) }
       #${ROOT_ID} select { padding-right:32px }
@@ -2510,9 +2509,51 @@
       #${ROOT_ID} .ccf-cs-perm-cell { display:grid;place-items:center;align-self:stretch;border-top:1px solid rgba(255,255,255,.12) }
       #${ROOT_ID} .ccf-cs-perm-cell input { width:18px;min-height:18px;accent-color:#f50057 }
       #${ROOT_ID} .ccf-cs-perm-cell span { display:none }
+      /* ===== 0.5.69 시트 정리 ===== */
+      /* 위 칸: 이미지 | 생명력(현재·최대)·진통제·무기 … 한 줄의 입력칸이 모두 같은 폭(1:1:1:1). 이미지·상태·아이템 묶음을 한 격자로 펼치고(display:contents),
+         이미지는 2줄 높이 정사각형(예전 3줄) — 그만큼 칸이 넓어진다. 아이템이 없으면 2칸. */
+      #${ROOT_ID} .ccf-cs-stats-items { grid-template-columns:min-content repeat(2,minmax(0,1fr));gap:16px;grid-auto-flow:row dense;align-items:end }
+      #${ROOT_ID} .ccf-cs-stats-items:has(.ccf-cs-item-fields>*) { grid-template-columns:min-content repeat(4,minmax(0,1fr)) }
+      #${ROOT_ID} .ccf-cs-portrait-stats,#${ROOT_ID} .ccf-cs-stats,#${ROOT_ID} .ccf-cs-item-fields { display:contents }
+      /* 한 줄 = 라벨 한 줄(13px, 1lh) + 라벨 간격 + 칸 36px. 이미지 = 2줄 + 줄 간격 16px 의 정사각형(크기를 칸 높이에서 계산 — aspect-ratio 와 늘이기를 같이 쓰면 폭이 순환해 커졌다) */
+      #${ROOT_ID} .ccf-cs-portrait { grid-column:1;grid-row:1/span 2;align-self:end;font-size:13px;line-height:normal;width:calc(2 * (1lh + var(--ccf-cs-label-gap,2px) + 36px) + 16px);height:auto;aspect-ratio:1;min-height:0 }
+      #${ROOT_ID} .ccf-cs-vital { grid-column:2/span 2 }
+      #${ROOT_ID} .ccf-cs-stats>:nth-child(3) { grid-column:2 }
+      #${ROOT_ID} .ccf-cs-stats>:nth-child(4) { grid-column:3 }
+      #${ROOT_ID} .ccf-cs-item-fields>:nth-child(odd) { grid-column:4 }
+      #${ROOT_ID} .ccf-cs-item-fields>:nth-child(even) { grid-column:5 }
+      /* 어빌리티 리스트 · 관계 목록: 머리줄·첫 줄·줄 높이를 같게(두 목록이 나란히), [주사위] 칸들 [◇ ×] */
+      #${ROOT_ID} .ccf-cs-repeaters,#${ROOT_ID} .ccf-cs-abilities { gap:4px }
+      #${ROOT_ID} .ccf-cs-repeaters section,#${ROOT_ID} .ccf-cs-abilities section { align-items:center;padding-bottom:4px }
+      #${ROOT_ID} .ccf-cs-abilities section,#${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head { grid-template-columns:24px max-content auto }
+      #${ROOT_ID} .ccf-cs-people section,#${ROOT_ID} .ccf-cs-people .ccf-cs-repeater-head { grid-template-columns:minmax(0,1fr) auto }
+      #${ROOT_ID} .ccf-cs-people .ccf-cs-repeater-head .ccf-cs-repeater-fields { grid-column:1 }
+      #${ROOT_ID} .ccf-cs-people .ccf-cs-inline-memo { grid-column:1/2 }
+      /* 어빌리티 이름 칸: 한글 9자(입력 글자 크기 × 9 + 안쪽 여백) — 남는 폭은 관계 목록으로 */
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:calc(var(--ccf-cs-size,16px) * 9 + 4px) calc(3em + 20px) calc(4em * 16 / 14 + 4px) }
+      @container (min-width:641px) { #${ROOT_ID} .ccf-cs-duo { grid-template-columns:max-content minmax(0,1fr) } }
+      #${ROOT_ID} .ccf-cs-abilities input[data-prop="type"],#${ROOT_ID} .ccf-cs-abilities input[data-prop="target"] { text-align:center }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head span:nth-child(2),#${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-head span:nth-child(3) { text-align:center }
+      /* 주사위: 그림 왼쪽 끝 = 제목 첫 글자 시작, 줄(입력칸)의 세로 가운데 */
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-roll-pair { align-self:center;justify-content:flex-start }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-roll-pair .ccf-cs-ability-roll { justify-items:start;place-items:center start;height:36px;min-height:36px }
+      #${ROOT_ID} .ccf-cs-abilities .ccf-cs-roll-pair .ccf-cs-d20 { margin-left:var(--ccf-cs-d20-bearing,0px) }
+      /* ◇ · × : 주사위와 같은 20px, 같은 선 굵기, 사이 간격 좁게 */
+      #${ROOT_ID} .ccf-cs-row-actions { display:inline-flex;align-items:center;gap:4px;align-self:center }
+      #${ROOT_ID} .ccf-cs-row-actions .ccf-cs-note-toggle,#${ROOT_ID} .ccf-cs-row-actions .ccf-cs-remove { width:20px;min-width:20px;height:20px;min-height:20px;padding:0;display:inline-grid;place-items:center;font-size:0 }
+      #${ROOT_ID} .ccf-cs-row-actions svg { display:block;width:20px;height:20px;overflow:visible }
+      #${ROOT_ID} .ccf-cs-row-actions .ccf-cs-note-toggle svg { width:18px;height:18px }
+      #${ROOT_ID} .ccf-cs-row-actions svg path { vector-effect:non-scaling-stroke;stroke-width:1.4px }
+      /* 특기표: 칸마다 [특기명 | 수치] 사이 얇은 세로선, 수치는 고정 폭 가운데(오른쪽 여백), 분야 사이 막대와 목록 사이 +2px씩 */
+      #${ROOT_ID} .ccf-cs-skills { grid-template-columns:repeat(5,max-content 12px) max-content }
+      #${ROOT_ID} .ccf-cs-skill button[data-roll] { grid-template-columns:minmax(0,1fr) 22px;column-gap:28px } /* 가장 긴 특기명 → 구분선 28px(예전 이름 → 수치 40px 에서, 구분선·수치 칸·막대 여백이 늘어난 만큼 특기명 쪽에서 흡수 — 창 기본 폭 유지), 구분선 → 수치 = 수치 → 칸 끝(수치 칸 16px 가운데 + 좌우 5~6px) */
+      #${ROOT_ID} .ccf-cs-skill small { align-self:stretch;display:grid;place-items:center;border-left:1px solid rgba(255,255,255,.2);padding-left:5px;box-sizing:content-box;width:16px;text-align:center }
+      /* 하단 굴림 줄: 아이콘 위 · 글자 아래(가운데), 드롭다운은 글자 + 화살표 그대로 */
+      #${ROOT_ID} .ccf-cs-dialog>footer button:not(.ccf-cs-footer-secret):not([data-action="plot-send"]) { flex-direction:column;justify-content:center;gap:3px;min-height:48px;padding:4px 8px;line-height:1.1 }
       @media (max-width:700px) {
-        #${ROOT_ID} .ccf-cs-repeaters section { grid-template-columns:32px minmax(0,1fr) 32px }
-        #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:24px minmax(0,1fr) 32px 32px }
+        #${ROOT_ID} .ccf-cs-people section { grid-template-columns:minmax(0,1fr) auto }
+        #${ROOT_ID} .ccf-cs-abilities section { grid-template-columns:24px minmax(0,1fr) auto }
+        #${ROOT_ID} .ccf-cs-abilities .ccf-cs-repeater-fields { grid-template-columns:minmax(0,1fr) calc(3em + 20px) calc(4em * 16 / 14 + 4px) }
         #${ROOT_ID} .ccf-cs-repeater-fields { grid-template-columns:1fr }
         #${ROOT_ID} main { padding:0 12px 16px }
         #${ROOT_ID} #ccf-cs-status { display:none }
