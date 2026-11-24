@@ -65,6 +65,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.click('.quick-cutin[data-quick="0"]'); await page.waitForTimeout(400);
   assert.equal(sent.at(-1).text, '@버튼'); assert.equal(await page.inputValue('#chat-input'), '쓰던 글');
   assert.match(await page.getAttribute('.quick-cutin[data-quick="0"]', 'aria-label'), /버튼 컷인 보내기: @버튼/);
+  // the warning button: several cut-ins; two -> a click offers both; one -> sent at once
+  await page.evaluate(() => { localStorage.setItem('capybara-quick-cutin-v1:x', JSON.stringify([{ text: '@버튼' }, { text: '옛 경고' }])); });
+  await page.click('.quick-cutin[data-quick="1"]', { button: 'right' }); await page.click('.menu-item:has-text("컷인 추가")');
+  await page.click('.menu-item:has-text("@버튼")'); await page.waitForTimeout(100); await page.keyboard.press('Escape'); await page.waitForTimeout(50);
+  await page.click('.quick-cutin[data-quick="1"]');
+  assert.deepEqual(await page.locator('.menu-item').allTextContents(), ['옛 경고', '@버튼']);
+  await page.click('.menu-item:has-text("@버튼")'); await page.waitForTimeout(400);
+  assert.equal(sent.at(-1).text, '@버튼');
   await browser.close();
   console.log('participant format toolbar PASS');
 })().catch(error => { console.error(error); process.exit(1); });

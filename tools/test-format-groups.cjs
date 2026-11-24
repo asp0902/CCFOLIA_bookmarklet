@@ -64,11 +64,33 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await page.locator('.ccf-quick-cutin[data-quick="1"]').click({ button: 'right' });
     await page.locator('.ccf-quick-menu input').fill('주의하세요'); await page.locator('.ccf-quick-menu input').press('Enter');
     assert.match(await page.locator('.ccf-quick-cutin[data-quick="1"]').getAttribute('data-ccf-tip'), /경고 컷인: 주의하세요/);
+    // the warning button holds several: add '@버튼' from the list (the chooser stays open for more), then a click offers both and sends the pick once
+    await page.locator('.ccf-quick-menu [role=menuitem]', { hasText: '@버튼' }).click();
+    assert.equal(await page.locator('.ccf-quick-menu').count(), 1, 'still open to add more');
+    await page.keyboard.press('Escape'); await page.mouse.click(700, 100);
+    const warn = page.locator('.ccf-quick-cutin[data-quick="1"]');
+    assert.match(await warn.getAttribute('data-ccf-tip'), /경고 컷인 2개: 주의하세요, @버튼/);
+    await warn.click();
+    assert.deepEqual(await page.locator('.ccf-quick-menu [role=menuitem]').allTextContents(), ['주의하세요', '@버튼']);
+    await page.locator('.ccf-quick-menu [role=menuitem]', { hasText: '@버튼' }).click(); await page.waitForTimeout(400);
+    assert.deepEqual(await page.evaluate(() => window.__sent), ['@버튼', '@버튼'], 'the pick is sent once');
+    // right click: remove one; with one left a click sends at once
+    await warn.click({ button: 'right' });
+    await page.locator('.ccf-quick-menu button[aria-label="주의하세요 지우기"]').click();
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('ccf-quick-cutin-v1:test'))[1].map((v) => v.text)), ['@버튼']);
+    await page.keyboard.press('Escape'); await page.mouse.click(700, 100);
+    await warn.click(); await page.waitForTimeout(400);
+    assert.deepEqual(await page.evaluate(() => window.__sent), ['@버튼', '@버튼', '@버튼'], 'one left: sent without a menu');
+    assert.equal(await page.locator('.ccf-quick-menu').count(), 0);
+    // an old saved single value reads as a one-item list
+    await page.evaluate(() => localStorage.setItem('ccf-quick-cutin-v1:test', JSON.stringify([{ text: '@버튼', fromList: true }, { text: '옛 경고', fromList: false }])));
+    await warn.hover(); assert.match(await page.evaluate(() => { const b = document.querySelector('.ccf-quick-cutin[data-quick="1"]'); b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return b.dataset.ccfTip; }), /경고 컷인: 옛 경고/);
+    await page.waitForTimeout(400); assert.equal((await page.evaluate(() => window.__sent)).at(-1), '옛 경고');
     // a chosen cut-in removed from the room: dimmed, a click opens the chooser instead of sending
     await page.evaluate(() => { const fx = window.__state.entities.roomEffects; window.__state.entities.roomEffects = { ids: ['e2'], entities: { e2: fx.entities.e2 } }; });
     await quick.click(); await page.waitForTimeout(150);
     assert.equal(await quick.evaluate((b) => b.classList.contains('ccf-quick-gone')), true, 'dimmed');
-    assert.equal(await page.locator('.ccf-quick-menu').count(), 1, 'chooser instead of sending'); assert.deepEqual(await page.evaluate(() => window.__sent), ['@버튼']);
+    assert.equal(await page.locator('.ccf-quick-menu').count(), 1, 'chooser instead of sending'); assert.equal((await page.evaluate(() => window.__sent)).length, 4, 'nothing more sent');
     assert.deepEqual(errors, []);
     console.log('format groups PASS');
   } finally { await browser.close(); }

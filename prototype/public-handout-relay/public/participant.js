@@ -1393,26 +1393,44 @@ refreshSpeakerUi();
   // two quick cut-in buttons where the toolkit has them: a name of this room's cut-ins (or any text) sent from the current speaker and tab; right-click / long press chooses it
   const QUICK_KEY = `capybara-quick-cutin-v1:${roomId}`, QUICK_NAMES = ["버튼", "경고"];
   const QUICK_ICONS = ['<ellipse cx="12" cy="15" rx="8" ry="3"/><path d="M4 15v2.5c0 1.66 3.58 3 8 3s8-1.34 8-3V15"/><path d="M7.5 14V9.5C7.5 8.12 9.51 7 12 7s4.5 1.12 4.5 2.5V14"/><ellipse cx="12" cy="9.5" rx="4.5" ry="2.5"/>', '<path d="M12 3.5 2.8 19.5h18.4L12 3.5z"/><path d="M12 9.5v5"/><path d="M12 17.2v.1"/>'];
-  const readQuick = () => { try { const all = JSON.parse(localStorage.getItem(QUICK_KEY) || "[]"); return [0, 1].map(i => (typeof all[i]?.text === "string" && all[i].text ? all[i] : null)); } catch (_) { return [null, null]; } };
+  // the warning button (1) holds several cut-ins: [push value, warning list]; an old single value reads as a one-item list
+  const validQuick = value => (typeof value?.text === "string" && value.text ? value : null);
+  const readQuick = () => { try { const all = JSON.parse(localStorage.getItem(QUICK_KEY) || "[]"); return [validQuick(all[0]), (Array.isArray(all[1]) ? all[1] : [all[1]]).map(validQuick).filter(Boolean)]; } catch (_) { return [null, []]; } };
   const knownCutins = () => [...new Set([...(sceneData?.cutinNames || []), ...(sceneData?.cutinPictures || []).map(item => item.name), ...(sceneData?.effects || []).map(item => item.name)].filter(Boolean))];
   const quickButtons = QUICK_NAMES.map((what, index) => {
     const b = document.createElement("button"); b.type = "button"; b.className = "quick-cutin"; b.dataset.quick = String(index);
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "22"); svg.setAttribute("height", "22"); svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "1.6"); svg.setAttribute("stroke-linejoin", "round"); svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = QUICK_ICONS[index]; b.append(svg); return b;
   });
-  const refreshQuick = () => quickButtons.forEach((b, index) => { const value = readQuick()[index], what = QUICK_NAMES[index]; b.dataset.tipText = value ? `${what} 컷인: ${value.text}\n우클릭으로 바꾸기` : `${what} 컷인: 정해지지 않음\n눌러서 정하기`; b.setAttribute("aria-label", value ? `${what} 컷인 보내기: ${value.text}` : `${what} 컷인 정하기`); });
+  const listOf = index => (index === 1 ? readQuick()[1] : [readQuick()[0]].filter(Boolean));
+  const refreshQuick = () => quickButtons.forEach((b, index) => {
+    const list = listOf(index), what = QUICK_NAMES[index];
+    b.dataset.tipText = !list.length ? `${what} 컷인: 정해지지 않음\n눌러서 정하기` : list.length === 1 ? `${what} 컷인: ${list[0].text}\n우클릭으로 ${index === 1 ? "추가·제거" : "바꾸기"}` : `${what} 컷인 ${list.length}개: ${list.map(value => value.text).join(", ").slice(0, 60)}\n눌러서 고르기 · 우클릭으로 추가·제거`;
+    b.setAttribute("aria-label", !list.length ? `${what} 컷인 정하기` : list.length === 1 ? `${what} 컷인 보내기: ${list[0].text}` : `${what} 컷인 ${list.length}개 중 고르기`);
+  });
   const writeQuick = (index, value) => { const all = readQuick(); all[index] = value; try { localStorage.setItem(QUICK_KEY, JSON.stringify(all)); } catch (_) {} refreshQuick(); };
-  const chooseQuick = (button, index) => openMenu(button, [...knownCutins().map(name => ({ label: name, run: () => writeQuick(index, { text: name }) })), ...(knownCutins().length ? [{ divider: true }] : []), { label: "직접 입력…", run: () => { const text = (prompt(`${QUICK_NAMES[index]} 컷인으로 보낼 글`, readQuick()[index]?.text || "") || "").trim(); if (text) writeQuick(index, { text }); } }, ...(readQuick()[index] ? [{ label: "정한 것 지우기", run: () => writeQuick(index, null) }] : [])]);
+  const sendQuick = text => postChat(crypto.randomUUID(), text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
+  const typeIn = (label, current, then) => { const text = (prompt(label, current || "") || "").trim(); if (text) then(text); };
+  // choose (push) or add (warning, the chooser opens again so several can be added)
+  const chooseQuick = (button, index) => {
+    const adding = index === 1, has = text => listOf(index).some(value => value.text === text);
+    const add = text => { if (adding) { if (!has(text)) writeQuick(1, [...readQuick()[1], { text }]); setTimeout(() => chooseQuick(button, index)); } else writeQuick(index, { text }); };
+    openMenu(button, [...knownCutins().map(name => ({ label: has(name) ? `✓ ${name}` : name, run: () => add(name) })), ...(knownCutins().length ? [{ divider: true }] : []), { label: "직접 입력…", run: () => typeIn(`${QUICK_NAMES[index]} 컷인으로 보낼 글`, adding ? "" : readQuick()[index]?.text, add) }, ...(!adding && readQuick()[0] ? [{ label: "정한 것 지우기", run: () => writeQuick(0, null) }] : [])]);
+  };
+  // the warning list: click (2 or more) picks one to send; right click sends, removes one, or adds
+  const warnMenu = (button, manage) => openMenu(button, [...readQuick()[1].map(value => ({ label: value.text, run: () => sendQuick(value.text) })), ...(manage ? [{ divider: true }, ...readQuick()[1].map((value, at) => ({ label: `× ${value.text} 지우기`, run: () => writeQuick(1, readQuick()[1].filter((_, i) => i !== at)) })), { label: "컷인 추가…", run: () => setTimeout(() => chooseQuick(button, 1)) }] : [])]);
   quickButtons.forEach((b, index) => {
     let press = 0, opened = false;
-    b.addEventListener("contextmenu", event => { event.preventDefault(); chooseQuick(b, index); });
-    b.addEventListener("pointerdown", event => { opened = false; if (event.pointerType !== "mouse") press = setTimeout(() => { opened = true; chooseQuick(b, index); }, 500); });
+    const manage = () => (index === 1 && readQuick()[1].length ? warnMenu(b, true) : chooseQuick(b, index));
+    b.addEventListener("contextmenu", event => { event.preventDefault(); manage(); });
+    b.addEventListener("pointerdown", event => { opened = false; if (event.pointerType !== "mouse") press = setTimeout(() => { opened = true; manage(); }, 500); });
     for (const type of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(type, () => clearTimeout(press));
     b.addEventListener("click", () => {
       if (opened) { opened = false; return; }
-      const value = readQuick()[index];
-      if (!value) { chooseQuick(b, index); return; }
-      postChat(crypto.randomUUID(), value.text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
+      const list = listOf(index);
+      if (!list.length) { chooseQuick(b, index); return; }
+      if (list.length > 1) { warnMenu(b, false); return; }
+      sendQuick(list[0].text);
     });
   });
   refreshQuick();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.154
+// @version      0.1.155
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.154"),
+    version: getUserscriptVersion("0.1.155"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -5899,8 +5899,13 @@
 
   // 0.1.150 빠른 컷인: 단추마다 사용자가 정한 글(룸의 컷인 이름 또는 직접 입력)을 지금 화자·탭으로 보낸다. 입력칸의 쓰던 글은 그대로 둔다.
   // 정하기: 우클릭·길게 누름(정해지지 않았으면 그냥 누름) → 룸 컷인 목록 + 직접 입력. 브라우저에 룸마다 저장한다.
+  // 0.1.155 경고 단추(1번)는 컷인 여러 개: [푸시 값, 경고 목록]. 옛 저장값(경고 하나)은 1개짜리 목록으로 읽는다.
+  const validQuick = (value) => (value && typeof value.text === "string" && value.text ? value : null);
   function readQuickCutins() {
-    try { const all = JSON.parse(localStorage.getItem(`${QUICK_CUTIN_KEY}:${quickCutinRoom()}`) || "[]"); return [0, 1].map((i) => (all[i] && typeof all[i].text === "string" && all[i].text ? all[i] : null)); } catch (_) { return [null, null]; }
+    try {
+      const all = JSON.parse(localStorage.getItem(`${QUICK_CUTIN_KEY}:${quickCutinRoom()}`) || "[]");
+      return [validQuick(all[0]), (Array.isArray(all[1]) ? all[1] : [all[1]]).map(validQuick).filter(Boolean)];
+    } catch (_) { return [null, []]; }
   }
   function writeQuickCutin(index, value) {
     const all = readQuickCutins(); all[index] = value;
@@ -5913,13 +5918,17 @@
     const list = slice?.ids?.map((id) => slice.entities?.[id]) || Object.values(slice?.entities || {});
     return list.map((effect) => (typeof effect?.name === "string" ? effect.name : "")).filter(Boolean);
   }
+  const quickGone = (value, names = roomCutinNames()) => !!value?.fromList && !names.includes(value.text);
   function refreshQuickCutinButton(button) {
-    const index = Number(button.dataset.quick), value = readQuickCutins()[index], what = QUICK_CUTIN_NAMES[index];
-    const gone = !!value?.fromList && !roomCutinNames().includes(value.text);
+    const index = Number(button.dataset.quick), what = QUICK_CUTIN_NAMES[index], names = roomCutinNames();
+    const list = index === 1 ? readQuickCutins()[1] : [readQuickCutins()[0]].filter(Boolean);
+    const gone = list.length > 0 && list.every((value) => quickGone(value, names));
     button.classList.toggle("ccf-quick-gone", gone);
-    const tip = value ? `${what} 컷인: ${value.text}${gone ? " (룸에 없음)" : ""}\n우클릭으로 바꾸기` : `${what} 컷인: 정해지지 않음\n눌러서 정하기`;
+    const tip = !list.length ? `${what} 컷인: 정해지지 않음\n눌러서 정하기`
+      : list.length === 1 ? `${what} 컷인: ${list[0].text}${gone ? " (룸에 없음)" : ""}\n우클릭으로 ${index === 1 ? "추가·제거" : "바꾸기"}`
+      : `${what} 컷인 ${list.length}개: ${list.map((value) => value.text).join(", ").slice(0, 60)}\n눌러서 고르기 · 우클릭으로 추가·제거`;
     button.dataset.ccfTip = tip; button.removeAttribute("title");
-    button.setAttribute("aria-label", value ? `${what} 컷인 보내기: ${value.text}` : `${what} 컷인 정하기`);
+    button.setAttribute("aria-label", !list.length ? `${what} 컷인 정하기` : list.length === 1 ? `${what} 컷인 보내기: ${list[0].text}` : `${what} 컷인 ${list.length}개 중 고르기`);
   }
   async function sendQuickCutin(toolbar, text) {
     const editor = toolbar.__ccfEditor, submit = findDiceRowSubmit(toolbar);
@@ -5935,46 +5944,89 @@
     return true;
   }
   function closeQuickCutinMenu() { document.querySelector(".ccf-quick-menu")?.remove(); }
-  function openQuickCutinMenu(button) {
+  // 코코포리아 메뉴 모양의 작은 창 하나(단추 위로 먼저, 바깥·Esc 로 닫힘)
+  function quickMenuShell(button, label) {
     closeQuickCutinMenu();
-    const index = Number(button.dataset.quick), current = readQuickCutins()[index];
-    const menu = document.createElement("div"); menu.className = "ccf-quick-menu"; menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", `${QUICK_CUTIN_NAMES[index]} 컷인 정하기`);
+    const menu = document.createElement("div"); menu.className = "ccf-quick-menu"; menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", label);
     menu.style.cssText = "position:fixed;z-index:2147483646;box-sizing:border-box;min-width:200px;max-width:300px;max-height:min(360px,calc(100vh - 16px));overflow-y:auto;padding:8px 0;border-radius:4px;background:rgba(44,44,44,.97);color:#fff;font:400 14px/1.5 Roboto,'Noto Sans KR',sans-serif;box-shadow:0 5px 5px -3px rgba(0,0,0,.2),0 8px 10px 1px rgba(0,0,0,.14),0 3px 14px 2px rgba(0,0,0,.12)";
-    const item = (label, run, checked = false) => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "menuitem"); b.textContent = label; b.style.cssText = `all:unset;box-sizing:border-box;display:block;width:100%;padding:6px 16px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${checked ? "background:rgba(144,202,249,.16)" : ""}`; b.addEventListener("mouseenter", () => { b.style.background = "rgba(255,255,255,.08)"; }); b.addEventListener("mouseleave", () => { b.style.background = checked ? "rgba(144,202,249,.16)" : ""; }); b.addEventListener("click", () => { run(); closeQuickCutinMenu(); }); menu.append(b); return b; };
-    const head = document.createElement("div"); head.textContent = `${QUICK_CUTIN_NAMES[index]} 컷인`; head.style.cssText = "padding:4px 16px 6px;font-size:12px;color:rgba(255,255,255,.7)"; menu.append(head);
+    const item = (text, run, { checked = false, dim = false, remove = null, keepOpen = false } = {}) => {
+      const row = document.createElement("div"); row.style.cssText = "display:flex;align-items:center";
+      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "menuitem"); b.textContent = text;
+      const bg = checked ? "rgba(144,202,249,.16)" : "";
+      b.style.cssText = `all:unset;box-sizing:border-box;flex:1;min-width:0;padding:6px 16px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${bg ? `background:${bg};` : ""}${dim ? "opacity:.45;" : ""}`;
+      b.addEventListener("mouseenter", () => { b.style.background = "rgba(255,255,255,.08)"; }); b.addEventListener("mouseleave", () => { b.style.background = bg; });
+      b.addEventListener("click", () => { if (!keepOpen) closeQuickCutinMenu(); run(); });
+      row.append(b);
+      if (remove) { const x = document.createElement("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", `${text} 지우기`); x.style.cssText = "all:unset;padding:0 14px;cursor:pointer;color:rgba(255,255,255,.7);font-size:18px"; x.addEventListener("click", remove); row.append(x); }
+      menu.append(row); return b;
+    };
+    const note = (text, color = "rgba(255,255,255,.7)") => { const d = document.createElement("div"); d.textContent = text; d.style.cssText = `padding:4px 16px 6px;font-size:12px;color:${color}`; menu.append(d); };
+    const divider = () => { const d = document.createElement("div"); d.style.cssText = "height:1px;margin:6px 0;background:rgba(255,255,255,.12)"; menu.append(d); };
+    const show = () => {
+      document.documentElement.appendChild(menu);
+      const r = button.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
+      menu.style.top = `${Math.max(8, r.top - 4 - h >= 8 ? r.top - 4 - h : Math.min(innerHeight - h - 8, r.bottom + 4))}px`; // 위로 먼저(아래는 입력칸)
+      menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+      const away = (event) => { if (!menu.isConnected) { document.removeEventListener("pointerdown", away, true); return; } if (!menu.contains(event.target) && event.target !== button) { closeQuickCutinMenu(); document.removeEventListener("pointerdown", away, true); } };
+      setTimeout(() => document.addEventListener("pointerdown", away, true), 0);
+      menu.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.stopPropagation(); closeQuickCutinMenu(); button.focus(); } });
+    };
+    return { menu, item, note, divider, show };
+  }
+  // 정하기(푸시) / 더하기(경고): 룸 컷인 목록 + 직접 입력. 경고는 고른 뒤에도 열려 있어 여러 개를 이어서 더한다.
+  function openQuickCutinMenu(button) {
+    const index = Number(button.dataset.quick), [push, list] = readQuickCutins(), adding = index === 1;
+    const { menu, item, note, show } = quickMenuShell(button, adding ? "경고 컷인 추가" : `${QUICK_CUTIN_NAMES[index]} 컷인 정하기`);
+    const has = (text) => (adding ? list.some((value) => value.text === text) : push?.text === text);
+    const add = (value) => { if (adding) { if (!has(value.text)) writeQuickCutin(1, [...readQuickCutins()[1], value]); openQuickCutinMenu(button); } else writeQuickCutin(index, value); };
+    note(adding ? "경고 컷인 추가(여러 개)" : `${QUICK_CUTIN_NAMES[index]} 컷인`);
     const names = roomCutinNames();
-    if (!names.length) { const none = document.createElement("div"); none.textContent = "이 룸에 컷인이 없습니다"; none.style.cssText = "padding:6px 16px;color:rgba(255,255,255,.5)"; menu.append(none); }
-    for (const name of names) item(name, () => writeQuickCutin(index, { text: name, fromList: true }), current?.text === name);
+    if (!names.length) note("이 룸에 컷인이 없습니다", "rgba(255,255,255,.5)");
+    for (const name of names) item(name, () => add({ text: name, fromList: true }), { checked: has(name), keepOpen: adding });
     const form = document.createElement("form"); form.style.cssText = "display:flex;gap:6px;padding:8px 16px 4px;border-top:1px solid rgba(255,255,255,.12);margin-top:6px";
-    const input = document.createElement("input"); input.type = "text"; input.placeholder = "직접 입력"; input.setAttribute("aria-label", "직접 입력"); input.value = current && !current.fromList ? current.text : ""; input.style.cssText = "flex:1;min-width:0;padding:4px 8px;border:1px solid rgba(255,255,255,.23);border-radius:4px;background:transparent;color:#fff;font:inherit";
-    const ok = document.createElement("button"); ok.type = "submit"; ok.textContent = "정하기"; ok.style.cssText = "all:unset;padding:4px 8px;border-radius:4px;color:#90caf9;cursor:pointer;font-weight:500";
+    const input = document.createElement("input"); input.type = "text"; input.placeholder = "직접 입력"; input.setAttribute("aria-label", "직접 입력"); input.value = !adding && push && !push.fromList ? push.text : ""; input.style.cssText = "flex:1;min-width:0;padding:4px 8px;border:1px solid rgba(255,255,255,.23);border-radius:4px;background:transparent;color:#fff;font:inherit";
+    const ok = document.createElement("button"); ok.type = "submit"; ok.textContent = adding ? "추가" : "정하기"; ok.style.cssText = "all:unset;padding:4px 8px;border-radius:4px;color:#90caf9;cursor:pointer;font-weight:500";
     form.append(input, ok); menu.append(form);
-    form.addEventListener("submit", (event) => { event.preventDefault(); const text = input.value.trim(); if (text) writeQuickCutin(index, { text, fromList: false }); closeQuickCutinMenu(); });
-    if (current) item("정한 것 지우기", () => writeQuickCutin(index, null));
-    document.documentElement.appendChild(menu);
-    const r = button.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
-    menu.style.top = `${Math.max(8, r.top - 4 - h >= 8 ? r.top - 4 - h : Math.min(innerHeight - h - 8, r.bottom + 4))}px`; // 위로 먼저(아래는 입력칸)
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    const away = (event) => { if (!menu.contains(event.target) && event.target !== button) { closeQuickCutinMenu(); document.removeEventListener("pointerdown", away, true); } };
-    setTimeout(() => document.addEventListener("pointerdown", away, true), 0);
-    menu.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.stopPropagation(); closeQuickCutinMenu(); button.focus(); } });
+    form.addEventListener("submit", (event) => { event.preventDefault(); const text = input.value.trim(); if (!text) return; if (!adding) closeQuickCutinMenu(); add({ text, fromList: false }); });
+    if (!adding && push) item("정한 것 지우기", () => writeQuickCutin(index, null));
+    show();
+    if (adding) input.focus();
+  }
+  // 경고 목록: 누름(2개 이상) = 고르면 보낸다 / 우클릭 = 보내기 + 항목별 지우기 + 컷인 추가…
+  function openWarnListMenu(button, toolbar, manage) {
+    const list = readQuickCutins()[1], names = roomCutinNames();
+    const { item, note, divider, show } = quickMenuShell(button, manage ? "경고 컷인 관리" : "경고 컷인 고르기");
+    note(manage ? "경고 컷인" : "보낼 컷인");
+    list.forEach((value, at) => {
+      const gone = quickGone(value, names);
+      item(gone ? `${value.text} (룸에 없음)` : value.text, () => { if (!gone) sendQuickCutinOnce(button, toolbar, value.text); }, { dim: gone, remove: manage ? () => { writeQuickCutin(1, readQuickCutins()[1].filter((_, i) => i !== at)); openWarnListMenu(button, toolbar, true); } : null });
+    });
+    if (manage) { divider(); item("컷인 추가…", () => openQuickCutinMenu(button)); }
+    show();
+  }
+  async function sendQuickCutinOnce(button, toolbar, text) {
+    if (button.dataset.sending === "1") return;
+    button.dataset.sending = "1";
+    try { await sendQuickCutin(toolbar, text); } finally { delete button.dataset.sending; }
   }
   function bindQuickCutins(toolbar) {
     toolbar.querySelectorAll(".ccf-quick-cutin").forEach((button) => {
       refreshQuickCutinButton(button);
+      const index = Number(button.dataset.quick);
+      const manage = () => (index === 1 && readQuickCutins()[1].length ? openWarnListMenu(button, toolbar, true) : openQuickCutinMenu(button));
       let longPress = 0, opened = false;
-      button.addEventListener("contextmenu", (event) => { event.preventDefault(); event.stopPropagation(); openQuickCutinMenu(button); });
-      button.addEventListener("pointerdown", (event) => { opened = false; if (event.pointerType !== "mouse") longPress = setTimeout(() => { opened = true; openQuickCutinMenu(button); }, 500); });
+      button.addEventListener("contextmenu", (event) => { event.preventDefault(); event.stopPropagation(); manage(); });
+      button.addEventListener("pointerdown", (event) => { opened = false; if (event.pointerType !== "mouse") longPress = setTimeout(() => { opened = true; manage(); }, 500); });
       for (const type of ["pointerup", "pointerleave", "pointercancel"]) button.addEventListener(type, () => clearTimeout(longPress));
       button.addEventListener("click", async (event) => {
         event.preventDefault(); event.stopPropagation();
         if (opened) { opened = false; return; }
-        const value = readQuickCutins()[Number(button.dataset.quick)];
         refreshQuickCutinButton(button);
-        if (!value || button.classList.contains("ccf-quick-gone")) { openQuickCutinMenu(button); return; }
-        if (button.dataset.sending === "1") return;
-        button.dataset.sending = "1";
-        try { await sendQuickCutin(toolbar, value.text); } finally { delete button.dataset.sending; }
+        const list = index === 1 ? readQuickCutins()[1] : [readQuickCutins()[0]].filter(Boolean);
+        if (!list.length) { openQuickCutinMenu(button); return; }
+        if (list.length > 1) { openWarnListMenu(button, toolbar, false); return; }
+        if (quickGone(list[0])) { manage(); return; }
+        await sendQuickCutinOnce(button, toolbar, list[0].text);
       });
     });
   }
