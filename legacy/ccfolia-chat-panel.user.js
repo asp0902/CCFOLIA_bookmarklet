@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.72
+// @version      0.5.73
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.72";
+  const VERSION = "0.5.73";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -4814,7 +4814,8 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
   function ensureMenuItem() {
     if (!getRoomId()) return;
     for (const menu of document.querySelectorAll('[role="menu"]')) {
-      if (!(menu instanceof HTMLElement) || !isVisible(menu)) continue;
+      // 0.5.73: 툴킷 자신의 메뉴(패널 안·안전 표식)는 레이아웃을 읽기 전에 거른다
+      if (!(menu instanceof HTMLElement) || menu.closest(".ccf-scp-panel, [data-capybara-toolkit-chat-panel]") || !isVisible(menu)) continue;
       if (!menu.classList.contains("ccf-scp-menu") && !menu.closest(".ccf-scp-panel")) captureNativeMenuStyle(menu);
 
       const existing = menu.querySelector(`[${MENU_ITEM_ATTR}="1"]`);
@@ -4914,7 +4915,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
     window.addEventListener("keydown", nativeBackquoteHandler, true);
 
     // 메뉴는 열 때마다 새로 만들어지므로 DOM 변화를 보고 그때그때 항목을 끼운다.
-    const observer = new MutationObserver(() => { if (active) ensureMenuItem(); });
+    // 0.5.73: 한 프레임에 한 번만 — DOM 이 바뀔 때마다(글 한 글자마다) 모든 메뉴의 위치를 읽어 레이아웃을 강제했다(추가 패널이 열려 있으면 한 글자에 ~20ms, 실측)
+    let menuItemQueued = false;
+    const observer = new MutationObserver(() => { if (!active || menuItemQueued) return; menuItemQueued = true; requestAnimationFrame(() => { menuItemQueued = false; if (active) ensureMenuItem(); }); });
     observer.observe(document.body, { childList: true, subtree: true });
     // 애니메이션 중 삽입이 밀리는 경우를 대비한 보조 폴링.
     // 0.5.49: GM 판정과 오리지널 줄 눈·구분선 단추는 추가 패널이 닫혀 있어도 돈다(패널을 열 때만 돌아서, 닫아 두면 isGm 이 null 로 남고 눈 단추가 하나도 없었다). 패널이 열려 있으면 패널 쪽 주기가 맡는다.
