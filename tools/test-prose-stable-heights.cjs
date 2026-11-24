@@ -72,7 +72,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(p[4][0] - p[3][1], nativeSep, 'new speaker: native distance');
     // the list end keeps the space the last row no longer has
     const end = await page.evaluate(() => { const ul = document.querySelector('ul[role=log]'); return ul.getBoundingClientRect().bottom - [...ul.querySelectorAll('p')].pop().getBoundingClientRect().bottom; });
-    assert.equal(end, nativeEnd, `list end space ${end} = native ${nativeEnd}`);
+    // the list end keeps only the inner 5px + the 1px divider space (accepted: filling it with list padding moved the bottom once more after the native scroll)
+    assert.equal(end, 6, `list end space ${end} (native ${nativeEnd})`);
+    assert.equal(await page.evaluate(() => getComputedStyle([...document.querySelectorAll('ul[role=log] hr')].pop()).visibility), 'hidden', 'the last row line is hidden');
+    assert.equal(await page.evaluate(() => getComputedStyle([...document.querySelectorAll('ul[role=log] hr')].pop()).transform), 'none', 'the last row line is not moved (no overflow below the list)');
     assert.deepEqual(errors, []);
     console.log(`prose stable heights PASS (between groups ${nativeSep}, list end ${end})`);
   } finally { await browser.close(); }

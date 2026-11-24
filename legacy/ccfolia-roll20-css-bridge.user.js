@@ -5829,7 +5829,8 @@
   // 0.3.119 스크롤 흔들림 A안: 줄 모양은 그 줄과 바로 앞 줄로만 정한다(다음 줄과 무관). 가상 목록은 줄 높이를 넣을 때 한 번 재므로, 새 메시지가 와도 이미 잰 줄이 바뀌면 안 된다.
   // 예전에는 묶음 끝 줄만 아래 여백(일반 14 = padding 8 + 본문 margin 6, 나레이션 16)을 크게 가져서, 같은 화자가 이어 말하면 앞 줄이 줄어들며 목록이 흔들렸다.
   // 이제 모든 줄의 아래 여백은 안쪽 값(일반 5, 나레이션 6)이고, 그 차이(9/10)는 다음 묶음 첫 줄 위(줄 감싸개 padding)로 옮긴다. 줄 사이 거리는 예전과 같다.
-  // 구분선은 자리(1px)는 그대로, 그린 위치만 그만큼 내린다(transform: 높이에 들어가지 않음). 목록 끝은 목록 padding 으로 채운다.
+  // 구분선은 자리(1px)는 그대로, 그린 위치만 그만큼 내린다(transform: 높이에 들어가지 않음). 목록 끝 여백은 그만큼 줄어든다(일반 14→5, 나레이션 16→6, 사용자 승인):
+  // 목록 padding 으로 채우면 코코포리아가 새 메시지에 맞추는 바닥(마지막 줄 끝)과 실제 바닥이 달라져 바닥 맞춤이 한 번 더 움직인다(실측 10~17px).
   const KIND = CONT_ATTR + "-k"; // 줄: "p" 일반 | "n" 나레이션
   const GAP = CONT_ATTR + "-gap"; // 줄 감싸개: 묶음 첫 줄 위 여백(앞 줄이 일반이면 9, 나레이션이면 10)
   const LIST_ATTR = CONT_ATTR + "-list"; // 채팅 목록(ul): 값은 목록마다 다른 번호(인덱스 CSS 범위)
@@ -5847,7 +5848,9 @@
     if (facet === "p" || facet === "n") return [
       `${strong} { padding-bottom: ${facet === "n" ? 6 : 5}px !important; border-bottom: 0 !important; }`,
       `${strong} .MuiListItemText-root, ${strong} p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
-      `${li} + .MuiDivider-root { transform: translateY(${GAP_AFTER[facet]}px); }`,
+      // 구분선은 뒤에 줄이 있을 때만 옮긴다(맨 끝 줄의 선을 옮기면 목록 밖으로 나가 스크롤 높이가 늘고, 코코포리아가 맞춘 바닥과 어긋난다). 맨 끝 줄의 선은 감춘다(순정에서도 바닥 가장자리에 붙어 거의 안 보임).
+      `[data-index]:not(:last-child) > ${li} + .MuiDivider-root, ${li} + .MuiDivider-root:not(:last-child) { transform: translateY(${GAP_AFTER[facet]}px); }`,
+      `[data-index]:last-child > ${li} + .MuiDivider-root { visibility: hidden; }`,
       // 나레이션은 서식 렌더 전에도 이름·아바타 없이(렌더가 늦게 와도 높이가 같게), 이어지는 줄도 가운데(들여쓰기 없음)
       ...(facet === "n" ? [`${strong} .MuiListItemAvatar-root, ${strong} h6.MuiListItemText-primary { display: none !important; }`, `${strong} .MuiListItemText-root { padding-left: 0 !important; }`] : [])
     ];
@@ -5898,8 +5901,6 @@
       ...shapeCss("", `[${GAP}="10"]`, "gap10"),
       // 숨긴 메시지(다른 사람 화면에서 줄을 감춤)는 위 여백도 두지 않는다
       `html[data-ccf-gm="0"] [${GAP}]:has(.ccf-render-root[data-ccf-hidden="1"]) { padding-top: 0 !important; }`,
-      // 묶음 끝 줄 아래 여백이 안쪽 값으로 줄었으니 목록 끝에서는 목록 padding 으로 채운다(일반 14 = 5 + 9). 띠 메시지 규칙(24px !important)이 있으면 그쪽이 앞선다.
-      `ul[${LIST_ATTR}] { padding-bottom: 9px; }`,
       // 묶음 안 구분선은 자리(1px)는 두고 색만 지운다(코코포리아 가상 목록의 줄 높이 반올림 합 때문에 지우면 아래 여백이 사라진다, 2026-11-22). 색은 다음 줄에 따라 바뀌어도 높이는 그대로.
       `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { border-color: transparent !important; background: transparent !important; }`
     ].join("\n");
