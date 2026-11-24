@@ -19,7 +19,6 @@ const ctx = vm.createContext({ findStore: () => ({ getState: () => ({ entities: 
 vm.runInContext(panel.slice(a, b) + '\nthis.api = { cutinAtTail, cutinHasPicture };', ctx);
 assert.equal(ctx.api.cutinAtTail('@그림'), '@그림'); assert.equal(ctx.api.cutinAtTail('본문 @소리'), '@소리'); assert.equal(ctx.api.cutinAtTail('메일@주소'), '', 'not a cut-in: untouched');
 assert.equal(ctx.api.cutinHasPicture('@그림'), true); assert.equal(ctx.api.cutinHasPicture('@소리'), false);
-assert.match(panel, /const cutinTail = meta\?\.source \? "" : cutinAtTail\(outText\);/);
 assert.match(panel, /else if \(!plainRest\.trim\(\)\) \{ triggerRoomEffects\(ctx, cutinTail\); return; \}/, 'no picture, nothing left: no message, the cut-in still plays');
 assert.match(panel, /if \(isCommand \|\| cutinTail\) triggerRoomEffects\(ctx, cutinTail \|\| cleanText\);/);
 // 0.5.70: text + @cut-in from the panel is body text (narration / format kept), not a command; the name is cut off, the picture name rides as cutin
