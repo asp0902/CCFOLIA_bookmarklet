@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.53
+// @version      0.3.54
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.53";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.54";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -3521,9 +3521,16 @@
       return;
     }
 
-    if (persisted?.state === "playing" && ccfBgmRoomSlotHasFile(targetSlotKey) === null && ccfBgmRestoreWaits < 10) {
-      ccfBgmRestoreWaits += 1;
-      window.setTimeout(() => { if (chatNotifierLifecycle.isActive()) prepareCcfYoutubeBgmPlayerFromEntries(entries); }, 300);
+    // 0.3.54: 룸 정보(그 칸에 파일이 걸렸는지)가 올 때까지 기다린다. 예전엔 3초 뒤 그냥 복원해서, 무거운 룸에서는 파일로 바꾼 칸에 유튜브가 되살아나 같이 울렸다(GM 화면만).
+    // 30초가 지나도 모르면 복원하지 않는다(의심스러우면 무음).
+    if (persisted?.state === "playing" && ccfBgmRoomSlotHasFile(targetSlotKey) === null) {
+      if (ccfBgmRestoreWaits < 100) {
+        ccfBgmRestoreWaits += 1;
+        window.setTimeout(() => { if (chatNotifierLifecycle.isActive()) prepareCcfYoutubeBgmPlayerFromEntries(entries); }, 300);
+        return;
+      }
+      ccfBgmRestoreConsumed = true;
+      cueCcfYoutubeBgmSlot(targetSlotKey, hit[1], hit[0]);
       return;
     }
 
