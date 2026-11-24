@@ -41,6 +41,8 @@ const STATE = { roomTitle: 'r', gmOnline: true, capabilities: { chatRead: true, 
     await page.waitForTimeout(120); assert.equal(await tip(), '내 캐릭터 목록');
     if (process.env.TOOLTIP_SHOT) { await page.waitForTimeout(260); await page.screenshot({ path: process.env.TOOLTIP_SHOT, clip: { x: 1000, y: 0, width: 440, height: 130 } }); }
     await away(); assert.equal(await tip(), null, 'gone');
+    // a panel on a high layer stays under the BGM bar: the progress line shows and its buttons take the pointer
+    assert.deepEqual(await page.evaluate(() => { renderScene({ ...sceneData, items: [{ id: 'big', x: -40, y: -24, z: 150, angle: 0, width: 80, height: 48, imageUrl: 'https://storage.ccfolia-cdn.net/big.png', locked: true }] }); const hit = (id) => { const r = document.getElementById(id).getBoundingClientRect(); const n = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return n.closest('#' + id) ? id : n.tagName; }; document.querySelector('#bgm-bar .bgm-row2').hidden = false; return [hit('bgm-stop'), hit('bgm-slot1'), hit('bgm-seek')]; }), ['bgm-stop', 'bgm-slot1', 'bgm-seek']);
     // touch, narrow page
     await page.evaluate(() => document.querySelector('#bgm-stop').dispatchEvent(new PointerEvent('pointerover', { bubbles: true, composed: true, pointerType: 'touch' })));
     await page.waitForTimeout(150); assert.equal(await tip(), null, 'touch');

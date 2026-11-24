@@ -108,7 +108,7 @@ main{padding:0}
 #scene{position:absolute;inset:0}
 #scene[hidden]{display:none}
 #scene-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(8px)}
-#scene-field{position:absolute;inset:0}
+#scene-field{position:absolute;inset:0;z-index:0} /* its own layer: a panel with a high z stays under the BGM bar and the map buttons, as in CCFOLIA */
 #scene-field img{user-select:none;pointer-events:none}#scene-field img[data-id]{pointer-events:auto;cursor:move}
 .stage>#handout{position:relative;z-index:50}
 
