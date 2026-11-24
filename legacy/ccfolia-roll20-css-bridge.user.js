@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.119
+// @version      0.3.120
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.119"),
+    version: getUserscriptVersion("0.3.120"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -6006,7 +6006,7 @@
     const kinds = messages.map((li) => (rowIsNarration(li) ? "n" : "p"));
     const lists = messages.map((li) => li.closest("ul"));
     const authors = messages.map((li, i) => groupKey(extractAuthor(li), li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src"), kinds[i] === "n", prefs));
-    let changed = false;
+    let changed = false, predictedChanged = false;
     for (let i = 0; i < messages.length; i++) {
       const li = messages[i];
       const author = authors[i];
@@ -6014,7 +6014,9 @@
       const prevSame = i > 0 && lists[i - 1] === lists[i];
       const prevAuthor = prevSame ? authors[i - 1] : null;
       const nextAuthor = i + 1 < authors.length && lists[i + 1] === lists[i] ? authors[i + 1] : null;
-      const isCont = !!(author && author === prevAuthor);
+      // 가상 목록 맨 윗줄(앞 줄이 그려지지 않음): 저장소 예측이 있으면 그 이어짐 여부를 쓴다(위로 스크롤해 앞 줄이 나타나도 바뀌지 않게)
+      const topGuess = !prevSame && lists[i]?.getAttribute("role") === "log" ? predicted.codes.get(Number(li.parentElement?.getAttribute("data-index"))) : null;
+      const isCont = topGuess ? topGuess[0] === "c" : !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
       const isLast = isCont && nextAuthor !== author;
       changed = setOrRemove(li, CONT_ATTR, isCont) || changed;
@@ -6028,12 +6030,18 @@
         changed = setOrRemove(parent, WRAP_LAST, isLast) || changed;
         changed = setOrRemove(parent, LEADER_WRAP, isLeader) || changed;
         // 묶음 첫 줄 위 여백. 앞 줄이 아직 그려지지 않은 가상 목록 맨 윗줄은 일반 줄 뒤로 본다(가장 흔함).
-        const gap = isCont ? null : prevSame ? GAP_AFTER[kinds[i - 1]] : Number(parent.getAttribute("data-index")) > 0 ? GAP_AFTER.p : null;
+        const gap = isCont ? null : prevSame ? GAP_AFTER[kinds[i - 1]] : topGuess ? (topGuess.length > 2 ? Number(topGuess.slice(2)) : null) : Number(parent.getAttribute("data-index")) > 0 ? GAP_AFTER.p : null;
         changed = setValue(parent.hasAttribute("data-index") ? parent : li, GAP, gap == null ? null : String(gap)) || changed;
+        // 예측(인덱스 CSS)과 표식이 다르면 그 번호의 예측을 버린다(맨 윗줄은 위에서 예측을 이미 따랐다)
+        const index = parent.hasAttribute("data-index") && lists[i]?.getAttribute("role") === "log" ? Number(parent.getAttribute("data-index")) : -1;
+        const want = predicted.codes.get(index);
+        if (want != null) {
+          if (want === shapeCode(isCont, kinds[i], gap)) predicted.hits += 1;
+          else { predicted.codes.delete(index); predicted.misses += 1; predictedChanged = true; }
+        }
       }
     }
-    // 미리 입힌 모양(인덱스 CSS)은 그 줄이 표식을 받으면 거둔다(표식 규칙이 같은 모양을 이어받는다)
-    if (nextRow.rules && nextRow.targets.some((sel) => document.querySelector(sel))) clearNextRow();
+    if (predictedChanged) renderPredicted();
     // 고정 상태인 스크롤러는 attr 적용 직후 바닥 유지 (RO 보정의 동기 선행판).
     for (const scroller of chatScrollers) {
       if (scroller.__ccr20Pinned && (changed || forceBottom)) {
@@ -6083,11 +6091,13 @@
     return true;
   }
 
-  // 인덱스 CSS(0.3.119): 새 메시지가 저장소에 들어오는 순간(React 가 줄을 그리기 전) 그 메시지가 받을 줄 번호(목록의 마지막 data-index + 1)에 최종 모양을 입혀 둔다.
-  // 가상 목록이 새 줄을 처음(이자 한 번) 잴 때 이미 최종 높이라 다시 재며 흔들리지 않는다. 예측(같은 화자·나레이션·앞 줄 종류)이 틀려도
-  // processList 가 곧바로 표식으로 바로잡으므로 예전과 같아질 뿐이다. 다른 탭 메시지라 그 번호의 줄이 오지 않으면 2초 뒤 거둔다.
+  // 인덱스 CSS(0.3.120): 저장소가 바뀔 때마다(새 메시지·탭 전환·수정·삭제 — React 가 줄을 그리기 전) 지금 탭의 마지막 PREDICT_ROWS 개 메시지의 최종 모양을
+  // 저장소 데이터(이름·스탠딩·나레이션 봉투)로 계산해 그 줄 번호(data-index = 탭 메시지 목록 idsGroupBy[탭] 의 순서)에 미리 입힌다.
+  // 가상 목록이 줄을 처음 잴 때 이미 최종 높이라, 새 메시지·탭 전환 때 다시 재며 흔들리지 않는다(0.3.119 는 새 메시지 한 줄만).
+  // 표식(processList)이 예측과 다르면 그 번호의 규칙을 버린다(표식이 이긴다). 앞 줄이 그려지지 않은 가상 목록 맨 윗줄은 예측을 쓴다.
+  const PREDICT_ROWS = 60;
   let listSeq = 0;
-  const nextRow = { store: null, unsubscribe: null, count: 0, style: null, rules: "", targets: [], timer: 0 };
+  const predicted = { store: null, unsubscribe: null, ids: null, entities: null, codes: new Map(), style: null, hits: 0, misses: 0 };
   function findStore() {
     const root = document.getElementById("root");
     const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
@@ -6104,61 +6114,58 @@
     return store;
   }
   function watchStore() {
-    if (nextRow.store) return;
+    if (predicted.store) return;
     const store = findStore();
     if (!store) return;
-    nextRow.store = store;
-    nextRow.count = store.getState()?.entities?.roomMessages?.ids?.length || 0;
-    nextRow.unsubscribe = store.subscribe(() => { try { predictNextRow(); } catch (_) { /* 예측 실패 = 예전 동작 */ } });
+    predicted.store = store;
+    predicted.unsubscribe = store.subscribe(() => { try { predictRows(); } catch (_) { /* 예측 실패 = 예전 동작 */ } });
+    try { predictRows(); } catch (_) { /* 예전 동작 */ }
   }
-  function clearNextRow() {
-    nextRow.rules = ""; nextRow.targets = [];
-    if (nextRow.style) nextRow.style.textContent = "";
-    if (nextRow.timer) { clearTimeout(nextRow.timer); nextRow.timer = 0; }
-  }
-  function predictNextRow() {
+  // 줄 모양 부호: 이어짐 "c" + 종류, 묶음 첫 줄 "s" + 종류 + 위 여백(앞 줄이 없으면 없음)
+  const shapeCode = (isCont, kind, gap) => (isCont ? "c" + kind : "s" + kind + (gap == null ? "" : gap));
+  function predictRows() {
     if (!active) return;
-    const messages = nextRow.store.getState()?.entities?.roomMessages;
-    const count = messages?.ids?.length || 0;
-    const grew = count > nextRow.count;
-    nextRow.count = count;
-    if (!grew) return;
-    const msg = messages.entities?.[messages.ids[count - 1]];
-    if (!msg) return;
-    let narration = false;
-    try { narration = proseEnvelopeNarration(String(msg.text || "")); } catch (_) { narration = false; }
-    const prefs = readPrefs();
-    const name = String(msg.name || "").replace(ASCII_EDGE_SPACE_RE, "");
-    const rules = [], targets = [];
-    document.querySelectorAll(`ul[${LIST_ATTR}]`).forEach((ul) => {
-      let last = null, max = -1;
-      for (const wrap of ul.querySelectorAll("[data-index]")) {
-        const index = Number(wrap.getAttribute("data-index"));
-        if (index > max) { max = index; last = wrap; }
+    const state = predicted.store.getState();
+    const messages = state?.entities?.roomMessages;
+    const ids = messages?.idsGroupBy?.[state?.app?.state?.roomChatTab];
+    if (ids === predicted.ids && messages?.entities === predicted.entities) return;
+    predicted.ids = ids; predicted.entities = messages?.entities;
+    predicted.codes = new Map();
+    if (Array.isArray(ids)) {
+      const prefs = readPrefs();
+      const from = Math.max(0, ids.length - PREDICT_ROWS);
+      let prev = null;
+      for (let i = Math.max(0, from - 1); i < ids.length; i++) {
+        const msg = messages.entities?.[ids[i]];
+        if (!msg) { prev = null; continue; }
+        let narration = false;
+        try { narration = proseEnvelopeNarration(String(msg.text || "")); } catch (_) { narration = false; }
+        const kind = narration ? "n" : "p";
+        const key = groupKey(String(msg.name || "").replace(ASCII_EDGE_SPACE_RE, ""), msg.iconUrl || "/blank.gif", narration, prefs);
+        const isCont = !!(key && prev && key === prev.key);
+        if (i >= from) predicted.codes.set(i, shapeCode(isCont, kind, isCont || !prev ? null : GAP_AFTER[prev.kind]));
+        prev = { key, kind };
       }
-      const li = last && [...last.children].find((el) => el.classList.contains("MuiListItem-root"));
-      if (!li) return;
-      const prevKind = li.getAttribute(KIND) === "n" ? "n" : "p";
-      const prevKey = groupKey(extractAuthor(li), li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src"), prevKind === "n", prefs);
-      const key = groupKey(name, msg.iconUrl || "/blank.gif", narration, prefs);
-      const cont = !!(key && key === prevKey);
-      const kind = narration ? "n" : "p";
-      const wrap = `ul[${LIST_ATTR}="${ul.getAttribute(LIST_ATTR)}"] [data-index="${max + 1}"]`;
-      const row = `${wrap} > .MuiListItem-root`;
-      const facets = cont ? ["cont", kind] : [kind, ...(kind === "n" ? ["nstart"] : []), prevKind === "n" ? "gap10" : "gap9"];
-      facets.forEach((facet) => rules.push(...shapeCss(row, wrap, facet)));
-      targets.push(`${row}[${KIND}]`);
-    });
-    if (!rules.length) return;
-    if (!nextRow.style || !nextRow.style.isConnected) {
-      nextRow.style = document.createElement("style");
-      nextRow.style.id = STYLE_ID + "-next-row";
-      (document.head || document.documentElement).appendChild(nextRow.style);
     }
-    nextRow.rules = rules.join("\n"); nextRow.targets = targets;
-    nextRow.style.textContent = nextRow.rules;
-    if (nextRow.timer) clearTimeout(nextRow.timer);
-    nextRow.timer = setTimeout(clearNextRow, 2000);
+    renderPredicted();
+  }
+  function renderPredicted() {
+    const rules = [];
+    predicted.codes.forEach((code, index) => {
+      const wrap = `ul[role="log"] [data-index="${index}"]`;
+      const row = `${wrap} > .MuiListItem-root`;
+      const kind = code[1];
+      const facets = code[0] === "c" ? ["cont", kind] : [kind, ...(kind === "n" ? ["nstart"] : []), ...(code.length > 2 ? [code.slice(2) === "10" ? "gap10" : "gap9"] : [])];
+      facets.forEach((facet) => rules.push(...shapeCss(row, wrap, facet)));
+    });
+    const text = rules.join("\n");
+    if (!text && !predicted.style) return;
+    if (!predicted.style || !predicted.style.isConnected) {
+      predicted.style = document.createElement("style");
+      predicted.style.id = STYLE_ID + "-next-row";
+      (document.head || document.documentElement).appendChild(predicted.style);
+    }
+    if (predicted.style.textContent !== text) predicted.style.textContent = text;
   }
 
   function scheduleScan(options = {}) {
@@ -6429,8 +6436,8 @@
     }
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    try { nextRow.unsubscribe?.(); } catch (_) {}
-    clearNextRow(); nextRow.style?.remove();
+    try { predicted.unsubscribe?.(); } catch (_) {}
+    predicted.style?.remove();
     for (const attr of [KIND, GAP, LIST_ATTR, CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
       document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
     }
@@ -6445,8 +6452,10 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.119",
+    version: "0.3.120",
     isActive() { return active; },
+    // 인덱스 CSS 예측: 맞은 줄·틀려서 버린 줄·지금 예측 중인 줄 수
+    prediction() { return { hits: predicted.hits, misses: predicted.misses, rows: predicted.codes.size }; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
     diag() {
