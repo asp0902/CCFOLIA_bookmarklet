@@ -29,7 +29,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('#gm-state').getAttribute('data-online'), '1');
   // the list window shows only the characters a participant made (CCFOLIA's own list is theirs only); a character on the field opens its sheet by clicking the token; the dialog has an x
   await page.click('#char-list-open');
-  assert.match(await page.locator('#char-window').innerText(), /아직 만든 캐릭터가 없습니다/);
+  assert.equal((await page.locator('#char-window').innerText()).trim(), '내 캐릭터 목록', 'an empty list writes nothing, as on CCFOLIA');
   await page.click('#char-window .cw-btn[aria-label="닫기"]');
   await page.evaluate(() => openSheet('c1'));
   assert.equal(await page.locator('.dlg .dlg-x').count(), 1, 'every dialog has an x');
