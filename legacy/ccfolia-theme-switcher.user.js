@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.70
+// @version      0.2.71
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -16,6 +16,9 @@
   "use strict";
 
   const STORAGE_KEY = "ccf-theme-switcher-settings-v1";
+  // 0.2.71 룸별 테마: 공용(위 키) + 이 룸 전용 덮어쓰기(같은 키 + ":{룸 id}" = { on, values }). 룸마다 나뉘는 것 = 테마 종류(기본값·라이트·커스텀·저장 테마 선택)·
+  // 커스텀 색(색 6종·강조색·UI 글자색·스크롤바·불투명도·뒤 흐림)·시트 테마(선택 + 켜기). 공용으로만 = 저장 테마 목록·화면 글꼴(채팅 스위치·폭은 따로 키라 원래 공용).
+  const ROOM_THEME_FIELDS = Object.freeze(["mode", "defaultTheme", "defaultThemeVersion", "customTheme", "unsungDuetEnabled", "selectedSheetTheme"]);
   const STYLE_ID = "ccf-theme-switcher-style";
   const VARS_STYLE_ID = "ccf-theme-switcher-vars";
   const DICEBOT_STYLE_ID = "ccf-theme-switcher-dicebot-style";
@@ -239,7 +242,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.70"),
+    version: getUserscriptVersion("0.2.71"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -418,6 +421,13 @@
   }
   let settings = readStoredSettings();
   let panelPosition = readStoredPanelPosition();
+  {
+    // 0.2.71 룸 이동(새로고침 없는 이동 포함) → 그 룸의 테마. 1초마다 주소만 비교(가볍다). 다른 탭이 공용·이 룸 값을 바꾸면 storage 이벤트로.
+    try { clearInterval(window.__CCF_THEME_ROOM_WATCH__); } catch (_) { /* 처음 */ }
+    let themeRoom = themeRoomId();
+    window.__CCF_THEME_ROOM_WATCH__ = setInterval(() => { const room = themeRoomId(); if (room !== themeRoom) { themeRoom = room; reloadThemeSettings(); } }, 1000);
+    window.addEventListener("storage", (event) => { if (event.key === STORAGE_KEY || (themeRoomId() && event.key === `${STORAGE_KEY}:${themeRoomId()}`)) reloadThemeSettings(); });
+  }
   let globalEventsBound = false;
   let bodyObserver = null;
   let ensureUiFrame = 0;
@@ -1010,6 +1020,9 @@
           padding: 16px;
         }
 
+        #${PANEL_ID} .ccf-theme-room-badge { font-style: normal; margin-left: 8px; padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 700; background: var(--ccf-theme-control-active, #2196f3); color: #fff; vertical-align: 2px; }
+        #${PANEL_ID} .ccf-theme-room-badge[hidden] { display: none; }
+        #${PANEL_ID} .ccf-theme-room-only { margin: 2px 0 6px; }
         #${PANEL_ID} .ccf-theme-head {
           display: flex;
           align-items: flex-start;
@@ -2498,10 +2511,11 @@
         <div class="ccf-theme-card">
           <div class="ccf-theme-head">
             <div class="ccf-theme-title">
-              <strong>테마</strong>
+              <strong>테마</strong><em class="ccf-theme-room-badge" title="이 룸 전용 테마가 적용 중입니다" hidden>이 룸</em>
             </div>
             <button type="button" class="ccf-theme-close" data-action="close" aria-label="테마 패널 닫기">×</button>
           </div>
+          <label class="ccf-theme-check ccf-theme-room-only" title="켜면 이 룸에서 고친 테마(종류·색·시트 테마)는 이 룸에만 적용됩니다. 끄면 공용 테마로(이 룸 값은 보관)."><input type="checkbox" data-theme-room-only> 이 룸에만 적용</label>
           <label class="ccf-theme-row">
             <span>종류</span>
             <select id="${MODE_SELECT_ID}" class="ccf-theme-select" aria-label="종류">
@@ -2613,6 +2627,7 @@
       `;
       document.body.appendChild(panel);
       panel.querySelector(".ccf-theme-head")?.addEventListener("mousedown", startPanelDrag);
+      panel.addEventListener("change", (event) => { const box = event.target; if (box instanceof HTMLInputElement && box.hasAttribute("data-theme-room-only")) setRoomThemeOnly(box.checked); });
 
       panel.addEventListener("click", (event) => {
         const target = event.target;
@@ -4388,6 +4403,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
   function syncUiFromSettings(previewOverride = null) {
     const panel = getPanel();
     if (!(panel instanceof HTMLElement)) return;
+    syncRoomThemeUi();
 
     const modeSelect = panel.querySelector(`#${MODE_SELECT_ID}`);
     if (modeSelect instanceof HTMLSelectElement) {
@@ -6913,12 +6929,48 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
   function readStoredSettings() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
+      const room = readRoomTheme();
+      if (room?.on) return normalizeSettings({ ...(raw ? JSON.parse(raw) : {}), ...room.values });
       if (!raw) return createDefaultSettings();
       return normalizeSettings(JSON.parse(raw));
     } catch (error) {
       console.warn("[CCF Theme] failed to read settings", error);
       return createDefaultSettings();
     }
+  }
+
+  function themeRoomId() { const m = location.pathname.match(/^\/rooms\/([^/]+)/); return m ? m[1] : ""; }
+  function readRoomTheme(room = themeRoomId()) {
+    if (!room) return null;
+    try { const v = JSON.parse(window.localStorage.getItem(`${STORAGE_KEY}:${room}`) || "null"); return v && typeof v === "object" && v.values && typeof v.values === "object" ? v : null; } catch (_) { return null; }
+  }
+  function writeRoomTheme(room, value) { try { window.localStorage.setItem(`${STORAGE_KEY}:${room}`, JSON.stringify(value)); return true; } catch (_) { return false; } }
+  function pickRoomThemeFields(value) { return Object.fromEntries(ROOM_THEME_FIELDS.filter((key) => value && key in value).map((key) => [key, value[key]])); }
+  // '이 룸에만 적용': 켜면 이 룸에 보관된 값(전에 켰던 적이 있으면)으로, 없으면 지금 값을 복사해 시작. 끄면 이 룸 값은 지우지 않고 보관, 적용은 공용.
+  function setRoomThemeOnly(on) {
+    const room = themeRoomId();
+    if (!room) return;
+    const rt = readRoomTheme(room);
+    if (on) writeRoomTheme(room, { on: true, values: rt?.values || pickRoomThemeFields(settings) });
+    else if (rt) writeRoomTheme(room, { ...rt, on: false });
+    reloadThemeSettings();
+  }
+  // 룸을 옮기거나(새로고침 없는 이동 포함) 다른 탭이 같은 설정을 바꿨을 때: 그 룸의 값(없으면 공용)으로 다시 적용
+  function reloadThemeSettings() {
+    const before = document.documentElement.getAttribute(DICEBOT_ATTR) || "";
+    applyTheme(readStoredSettings());
+    try { syncUnsungDuetToggle(); applyDicebotAttribute(); } catch (_) { /* 패널 전 */ }
+    const after = document.documentElement.getAttribute(DICEBOT_ATTR) || "";
+    if (before !== after) { try { if (!after) revertUnsungDuetDomState(); else reapplySheetThemeInjections(); } catch (_) { /* 다음 갱신에 */ } }
+    syncRoomThemeUi();
+  }
+  function syncRoomThemeUi() {
+    const panel = document.getElementById(PANEL_ID);
+    if (!panel) return;
+    const room = themeRoomId(), on = !!(room && readRoomTheme(room)?.on);
+    const box = panel.querySelector("[data-theme-room-only]");
+    if (box instanceof HTMLInputElement) { box.checked = on; box.disabled = !room; }
+    panel.querySelector(".ccf-theme-room-badge")?.toggleAttribute("hidden", !on);
   }
 
   function readStoredPanelPosition() {
@@ -6943,7 +6995,15 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
 
   function persistSettings() {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      const room = themeRoomId(), rt = room ? readRoomTheme(room) : null;
+      if (rt?.on) {
+        writeRoomTheme(room, { on: true, values: pickRoomThemeFields(settings) });
+        let shared = {};
+        try { shared = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") || {}; } catch (_) { shared = {}; }
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...shared, ...Object.fromEntries(Object.entries(settings).filter(([key]) => !ROOM_THEME_FIELDS.includes(key))) }));
+      } else {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      }
       return true;
     } catch (error) {
       console.warn("[CCF Theme] failed to save settings", error);
