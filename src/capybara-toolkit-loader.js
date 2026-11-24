@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.234";
-  const BUILD_ID = "2026-11-24-cutin-image-once-405";
+  const VERSION = "0.3.235";
+  const BUILD_ID = "2026-11-24-bgm-remote-restore-406";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

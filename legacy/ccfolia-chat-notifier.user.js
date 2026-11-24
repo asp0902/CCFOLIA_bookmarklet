@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Chat Notifier by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578091-ccf-chat-notifier-by-capybara-korea
-// @version      0.3.51
+// @version      0.3.52
 // @description  Plays a chat alert sound when new CCFOLIA messages arrive while the room is unfocused.
 // @description:ko 코코포리아 탭이나 창이 비활성 상태일 때 새 채팅이 오면 소리로만 알립니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -109,7 +109,7 @@
   // 북마클릿으로 로드하면 GM_info 가 없어 이 값이 그대로 보고된다.
   // 상단 @version 을 올릴 때 반드시 함께 올릴 것 (안 그러면 콘솔에 옛 버전이 찍혀
   // 배포가 안 된 것처럼 보인다 — 실제 버전 확인 지점은 여기 한 곳뿐).
-  const CCF_CHAT_NOTIFIER_VERSION = "0.3.51";
+  const CCF_CHAT_NOTIFIER_VERSION = "0.3.52";
   const CCF_CHAT_NOTIFIER_SCRIPT_INFO = Object.freeze({
     id: "ccf-chat-notifier",
     name: "CCFOLIA Chat Notifier",
@@ -4124,7 +4124,8 @@
     // - native-bgm-started / webaudio-bgm-started / native-library-selected: 다른 BGM이 시작돼서 자동 정지 → 전파 안 함
     // - remote-stop / remote-switch: 원격 신호 적용 중 → 전파 안 함
     const MANUAL_STOP_REASONS = new Set(["manual", "stop-button", "youtube-bgm-remove"]);
-    const shouldEmit = MANUAL_STOP_REASONS.has(reason);
+    // 0.3.52: 같은 칸에서 파일로 바꾼 것도 알린다 — 안 알리면 공유 기록에 유튜브 "재생 중"이 남아, 새로고침·입장한 화면에서 파일과 같이 울렸다(사용자 실제 룸)
+    const shouldEmit = MANUAL_STOP_REASONS.has(reason) || reason === "native-library-selected";
     // 사용자가 직접 정지한 것도 "로컬 의도" — 직전에 출발한 폴링 응답이 재생을 되살리지 못하게 한다.
     if (shouldEmit) {
       markCcfBgmLocalPlaybackIntent();
@@ -10469,6 +10470,7 @@
     ccfBgmJoinTimer = window.setInterval(step, 300);
   }
 
+  const ccfBgmPageOpenedAt = Math.round((typeof performance !== "undefined" && performance.timeOrigin) || Date.now());
   async function ccfBgmFirestorePollPlayback() {
     if (!BGM_FIRESTORE_PLAYBACK_SYNC_ENABLED || !chatNotifierLifecycle.isActive()) return;
     // 읽기를 시작한 시점의 로컬 의도를 기억해둔다.
@@ -10518,6 +10520,13 @@
       if (ageMs > BGM_FIRESTORE_PLAYBACK_FRESH_MS) debugLog("bgm-firestore-playback-old-but-playing", { ageMs });
       // 이미 같은 곡 재생 중이면 스킵.
       if (ccfBgmActiveSlotKey === data.slotKey && ccfBgmActiveEntryKey === data.entryKey) return;
+      // 0.3.52: 이 페이지가 열리기 전에 시작된 "재생 중"(= 새로고침·입장 뒤 복원)은 그 칸에 파일이 걸려 있거나 코코포리아 음원이 재생 중이면 따르지 않는다.
+      // 룸 정보가 아직 없으면 다음 폴링 때 다시 본다(의심스러우면 재생하지 않는다).
+      if ((Number(data.startedAt) || 0) < ccfBgmPageOpenedAt) {
+        const hasFile = ccfBgmRoomSlotHasFile(normalizeCcfBgmSlotKey(data.slotKey));
+        if (hasFile === null) { ccfBgmFirestoreLastPlaybackSignature = ""; return; }
+        if (shouldSkipCcfYoutubeRestoreForNativeBgm(data.slotKey, "remote-restore")) return;
+      }
 
       ccfBgmFirestorePlaybackApplying = true;
       try {
