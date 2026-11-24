@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.150
+// @version      0.1.151
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -99,7 +99,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.150"),
+    version: getUserscriptVersion("0.1.151"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -1273,7 +1273,7 @@
   // 저장소(roomEffects)의 컷인 이름·이미지 주소만 읽어, 메시지 글이 컷인 트리거와 같으면 그 행(p) 끝에 평범한 인라인 이미지를 하나 덧붙일 뿐이다
   // (오버레이·타이머·채널 없음, 새 행이 스캔될 때만 일한다). 원본 텍스트·노드는 건드리지 않는다(React-safe).
   // 끄기: localStorage.ccfCutinChatImage = "off". 글 일치 방식: 기본 "exact"(트리거와 글 전체가 같음), localStorage.ccfCutinChatMatch = "contains" 로 포함 일치.
-      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), atNames: new Set(), sizes: new Map(), loading: new Set(), failed: new Set() }); }
+      function cutinChatS() { return cutinChatS.s || (cutinChatS.s = { store: null, slice: undefined, map: new Map(), atNames: new Set(), sizes: new Map(), loading: new Set(), failed: new Map() }); }
 
   function cutinChatEnabled() {
     try { return localStorage.getItem("ccfCutinChatImage") !== "off"; } catch (_) { return true; }
@@ -1422,7 +1422,8 @@
     if (!inChat) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (!cutinChatEnabled()) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     const url = cutinChatUrlFor(cutinChatMessageText(el));
-    if (!url || cutinChatS().failed.has(url)) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
+    // 0.1.151: 한 번 실패한 그림도 1분 뒤 다시 시도한다(일시적인 네트워크 오류로 새로고침 전까지 그림이 영영 안 붙던 것)
+    if (!url || Date.now() - (cutinChatS().failed.get(url) || 0) < 60000) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     // 이미 다른 이미지(언성 듀엣 고정 이미지·매크로 GIF 인라인 등)가 이 메시지에 있으면 두 번 보이지 않게 건너뛴다.
     if ([...el.querySelectorAll("img")].some((image) => !image.closest(".ccf-cutin-chat-image"))) { if (el.hasAttribute("data-ccf-cutin-chat")) removeCutinChatImage(el); return; }
     if (el.getAttribute("data-ccf-cutin-chat") === url && el.querySelector(`:scope > .ccf-cutin-chat-image`)) { syncCutinChatHide(el); return; }
@@ -1440,7 +1441,7 @@
     if (size) { img.width = size.w; img.height = size.h; }
     else img.addEventListener("load", () => { if (img.naturalWidth && img.naturalHeight) cutinChatS().sizes.set(url, { w: img.naturalWidth, h: img.naturalHeight }); }, { once: true });
     img.addEventListener("load", () => syncCutinChatHide(el), { once: true });
-    img.addEventListener("error", () => { cutinChatS().failed.add(url); removeCutinChatImage(el); }, { once: true });
+    img.addEventListener("error", () => { cutinChatS().failed.set(url, Date.now()); removeCutinChatImage(el); }, { once: true });
     img.src = url;
     img.addEventListener("click", () => { try { window.open(url, "_blank", "noopener,noreferrer"); } catch (_) { /* 팝업 차단 */ } });
     wrap.appendChild(img);
@@ -1459,7 +1460,7 @@
       enabled: cutinChatEnabled(), store: !!store, sliceKeys: slice && typeof slice === "object" ? Object.keys(slice).slice(0, 8) : null,
       sampleKeys: entries.slice(0, 3).map((effect) => (effect && typeof effect === "object" ? Object.keys(effect) : typeof effect)),
       triggers: [...cutinChatMap()].map(([text, url]) => [text.slice(0, 30), url.slice(0, 60)]),
-      sizes: cutinChatS().sizes.size, images: document.querySelectorAll(`.ccf-cutin-chat-image`).length
+      sizes: cutinChatS().sizes.size, images: document.querySelectorAll(`.ccf-cutin-chat-image`).length, failed: [...cutinChatS().failed.keys()].map((u) => u.slice(-24)), atNames: cutinChatS().atNames.size
     };
   }
 
