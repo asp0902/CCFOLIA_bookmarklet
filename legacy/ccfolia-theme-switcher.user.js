@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.67
+// @version      0.2.68
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -239,7 +239,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.67"),
+    version: getUserscriptVersion("0.2.68"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -4264,12 +4264,14 @@
 
   // ---- 0.2.45 채팅 크기 조절·주사위 줄 숨기기 (모두 기본 = 지금 모양, 브라우저 저장) ----
   // 함수 선언(호이스팅): 스크립트 시작 직후 ensureUi 가 이 아래 선언보다 먼저 불린다(const 면 TDZ 오류였다)
+  function isChatWindowPage() { return /^\/rooms\/[^/]+\/chat\/?$/.test(location.pathname); }
   function readPx(key, lo, hi) { try { const n = Number(localStorage.getItem(key)); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : 0; } catch (_) { return 0; } }
   function chatComposerTextarea() { return [...document.querySelectorAll('form textarea[name="text"]')].find((t) => !t.closest(".ccf-scp-panel, [role='dialog']") && t.offsetParent) || null; }
   function applyChatLayout() {
     const root = document.documentElement;
     let hideDice = false; try { hideDice = localStorage.getItem("ccf-hide-dice-row") === "on"; } catch (_) {}
-    const inputH = readPx("ccf-chat-input-height", 40, 600), chatW = readPx("ccf-chat-width", 280, 1200);
+    // 0.2.68: '다른 창으로 보기' 창(/rooms/{id}/chat)은 채팅이 창 전체 — 본 창에서 정한 채팅 폭을 쓰지 않는다(창이 그 폭보다 넓으면 왼쪽에 빈 띠가 생겼다, 실측 585 창 · 555 폭 → 30px)
+    const inputH = readPx("ccf-chat-input-height", 40, 600), chatW = isChatWindowPage() ? 0 : readPx("ccf-chat-width", 280, 1200);
     root.toggleAttribute("data-ccf-hide-dice", hideDice);
     root.toggleAttribute("data-ccf-input-h", !!inputH);
     root.toggleAttribute("data-ccf-chat-w", !!chatW);
@@ -4308,7 +4310,7 @@ html[data-ccf-chat-w] .MuiDrawer-docked:has(form textarea[name="text"]), html[da
       grip.addEventListener("dblclick", () => { try { localStorage.removeItem("ccf-chat-input-height"); } catch (_) {} applyChatLayout(); });
       base.appendChild(grip);
     }
-    const paper = ta?.closest(".MuiDrawer-paper");
+    const paper = isChatWindowPage() ? null : ta?.closest(".MuiDrawer-paper"); // 다른 창: 폭 손잡이 없음(창 크기가 곧 채팅 폭)
     if (paper && !paper.querySelector(":scope > .ccf-chat-grip")) {
       const grip = document.createElement("div"); grip.className = "ccf-chat-grip"; grip.title = "끌어서 채팅창 폭 조절(더블클릭 = 기본)"; grip.setAttribute("data-ccf-safe-markup", "1");
       grip.addEventListener("pointerdown", (event) => {

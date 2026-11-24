@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.245";
-  const BUILD_ID = "2026-11-24-paren-gray-416";
+  const VERSION = "0.3.246";
+  const BUILD_ID = "2026-11-24-chat-window-fit-417";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";
@@ -528,6 +528,8 @@
 
     const root = document.createElement("div");
     root.id = "capybara-toolkit-root";
+    // '다른 창으로 보기' 창(/rooms/{id}/chat)에서는 카피바라 버튼을 숨긴다(기능은 그대로 돈다, 패널은 본 창에서 연다)
+    if (/^\/rooms\/[^/]+\/chat\/?$/.test(location.pathname)) root.style.display = "none";
     root.style.position = "fixed";
     root.style.zIndex = "2147483647";
     root.style.right = "16px";
