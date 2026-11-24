@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Second Chat Panel by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-chat-panel
-// @version      0.5.71
+// @version      0.5.72
 // @description  Adds a second, independent room chat panel beside the native one.
 // @description:ko 룸 채팅 패널을 하나 더 띄워 다른 탭을 동시에 보고 전송합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -68,7 +68,7 @@
   // ⚠ MUI 클래스명(.MuiListItem-root 등)을 쓰지 않는다. 다른 카피바라 스크립트들이
   //   그 클래스로 채팅 메시지를 찾아 가공하므로, 이 패널까지 건드리면 서로 망가진다.
 
-  const VERSION = "0.5.71";
+  const VERSION = "0.5.72";
   // 서식·알림 같은 다른 스크립트처럼 스위트 등록부에 버전을 남긴다(__CCF_TOOLKIT_VERSIONS__ 가 읽는다).
   if (INSTANCE_INDEX === 1) {
     try {
@@ -883,9 +883,9 @@
   }
   function applyRowExtra() {
     if (!listEl) return;
-    for (const row of listEl.querySelectorAll("[data-ccf-msg-id]")) {
-      if (row.style.getPropertyValue("border-bottom") && !row.hasAttribute("data-ccf-prose-cont-leader")) row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
-    }
+    // 0.5.72: 줄마다 넣지 않고 목록 CSS 변수로(나레이션 줄은 CSS 규칙이 빼 준다)
+    panelEl?.style.setProperty("--scp-row-pad-b", `${ccfScpRowPadBottom + panelRowExtra}px`);
+    for (const row of listEl.querySelectorAll("[data-ccf-msg-id]")) row.style.removeProperty("padding-bottom");
   }
   function adjustPanelRowGap() {
     if (!listEl) return;
@@ -1646,7 +1646,10 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
         row.style.setProperty("background-position", "16px 100%", "important");
         row.style.setProperty("background-repeat", "no-repeat", "important");
         // 네이티브 박스모델과 동일한 아래 패딩(8px)으로 고정 — 구분선 위 여백을 맞춘다.
-        row.style.setProperty("padding-bottom", `${ccfScpRowPadBottom + panelRowExtra}px`, "important");
+        // 0.5.72: 아래 패딩은 줄에 직접 넣지 않고 목록의 CSS 변수로(아래 규칙이 나레이션 줄은 빼고 건다). 줄에 강제하면 나레이션 묶음 가장자리 16px 규칙을 덮어
+        // 마지막 나레이션 줄 아래가 8px 로 좁았다(오리지널 16px, 실측). 나레이션 표시는 줄을 그린 뒤에 붙어서 여기서 판정할 수 없다.
+        row.style.removeProperty("padding-bottom");
+        panelEl?.style.setProperty("--scp-row-pad-b", `${ccfScpRowPadBottom + panelRowExtra}px`);
       }
     });
   }
@@ -2791,6 +2794,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
       #${PANEL_ID} .ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }
       #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id]:not([data-ccf-prose-cont-leader="1"]):not(:has(.ccf-render-root[data-ccf-narration="1"])) { padding-bottom: var(--scp-row-pad-b, 8px) !important; }
+      /* 나레이션 묶음의 마지막 줄: 오리지널처럼 아래 16px(서식 규칙의 'prose-cont-last' 를 패널에서는 다음 줄로 판정) */
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id][data-ccf-prose-cont="1"]:not(:has(+ [data-ccf-prose-cont="1"])):has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
