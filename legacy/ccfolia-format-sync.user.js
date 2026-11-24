@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.156
+// @version      0.1.157
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.156"),
+    version: getUserscriptVersion("0.1.157"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -7649,6 +7649,22 @@
       characterNames: [],
       pending: new Set(initialSet) // 저장 전까지는 창 안에서만 바뀌는 임시 선택
     };
+    // 창이 열려 있는 동안 캐릭터가 추가·삭제·이름 변경되면 바로 다시 그린다(이름이 바뀔 때만; 말 이동 같은 변경은 무시)
+    const store = endsWithCutinTrigger.store;
+    if (store?.subscribe) {
+      let lastNames = "";
+      const unsubscribe = store.subscribe(() => {
+        const state = getInlineNarratorPopoverState(toolbar);
+        if (!state || !state.popover?.classList.contains("open")) { unsubscribe(); return; }
+        const names = roomCharacterNamesFromStore();
+        if (!names) return;
+        const key = names.join("\n");
+        if (key === lastNames) return;
+        lastNames = key;
+        state.characterNames = sortNamesByMyCharacterOrder(names);
+        updateInlineNarratorPopoverList(toolbar);
+      });
+    }
 
     positionInlineNarratorPopover(toolbar);
     requestAnimationFrame(() => positionInlineNarratorPopover(toolbar));
@@ -11944,7 +11960,19 @@
     }
   }
 
+  // 0.1.157: 룸의 캐릭터 전체(저장소 entities.roomCharacters, 이름 있는 것). 화면에서 긁은 이름은 합치기만 해서 지운·이름 바꾼 캐릭터가 남았다.
+  function roomCharacterNamesFromStore() {
+    try {
+      endsWithCutinTrigger("\u0000"); // 저장소를 찾아 둔다
+      const slice = endsWithCutinTrigger.store?.getState?.()?.entities?.roomCharacters;
+      if (!slice) return null;
+      const list = slice.ids?.map((id) => slice.entities?.[id]) || Object.values(slice.entities || slice);
+      return uniqueCharacterNames(list.map((character) => (typeof character?.name === "string" ? character.name : "")));
+    } catch (_) { return null; }
+  }
   async function scrapeCharacterNames(forcePanelScan = false) {
+    const fromStore = roomCharacterNamesFromStore();
+    if (fromStore) return sortNamesByMyCharacterOrder(fromStore);
     // "내 캐릭터" 목록만 보면 룸의 다른 캐릭터를 나레이터로 지정할 수 없다.
     // 실제로 화자가 될 수 있는 건 캐릭터 선택 목록이므로, 두 출처를 합쳐서 준다.
     // (내 캐릭터를 앞에 두어 기존 정렬/우선순위는 유지)
@@ -12789,7 +12817,7 @@
     const rows = readSpeakerFontRows();
     const narration = rows.find((row) => row.name === "") || { name: "", fontId: "", room: false };
     let names = [];
-    try { names = uniqueCharacterNames([...readCachedMyCharacterNames(), ...ccfCachedSelectableNames]); } catch (_) {}
+    try { names = roomCharacterNamesFromStore() || uniqueCharacterNames([...readCachedMyCharacterNames(), ...ccfCachedSelectableNames]); } catch (_) {}
     return `<details data-speaker-fonts${buildSpeakerFontMarkup.open ? " open" : ""} style="margin:0 0 6px;font-size:12px"><summary style="cursor:pointer">화자별 글꼴</summary>
       <datalist id="ccf-speaker-font-names">${names.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("")}</datalist>
       <div data-speaker-font-rows>${speakerFontRowHtml({ ...narration, narration: true })}${rows.filter((row) => row.name !== "").map(speakerFontRowHtml).join("")}</div>
