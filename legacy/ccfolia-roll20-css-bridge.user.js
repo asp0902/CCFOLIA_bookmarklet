@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.118
+// @version      0.3.119
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.118"),
+    version: getUserscriptVersion("0.3.119"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -5826,6 +5826,57 @@
   let forceBottomOnNextScan = false;
   const bottomFinishers = new Map();
 
+  // 0.3.119 스크롤 흔들림 A안: 줄 모양은 그 줄과 바로 앞 줄로만 정한다(다음 줄과 무관). 가상 목록은 줄 높이를 넣을 때 한 번 재므로, 새 메시지가 와도 이미 잰 줄이 바뀌면 안 된다.
+  // 예전에는 묶음 끝 줄만 아래 여백(일반 14 = padding 8 + 본문 margin 6, 나레이션 16)을 크게 가져서, 같은 화자가 이어 말하면 앞 줄이 줄어들며 목록이 흔들렸다.
+  // 이제 모든 줄의 아래 여백은 안쪽 값(일반 5, 나레이션 6)이고, 그 차이(9/10)는 다음 묶음 첫 줄 위(줄 감싸개 padding)로 옮긴다. 줄 사이 거리는 예전과 같다.
+  // 구분선은 자리(1px)는 그대로, 그린 위치만 그만큼 내린다(transform: 높이에 들어가지 않음). 목록 끝 여백은 그만큼 줄어든다(일반 14→5, 나레이션 16→6, 사용자 승인):
+  // 목록 padding 으로 채우면 코코포리아가 새 메시지에 맞추는 바닥(마지막 줄 끝)과 실제 바닥이 달라져 바닥 맞춤이 한 번 더 움직인다(실측 10~17px).
+  const KIND = CONT_ATTR + "-k"; // 줄: "p" 일반 | "n" 나레이션
+  const GAP = CONT_ATTR + "-gap"; // 줄 감싸개: 묶음 첫 줄 위 여백(앞 줄이 일반이면 9, 나레이션이면 10)
+  const LIST_ATTR = CONT_ATTR + "-list"; // 채팅 목록(ul): 값은 목록마다 다른 번호(인덱스 CSS 범위)
+  const GAP_AFTER = { p: 9, n: 10 };
+  // 한 줄의 최종 모양을 만드는 한 곳. 스타일시트는 줄 표식으로, 인덱스 CSS 는 새 메시지가 받을 줄 번호(data-index)로 같은 규칙을 쓴다.
+  function shapeCss(li, wrap, facet) {
+    const strong = li + ".MuiListItem-root.MuiListItem-root.MuiListItem-root"; // 서식 스크립트의 나레이션 위·아래 규칙(명시도 0,3,0~0,6,0)보다 앞서게
+    if (facet === "cont") return [
+      `${li} .MuiListItemAvatar-root, ${li} h6.MuiListItemText-primary { display: none !important; }`,
+      `${li} { padding-top: 0 !important; padding-left: 16px !important; padding-right: 16px !important; margin: 0 !important; min-height: 0 !important; border-bottom: 0 !important; }`,
+      `${li} .MuiListItemText-root { margin-top: 0 !important; padding-left: 56px !important; }`,
+      `${li} p.MuiListItemText-secondary { margin: 0 !important; }`,
+      // 코코포리아 답장 버튼(줄 오른쪽 위 top 12px, 높이 30px)은 짧은 이어짐 줄 아래로 삐져나와 스크롤 높이를 늘린다(목록 끝이면 바닥 맞춤이 한 번 더 움직임, 실측 16px).
+      // 줄 아래쪽에 붙인다: 위로 넘치는 것은 스크롤 높이에 들어가지 않는다.
+      `${li} > div:has(> button.MuiIconButton-root) { top: auto !important; bottom: 0 !important; }`,
+      `${wrap} { padding-top: 0 !important; margin-top: 0 !important; min-height: 0 !important; }`
+    ];
+    if (facet === "p" || facet === "n") return [
+      `${strong} { padding-bottom: ${facet === "n" ? 6 : 5}px !important; border-bottom: 0 !important; }`,
+      `${strong} .MuiListItemText-root, ${strong} p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
+      // 구분선은 뒤에 줄이 있을 때만 옮긴다(맨 끝 줄의 선을 옮기면 목록 밖으로 나가 스크롤 높이가 늘고, 코코포리아가 맞춘 바닥과 어긋난다). 맨 끝 줄의 선은 감춘다(순정에서도 바닥 가장자리에 붙어 거의 안 보임).
+      `[data-index]:not(:last-child) > ${li} + .MuiDivider-root, ${li} + .MuiDivider-root:not(:last-child) { transform: translateY(${GAP_AFTER[facet]}px); }`,
+      `[data-index]:last-child > ${li} + .MuiDivider-root { visibility: hidden; }`,
+      // 나레이션은 서식 렌더 전에도 이름·아바타 없이(렌더가 늦게 와도 높이가 같게), 이어지는 줄도 가운데(들여쓰기 없음)
+      // (본문 위 margin 0 도 서식 스크립트 나레이션 규칙과 같게 — 렌더 전 6px 이 남아 렌더 뒤 줄이 줄었다, 실측 5~6px)
+      ...(facet === "n" ? [`${strong} .MuiListItemAvatar-root, ${strong} h6.MuiListItemText-primary { display: none !important; }`, `${strong} .MuiListItemText-root { padding-left: 0 !important; margin-top: 0 !important; }`] : [])
+    ];
+    // 나레이션 묶음 첫 줄 위 16px(서식 스크립트 규칙과 같은 값 — 렌더 전에도). 이미지 나레이션(12px)·구분선 줄 규칙은 명시도가 더 높아 그대로 앞선다.
+    if (facet === "nstart") return [`${li} { padding-top: 16px !important; }`];
+    // 줄마다 감싸개(data-index)가 있으면 감싸개 위 padding, 없는 목록(감싸개 없이 줄만 있는 화면)이면 줄 자신의 위 margin
+    const px = facet === "gap10" ? 10 : 9;
+    return [`${wrap}:not(.MuiListItem-root) { padding-top: ${px}px !important; }`, `${wrap}.MuiListItem-root { margin-top: ${px}px !important; }`];
+  }
+
+  // 묶음 키: 이름(+ 스탠딩 그림) + 나레이션 여부. 줄(DOM)과 새 메시지(저장소) 둘 다 이걸로 비교한다.
+  function readPrefs() {
+    // 0.3.111: 연속 메시지 합치기 끄기(ccf-prose-merge=off: 아무것도 묶지 않음), 같은 이름이라도 스탠딩(아바타 그림)이 다르면 따로(ccf-prose-split-avatar, 기본 켬)
+    try { return { merge: localStorage.getItem("ccf-prose-merge") !== "off", split: localStorage.getItem("ccf-prose-split-avatar") !== "off" }; } catch (_) { return { merge: true, split: true }; }
+  }
+  function groupKey(author, avatarSrc, narration, prefs) {
+    if (!prefs.merge || !author) return null;
+    const key = prefs.split ? author + "\\u0000av" + (avatarSrc || "") : author;
+    // #69 — 나레이션 메시지는 같은 화자라도 일반 발화와 묶지 않음 (별도 그룹 키)
+    return narration ? key + "\\u0000nr" : key;
+  }
+
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement("style");
@@ -5845,34 +5896,17 @@
       // 메시지 행(li)은 네이티브가 position: relative 라 뒤따르는 구분선(hr) 위로 올라온다 → 매크로 box-shadow 가
       // 구분선을 덮는다. 구분선을 한 단계 위로 올려 선이 그림자 위에 보이게 한다.
       `.MuiListItem-root + .MuiDivider-root { position: relative; z-index: 1; }`,
-      // === continuation li === 아바타 자체 숨김 + 본문에 들여쓰기 강제
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemAvatar-root { display: none !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] h6.MuiListItemText-primary { display: none !important; }`,
-      // 묶음 안 메시지 사이 간격은 5px. 묶음의 마지막 행은 아래 여백(li padding·본문 margin)을 건드리지 않아
-      // 네이티브 마지막 메시지와 같은 하단 여백을 유지한다.
-      `.MuiListItem-root[${CONT_ATTR}="1"] { padding-top: 0 !important; padding-left: 16px !important; padding-right: 16px !important; margin: 0 !important; min-height: 0 !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { padding-bottom: 5px !important; }`,
-      // 연속 묶음 내부 선만 숨기고 마지막 행의 네이티브 하단선은 보존한다.
-      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) { border-bottom: 0 !important; }`,
-      // 2026-11-22: 지우지(display:none) 않고 투명하게만 — 코코포리아 가상 목록(TanStack)은 줄 높이를 정수로 반올림해 더한다(70.66 → 71).
-      // 순정의 "마지막 줄 아래 여백"은 줄마다 구분선 0.67px 때문에 생기는 이 반올림 차이(줄당 0.34px)가 쌓인 것이라, 구분선을 없애면 여백도 사라졌다.
-      `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { border-color: transparent !important; background: transparent !important; }`,
-      // 본문 들여쓰기 — 첫 메시지 아바타 너비(약 56px) 정도
-      `.MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) .MuiListItemText-root { margin: 0 !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"][${LAST}="1"] .MuiListItemText-root { margin-top: 0 !important; }`,
-      // 나레이션 묶음의 마지막 행은 위아래 대칭(16px) 규칙이 따로 있어 본문 아래 margin 을 두지 않는다.
-      `.MuiListItem-root[${CONT_ATTR}="1"][${LAST}="1"]:has(.ccf-render-root[data-ccf-narration="1"]) .MuiListItemText-root { margin-bottom: 0 !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] .MuiListItemText-root { padding-left: 56px !important; }`,
-      `.MuiListItem-root[${CONT_ATTR}="1"] p.MuiListItemText-secondary { margin: 0 !important; }`,
-      // === leader li === 자기 아래쪽 padding만 cont와 맞춤
-      `.MuiListItem-root[${LEADER}="1"] { padding-bottom: 5px !important; border-bottom: 0 !important; }`,
-      `.MuiListItem-root[${LEADER}="1"] .MuiListItemText-root { margin-bottom: 0 !important; }`,
-      `.MuiListItem-root[${LEADER}="1"] p.MuiListItemText-secondary { margin-bottom: 0 !important; }`,
-      // === leader 부모 wrapper === 아래쪽 padding/margin만 제거
-      `[${LEADER_WRAP}="1"] { padding-bottom: 0 !important; margin-bottom: 0 !important; }`,
-      // === cont 부모 wrapper === 위/아래 다 제거 (단 last wrap의 아래쪽은 유지)
-      `[${WRAP}="1"] { padding-top: 0 !important; margin-top: 0 !important; min-height: 0 !important; }`,
-      `[${WRAP}="1"]:not([${WRAP_LAST}="1"]) { padding-bottom: 0 !important; margin-bottom: 0 !important; }`
+      // 0.3.119: 줄 모양(묶음 이어짐·종류·묶음 첫 줄 위 여백)은 shapeCss 한 곳에서 만든다.
+      ...shapeCss(`.MuiListItem-root[${CONT_ATTR}="1"]`, `[${WRAP}="1"]`, "cont"),
+      ...shapeCss(`.MuiListItem-root[${KIND}="p"]`, "", "p"),
+      ...shapeCss(`.MuiListItem-root[${KIND}="n"]`, "", "n"),
+      ...shapeCss(`.MuiListItem-root[${KIND}="n"]:not([${CONT_ATTR}="1"])`, "", "nstart"),
+      ...shapeCss("", `[${GAP}="9"]`, "gap9"),
+      ...shapeCss("", `[${GAP}="10"]`, "gap10"),
+      // 숨긴 메시지(다른 사람 화면에서 줄을 감춤)는 위 여백도 두지 않는다
+      `html[data-ccf-gm="0"] [${GAP}]:has(.ccf-render-root[data-ccf-hidden="1"]) { padding-top: 0 !important; }`,
+      // 묶음 안 구분선은 자리(1px)는 두고 색만 지운다(코코포리아 가상 목록의 줄 높이 반올림 합 때문에 지우면 아래 여백이 사라진다, 2026-11-22). 색은 다음 줄에 따라 바뀌어도 높이는 그대로.
+      `.MuiListItem-root[${LEADER}="1"] + .MuiDivider-root, .MuiListItem-root[${CONT_ATTR}="1"]:not([${LAST}="1"]) + .MuiDivider-root { border-color: transparent !important; background: transparent !important; }`
     ].join("\n");
     (document.head || document.documentElement).appendChild(style);
   }
@@ -5967,35 +6001,39 @@
     if (forceBottom) {
       chatScrollers.forEach((scroller) => { scroller.__ccr20Pinned = true; });
     }
-    // 0.3.111: 연속 메시지 합치기 끄기(ccf-prose-merge=off: 아무것도 묶지 않음), 같은 이름이라도 스탠딩(아바타 그림)이 다르면 따로(ccf-prose-split-avatar, 기본 켬)
-    let mergeOn = true, splitAvatar = true;
-    try { mergeOn = localStorage.getItem("ccf-prose-merge") !== "off"; splitAvatar = localStorage.getItem("ccf-prose-split-avatar") !== "off"; } catch (_) { /* 기본값 */ }
-    const authors = messages.map((li) => {
-      const author = mergeOn ? extractAuthor(li) : null;
-      if (!author) return author;
-      const key = splitAvatar ? author + "\\u0000av" + (li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src") || "") : author;
-      // #69 — 나레이션 메시지는 같은 화자라도 일반 발화와 묶지 않음 (별도 그룹 키)
-      return rowIsNarration(li) ? key + "\\u0000nr" : key;
-    });
+    watchStore();
+    const prefs = readPrefs();
+    const kinds = messages.map((li) => (rowIsNarration(li) ? "n" : "p"));
+    const lists = messages.map((li) => li.closest("ul"));
+    const authors = messages.map((li, i) => groupKey(extractAuthor(li), li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src"), kinds[i] === "n", prefs));
     let changed = false;
     for (let i = 0; i < messages.length; i++) {
       const li = messages[i];
       const author = authors[i];
-      const prevAuthor = i > 0 ? authors[i - 1] : null;
-      const nextAuthor = i + 1 < authors.length ? authors[i + 1] : null;
+      // 앞·뒤 줄은 같은 목록 안에서만 본다(메인 채팅과 룸 채팅 사이드 패널이 함께 열려 있을 때)
+      const prevSame = i > 0 && lists[i - 1] === lists[i];
+      const prevAuthor = prevSame ? authors[i - 1] : null;
+      const nextAuthor = i + 1 < authors.length && lists[i + 1] === lists[i] ? authors[i + 1] : null;
       const isCont = !!(author && author === prevAuthor);
       const isLeader = !isCont && !!(author && author === nextAuthor);
       const isLast = isCont && nextAuthor !== author;
       changed = setOrRemove(li, CONT_ATTR, isCont) || changed;
       changed = setOrRemove(li, LEADER, isLeader) || changed;
       changed = setOrRemove(li, LAST, isLast) || changed;
+      changed = setValue(li, KIND, kinds[i]) || changed;
+      if (lists[i] && !lists[i].hasAttribute(LIST_ATTR)) { lists[i].setAttribute(LIST_ATTR, String(++listSeq)); changed = true; }
       const parent = li.parentElement;
       if (parent) {
         changed = setOrRemove(parent, WRAP, isCont) || changed;
         changed = setOrRemove(parent, WRAP_LAST, isLast) || changed;
         changed = setOrRemove(parent, LEADER_WRAP, isLeader) || changed;
+        // 묶음 첫 줄 위 여백. 앞 줄이 아직 그려지지 않은 가상 목록 맨 윗줄은 일반 줄 뒤로 본다(가장 흔함).
+        const gap = isCont ? null : prevSame ? GAP_AFTER[kinds[i - 1]] : Number(parent.getAttribute("data-index")) > 0 ? GAP_AFTER.p : null;
+        changed = setValue(parent.hasAttribute("data-index") ? parent : li, GAP, gap == null ? null : String(gap)) || changed;
       }
     }
+    // 미리 입힌 모양(인덱스 CSS)은 그 줄이 표식을 받으면 거둔다(표식 규칙이 같은 모양을 이어받는다)
+    if (nextRow.rules && nextRow.targets.some((sel) => document.querySelector(sel))) clearNextRow();
     // 고정 상태인 스크롤러는 attr 적용 직후 바닥 유지 (RO 보정의 동기 선행판).
     for (const scroller of chatScrollers) {
       if (scroller.__ccr20Pinned && (changed || forceBottom)) {
@@ -6032,6 +6070,95 @@
       return true;
     }
     return false;
+  }
+
+  function setValue(el, attr, value) {
+    if (value == null) {
+      if (!el.hasAttribute(attr)) return false;
+      el.removeAttribute(attr);
+      return true;
+    }
+    if (el.getAttribute(attr) === value) return false;
+    el.setAttribute(attr, value);
+    return true;
+  }
+
+  // 인덱스 CSS(0.3.119): 새 메시지가 저장소에 들어오는 순간(React 가 줄을 그리기 전) 그 메시지가 받을 줄 번호(목록의 마지막 data-index + 1)에 최종 모양을 입혀 둔다.
+  // 가상 목록이 새 줄을 처음(이자 한 번) 잴 때 이미 최종 높이라 다시 재며 흔들리지 않는다. 예측(같은 화자·나레이션·앞 줄 종류)이 틀려도
+  // processList 가 곧바로 표식으로 바로잡으므로 예전과 같아질 뿐이다. 다른 탭 메시지라 그 번호의 줄이 오지 않으면 2초 뒤 거둔다.
+  let listSeq = 0;
+  const nextRow = { store: null, unsubscribe: null, count: 0, style: null, rules: "", targets: [], timer: 0 };
+  function findStore() {
+    const root = document.getElementById("root");
+    const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+    if (!key) return null;
+    let store = null;
+    const walk = (fiber, depth) => {
+      for (let f = fiber; f && !store && depth <= 60; f = f.sibling) {
+        const candidate = f.memoizedProps?.store;
+        if (candidate?.getState && candidate.subscribe) { store = candidate; return; }
+        walk(f.child, depth + 1);
+      }
+    };
+    walk(root[key]?.stateNode?.current || root[key], 0);
+    return store;
+  }
+  function watchStore() {
+    if (nextRow.store) return;
+    const store = findStore();
+    if (!store) return;
+    nextRow.store = store;
+    nextRow.count = store.getState()?.entities?.roomMessages?.ids?.length || 0;
+    nextRow.unsubscribe = store.subscribe(() => { try { predictNextRow(); } catch (_) { /* 예측 실패 = 예전 동작 */ } });
+  }
+  function clearNextRow() {
+    nextRow.rules = ""; nextRow.targets = [];
+    if (nextRow.style) nextRow.style.textContent = "";
+    if (nextRow.timer) { clearTimeout(nextRow.timer); nextRow.timer = 0; }
+  }
+  function predictNextRow() {
+    if (!active) return;
+    const messages = nextRow.store.getState()?.entities?.roomMessages;
+    const count = messages?.ids?.length || 0;
+    const grew = count > nextRow.count;
+    nextRow.count = count;
+    if (!grew) return;
+    const msg = messages.entities?.[messages.ids[count - 1]];
+    if (!msg) return;
+    let narration = false;
+    try { narration = proseEnvelopeNarration(String(msg.text || "")); } catch (_) { narration = false; }
+    const prefs = readPrefs();
+    const name = String(msg.name || "").replace(ASCII_EDGE_SPACE_RE, "");
+    const rules = [], targets = [];
+    document.querySelectorAll(`ul[${LIST_ATTR}]`).forEach((ul) => {
+      let last = null, max = -1;
+      for (const wrap of ul.querySelectorAll("[data-index]")) {
+        const index = Number(wrap.getAttribute("data-index"));
+        if (index > max) { max = index; last = wrap; }
+      }
+      const li = last && [...last.children].find((el) => el.classList.contains("MuiListItem-root"));
+      if (!li) return;
+      const prevKind = li.getAttribute(KIND) === "n" ? "n" : "p";
+      const prevKey = groupKey(extractAuthor(li), li.querySelector(".MuiListItemAvatar-root img")?.getAttribute("src"), prevKind === "n", prefs);
+      const key = groupKey(name, msg.iconUrl || "/blank.gif", narration, prefs);
+      const cont = !!(key && key === prevKey);
+      const kind = narration ? "n" : "p";
+      const wrap = `ul[${LIST_ATTR}="${ul.getAttribute(LIST_ATTR)}"] [data-index="${max + 1}"]`;
+      const row = `${wrap} > .MuiListItem-root`;
+      const facets = cont ? ["cont", kind] : [kind, ...(kind === "n" ? ["nstart"] : []), prevKind === "n" ? "gap10" : "gap9"];
+      facets.forEach((facet) => rules.push(...shapeCss(row, wrap, facet)));
+      targets.push(`${row}[${KIND}]`);
+    });
+    if (!rules.length) return;
+    if (!nextRow.style || !nextRow.style.isConnected) {
+      nextRow.style = document.createElement("style");
+      nextRow.style.id = STYLE_ID + "-next-row";
+      (document.head || document.documentElement).appendChild(nextRow.style);
+    }
+    nextRow.rules = rules.join("\n"); nextRow.targets = targets;
+    nextRow.style.textContent = nextRow.rules;
+    if (nextRow.timer) clearTimeout(nextRow.timer);
+    nextRow.timer = setTimeout(clearNextRow, 2000);
   }
 
   function scheduleScan(options = {}) {
@@ -6208,6 +6335,7 @@
       delete scroller.__ccr20Pinned;
       delete scroller.scrollTo;
       delete scroller.__ccr20NativeScrollAt;
+      delete scroller.__ccr20SnapTimes; delete scroller.__ccr20SnapPausedUntil; // 다시 켜면 속도 제한도 새로 센다
       if (scroller.__ccr20DeferredSnap) { window.clearTimeout(scroller.__ccr20DeferredSnap); scroller.__ccr20DeferredSnap = 0; }
       scroller.removeAttribute("data-ccr20-scroller");
       bottomFinishers.delete(scroller);
@@ -6301,7 +6429,9 @@
     }
     observer = null;
     document.getElementById(STYLE_ID)?.remove();
-    for (const attr of [CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
+    try { nextRow.unsubscribe?.(); } catch (_) {}
+    clearNextRow(); nextRow.style?.remove();
+    for (const attr of [KIND, GAP, LIST_ATTR, CONT_ATTR, CONT_ATTR + "-wrap", CONT_ATTR + "-wrap-last", CONT_ATTR + "-leader", CONT_ATTR + "-leader-wrap", CONT_ATTR + "-last", CONT_ATTR + "-speaker-start", CONT_ATTR + "-speaker-start-wrap", CONT_ATTR + "-msg", CONT_ATTR + "-msg-wrap"]) {
       document.querySelectorAll(`[${attr}]`).forEach((el) => el.removeAttribute(attr));
     }
     if (window.__CCF_PROSE_MODE_DEBUG__) {
@@ -6315,7 +6445,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.118",
+    version: "0.3.119",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },

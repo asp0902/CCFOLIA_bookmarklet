@@ -10,7 +10,9 @@ const grab = (text, start, end) => { const a = text.indexOf(start); assert(a >= 
 // the break rules of format-sync (all rules that mention data-ccf-break) and the bridge's continued-row rules
 const syncCss = [...sync.matchAll(/\n\s{6}\.MuiListItem-root[^\n{]*data-ccf-break[^{]*\{[^}]*\}/g)].map((m) => m[0]).join('\n');
 assert.ok(syncCss.includes('data-ccf-break'), 'the break rule exists');
-const contRules = [...bridge.matchAll(/`(\.MuiListItem-root\[\$\{CONT_ATTR\}="1"\][^`]*)`/g)].map((m) => m[1].replace(/\$\{CONT_ATTR\}/g, 'data-ccf-prose-cont').replace(/\$\{LAST\}/g, 'data-ccf-prose-cont-last').replace(/\$\{LEADER\}/g, 'data-ccf-prose-cont-leader').replace(/\$\{WRAP\}/g, 'data-ccf-prose-cont-wrap')).filter((r) => !r.includes('${'));
+// roll20 bridge 0.3.119: the continued-row rules come from one generator (shapeCss) — run it as the page does
+const shapeCss = new Function(`${grab(bridge, '  const GAP_AFTER = ', '  // 묶음 키:')}; return shapeCss;`)();
+const contRules = shapeCss('.MuiListItem-root[data-ccf-prose-cont="1"]', '[data-ccf-prose-cont-wrap="1"]', 'cont');
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }) });
   try {

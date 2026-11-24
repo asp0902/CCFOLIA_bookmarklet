@@ -34,10 +34,13 @@ vm.runInNewContext(prose, {
 });
 
 const css = styles[0]?.textContent || "";
-assert.ok(css.includes('[data-ccf-prose-cont-leader="1"] { padding-bottom: 5px !important; border-bottom: 0 !important; }'));
-assert.ok(css.includes('[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) { border-bottom: 0 !important; }'));
+// 0.3.119 (scroll jitter, option A): a row's shape never depends on the row after it. Only the divider colour may use the marks that do (leader / last).
+const nextDependent = css.split("\n").filter((rule) => /prose-cont-(leader|last|wrap-last)/.test(rule));
+assert.ok(nextDependent.length >= 1);
+for (const rule of nextDependent) assert.match(rule.trim(), /^[^{]*\+ \.MuiDivider-root \{ border-color: transparent !important; background: transparent !important; \}$/, rule);
+assert.ok(css.includes('[data-ccf-prose-cont-k="p"].MuiListItem-root.MuiListItem-root.MuiListItem-root { padding-bottom: 5px !important; border-bottom: 0 !important; }'));
+assert.ok(css.includes('[data-ccf-prose-cont-k="n"].MuiListItem-root.MuiListItem-root.MuiListItem-root { padding-bottom: 6px !important; border-bottom: 0 !important; }'));
+assert.ok(css.includes('[data-ccf-prose-cont-gap="9"]:not(.MuiListItem-root) { padding-top: 9px !important; }') && css.includes('[data-ccf-prose-cont-gap="10"]:not(.MuiListItem-root) { padding-top: 10px !important; }'));
 assert.ok(!css.includes("data-ccf-prose-cont-msg"));
 assert.ok(!css.includes("data-ccf-prose-cont-speaker-start"));
-assert.ok(css.includes('.MuiListItem-root[data-ccf-prose-cont-leader="1"] + .MuiDivider-root, .MuiListItem-root[data-ccf-prose-cont="1"]:not([data-ccf-prose-cont-last="1"]) + .MuiDivider-root { display: none !important; }'));
-
 console.log("roll20 prose native-layout checks passed");
