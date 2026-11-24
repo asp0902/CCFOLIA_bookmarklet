@@ -395,7 +395,7 @@ function runPieceAction(node) {
   if (action.type === "message") postChat(crypto.randomUUID(), action.text).then(async response => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "전송 실패"); showSendStatus("GM 브리지 전달 대기", 2500); }).catch(error => showSendStatus(error?.message || "전송 실패"));
 }
 function renderScene(scene) {
-  if (scene !== undefined) { const namesChanged = String(sceneData?.cutinNames || "") !== String(scene?.cutinNames || ""); sceneData = scene; syncRoomAudio(scene); playCutins(scene); if (namesChanged) setTimeout(() => { if (current) { rendered = false; renderState(current); } }, 0); } // a cut-in just played: its @name leaves the rows already drawn
+  if (scene !== undefined) { const namesChanged = JSON.stringify([sceneData?.cutinNames, sceneData?.cutinPictures]) !== JSON.stringify([scene?.cutinNames, scene?.cutinPictures]); sceneData = scene; syncRoomAudio(scene); playCutins(scene); if (namesChanged) { (scene?.cutinPictures || []).forEach(preloadCutinPicture); setTimeout(() => { if (current) { rendered = false; renderState(current); } }, 0); } } // a cut-in just played: its @name leaves the rows already drawn, its picture joins them
   const box = document.getElementById("scene"), field = document.getElementById("scene-field"), bg = document.getElementById("scene-bg");
   const stage = box.parentElement;
   if (!sceneData) { box.hidden = true; return; }
@@ -796,6 +796,7 @@ function fillMirrorRow(row, message) {
     const tail = () => body.lastElementChild || body;
     if (message.roll?.result) (tail()).append(rollResultSpan(message.roll));
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; tail().append(edited); }
+    addCutinPicture(body, message.text || "");
   }
 }
 const speakerRunKey = message => `${message.author || "noname"}\0${message.icon || ""}`; // the same name with another standing picture is a new group (data values, no waiting for the picture to load)
@@ -847,6 +848,7 @@ const renderState = data => {
     if (message.roll?.result) ((body.lastElementChild || body)).append(rollResultSpan(message.roll));
     // A message edited in CCFOLIA ends with " [편집 완료]" (measured: inline span, 12px, #757575, the same as the time).
     if (message.edited === true) { const edited = document.createElement("span"); edited.className = "msg-edited"; edited.textContent = " [편집 완료]"; (body.lastElementChild || body).append(edited); }
+    addCutinPicture(body, message.text || "");
     text.append(head, body); item.append(avatar, text); return item;
   }));
   { const now = scroller(); now.scrollTop = stickToBottom ? now.scrollHeight : previousTop; }
@@ -1048,6 +1050,31 @@ function withoutCutinName(text) {
   const body = String(text).normalize("NFC");
   const name = (sceneData?.cutinNames || []).map(item => item.normalize("NFC")).filter(item => body.endsWith(item)).sort((a, b) => b.length - a.length)[0];
   return name ? body.slice(0, -name.length).trimEnd() || "\u00a0" : text;
+}
+// The picture of a cut-in in its chat row, as the toolkit draws it on the GM's page: the text ends with the name (longest first), at most 200px high, centred, under the text.
+// A message that is only the name shows the picture alone once it has loaded; a picture that fails leaves the row as it was.
+const cutinKey = value => String(value || "").normalize("NFC").replace(/[\s\u3000\u00a0]+/g, " ").trim();
+const cutinPictureSizes = new Map();
+function preloadCutinPicture(item) {
+  if (cutinPictureSizes.has(item.url)) return;
+  const img = new Image(); img.referrerPolicy = "no-referrer";
+  img.onload = () => { if (img.naturalWidth) cutinPictureSizes.set(item.url, [img.naturalWidth, img.naturalHeight]); };
+  img.src = item.url;
+}
+function addCutinPicture(body, full) {
+  const start = full.indexOf(INVIS_START), end = full.indexOf(INVIS_END, start);
+  const key = cutinKey(start >= 0 && end > start ? full.slice(0, start) + full.slice(end + INVIS_END.length) : full); // what CCFOLIA saw: text + name, without the envelope
+  if (!key || body.querySelector("img")) return;
+  const hit = (sceneData?.cutinPictures || []).filter(item => key.endsWith(cutinKey(item.name))).sort((a, b) => cutinKey(b.name).length - cutinKey(a.name).length)[0];
+  if (!hit) return;
+  const wrap = document.createElement("span"), img = document.createElement("img"), size = cutinPictureSizes.get(hit.url);
+  wrap.className = "ccf-cutin-chat-image"; wrap.style.cssText = "display:block;margin:6px 0 2px;max-width:100%;line-height:0";
+  img.alt = ""; img.decoding = "async"; img.referrerPolicy = "no-referrer"; img.style.cssText = "display:block;margin:0 auto;max-width:100%;max-height:200px;width:auto;height:auto;object-fit:contain;border-radius:4px;cursor:zoom-in";
+  if (size) { img.width = size[0]; img.height = size[1]; } // the row has its height before the picture draws
+  img.addEventListener("load", () => { if (img.naturalWidth) cutinPictureSizes.set(hit.url, [img.naturalWidth, img.naturalHeight]); if (key === cutinKey(hit.name)) body.replaceChildren(wrap); }, { once: true });
+  img.addEventListener("error", () => wrap.remove(), { once: true });
+  img.addEventListener("click", () => window.open(hit.url, "_blank", "noopener,noreferrer"));
+  img.src = hit.url; wrap.append(img); body.append(wrap);
 }
 function renderRich(container, full, toolkit = false) {
   const { text, env } = decodeEnvelope(full);
