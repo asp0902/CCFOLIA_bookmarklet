@@ -38,3 +38,10 @@ assert.equal(boxed.ccfBgmCcfoliaPlayers()[0], player); boxed.ccfBgmCcfoliaPlayer
 assert.match(between('  function getCcfNativeMediaCandidates(', '  function isUsableNativeBgmMedia('), /ccfBgmCcfoliaPlayers\(\)/);
 assert.match(between('  function scanExistingNativeBgmMedia(', '  function shouldSkipCcfYoutubeRestoreForNativeBgm('), /const allMedia = getCcfNativeMediaCandidates\(\);/);
 console.log('bgm restore file PASS');
+// 0.3.52: YouTube -> file in the same slot (user case: after a reload both played). The GM's switch now records "stopped" for the other screens,
+// and a "playing" record that started before this page opened (= a reload) is not followed while the slot holds a file / CCFOLIA audio plays;
+// without room data yet it waits for the next poll instead of playing.
+assert.match(source, /const shouldEmit = MANUAL_STOP_REASONS\.has\(reason\) \|\| reason === "native-library-selected";/);
+assert.match(source, /if \(\(Number\(data\.startedAt\) \|\| 0\) < ccfBgmPageOpenedAt\) \{\n\s*const hasFile = ccfBgmRoomSlotHasFile\(normalizeCcfBgmSlotKey\(data\.slotKey\)\);\n\s*if \(hasFile === null\) \{ ccfBgmFirestoreLastPlaybackSignature = ""; return; \}\n\s*if \(shouldSkipCcfYoutubeRestoreForNativeBgm\(data\.slotKey, "remote-restore"\)\) return;\n\s*\}/);
+assert.match(source, /const ccfBgmPageOpenedAt = Math\.round\(\(typeof performance !== "undefined" && performance\.timeOrigin\) \|\| Date\.now\(\)\);/);
+console.log('bgm restore file (remote) PASS');
