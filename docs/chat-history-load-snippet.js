@@ -2,6 +2,7 @@
 // 코코포리아는 채팅 목록을 "위로" 스크롤해 맨 위 32px 안에 들어오면 이전 20개를 불러오고, 20개 미만이 오면 그 탭을 '끝'으로 표시합니다.
 // 이 스니펫은 지금 탭에서 그 동작을 6번 흉내 내고, 매번 메시지 수·불러오는 중/끝 표시·스크롤 위치·누가 스크롤을 되돌렸는지를 기록합니다(읽기와 스크롤만 합니다).
 (async () => {
+  const _copy = typeof copy === "function" ? copy : null; // 크롬 콘솔의 copy()는 기다린(await) 뒤에는 동작하지 않아 여기서 잡아 둔다
   const root = document.getElementById("root");
   const key = root && Object.keys(root).find((k) => k.startsWith("__reactContainer"));
   let store = null; const seen = new WeakSet();
@@ -28,5 +29,5 @@
   out.reason = !store ? "코코포리아 저장소를 못 찾음" : !log ? "채팅 목록을 못 찾음" : out.steps.some((s, i) => s.count > (i ? out.steps[i - 1].count : out.before.count)) ? "정상: 위로 스크롤하면 더 불러옴" : out.before.loadedToEnd ? "코코포리아가 이 탭을 이미 '끝'으로 표시함(그 아래로 더 없음)" : "위로 스크롤해도 더 안 불러옴 — othersWroteScroll 확인";
   const text = JSON.stringify(out, null, 1);
   console.warn(text);
-  try { copy(text); console.warn("클립보드에 복사했습니다."); } catch (_) { /* copy 없음 */ }
+  { const _t = text; window.__CCF_DIAG_RESULT__ = _t; try { _copy?.(_t); } catch (_) {} console.warn("끝났습니다. 클립보드에 안 들어갔으면 콘솔에 copy(__CCF_DIAG_RESULT__) 를 입력하고 Enter 하세요."); }
 })();

@@ -3,6 +3,7 @@
 // 담는 것: 스크립트 버전·받은 경로, Firebase 연결·내 uid 앞 6자, 시트 문서(id 앞 8자·소유자 앞 6자·deleted·수정 시각·json 길이·연결 캐릭터 이름),
 // 이 브라우저의 로컬 시트(같은 항목), 구성원(members: 툴킷 uid 앞 6자 ↔ 코코포리아 uid 앞 6자), 연결 캐릭터의 코코포리아 주인 앞 6자. 시트 본문·비밀·사명은 담지 않습니다.
 (async () => {
+  const _copy = typeof copy === "function" ? copy : null; // 크롬 콘솔의 copy()는 기다린(await) 뒤에는 동작하지 않아 여기서 잡아 둔다
   const p6 = (v) => String(v || "").slice(0, 6), p8 = (v) => String(v || "").slice(0, 8);
   const iso = (v) => { const n = Number(v); return n ? new Date(n).toISOString() : ""; };
   const sheetApi = window.__CCF_CHARACTER_SHEET_DEBUG__;
@@ -48,5 +49,5 @@
     }
   }
   console.warn("[시트 소유 진단]", out);
-  copy(JSON.stringify(out, null, 1));
+  { const _t = JSON.stringify(out, null, 1); window.__CCF_DIAG_RESULT__ = _t; try { _copy?.(_t); } catch (_) {} console.warn("끝났습니다. 클립보드에 안 들어갔으면 콘솔에 copy(__CCF_DIAG_RESULT__) 를 입력하고 Enter 하세요."); }
 })();
