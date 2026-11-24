@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Theme Switcher by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher
-// @version      0.2.69
+// @version      0.2.70
 // @description  Adds a theme switcher panel, custom color themes, and theme import/export tools to CCFOLIA.
 // @description:ko CCFOLIA에 테마 전환 패널, 사용자 지정 색상 테마, 테마 가져오기/내보내기 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -239,7 +239,7 @@
     id: "ccf-theme-switcher",
     name: "CCF Theme Switcher",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.2.69"),
+    version: getUserscriptVersion("0.2.70"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-theme-switcher"
   });
 
@@ -1685,16 +1685,21 @@
       sheetBg: "url(https://i.imgur.com/htxGxau.png)"
     };
 
+    const UD_CHAR_EDIT = `html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper:has(input[name="name"]):has(textarea[name="memo"])`;
     return `
       /* === [언성 듀엣] 캐릭터 편집 팝업 ============================= */
+      /* 0.2.70 사용자 결정: 언성 듀엣 꾸밈은 '캐릭터 편집' 창 하나만(${UD_CHAR_EDIT} — 이름 칸과 캐릭터 메모 칸이 함께 있는 창, 제목 글자(다국어)가 아니라 구조로 가린다).
+         필드 설정·내 캐릭터 목록·스크린 패널/마커 편집·방 설정·사운드 선택·컷인/장면 편집·확인창 등 다른 창은 코코포리아 원본 그대로. */
       /* Dialog paper 자체: 반투명 + 블랙 보더(=inset shadow).
          외곽선은 inset box-shadow만으로 표현 — 레이아웃 영향 없음.
          min-width: MUI 'sm' 기본값(600px)을 명시해 CCFOLIA 네이티브 너비 보장. */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper,
-      html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] > .MuiPaper-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiPaper-root.MuiDialog-paper {
+      ${UD_CHAR_EDIT} {
         background-color: ${UD.bgGlass} !important;
-        background-image: none !important;
+        /* 0.2.70 배경 그림은 창 전체 폭에(예전: 안쪽 내용 칸에만 contain 으로 깔려 좌우 약 36·40px 띠가 비었다). 창 자체는 스크롤되지 않아 그림은 예전처럼 고정 */
+        background-image: linear-gradient(${UD.bgGlassInner}, ${UD.bgGlassInner}), ${UD.sheetBg} !important;
+        background-repeat: no-repeat, no-repeat !important;
+        background-position: center top, center top !important;
+        background-size: cover, cover !important;
         color: ${UD.text} !important;
         border: 0 !important;
         min-width: min(600px, calc(100vw - 64px)) !important;
@@ -1706,8 +1711,8 @@
       /* DialogActions(삭제/복제/맵에서 집어넣기):
          - 세 버튼이 가로 폭을 균등 분배하도록 flex:1 1 0
          - 텍스트는 어떤 너비에서도 한 줄 유지 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButton-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogActions-root .MuiButtonBase-root {
+      ${UD_CHAR_EDIT} .MuiDialogActions-root .MuiButton-root,
+      ${UD_CHAR_EDIT} .MuiDialogActions-root .MuiButtonBase-root {
         flex: 1 1 0 !important;
         min-width: 0 !important;
         white-space: nowrap !important;
@@ -1715,8 +1720,7 @@
 
       /* 캐릭터 편집 헤더 (MuiAppBar) — 블랙 톤.
          border-bottom 대신 inset box-shadow로 가짜 보더 — 레이아웃 영향 없음 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] div[role="dialog"] .MuiAppBar-root {
+      ${UD_CHAR_EDIT} .MuiAppBar-root {
         background: ${UD.accentSoft} !important;
         background-image: none !important;
         color: ${UD.text} !important;
@@ -1725,113 +1729,108 @@
           inset 0 -1px 0 0 ${UD.accent},
           0 4px 14px ${UD.shadow} !important;
       }
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiTypography-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiSvgIcon-root {
+      ${UD_CHAR_EDIT} .MuiAppBar-root .MuiTypography-root,
+      ${UD_CHAR_EDIT} .MuiAppBar-root .MuiIconButton-root,
+      ${UD_CHAR_EDIT} .MuiAppBar-root .MuiSvgIcon-root {
         color: ${UD.text} !important;
       }
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiButtonBase-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAppBar-root .MuiIconButton-root:hover {
+      ${UD_CHAR_EDIT} .MuiAppBar-root .MuiButtonBase-root:hover,
+      ${UD_CHAR_EDIT} .MuiAppBar-root .MuiIconButton-root:hover {
         background: ${UD.accentHover} !important;
       }
 
       /* DialogContent: Roll20 시트의 헤더 일러스트를 깔아 룰 타이틀이 보이게 함.
          배경 이미지 + 반투명 청록 톤 오버레이가 겹쳐 보이도록 두 레이어 사용. */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root {
-        background-image:
-          linear-gradient(${UD.bgGlassInner}, ${UD.bgGlassInner}),
-          ${UD.sheetBg} !important;
-        background-repeat: no-repeat, no-repeat !important;
-        background-position: center top, center top !important;
-        background-size: cover, contain !important;
-        background-color: transparent !important;
+      ${UD_CHAR_EDIT} .MuiDialogContent-root {
+        background: transparent !important;
       }
 
       /* 내부 Paper/카드/아코디언 — MuiAppBar는 위 헤더 규칙이 처리하므로 제외 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiPaper-root:not(.MuiAppBar-root),
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiCard-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiAccordion-root {
+      ${UD_CHAR_EDIT} .MuiPaper-root:not(.MuiAppBar-root),
+      ${UD_CHAR_EDIT} .MuiCard-root,
+      ${UD_CHAR_EDIT} .MuiAccordion-root {
         background: ${UD.bgGlassInner} !important;
         color: ${UD.text} !important;
         border-color: ${UD.accentSoft} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDivider-root {
+      ${UD_CHAR_EDIT} .MuiDivider-root {
         border-color: ${UD.accentSoft} !important;
       }
 
       /* 텍스트 톤 — DialogActions(삭제/복제 등 액션 버튼)는 CCFOLIA 네이티브
          색을 유지하기 위해 DialogContent 스코프로 한정 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormLabel-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiInputLabel-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormControlLabel-label,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButton-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiSvgIcon-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogTitle-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogTitle-root .MuiTypography-root {
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiTypography-root:not([style*="color:"]),
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiFormLabel-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiInputLabel-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiFormControlLabel-label,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiTab-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiButton-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiButtonBase-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiSvgIcon-root,
+      ${UD_CHAR_EDIT} .MuiDialogTitle-root,
+      ${UD_CHAR_EDIT} .MuiDialogTitle-root .MuiTypography-root {
         color: ${UD.text} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTypography-caption,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiFormHelperText-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemText-secondary {
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiTypography-caption,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiFormHelperText-root,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiListItemText-secondary {
         color: ${UD.muted} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiFilledInput-root,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-input,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper textarea,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper input[type="text"],
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper input[type="number"] {
+      ${UD_CHAR_EDIT} .MuiInputBase-root,
+      ${UD_CHAR_EDIT} .MuiOutlinedInput-root,
+      ${UD_CHAR_EDIT} .MuiFilledInput-root,
+      ${UD_CHAR_EDIT} .MuiInputBase-input,
+      ${UD_CHAR_EDIT} textarea,
+      ${UD_CHAR_EDIT} input[type="text"],
+      ${UD_CHAR_EDIT} input[type="number"] {
         background: ${UD.bgChip} !important;
         color: ${UD.text} !important;
         border-radius: 0 !important;
       }
 
       /* 입력칸 보더는 청록 유지 (Roll20 시트 톤) */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiOutlinedInput-notchedOutline,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root fieldset {
+      ${UD_CHAR_EDIT} .MuiOutlinedInput-notchedOutline,
+      ${UD_CHAR_EDIT} .MuiInputBase-root fieldset {
         border-color: ${UD.inputBorder} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-focused .MuiOutlinedInput-notchedOutline,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiInputBase-root.Mui-focused fieldset {
+      ${UD_CHAR_EDIT} .Mui-focused .MuiOutlinedInput-notchedOutline,
+      ${UD_CHAR_EDIT} .MuiInputBase-root.Mui-focused fieldset {
         border-color: ${UD.muted} !important;
         box-shadow: 0 0 0 2px rgba(136, 149, 161, 0.25) !important;
       }
 
       /* 탭/리스트 선택 — 블랙 액센트 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTab-root.Mui-selected,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiListItemButton-root.Mui-selected,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .Mui-selected > .MuiListItemButton-root {
+      ${UD_CHAR_EDIT} .MuiTab-root.Mui-selected,
+      ${UD_CHAR_EDIT} .MuiListItemButton-root.Mui-selected,
+      ${UD_CHAR_EDIT} .Mui-selected > .MuiListItemButton-root {
         background: ${UD.accent} !important;
         color: ${UD.text} !important;
       }
 
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiTabs-indicator {
+      ${UD_CHAR_EDIT} .MuiTabs-indicator {
         background: ${UD.text} !important;
       }
 
       /* 호버 — 블랙 톤 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiButtonBase-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiTab-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiListItemButton-root:hover,
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper .MuiDialogContent-root .MuiMenuItem-root:hover {
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiButtonBase-root:hover,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiTab-root:hover,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiListItemButton-root:hover,
+      ${UD_CHAR_EDIT} .MuiDialogContent-root .MuiMenuItem-root:hover {
         background: ${UD.accentHover} !important;
       }
 
       /* 캐릭터 시트 팝업 스크롤바 — 블랙 액센트 */
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-track {
-        background: ${UD.bgSolid};
+      ${UD_CHAR_EDIT} ::-webkit-scrollbar-track {
+        background: transparent;
       }
-      html[${DICEBOT_ATTR}="unsung-duet"] .MuiDialog-paper ::-webkit-scrollbar-thumb {
+      ${UD_CHAR_EDIT} ::-webkit-scrollbar-thumb {
         background: ${UD.accent};
-        border: 2px solid ${UD.bgSolid};
+        border: 2px solid transparent;
+        background-clip: padding-box;
         border-radius: 999px;
       }
 
