@@ -413,6 +413,14 @@ export class RoomRelay {
       return json({ accepted: true });
     }
     // The GM's YouTube BGM: only the video id and play/stop state are relayed; participants play it in their own browser.
+    // The GM's effective theme for this room (theme-switcher): colours as #rrggbb, alpha 0-100, blur 0-30, a known sheet theme id. Nothing else passes.
+    if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/theme$/.test(url.pathname)) {
+      room.theme = cleanRoomTheme(await request.json().catch(() => ({})));
+      room.gmHeartbeatAt = Date.now();
+      await this.save(room);
+      this.push("p", { type: "theme", theme: room.theme });
+      return json({ accepted: true });
+    }
     if (request.method === "POST" && /^\/api\/admin\/rooms\/[^/]+\/bgm$/.test(url.pathname)) {
       const body = await request.json().catch(() => ({}));
       const playing = body.state === "playing" && /^[A-Za-z0-9_-]{11}$/.test(text(body.videoId, 20));
@@ -561,6 +569,7 @@ export class RoomRelay {
       messages: room.capabilities.chatRead ? room.messages : [],
       handout: room.capabilities.publicHandout ? room.handout : {},
       bgm: room.bgm || { state: "stopped" },
+      theme: room.theme || null,
       channels: room.channels || [],
       dicebot: room.dicebot || "",
       systemName: room.systemName || "",
@@ -706,6 +715,22 @@ export class RoomRelay {
     }
     return json({ error: "not found" }, 404);
   }
+}
+
+// The GM's room theme for the participant page: only these fields and shapes (the page applies them as CSS colours).
+const ROOM_THEME_COLORS = ["bg", "appbar", "paper", "border", "text", "inputBg", "accent", "uiText", "scrollbar"];
+const ROOM_SHEET_THEMES = new Set(["unsung-duet", "insane-roll20", "cree-grrr"]);
+export function cleanRoomTheme(body) {
+  const hex = (value) => (/^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "");
+  const num = (value, lo, hi, fallback) => { const n = Number(value); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n))) : fallback; };
+  const raw = body && typeof body.theme === "object" && body.theme ? body.theme : null;
+  let theme = null;
+  if (raw && ["bg", "appbar", "paper", "border", "text", "inputBg"].every((key) => hex(raw[key]))) {
+    theme = Object.fromEntries(ROOM_THEME_COLORS.map((key) => [key, hex(raw[key])]));
+    theme.alpha = num(raw.alpha, 0, 100, 100);
+    theme.blur = num(raw.blur, 0, 30, 0);
+  }
+  return { theme, sheet: ROOM_SHEET_THEMES.has(String(body?.sheet || "")) ? String(body.sheet) : "" };
 }
 
 export default {

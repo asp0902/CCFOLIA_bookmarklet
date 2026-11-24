@@ -1,3 +1,5 @@
+// v2 (GM theme): 'GM 테마(기본)' is first and chosen until the participant picks another kind; it follows the GM's room theme (state / live 'theme');
+// an earlier personal choice (v1 key) goes back to the GM theme once; a picked kind is kept and a GM change no longer overrides it.
 // Playroom theme palette (first stage): the toolkit's place and icon in the bottom line; kind (default, light, 6 presets, custom), six colours + accent, the 38 fonts;
 // kept in this browser; the export file has the toolkit's format and is read back; the theme also reaches the mirrored CCFOLIA parts (shared sheet).
 const assert = require('node:assert/strict');
@@ -19,8 +21,17 @@ const dir = path.join(__dirname, '..', 'prototype', 'public-handout-relay', 'pub
     assert.deepEqual(place, { right: 8, size: [24, 24], centre: true }, 'the toolkit palette place');
     const bg = (sel) => page.locator(sel).first().evaluate((n) => getComputedStyle(n).backgroundColor);
     const before = await bg('#chat-form');
+    // the GM's room theme arrives (with the state, then live): applied as the default
+    const GM = { bg: '#101010', appbar: '#202020', paper: '#303030', border: '#404040', text: '#eeeeee', inputBg: '#050505', accent: '#ff0000', alpha: 100, blur: 0 };
+    await page.evaluate((GM) => renderState({ roomTitle: 'r', gmOnline: true, channels: [{ id: 'main', label: '메인' }], messages: [], theme: { theme: GM, sheet: '' } }), GM);
+    assert.equal(await bg('#chat-form'), 'rgb(48, 48, 48)', 'GM theme panel colour');
+    await page.evaluate(() => window.__prSetGmTheme({ theme: { bg: '#101010', appbar: '#202020', paper: '#123123', border: '#404040', text: '#eeeeee', inputBg: '#050505', accent: '' } }));
+    assert.equal(await bg('#chat-form'), 'rgb(18, 49, 35)', 'a live GM change');
+    await page.evaluate(() => window.__prSetGmTheme({ theme: null, sheet: '' }));
+    assert.equal(await bg('#chat-form'), before, "the GM's default look = the normal look");
     await page.click('#theme-open');
-    assert.deepEqual(await page.locator('#pr-theme [data-kind] option').allTextContents(), ['기본값', '라이트', '심해', '벚꽃', '숲', '밤', '양피지', '다크', '커스텀']);
+    assert.equal(await page.inputValue('#pr-theme [data-kind]'), 'gm', 'GM 테마 chosen by default');
+    assert.deepEqual(await page.locator('#pr-theme [data-kind] option').allTextContents(), ['GM 테마(기본)', '기본값', '라이트', '심해', '벚꽃', '숲', '밤', '양피지', '다크', '커스텀']);
     assert.equal(await page.locator('#pr-theme [data-font] option').count(), 39, '기본 + 38');
     assert.equal(await page.locator('#pr-theme input[type=color]').count(), 7, 'six colours + accent');
     await page.selectOption('#pr-theme [data-kind]', 'preset:0');
@@ -30,6 +41,9 @@ const dir = path.join(__dirname, '..', 'prototype', 'public-handout-relay', 'pub
     assert.equal(await page.evaluate(() => { const { root } = cmMirror.shadow('theme-test-host', (n) => document.body.append(n)); root.innerHTML = '<div class="MuiPaper-root" id="p"></div>'; return getComputedStyle(root.getElementById('p')).backgroundColor; }), 'rgb(17, 42, 59)', 'mirrored parts follow');
     await page.selectOption('#pr-theme [data-font]', 'Nanum Myeongjo');
     assert.match(await page.locator('#chat-input').evaluate((n) => getComputedStyle(n).fontFamily), /^NanumMyeongjo, 나눔명조, "Nanum Myeongjo"/); // the installed copy first, then the web font (#690)
+    // a picked kind is not overridden by a GM change
+    await page.evaluate((GM) => window.__prSetGmTheme({ theme: GM, sheet: '' }), GM);
+    assert.equal(await bg('#chat-form'), 'rgb(17, 42, 59)', 'own choice kept over the GM theme');
     // kept across a reload
     await load();
     assert.equal(await bg('#chat-form'), 'rgb(17, 42, 59)', 'kept');
@@ -48,6 +62,11 @@ const dir = path.join(__dirname, '..', 'prototype', 'public-handout-relay', 'pub
     await page.setInputFiles('#pr-theme input[type=file]', { name: 't.ccf-theme.json', mimeType: 'application/json', buffer: fs.readFileSync(file) });
     await page.waitForFunction(() => getComputedStyle(document.getElementById('chat-form')).backgroundColor === 'rgb(18, 52, 86)');
     await page.keyboard.press('Escape'); assert.equal(await page.locator('#pr-theme').count(), 0, 'Esc closes');
+    // an earlier personal choice under the old key only: back to the GM theme once
+    await page.evaluate(() => { localStorage.removeItem('capybara-playroom-theme-v2'); localStorage.setItem('capybara-playroom-theme-v1', JSON.stringify({ mode: 'preset:0', custom: {}, font: '' })); });
+    await load();
+    await page.click('#theme-open');
+    assert.equal(await page.inputValue('#pr-theme [data-kind]'), 'gm', 'old personal choice → GM theme once');
     assert.deepEqual(errors, []);
     console.log('participant theme PASS');
   } finally { await browser.close(); }
