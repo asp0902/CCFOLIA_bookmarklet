@@ -2794,9 +2794,9 @@ html[data-ccf-gm="1"] [data-ccf-hidden-row="1"] .ccf-hidden-fold:hover { color: 
       /* 마지막 메시지 아래 구분선(줄 자신의 border-bottom) 뒤에 네이티브와 같은 여백을 두고 목록이 끝난다. 밴드(Roll20 박스 그림자)가 있으면 그림자가 잘리지 않게 더 준다. */
       #${PANEL_ID} .ccf-scp-list { padding: 0 0 max(0px, calc(var(--scp-list-tail, 8px) + var(--scp-list-adjust, 0px))); }
       #${PANEL_ID} .ccf-scp-list:has([data-ccr20-band]) { padding-bottom: 24px; }
-      #${PANEL_ID} .ccf-scp-list > .MuiListItem-root:not([data-ccf-prose-cont-leader="1"]):not(:has(.ccf-render-root[data-ccf-narration="1"])) { padding-bottom: var(--scp-row-pad-b, 8px) !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id]:not([data-ccf-prose-cont-leader="1"]):not(:has(.ccf-render-root[data-ccf-narration="1"])) { padding-bottom: var(--scp-row-pad-b, 8px) !important; }
       /* 나레이션 묶음의 마지막 줄: 오리지널처럼 아래 16px(서식 규칙의 'prose-cont-last' 를 패널에서는 다음 줄로 판정) */
-      #${PANEL_ID} .ccf-scp-list > .MuiListItem-root[data-ccf-prose-cont="1"]:not(:has(+ [data-ccf-prose-cont="1"])):has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
+      #${PANEL_ID} .MuiListItem-root[data-ccf-msg-id][data-ccf-prose-cont="1"]:not(:has(+ [data-ccf-prose-cont="1"])):has(.ccf-render-root[data-ccf-narration="1"]) { padding-bottom: 16px !important; }
       #${PANEL_ID} .ccf-scp-tabs { background-color: var(--scp-tabs-bg, rgb(33,33,33)); }
       #${PANEL_ID} .ccf-scp-compose { background-color: var(--scp-bottom-bg, rgb(18,18,18)); }
       #${PANEL_ID} .ccf-scp-tabs { padding: 0 0 0 40px; }
