@@ -1,6 +1,6 @@
-// loader 0.3.250: the capybara button is the size and shape of ccfolia's board menu button (the pencil, MUI Fab large: 56×56 round, elevation 6 shadow,
-// read from the page; 56px when it is not there). With no saved position it sits beside the pencil button, centres level, 16px apart: on the right when
-// there is room before the chat drawer, otherwise on the left (measured on the real room: 15px right of it with the drawer open, 16px with it closed → left).
+// loader 0.3.251: the capybara button is the size and shape of ccfolia's board menu button (the pencil, MUI Fab large: 56×56 round, elevation 6 shadow,
+// read from the page; 56px when it is not there). With no saved position it sits right left of the pencil button, centres level, 24px apart
+// (the gap between ccfolia's buttons, measured: zoom-out → pencil; nothing of ccfolia sits left of the pencil).
 // It follows the pencil while unsaved (the drawer moves it). A saved position (after a drag) wins and is kept on screen with the larger size;
 // no pencil button → the old default corner.
 const assert = require('node:assert/strict');
@@ -27,17 +27,12 @@ const DRAWER = '<div class="MuiDrawer-paper" style="position:fixed;right:0;top:0
     assert.deepEqual([b.w, b.h], [56, 56], 'same size as the pencil button');
     assert.equal(b.radius, '50%'); assert.equal(b.shadow, 'rgba(0, 0, 0, 0.2) 0px 3px 5px -1px, rgba(0, 0, 0, 0.14) 0px 6px 10px 0px, rgba(0, 0, 0, 0.12) 0px 1px 18px 0px', 'the pencil button shadow');
     assert.equal(b.y + b.h / 2, f.y + f.h / 2, 'centres level');
-    assert.equal(f.x - (b.x + b.w), 16, `16px left of the pencil (${JSON.stringify([b, f])})`);
+    assert.equal(f.x - (b.x + b.w), 24, `24px left of the pencil, the gap between ccfolia's buttons (${JSON.stringify([b, f])})`);
     // the drawer closes: the pencil moves to the right edge, the button follows (still no room on the right: 16px)
     await page.evaluate(() => { document.querySelector('.MuiDrawer-paper').style.display = 'none'; document.querySelector('.MuiFab-root').style.right = '16px'; });
     await page.waitForTimeout(800);
     b = await button(); f = await pencil();
-    assert.equal(f.x - (b.x + b.w), 16, 'follows the pencil');
-    // room on the right (a pencil further left): right side
-    await page.evaluate(() => { document.querySelector('.MuiFab-root').style.right = '300px'; });
-    await page.waitForTimeout(800);
-    b = await button(); f = await pencil();
-    assert.equal(b.x - (f.x + f.w), 16, 'right side when there is room');
+    assert.equal(f.x - (b.x + b.w), 24, 'follows the pencil');
     // 2) dragged → saved → kept after a reload (the pencil no longer moves it)
     const start = await button();
     await page.mouse.move(start.x + 28, start.y + 28); await page.mouse.down(); await page.mouse.move(start.x - 200, start.y - 300, { steps: 8 }); await page.mouse.up();
