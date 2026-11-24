@@ -15,7 +15,12 @@
     const call = async (url, init = {}) => {
       const token = await getToken();
       const res = await fetchFn(url, { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } });
-      if (!res.ok) { const err = new Error(`Drive ${res.status}`); err.status = res.status; throw err; }
+      if (!res.ok) {
+        // 실패 사유(구글 오류 본문의 reason: accessNotConfigured = Drive API 꺼짐, insufficientPermissions = 권한 범위 다름 …)를 함께 넘긴다 — 상태 줄에 사유별 안내
+        let reason = "";
+        try { const body = await res.clone().json(); reason = String(body?.error?.errors?.[0]?.reason || body?.error?.status || ""); } catch (_) { /* 본문 없음 */ }
+        const err = new Error(`Drive ${res.status}${reason ? ` ${reason}` : ""}`); err.status = res.status; err.reason = reason; throw err;
+      }
       return res;
     };
     const q = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
