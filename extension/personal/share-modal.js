@@ -542,7 +542,7 @@
   dConnect.addEventListener("click", async () => { dStatus.textContent = "구글 로그인 창에서 직접 로그인·허용하세요…"; showDrive(await driveAsk("connect")); });
   dDisconnect.addEventListener("click", async () => { showDrive(await driveAsk("disconnect")); });
   const driveSection = el("div", { class: "ntfy drive" },
-    el("div", { class: "ntfy-head" }, el("h3", { class: "section", text: "핸드아웃 Drive 동기화" })),
+    el("div", { class: "ntfy-head" }, el("h3", { class: "section", text: "핸드아웃 Google Drive 동기화" })),
     el("p", { class: "muted", text: "내가 GM 으로 만든 핸드아웃을 내 Google Drive 에 자동으로 올리고 받습니다(변경 이력 포함). 권한은 drive.file 하나." }),
     el("div", { class: "field" }, el("label", { for: "drive-client", text: "OAuth 클라이언트 ID" }), el("div", { class: "row" }, dClient, dSave)),
     dStatus,

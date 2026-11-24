@@ -4,7 +4,7 @@
   "use strict";
   if (location.origin !== "https://ccfolia.com" || window.top !== window) return;
   const SOURCE = "capybara-drive";
-  const OPS = new Set(["status", "upload", "download", "history", "read", "restore", "keep", "rooms"]);
+  const OPS = new Set(["status", "ensure", "connect", "upload", "download", "history", "read", "restore", "keep", "rooms"]); // ensure = 토큰 확인(조용한 재발급), connect = [다시 연결](구글 로그인 창)
   const mark = (on) => { document.documentElement.dataset.capybaraDrive = on ? "1" : "0"; };
   const refresh = async () => { try { const { driveConnected } = await chrome.storage.local.get(["driveConnected"]); mark(!!driveConnected); } catch (_) { mark(false); } };
   refresh();
