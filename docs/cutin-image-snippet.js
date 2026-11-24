@@ -15,7 +15,7 @@
     effects: effects.map((e) => ({ name: [String(e?.name || "").length, String(e?.name || "").slice(0, 3), form(String(e?.name || ""))], message: e?.message ? [String(e.message).length, String(e.message).slice(0, 3)] : null, image: host(e?.imageUrl || e?.image || e?.url || ""), fields: Object.keys(e || {}).filter((k) => /url|image|video|movie/i.test(k)) })),
     rows: [...document.querySelectorAll("[data-ccf-cutin-chat], [data-ccf-cutin-hide]")].slice(-10).map((el) => { const img = el.querySelector(".ccf-cutin-chat-image img"); return { textLen: (el.textContent || "").length, hide: el.getAttribute("data-ccf-cutin-hide"), img: !!img, src: img ? host(img.src) : "", natural: img ? `${img.naturalWidth}x${img.naturalHeight}` : "" }; }),
     version: window.__CCF_FORMAT_SYNC_RUNTIME__?.version || "",
-    diag: (() => { try { const d = window.__CCF_FORMAT_SYNC_RUNTIME__.cutinChatDiag(); return { enabled: d.enabled, store: d.store, triggers: d.triggers.length, images: d.images, failed: d.failed, atNames: d.atNames }; } catch (e) { return String(e.message || e).slice(0, 80); } })()
+    diag: (() => { try { const d = window.__CCF_FORMAT_SYNC_RUNTIME__.cutinChatDiag(); return { enabled: d.enabled, store: d.store, triggers: d.triggers.length, images: d.images, failed: d.failed, atNames: d.atNames, messageRows: d.messageRows, scanErrors: d.scanErrors }; } catch (e) { return String(e.message || e).slice(0, 80); } })()
   };
   console.warn("[컷인 그림 진단]", out);
   copy(JSON.stringify(out, null, 1));
