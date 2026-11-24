@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.159
+// @version      0.1.160
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.159"),
+    version: getUserscriptVersion("0.1.160"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -2156,6 +2156,8 @@
       const hasProfile = !!current.querySelector?.("img:not(.ccf-image), .MuiAvatar-root, .MuiListItemAvatar-root");
       const includesText = current.contains(el);
       if (hasProfile && includesText) return current;
+      // 0.1.160: 메시지 줄 경계를 넘지 않는다. 아바타 없는 나레이션 줄에서 목록(다른 줄의 아바타를 품은 UL)까지 올라가 목록 전체가 나레이션이 됐다(추가 패널: 모든 줄이 이름·아바타 없이 가운데).
+      if (current === matched) break;
     }
     return matched instanceof HTMLElement && matched !== el ? matched : null;
   }
