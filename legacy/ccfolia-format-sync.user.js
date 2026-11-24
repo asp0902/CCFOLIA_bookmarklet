@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCF Format Editor Tool by Capybara_korea
 // @namespace    https://greasyfork.org/users/Capybara_korea/ccf-format-sync
-// @version      0.1.166
+// @version      0.1.167
 // @description  Adds a rich formatting editor, renderer, and effects to CCFOLIA chat.
 // @description:ko CCFOLIA 채팅에 서식 편집/렌더링 기능을 추가합니다.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -100,7 +100,7 @@
     id: "ccf-format-sync",
     name: "CCF Format Editor Tool",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.1.166"),
+    version: getUserscriptVersion("0.1.167"),
     namespace: "https://greasyfork.org/users/Capybara_korea/ccf-format-sync"
   });
   const IS_CCFOLIA_HOST = /(?:^|\.)ccfolia\.com$/i.test(location.hostname);
@@ -6475,7 +6475,8 @@
       if (target?.matches?.('input[type="color"][data-inline-color]')) {
         updateInlineToolbarVisuals(toolbar);
         applyInlineToolbarStyle(toolbar, {
-          selectionOverride: getInlineToolbarSelection(toolbar)
+          selectionOverride: getInlineToolbarSelection(toolbar),
+          only: [target.getAttribute("data-inline-color")]
         });
         return;
       }
@@ -6486,7 +6487,8 @@
         target.dataset.sizePreviewApplied = "1";
         applyInlineToolbarStyle(toolbar, {
           selectionOverride: getInlineToolbarSelection(toolbar),
-          restoreSelection: false
+          restoreSelection: false,
+          only: ["fontSize"]
         });
         showInlineToolbarSelectionHighlight(toolbar);
       }
@@ -6496,13 +6498,14 @@
       const target = event.target instanceof Element ? event.target : null;
       if (target?.matches?.("[data-inline-font]")) {
         if (target.value) window.__CCF_ENSURE_GOOGLE_FONTS__?.((window.__CCF_MESSAGE_FONTS__ || {})[target.value] || "");
-        applyInlineToolbarStyle(toolbar, { selectionOverride: getInlineToolbarSelection(toolbar) });
+        applyInlineToolbarStyle(toolbar, { selectionOverride: getInlineToolbarSelection(toolbar), only: ["fontId"] });
         return;
       }
       if (target?.matches?.('input[type="color"][data-inline-color]')) {
         updateInlineToolbarVisuals(toolbar);
         applyInlineToolbarStyle(toolbar, {
-          selectionOverride: getInlineToolbarSelection(toolbar)
+          selectionOverride: getInlineToolbarSelection(toolbar),
+          only: [target.getAttribute("data-inline-color")]
         });
         return;
       }
@@ -6512,7 +6515,8 @@
         target.dataset.sizePreviewApplied = "1";
         applyInlineToolbarStyle(toolbar, {
           selectionOverride: getInlineToolbarSelection(toolbar),
-          restoreSelection: false
+          restoreSelection: false,
+          only: ["fontSize"]
         });
         showInlineToolbarSelectionHighlight(toolbar);
       }
@@ -6546,7 +6550,8 @@
       if (target.dataset.sizePreviewApplied === "1") {
         applyInlineToolbarStyle(toolbar, {
           selectionOverride: getInlineToolbarSelection(toolbar),
-          restoreSelection: false
+          restoreSelection: false,
+          only: ["fontSize"]
         });
       }
       delete target.dataset.sizePreviewApplied;
@@ -6721,7 +6726,8 @@
       sanitizeInlineSizeInput(input);
       applyInlineToolbarStyle(toolbar, {
         selectionOverride: getInlineToolbarSelection(toolbar),
-        restoreSelection: false
+        restoreSelection: false,
+        only: ["fontSize"]
       });
       input.dataset.sizePreviewApplied = "1";
       delete input.dataset.editingSize;
@@ -6753,7 +6759,8 @@
     input.dataset.sizePreviewApplied = "1";
     applyInlineToolbarStyle(toolbar, {
       selectionOverride: getInlineToolbarSelection(toolbar),
-      restoreSelection: false
+      restoreSelection: false,
+      only: ["fontSize"]
     });
     showInlineToolbarSelectionHighlight(toolbar);
   }
@@ -7131,6 +7138,27 @@
     if (!editor) return false;
 
     const selection = options.selectionOverride || getInlineToolbarSelection(toolbar);
+    // 0.1.167: 색·배경색·크기·글꼴은 그 한 가지만 선택 구간에 덧입힌다(굵게·기울임 단추와 같은 방식). 예전엔 툴바 전체 상태로 구간 서식을 통째로 바꿔
+    // 굵게·기울임·밑줄·취소선(선택 구간에서는 툴바에 켜짐 표시가 남지 않는다, 0.1.139)이 지워졌다.
+    if (Array.isArray(options.only) && !isModalOpen()) {
+      const text = stripInvisibleEnvelope(getEditorText(editor));
+      const range = normalizeSelectionRange(selection, text.length);
+      if (range && range.start !== range.end) {
+        const full = getStyleFromInlineToolbar(toolbar);
+        const patch = Object.fromEntries(options.only.map((key) => [key, full[key]]));
+        const state = ensureEditorState(editor);
+        state.runs = patchStyleRuns(state.runs, range, patch, text.length);
+        state.text = text;
+        state.roll20Source = null;
+        if (state.parentheticalGray) applyParentheticalGrayToEditor(editor);
+        renderPreview(editor);
+        refreshComposerBadge(activeComposer, editor);
+        syncEditorVisualPreview(editor);
+        if (options.restoreSelection !== false) restoreRoomSelectionSoon(editor, range);
+        scheduleInlineToolbarCurrentSync();
+        return true;
+      }
+    }
     const applied = applyStyleToCurrentSelection(editor, {
       silent: true,
       styleOverride: getStyleFromInlineToolbar(toolbar),
