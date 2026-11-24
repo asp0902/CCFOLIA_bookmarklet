@@ -5843,6 +5843,9 @@
       `${li} { padding-top: 0 !important; padding-left: 16px !important; padding-right: 16px !important; margin: 0 !important; min-height: 0 !important; border-bottom: 0 !important; }`,
       `${li} .MuiListItemText-root { margin-top: 0 !important; padding-left: 56px !important; }`,
       `${li} p.MuiListItemText-secondary { margin: 0 !important; }`,
+      // 코코포리아 답장 버튼(줄 오른쪽 위 top 12px, 높이 30px)은 짧은 이어짐 줄 아래로 삐져나와 스크롤 높이를 늘린다(목록 끝이면 바닥 맞춤이 한 번 더 움직임, 실측 16px).
+      // 줄 아래쪽에 붙인다: 위로 넘치는 것은 스크롤 높이에 들어가지 않는다.
+      `${li} > div:has(> button.MuiIconButton-root) { top: auto !important; bottom: 0 !important; }`,
       `${wrap} { padding-top: 0 !important; margin-top: 0 !important; min-height: 0 !important; }`
     ];
     if (facet === "p" || facet === "n") return [
@@ -5852,7 +5855,8 @@
       `[data-index]:not(:last-child) > ${li} + .MuiDivider-root, ${li} + .MuiDivider-root:not(:last-child) { transform: translateY(${GAP_AFTER[facet]}px); }`,
       `[data-index]:last-child > ${li} + .MuiDivider-root { visibility: hidden; }`,
       // 나레이션은 서식 렌더 전에도 이름·아바타 없이(렌더가 늦게 와도 높이가 같게), 이어지는 줄도 가운데(들여쓰기 없음)
-      ...(facet === "n" ? [`${strong} .MuiListItemAvatar-root, ${strong} h6.MuiListItemText-primary { display: none !important; }`, `${strong} .MuiListItemText-root { padding-left: 0 !important; }`] : [])
+      // (본문 위 margin 0 도 서식 스크립트 나레이션 규칙과 같게 — 렌더 전 6px 이 남아 렌더 뒤 줄이 줄었다, 실측 5~6px)
+      ...(facet === "n" ? [`${strong} .MuiListItemAvatar-root, ${strong} h6.MuiListItemText-primary { display: none !important; }`, `${strong} .MuiListItemText-root { padding-left: 0 !important; margin-top: 0 !important; }`] : [])
     ];
     // 나레이션 묶음 첫 줄 위 16px(서식 스크립트 규칙과 같은 값 — 렌더 전에도). 이미지 나레이션(12px)·구분선 줄 규칙은 명시도가 더 높아 그대로 앞선다.
     if (facet === "nstart") return [`${li} { padding-top: 16px !important; }`];
