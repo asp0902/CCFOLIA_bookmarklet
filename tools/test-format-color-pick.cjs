@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
-// format-sync 0.1.118: a format bar's color box opens the toolkit picker instead of the browser one:
+// format-sync 0.1.118 (0.1.164: colour area + hue bar inside, squares, one preview): a format bar's color box opens the toolkit picker instead of the browser one:
 // choosing only previews, [확인] applies (input + change on the box) and closes, outside / Esc cancels; confirmed colors are kept (latest first, no duplicates, 12), click = choose, right-click / × = delete.
 const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sync.user.js'), 'utf8');
 (async () => {
@@ -17,7 +17,7 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     await page.addScriptTag({ content: source });
     await page.waitForTimeout(500);
     const pop = () => page.locator('#ccf-color-pick');
-    const choose = (hex) => pop().locator('input[type=color]').evaluate((i, v) => { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, hex);
+    const choose = (hex) => pop().locator('.hex').fill(hex);
     // click -> our picker (the browser one is cancelled)
     const prevented = await page.evaluate(() => { let p = null; document.addEventListener('click', (e) => { p = e.defaultPrevented; }, { once: true }); document.getElementById('target').click(); return p; });
     assert.equal(prevented, true, 'the browser picker is not opened');
@@ -25,7 +25,24 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     // choosing only previews
     await choose('#ff0000');
     assert.equal(await page.inputValue('#target'), '#ffffff', 'not applied while choosing');
-    assert.equal(await pop().locator('.pv').evaluate((e) => getComputedStyle(e).backgroundColor), 'rgb(255, 0, 0)', 'preview');
+    assert.equal(await pop().locator('.cur').evaluate((e) => getComputedStyle(e).backgroundColor), 'rgb(255, 0, 0)', 'preview in the left box');
+    // 0.1.164: no browser colour chooser inside (it has no OK button); one preview (left), no right one; boxes are squares
+    assert.equal(await pop().locator('input[type=color]').count(), 0, 'no browser chooser');
+    assert.equal(await pop().locator('.pv').count(), 0, 'no right preview');
+    const sq = await pop().locator('.cur').evaluate((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    assert.equal(sq[0], sq[1], 'left box square ' + sq);
+    assert.equal(await pop().evaluate((e) => [...e.querySelectorAll('*')].every((c) => c.getBoundingClientRect().right <= e.getBoundingClientRect().right + 0.5)), true, 'nothing sticks out on the right (OK button, eyedropper)');
+    // the colour area and hue bar: dragging changes the preview only
+    const sv = await pop().locator('.sv').boundingBox();
+    await page.mouse.move(sv.x + sv.width - 2, sv.y + 2); await page.mouse.down(); await page.mouse.move(sv.x + sv.width * 0.5, sv.y + sv.height * 0.5); await page.mouse.up();
+    const dragged = await pop().locator('.hex').inputValue();
+    assert.match(dragged, /^#[0-9a-f]{6}$/); assert.notEqual(dragged, '#ff0000', 'area drag changes the colour');
+    assert.equal(await page.inputValue('#target'), '#ffffff', 'still not applied');
+    const hue = await pop().locator('.hue').boundingBox();
+    await page.mouse.click(hue.x + hue.width / 3, hue.y + hue.height / 2);
+    assert.notEqual(await pop().locator('.hex').inputValue(), dragged, 'hue bar changes the colour');
+    assert.equal(await pop().count(), 1, 'the window stays while dragging and clicking inside');
+    await choose('#ff0000');
     // Esc cancels
     await page.keyboard.press('Escape');
     assert.equal(await pop().count(), 0); assert.equal(await page.inputValue('#target'), '#ffffff'); assert.deepEqual(await page.evaluate(() => __events), []);
@@ -54,6 +71,8 @@ const source = fs.readFileSync(path.join(__dirname, '../legacy/ccfolia-format-sy
     // 12 at most
     await page.evaluate(() => localStorage.setItem('ccf-format-recent-colors-v1', JSON.stringify(Array.from({ length: 15 }, (_, i) => '#0000' + String(i).padStart(2, '0')))));
     await page.click('#target'); assert.equal(await pop().locator('.sw').count(), 12);
+    const sw = await pop().locator('.sw').first().evaluate((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    assert.equal(sw[0], sw[1], 'saved colour boxes are squares ' + sw);
     assert.deepEqual(errors, []);
     console.log('format color pick PASS');
   } finally { await browser.close(); }
