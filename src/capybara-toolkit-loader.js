@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.3.243";
-  const BUILD_ID = "2026-11-24-color-keeps-bold-414";
+  const VERSION = "0.3.244";
+  const BUILD_ID = "2026-11-24-perf-no-layout-per-mutation-415";
   const GLOBAL_KEY = "__CAPYBARA_TOOLKIT__";
 
   const DB_NAME = "capybara-toolkit";

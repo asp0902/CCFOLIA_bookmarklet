@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CCFOLIA Roll20 CSS Bridge by Capybara_korea
 // @namespace    https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea
-// @version      0.3.117
+// @version      0.3.118
 // @description  Converts Roll20 /desc CSS macros into CCFOLIA-rendered messages.
 // @description:ko Roll20 /desc CSS macros for CCFOLIA.
 // @license      Copyright @Capybara_korea. All rights reserved.
@@ -69,7 +69,7 @@
     id: "ccf-roll20-css-bridge",
     name: "CCFOLIA Roll20 CSS Bridge",
     // 북마클릿 로드 시 GM_info 가 없어 이 값이 보고된다. 상단 @version 과 함께 올릴 것.
-    version: getUserscriptVersion("0.3.117"),
+    version: getUserscriptVersion("0.3.118"),
     namespace: "https://greasyfork.org/ko/scripts/578087-ccfolia-roll20-css-bridge-by-capybara-korea"
   });
 
@@ -1280,7 +1280,7 @@
           .some((node) => node instanceof Element &&
             (node.matches?.(CHAT_MACRO_MENU_SELECTOR) || node.querySelector?.(CHAT_MACRO_MENU_SELECTOR)))
       )) {
-        syncChatMacroMenuButtonVisibility();
+        scheduleChatMacroMenuSync();
       }
 
       for (const mutation of mutations) {
@@ -1310,7 +1310,7 @@
       });
 
       if (shouldRefresh) {
-        syncChatMacroMenuButtonVisibility();
+        scheduleChatMacroMenuSync();
         scheduleEnsureUi();
       }
     });
@@ -1433,6 +1433,14 @@
     syncChatPromptPanels();
   }
 
+  // 한 프레임에 한 번만(DOM 변경 묶음마다 바로 부르면 같은 프레임에 여러 번 레이아웃을 읽었다)
+  let chatMacroMenuSyncQueued = false;
+  function scheduleChatMacroMenuSync() {
+    if (chatMacroMenuSyncQueued) return;
+    chatMacroMenuSyncQueued = true;
+    requestAnimationFrame(() => { chatMacroMenuSyncQueued = false; syncChatMacroMenuButtonVisibility(); });
+  }
+
   function syncChatMacroMenuButtonVisibility() {
     const root = document.documentElement;
     if (!root) return;
@@ -1445,6 +1453,9 @@
   }
 
   function hasVisibleChatMacroMenu() {
+    // 0.3.118: 매크로 메뉴 후보가 아예 없으면 레이아웃을 읽지 않는다 — 글 한 글자마다(코코포리아가 입력칸 주변 DOM 을 바꿀 때마다) 입력칸·메뉴의 위치를 읽어
+    // 페이지 전체 레이아웃을 강제했고, 추가 패널이 열려 요소가 두 배면 한 글자에 ~20ms 가 들었다(실측).
+    if (!document.querySelector(CHAT_MACRO_MENU_SELECTOR)) return false;
     return [...document.querySelectorAll('textarea[name="text"]')]
       .filter((editor) => isVisible(editor) && !editor.closest?.(`#${MODAL_ID}`))
       .some((editor) => hasVisibleChatMacroMenuForEditor(editor));
@@ -6304,7 +6315,7 @@
     // 진단할 때 실제로 도는 코드를 알 수 있도록 상단 @version 과 같은 값을 유지한다.
     // ⚠ 이 파일은 IIFE 가 둘로 나뉘어 있다(15~5324 / 5329~). 여기는 두 번째 블록이라
     //   첫 블록의 CCF_ROLL20_CSS_BRIDGE_SCRIPT_INFO 를 참조할 수 없다(ReferenceError).
-    version: "0.3.117",
+    version: "0.3.118",
     isActive() { return active; },
     rescan() { processList(); return document.querySelectorAll(`[${CONT_ATTR}="1"]`).length; },
     rescanAsync() { scheduleScan(); },
