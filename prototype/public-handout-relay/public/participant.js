@@ -98,7 +98,7 @@ function playBgm(bgm) {
   if (ytReady) startPlayer(ytWantId);
 }
 const volInput = document.getElementById("bgm-vol");
-const syncVol = () => { volInput.style.setProperty("--p", `${volInput.value}%`); };
+const syncVol = () => { volInput.style.setProperty("--p", `${volInput.value}%`); volInput.style.setProperty("--f", String(volInput.value / 100)); };
 volInput.addEventListener("input", () => { bgmVolume = Number(volInput.value); syncVol(); applyRoomAudioVolume(); try { ytPlayer?.setVolume(bgmVolume); } catch (_) {} });
 syncVol();
 document.getElementById("bgm-mute").addEventListener("click", () => {
@@ -327,7 +327,7 @@ function showPieceTip(node) {
 // Button tooltips as measured on CCFOLIA 1.37.6 (MUI): the same box as the panel memo, 14px from the button, centred, kept inside the window, under it (dice and range select: above it),
 // after 100ms (at once when another one closed less than 800ms ago). Only the buttons that have one there; no tooltip for touch or a narrow page.
 const TIP_LABELS = { "채팅 설정": "채팅 메뉴", "이름 색": "캐릭터 색상 변경", "BGM 정지": "BGMを停止する" };
-const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마"]);
+const TIP_TEXTS = new Set(["내 캐릭터 목록", "핸드아웃", "채팅 메뉴", "캐릭터 선택", "채팅 팔레트", "캐릭터 색상 변경", "채팅 커맨드에 대해", "BGMを停止する", "테마", "GM 도구"]);
 const bgmSlotTip = cfg => `${cfg?.name || "NOTITLE"}\nvol:${cfg?.volume ?? 0} loop:${!cfg || cfg.repeat ? "on" : "off"}`;
 function buttonTip(button) {
   if (button.id === "bgm-slot1") return { text: bgmKey ? bgmLast?.title || "NOTITLE" : bgmSlotTip(roomAudio.media.cfg) };

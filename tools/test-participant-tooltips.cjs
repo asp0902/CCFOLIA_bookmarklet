@@ -29,6 +29,9 @@ const STATE = { roomTitle: 'r', gmOnline: true, capabilities: { chatRead: true, 
       await hover(selector); assert.equal(await tip(), text);
       assert.equal(await page.evaluate((s) => { const n = document.querySelector('.piece-tip'); return Math.round(document.querySelector(s).getBoundingClientRect().top - (parseFloat(n.style.top) + n.offsetHeight)); }, selector), 14, `${selector}: above it`);
     }
+    await page.evaluate(() => { const b = document.createElement('button'); b.id = 'penguin'; b.setAttribute('aria-label', 'GM 도구'); b.style.cssText = 'position:fixed;left:300px;top:200px;width:40px;height:40px;z-index:9999'; document.body.append(b); });
+    await hover('#penguin'); assert.equal(await tip(), 'GM 도구', 'the penguin of the mirrored top bar');
+    await page.evaluate(() => document.getElementById('penguin').remove());
     for (const selector of ['#bgm-mute', '#chat-close', '.pen-fab', '#account-btn']) { await hover(selector); assert.equal(await tip(), null, `${selector}: none on CCFOLIA`); }
     assert.deepEqual(await page.evaluate(() => { const c = getComputedStyle(document.querySelector('.piece-tip')); return [c.backgroundColor, c.color, c.fontSize, c.fontWeight, c.lineHeight, c.padding, c.borderRadius, c.whiteSpace, c.maxWidth]; }), ['rgb(22, 22, 22)', 'rgb(255, 255, 255)', '12px', '500', 'normal', '4px 8px', '4px', 'pre-wrap', '300px']);
     // 100ms first, gone on leaving
